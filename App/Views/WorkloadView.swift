@@ -22,7 +22,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)）。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。法定节假日不算工作日，调休上班的周末算。")
             }
             Section {
                 Button {

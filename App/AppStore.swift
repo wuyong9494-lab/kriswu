@@ -826,7 +826,9 @@ final class AppStore: ObservableObject {
 
     /// 某月每个人的工作量（来自全员排班），按值班天数从多到少。
     func workload(year: Int, month: Int) -> Workload {
-        let days = Set(roster.values.flatMap(\.keys)).filter { $0.year == year && $0.month == month }.sorted()
+        // 只统计到今天：网站上提前排好的以后的日子还没上，不算
+        let today = DayKey.today
+        let days = Set(roster.values.flatMap(\.keys)).filter { $0.year == year && $0.month == month && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
         let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, calendar: .app).sorted { a, b in
             a.dutyDays != b.dutyDays ? a.dutyDays > b.dutyDays : a.name.compare(b.name, locale: zh) == .orderedAscending

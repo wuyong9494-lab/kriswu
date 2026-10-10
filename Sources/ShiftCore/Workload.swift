@@ -1,7 +1,7 @@
 import Foundation
 
 /// 每个人一个月的工作量。
-/// 只有「遥测」算值班；各组、调度等其它岗位，和工作日（周一到周五）没写在任何岗位上的日子，都算日常班。
+/// 只有「遥测」算值班；各组、调度等其它岗位，和工作日（周一到周五，按法定节假日调整）没写在任何岗位上的日子，都算日常班。
 /// 出差、休息（调休、请假、无分工）另外统计。
 public struct PersonWorkload: Equatable {
     public var name: String
@@ -30,10 +30,8 @@ public enum WorkloadCounter {
     /// days：统计哪些日子（已读到全员排班的日子）；名单是全员排班里出现过的所有人。
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher,
                              calendar: Calendar = .current) -> [PersonWorkload] {
-        let weekdays = Set(days.filter {
-            let w = calendar.component(.weekday, from: $0.date(calendar: calendar, hour: 12))
-            return w != 1 && w != 7
-        })
+        // 工作日：周一到周五，去掉法定假日，加上调休上班的周末
+        let weekdays = Set(days.filter { ChinaHolidays.isWorkday($0, calendar: calendar) })
         return roster.keys.compactMap { name in
             var p = PersonWorkload(name: name, dutyDays: 0, regularDays: 0, offDays: 0, tripDays: 0, posts: [:])
             for day in days {

@@ -661,4 +661,26 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["王五"]?.regularDays, 6)
         XCTAssertEqual(result["王五"]?.offDays, 0)
     }
+
+    func testNationalHolidayIsNotAWorkday() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
+        // 2026 国庆：10/1–10/7 放假，10/10（周六）上班
+        XCTAssertFalse(ChinaHolidays.isWorkday(d(1), calendar: cal))
+        XCTAssertFalse(ChinaHolidays.isWorkday(d(7), calendar: cal))
+        XCTAssertTrue(ChinaHolidays.isWorkday(d(8), calendar: cal))
+        XCTAssertTrue(ChinaHolidays.isWorkday(d(10), calendar: cal))
+        XCTAssertFalse(ChinaHolidays.isWorkday(d(11), calendar: cal))
+        XCTAssertTrue(ChinaHolidays.isWorkday(d(12), calendar: cal))
+        // 10/1–10/10 里只有 8、9、10 日是工作日：没排岗位的人日常班 3 天，组A 那天另算
+        let roster: Roster = ["张三": [d(2): "遥测", d(9): "组A"], "李四": [d(3): "休息"]]
+        let result = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
+            roster: roster, days: (1...10).map(d), matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
+            .map { ($0.name, $0) })
+        XCTAssertEqual(result["张三"]?.dutyDays, 1)
+        XCTAssertEqual(result["张三"]?.regularDays, 3)
+        XCTAssertEqual(result["李四"]?.regularDays, 3)
+        XCTAssertEqual(result["李四"]?.offDays, 1)
+    }
 }
