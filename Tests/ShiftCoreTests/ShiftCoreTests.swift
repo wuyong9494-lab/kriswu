@@ -288,7 +288,7 @@ final class APIDiscoveryTests: XCTestCase {
         ]}
         """
         let e = JSONScheduleExtractor.extract(json, aliases: [], matcher: matcher, reference: ref)
-        XCTAssertEqual(e, [d(10, 5): "组A、组E", d(10, 6): "组B"])
+        XCTAssertEqual(e, [d(10, 5): "组A、组E", d(10, 6): "组B", d(10, 10): "无分工"])
     }
 
     func testNestedDutiesAndTimestamps() {

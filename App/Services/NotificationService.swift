@@ -21,10 +21,10 @@ enum NotificationService {
     /// voice = true 时，通知铃声换成读出「今天，组D」的语音。
     @MainActor
     static func reschedule(_ plan: [PlannedNotification], voice: Bool) async {
-        let old = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
-        center.removePendingNotificationRequests(withIdentifiers: old)
-
+        // 先把通知内容（包括录语音，比较慢）全部准备好，再一次性替换旧提醒，
+        // 避免中途被系统挂起时旧提醒已删、新提醒还没登记完
         var voiceFiles = Set<String>()
+        var requests: [UNNotificationRequest] = []
         for n in plan {
             let content = UNMutableNotificationContent()
             content.title = n.title
@@ -38,8 +38,11 @@ enum NotificationService {
             let when = DateComponents(year: n.day.year, month: n.day.month, day: n.day.day,
                                       hour: n.time.hour, minute: n.time.minute)
             let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: false)
-            try? await center.add(UNNotificationRequest(identifier: n.id, content: content, trigger: trigger))
+            requests.append(UNNotificationRequest(identifier: n.id, content: content, trigger: trigger))
         }
+        let old = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
+        center.removePendingNotificationRequests(withIdentifiers: old)
+        for request in requests { try? await center.add(request) }
         VoiceSound.removeFiles(except: voiceFiles)
     }
 

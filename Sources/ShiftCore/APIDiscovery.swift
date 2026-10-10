@@ -243,10 +243,15 @@ public enum JSONScheduleExtractor {
 
         var entries: [DayKey: String] = [:]
         for row in mine {
-            guard let d = row[dateKey].flatMap({ day(from: $0, dates: dates) }),
-                  let raw = row[shiftKey]?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { continue }
+            guard let d = row[dateKey].flatMap({ day(from: $0, dates: dates) }) else { continue }
+            let raw = row[shiftKey]?.trimmingCharacters(in: .whitespaces) ?? ""
+            // 有这一天的记录、分工却是空的：网页上显示的是「无分工」
+            guard !raw.isEmpty else {
+                if entries[d] == nil { entries[d] = "无分工" }
+                continue
+            }
             let value = parser.removingAliases(raw).isEmpty ? raw : parser.removingAliases(raw)
-            if let existing = entries[d] {
+            if let existing = entries[d], existing != "无分工" {
                 if !existing.components(separatedBy: "+").contains(value) { entries[d] = existing + "+" + value }
             } else {
                 entries[d] = value

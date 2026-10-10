@@ -319,11 +319,19 @@ final class AppStore: ObservableObject {
             calendar: .app)
     }
 
+    /// 提醒用的排班：已经取到数据、但没给我排班的日子补上「未排班」，这样每天都会提醒。
+    var reminderSchedule: [DayKey: String] {
+        var s = schedule
+        let today = DayKey.today
+        for day in covered where day >= today && s[day] == nil { s[day] = "未排班" }
+        return s
+    }
+
     func rescheduleNotifications() async {
         // 手机上的通知带上组别工作内容；微信那份不带（只发自己的分工）
         var local = planner
         local.notes = groupNotes
-        await NotificationService.reschedule(local.plan(schedule: schedule, now: Date()), voice: settings.voiceEnabled)
+        await NotificationService.reschedule(local.plan(schedule: reminderSchedule, now: Date()), voice: settings.voiceEnabled)
         updateWidget()
         updateAppIcon()
         if settings.calendarSync { CalendarSync.sync(schedule, matcher: matcher) }
@@ -467,12 +475,12 @@ final class AppStore: ObservableObject {
         if settings.eveningEnabled, now >= time(settings.evening), settings.weChatEveningSent != today {
             settings.weChatEveningSent = today
             settings.weChatMorningSent = today
-            if let m = p.message(morning: false, on: today, schedule: schedule) {
+            if let m = p.message(morning: false, on: today, schedule: reminderSchedule) {
                 await pushToWeChat(title: m.title, content: m.body)
             }
         } else if settings.morningEnabled, now >= time(settings.morning), settings.weChatMorningSent != today {
             settings.weChatMorningSent = today
-            if let m = p.message(morning: true, on: today, schedule: schedule) {
+            if let m = p.message(morning: true, on: today, schedule: reminderSchedule) {
                 await pushToWeChat(title: m.title, content: m.body)
             }
         }
@@ -491,7 +499,7 @@ final class AppStore: ObservableObject {
             settings.weChatMorningSent = today
             settings.weChatEveningSent = today
         }
-        guard let m = planner.message(morning: morning, on: today, schedule: schedule) else {
+        guard let m = planner.message(morning: morning, on: today, schedule: reminderSchedule) else {
             return "\(morning ? "今天" : "明天")没有排班，未发送"
         }
         let ok = await pushToWeChat(title: m.title, content: m.body, force: true)
