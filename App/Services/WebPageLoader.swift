@@ -57,11 +57,11 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         // 打开的是登录页：用设置里的账号密码自动登录，再回到排班页面
         if HTMLText.looksLikeLoginPage(html), !username.isEmpty, !password.isEmpty {
             let submitted = (try? await webView.callAsyncJavaScript(
-                Self.autoLoginScript, arguments: ["u": username, "p": password], in: nil, in: .page)) as? Bool ?? false
+                Self.autoLoginScript, arguments: ["u": username, "p": password], in: nil, contentWorld: .page)) as? Bool ?? false
             if submitted {
                 try await Task.sleep(nanoseconds: 3_000_000_000)
                 _ = try? await webView.callAsyncJavaScript(
-                    "location.assign(target); return true;", arguments: ["target": url.absoluteString], in: nil, in: .page)
+                    "location.assign(target); return true;", arguments: ["target": url.absoluteString], in: nil, contentWorld: .page)
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 html = try await settledHTML(webView)
             }
@@ -74,7 +74,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         var extraHTML: [String] = []
         for tab in extraTabs {
             let clicked = (try? await webView.callAsyncJavaScript(
-                Self.clickTabScript, arguments: ["label": tab], in: nil, in: .page)) as? Bool ?? false
+                Self.clickTabScript, arguments: ["label": tab], in: nil, contentWorld: .page)) as? Bool ?? false
             if clicked { extraHTML.append(try await settledHTML(webView)) }
         }
         let allCaptured = extraHTML.isEmpty ? captured : await capturedRequests(webView)
@@ -90,7 +90,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
                 Self.replayScript,
                 arguments: ["url": request.url, "method": request.method, "headers": request.headers,
                             "body": request.requestBody ?? NSNull()],
-                in: nil, in: .page)
+                in: nil, contentWorld: .page)
             if let text = reply as? String { replies.append(text) }
         }
         return replies

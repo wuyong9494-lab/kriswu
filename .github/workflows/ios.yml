@@ -23,6 +23,7 @@ jobs:
           xcodegen generate
 
       - name: 编译 App（未签名）
+        shell: bash -o pipefail {0}
         run: |
           xcodebuild build \
             -project ShiftReminder.xcodeproj \
@@ -32,7 +33,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee build.log
+          # 这类警告意味着调用了不返回结果的旧接口，功能会悄悄失效，当作错误处理
+          if grep -E "always fails|no 'async' operations occur within 'await'" build.log; then
+            echo "::error::发现可疑警告（见上），请修复"; exit 1
+          fi
 
       - name: 检查 App 名称（侧载工具注册 App ID 时只接受英文）
         run: |

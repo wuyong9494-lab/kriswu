@@ -28,6 +28,23 @@ enum SyncService {
         var groupNotes: [String: String] = [:]
     }
 
+    /// 全员排班接口：再取上一周和后面三周，「值班表」里可以前后切换日期。
+    private static func rosterRequests(in captured: [CapturedRequest], reference: DayKey,
+                                       matcher: ShiftMatcher) -> [CapturedRequest] {
+        var best: CapturedRequest?
+        var bestCount = 0
+        for request in captured where (200..<300).contains(request.status) {
+            let roster = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher)
+            let count = roster.values.reduce(0) { $0 + $1.count }
+            if count > bestCount {
+                best = request
+                bestCount = count
+            }
+        }
+        guard let best, best.hasDateParameter else { return [] }
+        return [-7, 7, 14, 21].map { best.shifted(days: $0) }
+    }
+
     /// 从网页文字和接口数据里收集全员排班与各组说明。
     private static func collect(texts: [String], json: [String], reference: DayKey, matcher: ShiftMatcher)
         -> (Roster, [String: String]) {
@@ -55,25 +72,20 @@ enum SyncService {
         if viaWeb, let url = webURL(urlString) {
             let reference = parser.reference
             var found: APIDiscovery.Found?
+            let rosterWeeks: ([CapturedRequest]) -> [CapturedRequest] = { captured in
+                rosterRequests(in: captured, reference: reference, matcher: matcher)
+            }
             let page = try await WebPageLoader.load(
                 url: url, username: username, password: password, extraTabs: ["值班查看"],
-                afterTabs: { captured in
-                    // 全员排班接口：再取上一周和后面三周，「值班表」里可以前后切换日期
-                    let best = captured.filter { (200..<300).contains($0.status) }
-                        .map { r in (r, RosterExtractor.fromJSON(r.body, reference: reference, matcher: matcher)
-                            .values.map(\.count).reduce(0, +)) }
-                        .filter { $0.1 > 0 }
-                        .max { $0.1 < $1.1 }?.0
-                    guard let best, best.hasDateParameter else { return [] }
-                    return [-7, 7, 14, 21].map { best.shifted(days: $0) }
-                }) { captured in
+                afterTabs: rosterWeeks) { captured in
                 found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
                                           matcher: matcher, reference: reference)
                 guard let f = found, f.request.hasDateParameter, weeksAhead > 0 else { return [] }
                 return (1...weeksAhead).map { f.request.shifted(days: 7 * $0) }
             }
             let texts = ([page.html] + page.extraHTML).map(HTMLText.toText)
-            let (roster, notes) = collect(texts: texts, json: page.captured.map(\.body) + page.replies + page.extraReplies,
+            let bodies: [String] = page.captured.map { $0.body } + page.replies + page.extraReplies
+            let (roster, notes) = collect(texts: texts, json: bodies,
                                           reference: reference, matcher: matcher)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries

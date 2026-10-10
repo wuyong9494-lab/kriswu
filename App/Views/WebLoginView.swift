@@ -150,7 +150,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
                 // 等前端把登录表单画出来
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 _ = try? await webView.callAsyncJavaScript(
-                    WebPageLoader.autoLoginScript, arguments: ["u": c.user, "p": c.password], in: nil, in: .page)
+                    WebPageLoader.autoLoginScript, arguments: ["u": c.user, "p": c.password], in: nil, contentWorld: .page)
             }
         }
         currentURL = webView.url?.absoluteString
