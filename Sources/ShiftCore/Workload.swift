@@ -2,21 +2,21 @@ import Foundation
 
 /// 每个人一个月的工作量。
 /// 网页上只写了调度、遥测、各组、值班交班前、休息、调休、出差等岗位；
-/// 工作日（周一到周五）没写在任何岗位上的人，就是在正常上班（「日常班」）。
+/// 工作日（周一到周五）没写在任何岗位上的人，就是在正常上班（「日常班」），和值班分开统计。
 public struct PersonWorkload: Equatable {
     public var name: String
-    /// 上班天数（有岗位的日子 + 工作日没排岗位的日子）
-    public var workDays: Int
+    /// 排了值班岗位（调度、遥测、各组、值班交班前、加班…）的天数
+    public var dutyDays: Int
+    /// 工作日没排任何岗位、正常上班的天数（和值班分开算）
+    public var regularDays: Int
     /// 休息、调休、请假、无分工
     public var offDays: Int
     public var tripDays: Int
-    /// 各岗位天数，含「日常班」
+    /// 各岗位天数（不含日常班）
     public var posts: [String: Int]
 }
 
 public enum WorkloadCounter {
-    public static let regular = "日常班"
-
     /// 休息、调休、请假、无分工都不算上班。
     public static func isOff(_ post: String, matcher: ShiftMatcher) -> Bool {
         matcher.match(post)?.id == "off" || post.contains("休") || post.contains("假") || post == "无分工"
@@ -32,26 +32,23 @@ public enum WorkloadCounter {
             return w != 1 && w != 7
         })
         return roster.keys.compactMap { name in
-            var p = PersonWorkload(name: name, workDays: 0, offDays: 0, tripDays: 0, posts: [:])
+            var p = PersonWorkload(name: name, dutyDays: 0, regularDays: 0, offDays: 0, tripDays: 0, posts: [:])
             for day in days {
                 guard let raw = roster[name]?[day] else {
-                    if weekdays.contains(day) {
-                        p.workDays += 1
-                        p.posts[regular, default: 0] += 1
-                    }
+                    if weekdays.contains(day) { p.regularDays += 1 }
                     continue
                 }
                 let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
                 for post in posts { p.posts[post, default: 0] += 1 }
                 if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) {
-                    p.workDays += 1
+                    p.dutyDays += 1
                 } else if posts.contains(where: isTrip) {
                     p.tripDays += 1
                 } else {
                     p.offDays += 1
                 }
             }
-            return p.workDays + p.offDays + p.tripDays > 0 ? p : nil
+            return p.dutyDays + p.regularDays + p.offDays + p.tripDays > 0 ? p : nil
         }
     }
 }

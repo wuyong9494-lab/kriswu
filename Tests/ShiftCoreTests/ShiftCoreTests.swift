@@ -634,7 +634,7 @@ final class NotificationPlannerTests: XCTestCase {
 }
 
 final class WorkloadTests: XCTestCase {
-    func testUnlistedWeekdaysCountAsWork() {
+    func testDutyAndRegularDaysCountedSeparately() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
         let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }   // 10/5 周一 … 10/11 周日
@@ -646,16 +646,19 @@ final class WorkloadTests: XCTestCase {
         let days = (5...11).map(d)
         let result = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
             roster: roster, days: days, matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal).map { ($0.name, $0) })
-        // 张三：调度、组A、组B 上班 3 天，周四周五没排岗位算日常班 2 天，周三休息；周日没排不算
-        XCTAssertEqual(result["张三"]?.workDays, 5)
+        // 张三：调度、组A、组B 值班 3 天；周四周五没排岗位是日常班 2 天；周三休息；周日没排不算
+        XCTAssertEqual(result["张三"]?.dutyDays, 3)
+        XCTAssertEqual(result["张三"]?.regularDays, 2)
         XCTAssertEqual(result["张三"]?.offDays, 1)
-        XCTAssertEqual(result["张三"]?.posts["日常班"], 2)
+        XCTAssertNil(result["张三"]?.posts["日常班"])
         // 李四：出差 2 天、调休 1 天，周三、周五日常班
         XCTAssertEqual(result["李四"]?.tripDays, 2)
         XCTAssertEqual(result["李四"]?.offDays, 1)
-        XCTAssertEqual(result["李四"]?.workDays, 2)
-        // 王五：周五组C（同时写了休息也算上班），其余工作日 4 天日常班
-        XCTAssertEqual(result["王五"]?.workDays, 5)
+        XCTAssertEqual(result["李四"]?.regularDays, 2)
+        XCTAssertEqual(result["李四"]?.dutyDays, 0)
+        // 王五：周五组C（同时写了休息也算值班），其余工作日 4 天日常班
+        XCTAssertEqual(result["王五"]?.dutyDays, 1)
+        XCTAssertEqual(result["王五"]?.regularDays, 4)
         XCTAssertEqual(result["王五"]?.offDays, 0)
     }
 }

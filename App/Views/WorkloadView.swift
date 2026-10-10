@@ -22,7 +22,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)）。网站上能看到的日子才算得进来；工作日没排岗位（不在调度、各组、出差、休息、调休里）的人算「日常班」上班。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)）。网站上能看到的日子才算得进来；「值班」是排了调度、遥测、各组、值班交班前等岗位的天数；工作日没排岗位的算「日常班」，和值班分开统计。")
             }
             Section {
                 Button {
@@ -51,7 +51,8 @@ struct WorkloadView: View {
                             .font(.headline)
                             .foregroundStyle(store.isMe(person.name) ? Color.accentColor : Color.primary)
                         Spacer()
-                        Text("上班 \(person.workDays) 天").bold()
+                        Text("值班 \(person.dutyDays) 天").bold()
+                        Text("· 日常 \(person.regularDays)").foregroundStyle(.secondary)
                         if person.tripDays > 0 {
                             Text("· 差 \(person.tripDays)").foregroundStyle(.secondary)
                         }
