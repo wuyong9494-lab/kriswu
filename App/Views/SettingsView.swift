@@ -43,6 +43,11 @@ struct SettingsView: View {
                     } label: {
                         row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
                     }
+                    NavigationLink {
+                        BackupView()
+                    } label: {
+                        row("备份与恢复", icon: "externaldrive", detail: "换手机 / 重装用")
+                    }
                 }
                 Section {
                     NavigationLink {
@@ -176,6 +181,7 @@ struct SettingsView: View {
                 DatePicker("提醒时间", selection: time(\.evening), displayedComponents: .hourAndMinute)
             }
             Toggle("没排班的日子也提醒", isOn: $store.settings.notifyWhenEmpty)
+            Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
                 Button("试听") {
@@ -237,6 +243,7 @@ struct SettingsView: View {
             在电脑或手机浏览器打开 pushplus.plus，用微信扫码登录并关注公众号，复制「一对一推送」里的 token 填到这里。
             排班变动、登录过期会立即发到微信。
             每天准点发微信：打开「快捷指令」App › 自动化 › 新建 › 特定时间（如 7:30，每天，选「立即运行」）› 添加操作，搜索「值班提醒」，选「发送值班提醒到微信」，哪天选「今天」；20:30 再建一个，选「明天」。
+            下周预告：周日 20:30 再建一个自动化，同一个操作，哪天选「下周」。
             没设自动化时，App 会在有机会运行时补发，可能比准点晚。
             只发送你自己的分工，不发送网页上的其它内容。
             """)

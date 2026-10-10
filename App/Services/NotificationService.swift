@@ -63,6 +63,21 @@ enum NotificationService {
                                                     trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
     }
 
+    /// 上次同步成功 2 天后还没有新的同步，就由系统弹出提醒（每次同步成功都会往后推）。
+    static func scheduleStaleReminder(after lastSync: Date?) async {
+        let id = "sync-stale-scheduled"
+        center.removePendingNotificationRequests(withIdentifiers: [id])
+        guard let lastSync else { return }
+        let fire = max(lastSync.addingTimeInterval(2 * 86_400), Date().addingTimeInterval(3_600))
+        let content = UNMutableNotificationContent()
+        content.title = "⚠️ 已经两天没同步排班了"
+        content.body = "现在的提醒可能不是最新排班。打开值班提醒下拉刷新一下；一直失败的话到「设置 › 诊断」看原因。"
+        content.sound = .default
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        try? await center.add(UNNotificationRequest(identifier: id, content: content,
+                                                    trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
+    }
+
     /// 下一条要弹的排班提醒。
     static func nextReminder() async -> (date: Date, title: String)? {
         await center.pendingNotificationRequests()

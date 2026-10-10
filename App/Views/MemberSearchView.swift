@@ -10,7 +10,12 @@ struct MemberSearchView: View {
         let q = query.trimmingCharacters(in: .whitespaces)
         return store.roster.keys
             .filter { q.isEmpty || $0.localizedCaseInsensitiveContains(q) }
-            .sorted { $0.compare($1, locale: Locale(identifier: "zh_CN")) == .orderedAscending }
+            .sorted { a, b in
+                // 收藏的同事排在前面
+                let fa = store.isFavorite(a), fb = store.isFavorite(b)
+                if fa != fb { return fa }
+                return a.compare(b, locale: Locale(identifier: "zh_CN")) == .orderedAscending
+            }
     }
 
     var body: some View {
@@ -27,6 +32,9 @@ struct MemberSearchView: View {
                             MemberScheduleView(name: name)
                         } label: {
                             HStack {
+                                if store.isFavorite(name) {
+                                    Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption)
+                                }
                                 Text(name)
                                 Spacer()
                                 if let today = store.roster[name]?[.today] {
@@ -83,6 +91,14 @@ struct MemberScheduleView: View {
             }
         }
         .navigationTitle(name)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { store.toggleFavorite(name) } label: {
+                    Label(store.isFavorite(name) ? "取消收藏" : "收藏",
+                          systemImage: store.isFavorite(name) ? "star.fill" : "star")
+                }
+            }
+        }
     }
 
     private func row(_ day: DayKey, _ post: String, isToday: Bool) -> some View {

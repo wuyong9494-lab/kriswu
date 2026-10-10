@@ -35,6 +35,9 @@ public struct NotificationPlanner {
     /// 各组工作内容（「组D」→ 说明），有的话写进通知正文
     public var notes: [String: String] = [:]
 
+    /// 每周日晚上预告下周一到周日的安排
+    public var weekly = false
+
     /// iOS 最多保留 64 条待发通知，留一点余量。
     public static let maxPending = 60
 
@@ -60,6 +63,10 @@ public struct NotificationPlanner {
                                              aboutDay: day.adding(days: 1, calendar: calendar), time: t, schedule: schedule) {
                 result.append(n)
             }
+            if weekly, calendar.component(.weekday, from: day.date(calendar: calendar, hour: 12)) == 1,
+               let w = weekMessage(on: day, schedule: schedule) {
+                result.append(w)
+            }
         }
         return result
             .filter { $0.day.date(calendar: calendar, hour: $0.time.hour, minute: $0.time.minute) > now }
@@ -74,6 +81,25 @@ public struct NotificationPlanner {
             ? make(kind: "morning", label: "今天", fireDay: day, aboutDay: day, time: morning ?? ClockTime(hour: 0, minute: 0), schedule: schedule)
             : make(kind: "evening", label: "明天", fireDay: day, aboutDay: day.adding(days: 1, calendar: calendar),
                    time: evening ?? ClockTime(hour: 0, minute: 0), schedule: schedule)
+    }
+
+    /// 下周预告：fireDay 当天（一般是周日）晚上发，列出之后 7 天的分工。一天都没有数据时返回 nil。
+    public func weekMessage(on fireDay: DayKey, schedule: [DayKey: String]) -> PlannedNotification? {
+        let days = (1...7).map { fireDay.adding(days: $0, calendar: calendar) }
+        guard days.contains(where: { schedule[$0] != nil }) else { return nil }
+        let lines = days.map { day -> String in
+            let name = schedule[day].map(matcher.displayName) ?? "—"
+            return "\(Self.dateText(day, calendar: calendar))  \(name)"
+        }
+        let first = days[0], last = days[6]
+        return PlannedNotification(
+            id: "shift-week-\(fireDay)",
+            day: fireDay,
+            time: evening ?? ClockTime(hour: 20, minute: 0),
+            title: "🗓 下周安排（\(first.month)/\(first.day)–\(last.month)/\(last.day)）",
+            body: lines.joined(separator: "\n"),
+            speech: "下周安排已更新"
+        )
     }
 
     private func make(kind: String, label: String, fireDay: DayKey, aboutDay: DayKey, time: ClockTime,

@@ -57,6 +57,15 @@ struct AppSettings: Codable, Equatable {
     var manualGroupNotes: [String: String] = [:]
     /// 全员排班的读取规则版本；规则改了以后清掉旧数据重新读
     var rosterVersion = 0
+    /// 每周日晚上预告下周安排（iPhone 通知 + 微信）
+    var weeklyPreview = true
+    var weChatWeekSent: DayKey?
+    /// 收藏的同事，首页显示他们今天、明天在哪个组
+    var favorites: [String] = []
+    /// 最近的排班变动（首页显示）
+    var changeLog: [ChangeLogEntry] = []
+    /// 已经提醒过「很久没同步成功」，同步成功后恢复
+    var syncStaleNotified = false
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
@@ -93,10 +102,30 @@ struct AppSettings: Codable, Equatable {
         autoGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes) ?? [:]
         manualGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes) ?? [:]
         rosterVersion = try c.decodeIfPresent(Int.self, forKey: .rosterVersion) ?? 0
+        weeklyPreview = try c.decodeIfPresent(Bool.self, forKey: .weeklyPreview) ?? d.weeklyPreview
+        weChatWeekSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
+        favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
+        changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
+        syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
     }
+}
+
+struct ChangeLogEntry: Codable, Hashable {
+    var date: Date
+    var text: String
+}
+
+/// 备份文件：设置、排班、全员排班。密码和 PushPlus token 存在钥匙串里，不在备份中。
+struct BackupFile: Codable {
+    var version = 1
+    var created = Date()
+    var settings: AppSettings
+    var schedule: [String: String]
+    var covered: [String]
+    var roster: [String: [String: String]]
 }
 
 private struct PersistedState: Codable {
@@ -311,12 +340,14 @@ final class AppStore: ObservableObject {
     // MARK: - 提醒
 
     private var planner: NotificationPlanner {
-        NotificationPlanner(
+        var p = NotificationPlanner(
             morning: settings.morningEnabled ? settings.morning : nil,
             evening: settings.eveningEnabled ? settings.evening : nil,
             notifyWhenEmpty: settings.notifyWhenEmpty,
             matcher: matcher,
             calendar: .app)
+        p.weekly = settings.weeklyPreview
+        return p
     }
 
     /// 提醒用的排班：已经取到数据、但没给我排班的日子补上「未排班」，这样每天都会提醒。
@@ -336,6 +367,8 @@ final class AppStore: ObservableObject {
         updateAppIcon()
         if settings.calendarSync { CalendarSync.sync(schedule, matcher: matcher) }
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
+        // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
+        await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)
     }
 
     /// 今天该用哪个图标：组A–组E 用对应字母（一天多个组取第一个），无分工/休息用「休」，其它用默认的「值」。
@@ -404,6 +437,8 @@ final class AppStore: ObservableObject {
                 }
             }
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
+            let rosterBefore = roster
+            let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             if !outcome.roster.isEmpty {
                 // 这次读到的日子整天替换（换人、取消的都以新数据为准）
                 let days = Set(outcome.roster.values.flatMap(\.keys))
@@ -418,12 +453,16 @@ final class AppStore: ObservableObject {
             let changes = apply(result)
             settings.lastSync = Date()
             settings.loginExpiredNotified = false
+            settings.syncStaleNotified = false
             settings.lastSyncMessage = "同步成功：\(result.format.rawValue)，\(result.entries.count) 天"
                 + (changes.isEmpty ? "，没有变动" : "，\(changes.count) 处变动")
             // 第一次导入不算“变动”，之后每次同步发现不同就提醒
             if hadData && !changes.isEmpty && settings.notifyChanges {
                 let title = "📢 排班有更新（\(changes.count) 处）"
-                let body = ScheduleDiff.summary(changes, matcher: matcher, calendar: .app)
+                let body = ScheduleDiff.summary(changes, matcher: matcher, calendar: .app) {
+                    self.swapDetail($0, before: rosterBefore, fresh: freshDays)
+                }
+                settings.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + settings.changeLog).prefix(20))
                 await NotificationService.notifyNow(id: "schedule-changed", title: title, body: body)
                 // 微信：可以关掉；同样的变动不重复发
                 if settings.weChatChanges && settings.lastWeChatChangeDigest != body {
@@ -442,8 +481,58 @@ final class AppStore: ObservableObject {
                 await NotificationService.notifyNow(id: "login-expired", title: title, body: body)
                 await pushToWeChat(title: title, content: body)
             }
+            await notifyIfSyncStale()
             return false
         }
+    }
+
+    /// 超过一天没有同步成功（密码改了、网站换了地址或改版）。
+    var syncIsStale: Bool {
+        guard canSync else { return false }
+        guard let last = settings.lastSync else { return settings.lastSyncMessage?.hasPrefix("同步失败") ?? false }
+        return Date().timeIntervalSince(last) > 24 * 3600
+    }
+
+    /// 很久没同步成功时提醒一次（iPhone 通知 + 微信），同步成功后恢复。
+    private func notifyIfSyncStale() async {
+        guard syncIsStale, !settings.syncStaleNotified else { return }
+        settings.syncStaleNotified = true
+        let since = settings.lastSync.map { "从 " + $0.formatted(date: .abbreviated, time: .shortened) + " 起" } ?? ""
+        let title = "⚠️ 排班\(since)一直没同步成功"
+        let body = "\(settings.lastSyncMessage ?? "同步失败")\n现在的提醒可能不是最新排班。打开值班提醒下拉刷新，或到「设置 › 诊断」查看原因。"
+        await NotificationService.notifyNow(id: "sync-stale", title: title, body: body)
+        await pushToWeChat(title: title, content: body)
+    }
+
+    /// 排班变动的补充说明：新组原来是谁的、我原来的组现在是谁（一天一人一组，多半就是和他换的）。
+    /// before：同步前的全员排班；fresh：这次重新读到全员排班的日子（只有这些日子的「现在是谁」可信）。
+    func swapDetail(_ change: ScheduleChange, before: Roster, fresh: Set<DayKey>) -> String? {
+        func key(_ s: String) -> String { s.filter { !$0.isWhitespace }.uppercased() }
+        func groups(_ raw: String?) -> [String] {
+            guard let raw else { return [] }
+            return matcher.displayName(raw).split(separator: "+").map(String.init)
+                .filter { matcher.match($0)?.id != "off" && $0 != "未排班" }
+        }
+        func holders(_ group: String, in r: Roster) -> [String] {
+            r.compactMap { name, days in
+                guard !isMe(name), let posts = days[change.day],
+                      posts.split(separator: "+").contains(where: { key(String($0)) == key(group) }) else { return nil }
+                return name
+            }.sorted()
+        }
+        var parts: [String] = []
+        let oldGroups = groups(change.old), newGroups = groups(change.new)
+        for g in newGroups where !oldGroups.contains(g) {
+            let who = holders(g, in: before)
+            if !who.isEmpty { parts.append("\(g)原来是\(who.joined(separator: "、"))") }
+        }
+        if fresh.contains(change.day) {
+            for g in oldGroups where !newGroups.contains(g) {
+                let who = holders(g, in: roster)
+                if !who.isEmpty { parts.append("\(g)现在是\(who.joined(separator: "、"))") }
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "，")
     }
 
     /// 打开 App 时，距离上次同步超过 3 分钟就自动同步一次。
@@ -499,6 +588,31 @@ final class AppStore: ObservableObject {
                 await pushToWeChat(title: m.title, content: m.body)
             }
         }
+        // 周日晚上：下周安排
+        if settings.weeklyPreview, settings.eveningEnabled, now >= time(settings.evening),
+           Calendar.app.component(.weekday, from: now) == 1, settings.weChatWeekSent != today {
+            settings.weChatWeekSent = today
+            if let w = p.weekMessage(on: today, schedule: reminderSchedule) {
+                await pushToWeChat(title: w.title, content: w.body)
+            }
+        }
+    }
+
+    /// 立即把下周（从明天起 7 天）的安排发到微信，供快捷指令调用。
+    func sendWeChatWeek() async -> String {
+        guard !(Keychain.get(.pushPlusToken) ?? "").isEmpty else {
+            return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
+        }
+        let today = DayKey.today
+        settings.weChatWeekSent = today
+        if canSync { await sync(full: false) }
+        guard let w = planner.weekMessage(on: today, schedule: reminderSchedule) else {
+            let ok = await pushToWeChat(title: "🗓 接下来一周：暂无排班数据",
+                                        content: "没有取到接下来一周的排班（\(settings.lastSyncMessage ?? "还没同步过")）。", force: true)
+            return ok ? "已发送到微信：暂无排班数据" : (settings.weChatMessage ?? "微信推送失败")
+        }
+        let ok = await pushToWeChat(title: w.title, content: w.body, force: true)
+        return ok ? "已发送到微信：\(w.title)" : (settings.weChatMessage ?? "微信推送失败")
     }
 
     /// 立即把今天（morning）或明天的分工发到微信，供快捷指令自动化准点调用。返回给用户看的结果。
@@ -537,5 +651,91 @@ final class AppStore: ObservableObject {
             .flatMap { day in times.map { day.date(calendar: .app, hour: $0.hour, minute: $0.minute) } }
             .filter { $0 > now }
             .min()
+    }
+
+    // MARK: - 收藏的同事
+
+    func isFavorite(_ name: String) -> Bool { settings.favorites.contains(name) }
+
+    func toggleFavorite(_ name: String) {
+        if let i = settings.favorites.firstIndex(of: name) {
+            settings.favorites.remove(at: i)
+        } else {
+            settings.favorites.append(name)
+        }
+    }
+
+    // MARK: - 月度统计
+
+    /// 某月的统计文字，可复制或发到微信。
+    func monthReport(year: Int, month: Int) -> String {
+        let cal = Calendar.app
+        let first = DayKey(year: year, month: month, day: 1)
+        let count = cal.range(of: .day, in: .month, for: first.date(calendar: cal, hour: 12))?.count ?? 30
+        let days = (1...count).map { DayKey(year: year, month: month, day: $0) }
+        var tally: [String: Int] = [:]
+        var order: [String] = []
+        var unassigned = 0, unknown = 0
+        var lines: [String] = []
+        for day in days {
+            if let raw = schedule[day] {
+                let name = matcher.displayName(raw)
+                if tally[name] == nil { order.append(name) }
+                tally[name, default: 0] += 1
+                lines.append("\(day.dateText)  \(name)")
+            } else if covered.contains(day) {
+                unassigned += 1
+                lines.append("\(day.dateText)  未排班")
+            } else {
+                unknown += 1
+            }
+        }
+        var text = "\(year)年\(month)月排班统计\n"
+        for name in order.sorted(by: { tally[$0]! > tally[$1]! }) { text += "\(name)：\(tally[name]!) 天\n" }
+        if unassigned > 0 { text += "未排班：\(unassigned) 天\n" }
+        if unknown > 0 { text += "暂无数据：\(unknown) 天\n" }
+        text += "\n" + lines.joined(separator: "\n")
+        return text
+    }
+
+    // MARK: - 备份
+
+    func backupData() throws -> Data {
+        let file = BackupFile(settings: settings,
+                              schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }),
+                              covered: covered.map(\.description).sorted(),
+                              roster: roster.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) })
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(file)
+    }
+
+    /// 写到临时文件，用来分享 / 存到「文件」App。
+    func backupFileURL() throws -> URL {
+        let stamp = DayKey.today.description
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("值班提醒备份-\(stamp).json")
+        try backupData().write(to: url, options: .atomic)
+        return url
+    }
+
+    /// 从备份恢复：设置、排班、全员排班整体替换。返回恢复了多少天。
+    func restore(from data: Data) throws -> Int {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let file = try decoder.decode(BackupFile.self, from: data)
+        var restored: [DayKey: String] = [:]
+        for (k, v) in file.schedule { if let d = DayKey(string: k) { restored[d] = v } }
+        schedule = restored
+        covered = Set(file.covered.compactMap(DayKey.init(string:)))
+        roster = file.roster.mapValues { days in
+            Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
+        }
+        saveRoster()
+        var newSettings = file.settings
+        newSettings.rosterVersion = max(newSettings.rosterVersion, Self.rosterVersion)
+        settings = newSettings
+        scheduleChanged()
+        return restored.count
     }
 }

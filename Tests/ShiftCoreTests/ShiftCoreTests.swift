@@ -271,6 +271,14 @@ final class ScheduleDiffTests: XCTestCase {
         let text = ScheduleDiff.summary(changes, matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
         XCTAssertEqual(text, "10月11日 周日：夜班 → 白班\n10月12日 周一：休息 → 无\n10月13日 周二：无 → 夜班")
     }
+
+    func testSummaryDetail() {
+        let changes = [ScheduleChange(day: DayKey(year: 2026, month: 10, day: 12), old: "组D", new: "组B")]
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let text = ScheduleDiff.summary(changes, matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal) { _ in "组B 原来是张三" }
+        XCTAssertEqual(text, "10月12日 周一：组D → 组B（组B 原来是张三）")
+    }
 }
 
 final class APIDiscoveryTests: XCTestCase {
@@ -524,6 +532,25 @@ final class NotificationPlannerTests: XCTestCase {
         var withNotes = planner
         withNotes.notes = ["组D": "负责设备巡检"]
         XCTAssertEqual(withNotes.message(morning: true, on: today, schedule: schedule)?.body, "10月9日 周五  组D\n组D：负责设备巡检")
+    }
+
+    func testWeeklyPreview() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        var planner = NotificationPlanner(morning: nil, evening: ClockTime(hour: 20, minute: 30),
+                                          notifyWhenEmpty: false, matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
+        planner.weekly = true
+        // 2026-10-11 是周日
+        let sunday = DayKey(year: 2026, month: 10, day: 11)
+        let schedule = [DayKey(year: 2026, month: 10, day: 12): "组D", DayKey(year: 2026, month: 10, day: 14): "无分工"]
+        let week = planner.weekMessage(on: sunday, schedule: schedule)
+        XCTAssertEqual(week?.title, "🗓 下周安排（10/12–10/18）")
+        XCTAssertEqual(week?.body.components(separatedBy: "\n").first, "10月12日 周一  组D")
+        XCTAssertEqual(week?.body.components(separatedBy: "\n").count, 7)
+        let now = cal.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 8))!
+        let plan = planner.plan(schedule: schedule, now: now)
+        XCTAssertEqual(plan.filter { $0.id.hasPrefix("shift-week-") }.map(\.day), [sunday])
+        XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
     func testCapAndEmptyDays() {

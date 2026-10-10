@@ -5,11 +5,13 @@ import AppIntents
 enum ReminderDay: String, AppEnum {
     case today
     case tomorrow
+    case week
 
     static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "哪天")
     static var caseDisplayRepresentations: [ReminderDay: DisplayRepresentation] = [
         .today: "今天",
         .tomorrow: "明天",
+        .week: "下周",
     ]
 }
 
@@ -30,7 +32,7 @@ struct SyncScheduleIntent: AppIntent {
 
 struct SendWeChatReminderIntent: AppIntent {
     static var title: LocalizedStringResource = "发送值班提醒到微信"
-    static var description = IntentDescription("把今天或明天的分工发到微信（PushPlus）。在「快捷指令 › 自动化」里设成每天定时运行，就能准时收到。")
+    static var description = IntentDescription("把今天、明天或接下来一周的分工发到微信（PushPlus）。在「快捷指令 › 自动化」里设成每天定时运行，就能准时收到。")
 
     @Parameter(title: "哪天", default: .today)
     var day: ReminderDay
@@ -41,7 +43,12 @@ struct SendWeChatReminderIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let text = await AppStore.shared.sendWeChatReminder(morning: day == .today)
+        let text: String
+        if day == .week {
+            text = await AppStore.shared.sendWeChatWeek()
+        } else {
+            text = await AppStore.shared.sendWeChatReminder(morning: day == .today)
+        }
         return .result(dialog: "\(text)")
     }
 }

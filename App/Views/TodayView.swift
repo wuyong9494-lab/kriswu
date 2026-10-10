@@ -22,6 +22,9 @@ struct TodayView: View {
                                 .padding()
                                 .background(Color.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 16))
                         }
+                        if store.syncIsStale {
+                            StaleSyncBanner()
+                        }
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }
@@ -31,6 +34,8 @@ struct TodayView: View {
                         ShiftCard(label: "明天", day: today.adding(days: 1), large: false,
                                   reminder: store.settings.eveningEnabled ? "前一天 \(store.settings.evening.text) 提醒" : nil)
                             .onTapGesture { editing = today.adding(days: 1) }
+                        RecentChanges()
+                        FavoritesCard(today: today)
                         UpcomingList(from: today.adding(days: 2), count: 12) { editing = $0 }
                         SyncStatus()
                     }
@@ -139,6 +144,102 @@ private struct UpcomingList: View {
         }
         .padding()
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// 超过一天没同步成功：红色提示，避免照着旧排班上班。
+private struct StaleSyncBanner: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(store.settings.lastSync.map { "从 \($0.formatted(date: .abbreviated, time: .shortened)) 起一直没同步成功" }
+                  ?? "还没有同步成功过", systemImage: "exclamationmark.octagon.fill")
+                .font(.headline)
+            Text((store.settings.lastSyncMessage ?? "同步失败") + "\n现在显示的可能不是最新排班。下拉刷新重试；一直失败到「设置 › 诊断」看原因。")
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// 最近 3 天内同步发现的排班变动。
+private struct RecentChanges: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        let recent = store.settings.changeLog.filter { Date().timeIntervalSince($0.date) < 3 * 86_400 }
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("最近排班变动", systemImage: "arrow.left.arrow.right")
+                        .font(.headline)
+                    Spacer()
+                    Button("清除") { store.settings.changeLog = [] }
+                        .font(.footnote)
+                }
+                ForEach(recent, id: \.self) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.date.formatted(date: .abbreviated, time: .shortened) + " 发现")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(entry.text)
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+}
+
+/// 收藏的同事今天、明天在哪个组。
+private struct FavoritesCard: View {
+    @EnvironmentObject private var store: AppStore
+    let today: DayKey
+
+    var body: some View {
+        if !store.settings.favorites.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("同事")
+                    .font(.headline)
+                    .padding(.bottom, 8)
+                ForEach(Array(store.settings.favorites.enumerated()), id: \.element) { i, name in
+                    NavigationLink {
+                        MemberScheduleView(name: name)
+                    } label: {
+                        HStack {
+                            Text(name)
+                            Spacer()
+                            post("今天", store.roster[name]?[today])
+                            post("明天", store.roster[name]?[today.adding(days: 1)])
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    if i < store.settings.favorites.count - 1 { Divider() }
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private func post(_ label: String, _ raw: String?) -> some View {
+        let display = ShiftDisplay(raw: raw, matcher: store.matcher)
+        return Text("\(label) \(display?.name ?? "—")")
+            .font(.footnote)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background((display?.color ?? .gray).opacity(0.18), in: Capsule())
     }
 }
 

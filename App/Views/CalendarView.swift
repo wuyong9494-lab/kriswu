@@ -5,6 +5,7 @@ struct CalendarView: View {
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
     @State private var editing: DayKey?
+    @State private var weChatResult: String?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
     private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
@@ -36,6 +37,29 @@ struct CalendarView: View {
             })
             .refreshable { await store.sync(userInitiated: true) }
             .navigationTitle("排班日历")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        ShareLink(item: store.monthReport(year: year, month: month)) {
+                            Label("分享 / 复制本月统计", systemImage: "square.and.arrow.up")
+                        }
+                        Button {
+                            Task {
+                                let ok = await store.pushToWeChat(title: "\(year)年\(month)月排班统计",
+                                                                  content: store.monthReport(year: year, month: month), force: true)
+                                weChatResult = ok ? "已发送到微信" : (store.settings.weChatMessage ?? "微信推送失败")
+                            }
+                        } label: {
+                            Label("把本月统计发到微信", systemImage: "message")
+                        }
+                    } label: {
+                        Label("导出", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+            .alert(weChatResult ?? "", isPresented: Binding(get: { weChatResult != nil }, set: { if !$0 { weChatResult = nil } })) {
+                Button("好") {}
+            }
             .sheet(item: $editing) { DayEditor(day: $0) }
         }
     }

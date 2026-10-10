@@ -26,11 +26,14 @@ public enum ScheduleDiff {
     }
 
     /// 通知正文，例如「10月12日 周一：白班 → 夜班」，最多列 5 条。
-    public static func summary(_ changes: [ScheduleChange], matcher: ShiftMatcher, calendar: Calendar = .current) -> String {
+    /// detail：附加说明（例如「组B 原来是张三」），写在这一条后面。
+    public static func summary(_ changes: [ScheduleChange], matcher: ShiftMatcher, calendar: Calendar = .current,
+                               detail: (ScheduleChange) -> String? = { _ in nil }) -> String {
         var lines = changes.prefix(5).map { c -> String in
             let o = c.old.map(matcher.displayName) ?? "无"
             let n = c.new.map(matcher.displayName) ?? "无"
-            return "\(NotificationPlanner.dateText(c.day, calendar: calendar))：\(o) → \(n)"
+            let extra = detail(c).map { "（\($0)）" } ?? ""
+            return "\(NotificationPlanner.dateText(c.day, calendar: calendar))：\(o) → \(n)\(extra)"
         }
         if changes.count > 5 { lines.append("……共 \(changes.count) 处变动") }
         return lines.joined(separator: "\n")
