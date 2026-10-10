@@ -52,7 +52,7 @@ struct AppSettings: Codable, Equatable {
     /// 排班变动也发到微信（关掉后只在 iPhone 上通知）
     var weChatChanges = true
     var lastWeChatChangeDigest: String?
-    /// 各组工作内容：网页上读到的 / 自己填写的（填写的优先）
+    /// 各组工作内容：电脑版网页 > 自己填写的 > 其它页面顺带读到的
     var autoGroupNotes: [String: String] = [:]
     var manualGroupNotes: [String: String] = [:]
     /// 全员排班的读取规则版本；规则改了以后清掉旧数据重新读
@@ -68,6 +68,10 @@ struct AppSettings: Codable, Equatable {
     var syncStaleNotified = false
     /// 上次从电脑版页面读各组工作内容的时间（一天读一次）
     var lastDesktopNotesFetch: Date?
+    var lastDesktopNotesAttempt: Date?
+    var desktopNotesMessage: String?
+    /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
+    var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
     var lastSuccessMessage: String?
     var shiftTypes: [ShiftType] = ShiftType.defaults
@@ -112,6 +116,9 @@ struct AppSettings: Codable, Equatable {
         changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
         syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
         lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
+        lastDesktopNotesAttempt = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
+        desktopNotesMessage = try c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
+        desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
@@ -284,7 +291,9 @@ final class AppStore: ObservableObject {
 
     /// 组别的工作内容（自己填写的优先）。key 如「组D」。
     var groupNotes: [String: String] {
-        settings.autoGroupNotes.merging(settings.manualGroupNotes.filter { !$0.value.isEmpty }) { _, m in m }
+        settings.autoGroupNotes
+            .merging(settings.manualGroupNotes.filter { !$0.value.isEmpty }) { _, m in m }
+            .merging(settings.desktopGroupNotes.filter { !$0.value.isEmpty }) { _, d in d }
     }
 
     /// 某天分工对应的工作内容，例如「组A+组E」→ [("组A", "…"), ("组E", "…")]。
@@ -485,15 +494,12 @@ final class AppStore: ObservableObject {
                     await pushToWeChat(title: title, content: body)
                 }
             }
-            // 手机版没有各组工作内容：打开 App 时每天用电脑版页面读一次（读不到不影响同步结果）
+            // 手机版没有各组工作内容：打开 App 时每天用电脑版页面读一次（读不到不影响同步结果，过 1 小时再试）
+            let now = Date()
             if full, settings.syncViaWeb,
-               Date().timeIntervalSince(settings.lastDesktopNotesFetch ?? .distantPast) > 20 * 3600 {
-                settings.lastDesktopNotesFetch = Date()
-                let notes = await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
-                                                                     username: settings.sourceUsername,
-                                                                     password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
-                                                                     reference: .today)
-                if !notes.isEmpty { settings.autoGroupNotes.merge(notes) { _, n in n } }
+               now.timeIntervalSince(settings.lastDesktopNotesFetch ?? .distantPast) > 20 * 3600,
+               now.timeIntervalSince(settings.lastDesktopNotesAttempt ?? .distantPast) > 3600 {
+                await readDesktopNotes(mayLogin: mayLogin)
             }
             return true
         } catch {
@@ -509,6 +515,27 @@ final class AppStore: ObservableObject {
             await notifyIfSyncStale()
             return false
         }
+    }
+
+    /// 用电脑版打开「值班查看」读各组工作内容。读到就整体替换（网页上删掉的组也跟着删）。
+    @discardableResult
+    func readDesktopNotes(mayLogin: Bool = true) async -> Bool {
+        settings.lastDesktopNotesAttempt = Date()
+        let notes = await Task {
+            await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
+                                                     username: settings.sourceUsername,
+                                                     password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
+                                                     reference: .today)
+        }.value
+        if notes.isEmpty {
+            settings.desktopNotesMessage = "没读到（\(Date().formatted(date: .omitted, time: .shortened))）：电脑版页面上没找到「组A」等说明"
+            return false
+        }
+        settings.desktopGroupNotes = notes
+        settings.lastDesktopNotesFetch = Date()
+        settings.desktopNotesMessage = "读到 \(notes.count) 个组"
+        await rescheduleNotifications()
+        return true
     }
 
     /// 超过一天没有同步成功（密码改了、网站换了地址或改版）。

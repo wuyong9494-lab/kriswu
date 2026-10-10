@@ -34,6 +34,11 @@ struct SettingsView: View {
                         row("微信推送", icon: "message", detail: store.settings.weChatEnabled ? "已开启" : "未开启")
                     }
                     NavigationLink {
+                        GroupNotesView()
+                    } label: {
+                        row("各组工作内容", icon: "list.bullet.rectangle", detail: groupNotesSummary)
+                    }
+                    NavigationLink {
                         Form { displaySection }.navigationTitle("显示")
                     } label: {
                         row("显示", icon: "paintpalette", detail: store.settings.appearance.title)
@@ -88,6 +93,13 @@ struct SettingsView: View {
         return "同步于 " + last.formatted(date: .omitted, time: .shortened)
     }
 
+    private var groupNotesSummary: String {
+        if let date = store.settings.lastDesktopNotesFetch, !store.settings.desktopGroupNotes.isEmpty {
+            return "电脑版 · " + date.formatted(date: .numeric, time: .shortened)
+        }
+        return store.settings.manualGroupNotes.isEmpty ? "未读到" : "自己填写"
+    }
+
     private var reminderSummary: String {
         let s = store.settings
         let times = [s.morningEnabled ? s.morning.text : nil, s.eveningEnabled ? s.evening.text : nil].compactMap { $0 }
@@ -100,11 +112,6 @@ struct SettingsView: View {
                 ShiftTypesView()
             } label: {
                 Label("班次类型与颜色", systemImage: "paintpalette")
-            }
-            NavigationLink {
-                GroupNotesView()
-            } label: {
-                Label("各组工作内容", systemImage: "list.bullet.rectangle")
             }
             Toggle("图标显示今天的组", isOn: $store.settings.dynamicIcon)
                 .onChange(of: store.settings.dynamicIcon) { _ in store.updateAppIcon() }
@@ -401,11 +408,13 @@ struct GroupNotesView: View {
     @EnvironmentObject private var store: AppStore
     @State private var pasting = false
     @State private var pasteText = ""
+    @State private var reading = false
 
     private var groups: [String] {
         let fromSchedule = store.schedule.values.flatMap { store.matcher.displayName($0).split(separator: "+").map(String.init) }
             .filter { $0.hasPrefix("组") }
         let all = Set(fromSchedule + ["组A", "组B", "组C", "组D", "组E"])
+            .union(store.settings.desktopGroupNotes.keys)
             .union(store.settings.autoGroupNotes.keys)
             .union(store.settings.manualGroupNotes.keys)
         return all.sorted()
@@ -413,19 +422,55 @@ struct GroupNotesView: View {
 
     var body: some View {
         Form {
+            Section {
+                LabeledContent("上次读到", value: store.settings.lastDesktopNotesFetch
+                    .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "还没有")
+                if let message = store.settings.desktopNotesMessage {
+                    LabeledContent("最近结果", value: message)
+                }
+                Button {
+                    reading = true
+                    Task {
+                        await store.readDesktopNotes()
+                        reading = false
+                    }
+                } label: {
+                    HStack {
+                        Text("现在从电脑版网页读取")
+                        if reading { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(reading || !store.canSync)
+            } header: {
+                Text("电脑版网页（优先）")
+            } footer: {
+                Text("每天第一次打开 App 同步时，自动用电脑版打开网站「值班查看」，读上面每组该干什么。读到的内容优先显示；网页上没有的组，才用下面自己填写的。")
+            }
             ForEach(groups, id: \.self) { group in
+                let desktop = store.settings.desktopGroupNotes[group]
                 Section {
-                    TextField(store.settings.autoGroupNotes[group] ?? "例如：负责设备巡检和日志记录",
+                    if let desktop {
+                        Text(desktop)
+                            .font(.subheadline)
+                            .textSelection(.enabled)
+                    }
+                    TextField(desktop == nil ? (store.settings.autoGroupNotes[group] ?? "例如：负责设备巡检和日志记录")
+                                             : "备用：电脑版读不到时显示",
                               text: Binding(
-                                get: { store.settings.manualGroupNotes[group] ?? store.settings.autoGroupNotes[group] ?? "" },
+                                get: { store.settings.manualGroupNotes[group] ?? "" },
                                 set: { store.settings.manualGroupNotes[group] = $0.isEmpty ? nil : $0 }),
                               axis: .vertical)
                         .lineLimit(2...6)
+                        .foregroundStyle(desktop == nil ? Color.primary : Color.secondary)
                 } header: {
                     Text(group)
                 } footer: {
-                    if store.settings.autoGroupNotes[group] != nil {
-                        Text(store.settings.manualGroupNotes[group] == nil ? "从网页读到" : "已手动修改（清空后恢复网页上的说明）")
+                    if desktop != nil {
+                        Text("来自电脑版网页")
+                    } else if store.settings.manualGroupNotes[group] != nil {
+                        Text("自己填写（电脑版网页上没读到这个组）")
+                    } else if store.settings.autoGroupNotes[group] != nil {
+                        Text("从其它页面读到")
                     }
                 }
             }

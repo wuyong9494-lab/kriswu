@@ -118,7 +118,8 @@ enum SyncService {
         guard let dutyURL = c.url,
               let page = try? await WebPageLoader.load(url: dutyURL, username: username, password: password,
                                                        desktop: true, replay: { _ in [] }) else { return [:] }
-        return GroupNotes.fromText(HTMLText.toText(page.html), reference: reference)
+        let notes = GroupNotes.fromDesktopHTML(page.html)
+        return notes.isEmpty ? GroupNotes.fromText(HTMLText.toText(page.html), reference: reference) : notes
     }
 
     private static func webURL(_ urlString: String) -> URL? {

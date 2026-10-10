@@ -467,6 +467,27 @@ final class RosterTests: XCTestCase {
         XCTAssertEqual(roster.count, 3)
     }
 
+    func testGroupNotesFromDesktopTable() {
+        let html = """
+        <table><tr><td>组A</td><td><div>下午可做：<span>GF03C02</span><del>GF03B06星</del></div>
+        <div>发遥测：等每日自动生成log令的星</div></td><td>1.所有星进行备份数传</td></tr>
+        <tr><td>组B</td><td>下午可做：<span style="text-decoration: line-through">KF01B</span>KF02B01星规划</td><td></td></tr></table>
+        <table><tr><td>2026-10-05</td><td>周一</td><td>张三</td></tr></table>
+        """
+        let notes = GroupNotes.fromDesktopHTML(html)
+        XCTAssertEqual(notes["组A"], "下午可做： GF03C02\n发遥测：等每日自动生成log令的星\n1.所有星进行备份数传")
+        XCTAssertEqual(notes["组B"], "下午可做： KF02B01星规划")
+        XCTAssertEqual(notes.count, 2)
+    }
+
+    func testGroupNotesFromDesktopBlocks() {
+        let html = "<div>组A</div><div>负责一号星的规划</div><div>注意备份</div><div>组B</div><div>负责二号星规划工作</div><div>日期</div><div>组C</div>"
+        let notes = GroupNotes.fromDesktopHTML(html)
+        XCTAssertEqual(notes["组A"], "负责一号星的规划\n注意备份")
+        XCTAssertEqual(notes["组B"], "负责二号星规划工作")
+        XCTAssertNil(notes["组C"])
+    }
+
     func testGroupNotesFromPaste() {
         let text = """
         组A：下午可做：一号星

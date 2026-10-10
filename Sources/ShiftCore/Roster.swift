@@ -188,6 +188,64 @@ public enum GroupNotes {
         return notes
     }
 
+    /// 电脑版「值班查看」页面：上方「组A｜要做的事｜注意事项」那一块。
+    /// 保留单元格里的换行，去掉划了删除线的内容（已经不做的星）；
+    /// 不是表格时，按「组A」单独一行、下面几行是说明来读。
+    public static func fromDesktopHTML(_ html: String) -> [String: String] {
+        var s = html
+        func replace(_ pattern: String, _ with: String) {
+            s = s.replacingOccurrences(of: pattern, with: with, options: [.regularExpression, .caseInsensitive])
+        }
+        replace(#"<(script|style|noscript|template)\b[^>]*>[\s\S]*?</\1\s*>"#, " ")
+        replace(#"<(del|s|strike)\b[^>]*>[\s\S]*?</\1\s*>"#, " ")
+        replace(#"<(span|font|b|i|em|strong)\b[^>]*line-through[^>]*>[^<]*</\1\s*>"#, " ")
+        replace(#"\s+"#, " ")
+        replace(#"<br\s*/?>|</(p|div|li|h[1-6])\s*>"#, "\n")
+
+        func clean(_ fragment: String) -> String {
+            let text = HTMLText.decodeEntities(fragment.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression))
+            return text.components(separatedBy: "\n")
+                .map { $0.replacingOccurrences(of: #"[ \t]+"#, with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+        }
+
+        var notes: [String: String] = [:]
+        for row in HTMLText.captures(#"<tr\b[^>]*>([\s\S]*?)</tr\s*>"#, in: s) {
+            let cells = HTMLText.captures(#"<t[dh]\b[^>]*>([\s\S]*?)</t[dh]\s*>"#, in: row).map(clean)
+            guard let first = cells.first, isGroup(first) else { continue }
+            let note = cells.dropFirst().filter { !$0.isEmpty }.joined(separator: "\n")
+            if note.count >= minLength { notes[normalizeGroup(first)] = note }
+        }
+        if !notes.isEmpty { return notes }
+
+        // 不是表格：「组A」单独一行，后面到下一个「组X」为止
+        let lines = clean(s).components(separatedBy: "\n")
+        var current: String?
+        var body: [String] = []
+        func flush() {
+            if let g = current, body.joined().count >= minLength { notes[normalizeGroup(g)] = body.joined(separator: "\n") }
+            body = []
+        }
+        for line in lines {
+            if isGroup(line) {
+                flush()
+                current = line
+            } else if current != nil {
+                // 到了排班表（日期、星期那一行）就结束
+                if line.hasPrefix("日期") || line.range(of: #"^\d{4}-\d{1,2}-\d{1,2}"#, options: .regularExpression) != nil {
+                    flush()
+                    current = nil
+                } else if body.count < 20 {
+                    body.append(line)
+                }
+            }
+        }
+        flush()
+        return notes
+    }
+
     private static let pasteHeader = try! NSRegularExpression(
         pattern: #"^(组\s*[A-Za-z0-9一二三四五六七八九十]{1,2})\s*(?:[：:]\s*(.*))?$"#)
 
