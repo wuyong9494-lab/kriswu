@@ -35,6 +35,8 @@ public struct ShiftType: Identifiable, Hashable, Codable {
                   keywords: ["夜", "晚", "night"], codes: ["N"]),
         ShiftType(id: "duty", name: "值班", emoji: "🛡️", colorHex: "#D0021B",
                   keywords: ["值", "duty", "on-call", "oncall"], codes: []),
+        ShiftType(id: "trip", name: "出差", emoji: "🧳", colorHex: "#8E8E93", keywords: ["出差"]),
+        ShiftType(id: "overtime", name: "加班", emoji: "⏱️", colorHex: "#E8743B", keywords: ["加班"]),
         ShiftType(id: "off", name: "休息", emoji: "🛌", colorHex: "#7ED321",
                   keywords: ["休", "假", "无分工", "off", "rest", "leave", "holiday"], codes: ["O", "R", "X", "/", "-"]),
     ]

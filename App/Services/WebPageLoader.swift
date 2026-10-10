@@ -29,14 +29,18 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
 
     /// 打开网页（必要时自动登录），记录网页取数据的请求；
     /// replay 根据记录挑出要再发一次的请求（比如把日期改成下一周），在同一个页面里用同样的登录状态发出。
+    /// pager：打开额外页面后依次点这些翻页按钮（如「上一天」最多 7 次、「下一天」最多 21 次），
+    /// 每翻一页记下内容；页面不再变化就换下一个按钮。
     static func load(url: URL, username: String, password: String, extraTabs: [String] = [],
+                     pager: [(label: String, steps: Int)] = [],
                      afterTabs: ([CapturedRequest]) -> [CapturedRequest] = { _ in [] },
                      replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let loader = WebPageLoader(username: username, password: password)
-        return try await loader.load(url, extraTabs: extraTabs, afterTabs: afterTabs, replay: replay)
+        return try await loader.load(url, extraTabs: extraTabs, pager: pager, afterTabs: afterTabs, replay: replay)
     }
 
-    private func load(_ url: URL, extraTabs: [String], afterTabs: ([CapturedRequest]) -> [CapturedRequest],
+    private func load(_ url: URL, extraTabs: [String], pager: [(label: String, steps: Int)],
+                      afterTabs: ([CapturedRequest]) -> [CapturedRequest],
                       replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
@@ -75,7 +79,18 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         for tab in extraTabs {
             let clicked = (try? await webView.callAsyncJavaScript(
                 Self.clickTabScript, arguments: ["label": tab], in: nil, contentWorld: .page)) as? Bool ?? false
-            if clicked { extraHTML.append(try await settledHTML(webView)) }
+            guard clicked else { continue }
+            var last = try await settledHTML(webView)
+            extraHTML.append(last)
+            for (label, steps) in pager {
+                for _ in 0..<steps {
+                    let pressed = (try? await webView.callAsyncJavaScript(
+                        Self.clickTabScript, arguments: ["label": label], in: nil, contentWorld: .page)) as? Bool ?? false
+                    guard pressed, let html = try await changedHTML(webView, from: last) else { break }
+                    extraHTML.append(html)
+                    last = html
+                }
+            }
         }
         let allCaptured = extraHTML.isEmpty ? captured : await capturedRequests(webView)
         let extraReplies = await send(afterTabs(allCaptured), in: webView)
@@ -94,6 +109,20 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             if let text = reply as? String { replies.append(text) }
         }
         return replies
+    }
+
+    /// 点按钮后等页面变化（最多 4 秒）；没变化说明已经翻到头了，返回 nil。
+    private func changedHTML(_ webView: WKWebView, from old: String) async throws -> String? {
+        for _ in 0..<12 {
+            try await Task.sleep(nanoseconds: 330_000_000)
+            let html = (try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String) ?? ""
+            if !html.isEmpty && html != old {
+                // 再等一下让内容画完整
+                try await Task.sleep(nanoseconds: 400_000_000)
+                return (try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String) ?? html
+            }
+        }
+        return nil
     }
 
     private func capturedRequests(_ webView: WKWebView) async -> [CapturedRequest] {

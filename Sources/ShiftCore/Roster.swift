@@ -16,8 +16,17 @@ public enum RosterExtractor {
             .trimmingCharacters(in: .whitespaces)
     }
 
+    /// 网页上的按钮、分区标题，不是人名
+    private static let uiWords: Set<String> = [
+        "上一天", "下一天", "我的分工", "值班查看", "排班系统", "值班管理系统", "基础分工", "组别分工",
+        "交班与休息", "其他", "今天", "明天", "无分工", "暂无", "无",
+    ]
+
+    /// 常见岗位名：即使「班次类型」里没有，也当作岗位
+    private static let postWords = ["遥测", "调度", "值班", "交班", "休息", "调休", "请假", "出差", "加班", "组"]
+
     static func looksLikeName(_ s: String) -> Bool {
-        guard !s.isEmpty, DateTokenParser.cleaned(s) == s else { return false }   // 排除「周一」这类
+        guard !s.isEmpty, !uiWords.contains(s), DateTokenParser.cleaned(s) == s else { return false }   // 排除「周一」这类
         let r = NSRange(s.startIndex..., in: s)
         return chineseName.firstMatch(in: s, range: r) != nil || latinName.firstMatch(in: s, range: r) != nil
     }
@@ -31,7 +40,8 @@ public enum RosterExtractor {
     /// 像岗位的词：遥测、调度、组A、值班交班前、休息、调休……（人名不算）
     static func isPost(_ s: String, matcher: ShiftMatcher) -> Bool {
         let t = cleanName(s)
-        return !t.isEmpty && matcher.match(t) != nil
+        guard !t.isEmpty, !uiWords.contains(t) else { return false }
+        return matcher.match(t) != nil || postWords.contains { t.contains($0) }
     }
 
     static func add(_ post: String, for name: String, on day: DayKey, to roster: inout Roster) {
@@ -73,15 +83,16 @@ public enum RosterExtractor {
         return roster
     }
 
-    /// 卡片式页面（手机版常见）：一行日期，下面每行「岗位 人名 人名…」，
-    /// 或者岗位单独一行、人名在下一行。
+    /// 卡片式页面（手机版「值班查看」）：一行日期，下面每行「岗位 人名 人名…」，
+    /// 或者岗位单独一行、人名紧接在下一行（多个人用「、」隔开）。
     public static func fromCards(_ text: String, reference: DayKey, matcher: ShiftMatcher) -> Roster {
         let rows = ScheduleParser.splitRows(text)
         let dates = DateTokenParser(reference: reference)
         var roster: Roster = [:]
         var day: DayKey?
         var pendingPost: String?
-        for row in rows {
+        var pendingRow = -1
+        for (index, row) in rows.enumerated() {
             let cells = row.flatMap { $0.components(separatedBy: CharacterSet(charactersIn: "：:")) }
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
@@ -95,14 +106,17 @@ public enum RosterExtractor {
                 let found = cells.dropFirst().flatMap { names(inCell: $0, matcher: matcher) }
                 if found.isEmpty {
                     pendingPost = cleanName(first)
+                    pendingRow = index
                 } else {
                     for name in found { add(cleanName(first), for: name, on: day, to: &roster) }
                     pendingPost = nil
                 }
-            } else if let post = pendingPost {
-                let found = cells.flatMap { names(inCell: $0, matcher: matcher) }
-                for name in found { add(post, for: name, on: day, to: &roster) }
-                if !found.isEmpty { pendingPost = nil }
+            } else if let post = pendingPost, index == pendingRow + 1 {
+                // 只认岗位下面紧挨着的一行；空岗位（请假、出差…）后面的按钮文字不会被当成人名
+                for name in cells.flatMap({ names(inCell: $0, matcher: matcher) }) { add(post, for: name, on: day, to: &roster) }
+                pendingPost = nil
+            } else {
+                pendingPost = nil
             }
         }
         return roster

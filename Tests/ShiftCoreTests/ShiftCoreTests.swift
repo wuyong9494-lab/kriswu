@@ -404,6 +404,47 @@ final class RosterTests: XCTestCase {
         XCTAssertTrue(RosterExtractor.fromTable(cards, reference: ref, matcher: m).isEmpty)
     }
 
+    /// 手机版「值班查看」真实结构（人名为虚构）：一天一页，分区标题 + 岗位卡片，空岗位后面是翻页按钮
+    func testMobileDutyViewPage() {
+        let m = ShiftMatcher(types: ShiftType.defaults)
+        let page = """
+        排班系统 W
+        2026-10-10 周六
+        基础分工
+        遥测
+        罗刚(1)
+        调度
+        陈静(3)、朱丽(3)、胡斌
+        组别分工
+        组A
+        何强(4)
+        组D
+        郭峰
+        交班与休息
+        值班交班前
+        林娜(5)
+        休息
+        马超(1)
+        其他
+        调休
+        周敏(3)
+        请假
+        出差
+        加班
+        上一天
+        6 / 7
+        下一天
+        我的分工
+        值班查看
+        """
+        let r = RosterExtractor.fromCards(page, reference: ref, matcher: m)
+        XCTAssertEqual(r["胡斌"], [d(10): "调度"])
+        XCTAssertEqual(r["郭峰"], [d(10): "组D"])
+        XCTAssertEqual(r["林娜"], [d(10): "值班交班前"])
+        XCTAssertEqual(r["周敏"], [d(10): "调休"])
+        XCTAssertEqual(Set(r.keys), ["罗刚", "陈静", "朱丽", "胡斌", "何强", "郭峰", "林娜", "马超", "周敏"])
+    }
+
     func testRosterFromJSON() {
         let json = """
         {"data":[
