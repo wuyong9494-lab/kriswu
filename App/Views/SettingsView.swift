@@ -258,11 +258,14 @@ struct SettingsView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             SecureField("值班网站密码（保存在钥匙串）", text: $password)
-                .onChange(of: password) { Keychain.set($0, for: .sourcePassword) }
+                .onChange(of: password) {
+                    Keychain.set($0, for: .sourcePassword)
+                    store.settings.loginExpiredNotified = false   // 改了密码，允许重新自动登录
+                }
             Toggle("用内置浏览器同步（沿用登录状态）", isOn: $store.settings.syncViaWeb)
             Toggle("排班有变动时通知我", isOn: $store.settings.notifyChanges)
             Button {
-                Task { await store.sync() }
+                Task { await store.sync(userInitiated: true) }
             } label: {
                 HStack {
                     Label("立即同步", systemImage: "arrow.triangle.2.circlepath")

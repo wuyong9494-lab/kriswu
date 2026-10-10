@@ -22,7 +22,7 @@ struct SyncScheduleIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = AppStore.shared
         guard store.canSync else { return .result(dialog: "还没有设置排班网址") }
-        await store.sync()
+        await store.sync(full: false)
         await store.rescheduleNotifications()
         return .result(dialog: "\(store.settings.lastSyncMessage ?? "已同步")")
     }

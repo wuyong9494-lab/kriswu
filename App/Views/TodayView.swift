@@ -37,7 +37,7 @@ struct TodayView: View {
                     .padding()
                 }
             }
-            .refreshable { await store.sync() }
+            .refreshable { await store.sync(userInitiated: true) }
             .navigationTitle("值班提醒")
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {

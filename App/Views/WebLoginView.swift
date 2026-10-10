@@ -58,7 +58,7 @@ struct WebLoginView: View {
                                 store.settings.sourceURL = url
                                 store.settings.syncViaWeb = true
                                 toast = "已设为自动同步地址，正在同步…"
-                                let ok = await store.sync()
+                                let ok = await store.sync(userInitiated: true)
                                 toast = store.settings.lastSyncMessage ?? (ok ? "同步成功" : "同步失败")
                             }
                         }

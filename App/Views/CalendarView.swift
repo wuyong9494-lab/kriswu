@@ -34,7 +34,7 @@ struct CalendarView: View {
                 if value.translation.width < -60 { move(1) }
                 if value.translation.width > 60 { move(-1) }
             })
-            .refreshable { await store.sync() }
+            .refreshable { await store.sync(userInitiated: true) }
             .navigationTitle("排班日历")
             .sheet(item: $editing) { DayEditor(day: $0) }
         }

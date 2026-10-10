@@ -374,20 +374,35 @@ final class AppStore: ObservableObject {
     var canSync: Bool { !settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty }
 
     @discardableResult
-    func sync() async -> Bool {
+    /// full：同时翻页读取全员排班（较慢，约半分钟），后台和快捷指令里只取自己的排班，避免超过系统给的时间。
+    /// userInitiated：用户手动刷新。登录失败过一次后，只有手动刷新才再尝试登录，防止密码错误时反复登录把账号锁住；
+    /// 同步结果和之前差别过大时，也只有手动刷新才采用。
+    func sync(full: Bool = true, userInitiated: Bool = false) async -> Bool {
         guard canSync, !isSyncing else { return false }
         isSyncing = true
         defer { isSyncing = false }
         do {
+            let mayLogin = userInitiated || !settings.loginExpiredNotified
             let outcome = try await SyncService.fetchSchedule(urlString: settings.sourceURL,
                                                               username: settings.sourceUsername,
-                                                              password: Keychain.get(.sourcePassword) ?? "",
+                                                              password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
                                                               viaWeb: settings.syncViaWeb,
+                                                              includeRoster: full,
                                                               parser: parser,
                                                               aliases: settings.aliases,
                                                               matcher: matcher,
                                                               preferredAPI: settings.apiSignature)
             let result = outcome.result
+            if !userInitiated, let range = result.range {
+                // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
+                let today = DayKey.today
+                let known = covered.filter { $0 >= today && range.contains($0) }
+                let changed = known.filter { schedule[$0] != result.entries[$0] }.count
+                if known.count >= 5 && changed * 10 > known.count * 6 {
+                    settings.lastSyncMessage = "同步结果异常：\(known.count) 天里有 \(changed) 天和之前不同，可能是网站改版，已忽略。下拉刷新可确认采用"
+                    return false
+                }
+            }
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
             if !outcome.roster.isEmpty {
                 // 这次读到的日子整天替换（换人、取消的都以新数据为准）
@@ -435,12 +450,12 @@ final class AppStore: ObservableObject {
     func syncIfStale() async {
         guard canSync else { return }
         if let last = settings.lastSync, Date().timeIntervalSince(last) < 3 * 60 { return }
-        await sync()
+        await sync(full: true)
     }
 
     /// 系统在后台唤醒 App 时调用（时间由 iOS 决定，不保证准时）。
     func backgroundRefresh() async {
-        if canSync { await sync() }
+        if canSync { await sync(full: false) }
         await sendDueWeChatReminders()
         await rescheduleNotifications()
         BackgroundRefresh.schedule(notBefore: nextWeChatReminder)

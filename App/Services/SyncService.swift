@@ -68,7 +68,7 @@ enum SyncService {
     /// viaWeb = false：直接下载（CSV / ICS 日历订阅 / JSON 文件）。
     @MainActor
     static func fetchSchedule(urlString: String, username: String, password: String, viaWeb: Bool,
-                              parser: ScheduleParser, aliases: [String], matcher: ShiftMatcher,
+                              includeRoster: Bool = true, parser: ScheduleParser, aliases: [String], matcher: ShiftMatcher,
                               preferredAPI: String?, weeksAhead: Int = 3) async throws -> Outcome {
         if viaWeb, let url = webURL(urlString) {
             let reference = parser.reference
@@ -77,9 +77,9 @@ enum SyncService {
                 rosterRequests(in: captured, reference: reference, matcher: matcher)
             }
             let page = try await WebPageLoader.load(
-                url: url, username: username, password: password, extraTabs: ["值班查看"],
+                url: url, username: username, password: password, extraTabs: includeRoster ? ["值班查看"] : [],
                 // 「值班查看」一次只显示一天：先往前翻到本周第一天，再往后翻，能翻到的日子都读一遍
-                pager: [(label: "上一天", steps: 7), (label: "下一天", steps: 21)],
+                pager: includeRoster ? [(label: "上一天", steps: 7), (label: "下一天", steps: 21)] : [],
                 afterTabs: rosterWeeks) { captured in
                 found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
                                           matcher: matcher, reference: reference)
