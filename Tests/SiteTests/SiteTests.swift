@@ -106,6 +106,7 @@ final class SiteTests: XCTestCase {
         }
         // 说明里的「9月20日」不能读成某个人的排班
         XCTAssertNil(result.roster["下午可做"])
-        XCTAssertEqual(Set(result.roster.keys), Set(try await expected(.today).roster.keys))
+        let everyone = Set(try await expected(.today).roster.keys)
+        XCTAssertEqual(Set(result.roster.keys), everyone)
     }
 }
