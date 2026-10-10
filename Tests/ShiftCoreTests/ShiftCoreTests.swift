@@ -467,6 +467,38 @@ final class RosterTests: XCTestCase {
         XCTAssertEqual(roster.count, 3)
     }
 
+    func testRosterFromDesktopWeekTable() {
+        // 仿电脑版「值班查看」：上面是各组说明（里面也有日期），下面是 Element 表格（表头、表体是两个 table）
+        let html = """
+        <div class="notes"><table><tr><td>组A</td><td>下午可做：一号星</td><td>谛听新星发射保障：9月20日发射</td></tr>
+        <tr><td>组B</td><td>下午可做：二号星规划</td><td>注意检查</td></tr></table></div>
+        <div class="el-table__header-wrapper"><table><thead><tr>
+        <th><div class="cell">日期<span class="caret-wrapper"><i class="sort-caret"></i></span></div></th><th>星期</th>
+        <th>遥测</th><th>调度</th><th>组A</th><th>组B</th><th>值班交班前</th><th>休息</th><th>调休</th><th>加班</th>
+        </tr></thead></table></div>
+        <div class="el-table__body-wrapper"><table><tbody>
+        <tr><td><div class="cell">2026-10-05</div></td><td>周一</td><td><span class="el-tag">张三(5)</span></td>
+        <td><span class="el-tag">李四(3)</span></td><td><span class="el-tag">王五(1)</span></td><td><span class="el-tag">赵六(5)</span></td>
+        <td><span class="el-tag">钱七(6)</span></td><td><span class="el-tag">王五(1)</span><span class="el-tag">赵六(5)</span></td>
+        <td></td><td><span class="el-tag">孙八(3)</span></td></tr>
+        <tr><td>2026-10-06</td><td>周二</td><td>赵六(4)</td><td>李四(3)</td><td>钱七(6)</td><td>王五(1)</td><td></td><td></td><td></td><td></td></tr>
+        </tbody></table></div>
+        """
+        let roster = RosterExtractor.fromDesktopHTML(html, reference: DayKey(year: 2026, month: 10, day: 10),
+                                                     matcher: ShiftMatcher(types: ShiftType.defaults))
+        let d5 = DayKey(year: 2026, month: 10, day: 5), d6 = DayKey(year: 2026, month: 10, day: 6)
+        XCTAssertEqual(roster["张三"]?[d5], "遥测")
+        XCTAssertEqual(roster["李四"]?[d5], "调度")
+        XCTAssertEqual(roster["王五"]?[d5], "组A+休息")
+        XCTAssertEqual(roster["钱七"]?[d5], "值班交班前")
+        XCTAssertEqual(roster["孙八"]?[d5], "加班")
+        XCTAssertEqual(roster["赵六"]?[d6], "遥测")
+        XCTAssertEqual(roster["钱七"]?[d6], "组A")
+        // 说明里的「9月20日」不能读成排班
+        XCTAssertNil(roster.values.first { $0[DayKey(year: 2026, month: 9, day: 20)] != nil })
+        XCTAssertEqual(Set(roster.keys), ["张三", "李四", "王五", "赵六", "钱七", "孙八"])
+    }
+
     func testGroupNotesFromDesktopTable() {
         let html = """
         <table><tr><td>组A</td><td><div>下午可做：<span>GF03C02</span><del>GF03B06星</del></div>

@@ -113,6 +113,7 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     init(userAgent: String? = nil) {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        if userAgent != nil { WebPageLoader.applyDesktopMode(to: config) }
         webView = WKWebView(frame: .zero, configuration: config)
         webView.customUserAgent = userAgent
         super.init()

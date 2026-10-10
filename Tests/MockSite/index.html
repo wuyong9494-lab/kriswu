@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>排班系统（测试）</title>
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  .btn { display: inline-block; padding: 4px 10px; border: 1px solid #ccc; margin: 4px; cursor: pointer; }
+  .tab { display: inline-block; padding: 8px; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid #ddd; padding: 2px 6px; }
+</style>
+</head>
+<body>
+<div id="app">加载中…</div>
+<script>
+// 和很多真实网站一样：浏览器标识像手机、屏幕窄、或者有触摸屏，就显示手机版
+const isMobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
+  || window.innerWidth < 768 || document.documentElement.clientWidth < 768
+  || ('ontouchstart' in window);
+document.body.dataset.layout = isMobile ? 'mobile' : 'desktop';
+const app = document.getElementById('app');
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const monday = d => addDays(d, -((d.getDay() + 6) % 7));
+const weekNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const token = () => localStorage.getItem('token');
+
+async function api(path) {
+  const r = await fetch(path, { headers: { Authorization: 'Bearer ' + token() } });
+  if (r.status === 401) { localStorage.removeItem('token'); route(); return null; }
+  return (await r.json()).data;
+}
+
+function loginView() {
+  app.innerHTML = `<form class="login" onsubmit="return false">
+    <div class="el-input"><input type="text" placeholder="请输入账号"></div>
+    <div class="el-input"><input type="password" placeholder="请输入密码"></div>
+    <button type="button" class="el-button"><span>登 录</span></button></form>`;
+  app.querySelector('button').onclick = async () => {
+    const [u, p] = [...app.querySelectorAll('input')].map(e => e.value);
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ username: u, password: p }) });
+    const j = await r.json();
+    if (j.code === 0) { localStorage.setItem('token', j.token); location.hash = isMobile ? '#/mine' : '#/duty'; route(); }
+  };
+}
+
+// ---------- 手机版 ----------
+let mobileDay = new Date();
+function mobileShell(active) {
+  return `<div class="tabs"><div class="tab ${active === 'mine' ? 'on' : ''}" onclick="location.hash='#/mine'">我的分工</div>` +
+         `<div class="tab ${active === 'duty' ? 'on' : ''}" onclick="location.hash='#/duty'">值班查看</div></div><div id="body"></div>`;
+}
+async function mobileMine() {
+  app.innerHTML = mobileShell('mine');
+  const m = monday(new Date());
+  const rows = await api(`/api/mine?start=${iso(m)}&end=${iso(addDays(m, 6))}`);
+  if (!rows) return;
+  document.getElementById('body').innerHTML = rows.map(r =>
+    `<div class="card"><div class="date">${r.dutyDate} ${weekNames[new Date(r.dutyDate + 'T12:00').getDay()]}</div>` +
+    `<div class="post">${r.groupName || '无分工'}</div></div>`).join('');
+}
+async function mobileDuty() {
+  app.innerHTML = mobileShell('duty') ;
+  const d = iso(mobileDay);
+  const rows = await api(`/api/duty?start=${d}&end=${d}`);
+  if (!rows) return;
+  const byPost = {};
+  rows.forEach(r => (byPost[r.postName] = byPost[r.postName] || []).push(r.userName));
+  document.getElementById('body').innerHTML =
+    `<div class="pager"><span class="btn" id="prev">上一天</span><span class="day">${d} ${weekNames[mobileDay.getDay()]}</span>` +
+    `<span class="btn" id="next">下一天</span></div>` +
+    Object.entries(byPost).map(([p, names]) => `<div class="card"><div class="post">${p}</div><div class="names">${names.join('、')}</div></div>`).join('');
+  document.getElementById('prev').onclick = () => { mobileDay = addDays(mobileDay, -1); mobileDuty(); };
+  document.getElementById('next').onclick = () => { mobileDay = addDays(mobileDay, 1); mobileDuty(); };
+}
+
+// ---------- 电脑版 ----------
+let desktopWeek = monday(new Date());
+const NOTES = [
+  ['组A', '下午可做：<span>一号星</span><del>二号星</del><br>发遥测：每日自动生成的星', '1.所有星做备份数传'],
+  ['组B', '下午可做：<span style="text-decoration: line-through">三号星</span>四号星规划', '四号星可自动规划'],
+  ['组C', '下午可做：五号星、六号星', '注意客户使用时间段'],
+  ['组D', '上午可做：保证每日指令发送与遥测', '平台星有任务就做'],
+  ['组E', '当日应急，每半个小时查看异常', '新星发射保障：9月20日发射'],
+];
+async function desktopDuty() {
+  const start = desktopWeek, end = addDays(start, 6);
+  const rows = await api(`/api/duty?start=${iso(start)}&end=${iso(end)}`);
+  if (!rows) return;
+  const posts = ['遥测', '调度', '组A', '组B', '组C', '组D', '组E', '值班交班前', '休息', '调休', '加班'];
+  const cells = {};
+  rows.forEach(r => ((cells[r.dutyDate] = cells[r.dutyDate] || {})[r.postName] =
+    (cells[r.dutyDate][r.postName] || []).concat(r.userName + '(' + r.times + ')')));
+  const days = [...Array(7).keys()].map(i => addDays(start, i));
+  app.innerHTML =
+    `<div class="page-title">值班查看</div><div class="sub">当前周：${iso(start)} ~ ${iso(end)}</div>` +
+    `<div class="tools"><button class="el-button"><span>值班大屏</span></button>` +
+    `<button class="el-button" id="prev"><i class="el-icon-caret-left"></i><span>上一周</span></button>` +
+    `<button class="el-button" id="next"><i class="el-icon-caret-right"></i><span>下一周</span></button></div>` +
+    `<div class="notes"><table>${NOTES.map(n => `<tr><td>${n[0]}</td><td>${n[1]}</td><td>${n[2]}</td></tr>`).join('')}</table></div>` +
+    `<div class="el-table"><div class="el-table__header-wrapper"><table><thead><tr><th><div class="cell">日期<span class="caret-wrapper"></span></div></th><th>星期</th>` +
+    posts.map(p => `<th><div class="cell">${p}</div></th>`).join('') + `</tr></thead></table></div>` +
+    `<div class="el-table__body-wrapper"><table><tbody>` +
+    days.map(d => `<tr><td><div class="cell">${iso(d)}</div></td><td>${weekNames[d.getDay()]}</td>` +
+      posts.map(p => `<td><div class="cell">${(cells[iso(d)] || {})[p] ? cells[iso(d)][p].map(n => `<span class="el-tag">${n}</span>`).join('') : ''}</div></td>`).join('') +
+      `</tr>`).join('') + `</tbody></table></div></div>`;
+  document.getElementById('prev').onclick = () => { desktopWeek = addDays(desktopWeek, -7); desktopDuty(); };
+  document.getElementById('next').onclick = () => { desktopWeek = addDays(desktopWeek, 7); desktopDuty(); };
+}
+
+function route() {
+  if (!token()) return loginView();
+  const h = location.hash;
+  if (isMobile) return h.startsWith('#/duty') ? mobileDuty() : mobileMine();
+  return desktopDuty();
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>

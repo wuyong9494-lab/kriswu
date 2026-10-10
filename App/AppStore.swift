@@ -72,6 +72,7 @@ struct AppSettings: Codable, Equatable {
     var desktopNotesMessage: String?
     /// 电脑版「值班查看」的网址（空 = 用同步网址的 #/duty）
     var desktopNotesURL = ""
+    var desktopRosterMessage: String?
     /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
     var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
@@ -121,6 +122,7 @@ struct AppSettings: Codable, Equatable {
         lastDesktopNotesAttempt = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
         desktopNotesMessage = try c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
         desktopNotesURL = try c.decodeIfPresent(String.self, forKey: .desktopNotesURL) ?? ""
+        desktopRosterMessage = try c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
         desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
@@ -465,15 +467,7 @@ final class AppStore: ObservableObject {
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
             let rosterBefore = roster
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
-            if !outcome.roster.isEmpty {
-                // 这次读到的日子整天替换（换人、取消的都以新数据为准）
-                let days = Set(outcome.roster.values.flatMap(\.keys))
-                roster = roster.mapValues { $0.filter { !days.contains($0.key) } }
-                RosterExtractor.merge(outcome.roster, into: &roster)
-                let cutoff = DayKey.today.adding(days: -120)
-                roster = roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
-                saveRoster()
-            }
+            mergeRoster(outcome.roster)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
             let hadData = !schedule.isEmpty
@@ -531,15 +525,34 @@ final class AppStore: ObservableObject {
                                                      overrideURL: settings.desktopNotesURL,
                                                      username: settings.sourceUsername,
                                                      password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
-                                                     reference: .today)
+                                                     reference: .today,
+                                                     matcher: matcher)
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
+        mergeRoster(result.roster)
+        let days = Set(result.roster.values.flatMap(\.keys))
+        if let lo = days.min(), let hi = days.max() {
+            settings.desktopRosterMessage = "读到 \(result.roster.count) 人、\(days.count) 天（\(lo.dateText) – \(hi.dateText)）"
+        } else {
+            settings.desktopRosterMessage = "没读到全员排班（\(Date().formatted(date: .omitted, time: .shortened))）"
+        }
         if result.notes.isEmpty {
             settings.desktopNotesMessage = "没读到（\(Date().formatted(date: .omitted, time: .shortened))）：\(result.reason ?? "没找到说明")"
             return false
         }
         await applyDesktopNotes(result.notes)
         return true
+    }
+
+    /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），保留最近 200 天。
+    func mergeRoster(_ new: Roster) {
+        guard !new.isEmpty else { return }
+        let days = Set(new.values.flatMap(\.keys))
+        roster = roster.mapValues { $0.filter { !days.contains($0.key) } }
+        RosterExtractor.merge(new, into: &roster)
+        let cutoff = DayKey.today.adding(days: -200)
+        roster = roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+        saveRoster()
     }
 
     /// 保存从电脑版页面读到的各组说明。

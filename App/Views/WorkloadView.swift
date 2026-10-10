@@ -5,6 +5,7 @@ struct WorkloadView: View {
     @EnvironmentObject private var store: AppStore
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
+    @State private var reading = false
 
     var body: some View {
         let report = store.workload(year: year, month: month)
@@ -20,8 +21,28 @@ struct WorkloadView: View {
                 .buttonStyle(.borderless)
             } footer: {
                 Text(report.days.isEmpty
-                     ? "这个月还没有全员排班数据。在「今天」页下拉刷新会读取网站「值班查看」。"
+                     ? "这个月还没有全员排班数据。"
                      : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)）。网站上能看到的日子才算得进来。")
+            }
+            Section {
+                Button {
+                    reading = true
+                    Task {
+                        await store.readDesktopNotes()
+                        reading = false
+                    }
+                } label: {
+                    HStack {
+                        Text("从电脑版网页读取前两个月")
+                        if reading { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(reading || !store.canSync)
+                if let message = store.settings.desktopRosterMessage {
+                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("用电脑版打开「值班查看」，点「上一周」往前翻 9 周，把每周的全员排班存下来（约半分钟）。每天第一次打开 App 时也会自动读一次。")
             }
             ForEach(report.people, id: \.name) { person in
                 Section {

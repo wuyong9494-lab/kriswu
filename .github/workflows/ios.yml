@@ -95,3 +95,44 @@ jobs:
           else
             gh release create app ShiftReminder.ipa --target "$GITHUB_SHA" --title "$title" --notes "$notes" --latest
           fi
+
+  # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
+  site-tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 启动仿值班网站
+        run: |
+          nohup python3 Tests/MockSite/server.py 8765 > mock.log 2>&1 &
+          sleep 2
+          curl -sf "http://127.0.0.1:8765/api/expected?date=2026-01-01"
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 模拟器里测试同步流程
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          echo "模拟器：$DEVICE"
+          set +e
+          xcodebuild test \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -destination "id=$DEVICE" \
+            -only-testing:SiteTests \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO > test.log 2>&1
+          status=$?
+          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log
+          if [ $status -ne 0 ]; then tail -80 test.log; fi
+          exit $status
+
+      - name: 网站访问记录
+        if: always()
+        run: tail -150 mock.log

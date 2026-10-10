@@ -109,6 +109,8 @@ enum SyncService {
 
     struct DesktopNotes {
         var notes: [String: String]
+        /// 电脑版周表里的全员排班（往前翻了几周）
+        var roster: Roster = [:]
         var url: String
         /// 没读到时的原因和页面文字（给「设置 › 各组工作内容」排查用）
         var reason: String?
@@ -130,36 +132,62 @@ enum SyncService {
         return notes.isEmpty ? GroupNotes.fromText(HTMLText.toText(html), reference: reference) : notes
     }
 
-    /// 用电脑版打开「值班查看」，读上面各组的工作内容。
+    /// 用电脑版打开「值班查看」：读上面各组的工作内容，再点「上一周」往前翻 weeksBack 周读全员排班。
+    /// 网页背后的数据接口带日期参数时，也直接用接口取前几周，翻页失败也能拿到。
     @MainActor
     static func fetchDesktopGroupNotes(urlString: String, overrideURL: String, username: String, password: String,
-                                       reference: DayKey) async -> DesktopNotes {
+                                       reference: DayKey, matcher: ShiftMatcher, weeksBack: Int = 9) async -> DesktopNotes {
         let custom = overrideURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let dutyURL = custom.isEmpty ? desktopDutyURL(from: urlString) : webURL(custom) else {
             return DesktopNotes(notes: [:], url: custom, reason: "网址不正确", pageText: "")
         }
+        let history: ([CapturedRequest]) -> [CapturedRequest] = { captured in
+            historyRequests(in: captured, reference: reference, matcher: matcher, weeksBack: weeksBack)
+        }
         let page: WebPageLoader.Page
         do {
-            // 直接打开 #/duty；页面上要是没有，再点一下「值班查看」菜单
+            // 空标签 = 在打开的页面上直接翻页
             page = try await WebPageLoader.load(url: dutyURL, username: username, password: password,
-                                                extraTabs: ["值班查看"], desktop: true, replay: { _ in [] })
+                                                extraTabs: [""], pager: weeksBack > 0 ? [(label: "上一周", steps: weeksBack)] : [],
+                                                afterTabs: history, desktop: true, replay: { _ in [] })
         } catch {
             return DesktopNotes(notes: [:], url: dutyURL.absoluteString, reason: "打不开：\(error.localizedDescription)", pageText: "")
         }
-        var html = page.html
-        var notes = groupNotes(fromHTML: html, reference: reference)
-        for extra in page.extraHTML where notes.isEmpty {
-            notes = groupNotes(fromHTML: extra, reference: reference)
-            html = extra
+        var roster: Roster = [:]
+        var notes: [String: String] = [:]
+        for html in [page.html] + page.extraHTML {
+            RosterExtractor.merge(RosterExtractor.fromDesktopHTML(html, reference: reference, matcher: matcher), into: &roster)
+            if notes.isEmpty { notes = groupNotes(fromHTML: html, reference: reference) }
         }
-        let text = HTMLText.toText(html)
+        for body in page.captured.map(\.body) + page.extraReplies {
+            RosterExtractor.merge(RosterExtractor.fromJSON(body, reference: reference, matcher: matcher), into: &roster)
+        }
+        let text = HTMLText.toText(page.html)
         var reason: String?
         if notes.isEmpty {
             reason = HTMLText.looksLikeLoginPage(page.html) ? "停在了登录页（自动登录没成功）"
                 : text.contains("组A") ? "页面上有「组A」，但没认出说明的位置"
                 : "页面上没有「组A」等字样，可能不是电脑版「值班查看」页面"
         }
-        return DesktopNotes(notes: notes, url: page.url ?? dutyURL.absoluteString, reason: reason, pageText: String(text.prefix(6000)))
+        return DesktopNotes(notes: notes, roster: roster, url: page.url ?? dutyURL.absoluteString, reason: reason,
+                            pageText: String(text.prefix(6000)))
+    }
+
+    /// 全员排班接口往前取 weeksBack 周（以及后面三周）。
+    private static func historyRequests(in captured: [CapturedRequest], reference: DayKey, matcher: ShiftMatcher,
+                                        weeksBack: Int) -> [CapturedRequest] {
+        var best: CapturedRequest?
+        var bestCount = 0
+        for request in captured where (200..<300).contains(request.status) {
+            let count = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher).values.reduce(0) { $0 + $1.count }
+            if count > bestCount {
+                best = request
+                bestCount = count
+            }
+        }
+        guard let best, best.hasDateParameter else { return [] }
+        let back = weeksBack > 0 ? (1...weeksBack).map { -7 * $0 } : []
+        return (back + [7, 14, 21]).map { best.shifted(days: $0) }
     }
 
     private static func webURL(_ urlString: String) -> URL? {

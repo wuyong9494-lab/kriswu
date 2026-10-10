@@ -62,15 +62,29 @@ public enum RosterExtractor {
 
     /// 岗位表：表头是岗位（组A、组B、调度…），每行一天，格子里是这个岗位当天的人。
     /// 表头里不像岗位的列（比如表头对错了位置、读到了人名）直接跳过。
-    public static func fromTable(_ text: String, reference: DayKey, matcher: ShiftMatcher) -> Roster {
+    /// strict：只认带「日期」或「星期」列的表头、日期在前两列且格子里只有日期的行
+    /// （电脑版页面上方的各组说明里也有「9月20日发射」这类文字，不能当成排班）。
+    public static func fromTable(_ text: String, reference: DayKey, matcher: ShiftMatcher, strict: Bool = false) -> Roster {
         let rows = ScheduleParser.splitRows(text)
         let dates = DateTokenParser(reference: reference)
         var roster: Roster = [:]
         var header: [String]?
+        func isDateCell(_ cell: String) -> Bool {
+            guard dates.parse(cell) != nil else { return false }
+            return !strict || cell.trimmingCharacters(in: .whitespaces).count <= 16
+        }
         for row in rows {
-            guard let dateCol = row.firstIndex(where: { dates.parse($0) != nil }), let day = dates.parse(row[dateCol]) else {
+            guard let dateCol = row.firstIndex(where: isDateCell), !strict || dateCol <= 1,
+                  let day = dates.parse(row[dateCol]) else {
                 // 没有日期的行：至少 3 个格子的当作表头
-                if row.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).count >= 3 { header = row }
+                let cells = row.map { $0.trimmingCharacters(in: .whitespaces) }
+                if cells.filter({ !$0.isEmpty }).count >= 3 {
+                    if !strict || cells.contains(where: { $0.hasPrefix("日期") || $0.hasPrefix("星期") }) {
+                        header = row
+                    } else if strict {
+                        header = nil
+                    }
+                }
                 continue
             }
             guard let header else { continue }
@@ -81,6 +95,11 @@ public enum RosterExtractor {
             }
         }
         return roster
+    }
+
+    /// 电脑版「值班查看」：一周一张表，表头「日期 星期 遥测 调度 组A … 休息 调休 加班」，格子里「张三(5)」。
+    public static func fromDesktopHTML(_ html: String, reference: DayKey, matcher: ShiftMatcher) -> Roster {
+        fromTable(HTMLText.tablesOnly(html), reference: reference, matcher: matcher, strict: true)
     }
 
     /// 卡片式页面（手机版「值班查看」）：一行日期，下面每行「岗位 人名 人名…」，

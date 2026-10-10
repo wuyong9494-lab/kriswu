@@ -46,6 +46,68 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     static let desktopUserAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
+    /// 让网页以为是在电脑上打开：屏幕 1440 宽、没有触摸屏，并把页面的 viewport 改成 1440 宽。
+    /// 很多网站按屏幕宽度（而不是浏览器标识）决定显示手机版还是电脑版，只改标识不够。
+    static let desktopScript = """
+    (function () {
+      if (window.__desktopMode) return;
+      window.__desktopMode = true;
+      var W = 1440, H = 900;
+      function def(o, k, v) { try { Object.defineProperty(o, k, { get: function () { return v; }, configurable: true }); } catch (e) {} }
+      def(screen, 'width', W); def(screen, 'availWidth', W); def(screen, 'height', H); def(screen, 'availHeight', H);
+      def(window, 'outerWidth', W); def(window, 'outerHeight', H);
+      def(navigator, 'maxTouchPoints', 0); def(navigator, 'platform', 'MacIntel');
+      function noTouch() {
+        ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'].forEach(function (k) {
+          [window, document, document.documentElement, Window.prototype, Document.prototype,
+           Element.prototype, HTMLElement.prototype].forEach(function (o) { try { if (o) delete o[k]; } catch (e) {} });
+        });
+        try { delete window.TouchEvent; } catch (e) {}
+      }
+      noTouch();
+      try { delete window.orientation; } catch (e) {}
+      var mm = window.matchMedia;
+      if (mm) {
+        window.matchMedia = function (q) {
+          var r = mm.call(window, q);
+          if (/pointer\s*:\s*coarse|hover\s*:\s*none/i.test(q)) {
+            return { matches: false, media: q, onchange: null, addListener: function () {}, removeListener: function () {},
+                     addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+          }
+          return r;
+        };
+      }
+      var content = 'width=' + W;
+      function fix(m) { if (m && m.name && m.name.toLowerCase() === 'viewport' && m.content !== content) m.content = content; }
+      function ensure() {
+        var list = document.querySelectorAll('meta[name=viewport]');
+        if (list.length === 0 && (document.head || document.documentElement)) {
+          var m = document.createElement('meta'); m.name = 'viewport'; m.content = content;
+          (document.head || document.documentElement).appendChild(m);
+        }
+        list.forEach(fix);
+      }
+      ensure();
+      new MutationObserver(function (records) {
+        records.forEach(function (r) {
+          if (r.type === 'attributes') fix(r.target);
+          r.addedNodes && r.addedNodes.forEach(function (n) { if (n.tagName === 'META') fix(n); });
+        });
+      }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['content', 'name'] });
+      document.addEventListener('DOMContentLoaded', function () { ensure(); noTouch(); });
+      // 页面脚本最早在 <head> 里就会判断，在第一个元素出现时再清一次
+      new MutationObserver(function (r, o) { if (document.head) { noTouch(); o.disconnect(); } })
+        .observe(document, { childList: true, subtree: true });
+    })();
+    """
+
+    /// 打开电脑版页面用的浏览器设置。
+    static func applyDesktopMode(to config: WKWebViewConfiguration) {
+        config.defaultWebpagePreferences.preferredContentMode = .desktop
+        config.userContentController.addUserScript(
+            WKUserScript(source: desktopScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
+
     private func load(_ url: URL, extraTabs: [String], pager: [(label: String, steps: Int)],
                       afterTabs: ([CapturedRequest]) -> [CapturedRequest],
                       desktop: Bool,
@@ -54,6 +116,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         config.websiteDataStore = .default()
         config.userContentController.addUserScript(
             WKUserScript(source: Self.spyScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        if desktop { Self.applyDesktopMode(to: config) }
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: desktop ? 1440 : 390, height: desktop ? 900 : 844),
                                 configuration: config)
         if desktop { webView.customUserAgent = Self.desktopUserAgent }
@@ -87,11 +150,14 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         // 再点开其它标签页（如「值班查看」），拿全员排班和各组说明
         var extraHTML: [String] = []
         for tab in extraTabs {
-            let clicked = (try? await webView.callAsyncJavaScript(
-                Self.clickTabScript, arguments: ["label": tab], in: nil, contentWorld: .page)) as? Bool ?? false
-            guard clicked else { continue }
+            // 空标签 = 就在当前页面翻页
+            if !tab.isEmpty {
+                let clicked = (try? await webView.callAsyncJavaScript(
+                    Self.clickTabScript, arguments: ["label": tab], in: nil, contentWorld: .page)) as? Bool ?? false
+                guard clicked else { continue }
+            }
             var last = try await settledHTML(webView)
-            extraHTML.append(last)
+            if !tab.isEmpty { extraHTML.append(last) }
             for (label, steps) in pager {
                 for _ in 0..<steps {
                     let pressed = (try? await webView.callAsyncJavaScript(
@@ -143,8 +209,9 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
 
     /// 点击文字正好是 label 的标签（取最里层的元素，点击会冒泡到外层）。
     private static let clickTabScript = """
-    const els = [...document.querySelectorAll('a, button, span, div, li, p, [role=tab]')]
-      .filter(e => e.offsetParent !== null && (e.innerText || '').trim() === label);
+    const norm = s => (s || '').replace(/\s+/g, '');
+    const els = [...document.querySelectorAll('a, button, span, div, li, p, [role=tab], [role=button]')]
+      .filter(e => e.offsetParent !== null && norm(e.innerText) === norm(label));
     const el = els[els.length - 1];
     if (!el) return false;
     el.click();

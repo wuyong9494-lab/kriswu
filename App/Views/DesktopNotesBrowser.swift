@@ -33,9 +33,13 @@ struct DesktopNotesBrowser: View {
                     Button("读取本页") {
                         Task {
                             guard let html = await model.html() else { return }
+                            // 顺便存下这一页周表里的全员排班
+                            let weekRoster = RosterExtractor.fromDesktopHTML(html, reference: .today, matcher: store.matcher)
+                            store.mergeRoster(weekRoster)
                             let notes = SyncService.groupNotes(fromHTML: html, reference: .today)
                             if notes.isEmpty {
-                                toast = "这一页上没认出「组A」等说明。换到「值班查看」页面再试"
+                                toast = "这一页上没认出「组A」等说明" + (weekRoster.isEmpty ? "。换到「值班查看」页面再试"
+                                    : "，但存下了 \(weekRoster.count) 人的本页排班")
                                 store.desktopPageText = "网址：\(model.webView.url?.absoluteString ?? "")\n\n"
                                     + String(HTMLText.toText(html).prefix(6000))
                             } else {

@@ -37,7 +37,23 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
-    scheme: {}
+    scheme:
+      testTargets:
+        - SiteTests
+
+  # 模拟器里对着仿值班网站（Tests/MockSite）跑同步流程，只在 CI 用
+  SiteTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/SiteTests
+    dependencies:
+      - target: ShiftReminder
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder.sitetests
+        TARGETED_DEVICE_FAMILY: "1"
 
   # 主屏幕 / 锁屏小组件：显示今天、明天的分工
   ShiftWidget:

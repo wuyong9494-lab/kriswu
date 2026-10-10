@@ -429,6 +429,9 @@ struct GroupNotesView: View {
                 if let message = store.settings.desktopNotesMessage {
                     LabeledContent("最近结果", value: message)
                 }
+                if let message = store.settings.desktopRosterMessage {
+                    LabeledContent("全员排班", value: message)
+                }
                 Button {
                     reading = true
                     Task {

@@ -49,6 +49,14 @@ public enum HTMLText {
             .joined(separator: "\n")
     }
 
+    /// 只要网页里的表格（逐行「格子\t格子」），表格以外的文字不要。
+    public static func tablesOnly(_ html: String) -> String {
+        var s = html.replacingOccurrences(of: #"<(script|style|noscript|template)\b[^>]*>[\s\S]*?</\1\s*>"#, with: " ",
+                                          options: [.regularExpression, .caseInsensitive])
+        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return captures(#"(<table\b[^>]*>[\s\S]*?</table\s*>)"#, in: s).map(tableText).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+
     static func tableText(_ table: String) -> String {
         var lines: [String] = []
         for row in captures(#"<tr\b[^>]*>([\s\S]*?)</tr\s*>"#, in: table) {
