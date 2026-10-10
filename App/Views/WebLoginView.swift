@@ -109,10 +109,12 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     /// 设置里的账号密码；打开登录页时自动填好并点「登录」
     var credentials: (user: String, password: String)?
 
-    override init() {
+    /// userAgent：传入电脑浏览器标识时，网站显示电脑版页面
+    init(userAgent: String? = nil) {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         webView = WKWebView(frame: .zero, configuration: config)
+        webView.customUserAgent = userAgent
         super.init()
         webView.navigationDelegate = self
         webView.allowsBackForwardNavigationGestures = true

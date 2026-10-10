@@ -70,6 +70,8 @@ struct AppSettings: Codable, Equatable {
     var lastDesktopNotesFetch: Date?
     var lastDesktopNotesAttempt: Date?
     var desktopNotesMessage: String?
+    /// 电脑版「值班查看」的网址（空 = 用同步网址的 #/duty）
+    var desktopNotesURL = ""
     /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
     var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
@@ -118,6 +120,7 @@ struct AppSettings: Codable, Equatable {
         lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
         lastDesktopNotesAttempt = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
         desktopNotesMessage = try c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
+        desktopNotesURL = try c.decodeIfPresent(String.self, forKey: .desktopNotesURL) ?? ""
         desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
@@ -182,6 +185,8 @@ final class AppStore: ObservableObject {
     /// 全员排班（姓名 → 日期 → 岗位），只存在手机上，用于搜索成员
     @Published private(set) var roster: Roster = [:]
     @Published private(set) var isSyncing = false
+    /// 上次读电脑版页面时看到的文字（只在内存里，排查用）
+    @Published var desktopPageText: String?
 
     private static let rosterURL: URL = {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -521,21 +526,28 @@ final class AppStore: ObservableObject {
     @discardableResult
     func readDesktopNotes(mayLogin: Bool = true) async -> Bool {
         settings.lastDesktopNotesAttempt = Date()
-        let notes = await Task {
+        let result = await Task {
             await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
+                                                     overrideURL: settings.desktopNotesURL,
                                                      username: settings.sourceUsername,
                                                      password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
                                                      reference: .today)
         }.value
-        if notes.isEmpty {
-            settings.desktopNotesMessage = "没读到（\(Date().formatted(date: .omitted, time: .shortened))）：电脑版页面上没找到「组A」等说明"
+        desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
+        if result.notes.isEmpty {
+            settings.desktopNotesMessage = "没读到（\(Date().formatted(date: .omitted, time: .shortened))）：\(result.reason ?? "没找到说明")"
             return false
         }
+        await applyDesktopNotes(result.notes)
+        return true
+    }
+
+    /// 保存从电脑版页面读到的各组说明。
+    func applyDesktopNotes(_ notes: [String: String]) async {
         settings.desktopGroupNotes = notes
         settings.lastDesktopNotesFetch = Date()
-        settings.desktopNotesMessage = "读到 \(notes.count) 个组"
+        settings.desktopNotesMessage = "读到 \(notes.count) 个组：" + notes.keys.sorted().joined(separator: "、")
         await rescheduleNotifications()
-        return true
     }
 
     /// 超过一天没有同步成功（密码改了、网站换了地址或改版）。

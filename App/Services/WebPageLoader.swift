@@ -25,6 +25,8 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         var extraHTML: [String]
         /// 打开额外页面后，afterTabs 要求重新发出的请求的返回内容（如其它几周的全员排班）
         var extraReplies: [String]
+        /// 最后停在的网址
+        var url: String? = nil
     }
 
     /// 打开网页（必要时自动登录），记录网页取数据的请求；
@@ -41,7 +43,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     }
 
     /// 电脑浏览器的标识：网站据此显示电脑版页面（电脑版「值班查看」上有各组工作内容）。
-    private static let desktopUserAgent =
+    static let desktopUserAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
     private func load(_ url: URL, extraTabs: [String], pager: [(label: String, steps: Int)],
@@ -102,7 +104,8 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         }
         let allCaptured = extraHTML.isEmpty ? captured : await capturedRequests(webView)
         let extraReplies = await send(afterTabs(allCaptured), in: webView)
-        return Page(html: html, captured: allCaptured, replies: replies, extraHTML: extraHTML, extraReplies: extraReplies)
+        return Page(html: html, captured: allCaptured, replies: replies, extraHTML: extraHTML, extraReplies: extraReplies,
+                    url: webView.url?.absoluteString)
     }
 
     /// 在页面里用同样的请求头和登录状态逐个发出请求，返回各自的内容。

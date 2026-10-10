@@ -161,12 +161,12 @@ public enum GroupNotes {
     static let minLength = 8
 
     static func isGroup(_ s: String) -> Bool {
-        let t = s.trimmingCharacters(in: .whitespaces)
+        let t = s.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "：:")))
         return groupName.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil
     }
 
     static func normalizeGroup(_ s: String) -> String {
-        s.filter { !$0.isWhitespace }.uppercased()
+        s.filter { !$0.isWhitespace && $0 != "：" && $0 != ":" }.uppercased()
     }
 
     /// 表格文字：一行开头是「组E」，后面的格子是说明；或者「组E」单独一行，下一行是说明。
@@ -213,7 +213,12 @@ public enum GroupNotes {
 
         var notes: [String: String] = [:]
         for row in HTMLText.captures(#"<tr\b[^>]*>([\s\S]*?)</tr\s*>"#, in: s) {
-            let cells = HTMLText.captures(#"<t[dh]\b[^>]*>([\s\S]*?)</t[dh]\s*>"#, in: row).map(clean)
+            var cells = HTMLText.captures(#"<t[dh]\b[^>]*>([\s\S]*?)</t[dh]\s*>"#, in: row).map(clean)
+            // 第一个格子是「组A」，或者「组A」后面换行接着说明
+            if let head = cells.first?.components(separatedBy: "\n"), head.count > 1, isGroup(head[0]) {
+                cells[0] = head[0]
+                cells.insert(head.dropFirst().joined(separator: "\n"), at: 1)
+            }
             guard let first = cells.first, isGroup(first) else { continue }
             let note = cells.dropFirst().filter { !$0.isEmpty }.joined(separator: "\n")
             if note.count >= minLength { notes[normalizeGroup(first)] = note }

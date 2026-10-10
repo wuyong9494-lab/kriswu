@@ -409,6 +409,7 @@ struct GroupNotesView: View {
     @State private var pasting = false
     @State private var pasteText = ""
     @State private var reading = false
+    @State private var browsing = false
 
     private var groups: [String] {
         let fromSchedule = store.schedule.values.flatMap { store.matcher.displayName($0).split(separator: "+").map(String.init) }
@@ -441,10 +442,30 @@ struct GroupNotesView: View {
                     }
                 }
                 .disabled(reading || !store.canSync)
+                Button("自己打开电脑版网页读取") { browsing = true }
+                    .disabled(!store.canSync)
+                TextField(SyncService.desktopDutyURL(from: store.settings.sourceURL)?.absoluteString ?? "电脑版「值班查看」网址",
+                          text: $store.settings.desktopNotesURL)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.footnote)
+                if let text = store.desktopPageText {
+                    NavigationLink("查看 App 读到的页面内容") {
+                        ScrollView {
+                            Text(text)
+                                .font(.footnote.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                        }
+                        .navigationTitle("读到的页面")
+                    }
+                }
             } header: {
                 Text("电脑版网页（优先）")
             } footer: {
-                Text("每天第一次打开 App 同步时，自动用电脑版打开网站「值班查看」，读上面每组该干什么。读到的内容优先显示；网页上没有的组，才用下面自己填写的。")
+                Text("每天第一次打开 App 同步时，自动用电脑版打开网站「值班查看」，读上面每组该干什么。读到的内容优先显示；网页上没有的组，才用下面自己填写的。\n自动读不到时，点「自己打开电脑版网页读取」，在网页里打开「值班查看」后点「读取本页」，App 会记住这个网址，以后每天自动从这里读。网址框留空就用同步网址的 #/duty。")
             }
             ForEach(groups, id: \.self) { group in
                 let desktop = store.settings.desktopGroupNotes[group]
@@ -484,6 +505,7 @@ struct GroupNotesView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $browsing) { DesktopNotesBrowser() }
         .sheet(isPresented: $pasting) {
             NavigationStack {
                 Form {

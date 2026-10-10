@@ -486,6 +486,7 @@ final class RosterTests: XCTestCase {
         XCTAssertEqual(notes["组A"], "负责一号星的规划\n注意备份")
         XCTAssertEqual(notes["组B"], "负责二号星规划工作")
         XCTAssertNil(notes["组C"])
+        XCTAssertEqual(GroupNotes.fromDesktopHTML("<div>组D：</div><div>负责平台星的数传工作</div>")["组D"], "负责平台星的数传工作")
     }
 
     func testGroupNotesFromPaste() {

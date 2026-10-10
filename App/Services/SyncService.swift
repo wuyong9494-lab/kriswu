@@ -107,19 +107,59 @@ enum SyncService {
         return Outcome(result: try parser.parse(text), apiSignature: nil, roster: roster, groupNotes: notes)
     }
 
-    /// 用电脑版打开「值班查看」（网址 #/duty），读上面各组的工作内容。读不到返回空。
-    @MainActor
-    static func fetchDesktopGroupNotes(urlString: String, username: String, password: String,
-                                       reference: DayKey) async -> [String: String] {
-        guard let url = webURL(urlString), var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return [:] }
+    struct DesktopNotes {
+        var notes: [String: String]
+        var url: String
+        /// 没读到时的原因和页面文字（给「设置 › 各组工作内容」排查用）
+        var reason: String?
+        var pageText: String
+    }
+
+    /// 电脑版「值班查看」的地址：同一个网站的 #/duty。
+    static func desktopDutyURL(from urlString: String) -> URL? {
+        guard let url = webURL(urlString), var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         c.path = "/"
         c.query = nil
         c.fragment = "/duty"
-        guard let dutyURL = c.url,
-              let page = try? await WebPageLoader.load(url: dutyURL, username: username, password: password,
-                                                       desktop: true, replay: { _ in [] }) else { return [:] }
-        let notes = GroupNotes.fromDesktopHTML(page.html)
-        return notes.isEmpty ? GroupNotes.fromText(HTMLText.toText(page.html), reference: reference) : notes
+        return c.url
+    }
+
+    /// 网页里的各组说明（电脑版表格 / 「组A」加说明的文字）。
+    static func groupNotes(fromHTML html: String, reference: DayKey) -> [String: String] {
+        let notes = GroupNotes.fromDesktopHTML(html)
+        return notes.isEmpty ? GroupNotes.fromText(HTMLText.toText(html), reference: reference) : notes
+    }
+
+    /// 用电脑版打开「值班查看」，读上面各组的工作内容。
+    @MainActor
+    static func fetchDesktopGroupNotes(urlString: String, overrideURL: String, username: String, password: String,
+                                       reference: DayKey) async -> DesktopNotes {
+        let custom = overrideURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let dutyURL = custom.isEmpty ? desktopDutyURL(from: urlString) : webURL(custom) else {
+            return DesktopNotes(notes: [:], url: custom, reason: "网址不正确", pageText: "")
+        }
+        let page: WebPageLoader.Page
+        do {
+            // 直接打开 #/duty；页面上要是没有，再点一下「值班查看」菜单
+            page = try await WebPageLoader.load(url: dutyURL, username: username, password: password,
+                                                extraTabs: ["值班查看"], desktop: true, replay: { _ in [] })
+        } catch {
+            return DesktopNotes(notes: [:], url: dutyURL.absoluteString, reason: "打不开：\(error.localizedDescription)", pageText: "")
+        }
+        var html = page.html
+        var notes = groupNotes(fromHTML: html, reference: reference)
+        for extra in page.extraHTML where notes.isEmpty {
+            notes = groupNotes(fromHTML: extra, reference: reference)
+            html = extra
+        }
+        let text = HTMLText.toText(html)
+        var reason: String?
+        if notes.isEmpty {
+            reason = HTMLText.looksLikeLoginPage(page.html) ? "停在了登录页（自动登录没成功）"
+                : text.contains("组A") ? "页面上有「组A」，但没认出说明的位置"
+                : "页面上没有「组A」等字样，可能不是电脑版「值班查看」页面"
+        }
+        return DesktopNotes(notes: notes, url: page.url ?? dutyURL.absoluteString, reason: reason, pageText: String(text.prefix(6000)))
     }
 
     private static func webURL(_ urlString: String) -> URL? {
