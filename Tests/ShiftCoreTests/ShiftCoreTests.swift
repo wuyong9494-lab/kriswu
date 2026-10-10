@@ -634,31 +634,31 @@ final class NotificationPlannerTests: XCTestCase {
 }
 
 final class WorkloadTests: XCTestCase {
-    func testDutyAndRegularDaysCountedSeparately() {
+    func testOnlyTelemetryIsDuty() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
         let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }   // 10/5 周一 … 10/11 周日
         let roster: Roster = [
-            "张三": [d(5): "调度", d(6): "组A", d(7): "休息", d(10): "组B"],
+            "张三": [d(5): "遥测", d(6): "组A", d(7): "休息", d(8): "调度", d(10): "遥测"],
             "李四": [d(5): "出差", d(6): "出差", d(8): "调休"],
-            "王五": [d(9): "组C+休息"],
+            "王五": [d(9): "组C+休息", d(11): "组D"],
         ]
         let days = (5...11).map(d)
         let result = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
             roster: roster, days: days, matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal).map { ($0.name, $0) })
-        // 张三：调度、组A、组B 值班 3 天；周四周五没排岗位是日常班 2 天；周三休息；周日没排不算
-        XCTAssertEqual(result["张三"]?.dutyDays, 3)
-        XCTAssertEqual(result["张三"]?.regularDays, 2)
+        // 张三：遥测 2 天是值班（含周六）；组A、调度、周五没排岗位是日常班 3 天；周三休息
+        XCTAssertEqual(result["张三"]?.dutyDays, 2)
+        XCTAssertEqual(result["张三"]?.regularDays, 3)
         XCTAssertEqual(result["张三"]?.offDays, 1)
-        XCTAssertNil(result["张三"]?.posts["日常班"])
+        XCTAssertEqual(result["张三"]?.posts["组A"], 1)
         // 李四：出差 2 天、调休 1 天，周三、周五日常班
         XCTAssertEqual(result["李四"]?.tripDays, 2)
         XCTAssertEqual(result["李四"]?.offDays, 1)
         XCTAssertEqual(result["李四"]?.regularDays, 2)
         XCTAssertEqual(result["李四"]?.dutyDays, 0)
-        // 王五：周五组C（同时写了休息也算值班），其余工作日 4 天日常班
-        XCTAssertEqual(result["王五"]?.dutyDays, 1)
-        XCTAssertEqual(result["王五"]?.regularDays, 4)
+        // 王五：周五组C（同时写了休息也算上班）、周日组D 都是日常班，加上周一到周四没排岗位 4 天
+        XCTAssertEqual(result["王五"]?.dutyDays, 0)
+        XCTAssertEqual(result["王五"]?.regularDays, 6)
         XCTAssertEqual(result["王五"]?.offDays, 0)
     }
 }

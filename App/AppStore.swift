@@ -833,7 +833,7 @@ final class AppStore: ObservableObject {
         }
         var text = "\(year)年\(month)月工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；值班 = 排了调度、各组等岗位，日常班 = 工作日没排岗位）"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；值班 = 遥测，日常班 = 各组、调度等岗位和工作日没排岗位的日子）"
         }
         for p in people {
             text += "\n\(p.name)：值班 \(p.dutyDays) 天，日常班 \(p.regularDays) 天"

@@ -1,13 +1,13 @@
 import Foundation
 
 /// 每个人一个月的工作量。
-/// 网页上只写了调度、遥测、各组、值班交班前、休息、调休、出差等岗位；
-/// 工作日（周一到周五）没写在任何岗位上的人，就是在正常上班（「日常班」），和值班分开统计。
+/// 只有「遥测」算值班；各组、调度等其它岗位，和工作日（周一到周五）没写在任何岗位上的日子，都算日常班。
+/// 出差、休息（调休、请假、无分工）另外统计。
 public struct PersonWorkload: Equatable {
     public var name: String
-    /// 排了值班岗位（调度、遥测、各组、值班交班前、加班…）的天数
+    /// 值班（遥测）天数
     public var dutyDays: Int
-    /// 工作日没排任何岗位、正常上班的天数（和值班分开算）
+    /// 日常班天数：各组、调度等岗位，加上工作日没排岗位的日子
     public var regularDays: Int
     /// 休息、调休、请假、无分工
     public var offDays: Int
@@ -23,6 +23,9 @@ public enum WorkloadCounter {
     }
 
     public static func isTrip(_ post: String) -> Bool { post.contains("出差") }
+
+    /// 值班只有遥测
+    public static func isDuty(_ post: String) -> Bool { post.contains("遥测") }
 
     /// days：统计哪些日子（已读到全员排班的日子）；名单是全员排班里出现过的所有人。
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher,
@@ -40,8 +43,10 @@ public enum WorkloadCounter {
                 }
                 let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
                 for post in posts { p.posts[post, default: 0] += 1 }
-                if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) {
+                if posts.contains(where: isDuty) {
                     p.dutyDays += 1
+                } else if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) {
+                    p.regularDays += 1
                 } else if posts.contains(where: isTrip) {
                     p.tripDays += 1
                 } else {
