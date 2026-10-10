@@ -67,13 +67,12 @@ struct ShiftCard: View {
     var body: some View {
         let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
         HStack(spacing: 16) {
-            Text(display?.emoji ?? "📅")
-                .font(.system(size: large ? 56 : 36))
+            DateBadge(day: day, size: large ? 64 : 46)
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(label) · \(day.dateText)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
+                Text(display.map { "\($0.emoji) \($0.name)" } ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
                     .font(large ? .largeTitle.bold() : .title2.bold())
                     .foregroundStyle(display == nil ? Color.secondary : Color.primary)
                 // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）
@@ -178,5 +177,35 @@ struct SyncStatus: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// 显示真实日期的小日历（顶部是星期，下面是几号），代替固定画着「7月17日」的 📅 表情。
+struct DateBadge: View {
+    let day: DayKey
+    let size: CGFloat
+
+    private var weekday: String {
+        let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        return names[Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12)) - 1]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(weekday)
+                .font(.system(size: size * 0.2, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, size * 0.05)
+                .background(Color.red)
+            Text("\(day.day)")
+                .font(.system(size: size * 0.46, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: size, height: size)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.2))
+        .overlay(RoundedRectangle(cornerRadius: size * 0.2).stroke(Color.primary.opacity(0.1)))
     }
 }

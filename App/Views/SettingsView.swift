@@ -188,7 +188,7 @@ struct SettingsView: View {
                     await NotificationService.requestAuthorization()
                     let today = DayKey.today
                     let name = ShiftDisplay(raw: store.shift(on: today), matcher: store.matcher)
-                    await NotificationService.sendTest(title: "\(name?.emoji ?? "📅") 今天：\(name?.name ?? "未排班")",
+                    await NotificationService.sendTest(title: "\(name.map { $0.emoji + " " } ?? "")今天：\(name?.name ?? "未排班")",
                                                        body: "这是一条测试通知，3 秒后出现")
                     await refreshStatus()
                 }
@@ -215,7 +215,7 @@ struct SettingsView: View {
                     Task {
                         let today = DayKey.today
                         let name = ShiftDisplay(raw: store.shift(on: today), matcher: store.matcher)
-                        await store.pushToWeChat(title: "\(name?.emoji ?? "📅") 今天：\(name?.name ?? "未排班")",
+                        await store.pushToWeChat(title: "\(name.map { $0.emoji + " " } ?? "")今天：\(name?.name ?? "未排班")",
                                                  content: "这是一条来自「值班提醒」的测试消息", force: true)
                         sendingWeChatTest = false
                     }

@@ -363,7 +363,7 @@ final class RosterTests: XCTestCase {
         2026-10-05\t周一\t刘洋(5)\t陈静(3)\t张伟(1)\t杨帆(5)\t张伟(1) 杨帆(5)
         2026-10-06\t周二\t黄磊(5)\t陈静(3) 朱丽(3) 胡斌\t孙涛(6)\t张伟(1)
         """
-        let roster = RosterExtractor.fromTable(text, reference: ref)
+        let roster = RosterExtractor.fromTable(text, reference: ref, matcher: ShiftMatcher(types: ShiftType.defaults))
         XCTAssertEqual(roster["张伟"], [d(5): "组A+休息", d(6): "组B"])
         XCTAssertEqual(roster["胡斌"], [d(6): "调度"])
         XCTAssertEqual(roster["陈静"], [d(5): "调度", d(6): "调度"])
@@ -372,6 +372,36 @@ final class RosterTests: XCTestCase {
         let notes = GroupNotes.fromText(text, reference: ref)
         XCTAssertEqual(notes["组E"], "●当日应急：每半小时检查设备状态并处理● ●设备巡检●")
         XCTAssertNil(notes["组A"])
+    }
+
+    func testRosterFromCardsAndMisalignedHeader() {
+        let m = ShiftMatcher(types: ShiftType.defaults)
+        // 手机版卡片：一行日期，下面每行「岗位 人名…」
+        let cards = """
+        2026-10-10 周六
+        遥测 罗刚(1)
+        调度 陈静(3) 朱丽(3) 胡斌
+        组A 何强(4)
+        值班交班前
+        林娜(5)
+        休息 马超(1)
+        2026-10-11 周日
+        组A 刘洋(5)
+        """
+        let r = RosterExtractor.fromCards(cards, reference: ref, matcher: m)
+        XCTAssertEqual(r["罗刚"], [d(10): "遥测"])
+        XCTAssertEqual(r["胡斌"], [d(10): "调度"])
+        XCTAssertEqual(r["何强"], [d(10): "组A"])
+        XCTAssertEqual(r["林娜"], [d(10): "值班交班前"])
+        XCTAssertEqual(r["马超"], [d(10): "休息"])
+        XCTAssertEqual(r["刘洋"], [d(11): "组A"])
+        XCTAssertNil(r["遥测"])
+
+        // 表头读到的是人名时，不能把人名当岗位
+        let bad = "林娜\t何强\t陈静\n2026-10-10\t马超\t刘洋"
+        XCTAssertTrue(RosterExtractor.fromTable(bad, reference: ref, matcher: m).isEmpty)
+        // 同一份卡片文字按表格读，也不会产生错误数据
+        XCTAssertTrue(RosterExtractor.fromTable(cards, reference: ref, matcher: m).isEmpty)
     }
 
     func testRosterFromJSON() {

@@ -55,7 +55,8 @@ enum SyncService {
             notes.merge(GroupNotes.fromJSON(body)) { _, n in n }
         }
         for text in texts {
-            RosterExtractor.merge(RosterExtractor.fromTable(text, reference: reference), into: &roster)
+            RosterExtractor.merge(RosterExtractor.fromTable(text, reference: reference, matcher: matcher), into: &roster)
+            RosterExtractor.merge(RosterExtractor.fromCards(text, reference: reference, matcher: matcher), into: &roster)
             notes.merge(GroupNotes.fromText(text, reference: reference)) { _, n in n }
         }
         return (roster, notes)

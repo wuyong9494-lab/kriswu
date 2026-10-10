@@ -81,7 +81,7 @@ public struct NotificationPlanner {
         let raw = schedule[aboutDay]
         guard raw != nil || notifyWhenEmpty else { return nil }
         let name = raw.map(matcher.displayName) ?? "未排班"
-        let emoji = raw.flatMap(matcher.match)?.emoji ?? "📅"
+        let emoji = raw.flatMap(matcher.match).map { $0.emoji + " " } ?? ""
         // 排班里写了更多工作内容（如 "白班 门诊二楼"）时，正文里显示原文
         var detail = raw.flatMap { $0.count > name.count ? "\n\($0)" : nil } ?? ""
         for part in name.split(separator: "+") {
@@ -91,7 +91,7 @@ public struct NotificationPlanner {
             id: "shift-\(kind)-\(fireDay)",
             day: fireDay,
             time: time,
-            title: "\(emoji) \(label)：\(name)",
+            title: "\(emoji)\(label)：\(name)",
             body: "\(Self.dateText(aboutDay, calendar: calendar))  \(name)\(detail)",
             speech: "\(label)，\(name.replacingOccurrences(of: "+", with: "和"))"
         )

@@ -22,10 +22,16 @@ public enum RosterExtractor {
         return chineseName.firstMatch(in: s, range: r) != nil || latinName.firstMatch(in: s, range: r) != nil
     }
 
-    static func names(inCell cell: String) -> [String] {
+    static func names(inCell cell: String, matcher: ShiftMatcher) -> [String] {
         cell.components(separatedBy: CharacterSet(charactersIn: " 、,，;；/\t"))
             .map(cleanName)
-            .filter(looksLikeName)
+            .filter { looksLikeName($0) && !isPost($0, matcher: matcher) }
+    }
+
+    /// 像岗位的词：遥测、调度、组A、值班交班前、休息、调休……（人名不算）
+    static func isPost(_ s: String, matcher: ShiftMatcher) -> Bool {
+        let t = cleanName(s)
+        return !t.isEmpty && matcher.match(t) != nil
     }
 
     static func add(_ post: String, for name: String, on day: DayKey, to roster: inout Roster) {
@@ -45,7 +51,8 @@ public enum RosterExtractor {
     }
 
     /// 岗位表：表头是岗位（组A、组B、调度…），每行一天，格子里是这个岗位当天的人。
-    public static func fromTable(_ text: String, reference: DayKey) -> Roster {
+    /// 表头里不像岗位的列（比如表头对错了位置、读到了人名）直接跳过。
+    public static func fromTable(_ text: String, reference: DayKey, matcher: ShiftMatcher) -> Roster {
         let rows = ScheduleParser.splitRows(text)
         let dates = DateTokenParser(reference: reference)
         var roster: Roster = [:]
@@ -59,8 +66,43 @@ public enum RosterExtractor {
             guard let header else { continue }
             for (col, cell) in row.enumerated() where col != dateCol && col < header.count {
                 let post = header[col].trimmingCharacters(in: .whitespaces)
-                guard !post.isEmpty, dates.parse(post) == nil else { continue }
-                for name in names(inCell: cell) { add(post, for: name, on: day, to: &roster) }
+                guard isPost(post, matcher: matcher) else { continue }
+                for name in names(inCell: cell, matcher: matcher) { add(post, for: name, on: day, to: &roster) }
+            }
+        }
+        return roster
+    }
+
+    /// 卡片式页面（手机版常见）：一行日期，下面每行「岗位 人名 人名…」，
+    /// 或者岗位单独一行、人名在下一行。
+    public static func fromCards(_ text: String, reference: DayKey, matcher: ShiftMatcher) -> Roster {
+        let rows = ScheduleParser.splitRows(text)
+        let dates = DateTokenParser(reference: reference)
+        var roster: Roster = [:]
+        var day: DayKey?
+        var pendingPost: String?
+        for row in rows {
+            let cells = row.flatMap { $0.components(separatedBy: CharacterSet(charactersIn: "：:")) }
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            if let d = cells.lazy.compactMap({ dates.parse($0) }).first {
+                day = d
+                pendingPost = nil
+                continue
+            }
+            guard let day, let first = cells.first else { continue }
+            if isPost(first, matcher: matcher) {
+                let found = cells.dropFirst().flatMap { names(inCell: $0, matcher: matcher) }
+                if found.isEmpty {
+                    pendingPost = cleanName(first)
+                } else {
+                    for name in found { add(cleanName(first), for: name, on: day, to: &roster) }
+                    pendingPost = nil
+                }
+            } else if let post = pendingPost {
+                let found = cells.flatMap { names(inCell: $0, matcher: matcher) }
+                for name in found { add(post, for: name, on: day, to: &roster) }
+                if !found.isEmpty { pendingPost = nil }
             }
         }
         return roster
@@ -90,8 +132,8 @@ public enum RosterExtractor {
             guard let postKey else { continue }
             for row in rows {
                 guard let day = row[dateKey].flatMap({ JSONScheduleExtractor.day(from: $0, dates: dates) }),
-                      let name = row[personKey].map(cleanName), looksLikeName(name),
-                      let post = row[postKey] else { continue }
+                      let name = row[personKey].map(cleanName), looksLikeName(name), !isPost(name, matcher: matcher),
+                      let post = row[postKey], isPost(post, matcher: matcher) else { continue }
                 add(post, for: name, on: day, to: &roster)
             }
         }

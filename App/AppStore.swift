@@ -55,6 +55,8 @@ struct AppSettings: Codable, Equatable {
     /// 各组工作内容：网页上读到的 / 自己填写的（填写的优先）
     var autoGroupNotes: [String: String] = [:]
     var manualGroupNotes: [String: String] = [:]
+    /// 全员排班的读取规则版本；规则改了以后清掉旧数据重新读
+    var rosterVersion = 0
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
@@ -90,6 +92,7 @@ struct AppSettings: Codable, Equatable {
         lastWeChatChangeDigest = try c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
         autoGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes) ?? [:]
         manualGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes) ?? [:]
+        rosterVersion = try c.decodeIfPresent(Int.self, forKey: .rosterVersion) ?? 0
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
@@ -184,7 +187,17 @@ final class AppStore: ObservableObject {
             covered = []
         }
         roster = Self.loadRoster()
+        // 旧版本把手机版「值班查看」读错了（人名当成岗位），清掉重新读
+        if settings.rosterVersion < Self.rosterVersion {
+            roster = [:]
+            saveRoster()
+            settings.rosterVersion = Self.rosterVersion
+            settings.lastSync = nil   // 打开 App 后马上重新同步
+            save()
+        }
     }
+
+    private static let rosterVersion = 2
 
     private func save() {
         let state = PersistedState(settings: settings,
@@ -366,6 +379,9 @@ final class AppStore: ObservableObject {
             let result = outcome.result
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
             if !outcome.roster.isEmpty {
+                // 这次读到的日子整天替换（换人、取消的都以新数据为准）
+                let days = Set(outcome.roster.values.flatMap(\.keys))
+                roster = roster.mapValues { $0.filter { !days.contains($0.key) } }
                 RosterExtractor.merge(outcome.roster, into: &roster)
                 let cutoff = DayKey.today.adding(days: -120)
                 roster = roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
