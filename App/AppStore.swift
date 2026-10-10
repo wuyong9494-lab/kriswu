@@ -49,6 +49,12 @@ struct AppSettings: Codable, Equatable {
     var dynamicIcon = true
     /// 把排班写进 iPhone「日历」App
     var calendarSync = false
+    /// 排班变动也发到微信（关掉后只在 iPhone 上通知）
+    var weChatChanges = true
+    var lastWeChatChangeDigest: String?
+    /// 各组工作内容：网页上读到的 / 自己填写的（填写的优先）
+    var autoGroupNotes: [String: String] = [:]
+    var manualGroupNotes: [String: String] = [:]
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
@@ -80,6 +86,10 @@ struct AppSettings: Codable, Equatable {
         weChatMessage = try c.decodeIfPresent(String.self, forKey: .weChatMessage)
         dynamicIcon = try c.decodeIfPresent(Bool.self, forKey: .dynamicIcon) ?? d.dynamicIcon
         calendarSync = try c.decodeIfPresent(Bool.self, forKey: .calendarSync) ?? d.calendarSync
+        weChatChanges = try c.decodeIfPresent(Bool.self, forKey: .weChatChanges) ?? d.weChatChanges
+        lastWeChatChangeDigest = try c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
+        autoGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes) ?? [:]
+        manualGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes) ?? [:]
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
@@ -124,7 +134,29 @@ final class AppStore: ObservableObject {
     @Published private(set) var schedule: [DayKey: String]
     /// 已经取到过结果的日子：有排班的显示班次，没排班的显示「未排班」；不在这里的日子还没有数据
     @Published private(set) var covered: Set<DayKey>
+    /// 全员排班（姓名 → 日期 → 岗位），只存在手机上，用于搜索成员
+    @Published private(set) var roster: Roster = [:]
     @Published private(set) var isSyncing = false
+
+    private static let rosterURL: URL = {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("roster.json")
+    }()
+
+    private static func loadRoster() -> Roster {
+        guard let data = try? Data(contentsOf: rosterURL),
+              let raw = try? JSONDecoder().decode([String: [String: String]].self, from: data) else { return [:] }
+        return raw.mapValues { days in
+            Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+
+    private func saveRoster() {
+        let raw = roster.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) }
+        if let data = try? JSONEncoder().encode(raw) {
+            try? data.write(to: Self.rosterURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
+    }
 
     private static let fileURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -151,6 +183,7 @@ final class AppStore: ObservableObject {
         } else {
             covered = []
         }
+        roster = Self.loadRoster()
     }
 
     private func save() {
@@ -183,6 +216,7 @@ final class AppStore: ObservableObject {
     @discardableResult
     func apply(_ result: ParseResult) -> [ScheduleChange] {
         let old = schedule
+        let knownBefore = covered
         var new = schedule
         if let range = result.range {
             new = new.filter { !range.contains($0.key) }
@@ -195,7 +229,24 @@ final class AppStore: ObservableObject {
         new.merge(result.entries) { _, n in n }
         schedule = new
         scheduleChanged()
+        // 之前就取到过的日子改了才算变动；新一周第一次取到不算
         return ScheduleDiff.changes(old: old, new: new, from: .today)
+            .filter { knownBefore.contains($0.day) || $0.old != nil }
+    }
+
+    /// 组别的工作内容（自己填写的优先）。key 如「组D」。
+    var groupNotes: [String: String] {
+        settings.autoGroupNotes.merging(settings.manualGroupNotes.filter { !$0.value.isEmpty }) { _, m in m }
+    }
+
+    /// 某天分工对应的工作内容，例如「组A+组E」→ [("组A", "…"), ("组E", "…")]。
+    func notes(for raw: String?) -> [(group: String, note: String)] {
+        guard let raw else { return [] }
+        let notes = groupNotes
+        return matcher.displayName(raw).split(separator: "+").compactMap { part in
+            let key = String(part).filter { !$0.isWhitespace }.uppercased()
+            return notes[key].map { (group: String(part), note: $0) }
+        }
     }
 
     /// 这一天是否已经取到过排班结果（没排班也算）。
@@ -204,6 +255,8 @@ final class AppStore: ObservableObject {
     func clearSchedule() {
         schedule = [:]
         covered = []
+        roster = [:]
+        saveRoster()
         scheduleChanged()
     }
 
@@ -224,7 +277,10 @@ final class AppStore: ObservableObject {
     }
 
     func rescheduleNotifications() async {
-        await NotificationService.reschedule(planner.plan(schedule: schedule, now: Date()), voice: settings.voiceEnabled)
+        // 手机上的通知带上组别工作内容；微信那份不带（只发自己的分工）
+        var local = planner
+        local.notes = groupNotes
+        await NotificationService.reschedule(local.plan(schedule: schedule, now: Date()), voice: settings.voiceEnabled)
         updateWidget()
         updateAppIcon()
         if settings.calendarSync { CalendarSync.sync(schedule, matcher: matcher) }
@@ -282,6 +338,13 @@ final class AppStore: ObservableObject {
                                                               preferredAPI: settings.apiSignature)
             let result = outcome.result
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
+            if !outcome.roster.isEmpty {
+                RosterExtractor.merge(outcome.roster, into: &roster)
+                let cutoff = DayKey.today.adding(days: -120)
+                roster = roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+                saveRoster()
+            }
+            if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
             let hadData = !schedule.isEmpty
             let changes = apply(result)
             settings.lastSync = Date()
@@ -293,7 +356,11 @@ final class AppStore: ObservableObject {
                 let title = "📢 排班有更新（\(changes.count) 处）"
                 let body = ScheduleDiff.summary(changes, matcher: matcher, calendar: .app)
                 await NotificationService.notifyNow(id: "schedule-changed", title: title, body: body)
-                await pushToWeChat(title: title, content: body)
+                // 微信：可以关掉；同样的变动不重复发
+                if settings.weChatChanges && settings.lastWeChatChangeDigest != body {
+                    settings.lastWeChatChangeDigest = body
+                    await pushToWeChat(title: title, content: body)
+                }
             }
             return true
         } catch {

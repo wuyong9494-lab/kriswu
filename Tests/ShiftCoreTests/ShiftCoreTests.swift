@@ -352,6 +352,51 @@ final class APIDiscoveryTests: XCTestCase {
     }
 }
 
+final class RosterTests: XCTestCase {
+    let ref = DayKey(year: 2026, month: 10, day: 9)
+    func d(_ day: Int) -> DayKey { DayKey(year: 2026, month: 10, day: day) }
+
+    func testRosterFromTable() {
+        let text = """
+        组E\t●当日应急：每半小时检查设备状态并处理●\t●设备巡检●
+        日期\t星期\t遥测\t调度\t组A\t组B\t休息
+        2026-10-05\t周一\t刘洋(5)\t陈静(3)\t张伟(1)\t杨帆(5)\t张伟(1) 杨帆(5)
+        2026-10-06\t周二\t黄磊(5)\t陈静(3) 朱丽(3) 胡斌\t孙涛(6)\t张伟(1)
+        """
+        let roster = RosterExtractor.fromTable(text, reference: ref)
+        XCTAssertEqual(roster["张伟"], [d(5): "组A+休息", d(6): "组B"])
+        XCTAssertEqual(roster["胡斌"], [d(6): "调度"])
+        XCTAssertEqual(roster["陈静"], [d(5): "调度", d(6): "调度"])
+        XCTAssertNil(roster["周一"])
+
+        let notes = GroupNotes.fromText(text, reference: ref)
+        XCTAssertEqual(notes["组E"], "●当日应急：每半小时检查设备状态并处理● ●设备巡检●")
+        XCTAssertNil(notes["组A"])
+    }
+
+    func testRosterFromJSON() {
+        let json = """
+        {"data":[
+          {"dutyDate":"2026-10-07","userName":"张伟(1)","postName":"组D"},
+          {"dutyDate":"2026-10-07","userName":"刘洋","postName":"组A"},
+          {"dutyDate":"2026-10-08","userName":"张伟","postName":"组E"},
+          {"dutyDate":"2026-10-08","userName":"杨帆","postName":"组B"}
+        ]}
+        """
+        let roster = RosterExtractor.fromJSON(json, reference: ref, matcher: ShiftMatcher(types: ShiftType.defaults))
+        XCTAssertEqual(roster["张伟"], [d(7): "组D", d(8): "组E"])
+        XCTAssertEqual(roster.count, 3)
+    }
+
+    func testGroupNotesFromJSONAndMobilePage() {
+        let json = #"{"rows":[{"group":"组A","content":"负责设备巡检和日志记录"},{"group":"组B","content":"负责数据传输监控与重传"}]}"#
+        XCTAssertEqual(GroupNotes.fromJSON(json)["组B"], "负责数据传输监控与重传")
+        // 手机版「我的分工」页面不应被误认成说明
+        let mobile = "2026-10-06 周二\n组B\n2026-10-09 周五\n组D\n我的分工\n值班查看"
+        XCTAssertTrue(GroupNotes.fromText(mobile, reference: ref).isEmpty)
+    }
+}
+
 final class ShiftMatcherTests: XCTestCase {
     let m = ShiftMatcher(types: ShiftType.defaults)
 
@@ -404,6 +449,10 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertEqual(planner.message(morning: true, on: today, schedule: schedule)?.title, "👥 今天：组D")
         XCTAssertEqual(planner.message(morning: false, on: today, schedule: schedule)?.title, "🛌 明天：无分工")
         XCTAssertNil(planner.message(morning: true, on: DayKey(year: 2026, month: 10, day: 11), schedule: schedule))
+
+        var withNotes = planner
+        withNotes.notes = ["组D": "负责设备巡检"]
+        XCTAssertEqual(withNotes.message(morning: true, on: today, schedule: schedule)?.body, "10月9日 周五  组D\n组D：负责设备巡检")
     }
 
     func testCapAndEmptyDays() {

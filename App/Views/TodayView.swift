@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayView: View {
     @EnvironmentObject private var store: AppStore
     @State private var editing: DayKey?
+    @State private var searching = false
 
     var body: some View {
         NavigationStack {
@@ -10,6 +11,9 @@ struct TodayView: View {
                 let today = DayKey(date: context.date, calendar: .app)
                 ScrollView {
                     VStack(spacing: 16) {
+                        Text(context.date.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).year().month().day().weekday(.wide)))
+                            .font(.title3.bold())
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         if let days = SigningInfo.daysLeft, days <= 2 {
                             Label("签名还有 \(days) 天到期：打开 LocalDevVPN，再到 SideStore 点「Refresh All」续签",
                                   systemImage: "exclamationmark.triangle.fill")
@@ -35,7 +39,15 @@ struct TodayView: View {
             }
             .refreshable { await store.sync() }
             .navigationTitle("值班提醒")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { searching = true } label: {
+                        Label("搜索成员", systemImage: "magnifyingglass")
+                    }
+                }
+            }
             .sheet(item: $editing) { DayEditor(day: $0) }
+            .sheet(isPresented: $searching) { MemberSearchView() }
         }
     }
 }
@@ -59,6 +71,13 @@ struct ShiftCard: View {
                 Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
                     .font(large ? .largeTitle.bold() : .title2.bold())
                     .foregroundStyle(display == nil ? Color.secondary : Color.primary)
+                // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）
+                ForEach(store.notes(for: store.shift(on: day)), id: \.group) { item in
+                    Text(store.notes(for: store.shift(on: day)).count > 1 ? "\(item.group)：\(item.note)" : item.note)
+                        .font(large ? .subheadline : .footnote)
+                        .foregroundStyle(.primary.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let reminder {
                     Label(reminder, systemImage: "bell")
                         .font(.caption)

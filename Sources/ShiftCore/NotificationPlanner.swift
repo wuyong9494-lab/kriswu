@@ -32,6 +32,8 @@ public struct NotificationPlanner {
     public var notifyWhenEmpty: Bool
     public var matcher: ShiftMatcher
     public var calendar: Calendar
+    /// 各组工作内容（「组D」→ 说明），有的话写进通知正文
+    public var notes: [String: String] = [:]
 
     /// iOS 最多保留 64 条待发通知，留一点余量。
     public static let maxPending = 60
@@ -81,7 +83,10 @@ public struct NotificationPlanner {
         let name = raw.map(matcher.displayName) ?? "未排班"
         let emoji = raw.flatMap(matcher.match)?.emoji ?? "📅"
         // 排班里写了更多工作内容（如 "白班 门诊二楼"）时，正文里显示原文
-        let detail = raw.flatMap { $0.count > name.count ? "\n\($0)" : nil } ?? ""
+        var detail = raw.flatMap { $0.count > name.count ? "\n\($0)" : nil } ?? ""
+        for part in name.split(separator: "+") {
+            if let note = notes[String(part).filter { !$0.isWhitespace }.uppercased()] { detail += "\n\(part)：\(note)" }
+        }
         return PlannedNotification(
             id: "shift-\(kind)-\(fireDay)",
             day: fireDay,

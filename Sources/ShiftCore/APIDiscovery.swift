@@ -177,7 +177,7 @@ public enum JSONScheduleExtractor {
         return nil
     }
 
-    private static func day(from value: String, dates: DateTokenParser) -> DayKey? {
+    static func day(from value: String, dates: DateTokenParser) -> DayKey? {
         if let d = dates.parse(value) { return d }
         // 毫秒 / 秒时间戳
         if value.count == 13 || value.count == 10, let n = Double(value), n > 1_400_000_000 {
@@ -190,18 +190,22 @@ public enum JSONScheduleExtractor {
     private static let shiftKeyHints = ["shift", "duty", "group", "post", "work", "task", "job", "class", "team",
                                         "分工", "班", "组", "岗", "职"]
 
-    static func extract(_ rows: [[String: String]], parser: ScheduleParser, dates: DateTokenParser,
-                        matcher: ShiftMatcher) -> [DayKey: String] {
-        let keys = Set(rows.flatMap(\.keys))
-
-        // 1. 日期字段：至少一半的行能解析出日期；有好几个时（如「值班日期」和「更新时间」）取不同日期最多的
-        let dateKey = keys.compactMap { k -> (String, Int, Int)? in
+    /// 日期字段：至少一半的行能解析出日期；有好几个时（如「值班日期」和「更新时间」）取不同日期最多的。
+    static func dateKey(in rows: [[String: String]], dates: DateTokenParser) -> String? {
+        Set(rows.flatMap(\.keys)).compactMap { k -> (String, Int, Int)? in
             let parsed = rows.compactMap { $0[k].flatMap { day(from: $0, dates: dates) } }
             guard !parsed.isEmpty, parsed.count * 2 >= rows.count else { return nil }
             return (k, Set(parsed).count, parsed.count)
         }
         .max { ($0.1, $0.2, $1.0) < ($1.1, $1.2, $0.0) }?.0
-        guard let dateKey else { return [:] }
+    }
+
+    static func extract(_ rows: [[String: String]], parser: ScheduleParser, dates: DateTokenParser,
+                        matcher: ShiftMatcher) -> [DayKey: String] {
+        let keys = Set(rows.flatMap(\.keys))
+
+        // 1. 日期字段
+        guard let dateKey = dateKey(in: rows, dates: dates) else { return [:] }
 
         // 2. 多人数据：找出包含自己名字的字段，只保留自己的行
         let personKey = keys.filter { $0 != dateKey }.first { k in rows.contains { $0[k].map(parser.isMe) ?? false } }

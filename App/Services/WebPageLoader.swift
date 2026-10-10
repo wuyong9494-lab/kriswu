@@ -21,17 +21,19 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         var captured: [CapturedRequest]
         /// replay 里要求重新发出的请求的返回内容
         var replies: [String]
+        /// 额外打开的页面（如「值班查看」）的内容
+        var extraHTML: [String]
     }
 
     /// 打开网页（必要时自动登录），记录网页取数据的请求；
     /// replay 根据记录挑出要再发一次的请求（比如把日期改成下一周），在同一个页面里用同样的登录状态发出。
-    static func load(url: URL, username: String, password: String,
+    static func load(url: URL, username: String, password: String, extraTabs: [String] = [],
                      replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let loader = WebPageLoader(username: username, password: password)
-        return try await loader.load(url, replay: replay)
+        return try await loader.load(url, extraTabs: extraTabs, replay: replay)
     }
 
-    private func load(_ url: URL, replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
+    private func load(_ url: URL, extraTabs: [String], replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.userContentController.addUserScript(
@@ -61,8 +63,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             }
         }
 
-        let json = (try? await webView.evaluateJavaScript("JSON.stringify(window.__shiftSpy || [])")) as? String ?? "[]"
-        let captured = (try? JSONDecoder().decode([CapturedRequest].self, from: Data(json.utf8))) ?? []
+        let captured = await capturedRequests(webView)
         var replies: [String] = []
         for request in replay(captured) {
             let reply = try? await webView.callAsyncJavaScript(
@@ -72,8 +73,32 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
                 in: nil, in: .page)
             if let text = reply as? String { replies.append(text) }
         }
-        return Page(html: html, captured: captured, replies: replies)
+
+        // 再点开其它标签页（如「值班查看」），拿全员排班和各组说明
+        var extraHTML: [String] = []
+        for tab in extraTabs {
+            let clicked = (try? await webView.callAsyncJavaScript(
+                Self.clickTabScript, arguments: ["label": tab], in: nil, in: .page)) as? Bool ?? false
+            if clicked { extraHTML.append(try await settledHTML(webView)) }
+        }
+        let allCaptured = extraHTML.isEmpty ? captured : await capturedRequests(webView)
+        return Page(html: html, captured: allCaptured, replies: replies, extraHTML: extraHTML)
     }
+
+    private func capturedRequests(_ webView: WKWebView) async -> [CapturedRequest] {
+        let json = (try? await webView.evaluateJavaScript("JSON.stringify(window.__shiftSpy || [])")) as? String ?? "[]"
+        return (try? JSONDecoder().decode([CapturedRequest].self, from: Data(json.utf8))) ?? []
+    }
+
+    /// 点击文字正好是 label 的标签（取最里层的元素，点击会冒泡到外层）。
+    private static let clickTabScript = """
+    const els = [...document.querySelectorAll('a, button, span, div, li, p, [role=tab]')]
+      .filter(e => e.offsetParent !== null && (e.innerText || '').trim() === label);
+    const el = els[els.length - 1];
+    if (!el) return false;
+    el.click();
+    return true;
+    """
 
     /// 在网页最开始注入：包装 fetch 和 XMLHttpRequest，记下返回 JSON 的请求（最多 50 条，存在页面内存里）。
     private static let spyScript = """

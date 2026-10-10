@@ -96,6 +96,11 @@ struct SettingsView: View {
             } label: {
                 Label("班次类型与颜色", systemImage: "paintpalette")
             }
+            NavigationLink {
+                GroupNotesView()
+            } label: {
+                Label("各组工作内容", systemImage: "list.bullet.rectangle")
+            }
             Toggle("图标显示今天的组", isOn: $store.settings.dynamicIcon)
                 .onChange(of: store.settings.dynamicIcon) { _ in store.updateAppIcon() }
             Picker("外观", selection: $store.settings.appearance) {
@@ -204,6 +209,7 @@ struct SettingsView: View {
                     .autocorrectionDisabled()
                     .onChange(of: pushToken) { Keychain.set($0.trimmingCharacters(in: .whitespacesAndNewlines), for: .pushPlusToken) }
                 Toggle("每天的提醒也发到微信", isOn: $store.settings.weChatDaily)
+                Toggle("排班变动也发到微信", isOn: $store.settings.weChatChanges)
                 Button {
                     sendingWeChatTest = true
                     Task {
@@ -377,5 +383,42 @@ private struct ShiftTypeEditor: View {
         s.components(separatedBy: CharacterSet(charactersIn: ",，、;；"))
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+}
+
+/// 各组工作内容：同步时从网页读到的会自动填上；也可以自己改，改过的优先显示。
+struct GroupNotesView: View {
+    @EnvironmentObject private var store: AppStore
+
+    private var groups: [String] {
+        let fromSchedule = store.schedule.values.flatMap { store.matcher.displayName($0).split(separator: "+").map(String.init) }
+            .filter { $0.hasPrefix("组") }
+        let all = Set(fromSchedule + ["组A", "组B", "组C", "组D", "组E"])
+            .union(store.settings.autoGroupNotes.keys)
+            .union(store.settings.manualGroupNotes.keys)
+        return all.sorted()
+    }
+
+    var body: some View {
+        Form {
+            ForEach(groups, id: \.self) { group in
+                Section {
+                    TextField(store.settings.autoGroupNotes[group] ?? "例如：负责设备巡检和日志记录",
+                              text: Binding(
+                                get: { store.settings.manualGroupNotes[group] ?? store.settings.autoGroupNotes[group] ?? "" },
+                                set: { store.settings.manualGroupNotes[group] = $0.isEmpty ? nil : $0 }),
+                              axis: .vertical)
+                        .lineLimit(2...6)
+                } header: {
+                    Text(group)
+                } footer: {
+                    if store.settings.autoGroupNotes[group] != nil {
+                        Text(store.settings.manualGroupNotes[group] == nil ? "从网页读到" : "已手动修改（清空后恢复网页上的说明）")
+                    }
+                }
+            }
+        }
+        .navigationTitle("各组工作内容")
+        .onDisappear { Task { await store.rescheduleNotifications() } }
     }
 }

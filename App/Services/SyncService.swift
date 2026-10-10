@@ -22,6 +22,26 @@ enum SyncService {
         var result: ParseResult
         /// 这次用上的数据接口（下次优先用它）；读网页内容时为 nil
         var apiSignature: String?
+        /// 全员排班（用于搜索成员）
+        var roster: Roster = [:]
+        /// 各组的工作内容
+        var groupNotes: [String: String] = [:]
+    }
+
+    /// 从网页文字和接口数据里收集全员排班与各组说明。
+    private static func collect(texts: [String], json: [String], reference: DayKey, matcher: ShiftMatcher)
+        -> (Roster, [String: String]) {
+        var roster: Roster = [:]
+        var notes: [String: String] = [:]
+        for body in json {
+            RosterExtractor.merge(RosterExtractor.fromJSON(body, reference: reference, matcher: matcher), into: &roster)
+            notes.merge(GroupNotes.fromJSON(body)) { _, n in n }
+        }
+        for text in texts {
+            RosterExtractor.merge(RosterExtractor.fromTable(text, reference: reference), into: &roster)
+            notes.merge(GroupNotes.fromText(text, reference: reference)) { _, n in n }
+        }
+        return (roster, notes)
     }
 
     /// 取回排班。
@@ -35,25 +55,31 @@ enum SyncService {
         if viaWeb, let url = webURL(urlString) {
             let reference = parser.reference
             var found: APIDiscovery.Found?
-            let page = try await WebPageLoader.load(url: url, username: username, password: password) { captured in
+            let page = try await WebPageLoader.load(url: url, username: username, password: password,
+                                                    extraTabs: ["值班查看"]) { captured in
                 found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
                                           matcher: matcher, reference: reference)
                 guard let f = found, f.request.hasDateParameter, weeksAhead > 0 else { return [] }
                 return (1...weeksAhead).map { f.request.shifted(days: 7 * $0) }
             }
+            let texts = ([page.html] + page.extraHTML).map(HTMLText.toText)
+            let (roster, notes) = collect(texts: texts, json: page.captured.map(\.body) + page.replies,
+                                          reference: reference, matcher: matcher)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries
                 for reply in page.replies {
                     let more = JSONScheduleExtractor.extract(reply, aliases: aliases, matcher: matcher, reference: reference)
                     for (day, value) in more where entries[day] == nil { entries[day] = value }
                 }
-                return Outcome(result: ParseResult(entries: entries, format: .api), apiSignature: f.request.signature)
+                return Outcome(result: ParseResult(entries: entries, format: .api), apiSignature: f.request.signature,
+                               roster: roster, groupNotes: notes)
             }
             if HTMLText.looksLikeLoginPage(page.html) { throw SyncError.needsLogin }
-            return Outcome(result: try parser.parse(HTMLText.toText(page.html)), apiSignature: nil)
+            return Outcome(result: try parser.parse(texts[0]), apiSignature: nil, roster: roster, groupNotes: notes)
         }
         let text = try await fetchText(urlString: urlString, username: username, password: password)
-        return Outcome(result: try parser.parse(text), apiSignature: nil)
+        let (roster, notes) = collect(texts: [text], json: [text], reference: parser.reference, matcher: matcher)
+        return Outcome(result: try parser.parse(text), apiSignature: nil, roster: roster, groupNotes: notes)
     }
 
     private static func webURL(_ urlString: String) -> URL? {
