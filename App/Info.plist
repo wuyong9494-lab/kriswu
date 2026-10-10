@@ -41,6 +41,10 @@
 	<array>
 		<string>com.kriswu.shiftreminder.refresh</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>把排班写进「日历」App 里单独的「值班提醒」日历。</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>把排班写进「日历」App 里单独的「值班提醒」日历，并在排班变动时更新或删除其中的事件。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

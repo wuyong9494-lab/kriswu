@@ -47,6 +47,8 @@ struct AppSettings: Codable, Equatable {
     var weChatMessage: String?
     /// 主屏幕图标显示今天的组（A–E / 休），打开 App 时切换
     var dynamicIcon = true
+    /// 把排班写进 iPhone「日历」App
+    var calendarSync = false
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
@@ -77,6 +79,7 @@ struct AppSettings: Codable, Equatable {
         weChatEveningSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatEveningSent)
         weChatMessage = try c.decodeIfPresent(String.self, forKey: .weChatMessage)
         dynamicIcon = try c.decodeIfPresent(Bool.self, forKey: .dynamicIcon) ?? d.dynamicIcon
+        calendarSync = try c.decodeIfPresent(Bool.self, forKey: .calendarSync) ?? d.calendarSync
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
@@ -198,6 +201,7 @@ final class AppStore: ObservableObject {
         await NotificationService.reschedule(planner.plan(schedule: schedule, now: Date()), voice: settings.voiceEnabled)
         updateWidget()
         updateAppIcon()
+        if settings.calendarSync { CalendarSync.sync(schedule, matcher: matcher) }
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
     }
 

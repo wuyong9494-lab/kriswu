@@ -106,6 +106,8 @@ struct DiagnosticsView: View {
             Row(label: "已登记提醒", value: "\(pending) 条", ok: pending > 0),
             Row(label: "下一条", value: next.map { "\(fmt($0.date)) \($0.title)" } ?? "无", ok: next != nil),
             Row(label: "语音播报", value: s.voiceEnabled ? "开" : "关", ok: nil),
+            Row(label: "同步到日历", value: s.calendarSync ? (CalendarSync.authorized ? "开" : "开，但没有日历权限") : "关",
+                ok: s.calendarSync ? CalendarSync.authorized : nil),
         ]
 
         let widgetRows = [

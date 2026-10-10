@@ -12,38 +12,43 @@ struct SettingsView: View {
     @State private var confirmClear = false
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var pendingCount = 0
+    @State private var calendarMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                nameSection
-                reminderSection
-                weChatSection
-                sourceSection
-                Section("导入") {
+                Section {
+                    NavigationLink {
+                        Form { sourceSection; nameSection }.navigationTitle("账号与同步")
+                    } label: {
+                        row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
+                    }
+                    NavigationLink {
+                        Form { reminderSection; calendarSection }.navigationTitle("提醒")
+                    } label: {
+                        row("提醒", icon: "bell", detail: reminderSummary)
+                    }
+                    NavigationLink {
+                        Form { weChatSection }.navigationTitle("微信推送")
+                    } label: {
+                        row("微信推送", icon: "message", detail: store.settings.weChatEnabled ? "已开启" : "未开启")
+                    }
+                    NavigationLink {
+                        Form { displaySection }.navigationTitle("显示")
+                    } label: {
+                        row("显示", icon: "paintpalette", detail: store.settings.appearance.title)
+                    }
                     NavigationLink {
                         ImportView()
                     } label: {
-                        Label("粘贴 / 文件导入排班表", systemImage: "square.and.arrow.down")
-                    }
-                }
-                Section("显示") {
-                    NavigationLink {
-                        ShiftTypesView()
-                    } label: {
-                        Label("班次类型与颜色", systemImage: "paintpalette")
-                    }
-                    Toggle("图标显示今天的组", isOn: $store.settings.dynamicIcon)
-                        .onChange(of: store.settings.dynamicIcon) { _ in store.updateAppIcon() }
-                    Picker("外观", selection: $store.settings.appearance) {
-                        ForEach(Appearance.allCases) { Text($0.title).tag($0) }
+                        row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
                     }
                 }
                 Section {
                     NavigationLink {
                         DiagnosticsView()
                     } label: {
-                        Label("诊断（出问题时看这里）", systemImage: "stethoscope")
+                        row("诊断", icon: "stethoscope", detail: "出问题时看这里")
                     }
                     Button("清空所有排班", role: .destructive) { confirmClear = true }
                 }
@@ -61,6 +66,71 @@ struct SettingsView: View {
             .fullScreenCover(isPresented: $showingWebLogin) {
                 WebLoginView()
             }
+        }
+    }
+
+    private func row(_ title: String, icon: String, detail: String) -> some View {
+        HStack {
+            Label(title, systemImage: icon)
+            Spacer()
+            Text(detail).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    private var syncSummary: String {
+        if store.settings.sourceURL.isEmpty { return "未设置" }
+        guard let last = store.settings.lastSync else { return "未同步" }
+        return "同步于 " + last.formatted(date: .omitted, time: .shortened)
+    }
+
+    private var reminderSummary: String {
+        let s = store.settings
+        let times = [s.morningEnabled ? s.morning.text : nil, s.eveningEnabled ? s.evening.text : nil].compactMap { $0 }
+        return times.isEmpty ? "已关闭" : times.joined(separator: " / ")
+    }
+
+    private var displaySection: some View {
+        Section {
+            NavigationLink {
+                ShiftTypesView()
+            } label: {
+                Label("班次类型与颜色", systemImage: "paintpalette")
+            }
+            Toggle("图标显示今天的组", isOn: $store.settings.dynamicIcon)
+                .onChange(of: store.settings.dynamicIcon) { _ in store.updateAppIcon() }
+            Picker("外观", selection: $store.settings.appearance) {
+                ForEach(Appearance.allCases) { Text($0.title).tag($0) }
+            }
+        } footer: {
+            Text("图标只能在打开 App 时更换，每次更换系统会弹出提示；想不打开 App 也每天更新，用主屏幕小组件「今日班组」。")
+        }
+    }
+
+    private var calendarSection: some View {
+        Section {
+            Toggle("同步到 iPhone 日历", isOn: Binding(
+                get: { store.settings.calendarSync },
+                set: { on in
+                    Task {
+                        if on {
+                            guard await CalendarSync.requestAccess() else {
+                                calendarMessage = "没有日历权限：请到「设置 › 隐私与安全性 › 日历 › 值班提醒」选「完全访问」"
+                                return
+                            }
+                            calendarMessage = nil
+                            store.settings.calendarSync = true
+                            CalendarSync.sync(store.schedule, matcher: store.matcher)
+                        } else {
+                            store.settings.calendarSync = false
+                            CalendarSync.removeCalendar()
+                        }
+                    }
+                }))
+            if let calendarMessage {
+                Text(calendarMessage).font(.footnote).foregroundStyle(.orange)
+            }
+        } footer: {
+            Text("在系统「日历」App 里新建一个「值班提醒」日历，每天一个全天事件（如「组D」），Apple Watch 上也能看到。只改动这个日历，关掉开关会删除它。")
         }
     }
 
