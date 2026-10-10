@@ -514,11 +514,18 @@ final class AppStore: ObservableObject {
             settings.weChatMorningSent = today
             settings.weChatEveningSent = today
         }
-        guard let m = planner.message(morning: morning, on: today, schedule: reminderSchedule) else {
-            return "\(morning ? "今天" : "明天")没有排班，未发送"
+        let label = morning ? "今天" : "明天"
+        var m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
+        // 没有这天的数据：先同步一次再看（快捷指令自动化里 App 可能很久没打开过）
+        if m == nil, canSync {
+            await sync(full: false)
+            m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
         }
-        let ok = await pushToWeChat(title: m.title, content: m.body, force: true)
-        return ok ? "已发送到微信：\(m.title)" : (settings.weChatMessage ?? "微信推送失败")
+        // 仍然没有也照样发一条，免得以为推送坏了
+        let title = m?.title ?? "\(label)：暂无排班数据"
+        let body = m?.body ?? "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"
+        let ok = await pushToWeChat(title: title, content: body, force: true)
+        return ok ? "已发送到微信：\(title)" : (settings.weChatMessage ?? "微信推送失败")
     }
 
     /// 下一次该发微信提醒的时间，用来请求系统在那之后尽快唤醒 App。
