@@ -73,6 +73,15 @@ struct DayRosterView: View {
         }
         .navigationTitle("值班表")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    WorkloadView()
+                } label: {
+                    Label("工作量", systemImage: "chart.bar")
+                }
+            }
+        }
         .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
             guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
             if value.translation.width < -60 { day = day.adding(days: 1) }

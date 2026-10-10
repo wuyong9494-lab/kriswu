@@ -56,6 +56,13 @@ struct CalendarView: View {
                         Label("导出", systemImage: "square.and.arrow.up")
                     }
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink {
+                        WorkloadView()
+                    } label: {
+                        Label("工作量", systemImage: "chart.bar")
+                    }
+                }
             }
             .alert(weChatResult ?? "", isPresented: Binding(get: { weChatResult != nil }, set: { if !$0 { weChatResult = nil } })) {
                 Button("好") {}
