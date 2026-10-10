@@ -22,7 +22,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)）。网站上能看到的日子才算得进来。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)）。网站上能看到的日子才算得进来；工作日没排岗位（不在调度、各组、出差、休息、调休里）的人算「日常班」上班。")
             }
             Section {
                 Button {
@@ -52,11 +52,14 @@ struct WorkloadView: View {
                             .foregroundStyle(store.isMe(person.name) ? Color.accentColor : Color.primary)
                         Spacer()
                         Text("上班 \(person.workDays) 天").bold()
+                        if person.tripDays > 0 {
+                            Text("· 差 \(person.tripDays)").foregroundStyle(.secondary)
+                        }
                         if person.offDays > 0 {
                             Text("· 休 \(person.offDays)").foregroundStyle(.secondary)
                         }
                     }
-                    FlowChips(items: person.posts.map { (text: "\($0.post) ×\($0.count)", raw: $0.post) })
+                    FlowChips(items: AppStore.sortedPosts(person).map { (text: "\($0.post) ×\($0.count)", raw: $0.post) })
                 }
             }
         }

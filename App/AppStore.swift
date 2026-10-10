@@ -819,53 +819,30 @@ final class AppStore: ObservableObject {
     // MARK: - 工作量统计
 
     struct Workload {
-        struct Person {
-            var name: String
-            var workDays: Int
-            var offDays: Int
-            var posts: [(post: String, count: Int)]
-        }
         var days: [DayKey]
-        var people: [Person]
+        var people: [PersonWorkload]
         var text: String
-    }
-
-    /// 休息、调休、请假、无分工都不算上班。
-    func isOffPost(_ post: String) -> Bool {
-        matcher.match(post)?.id == "off" || post.contains("休") || post.contains("假") || post == "无分工"
     }
 
     /// 某月每个人的工作量（来自全员排班），按上班天数从多到少。
     func workload(year: Int, month: Int) -> Workload {
-        var days = Set<DayKey>()
-        var people: [Workload.Person] = []
-        for (name, schedule) in roster {
-            var work = 0, off = 0
-            var counts: [String: Int] = [:]
-            for (day, raw) in schedule where day.year == year && day.month == month {
-                days.insert(day)
-                let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
-                if posts.allSatisfy(isOffPost) { off += 1 } else { work += 1 }
-                for p in posts { counts[p, default: 0] += 1 }
-            }
-            guard work + off > 0 else { continue }
-            let posts = counts.map { (post: $0.key, count: $0.value) }
-                .sorted { ($0.count, $1.post) > ($1.count, $0.post) }
-            people.append(.init(name: name, workDays: work, offDays: off, posts: posts))
-        }
+        let days = Set(roster.values.flatMap(\.keys)).filter { $0.year == year && $0.month == month }.sorted()
         let zh = Locale(identifier: "zh_CN")
-        people.sort { a, b in
+        let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, calendar: .app).sorted { a, b in
             a.workDays != b.workDays ? a.workDays > b.workDays : a.name.compare(b.name, locale: zh) == .orderedAscending
         }
-        let sortedDays = days.sorted()
         var text = "\(year)年\(month)月工作量统计"
-        if let first = sortedDays.first, let last = sortedDays.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(sortedDays.count) 天）"
+        if let first = days.first, let last = days.last {
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作日没排岗位的算日常班）"
         }
         for p in people {
-            text += "\n\(p.name)：上班 \(p.workDays) 天，休 \(p.offDays) 天；"
-                + p.posts.map { "\($0.post)×\($0.count)" }.joined(separator: " ")
+            text += "\n\(p.name)：上班 \(p.workDays) 天" + (p.tripDays > 0 ? "，出差 \(p.tripDays) 天" : "")
+                + "，休 \(p.offDays) 天；" + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
         }
-        return Workload(days: sortedDays, people: people, text: text)
+        return Workload(days: days, people: people, text: text)
+    }
+
+    static func sortedPosts(_ p: PersonWorkload) -> [(post: String, count: Int)] {
+        p.posts.map { (post: $0.key, count: $0.value) }.sorted { ($0.count, $1.post) > ($1.count, $0.post) }
     }
 }
