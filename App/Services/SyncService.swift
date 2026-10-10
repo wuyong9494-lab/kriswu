@@ -18,21 +18,58 @@ enum SyncError: LocalizedError {
 }
 
 enum SyncService {
-    /// 取回排班数据并转成文字。
-    /// viaWeb = true 时用 App 内置浏览器打开（沿用「网页登录」的登录状态，支持动态网页）；
-    /// 否则直接下载（适合 CSV / ICS 日历订阅 / JSON 文件）。
+    struct Outcome {
+        var result: ParseResult
+        /// 这次用上的数据接口（下次优先用它）；读网页内容时为 nil
+        var apiSignature: String?
+    }
+
+    /// 取回排班。
+    /// viaWeb = true：在内置浏览器里打开排班页面（自动登录）。能认出网页背后的数据接口时，
+    /// 直接用这个接口再取后面 weeksAhead 周的数据；认不出就照旧读网页上显示的内容。
+    /// viaWeb = false：直接下载（CSV / ICS 日历订阅 / JSON 文件）。
     @MainActor
-    static func fetchText(urlString: String, username: String, password: String, viaWeb: Bool) async throws -> String {
+    static func fetchSchedule(urlString: String, username: String, password: String, viaWeb: Bool,
+                              parser: ScheduleParser, aliases: [String], matcher: ShiftMatcher,
+                              preferredAPI: String?, weeksAhead: Int = 3) async throws -> Outcome {
+        if viaWeb, let url = webURL(urlString) {
+            let reference = parser.reference
+            var found: APIDiscovery.Found?
+            let page = try await WebPageLoader.load(url: url, username: username, password: password) { captured in
+                found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
+                                          matcher: matcher, reference: reference)
+                guard let f = found, f.request.hasDateParameter, weeksAhead > 0 else { return [] }
+                return (1...weeksAhead).map { f.request.shifted(days: 7 * $0) }
+            }
+            if let f = found, !f.entries.isEmpty {
+                var entries = f.entries
+                for reply in page.replies {
+                    let more = JSONScheduleExtractor.extract(reply, aliases: aliases, matcher: matcher, reference: reference)
+                    for (day, value) in more where entries[day] == nil { entries[day] = value }
+                }
+                return Outcome(result: ParseResult(entries: entries, format: .api), apiSignature: f.request.signature)
+            }
+            if HTMLText.looksLikeLoginPage(page.html) { throw SyncError.needsLogin }
+            return Outcome(result: try parser.parse(HTMLText.toText(page.html)), apiSignature: nil)
+        }
+        let text = try await fetchText(urlString: urlString, username: username, password: password)
+        return Outcome(result: try parser.parse(text), apiSignature: nil)
+    }
+
+    private static func webURL(_ urlString: String) -> URL? {
+        let s = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: s), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return url
+    }
+
+    /// 直接下载排班文件并转成文字（网页会先转换成表格文字）。
+    static func fetchText(urlString: String, username: String, password: String) async throws -> String {
         var s = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.lowercased().hasPrefix("webcal://") { s = "https://" + s.dropFirst("webcal://".count) }
         guard let url = URL(string: s), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             throw SyncError.badURL
-        }
-
-        if viaWeb {
-            let html = try await WebPageLoader.html(url: url, username: username, password: password)
-            if HTMLText.looksLikeLoginPage(html) { throw SyncError.needsLogin }
-            return HTMLText.toText(html)
         }
 
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)

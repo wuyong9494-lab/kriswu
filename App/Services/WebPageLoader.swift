@@ -15,14 +15,27 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         self.password = password
     }
 
-    static func html(url: URL, username: String, password: String) async throws -> String {
-        let loader = WebPageLoader(username: username, password: password)
-        return try await loader.load(url)
+    struct Page {
+        var html: String
+        /// 网页加载时向服务器取数据的请求（只在内存里，不保存）
+        var captured: [CapturedRequest]
+        /// replay 里要求重新发出的请求的返回内容
+        var replies: [String]
     }
 
-    private func load(_ url: URL) async throws -> String {
+    /// 打开网页（必要时自动登录），记录网页取数据的请求；
+    /// replay 根据记录挑出要再发一次的请求（比如把日期改成下一周），在同一个页面里用同样的登录状态发出。
+    static func load(url: URL, username: String, password: String,
+                     replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
+        let loader = WebPageLoader(username: username, password: password)
+        return try await loader.load(url, replay: replay)
+    }
+
+    private func load(_ url: URL, replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        config.userContentController.addUserScript(
+            WKUserScript(source: Self.spyScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: config)
         webView.navigationDelegate = self
         self.webView = webView
@@ -47,8 +60,76 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
                 html = try await settledHTML(webView)
             }
         }
-        return html
+
+        let json = (try? await webView.evaluateJavaScript("JSON.stringify(window.__shiftSpy || [])")) as? String ?? "[]"
+        let captured = (try? JSONDecoder().decode([CapturedRequest].self, from: Data(json.utf8))) ?? []
+        var replies: [String] = []
+        for request in replay(captured) {
+            let reply = try? await webView.callAsyncJavaScript(
+                Self.replayScript,
+                arguments: ["url": request.url, "method": request.method, "headers": request.headers,
+                            "body": request.requestBody ?? NSNull()],
+                in: nil, in: .page)
+            if let text = reply as? String { replies.append(text) }
+        }
+        return Page(html: html, captured: captured, replies: replies)
     }
+
+    /// 在网页最开始注入：包装 fetch 和 XMLHttpRequest，记下返回 JSON 的请求（最多 50 条，存在页面内存里）。
+    private static let spyScript = """
+    (function () {
+      if (window.__shiftSpy) return;
+      const log = window.__shiftSpy = [];
+      const keep = e => {
+        try {
+          if (typeof e.body === 'string' && e.body.length < 500000 && /^\\s*[\\[{]/.test(e.body)) {
+            log.push(e);
+            if (log.length > 50) log.shift();
+          }
+        } catch (_) {}
+      };
+      const abs = u => { try { return new URL(u, location.href).href; } catch (_) { return String(u); } };
+      const origFetch = window.fetch;
+      if (origFetch) {
+        window.fetch = function (input, init) {
+          const url = abs(typeof input === 'string' ? input : (input && input.url) || input);
+          const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+          const headers = {};
+          try { new Headers((init && init.headers) || (input && input.headers) || {}).forEach((v, k) => headers[k] = v); } catch (_) {}
+          const reqBody = init && typeof init.body === 'string' ? init.body : null;
+          return origFetch.apply(this, arguments).then(res => {
+            try { res.clone().text().then(t => keep({ url, method, headers, reqBody, status: res.status, body: t })); } catch (_) {}
+            return res;
+          });
+        };
+      }
+      const P = XMLHttpRequest.prototype, open = P.open, send = P.send, setHeader = P.setRequestHeader;
+      P.open = function (m, u) { this.__spy = { method: String(m).toUpperCase(), url: abs(u), headers: {} }; return open.apply(this, arguments); };
+      P.setRequestHeader = function (k, v) { if (this.__spy) this.__spy.headers[k] = v; return setHeader.apply(this, arguments); };
+      P.send = function (b) {
+        const s = this.__spy;
+        if (s) {
+          s.reqBody = typeof b === 'string' ? b : null;
+          this.addEventListener('load', () => {
+            try {
+              const t = (this.responseType === '' || this.responseType === 'text') ? this.responseText
+                      : (this.responseType === 'json' ? JSON.stringify(this.response) : '');
+              keep(Object.assign({}, s, { status: this.status, body: t }));
+            } catch (_) {}
+          });
+        }
+        return send.apply(this, arguments);
+      };
+    })();
+    """
+
+    /// 用记录下来的请求头和内容再发一次请求（同一个页面、同一个登录状态）。
+    private static let replayScript = """
+    const init = { method, headers, credentials: 'include' };
+    if (body !== null && method !== 'GET' && method !== 'HEAD') init.body = body;
+    const r = await fetch(url, init);
+    return await r.text();
+    """
 
     /// 等页面里的脚本把内容画出来：连续两次内容不变就认为加载完成，最多等 15 秒。
     private func settledHTML(_ webView: WKWebView) async throws -> String {

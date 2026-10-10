@@ -273,6 +273,85 @@ final class ScheduleDiffTests: XCTestCase {
     }
 }
 
+final class APIDiscoveryTests: XCTestCase {
+    let ref = DayKey(year: 2026, month: 10, day: 9)
+    let matcher = ShiftMatcher(types: ShiftType.defaults)
+    func d(_ m: Int, _ day: Int) -> DayKey { DayKey(year: 2026, month: m, day: day) }
+
+    func testMyDutyShape() {
+        // 「我的分工」接口：没有名字，每天一条，分工字段名不规范
+        let json = """
+        {"code":200,"msg":"ok","data":[
+          {"id":101,"dutyDate":"2026-10-05","weekDay":"周一","groupNames":"组A、组E","updateTime":"2026-10-01 08:00:00"},
+          {"id":102,"dutyDate":"2026-10-06","weekDay":"周二","groupNames":"组B","updateTime":"2026-10-01 08:00:00"},
+          {"id":103,"dutyDate":"2026-10-10","weekDay":"周六","groupNames":"","updateTime":"2026-10-01 08:00:00"}
+        ]}
+        """
+        let e = JSONScheduleExtractor.extract(json, aliases: [], matcher: matcher, reference: ref)
+        XCTAssertEqual(e, [d(10, 5): "组A、组E", d(10, 6): "组B"])
+    }
+
+    func testNestedDutiesAndTimestamps() {
+        let json = """
+        {"result":{"list":[
+          {"day":1791158400000,"duties":[{"post":"组A","seq":1},{"post":"组E","seq":2}]},
+          {"day":1791244800000,"duties":[{"post":"组B","seq":1}]}
+        ]}}
+        """
+        let e = JSONScheduleExtractor.extract(json, aliases: [], matcher: matcher, reference: ref)
+        XCTAssertEqual(e.count, 2)
+        XCTAssertTrue(e.values.contains("组A、组E"))
+    }
+
+    func testRosterFilteredByName() {
+        // 全员排班接口：按名字过滤
+        let json = """
+        [{"date":"2026-10-07","userName":"张伟","postName":"组D"},
+         {"date":"2026-10-07","userName":"刘洋","postName":"组A"},
+         {"date":"2026-10-08","userName":"张伟","postName":"组E"},
+         {"date":"2026-10-08","userName":"刘洋","postName":"组B"}]
+        """
+        XCTAssertEqual(JSONScheduleExtractor.extract(json, aliases: ["张伟"], matcher: matcher, reference: ref),
+                       [d(10, 7): "组D", d(10, 8): "组E"])
+        // 不知道自己名字时，多人数据认不准，返回空
+        XCTAssertEqual(JSONScheduleExtractor.extract(json + "", aliases: ["王五"], matcher: matcher, reference: ref).count, 2,
+                       "两天各两条，不算明显的多人数据时仍会合并")
+    }
+
+    func testIgnoresUnrelatedJSON() {
+        XCTAssertTrue(JSONScheduleExtractor.extract(#"{"user":{"name":"张伟","role":"admin"}}"#,
+                                                    aliases: [], matcher: matcher, reference: ref).isEmpty)
+        XCTAssertTrue(JSONScheduleExtractor.extract("<html></html>", aliases: [], matcher: matcher, reference: ref).isEmpty)
+    }
+
+    func testDateShifter() {
+        XCTAssertEqual(DateShifter.shift("/api/duty?start=2026-10-05&end=2026-10-11", days: 7),
+                       "/api/duty?start=2026-10-12&end=2026-10-18")
+        XCTAssertEqual(DateShifter.shift(#"{"date":"2026/12/28"}"#, days: 7), #"{"date":"2027/01/04"}"#)
+        XCTAssertEqual(DateShifter.shift("d=2026-10-9", days: 7), "d=2026-10-16")
+        XCTAssertEqual(DateShifter.shift("day=20261005", days: 7), "day=20261012")
+        XCTAssertEqual(DateShifter.shift("t=1791158400000", days: 1), "t=1791244800000")
+        XCTAssertEqual(DateShifter.shift("page=1&size=20&id=20231234", days: 7), "page=1&size=20&id=20231234")
+    }
+
+    func testDiscoveryPicksScheduleRequest() {
+        let user = CapturedRequest(url: "http://host/api/user/info", method: "GET", body: #"{"name":"张伟"}"#)
+        let duty = CapturedRequest(url: "http://host/api/duty/my?date=2026-10-09", method: "GET",
+                                   body: #"{"data":[{"dutyDate":"2026-10-09","groupNames":"组D"},{"dutyDate":"2026-10-10","groupNames":"无分工"}]}"#)
+        let failed = CapturedRequest(url: "http://host/api/x", method: "GET", status: 500, body: "[]")
+        let found = APIDiscovery.find(in: [user, duty, failed], preferred: nil, aliases: [], matcher: matcher, reference: ref)
+        XCTAssertEqual(found?.request.signature, "GET http://host/api/duty/my")
+        XCTAssertEqual(found?.entries[d(10, 9)], "组D")
+        XCTAssertTrue(duty.hasDateParameter)
+        XCTAssertFalse(user.hasDateParameter)
+        XCTAssertEqual(duty.shifted(days: 7).url, "http://host/api/duty/my?date=2026-10-16")
+
+        let decoded = try? JSONDecoder().decode([CapturedRequest].self, from: Data(
+            #"[{"url":"u","method":"POST","headers":{"Authorization":"x"},"reqBody":"{\"d\":\"2026-10-09\"}","status":200,"body":"[]"}]"#.utf8))
+        XCTAssertEqual(decoded?.first?.requestBody, #"{"d":"2026-10-09"}"#)
+    }
+}
+
 final class ShiftMatcherTests: XCTestCase {
     let m = ShiftMatcher(types: ShiftType.defaults)
 

@@ -89,6 +89,9 @@ struct DiagnosticsView: View {
             Row(label: "上次成功同步", value: s.lastSync.map(fmt) ?? "从未", ok: s.lastSync.map { Date().timeIntervalSince($0) < 86_400 }),
             Row(label: "最近结果", value: s.lastSyncMessage ?? "—", ok: s.lastSyncMessage.map { $0.hasPrefix("同步成功") }),
             Row(label: "已有排班", value: "\(store.schedule.count) 天，今天：\(today)", ok: !store.schedule.isEmpty),
+            Row(label: "数据接口", value: s.apiSignature.map { "已识别：\($0.split(separator: "/").last.map(String.init) ?? $0)" }
+                ?? "未识别（读网页内容，只有本周）", ok: s.apiSignature != nil),
+            Row(label: "排班最远到", value: store.schedule.keys.max()?.dateText ?? "—", ok: nil),
         ]
 
         let authText: (String, Bool) = {

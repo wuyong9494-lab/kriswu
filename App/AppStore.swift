@@ -36,6 +36,8 @@ struct AppSettings: Codable, Equatable {
     /// 同步发现排班变动时推送通知
     var notifyChanges = true
     var loginExpiredNotified = false
+    /// 认出的网站数据接口（如 "GET http://…/api/duty"），同步时优先用它取多周数据
+    var apiSignature: String?
     /// 微信推送（PushPlus）
     var weChatEnabled = false
     /// 每天的提醒也发一份到微信（App 有机会运行时补发，可能比准点晚）
@@ -68,6 +70,7 @@ struct AppSettings: Codable, Equatable {
         syncViaWeb = try c.decodeIfPresent(Bool.self, forKey: .syncViaWeb) ?? d.syncViaWeb
         notifyChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyChanges) ?? d.notifyChanges
         loginExpiredNotified = try c.decodeIfPresent(Bool.self, forKey: .loginExpiredNotified) ?? d.loginExpiredNotified
+        apiSignature = try c.decodeIfPresent(String.self, forKey: .apiSignature)
         weChatEnabled = try c.decodeIfPresent(Bool.self, forKey: .weChatEnabled) ?? d.weChatEnabled
         weChatDaily = try c.decodeIfPresent(Bool.self, forKey: .weChatDaily) ?? d.weChatDaily
         weChatMorningSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatMorningSent)
@@ -239,11 +242,16 @@ final class AppStore: ObservableObject {
         isSyncing = true
         defer { isSyncing = false }
         do {
-            let text = try await SyncService.fetchText(urlString: settings.sourceURL,
-                                                       username: settings.sourceUsername,
-                                                       password: Keychain.get(.sourcePassword) ?? "",
-                                                       viaWeb: settings.syncViaWeb)
-            let result = try parser.parse(text)
+            let outcome = try await SyncService.fetchSchedule(urlString: settings.sourceURL,
+                                                              username: settings.sourceUsername,
+                                                              password: Keychain.get(.sourcePassword) ?? "",
+                                                              viaWeb: settings.syncViaWeb,
+                                                              parser: parser,
+                                                              aliases: settings.aliases,
+                                                              matcher: matcher,
+                                                              preferredAPI: settings.apiSignature)
+            let result = outcome.result
+            if let signature = outcome.apiSignature { settings.apiSignature = signature }
             let hadData = !schedule.isEmpty
             let changes = apply(result)
             settings.lastSync = Date()

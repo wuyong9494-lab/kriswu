@@ -15,10 +15,15 @@ public enum ScheduleParseError: Error, Equatable, LocalizedError {
 }
 
 public struct ParseResult: Equatable {
-    public enum Format: String { case ics = "日历 (ICS)", json = "JSON", matrix = "月度排班表", column = "按列排班表", roster = "岗位排班表", list = "日期列表" }
+    public enum Format: String { case ics = "日历 (ICS)", json = "JSON", matrix = "月度排班表", column = "按列排班表", roster = "岗位排班表", list = "日期列表", api = "数据接口" }
 
     public var entries: [DayKey: String]
     public var format: Format
+
+    public init(entries: [DayKey: String], format: Format) {
+        self.entries = entries
+        self.format = format
+    }
 
     /// 解析出的日期范围；同步时用新数据整体替换这一段。
     public var range: ClosedRange<DayKey>? {
