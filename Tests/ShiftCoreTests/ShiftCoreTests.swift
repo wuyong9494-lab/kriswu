@@ -637,7 +637,8 @@ final class WorkloadTests: XCTestCase {
     func testOnlyTelemetryIsDuty() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
-        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }   // 10/5 周一 … 10/11 周日
+        // 10/12 周一 … 10/18 周日（不在国庆假期里），下面的 5…11 对应周一到周日
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day + 7) }
         let roster: Roster = [
             "张三": [d(5): "遥测", d(6): "组A", d(7): "休息", d(8): "调度", d(10): "遥测"],
             "李四": [d(5): "出差", d(6): "出差", d(8): "调休"],
