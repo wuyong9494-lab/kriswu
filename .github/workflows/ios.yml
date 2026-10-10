@@ -85,9 +85,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete app --yes --cleanup-tag || true
-          gh release create app ShiftReminder.ipa \
-            --target "$GITHUB_SHA" \
-            --title "值班提醒 最新版（build ${{ github.run_number }}）" \
-            --notes "未签名安装包，用 SideStore / AltStore / Sideloadly 安装。提交：${GITHUB_SHA::7}" \
-            --latest
+          title="值班提醒 最新版（build ${{ github.run_number }}）"
+          notes="未签名安装包，用 SideStore / AltStore / Sideloadly 安装。提交：${GITHUB_SHA::7}"
+          if gh release view app >/dev/null 2>&1; then
+            # 原地替换安装包，不删发布：避免下载链接中途失效、下载到损坏的文件
+            gh release upload app ShiftReminder.ipa --clobber
+            git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/app" || true
+            gh release edit app --title "$title" --notes "$notes" --latest
+          else
+            gh release create app ShiftReminder.ipa --target "$GITHUB_SHA" --title "$title" --notes "$notes" --latest
+          fi
