@@ -1,0 +1,3 @@
+/* 主屏幕上显示的名字。Info.plist 里保持英文，因为侧载工具注册 App ID 时不接受中文名 */
+"CFBundleDisplayName" = "值班提醒";
+"CFBundleName" = "值班提醒";

@@ -1,0 +1,88 @@
+name: iOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 核心逻辑单元测试
+        run: swift test
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 编译 App（未签名）
+        run: |
+          xcodebuild build \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: 检查 App 名称（侧载工具注册 App ID 时只接受英文）
+        run: |
+          APP=build/Build/Products/Release-iphoneos/ShiftReminder.app
+          for plist in "$APP/Info.plist" "$APP/PlugIns/ShiftWidget.appex/Info.plist"; do
+            for k in CFBundleDisplayName CFBundleName; do
+              v=$(/usr/libexec/PlistBuddy -c "Print :$k" "$plist")
+              echo "$plist $k=$v"
+              echo "$v" | LC_ALL=C grep -q '^[ -~]*$' || { echo "::error::$plist 的 $k 必须是英文"; exit 1; }
+            done
+          done
+          cat "$APP/zh-Hans.lproj/InfoPlist.strings"
+          # 图标要编进 App，否则主屏幕上是空白图标
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" "$APP/Info.plist"
+          for x in A B C D E Rest; do
+            /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:Icon$x" "$APP/Info.plist" >/dev/null \
+              || { echo "::error::缺少备用图标 Icon$x"; exit 1; }
+          done
+          ls "$APP"/AppIcon*.png "$APP/Assets.car"
+
+      # 未签名的程序里没有 entitlements，SideStore 就不知道要开 App Group（小组件读不到数据）。
+      # 用临时签名（ad-hoc）把 entitlements 写进去，SideStore 安装时会换成你自己的签名。
+      - name: 写入 entitlements（ad-hoc 签名）
+        run: |
+          APP=build/Build/Products/Release-iphoneos/ShiftReminder.app
+          codesign -f -s - --entitlements Widget/ShiftWidget.entitlements "$APP/PlugIns/ShiftWidget.appex"
+          codesign -f -s - --entitlements App/ShiftReminder.entitlements "$APP"
+          codesign -d --entitlements - "$APP"
+          codesign -d --entitlements - "$APP/PlugIns/ShiftWidget.appex"
+
+      - name: 打包未签名 IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/ShiftReminder.app Payload/
+          zip -qr ShiftReminder.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ShiftReminder-ipa
+          path: ShiftReminder.ipa
+
+      # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
+      - name: 发布到 Releases（最新版）
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete app --yes --cleanup-tag || true
+          gh release create app ShiftReminder.ipa \
+            --target "$GITHUB_SHA" \
+            --title "值班提醒 最新版（build ${{ github.run_number }}）" \
+            --notes "未签名安装包，用 SideStore / AltStore / Sideloadly 安装。提交：${GITHUB_SHA::7}" \
+            --latest
