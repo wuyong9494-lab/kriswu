@@ -188,6 +188,36 @@ public enum GroupNotes {
         return notes
     }
 
+    private static let pasteHeader = try! NSRegularExpression(
+        pattern: #"^(组\s*[A-Za-z0-9一二三四五六七八九十]{1,2})\s*(?:[：:]\s*(.*))?$"#)
+
+    /// 自己粘贴的说明：「组A：……」开始一个组，之后的行都属于这个组，直到下一个「组X：」。
+    public static func fromPaste(_ text: String) -> [String: String] {
+        var notes: [String: String] = [:]
+        var current: String?
+        var lines: [String] = []
+        func flush() {
+            if let g = current {
+                let note = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !note.isEmpty { notes[normalizeGroup(g)] = note }
+            }
+            lines = []
+        }
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            let range = NSRange(line.startIndex..., in: line)
+            if let m = pasteHeader.firstMatch(in: line, range: range), let g = Range(m.range(at: 1), in: line) {
+                flush()
+                current = String(line[g])
+                if let r = Range(m.range(at: 2), in: line), !line[r].isEmpty { lines.append(String(line[r])) }
+            } else if current != nil, !line.isEmpty {
+                lines.append(line)
+            }
+        }
+        flush()
+        return notes
+    }
+
     /// 接口数据：某个字段是「组E」，另一个字段是较长的说明文字。
     public static func fromJSON(_ text: String) -> [String: String] {
         guard let first = text.trimmingCharacters(in: .whitespacesAndNewlines).first, first == "{" || first == "[",

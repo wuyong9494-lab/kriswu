@@ -467,6 +467,22 @@ final class RosterTests: XCTestCase {
         XCTAssertEqual(roster.count, 3)
     }
 
+    func testGroupNotesFromPaste() {
+        let text = """
+        组A：下午可做：一号星
+        注意备份数传
+        组 b
+        负责二号星规划
+        组C:
+        无关的行以外
+        """
+        let notes = GroupNotes.fromPaste(text)
+        XCTAssertEqual(notes["组A"], "下午可做：一号星\n注意备份数传")
+        XCTAssertEqual(notes["组B"], "负责二号星规划")
+        XCTAssertEqual(notes["组C"], "无关的行以外")
+        XCTAssertTrue(GroupNotes.fromPaste("随便一段话").isEmpty)
+    }
+
     func testGroupNotesFromJSONAndMobilePage() {
         let json = #"{"rows":[{"group":"组A","content":"负责设备巡检和日志记录"},{"group":"组B","content":"负责数据传输监控与重传"}]}"#
         XCTAssertEqual(GroupNotes.fromJSON(json)["组B"], "负责数据传输监控与重传")

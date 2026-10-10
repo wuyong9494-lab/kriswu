@@ -399,6 +399,8 @@ private struct ShiftTypeEditor: View {
 /// 各组工作内容：同步时从网页读到的会自动填上；也可以自己改，改过的优先显示。
 struct GroupNotesView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var pasting = false
+    @State private var pasteText = ""
 
     private var groups: [String] {
         let fromSchedule = store.schedule.values.flatMap { store.matcher.displayName($0).split(separator: "+").map(String.init) }
@@ -429,6 +431,38 @@ struct GroupNotesView: View {
             }
         }
         .navigationTitle("各组工作内容")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("一次粘贴") {
+                    pasteText = UIPasteboard.general.string ?? ""
+                    pasting = true
+                }
+            }
+        }
+        .sheet(isPresented: $pasting) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextEditor(text: $pasteText)
+                            .frame(minHeight: 320)
+                    } footer: {
+                        Text("每个组用「组A：」开头，下面几行都算这个组的内容，直到下一个「组B：」。会替换这些组现在的说明。")
+                    }
+                }
+                .navigationTitle("粘贴各组工作内容")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("取消") { pasting = false } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") {
+                            store.settings.manualGroupNotes.merge(GroupNotes.fromPaste(pasteText)) { _, n in n }
+                            pasting = false
+                        }
+                        .disabled(GroupNotes.fromPaste(pasteText).isEmpty)
+                    }
+                }
+            }
+        }
         .onDisappear { Task { await store.rescheduleNotifications() } }
     }
 }

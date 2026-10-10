@@ -34,19 +34,27 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     static func load(url: URL, username: String, password: String, extraTabs: [String] = [],
                      pager: [(label: String, steps: Int)] = [],
                      afterTabs: ([CapturedRequest]) -> [CapturedRequest] = { _ in [] },
+                     desktop: Bool = false,
                      replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let loader = WebPageLoader(username: username, password: password)
-        return try await loader.load(url, extraTabs: extraTabs, pager: pager, afterTabs: afterTabs, replay: replay)
+        return try await loader.load(url, extraTabs: extraTabs, pager: pager, afterTabs: afterTabs, desktop: desktop, replay: replay)
     }
+
+    /// 电脑浏览器的标识：网站据此显示电脑版页面（电脑版「值班查看」上有各组工作内容）。
+    private static let desktopUserAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
     private func load(_ url: URL, extraTabs: [String], pager: [(label: String, steps: Int)],
                       afterTabs: ([CapturedRequest]) -> [CapturedRequest],
+                      desktop: Bool,
                       replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.userContentController.addUserScript(
             WKUserScript(source: Self.spyScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: config)
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: desktop ? 1440 : 390, height: desktop ? 900 : 844),
+                                configuration: config)
+        if desktop { webView.customUserAgent = Self.desktopUserAgent }
         webView.navigationDelegate = self
         self.webView = webView
         defer { self.webView = nil }

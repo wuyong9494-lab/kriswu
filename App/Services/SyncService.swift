@@ -107,6 +107,20 @@ enum SyncService {
         return Outcome(result: try parser.parse(text), apiSignature: nil, roster: roster, groupNotes: notes)
     }
 
+    /// 用电脑版打开「值班查看」（网址 #/duty），读上面各组的工作内容。读不到返回空。
+    @MainActor
+    static func fetchDesktopGroupNotes(urlString: String, username: String, password: String,
+                                       reference: DayKey) async -> [String: String] {
+        guard let url = webURL(urlString), var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return [:] }
+        c.path = "/"
+        c.query = nil
+        c.fragment = "/duty"
+        guard let dutyURL = c.url,
+              let page = try? await WebPageLoader.load(url: dutyURL, username: username, password: password,
+                                                       desktop: true, replay: { _ in [] }) else { return [:] }
+        return GroupNotes.fromText(HTMLText.toText(page.html), reference: reference)
+    }
+
     private static func webURL(_ urlString: String) -> URL? {
         let s = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: s), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {

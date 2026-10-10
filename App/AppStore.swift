@@ -66,6 +66,8 @@ struct AppSettings: Codable, Equatable {
     var changeLog: [ChangeLogEntry] = []
     /// 已经提醒过「很久没同步成功」，同步成功后恢复
     var syncStaleNotified = false
+    /// 上次从电脑版页面读各组工作内容的时间（一天读一次）
+    var lastDesktopNotesFetch: Date?
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
@@ -107,6 +109,7 @@ struct AppSettings: Codable, Equatable {
         favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
         changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
         syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
+        lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
@@ -449,6 +452,16 @@ final class AppStore: ObservableObject {
                 saveRoster()
             }
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
+            // 手机版没有各组工作内容：打开 App 时每天用电脑版页面读一次
+            if full, settings.syncViaWeb,
+               Date().timeIntervalSince(settings.lastDesktopNotesFetch ?? .distantPast) > 20 * 3600 {
+                settings.lastDesktopNotesFetch = Date()
+                let notes = await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
+                                                                     username: settings.sourceUsername,
+                                                                     password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
+                                                                     reference: .today)
+                if !notes.isEmpty { settings.autoGroupNotes.merge(notes) { _, n in n } }
+            }
             let hadData = !schedule.isEmpty
             let changes = apply(result)
             settings.lastSync = Date()
