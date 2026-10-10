@@ -56,7 +56,7 @@ struct ShiftCard: View {
                 Text("\(label) · \(day.dateText)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(display?.name ?? "未排班")
+                Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
                     .font(large ? .largeTitle.bold() : .title2.bold())
                     .foregroundStyle(display == nil ? Color.secondary : Color.primary)
                 if let reminder {
@@ -98,6 +98,12 @@ private struct UpcomingList: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
                                 .background(display.color.opacity(0.18), in: Capsule())
+                        } else if store.isCovered(day) {
+                            Text("未排班")
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.18), in: Capsule())
                         } else {
                             Text("—").foregroundStyle(.tertiary)
                         }

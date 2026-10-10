@@ -89,6 +89,8 @@ struct AppSettings: Codable, Equatable {
 private struct PersistedState: Codable {
     var settings: AppSettings
     var schedule: [String: String]
+    /// 已经取到过排班结果的日子（包括没给我排班的日子）
+    var covered: [String]?
 }
 
 extension Calendar {
@@ -120,6 +122,8 @@ final class AppStore: ObservableObject {
         }
     }
     @Published private(set) var schedule: [DayKey: String]
+    /// 已经取到过结果的日子：有排班的显示班次，没排班的显示「未排班」；不在这里的日子还没有数据
+    @Published private(set) var covered: Set<DayKey>
     @Published private(set) var isSyncing = false
 
     private static let fileURL: URL = {
@@ -136,11 +140,23 @@ final class AppStore: ObservableObject {
             if let day = DayKey(string: k) { schedule[day] = v }
         }
         self.schedule = schedule
+        if let saved = state?.covered {
+            covered = Set(saved.compactMap(DayKey.init(string:)))
+        } else if let lo = schedule.keys.min(), let hi = schedule.keys.max() {
+            // 旧版本没记录：把已有排班的首尾之间都算作取到过
+            var days = Set<DayKey>()
+            var d = lo
+            while d <= hi { days.insert(d); d = d.adding(days: 1) }
+            covered = days
+        } else {
+            covered = []
+        }
     }
 
     private func save() {
         let state = PersistedState(settings: settings,
-                                   schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }))
+                                   schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }),
+                                   covered: covered.map(\.description).sorted())
         if let data = try? JSONEncoder().encode(state) {
             try? data.write(to: Self.fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         }
@@ -159,6 +175,7 @@ final class AppStore: ObservableObject {
     func setShift(_ value: String?, on day: DayKey) {
         let v = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         schedule[day] = (v?.isEmpty ?? true) ? nil : v
+        covered.insert(day)
         scheduleChanged()
     }
 
@@ -169,6 +186,11 @@ final class AppStore: ObservableObject {
         var new = schedule
         if let range = result.range {
             new = new.filter { !range.contains($0.key) }
+            var d = range.lowerBound
+            while d <= range.upperBound { covered.insert(d); d = d.adding(days: 1) }
+            // 只保留最近一年，文件不会越来越大
+            let cutoff = DayKey.today.adding(days: -366)
+            covered = covered.filter { $0 >= cutoff }
         }
         new.merge(result.entries) { _, n in n }
         schedule = new
@@ -176,8 +198,12 @@ final class AppStore: ObservableObject {
         return ScheduleDiff.changes(old: old, new: new, from: .today)
     }
 
+    /// 这一天是否已经取到过排班结果（没排班也算）。
+    func isCovered(_ day: DayKey) -> Bool { covered.contains(day) || schedule[day] != nil }
+
     func clearSchedule() {
         schedule = [:]
+        covered = []
         scheduleChanged()
     }
 

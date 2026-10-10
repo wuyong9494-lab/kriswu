@@ -80,6 +80,8 @@ private struct DayCell: View {
 
     var body: some View {
         let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
+        // 取到过结果但没给我排班：灰底「未排班」；还没取到数据的日子：留空
+        let unassigned = display == nil && store.isCovered(day)
         VStack(spacing: 2) {
             Text("\(day.day)")
                 .font(.subheadline.weight(isToday ? .bold : .regular))
@@ -90,13 +92,22 @@ private struct DayCell: View {
                     .font(.caption2)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
+            } else if unassigned {
+                Spacer(minLength: 0)
+                Text("未排班")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Spacer(minLength: 0)
             } else {
                 Spacer(minLength: 0)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64)
         .padding(.vertical, 2)
-        .background((display?.color ?? .clear).opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+        .background(display.map { $0.color.opacity(0.2) } ?? (unassigned ? Color.gray.opacity(0.18) : .clear),
+                    in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(isToday ? Color.accentColor : .clear, lineWidth: 2))
         .contentShape(Rectangle())
     }
