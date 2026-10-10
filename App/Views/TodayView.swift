@@ -40,7 +40,12 @@ struct TodayView: View {
             .refreshable { await store.sync() }
             .navigationTitle("值班提醒")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        DayRosterView()
+                    } label: {
+                        Label("值班表", systemImage: "tablecells")
+                    }
                     Button { searching = true } label: {
                         Label("搜索成员", systemImage: "magnifyingglass")
                     }

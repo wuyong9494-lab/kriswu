@@ -23,17 +23,21 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         var replies: [String]
         /// 额外打开的页面（如「值班查看」）的内容
         var extraHTML: [String]
+        /// 打开额外页面后，afterTabs 要求重新发出的请求的返回内容（如其它几周的全员排班）
+        var extraReplies: [String]
     }
 
     /// 打开网页（必要时自动登录），记录网页取数据的请求；
     /// replay 根据记录挑出要再发一次的请求（比如把日期改成下一周），在同一个页面里用同样的登录状态发出。
     static func load(url: URL, username: String, password: String, extraTabs: [String] = [],
+                     afterTabs: ([CapturedRequest]) -> [CapturedRequest] = { _ in [] },
                      replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let loader = WebPageLoader(username: username, password: password)
-        return try await loader.load(url, extraTabs: extraTabs, replay: replay)
+        return try await loader.load(url, extraTabs: extraTabs, afterTabs: afterTabs, replay: replay)
     }
 
-    private func load(_ url: URL, extraTabs: [String], replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
+    private func load(_ url: URL, extraTabs: [String], afterTabs: ([CapturedRequest]) -> [CapturedRequest],
+                      replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.userContentController.addUserScript(
@@ -64,15 +68,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         }
 
         let captured = await capturedRequests(webView)
-        var replies: [String] = []
-        for request in replay(captured) {
-            let reply = try? await webView.callAsyncJavaScript(
-                Self.replayScript,
-                arguments: ["url": request.url, "method": request.method, "headers": request.headers,
-                            "body": request.requestBody ?? NSNull()],
-                in: nil, in: .page)
-            if let text = reply as? String { replies.append(text) }
-        }
+        let replies = await send(replay(captured), in: webView)
 
         // 再点开其它标签页（如「值班查看」），拿全员排班和各组说明
         var extraHTML: [String] = []
@@ -82,7 +78,22 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             if clicked { extraHTML.append(try await settledHTML(webView)) }
         }
         let allCaptured = extraHTML.isEmpty ? captured : await capturedRequests(webView)
-        return Page(html: html, captured: allCaptured, replies: replies, extraHTML: extraHTML)
+        let extraReplies = await send(afterTabs(allCaptured), in: webView)
+        return Page(html: html, captured: allCaptured, replies: replies, extraHTML: extraHTML, extraReplies: extraReplies)
+    }
+
+    /// 在页面里用同样的请求头和登录状态逐个发出请求，返回各自的内容。
+    private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [String] {
+        var replies: [String] = []
+        for request in requests {
+            let reply = try? await webView.callAsyncJavaScript(
+                Self.replayScript,
+                arguments: ["url": request.url, "method": request.method, "headers": request.headers,
+                            "body": request.requestBody ?? NSNull()],
+                in: nil, in: .page)
+            if let text = reply as? String { replies.append(text) }
+        }
+        return replies
     }
 
     private func capturedRequests(_ webView: WKWebView) async -> [CapturedRequest] {

@@ -69,12 +69,16 @@ struct MemberScheduleView: View {
             }
             if !upcoming.isEmpty {
                 Section("今天及以后") {
-                    ForEach(upcoming, id: \.day) { row($0.day, $0.post, isToday: $0.day == today) }
+                    ForEach(upcoming, id: \.day) { item in
+                        NavigationLink { DayRosterView(day: item.day) } label: { row(item.day, item.post, isToday: item.day == today) }
+                    }
                 }
             }
             if !past.isEmpty {
                 Section("之前") {
-                    ForEach(past.reversed(), id: \.day) { row($0.day, $0.post, isToday: false) }
+                    ForEach(past.reversed(), id: \.day) { item in
+                        NavigationLink { DayRosterView(day: item.day) } label: { row(item.day, item.post, isToday: false) }
+                    }
                 }
             }
         }

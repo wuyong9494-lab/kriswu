@@ -249,6 +249,33 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// 某一天所有岗位各是谁（来自全员排班），按网页上的习惯排序：遥测、调度、组A–E、其它、休息、调休。
+    func dayRoster(_ day: DayKey) -> [(post: String, names: [String])] {
+        var byPost: [String: [String]] = [:]
+        for (name, days) in roster {
+            guard let posts = days[day] else { continue }
+            for post in posts.split(separator: "+").map(String.init) { byPost[post, default: []].append(name) }
+        }
+        func rank(_ post: String) -> (Int, String) {
+            switch post {
+            case "遥测": return (0, post)
+            case "调度": return (1, post)
+            case _ where post.hasPrefix("组"): return (2, post)
+            case "休息": return (5, post)
+            case "调休": return (6, post)
+            case _ where post.hasPrefix("值班"): return (3, post)
+            default: return (4, post)
+            }
+        }
+        let zh = Locale(identifier: "zh_CN")
+        return byPost
+            .map { (post: $0.key, names: $0.value.sorted { $0.compare($1, locale: zh) == .orderedAscending }) }
+            .sorted { rank($0.post) < rank($1.post) }
+    }
+
+    /// 是不是我自己（按「我的名字」判断）。
+    func isMe(_ name: String) -> Bool { parser.isMe(name) }
+
     /// 这一天是否已经取到过排班结果（没排班也算）。
     func isCovered(_ day: DayKey) -> Bool { covered.contains(day) || schedule[day] != nil }
 

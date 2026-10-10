@@ -55,15 +55,25 @@ enum SyncService {
         if viaWeb, let url = webURL(urlString) {
             let reference = parser.reference
             var found: APIDiscovery.Found?
-            let page = try await WebPageLoader.load(url: url, username: username, password: password,
-                                                    extraTabs: ["值班查看"]) { captured in
+            let page = try await WebPageLoader.load(
+                url: url, username: username, password: password, extraTabs: ["值班查看"],
+                afterTabs: { captured in
+                    // 全员排班接口：再取上一周和后面三周，「值班表」里可以前后切换日期
+                    let best = captured.filter { (200..<300).contains($0.status) }
+                        .map { r in (r, RosterExtractor.fromJSON(r.body, reference: reference, matcher: matcher)
+                            .values.map(\.count).reduce(0, +)) }
+                        .filter { $0.1 > 0 }
+                        .max { $0.1 < $1.1 }?.0
+                    guard let best, best.hasDateParameter else { return [] }
+                    return [-7, 7, 14, 21].map { best.shifted(days: $0) }
+                }) { captured in
                 found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
                                           matcher: matcher, reference: reference)
                 guard let f = found, f.request.hasDateParameter, weeksAhead > 0 else { return [] }
                 return (1...weeksAhead).map { f.request.shifted(days: 7 * $0) }
             }
             let texts = ([page.html] + page.extraHTML).map(HTMLText.toText)
-            let (roster, notes) = collect(texts: texts, json: page.captured.map(\.body) + page.replies,
+            let (roster, notes) = collect(texts: texts, json: page.captured.map(\.body) + page.replies + page.extraReplies,
                                           reference: reference, matcher: matcher)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries

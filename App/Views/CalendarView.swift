@@ -155,6 +155,13 @@ struct DayEditor: View {
                         Text(current)
                     }
                 }
+                Section {
+                    NavigationLink {
+                        DayRosterView(day: day)
+                    } label: {
+                        Label("查看这一天全部组别", systemImage: "tablecells")
+                    }
+                }
                 Section("选择班次") {
                     ForEach(store.settings.shiftTypes) { type in
                         Button {
