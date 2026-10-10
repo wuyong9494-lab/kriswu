@@ -56,6 +56,12 @@ struct DiagnosticsView: View {
         .task { await load() }
     }
 
+    private var rosterSummary: String {
+        let days = Set(store.roster.values.flatMap(\.keys))
+        guard let lo = days.min(), let hi = days.max() else { return "没有（同步时没读到「值班查看」）" }
+        return "\(store.roster.count) 人，\(days.count) 天（\(lo.dateText) – \(hi.dateText)）"
+    }
+
     private func load() async {
         let s = store.settings
         let app = UIApplication.shared
@@ -92,6 +98,8 @@ struct DiagnosticsView: View {
             Row(label: "数据接口", value: s.apiSignature.map { "已识别：\($0.split(separator: "/").last.map(String.init) ?? $0)" }
                 ?? "未识别（读网页内容，只有本周）", ok: s.apiSignature != nil),
             Row(label: "排班最远到", value: store.schedule.keys.max()?.dateText ?? "—", ok: nil),
+            Row(label: "上次成功结果", value: s.lastSuccessMessage ?? "—", ok: nil),
+            Row(label: "全员排班", value: rosterSummary, ok: !store.roster.isEmpty),
         ]
 
         let authText: (String, Bool) = {

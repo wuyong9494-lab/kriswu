@@ -68,6 +68,8 @@ struct AppSettings: Codable, Equatable {
     var syncStaleNotified = false
     /// 上次从电脑版页面读各组工作内容的时间（一天读一次）
     var lastDesktopNotesFetch: Date?
+    /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
+    var lastSuccessMessage: String?
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
@@ -110,6 +112,7 @@ struct AppSettings: Codable, Equatable {
         changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
         syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
         lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
+        lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
@@ -414,6 +417,12 @@ final class AppStore: ObservableObject {
     /// userInitiated：用户手动刷新。登录失败过一次后，只有手动刷新才再尝试登录，防止密码错误时反复登录把账号锁住；
     /// 同步结果和之前差别过大时，也只有手动刷新才采用。
     func sync(full: Bool = true, userInitiated: Bool = false) async -> Bool {
+        // 放在独立的任务里跑：下拉刷新的界面消失、切换页面时 SwiftUI 会取消调用方，
+        // 不能让读到一半的全员排班跟着作废（以前会显示「CancellationError」）
+        await Task { await self.performSync(full: full, userInitiated: userInitiated) }.value
+    }
+
+    private func performSync(full: Bool, userInitiated: Bool) async -> Bool {
         guard canSync, !isSyncing else { return false }
         isSyncing = true
         defer { isSyncing = false }
@@ -452,16 +461,7 @@ final class AppStore: ObservableObject {
                 saveRoster()
             }
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
-            // 手机版没有各组工作内容：打开 App 时每天用电脑版页面读一次
-            if full, settings.syncViaWeb,
-               Date().timeIntervalSince(settings.lastDesktopNotesFetch ?? .distantPast) > 20 * 3600 {
-                settings.lastDesktopNotesFetch = Date()
-                let notes = await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
-                                                                     username: settings.sourceUsername,
-                                                                     password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
-                                                                     reference: .today)
-                if !notes.isEmpty { settings.autoGroupNotes.merge(notes) { _, n in n } }
-            }
+
             let hadData = !schedule.isEmpty
             let changes = apply(result)
             settings.lastSync = Date()
@@ -469,6 +469,8 @@ final class AppStore: ObservableObject {
             settings.syncStaleNotified = false
             settings.lastSyncMessage = "同步成功：\(result.format.rawValue)，\(result.entries.count) 天"
                 + (changes.isEmpty ? "，没有变动" : "，\(changes.count) 处变动")
+                + (outcome.roster.isEmpty ? "" : "，全员 \(outcome.roster.count) 人")
+            settings.lastSuccessMessage = settings.lastSyncMessage
             // 第一次导入不算“变动”，之后每次同步发现不同就提醒
             if hadData && !changes.isEmpty && settings.notifyChanges {
                 let title = "📢 排班有更新（\(changes.count) 处）"
@@ -482,6 +484,16 @@ final class AppStore: ObservableObject {
                     settings.lastWeChatChangeDigest = body
                     await pushToWeChat(title: title, content: body)
                 }
+            }
+            // 手机版没有各组工作内容：打开 App 时每天用电脑版页面读一次（读不到不影响同步结果）
+            if full, settings.syncViaWeb,
+               Date().timeIntervalSince(settings.lastDesktopNotesFetch ?? .distantPast) > 20 * 3600 {
+                settings.lastDesktopNotesFetch = Date()
+                let notes = await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
+                                                                     username: settings.sourceUsername,
+                                                                     password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
+                                                                     reference: .today)
+                if !notes.isEmpty { settings.autoGroupNotes.merge(notes) { _, n in n } }
             }
             return true
         } catch {
