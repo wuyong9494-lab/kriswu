@@ -70,7 +70,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
       if (mm) {
         window.matchMedia = function (q) {
           var r = mm.call(window, q);
-          if (/pointer\s*:\s*coarse|hover\s*:\s*none/i.test(q)) {
+          if (/pointer\\s*:\\s*coarse|hover\\s*:\\s*none/i.test(q)) {
             return { matches: false, media: q, onchange: null, addListener: function () {}, removeListener: function () {},
                      addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
           }
@@ -209,7 +209,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
 
     /// 点击文字正好是 label 的标签（取最里层的元素，点击会冒泡到外层）。
     private static let clickTabScript = """
-    const norm = s => (s || '').replace(/\s+/g, '');
+    const norm = s => (s || '').replace(/\\s+/g, '');
     const els = [...document.querySelectorAll('a, button, span, div, li, p, [role=tab], [role=button]')]
       .filter(e => e.offsetParent !== null && norm(e.innerText) === norm(label));
     const el = els[els.length - 1];
