@@ -58,6 +58,8 @@ struct RootView: View {
                 .tabItem { Label("今天", systemImage: "sun.max") }
             CalendarView()
                 .tabItem { Label("日历", systemImage: "calendar") }
+            SiteView()
+                .tabItem { Label("网站", systemImage: "globe") }
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
         }
