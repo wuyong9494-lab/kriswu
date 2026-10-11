@@ -15,7 +15,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 核心逻辑单元测试
-        run: swift test
+        shell: bash -o pipefail {0}
+        run: |
+          swift test 2>&1 | tee swift-test.log || {
+            # 失败的断言也作为注释显示在检查结果里，方便查看
+            grep -E "error:" swift-test.log | head -20 | sed 's/^/::error::/'
+            exit 1
+          }
 
       - name: 生成 Xcode 工程
         run: |
@@ -130,7 +136,10 @@ jobs:
             CODE_SIGNING_ALLOWED=NO > test.log 2>&1
           status=$?
           grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log
-          if [ $status -ne 0 ]; then tail -80 test.log; fi
+          if [ $status -ne 0 ]; then
+            tail -80 test.log
+            grep -E "error:" test.log | head -20 | sed 's/^/::error::/'
+          fi
           exit $status
 
       - name: 网站访问记录

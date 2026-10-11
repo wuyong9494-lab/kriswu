@@ -785,8 +785,6 @@ final class AppStore: ObservableObject {
             }
         }
     }
-        }
-    }
 
     /// 立即把下周（从明天起 7 天）的安排发到微信，供快捷指令调用。
     func sendWeChatWeek() async -> String {

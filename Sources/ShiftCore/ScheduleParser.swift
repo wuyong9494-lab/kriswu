@@ -110,15 +110,22 @@ public struct ScheduleParser {
                 let end = start + a.count
                 // 名字在最后、后面有空格、或者后面不是汉字：是我
                 if end == chars.count || spaceAfter[end - 1] || !Self.isHan(chars[end]) { return true }
-                // 后面紧跟着汉字：是班次名（「张伟夜班」）就是我，否则是更长的名字（「张伟东」）
-                let rest = String(chars[end...].prefix { Self.isHan($0) })
-                if Self.shiftWords.match(rest) != nil { return true }
+                // 后面紧跟着汉字：紧接着就是班次名（「张伟夜班」）才是我，否则是更长的名字（「张伟东」「张伟东 夜班」）
+                var rest = ""
+                var k = end
+                while k < chars.count, Self.isHan(chars[k]) {
+                    rest.append(chars[k])
+                    if spaceAfter[k] { break }
+                    k += 1
+                }
+                if Self.shiftWords.contains(where: { rest.hasPrefix($0) }) { return true }
             }
             return false
         }
     }
 
-    private static let shiftWords = ShiftMatcher(types: ShiftType.defaults)
+    /// 班次名和关键字（白班、夜、休息、组…），长度至少 1
+    private static let shiftWords: [String] = ShiftType.defaults.flatMap { [$0.name] + $0.keywords }.filter { !$0.isEmpty }
 
     static func isHan(_ ch: Character) -> Bool {
         ch.unicodeScalars.first.map { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) } ?? false
