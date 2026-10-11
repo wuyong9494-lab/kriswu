@@ -36,7 +36,7 @@ struct WorkloadView: View {
                     LabeledContent("轮班人员", value: store.settings.rotationMembers.isEmpty ? "自动判断" : "\(store.settings.rotationMembers.count) 人")
                 }
             } footer: {
-                Text("轮班人员和排过调度的人，工作日网站上没给排岗位的日子不算工作量；其他人（一直没有组别的日常班人员）工作日没排岗位算日常班。")
+                Text("轮班人员和排过调度的人，工作日网站上没给排岗位的日子不算工作量；其他人（没有组别和调度任务的人，即使值遥测）工作日没排岗位算日常班。")
             }
             Section {
                 NavigationLink {
@@ -216,7 +216,7 @@ struct RotationMembersView: View {
                 }
             } footer: {
                 Text(members.isEmpty
-                     ? "还没设置：现在按「排过组别、遥测、调度」自动判断谁是轮班的。"
+                     ? "还没设置：现在按「有组别任务或调度任务」自动判断谁是轮班的；只值遥测的不算。"
                      : "已设置 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也按轮班算。")
             }
             Section("全员排班里的人（点一下勾选）") {

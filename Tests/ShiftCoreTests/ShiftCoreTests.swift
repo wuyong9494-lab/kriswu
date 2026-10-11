@@ -716,6 +716,15 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["乙"]?.unassignedDays, 4)
         XCTAssertEqual(result["丙"]?.workDays, 5)
         XCTAssertEqual(result["丙"]?.unassignedDays, 0)
+
+        // 没设置名单时自动判断：只值遥测、没有组别和调度任务的人，没排的工作日算日常
+        let auto = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
+            roster: ["丁": [d(5): "遥测"], "戊": [d(5): "组C"]], days: (5...11).map(d), matcher: m, calendar: cal)
+            .map { ($0.name, $0) })
+        XCTAssertEqual(auto["丁"]?.dutyDays, 1)
+        XCTAssertEqual(auto["丁"]?.regularDays, 4)
+        XCTAssertEqual(auto["丁"]?.unassignedDays, 0)
+        XCTAssertEqual(auto["戊"]?.unassignedDays, 4)
     }
 
     func testHolidayRestAfterDutyOnly() {

@@ -59,13 +59,14 @@ public enum WorkloadCounter {
 
     /// 轮班的人：设置里勾选的轮班人员，加上排过调度的人。这些人没排岗位的日子就是没给他排班，不算上班；
     /// 其他人（一直没有组别的日常班人员）工作日没排岗位就是在上日常班。
-    /// members 为空（还没设置）时，排过组别（组A–E）、遥测或调度的人都算轮班的。
+    /// members 为空（还没设置）时，排过组别（组A–E）或调度的人算轮班的；只值遥测的不算。
     public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
                                   matcher: ShiftMatcher) -> Bool {
         let posts = history.values.flatMap { $0.split(separator: "+").map { matcher.displayName(String($0)) } }
         if posts.contains(where: { $0.contains("调度") }) { return true }
         if let members, !members.isEmpty { return members.contains(name) }
-        return posts.contains { GroupNotes.isGroup($0) || isDuty($0) }
+        // 只值遥测、没有组别任务的人不算轮班：没排的工作日照样是在上日常班
+        return posts.contains { GroupNotes.isGroup($0) }
     }
 
     /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）
