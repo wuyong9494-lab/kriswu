@@ -288,9 +288,13 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
 
     /// 用记录下来的请求头和内容再发一次请求（同一个页面、同一个登录状态）。
     private static let replayScript = """
-    const init = { method, headers, credentials: 'include' };
+    // 单个请求最多等 6 秒，卡住的请求不能把后台时间用完
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    const init = { method, headers, credentials: 'include', signal: ctrl.signal };
     if (body !== null && method !== 'GET' && method !== 'HEAD') init.body = body;
-    const r = await fetch(url, init);
+    let r;
+    try { r = await fetch(url, init); } catch (e) { return null; } finally { clearTimeout(timer); }
     if (!r.ok) return null;   // 出错的那一周不要，免得当成「没排班」
     return await r.text();
     """

@@ -407,21 +407,23 @@ final class AppStore: ObservableObject {
     /// 设置、排班一次同步会改好几处：等 0.3 秒合并成一次重新登记提醒，后来的取消前面没做完的，
     /// 免得慢的那次（录语音）最后完成、用旧排班覆盖新排班。
     func requestReschedule() {
-        rescheduleTask?.cancel()
-        rescheduleTask = Task { [weak self] in
+        debounceTask?.cancel()
+        debounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
-            await self?.performReschedule()
+            await self?.rescheduleNotifications()
         }
     }
 
-    /// 马上重新登记（等它做完）。和 requestReschedule 共用一个任务：新的开始时取消旧的，
-    /// 旧的在替换提醒之前会发现自己被取消，不会用过时的排班覆盖。
+    private var debounceTask: Task<Void, Never>?
+
+    /// 马上重新登记（等它做完）。一次接一次排队做，绝不同时进行：
+    /// 每次开始时读的都是当时最新的排班，不会有慢的旧任务最后完成、把新提醒盖掉。
     func rescheduleNotifications() async {
-        rescheduleTask?.cancel()
+        let previous = rescheduleTask
         let task = Task { [weak self] in
-            guard let self else { return }
-            await self.performReschedule()
+            await previous?.value
+            await self?.performReschedule()
         }
         rescheduleTask = task
         await task.value
@@ -510,19 +512,24 @@ final class AppStore: ObservableObject {
     func sync(full: Bool = true, userInitiated: Bool = false) async -> Bool {
         // 正在同步：等它做完，用它的结果（快捷指令不会因为撞上自动同步而说「没有数据」）
         if let running = syncTask {
+            let runningWasUser = syncTaskUserInitiated
             let ok = await running.value
             // 自动同步不会重试登录、不采用异常结果；手动下拉要自己再来一次
-            guard userInitiated, !syncTaskUserInitiated else { return ok }
+            guard userInitiated, !runningWasUser else { return ok }
+            // 等待期间别人已经开始了新的一次：用那一次
+            if let next = syncTask { return await next.value }
         }
         // 放在独立的任务里跑：下拉刷新的界面消失、切换页面时 SwiftUI 会取消调用方，
         // 不能让读到一半的全员排班跟着作废（以前会显示「CancellationError」）
-        if let running = syncTask { return await running.value }   // 等待期间别人已经开始了
-        let task = Task { await self.performSync(full: full, userInitiated: userInitiated) }
+        let task = Task { () -> Bool in
+            let ok = await self.performSync(full: full, userInitiated: userInitiated)
+            // 在任务里面清掉：所有在等它的人醒来时，都能看到「已经没有正在进行的同步」
+            self.syncTask = nil
+            return ok
+        }
         syncTask = task
         syncTaskUserInitiated = userInitiated
-        let ok = await task.value
-        syncTask = nil
-        return ok
+        return await task.value
     }
 
     private var syncTask: Task<Bool, Never>?
@@ -532,6 +539,7 @@ final class AppStore: ObservableObject {
         guard canSync, !isSyncing else { return false }
         isSyncing = true
         defer { isSyncing = false }
+        let aliasesAtStart = settings.aliases
         do {
             let mayLogin = userInitiated || !settings.loginExpiredNotified
             let outcome = try await SyncService.fetchSchedule(urlString: settings.sourceURL,
@@ -565,7 +573,8 @@ final class AppStore: ObservableObject {
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
-            settings.nextSyncIsBaseline = false
+            // 同步途中又改了名字：这次用的是旧名字，下次还要当作重新开始
+            if settings.aliases == aliasesAtStart { settings.nextSyncIsBaseline = false }
             let changes = apply(result)
             settings.lastSync = Date()
             settings.loginExpiredNotified = false

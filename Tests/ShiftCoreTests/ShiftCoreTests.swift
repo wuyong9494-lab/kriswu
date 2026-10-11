@@ -841,6 +841,8 @@ final class RegressionTests: XCTestCase {
         let body = CapturedRequest(url: "http://h/api", method: "POST", requestBody: #"{"from":"20261012","to":"20261018"}"#)
         XCTAssertEqual(body.dateWindow?.upperBound, DayKey(year: 2026, month: 10, day: 18))
         XCTAssertNil(CapturedRequest(url: "http://h/api/user?id=1760000000000", method: "GET").dateWindow)
+        // 版本号之类的第三个日期：看不出范围，不用
+        XCTAssertNil(CapturedRequest(url: "http://h/api?v=20261001&start=2026-10-12&end=2026-10-18", method: "GET").dateWindow)
     }
 
     func testHTMLEntitiesDecodedOnce() {

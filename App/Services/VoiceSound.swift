@@ -63,7 +63,8 @@ enum VoiceSound {
 
     /// 先录到临时文件，录完整了再换成正式文件；录一半失败或超时的不会留下来当铃声。
     private static func render(_ text: String, to finalURL: URL) async -> Bool {
-        let url = finalURL.deletingLastPathComponent().appendingPathComponent("tmp-" + finalURL.lastPathComponent)
+        // 每次录音用自己的临时文件，两次同时录同一句也不会互相覆盖
+        let url = finalURL.deletingLastPathComponent().appendingPathComponent("tmp-\(UUID().uuidString)-" + finalURL.lastPathComponent)
         try? FileManager.default.removeItem(at: url)
         let ok = await record(text, to: url)
         guard ok else {

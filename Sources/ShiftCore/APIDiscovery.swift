@@ -49,20 +49,24 @@ public struct CapturedRequest: Codable, Hashable {
         return copy
     }
 
-    private static let datePattern = try! NSRegularExpression(
-        pattern: #"(?<!\d)(20\d{2})[-/]?(\d{1,2})[-/]?(\d{1,2})(?!\d)"#)
+    private static let datePatterns = [
+        try! NSRegularExpression(pattern: #"(?<!\d)(20\d{2})[-/](\d{1,2})[-/](\d{1,2})(?!\d)"#),
+        try! NSRegularExpression(pattern: #"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)"#),
+    ]
 
     /// 请求参数里的日期范围，例如 start=2026-10-05&end=2026-10-11 → 10/5…10/11。
     /// 没有日期、或者只有一个日期时返回那一天。
     public var dateWindow: ClosedRange<DayKey>? {
         let text = (url.removingPercentEncoding ?? url) + " " + (requestBody ?? "")
         let ns = text as NSString
-        let days = Self.datePattern.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m -> DayKey? in
+        let matches = Self.datePatterns.flatMap { $0.matches(in: text, range: NSRange(location: 0, length: ns.length)) }
+        let days = matches.compactMap { m -> DayKey? in
             guard let y = Int(ns.substring(with: m.range(at: 1))), let mo = Int(ns.substring(with: m.range(at: 2))),
                   let d = Int(ns.substring(with: m.range(at: 3))), DayKey.isValid(year: y, month: mo, day: d) else { return nil }
             return DayKey(year: y, month: mo, day: d)
         }
-        guard let lo = days.min(), let hi = days.max() else { return nil }
+        // 超过两个不同的日期（比如还有个版本号 v=20261001）：看不出哪个是范围，不用
+        guard Set(days).count <= 2, let lo = days.min(), let hi = days.max() else { return nil }
         return lo...hi
     }
 
