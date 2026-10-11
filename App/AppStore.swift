@@ -596,10 +596,22 @@ final class AppStore: ObservableObject {
                 // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
                 let today = DayKey.today
                 let replaced = result.replacedDays(calendar: .app)
-                let known = covered.filter { $0 >= today && replaced.contains($0) }
+                // 和 apply() 同一个规则：网站还没正式排班、只有请假调休记录的以后日子不算「已经知道」，
+                // 不然网站第一次排出新一周时会被当成异常一直挡住
+                let rosterDays = Set(roster.values.flatMap(\.keys))
+                let known = covered.filter { day in
+                    guard day >= today, replaced.contains(day) else { return false }
+                    return publishedDays.isEmpty || day == today || publishedDays.contains(day) || !rosterDays.contains(day)
+                }
                 let changed = known.filter { schedule[$0] != result.entries[$0] }.count
                 if known.count >= 5 && changed * 10 > known.count * 6 {
+                    let alreadyTold = settings.lastSyncMessage?.hasPrefix("同步结果异常") == true
                     settings.lastSyncMessage = "同步结果异常：\(known.count) 天里有 \(changed) 天和之前不同，可能是网站改版，已忽略。下拉刷新可确认采用"
+                    if !alreadyTold {
+                        await NotificationService.notifyNow(id: "sync-anomaly",
+                                                            title: "排班变化很大，没有自动采用",
+                                                            body: "\(known.count) 天里有 \(changed) 天和之前不同。打开值班提醒下拉刷新确认。")
+                    }
                     return false
                 }
             }
@@ -825,7 +837,9 @@ final class AppStore: ObservableObject {
     func sendPendingWeChatChange() async {
         guard settings.weChatEnabled, let pending = settings.pendingWeChatChange else { return }
         let parts = pending.text.split(separator: "\n", maxSplits: 1).map(String.init)
-        if await pushToWeChat(title: parts[0], content: parts.count > 1 ? parts[1] : "") {
+        if await pushToWeChat(title: parts[0], content: parts.count > 1 ? parts[1] : ""),
+           settings.pendingWeChatChange == pending {
+            // 发送途中又来了新的变动就留着，下次再发
             settings.pendingWeChatChange = nil
         }
     }
