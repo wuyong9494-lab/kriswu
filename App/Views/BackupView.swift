@@ -58,6 +58,7 @@ struct BackupView: View {
                 guard let data = confirmRestore else { return }
                 do {
                     let days = try store.restore(from: data)
+                    backupURL = try? store.backupFileURL()
                     message = "已恢复 \(days) 天排班，正在重新同步。换了新手机的话，到「账号与同步」填网站密码，到「微信推送」填 token。"
                         + (Keychain.get(.sourcePassword) == nil ? "\n（这台手机上没有保存的密码，需要重新填）" : "")
                 } catch {

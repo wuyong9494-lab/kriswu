@@ -40,8 +40,9 @@ struct SiteView: View {
                 }
             }
             .onAppear {
-                guard !loaded, !store.settings.sourceURL.isEmpty else { return }
+                // 每次进来都取最新的账号密码（可能刚在设置里改过）
                 model.credentials = (store.settings.sourceUsername, Keychain.get(.sourcePassword) ?? "")
+                guard !loaded, !store.settings.sourceURL.isEmpty else { return }
                 model.load(store.settings.sourceURL)
                 loaded = true
             }

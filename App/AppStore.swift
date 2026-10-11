@@ -834,8 +834,13 @@ final class AppStore: ObservableObject {
     /// 过了早上提醒时间、今天还没发过 → 发「今天」；过了晚上提醒时间 → 发「明天」。
     /// 早上那条过了晚上提醒时间就不再补发。
     /// 排班变动的微信通知：发成功才清掉，没发出去（网络、后台时间到了）下次 App 运行时补发
+    private var isSendingWeChatChange = false
+
     func sendPendingWeChatChange() async {
-        guard settings.weChatEnabled, let pending = settings.pendingWeChatChange else { return }
+        // 已经有一次在发了就不重复发同一条
+        guard settings.weChatEnabled, !isSendingWeChatChange, let pending = settings.pendingWeChatChange else { return }
+        isSendingWeChatChange = true
+        defer { isSendingWeChatChange = false }
         let parts = pending.text.split(separator: "\n", maxSplits: 1).map(String.init)
         if await pushToWeChat(title: parts[0], content: parts.count > 1 ? parts[1] : ""),
            settings.pendingWeChatChange == pending {

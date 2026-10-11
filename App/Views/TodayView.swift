@@ -6,6 +6,7 @@ struct TodayView: View {
     @State private var searching = false
     /// 下拉刷新后在顶部显示几秒「同步完成：没有变动 / 3 处变动」
     @State private var toast: String?
+    @State private var toastTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -47,9 +48,10 @@ struct TodayView: View {
             .refreshable {
                 await store.sync(userInitiated: true)
                 toast = store.settings.lastSyncMessage
-                Task {
+                toastTask?.cancel()
+                toastTask = Task {
                     try? await Task.sleep(nanoseconds: 4_000_000_000)
-                    toast = nil
+                    if !Task.isCancelled { toast = nil }
                 }
             }
             .overlay(alignment: .top) {
