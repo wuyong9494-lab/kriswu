@@ -455,7 +455,7 @@ final class AppStore: ObservableObject {
     var canSync: Bool { !settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty }
 
     @discardableResult
-    /// full：同时翻页读取全员排班（较慢，约半分钟），后台和快捷指令里只取自己的排班，避免超过系统给的时间。
+    /// full：一页页翻「值班查看」读全员排班（较慢，约半分钟）；后台和快捷指令里不翻页，只用网站接口补取全员排班，避免超过系统给的时间。
     /// userInitiated：用户手动刷新。登录失败过一次后，只有手动刷新才再尝试登录，防止密码错误时反复登录把账号锁住；
     /// 同步结果和之前差别过大时，也只有手动刷新才采用。
     func sync(full: Bool = true, userInitiated: Bool = false) async -> Bool {
@@ -482,7 +482,9 @@ final class AppStore: ObservableObject {
                                                               username: settings.sourceUsername,
                                                               password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
                                                               viaWeb: settings.syncViaWeb,
-                                                              includeRoster: full,
+                                                              // 后台和快捷指令也读全员排班，只是不一页页翻（时间有限）
+                                                              includeRoster: true,
+                                                              pageThroughRoster: full,
                                                               parser: parser,
                                                               aliases: settings.aliases,
                                                               matcher: matcher,

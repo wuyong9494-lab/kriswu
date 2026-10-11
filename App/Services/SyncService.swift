@@ -35,16 +35,29 @@ enum SyncService {
                                        matcher: ShiftMatcher) -> [CapturedRequest] {
         var best: CapturedRequest?
         var bestCount = 0
+        var bestDays = Set<DayKey>()
         for request in captured where (200..<300).contains(request.status) {
             let roster = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher)
             let count = roster.values.reduce(0) { $0 + $1.count }
             if count > bestCount {
                 best = request
                 bestCount = count
+                bestDays = Set(roster.values.flatMap(\.keys))
             }
         }
         guard let best, best.hasDateParameter else { return [] }
+        // 接口一次只给一天（手机版「值班查看」）：逐天取前一周到后三周；一次给一周的，按周取
+        if bestDays.count == 1, let base = bestDays.first {
+            let today = DayKey.today
+            return (-7...21).map { today.adding(days: $0) }.filter { $0 != base }.map { day in
+                best.shifted(days: calendarDays(from: base, to: day))
+            }
+        }
         return [-7, 7, 14, 21].map { best.shifted(days: $0) }
+    }
+
+    private static func calendarDays(from a: DayKey, to b: DayKey) -> Int {
+        Calendar.app.dateComponents([.day], from: a.date(calendar: .app, hour: 12), to: b.date(calendar: .app, hour: 12)).day ?? 0
     }
 
     /// 从网页文字和接口数据里收集全员排班与各组说明。
@@ -72,7 +85,8 @@ enum SyncService {
     /// viaWeb = false：直接下载（CSV / ICS 日历订阅 / JSON 文件）。
     @MainActor
     static func fetchSchedule(urlString: String, username: String, password: String, viaWeb: Bool,
-                              includeRoster: Bool = true, parser: ScheduleParser, aliases: [String], matcher: ShiftMatcher,
+                              includeRoster: Bool = true, pageThroughRoster: Bool = true,
+                              parser: ScheduleParser, aliases: [String], matcher: ShiftMatcher,
                               preferredAPI: String?, weeksAhead: Int = 3) async throws -> Outcome {
         if viaWeb, let url = webURL(urlString) {
             let reference = parser.reference
@@ -83,10 +97,11 @@ enum SyncService {
             let page = try await WebPageLoader.load(
                 url: url, username: username, password: password, extraTabs: includeRoster ? ["值班查看"] : [],
                 // 「值班查看」一次只显示一天：先往前翻到本周第一天，再往后翻，能翻到的日子都读一遍
-                pager: includeRoster ? [(label: "上一天", steps: 7), (label: "下一天", steps: 21)] : [],
+                // 后台时间有限：不一页页翻，只靠下面的接口补取各天/各周
+                pager: includeRoster && pageThroughRoster ? [(label: "上一天", steps: 7), (label: "下一天", steps: 21)] : [],
                 afterTabs: rosterWeeks,
                 // 后台、快捷指令里只有约 30 秒
-                timeBudget: includeRoster ? nil : 20) { captured in
+                timeBudget: includeRoster && pageThroughRoster ? nil : 20) { captured in
                 found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
                                           matcher: matcher, reference: reference)
                 guard let f = found, f.request.hasDateParameter, weeksAhead > 0 else { return [] }

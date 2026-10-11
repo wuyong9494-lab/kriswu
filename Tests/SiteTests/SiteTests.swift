@@ -64,6 +64,23 @@ final class SiteTests: XCTestCase {
         }
     }
 
+    /// 后台同步：不翻页，只靠接口逐天补取，20 秒内也要拿到前后几周的全员排班
+    func testBackgroundSyncReadsRosterWithoutPaging() async throws {
+        let start = Date()
+        let outcome = try await SyncService.fetchSchedule(
+            urlString: base + "#/mine", username: "zhangsan", password: "pw123", viaWeb: true,
+            includeRoster: true, pageThroughRoster: false,
+            parser: ScheduleParser(aliases: [], reference: .today), aliases: [], matcher: matcher, preferredAPI: nil)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 28, "后台只有约 30 秒")
+        for offset in [-5, 0, 3, 13] {
+            let day = DayKey.today.adding(days: offset)
+            let e = try await expected(day)
+            for (name, post) in e.roster {
+                XCTAssertEqual(outcome.roster[name]?[day], post, "全员排班 \(name) \(day)")
+            }
+        }
+    }
+
     func testDesktopPagerGoesBackWeekByWeek() async throws {
         let page = try await WebPageLoader.load(url: URL(string: base + "#/duty")!, username: "zhangsan", password: "pw123",
                                                 extraTabs: [""], pager: [(label: "上一周", steps: 3)],

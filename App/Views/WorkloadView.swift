@@ -28,7 +28,7 @@ struct WorkloadView: View {
                 NavigationLink {
                     FairnessView()
                 } label: {
-                    Label("排班合理度分析（本周组别、本月遥测）", systemImage: "scalemass")
+                    Label("工作量均衡分析（本周、本月谁干得多 / 少）", systemImage: "scalemass")
                 }
             }
             Section {

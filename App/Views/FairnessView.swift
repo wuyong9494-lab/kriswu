@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// 排班合理度分析：这一周组A–E 怎么分的，这个月遥测值班排得公不公平。
+/// 工作量均衡分析：有组别（组A–E）排班的人，这一周、这一个月谁干得多、谁干得少。
 struct FairnessView: View {
     @EnvironmentObject private var store: AppStore
     @State private var weekOffset = 0
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
+    /// 只算到今天（关掉则包括已经排好的以后几天）
+    @State private var untilToday = false
 
     private var weekDays: [DayKey] {
         let cal = Calendar.app
@@ -22,50 +24,54 @@ struct FairnessView: View {
         return (1...count).map { DayKey(year: year, month: month, day: $0) }
     }
 
+    private func usable(_ days: [DayKey], known: Set<DayKey>) -> [DayKey] {
+        days.filter { known.contains($0) && (!untilToday || $0 <= .today) }
+    }
+
     var body: some View {
         let known = Set(store.roster.values.flatMap(\.keys))
-        let week = weekDays.filter(known.contains)
-        let monthKnown = monthDays.filter(known.contains)
-        let groupReport = FairnessAnalyzer.groupWeek(roster: store.roster, days: week, restBalance: store.settings.restBalance,
-                                                     matcher: store.matcher, calendar: .app)
-        let teleReport = FairnessAnalyzer.telemetryMonth(roster: store.roster, days: monthKnown,
-                                                         restBalance: store.settings.restBalance,
-                                                         matcher: store.matcher, calendar: .app)
+        let week = usable(weekDays, known: known)
+        let monthKnown = usable(monthDays, known: known)
+        let weekReport = WorkloadBalance.analyze(roster: store.roster, days: week, matcher: store.matcher,
+                                                 tolerance: 2, calendar: .app)
+        let monthReport = WorkloadBalance.analyze(roster: store.roster, days: monthKnown, matcher: store.matcher,
+                                                  tolerance: 3, calendar: .app)
         List {
+            Section {
+                Toggle("只算到今天", isOn: $untilToday)
+            } footer: {
+                Text("比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 节假日值班调休 + 日常（各组、调度、工作日没排岗位）+ 出差。关掉「只算到今天」时，网站上已经排好的以后几天也算进去，看排班本身是否均衡。")
+            }
             Section {
                 switcher(title: "\(weekDays[0].month)/\(weekDays[0].day) – \(weekDays[6].month)/\(weekDays[6].day)",
                          back: { weekOffset -= 1 }, forward: { weekOffset += 1 })
-                ReportSummary(report: groupReport, unit: "天", empty: week.isEmpty ? "这一周还没有全员排班数据" : nil)
+                Summary(report: weekReport, empty: week.isEmpty ? "这一周还没有全员排班数据" : nil)
             } header: {
-                Text("本周组A–E 分配")
+                Text("本周工作量")
             } footer: {
-                Text("看：每天每个组是否都有人且只有一个人；同一个人一周别总在同一个组（3 次以上）；不要连续 6 天以上都在组里；每人组别天数差距别超过 2 天；待休多的人别排太多。")
+                Text("和平均差 2 天以上算偏多 / 偏少；最多和最少差 1 天以内为均衡，2 天以内为基本均衡。")
             }
-            if !groupReport.rows.isEmpty {
-                Section {
-                    ForEach(groupReport.rows, id: \.name) { row in RowView(row: row, unit: "天") }
-                }
+            if !weekReport.rows.isEmpty {
+                Section { ForEach(weekReport.rows, id: \.name) { RowView(row: $0) } }
             }
 
             Section {
                 switcher(title: "\(year)年\(month)月", back: { moveMonth(-1) }, forward: { moveMonth(1) })
-                ReportSummary(report: teleReport, unit: "次", empty: monthKnown.isEmpty ? "这个月还没有全员排班数据" : nil)
+                Summary(report: monthReport, empty: monthKnown.isEmpty ? "这个月还没有全员排班数据" : nil)
             } header: {
-                Text("本月遥测值班")
+                Text("本月工作量")
             } footer: {
-                Text("看：每天都有人遥测；同一个人两次遥测之间至少隔 2 天；每人次数和平均差不超过 2 次；节假日、周末的遥测要分散；待休多的人别再多排。日期后「节」= 法定节假日，「末」= 周末。包括已经排好的以后的日子。")
+                Text("和平均差 3 天以上算偏多 / 偏少；最多和最少差 1 天以内为均衡，3 天以内为基本均衡。")
             }
-            if !teleReport.rows.isEmpty {
-                Section {
-                    ForEach(teleReport.rows, id: \.name) { row in RowView(row: row, unit: "次") }
-                }
+            if !monthReport.rows.isEmpty {
+                Section { ForEach(monthReport.rows, id: \.name) { RowView(row: $0) } }
             }
         }
-        .navigationTitle("排班合理度")
+        .navigationTitle("工作量均衡")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: shareText(groupReport, teleReport)) { Label("分享", systemImage: "square.and.arrow.up") }
+                ShareLink(item: shareText(weekReport, monthReport)) { Label("分享", systemImage: "square.and.arrow.up") }
             }
         }
     }
@@ -88,60 +94,61 @@ struct FairnessView: View {
         month = m; year = y
     }
 
-    private func shareText(_ g: FairnessReport, _ t: FairnessReport) -> String {
-        func block(_ title: String, _ r: FairnessReport, _ unit: String) -> String {
-            var s = "\(title)：\(r.score) 分（\(r.verdict)）"
-            s += r.findings.isEmpty ? "\n没有发现问题" : "\n" + r.findings.map { "· \($0)" }.joined(separator: "\n")
-            s += "\n" + r.rows.map { row in
-                "\(row.name) \(row.count)\(unit)" + (store.settings.restBalance[row.name].map { "（待休\($0)）" } ?? "") + "：\(row.detail)"
-            }.joined(separator: "\n")
-            return s
+    private func shareText(_ week: BalanceReport, _ month: BalanceReport) -> String {
+        func block(_ title: String, _ r: BalanceReport) -> String {
+            guard !r.rows.isEmpty else { return "\(title)：没有数据" }
+            return "\(title)：\(r.verdict)\n" + r.findings.map { "· \($0)" }.joined(separator: "\n") + "\n"
+                + r.rows.map { row in
+                    let w = row.workload
+                    return "\(row.name) \(w.workDays) 天（遥测 \(w.dutyDays)，组别 \(row.groupDays)，出差 \(w.tripDays)，休息 \(w.offDays)）"
+                        + (row.level == .normal ? "" : " \(row.level.rawValue)")
+                }.joined(separator: "\n")
         }
-        return block("本周组A–E（\(weekDays[0].month)/\(weekDays[0].day)起）", g, "天") + "\n\n"
-            + block("\(year)年\(month)月遥测", t, "次")
+        return block("本周（\(weekDays[0].month)/\(weekDays[0].day) 起）工作量", week) + "\n\n"
+            + block("\(year)年\(month)月工作量", month)
     }
 }
 
-private struct ReportSummary: View {
-    let report: FairnessReport
-    let unit: String
+private struct Summary: View {
+    let report: BalanceReport
     let empty: String?
 
     var body: some View {
         if let empty {
             Text(empty).foregroundStyle(.secondary)
+        } else if report.rows.isEmpty {
+            Text("这段时间没有人排组别").foregroundStyle(.secondary)
         } else {
             HStack(alignment: .firstTextBaseline) {
-                Text("\(report.score)")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                Text(report.verdict)
+                    .font(.title2.bold())
                     .foregroundStyle(color)
-                Text("分 · \(report.verdict)").font(.headline).foregroundStyle(color)
                 Spacer()
-                Text("平均 \(String(format: "%.1f", report.average)) \(unit)/人")
+                Text("相差 \(report.spread) 天 · 平均 \(String(format: "%.1f", report.average)) 天")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            if report.findings.isEmpty {
-                Label("没有发现问题", systemImage: "checkmark.circle").foregroundStyle(.green)
-            } else {
-                ForEach(report.findings, id: \.self) { finding in
-                    Label(finding, systemImage: "exclamationmark.triangle")
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
-                }
+            ForEach(report.findings, id: \.self) { line in
+                Text(line).font(.subheadline)
             }
         }
     }
 
-    private var color: Color { report.score >= 85 ? .green : (report.score >= 70 ? .orange : .red) }
+    private var color: Color {
+        switch report.verdict {
+        case "均衡": return .green
+        case "基本均衡": return .orange
+        default: return .red
+        }
+    }
 }
 
 private struct RowView: View {
     @EnvironmentObject private var store: AppStore
-    let row: FairnessReport.Row
-    let unit: String
+    let row: BalanceReport.Row
 
     var body: some View {
+        let w = row.workload
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(row.name).font(.headline)
@@ -154,12 +161,22 @@ private struct RowView: View {
                         .background(Color.green.opacity(0.2), in: Capsule())
                 }
                 Spacer()
-                Text("\(row.count) \(unit)").bold()
+                if row.level != .normal {
+                    Text(row.level.rawValue)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background((row.level == .more ? Color.red : Color.blue).opacity(0.2), in: Capsule())
+                }
+                Text("\(w.workDays) 天").bold()
             }
-            Text(row.detail).font(.footnote).foregroundStyle(.secondary)
-            if let warning = row.warning {
-                Text(warning).font(.footnote).foregroundStyle(.orange)
-            }
+            Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它日常 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays) · 休息 \(w.offDays)"
+                 + (w.holidayDays > 0 ? " · 节假日 \(w.holidayDays)" : ""))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(String(format: "%+.1f 天", row.diff))
+                .font(.caption)
+                .foregroundStyle(row.level == .more ? .red : (row.level == .less ? .blue : .secondary))
         }
     }
 }
