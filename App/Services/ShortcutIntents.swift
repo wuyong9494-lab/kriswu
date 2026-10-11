@@ -18,13 +18,13 @@ enum ReminderDay: String, AppEnum {
 /// 在「快捷指令 › 自动化」里设成每天 7:00 运行，保证 7:30 的提醒用的是最新排班。
 struct SyncScheduleIntent: AppIntent {
     static var title: LocalizedStringResource = "同步排班"
-    static var description = IntentDescription("从值班网站取最新排班并更新提醒、小组件。可以在「快捷指令 › 自动化」里设成每天早上定时运行。")
+    static var description = IntentDescription("从值班网站取最新排班，发现变动马上通知，并更新提醒、小组件。iPhone 后台运行 App 的时间不固定，在「快捷指令 › 自动化」里每天设几个时间（如 9:00、12:00、15:00、18:00）运行它，排班变动就能及时知道。")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = AppStore.shared
         guard store.canSync else { return .result(dialog: "还没有设置排班网址") }
-        await store.sync(full: false)
+        await store.sync(full: false, source: "快捷指令")
         await store.rescheduleNotifications()
         return .result(dialog: "\(store.settings.lastSyncMessage ?? "已同步")")
     }

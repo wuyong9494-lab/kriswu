@@ -82,6 +82,10 @@ struct AppSettings: Codable, Equatable {
     var remindUnassigned = true
     /// 还没发到微信的排班变动
     var pendingWeChatChange: ChangeLogEntry?
+    /// 最近 30 次同步（诊断用）
+    var syncLog: [SyncLogEntry] = []
+    /// 上次系统在后台唤醒 App 的时间
+    var lastBackgroundWake: Date?
     /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
     var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
@@ -137,12 +141,24 @@ struct AppSettings: Codable, Equatable {
         nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
         remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
         pendingWeChatChange = try c.decodeIfPresent(ChangeLogEntry.self, forKey: .pendingWeChatChange)
+        syncLog = try c.decodeIfPresent([SyncLogEntry].self, forKey: .syncLog) ?? []
+        lastBackgroundWake = try c.decodeIfPresent(Date.self, forKey: .lastBackgroundWake)
         desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
         lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
     }
+}
+
+/// 一次同步的记录（诊断页「最近同步」），用来看后台到底有没有同步
+struct SyncLogEntry: Codable, Hashable {
+    var date: Date
+    /// 打开 App / 下拉刷新 / 后台刷新 / 快捷指令…
+    var source: String
+    var ok: Bool
+    var message: String
+    var seconds: Int
 }
 
 struct ChangeLogEntry: Codable, Hashable {
@@ -521,7 +537,8 @@ final class AppStore: ObservableObject {
     /// full：一页页翻「值班查看」读全员排班（较慢，约半分钟）；后台和快捷指令里不翻页，只用网站接口补取全员排班，避免超过系统给的时间。
     /// userInitiated：用户手动刷新。登录失败过一次后，只有手动刷新才再尝试登录，防止密码错误时反复登录把账号锁住；
     /// 同步结果和之前差别过大时，也只有手动刷新才采用。
-    func sync(full: Bool = true, userInitiated: Bool = false) async -> Bool {
+    func sync(full: Bool = true, userInitiated: Bool = false, source: String? = nil) async -> Bool {
+        let source = source ?? (userInitiated ? "手动刷新" : (full ? "打开 App" : "后台"))
         // 正在同步：等它做完，用它的结果（快捷指令不会因为撞上自动同步而说「没有数据」）
         if let running = syncTask {
             let runningWasUser = syncTaskUserInitiated
@@ -534,7 +551,13 @@ final class AppStore: ObservableObject {
         // 放在独立的任务里跑：下拉刷新的界面消失、切换页面时 SwiftUI 会取消调用方，
         // 不能让读到一半的全员排班跟着作废（以前会显示「CancellationError」）
         let task = Task { () -> Bool in
+            let start = Date()
             let ok = await self.performSync(full: full, userInitiated: userInitiated)
+            if self.canSync {
+                let entry = SyncLogEntry(date: start, source: source, ok: ok,
+                                         message: self.settings.lastSyncMessage ?? "", seconds: Int(Date().timeIntervalSince(start)))
+                self.settings.syncLog = Array(([entry] + self.settings.syncLog).prefix(30))
+            }
             // 在任务里面清掉：所有在等它的人醒来时，都能看到「已经没有正在进行的同步」
             self.syncTask = nil
             return ok
@@ -754,11 +777,12 @@ final class AppStore: ObservableObject {
     /// 系统在后台唤醒 App 时调用（时间由 iOS 决定，不保证准时）。
     func backgroundRefresh() async {
         BackgroundRefresh.schedule(notBefore: nextWeChatReminder)   // 先约好下一次，万一这次被系统打断
+        settings.lastBackgroundWake = Date()
         await withTaskCancellationHandler {
             // 先发到点的微信（只需要几秒），再同步；同步用完后台时间也不耽误微信
             await sendDueWeChatReminders()
             if canSync {
-                await sync(full: false)
+                await sync(full: false, source: "后台刷新")
                 // 同步前还没有数据、没发出去的，同步后再试一次
                 await sendDueWeChatReminders()
             }
@@ -848,7 +872,7 @@ final class AppStore: ObservableObject {
         let today = DayKey.today
         let before = settings.weChatWeekSent
         settings.weChatWeekSent = today
-        if canSync { await sync(full: false) }
+        if canSync { await sync(full: false, source: "快捷指令（下周）") }
         guard let w = planner.weekMessage(on: today, schedule: reminderSchedule) else {
             let ok = await pushToWeChat(title: "🗓 接下来一周：暂无排班数据",
                                         content: "没有取到接下来一周的排班（\(settings.lastSyncMessage ?? "还没同步过")）。", force: true)
@@ -876,12 +900,9 @@ final class AppStore: ObservableObject {
             settings.weChatEveningSent = today
         }
         let label = morning ? "今天" : "明天"
-        var m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
-        // 没有这天的数据：先同步一次再看（快捷指令自动化里 App 可能很久没打开过）
-        if m == nil, canSync {
-            await sync(full: false)
-            m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
-        }
+        // 先同步一次再发：发的是网站上最新的排班，顺便发现排班变动（App 可能很久没在后台运行过）
+        if canSync { await sync(full: false, source: "快捷指令（微信）") }
+        let m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
         // 仍然没有也照样发一条，免得以为推送坏了
         let title = m?.title ?? "\(label)：暂无排班数据"
         let body = m?.body ?? "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"

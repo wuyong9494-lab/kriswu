@@ -135,9 +135,23 @@ struct DiagnosticsView: View {
                                   ok: s.weChatMessage.map { !$0.contains("失败") }))
         }
 
+        // 后台同步到底有没有跑：系统多久唤醒一次、最近每次同步的结果
+        let dayAgo = Date().addingTimeInterval(-86_400)
+        let backgroundRuns = s.syncLog.filter { $0.date > dayAgo && ($0.source.hasPrefix("后台") || $0.source.hasPrefix("快捷指令")) }
+        var logRows = [
+            Row(label: "上次后台唤醒", value: s.lastBackgroundWake.map(fmt) ?? "从未",
+                ok: s.lastBackgroundWake.map { Date().timeIntervalSince($0) < 6 * 3600 }),
+            Row(label: "24 小时内后台/快捷指令同步", value: "\(backgroundRuns.count) 次", ok: !backgroundRuns.isEmpty),
+        ]
+        logRows += s.syncLog.prefix(15).map { e in
+            Row(label: "\(e.date.formatted(date: .numeric, time: .shortened)) \(e.source)",
+                value: "\(e.message.isEmpty ? (e.ok ? "成功" : "失败") : e.message)（\(e.seconds) 秒）", ok: e.ok)
+        }
+
         sections = [
             Section(title: "App", rows: appRows),
             Section(title: "排班同步", rows: syncRows),
+            Section(title: "最近同步记录（新的在前）", rows: logRows),
             Section(title: "提醒", rows: reminderRows),
             Section(title: "小组件 / 图标", rows: widgetRows),
             Section(title: "微信", rows: weChatRows),
