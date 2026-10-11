@@ -4,7 +4,8 @@ import Foundation
 /// - 值班：遥测（工作到第二天 8:30）
 /// - 值班调休：法定节假日里，遥测后紧接着的休息、调休。节假日值班换来的，算工作量
 ///   （平时的休息、调休，不管是值班换来的还是请假，都算休息）
-/// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位的日子
+/// - 日常：各组、调度等其它岗位；一直没有组别的日常班人员，工作日（按法定节假日调整）没排岗位的日子
+/// - 未排班：轮组别、遥测、调度的人，工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
 /// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
@@ -26,6 +27,8 @@ public struct PersonWorkload: Equatable {
     public var holidayWorkedDays: Int
     /// 各岗位天数（不含日常班）
     public var posts: [String: Int]
+    /// 轮组别、遥测、调度的人，工作日没排岗位的天数（不算工作量）
+    public var unassignedDays: Int = 0
 
     /// 工作量 = 值班 + 值班调休 + 日常 + 出差
     public var workDays: Int { dutyDays + dutyRestDays + regularDays + tripDays }
@@ -50,12 +53,28 @@ public enum WorkloadCounter {
 
     /// 一天归到哪一类
     public enum Kind: String {
-        case duty = "值班", dutyRest = "值班调休", regular = "日常", trip = "出差", holiday = "节假日", off = "休息"
+        case duty = "值班", dutyRest = "值班调休", regular = "日常", trip = "出差", holiday = "节假日", off = "休息",
+             unassigned = "未排班"
     }
 
-    /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil）
-    public static func classify(_ raw: String?, workday: Bool, holiday: Bool, matcher: ShiftMatcher) -> Kind {
-        guard let raw else { return workday ? .regular : (holiday ? .holiday : .off) }
+    /// 轮班的人：排过组别（组A–E）、遥测或调度。这些人没排岗位的日子就是没给他排班，不算上班；
+    /// 其他人（一直没有组别的日常班人员）工作日没排岗位就是在上日常班。
+    public static func isRotating(_ history: [DayKey: String], matcher: ShiftMatcher) -> Bool {
+        history.values.contains { raw in
+            raw.split(separator: "+").contains { part in
+                let post = matcher.displayName(String(part))
+                return GroupNotes.isGroup(post) || isDuty(post) || post.contains("调度")
+            }
+        }
+    }
+
+    /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）
+    public static func classify(_ raw: String?, workday: Bool, holiday: Bool, rotating: Bool = false,
+                                matcher: ShiftMatcher) -> Kind {
+        guard let raw else {
+            if holiday { return .holiday }
+            return workday ? (rotating ? .unassigned : .regular) : .off
+        }
         let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
         if posts.contains(where: isDuty) { return .duty }
         if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) { return .regular }
@@ -69,9 +88,10 @@ public enum WorkloadCounter {
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher,
                              calendar: Calendar = .current) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
+        let rotating = isRotating(history, matcher: matcher)
         for day in days {
             result[day] = classify(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
-                                   holiday: ChinaHolidays.isHoliday(day), matcher: matcher)
+                                   holiday: ChinaHolidays.isHoliday(day), rotating: rotating, matcher: matcher)
         }
         func restPosts(_ day: DayKey) -> Bool {
             guard let raw = history[day] else { return false }
@@ -117,6 +137,7 @@ public enum WorkloadCounter {
                 case .trip: p.tripDays += 1
                 case .holiday: p.holidayDays += 1
                 case .off: p.offDays += 1
+                case .unassigned: p.unassignedDays += 1
                 }
             }
             return p

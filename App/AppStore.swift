@@ -1082,10 +1082,10 @@ final class AppStore: ObservableObject {
         }
         var text = "\(year)年\(month)月工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位和工作日没排岗位的日子）+ 出差）"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位；一直没有组别的日常班人员工作日没排岗位的日子）+ 出差）"
         }
         for p in people {
-            text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)，出差 \(p.tripDays)），休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天"
+            text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)，出差 \(p.tripDays)），休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天" + (p.unassignedDays > 0 ? "，没排班 \(p.unassignedDays) 天" : "")
                 + (settings.restBalance[p.name].map { "，待休 \($0) 天" } ?? "")
                 + (p.holidayWorkedDays > 0 ? "，节假日上班 \(p.holidayWorkedDays) 天" : "") + "；"
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")

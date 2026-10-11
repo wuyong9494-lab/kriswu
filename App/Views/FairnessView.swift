@@ -45,7 +45,7 @@ struct FairnessView: View {
             Section {
                 Toggle("只算到今天", isOn: $untilToday)
             } footer: {
-                Text("比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 节假日值班调休 + 日常（各组、调度、工作日没排岗位）+ 出差。关掉「只算到今天」时，网站上已经排好组别、遥测的以后几天也算进去，看排班本身是否均衡；只有提前申请的请假、调休的日子不算。")
+                Text("比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 节假日值班调休 + 日常（各组、调度等岗位）；工作日没给排班的日子不算+ 出差。关掉「只算到今天」时，网站上已经排好组别、遥测的以后几天也算进去，看排班本身是否均衡；只有提前申请的请假、调休的日子不算。")
             }
             Section {
                 switcher(title: "\(weekDays[0].month)/\(weekDays[0].day) – \(weekDays[6].month)/\(weekDays[6].day)",
@@ -189,7 +189,8 @@ private struct RowView: View {
                 Text("\(w.workDays) 天").bold()
             }
             Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它日常 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays) · 休息 \(w.offDays)"
-                 + (w.holidayDays > 0 ? " · 节假日 \(w.holidayDays)" : ""))
+                 + (w.holidayDays > 0 ? " · 节假日 \(w.holidayDays)" : "")
+                 + (w.unassignedDays > 0 ? " · 没排班 \(w.unassignedDays)" : ""))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Text(String(format: "%+.1f 天", row.diff))
