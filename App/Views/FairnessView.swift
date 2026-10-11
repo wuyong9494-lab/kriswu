@@ -45,7 +45,7 @@ struct FairnessView: View {
             Section {
                 switcher(title: "\(weekDays[0].month)/\(weekDays[0].day) – \(weekDays[6].month)/\(weekDays[6].day)",
                          back: { weekOffset -= 1 }, forward: { weekOffset += 1 })
-                Summary(report: weekReport, empty: week.isEmpty ? "这一周还没有全员排班数据" : nil)
+                Summary(report: weekReport, empty: week.isEmpty ? "这一周还没有全员排班数据" : nil, range: rangeText(week))
             } header: {
                 Text("本周工作量")
             } footer: {
@@ -57,7 +57,7 @@ struct FairnessView: View {
 
             Section {
                 switcher(title: "\(year)年\(month)月", back: { moveMonth(-1) }, forward: { moveMonth(1) })
-                Summary(report: monthReport, empty: monthKnown.isEmpty ? "这个月还没有全员排班数据" : nil)
+                Summary(report: monthReport, empty: monthKnown.isEmpty ? "这个月还没有全员排班数据" : nil, range: rangeText(monthKnown))
             } header: {
                 Text("本月工作量")
             } footer: {
@@ -74,6 +74,13 @@ struct FairnessView: View {
                 ShareLink(item: shareText(weekReport, monthReport)) { Label("分享", systemImage: "square.and.arrow.up") }
             }
         }
+    }
+
+    /// 「统计 10月1日 周四 – 10月25日 周日，共 25 天」
+    private func rangeText(_ days: [DayKey]) -> String? {
+        guard let first = days.first, let last = days.last else { return nil }
+        return "统计 \(first.dateText) – \(last.dateText)，共 \(days.count) 天"
+            + (!untilToday && last > .today ? "（含已排好的以后几天）" : "")
     }
 
     private func switcher(title: String, back: @escaping () -> Void, forward: @escaping () -> Void) -> some View {
@@ -104,14 +111,16 @@ struct FairnessView: View {
                         + (row.level == .normal ? "" : " \(row.level.rawValue)")
                 }.joined(separator: "\n")
         }
-        return block("本周（\(weekDays[0].month)/\(weekDays[0].day) 起）工作量", week) + "\n\n"
-            + block("\(year)年\(month)月工作量", month)
+        let known = Set(store.roster.values.flatMap(\.keys))
+        return block("本周工作量（\(rangeText(usable(weekDays, known: known)) ?? "")）", week) + "\n\n"
+            + block("\(year)年\(month)月工作量（\(rangeText(usable(monthDays, known: known)) ?? "")）", month)
     }
 }
 
 private struct Summary: View {
     let report: BalanceReport
     let empty: String?
+    var range: String?
 
     var body: some View {
         if let empty {
@@ -119,6 +128,10 @@ private struct Summary: View {
         } else if report.rows.isEmpty {
             Text("这段时间没有人排组别").foregroundStyle(.secondary)
         } else {
+            if let range {
+                Label(range, systemImage: "calendar")
+                    .font(.subheadline.bold())
+            }
             HStack(alignment: .firstTextBaseline) {
                 Text(report.verdict)
                     .font(.title2.bold())
