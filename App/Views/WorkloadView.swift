@@ -10,6 +10,11 @@ struct WorkloadView: View {
     var body: some View {
         let report = store.workload(year: year, month: month)
         List {
+            if !ChinaHolidays.knownYears.contains(DayKey.today.year) {
+                Label("App 里还没有 \(DayKey.today.year) 年的法定节假日，假期会被当成工作日算，请更新 App", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
             Section {
                 HStack {
                     Button { move(-1) } label: { Image(systemName: "chevron.left") }
@@ -41,10 +46,10 @@ struct WorkloadView: View {
                 } label: {
                     HStack {
                         Text("从电脑版网页读取前两个月")
-                        if reading { Spacer(); ProgressView() }
+                        if reading || store.isReadingDesktop { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(reading || !store.canSync)
+                .disabled(reading || store.isReadingDesktop || !store.canSync)
                 if let message = store.settings.desktopRosterMessage {
                     Text(message).font(.footnote).foregroundStyle(.secondary)
                 }

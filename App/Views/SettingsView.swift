@@ -187,7 +187,7 @@ struct SettingsView: View {
             if store.settings.eveningEnabled {
                 DatePicker("提醒时间", selection: time(\.evening), displayedComponents: .hourAndMinute)
             }
-            Toggle("没排班的日子也提醒", isOn: $store.settings.notifyWhenEmpty)
+            Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
@@ -441,10 +441,10 @@ struct GroupNotesView: View {
                 } label: {
                     HStack {
                         Text("现在从电脑版网页读取")
-                        if reading { Spacer(); ProgressView() }
+                        if reading || store.isReadingDesktop { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(reading || !store.canSync)
+                .disabled(reading || store.isReadingDesktop || !store.canSync)
                 Button("自己打开电脑版网页读取") { browsing = true }
                     .disabled(!store.canSync)
                 TextField(SyncService.desktopDutyURL(from: store.settings.sourceURL)?.absoluteString ?? "电脑版「值班查看」网址",

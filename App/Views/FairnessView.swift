@@ -37,6 +37,11 @@ struct FairnessView: View {
         let monthReport = WorkloadBalance.analyze(roster: store.roster, days: monthKnown, matcher: store.matcher,
                                                   tolerance: 3, calendar: .app)
         List {
+            if !ChinaHolidays.knownYears.contains(DayKey.today.year) {
+                Label("App 里还没有 \(DayKey.today.year) 年的法定节假日，假期会被当成工作日算，请更新 App", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
             Section {
                 Toggle("只算到今天", isOn: $untilToday)
             } footer: {

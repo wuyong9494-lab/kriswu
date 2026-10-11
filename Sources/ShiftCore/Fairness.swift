@@ -8,7 +8,7 @@ public struct BalanceReport: Equatable {
     public struct Row: Equatable {
         public var name: String
         public var workload: PersonWorkload
-        /// 有组别（组A–E）的天数
+        /// 日常班里有组别（组A–E）的天数（regularDays 的一部分）
         public var groupDays: Int
         /// 和平均的差（天）
         public var diff: Double
@@ -38,10 +38,14 @@ public enum WorkloadBalance {
     /// days：统计哪些日子；tolerance：和平均差多少天算「偏多/偏少」（一周 2 天，一个月 3 天）。
     public static func analyze(roster: Roster, days: [DayKey], matcher: ShiftMatcher, tolerance: Double,
                                calendar: Calendar = .current) -> BalanceReport {
-        func groupDays(_ history: [DayKey: String]) -> Int {
-            days.filter { day in
-                history[day]?.split(separator: "+").contains { isGroup(matcher.displayName(String($0))) } ?? false
-            }.count
+        func hasGroup(_ raw: String?) -> Bool {
+            raw?.split(separator: "+").contains { isGroup(matcher.displayName(String($0))) } ?? false
+        }
+        func groupDays(_ history: [DayKey: String]) -> Int { days.filter { hasGroup(history[$0]) }.count }
+        /// 算在「日常」里的组别天数（同一天还有遥测的算值班，不在这里）
+        func regularGroupDays(_ history: [DayKey: String]) -> Int {
+            let kinds = WorkloadCounter.kinds(of: history, days: days, matcher: matcher, calendar: calendar)
+            return days.filter { kinds[$0] == .regular && hasGroup(history[$0]) }.count
         }
         // 只比较这段时间有组别排班的人
         let pool = roster.filter { groupDays($0.value) > 0 }
@@ -53,7 +57,7 @@ public enum WorkloadBalance {
         let rows = workloads.map { w -> BalanceReport.Row in
             let diff = Double(w.workDays) - average
             let level: BalanceReport.Level = diff >= tolerance ? .more : (diff <= -tolerance ? .less : .normal)
-            return .init(name: w.name, workload: w, groupDays: groupDays(pool[w.name] ?? [:]), diff: diff, level: level)
+            return .init(name: w.name, workload: w, groupDays: regularGroupDays(pool[w.name] ?? [:]), diff: diff, level: level)
         }.sorted { ($0.workload.workDays, $0.workload.dutyDays, $1.name) > ($1.workload.workDays, $1.workload.dutyDays, $0.name) }
 
         let most = rows.first!, least = rows.last!

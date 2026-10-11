@@ -53,7 +53,16 @@ enum SyncService {
                 best.shifted(days: calendarDays(from: base, to: day))
             }
         }
-        return [-7, 7, 14, 21].map { best.shifted(days: $0) }
+        // 按周的：以「这一条是哪一周」为准换算到本周，再取前一周、后三周
+        let base = weekOffset(of: bestDays)
+        return [-7, 0, 7, 14, 21].map { base + $0 }.filter { $0 != 0 }.map { best.shifted(days: $0) }
+    }
+
+    /// 这批日子所在的周离本周有几天（本周 = 0；上一周的数据 = 7，要往后推 7 天才是本周）。
+    private static func weekOffset(of days: Set<DayKey>) -> Int {
+        guard let first = days.min() else { return 0 }
+        let d = calendarDays(from: first, to: DayKey.today)
+        return Int((Double(d) / 7).rounded(.down)) * 7
     }
 
     private static func calendarDays(from a: DayKey, to b: DayKey) -> Int {
@@ -118,11 +127,23 @@ enum SyncService {
                     guard let lo = e.keys.min(), let hi = e.keys.max() else { return [] }
                     return ParseResult.days(in: lo...hi, calendar: .app)
                 }
-                var covered = span(f.entries)
-                for reply in page.replies {
+                // 用请求里的日期范围（比如整一周）；请求里看不出来时用读到的首尾日期
+                func window(_ request: CapturedRequest, _ e: [DayKey: String]) -> Set<DayKey> {
+                    if let w = request.dateWindow, w.lowerBound != w.upperBound {
+                        let days = ParseResult.days(in: w, calendar: .app)
+                        if days.count <= 62, Set(e.keys).isSubset(of: days) { return days }
+                    }
+                    return span(e)
+                }
+                var covered = window(f.request, f.entries)
+                for (i, reply) in page.replies.enumerated() {
                     let more = JSONScheduleExtractor.extract(reply, aliases: aliases, matcher: matcher, reference: reference)
                     for (day, value) in more where entries[day] == nil { entries[day] = value }
-                    covered.formUnion(span(more))
+                    if i < page.replyRequests.count, !more.isEmpty {
+                        covered.formUnion(window(page.replyRequests[i], more))
+                    } else {
+                        covered.formUnion(span(more))
+                    }
                 }
                 return Outcome(result: ParseResult(entries: entries, format: .api, coveredDays: covered),
                                apiSignature: f.request.signature,
@@ -212,16 +233,21 @@ enum SyncService {
                                         weeksBack: Int) -> [CapturedRequest] {
         var best: CapturedRequest?
         var bestCount = 0
+        var bestDays = Set<DayKey>()
         for request in captured where (200..<300).contains(request.status) {
-            let count = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher).values.reduce(0) { $0 + $1.count }
+            let roster = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher)
+            let count = roster.values.reduce(0) { $0 + $1.count }
             if count > bestCount {
                 best = request
                 bestCount = count
+                bestDays = Set(roster.values.flatMap(\.keys))
             }
         }
-        guard let best, best.hasDateParameter else { return [] }
+        guard let best, best.hasDateParameter, bestDays.count > 1 else { return [] }
+        // 翻页后最多的那一条可能是好几周前的：先换算到本周，再往前 weeksBack 周、往后三周
+        let base = weekOffset(of: bestDays)
         let back = weeksBack > 0 ? (1...weeksBack).map { -7 * $0 } : []
-        return (back + [7, 14, 21]).map { best.shifted(days: $0) }
+        return (back + [0, 7, 14, 21]).map { base + $0 }.filter { $0 != 0 }.map { best.shifted(days: $0) }
     }
 
     private static func webURL(_ urlString: String) -> URL? {

@@ -87,24 +87,38 @@ public struct ScheduleParser {
         s.lowercased().filter { !$0.isWhitespace }
     }
 
-    /// 格子里有我的名字。「张伟(3)」「张伟-夜班」「夜班 张伟」算；同事「张伟东」不算
-    /// （名字后面紧跟着别的汉字，说明是另一个更长的名字）。
+    /// 格子里有我的名字。「张伟(3)」「张 伟」「张伟-夜班」「张伟 白班」「张伟夜班」算；
+    /// 同事「张伟东」不算（名字后面紧跟着别的汉字，而且不是班次名，说明是另一个更长的名字）。
     func isMe(_ cell: String) -> Bool {
-        let normalized = Self.normalize(cell)
-        guard !normalized.isEmpty else { return false }
-        // 保留空格来判断名字后面紧跟的是不是汉字（「张伟 白班」是我，「张伟东」不是）
-        let c = cell.lowercased()
+        // 去掉空格比较，同时记下每个字后面原来有没有空格
+        var chars: [Character] = []
+        var spaceAfter: [Bool] = []
+        for ch in cell.lowercased() {
+            if ch.isWhitespace {
+                if !spaceAfter.isEmpty { spaceAfter[spaceAfter.count - 1] = true }
+            } else {
+                chars.append(ch)
+                spaceAfter.append(false)
+            }
+        }
+        guard !chars.isEmpty else { return false }
         return aliases.contains { alias in
-            if normalized == alias { return true }
-            var search = c.startIndex..<c.endIndex
-            while let r = c.range(of: alias, range: search) {
-                let next = r.upperBound < c.endIndex ? c[r.upperBound] : nil
-                if !(next.map(Self.isHan) ?? false) { return true }
-                search = r.upperBound..<c.endIndex
+            let a = Array(alias)
+            guard !a.isEmpty, a.count <= chars.count else { return false }
+            if chars == a { return true }
+            for start in 0...(chars.count - a.count) where Array(chars[start..<(start + a.count)]) == a {
+                let end = start + a.count
+                // 名字在最后、后面有空格、或者后面不是汉字：是我
+                if end == chars.count || spaceAfter[end - 1] || !Self.isHan(chars[end]) { return true }
+                // 后面紧跟着汉字：是班次名（「张伟夜班」）就是我，否则是更长的名字（「张伟东」）
+                let rest = String(chars[end...].prefix { Self.isHan($0) })
+                if Self.shiftWords.match(rest) != nil { return true }
             }
             return false
         }
     }
+
+    private static let shiftWords = ShiftMatcher(types: ShiftType.defaults)
 
     static func isHan(_ ch: Character) -> Bool {
         ch.unicodeScalars.first.map { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) } ?? false

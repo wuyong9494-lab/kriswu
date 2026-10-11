@@ -28,6 +28,8 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         var captured: [CapturedRequest]
         /// replay 里要求重新发出的请求的返回内容
         var replies: [String]
+        /// replies 里每一条对应的请求（同样的顺序）
+        var replyRequests: [CapturedRequest] = []
         /// 额外打开的页面（如「值班查看」）的内容
         var extraHTML: [String]
         /// 打开额外页面后，afterTabs 要求重新发出的请求的返回内容（如其它几周的全员排班）
@@ -138,7 +140,9 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30))
             // 网页一直不结束加载时也要能返回
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 35_000_000_000)
+                // 后台有时间限制时只等 15 秒
+                let wait: UInt64 = self?.deadline == nil ? 35 : 15
+                try? await Task.sleep(nanoseconds: wait * 1_000_000_000)
                 self?.finish(URLError(.timedOut))
             }
         }
@@ -159,7 +163,8 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         }
 
         let captured = await capturedRequests(webView)
-        let replies = await send(replay(captured), in: webView)
+        let sent = await send(replay(captured), in: webView)
+        let replies = sent.map { $0.reply }
 
         // 再点开其它标签页（如「值班查看」），拿全员排班和各组说明
         var extraHTML: [String] = []
@@ -183,21 +188,22 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             }
         }
         let allCaptured = extraHTML.isEmpty ? captured : await capturedRequests(webView)
-        let extraReplies = await send(afterTabs(allCaptured), in: webView)
-        return Page(html: html, captured: allCaptured, replies: replies, extraHTML: extraHTML, extraReplies: extraReplies,
+        let extraReplies = await send(afterTabs(allCaptured), in: webView).map { $0.reply }
+        return Page(html: html, captured: allCaptured, replies: replies, replyRequests: sent.map { $0.request },
+                    extraHTML: extraHTML, extraReplies: extraReplies,
                     url: webView.url?.absoluteString)
     }
 
     /// 在页面里用同样的请求头和登录状态逐个发出请求，返回各自的内容。
-    private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [String] {
-        var replies: [String] = []
+    private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [(request: CapturedRequest, reply: String)] {
+        var replies: [(request: CapturedRequest, reply: String)] = []
         for request in requests where !outOfRequestTime {
             let reply = try? await webView.callAsyncJavaScript(
                 Self.replayScript,
                 arguments: ["url": request.url, "method": request.method, "headers": request.headers,
                             "body": request.requestBody ?? NSNull()],
                 in: nil, contentWorld: .page)
-            if let text = reply as? String { replies.append(text) }
+            if let text = reply as? String { replies.append((request, text)) }
         }
         return replies
     }

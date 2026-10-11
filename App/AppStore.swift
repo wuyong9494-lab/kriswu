@@ -76,6 +76,10 @@ struct AppSettings: Codable, Equatable {
     /// 每个人还有几天待休（网页上人名后括号里的数字）
     var restBalance: [String: Int] = [:]
     var restBalanceUpdated: Date?
+    /// 改了「我的名字」：下一次同步当作重新开始，不提示变动、不做异常检查
+    var nextSyncIsBaseline = false
+    /// 网站排了班、但没给我排的日子也提醒（显示「未排班」）
+    var remindUnassigned = true
     /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
     var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
@@ -128,6 +132,8 @@ struct AppSettings: Codable, Equatable {
         desktopRosterMessage = try c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
         restBalance = try c.decodeIfPresent([String: Int].self, forKey: .restBalance) ?? [:]
         restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
+        nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
+        remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
         desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
@@ -182,6 +188,10 @@ final class AppStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             guard settings != oldValue else { return }
+            if settings.aliases != oldValue.aliases { settings.nextSyncIsBaseline = true }
+            if settings.shiftTypes != oldValue.shiftTypes {
+                publishedDays = Self.published(in: roster, matcher: matcher)
+            }
             save()
             requestReschedule()
         }
@@ -401,8 +411,17 @@ final class AppStore: ObservableObject {
         rescheduleTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
-            await self?.rescheduleNotifications()
+            await self?.performReschedule()
         }
+    }
+
+    /// 马上重新登记（等它做完）。和 requestReschedule 共用一个任务：新的开始时取消旧的，
+    /// 旧的在替换提醒之前会发现自己被取消，不会用过时的排班覆盖。
+    func rescheduleNotifications() async {
+        rescheduleTask?.cancel()
+        let task = Task { [weak self] in await self?.performReschedule() }
+        rescheduleTask = task
+        await task.value
     }
 
     // MARK: - 提醒
@@ -411,7 +430,8 @@ final class AppStore: ObservableObject {
         var p = NotificationPlanner(
             morning: settings.morningEnabled ? settings.morning : nil,
             evening: settings.eveningEnabled ? settings.evening : nil,
-            notifyWhenEmpty: settings.notifyWhenEmpty,
+            // 还没取到数据的日子不提醒；排了班但没给我排的日子由 reminderSchedule 补「未排班」
+            notifyWhenEmpty: false,
             matcher: matcher,
             calendar: .app)
         p.weekly = settings.weeklyPreview
@@ -423,11 +443,13 @@ final class AppStore: ObservableObject {
         var s = schedule
         let today = DayKey.today
         // 网站还没排到的日子不提醒「未排班」
-        for day in covered where day >= today && s[day] == nil && isCovered(day) { s[day] = "未排班" }
+        if settings.remindUnassigned {
+            for day in covered where day >= today && s[day] == nil && isCovered(day) { s[day] = "未排班" }
+        }
         return s
     }
 
-    func rescheduleNotifications() async {
+    private func performReschedule() async {
         // 手机上的通知带上组别工作内容；微信那份不带（只发自己的分工）
         var local = planner
         local.notes = groupNotes
@@ -465,7 +487,7 @@ final class AppStore: ObservableObject {
             let day = today.adding(days: offset)
             guard let raw = schedule[day] else {
                 // 取到过、但没给我排班
-                return covered.contains(day) ? WidgetDay(date: day.description, title: "未排班", emoji: "", colorHex: "#8E8E93") : nil
+                return isCovered(day) ? WidgetDay(date: day.description, title: "未排班", emoji: "", colorHex: "#8E8E93") : nil
             }
             let type = matcher.match(raw)
             return WidgetDay(date: day.description, title: matcher.displayName(raw),
@@ -484,17 +506,24 @@ final class AppStore: ObservableObject {
     /// 同步结果和之前差别过大时，也只有手动刷新才采用。
     func sync(full: Bool = true, userInitiated: Bool = false) async -> Bool {
         // 正在同步：等它做完，用它的结果（快捷指令不会因为撞上自动同步而说「没有数据」）
-        if let running = syncTask { return await running.value }
+        if let running = syncTask {
+            let ok = await running.value
+            // 自动同步不会重试登录、不采用异常结果；手动下拉要自己再来一次
+            guard userInitiated, !syncTaskUserInitiated else { return ok }
+        }
         // 放在独立的任务里跑：下拉刷新的界面消失、切换页面时 SwiftUI 会取消调用方，
         // 不能让读到一半的全员排班跟着作废（以前会显示「CancellationError」）
+        if let running = syncTask { return await running.value }   // 等待期间别人已经开始了
         let task = Task { await self.performSync(full: full, userInitiated: userInitiated) }
         syncTask = task
+        syncTaskUserInitiated = userInitiated
         let ok = await task.value
         syncTask = nil
         return ok
     }
 
     private var syncTask: Task<Bool, Never>?
+    private var syncTaskUserInitiated = false
 
     private func performSync(full: Bool, userInitiated: Bool) async -> Bool {
         guard canSync, !isSyncing else { return false }
@@ -514,7 +543,7 @@ final class AppStore: ObservableObject {
                                                               matcher: matcher,
                                                               preferredAPI: settings.apiSignature)
             let result = outcome.result
-            if !userInitiated, result.range != nil {
+            if !userInitiated, !settings.nextSyncIsBaseline, result.range != nil {
                 // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
                 let today = DayKey.today
                 let replaced = result.replacedDays(calendar: .app)
@@ -532,7 +561,8 @@ final class AppStore: ObservableObject {
             updateRestBalance(outcome.restBalance)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
-            let hadData = !schedule.isEmpty
+            let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
+            settings.nextSyncIsBaseline = false
             let changes = apply(result)
             settings.lastSync = Date()
             settings.loginExpiredNotified = false
@@ -548,7 +578,8 @@ final class AppStore: ObservableObject {
                     self.swapDetail($0, before: rosterBefore, fresh: freshDays)
                 }
                 settings.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + settings.changeLog).prefix(20))
-                await NotificationService.notifyNow(id: "schedule-changed", title: title, body: body)
+                // 每次变动一条，后一次不会把前一次顶掉
+                await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
                 // 微信：可以关掉；同样的变动不重复发
                 if settings.weChatChanges && settings.lastWeChatChangeDigest != body {
                     settings.lastWeChatChangeDigest = body
@@ -560,7 +591,9 @@ final class AppStore: ObservableObject {
             if full, settings.syncViaWeb,
                now.timeIntervalSince(settings.lastDesktopNotesFetch ?? .distantPast) > 20 * 3600,
                now.timeIntervalSince(settings.lastDesktopNotesAttempt ?? .distantPast) > 3600 {
-                await readDesktopNotes(mayLogin: mayLogin)
+                // 同步结束后再单独读（约半分钟），不拖慢同步、不让快捷指令等它
+                settings.lastDesktopNotesAttempt = now
+                Task { [weak self] in await self?.readDesktopNotes(mayLogin: mayLogin) }
             }
             return true
         } catch {
@@ -581,15 +614,20 @@ final class AppStore: ObservableObject {
     /// 用电脑版打开「值班查看」读各组工作内容。读到就整体替换（网页上删掉的组也跟着删）。
     /// 设置、工作量页上的按钮：和同步共用一个「正在进行」标记，两个隐藏浏览器不会同时登录
     @discardableResult
-    func readDesktopNotes() async -> Bool {
-        guard !isSyncing else { return false }
-        isSyncing = true
-        defer { isSyncing = false }
-        return await readDesktopNotes(mayLogin: true)
+    /// 读电脑版页面要半分钟左右：不占用「正在同步」，快捷指令、后台同步不用等它；
+    /// 但等正在进行的同步结束后再开始，两个隐藏浏览器不会同时登录。
+    func readDesktopNotes(mayLogin: Bool = true) async -> Bool {
+        guard !isReadingDesktop else { return false }
+        isReadingDesktop = true
+        defer { isReadingDesktop = false }
+        while isSyncing { try? await Task.sleep(nanoseconds: 500_000_000) }
+        return await readDesktopNotesNow(mayLogin: mayLogin)
     }
 
+    @Published private(set) var isReadingDesktop = false
+
     @discardableResult
-    private func readDesktopNotes(mayLogin: Bool) async -> Bool {
+    private func readDesktopNotesNow(mayLogin: Bool) async -> Bool {
         settings.lastDesktopNotesAttempt = Date()
         let result = await Task {
             await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
@@ -627,11 +665,14 @@ final class AppStore: ObservableObject {
     func mergeRoster(_ new: Roster) {
         guard !new.isEmpty else { return }
         let days = Set(new.values.flatMap(\.keys))
-        roster = roster.mapValues { $0.filter { !days.contains($0.key) } }
-        RosterExtractor.merge(new, into: &roster)
+        // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
+        var merged = roster.mapValues { $0.filter { !days.contains($0.key) } }
+        RosterExtractor.merge(new, into: &merged)
         let cutoff = DayKey.today.adding(days: -200)
-        roster = roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+        roster = merged.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
         saveRoster()
+        // 已排班的日子变了，「未排班」提醒也要跟着变
+        requestReschedule()
     }
 
     /// 保存从电脑版页面读到的各组说明。
@@ -678,7 +719,11 @@ final class AppStore: ObservableObject {
     func backgroundRefresh() async {
         // 先发到点的微信（只需要几秒），再同步；同步用完后台时间也不耽误微信
         await sendDueWeChatReminders()
-        if canSync { await sync(full: false) }
+        if canSync {
+            await sync(full: false)
+            // 同步前还没有数据、没发出去的，同步后再试一次
+            await sendDueWeChatReminders()
+        }
         await rescheduleNotifications()
         BackgroundRefresh.schedule(notBefore: nextWeChatReminder)
     }
@@ -709,32 +754,37 @@ final class AppStore: ObservableObject {
         let p = planner
         func time(_ t: ClockTime) -> Date { today.date(calendar: .app, hour: t.hour, minute: t.minute) }
 
-        // 先记下「已发」防止重复，发送失败再改回去，下次 App 运行时重发
+        // 还没有这天的数据就先不记「已发」，同步拿到数据后再发；
+        // 有内容时先记下「已发」防止重复，发送失败再改回去，下次 App 运行时重发
         if settings.eveningEnabled, now >= time(settings.evening), settings.weChatEveningSent != today {
-            let before = (settings.weChatEveningSent, settings.weChatMorningSent)
-            settings.weChatEveningSent = today
-            settings.weChatMorningSent = today
-            if let m = p.message(morning: false, on: today, schedule: reminderSchedule),
-               !(await pushToWeChat(title: m.title, content: m.body)) {
-                (settings.weChatEveningSent, settings.weChatMorningSent) = before
+            if let m = p.message(morning: false, on: today, schedule: reminderSchedule) {
+                let before = (settings.weChatEveningSent, settings.weChatMorningSent)
+                settings.weChatEveningSent = today
+                settings.weChatMorningSent = today
+                if !(await pushToWeChat(title: m.title, content: m.body)) {
+                    (settings.weChatEveningSent, settings.weChatMorningSent) = before
+                }
             }
         } else if settings.morningEnabled, now >= time(settings.morning), settings.weChatMorningSent != today {
-            let before = settings.weChatMorningSent
-            settings.weChatMorningSent = today
-            if let m = p.message(morning: true, on: today, schedule: reminderSchedule),
-               !(await pushToWeChat(title: m.title, content: m.body)) {
-                settings.weChatMorningSent = before
+            if let m = p.message(morning: true, on: today, schedule: reminderSchedule) {
+                let before = settings.weChatMorningSent
+                settings.weChatMorningSent = today
+                if !(await pushToWeChat(title: m.title, content: m.body)) {
+                    settings.weChatMorningSent = before
+                }
             }
         }
         // 周日晚上：下周安排
-        if settings.weeklyPreview, settings.eveningEnabled, now >= time(settings.evening),
-           Calendar.app.component(.weekday, from: now) == 1, settings.weChatWeekSent != today {
+        if settings.weeklyPreview, now >= time(settings.eveningEnabled ? settings.evening : ClockTime(hour: 20, minute: 0)),
+           Calendar.app.component(.weekday, from: now) == 1, settings.weChatWeekSent != today,
+           let w = p.weekMessage(on: today, schedule: reminderSchedule) {
             let before = settings.weChatWeekSent
             settings.weChatWeekSent = today
-            if let w = p.weekMessage(on: today, schedule: reminderSchedule),
-               !(await pushToWeChat(title: w.title, content: w.body)) {
+            if !(await pushToWeChat(title: w.title, content: w.body)) {
                 settings.weChatWeekSent = before
             }
+        }
+    }
         }
     }
 
@@ -761,7 +811,8 @@ final class AppStore: ObservableObject {
             return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
         }
         let today = DayKey.today
-        // 记下已发送，App 之后运行时就不会再补发同一条
+        // 记下已发送，App 之后运行时就不会再补发同一条；发送失败再改回去
+        let before = (settings.weChatMorningSent, settings.weChatEveningSent)
         if morning {
             settings.weChatMorningSent = today
         } else {
@@ -779,6 +830,7 @@ final class AppStore: ObservableObject {
         let title = m?.title ?? "\(label)：暂无排班数据"
         let body = m?.body ?? "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"
         let ok = await pushToWeChat(title: title, content: body, force: true)
+        if !ok { (settings.weChatMorningSent, settings.weChatEveningSent) = before }
         return ok ? "已发送到微信：\(title)" : (settings.weChatMessage ?? "微信推送失败")
     }
 
@@ -823,7 +875,7 @@ final class AppStore: ObservableObject {
                 if tally[name] == nil { order.append(name) }
                 tally[name, default: 0] += 1
                 lines.append("\(day.dateText)  \(name)")
-            } else if covered.contains(day) {
+            } else if isCovered(day) {
                 unassigned += 1
                 lines.append("\(day.dateText)  未排班")
             } else {
@@ -873,9 +925,20 @@ final class AppStore: ObservableObject {
         }
         saveRoster()
         var newSettings = file.settings
-        newSettings.rosterVersion = max(newSettings.rosterVersion, Self.rosterVersion)
+        // 旧格式的全员排班可能读错过，清掉，同步时重新读
+        if newSettings.rosterVersion < Self.rosterVersion { roster = [:]; saveRoster() }
+        newSettings.rosterVersion = Self.rosterVersion
+        // 备份时的同步状态已经过时：清掉，马上重新同步（也会重新尝试登录）
+        newSettings.lastSync = nil
+        newSettings.lastSyncMessage = nil
+        newSettings.loginExpiredNotified = false
+        newSettings.syncStaleNotified = false
+        newSettings.nextSyncIsBaseline = true
+        // 重装后日历权限要重新给，没给就先关掉
+        if newSettings.calendarSync && !CalendarSync.authorized { newSettings.calendarSync = false }
         settings = newSettings
         scheduleChanged()
+        Task { [weak self] in await self?.sync(userInitiated: true) }
         return restored.count
     }
 

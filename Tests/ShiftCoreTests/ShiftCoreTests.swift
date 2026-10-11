@@ -797,6 +797,10 @@ final class RegressionTests: XCTestCase {
         XCTAssertFalse(p.isMe("张伟东(2)"))
         XCTAssertTrue(p.isMe("张伟东 张伟"))
         XCTAssertTrue(p.isMe("张伟 白班"))
+        XCTAssertTrue(p.isMe("张 伟"))
+        XCTAssertTrue(p.isMe("张 伟(3)"))
+        XCTAssertTrue(p.isMe("张伟夜班"))
+        XCTAssertFalse(p.isMe("张伟东 夜班"))
     }
 
     func testNamesContainingWeekdayWords() {
@@ -829,6 +833,14 @@ final class RegressionTests: XCTestCase {
         XCTAssertTrue(r.replacedDays().contains(d(15)))
         // 没给 coveredDays 时还是首尾之间
         XCTAssertTrue(ParseResult(entries: [d(12): "组A", d(31): "组B"], format: .list).replacedDays().contains(d(20)))
+    }
+
+    func testRequestDateWindow() {
+        let r = CapturedRequest(url: "http://h/api/mine?start=2026-10-05&end=2026-10-11", method: "GET")
+        XCTAssertEqual(r.dateWindow, DayKey(year: 2026, month: 10, day: 5)...DayKey(year: 2026, month: 10, day: 11))
+        let body = CapturedRequest(url: "http://h/api", method: "POST", requestBody: #"{"from":"20261012","to":"20261018"}"#)
+        XCTAssertEqual(body.dateWindow?.upperBound, DayKey(year: 2026, month: 10, day: 18))
+        XCTAssertNil(CapturedRequest(url: "http://h/api/user?id=1760000000000", method: "GET").dateWindow)
     }
 
     func testHTMLEntitiesDecodedOnce() {

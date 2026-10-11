@@ -20,7 +20,7 @@ struct BackupView: View {
                     Text("正在准备备份…").foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("包含设置、你的排班、全员排班、组别说明和收藏的同事。可以选「存储到“文件”」，或发到微信「文件传输助手」。\n网站密码和 PushPlus token 不在备份里，恢复后要重新填一次。")
+                Text("包含设置、你的排班、全员排班、组别说明和收藏的同事。可以选「存储到“文件”」，或发到微信「文件传输助手」。\n网站密码和 PushPlus token 不在备份里：同一台手机删掉重装时手机还记着，换新手机要重新填一次。")
             }
             Section {
                 Button {
@@ -58,7 +58,8 @@ struct BackupView: View {
                 guard let data = confirmRestore else { return }
                 do {
                     let days = try store.restore(from: data)
-                    message = "已恢复 \(days) 天排班。记得到「账号与同步」重新填网站密码，到「微信推送」重新填 token。"
+                    message = "已恢复 \(days) 天排班，正在重新同步。换了新手机的话，到「账号与同步」填网站密码，到「微信推送」填 token。"
+                        + (Keychain.get(.sourcePassword) == nil ? "\n（这台手机上没有保存的密码，需要重新填）" : "")
                 } catch {
                     message = "这不是值班提醒的备份文件，或文件已损坏"
                 }
