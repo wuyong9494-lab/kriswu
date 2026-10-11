@@ -22,7 +22,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。「上班」= 值班 + 日常；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。遥测后紧接着的休息、调休（最多 2 天，节假日一般 1 天）是值班换来的，算「值班调休」。「工作量」= 值班 + 值班调休 + 日常；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
             }
             Section {
                 Button {
@@ -54,7 +54,7 @@ struct WorkloadView: View {
                             .font(.headline)
                             .foregroundStyle(store.isMe(person.name) ? Color.accentColor : Color.primary)
                         Spacer()
-                        Text("上班 \(person.workDays) 天").font(.headline)
+                        Text("工作量 \(person.workDays) 天").font(.headline)
                     }
                     }
                     Text(summary(person))
@@ -75,7 +75,8 @@ struct WorkloadView: View {
 
     /// 「值班 2 · 日常 8 · 休息 3 · 节假日 7」，出差、节假日上班有才显示
     private func summary(_ p: PersonWorkload) -> String {
-        var parts = ["值班 \(p.dutyDays)", "日常 \(p.regularDays)", "休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
+        var parts = ["值班 \(p.dutyDays)", "值班调休 \(p.dutyRestDays)", "日常 \(p.regularDays)",
+                     "休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
         if p.tripDays > 0 { parts.append("出差 \(p.tripDays)") }
         if p.holidayWorkedDays > 0 { parts.append("其中节假日上班 \(p.holidayWorkedDays)") }
         return parts.joined(separator: " · ")
@@ -121,11 +122,11 @@ struct WorkloadDetailView: View {
     let days: [DayKey]
 
     var body: some View {
+        let kinds = WorkloadCounter.kinds(of: store.roster[name] ?? [:], days: days, matcher: store.matcher, calendar: .app)
         List(days.reversed()) { day in
             let raw = store.roster[name]?[day]
             let holiday = ChinaHolidays.isHoliday(day)
-            let kind = WorkloadCounter.classify(raw, workday: ChinaHolidays.isWorkday(day, calendar: .app),
-                                                holiday: holiday, matcher: store.matcher)
+            let kind = kinds[day] ?? .off
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(day.dateText)
@@ -148,6 +149,7 @@ struct WorkloadDetailView: View {
     private func color(_ kind: WorkloadCounter.Kind) -> Color {
         switch kind {
         case .duty: return .blue
+        case .dutyRest: return .indigo
         case .regular: return .teal
         case .trip: return .orange
         case .holiday: return .red
