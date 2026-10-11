@@ -857,6 +857,11 @@ final class RegressionTests: XCTestCase {
         XCTAssertFalse(RosterExtractor.isPost("王建中", matcher: m))
         XCTAssertTrue(RosterExtractor.isPost("值班交班前", matcher: m))
         XCTAssertTrue(RosterExtractor.isPost("组A", matcher: m))
+        for post in ["年假", "补休", "早班", "白", "夜", "休息", "出差"] { XCTAssertTrue(RosterExtractor.isPost(post, matcher: m), post) }
+        XCTAssertTrue(m.isStrictMatch("组E"))
+        // 一行里两个组的标签
+        let r = try? ScheduleParser(aliases: [], reference: ref).parse("2026-10-12 组A 组E")
+        XCTAssertEqual(r?.entries[DayKey(year: 2026, month: 10, day: 12)], "组A+组E")
         // 「王　五」合回一个名字；带间隔号的名字
         XCTAssertEqual(RosterExtractor.names(inCell: "王　五", matcher: m), ["王五"])
         XCTAssertTrue(RosterExtractor.looksLikeName("阿依古丽·买买提"))

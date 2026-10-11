@@ -92,6 +92,7 @@ public struct ShiftMatcher {
     public func isStrictMatch(_ raw: String) -> Bool {
         let text = Self.normalize(raw)
         guard !text.isEmpty else { return false }
+        if GroupNotes.isGroup(raw) { return true }   // 组A–组E
         return types.contains { t in
             Self.normalize(t.name) == text || t.codes.contains { Self.normalize($0) == text }
                 || t.keywords.contains { k in

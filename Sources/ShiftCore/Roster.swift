@@ -25,7 +25,8 @@ public enum RosterExtractor {
     ]
 
     /// 常见岗位名：即使「班次类型」里没有，也当作岗位
-    private static let postWords = ["遥测", "调度", "值班", "交班", "休息", "调休", "请假", "出差", "加班", "组"]
+    private static let postWords = ["遥测", "调度", "值班", "交班", "休息", "调休", "请假", "出差", "加班", "组",
+                                    "休", "假", "班"]   // 年假、补休、早班这类
 
     private static let dayWord = try! NSRegularExpression(
         pattern: #"^(?:(?:周|星期|礼拜)[一二三四五六日天]|今天|明天|昨天|今日)$"#)
@@ -60,7 +61,9 @@ public enum RosterExtractor {
     static func isPost(_ s: String, matcher: ShiftMatcher) -> Bool {
         let t = cleanName(s)
         guard !t.isEmpty, !uiWords.contains(t) else { return false }
+        // 单个字的代码（白、夜、早）是岗位；人名至少两个字，不会被单字关键字误判（王建中）
         return matcher.isStrictMatch(t) || postWords.contains { t.contains($0) }
+            || (t.count == 1 && matcher.match(t) != nil)
     }
 
     static func add(_ post: String, for name: String, on day: DayKey, to roster: inout Roster) {

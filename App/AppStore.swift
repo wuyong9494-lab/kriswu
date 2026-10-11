@@ -875,7 +875,7 @@ final class AppStore: ObservableObject {
         let today = DayKey.today
         let before = settings.weChatWeekSent
         settings.weChatWeekSent = today
-        if canSync { await sync(full: false, source: "快捷指令（下周）") }
+        if canSync { await syncWithin(seconds: 15, source: "快捷指令（下周）") }
         guard let w = planner.weekMessage(on: today, schedule: reminderSchedule) else {
             let ok = await pushToWeChat(title: "🗓 接下来一周：暂无排班数据",
                                         content: "没有取到接下来一周的排班（\(settings.lastSyncMessage ?? "还没同步过")）。", force: true)
@@ -894,24 +894,36 @@ final class AppStore: ObservableObject {
             return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
         }
         let today = DayKey.today
-        // 记下已发送，App 之后运行时就不会再补发同一条；发送失败再改回去
-        let before = (settings.weChatMorningSent, settings.weChatEveningSent)
-        if morning {
-            settings.weChatMorningSent = today
-        } else {
-            settings.weChatMorningSent = today
-            settings.weChatEveningSent = today
-        }
         let label = morning ? "今天" : "明天"
-        // 先同步一次再发：发的是网站上最新的排班，顺便发现排班变动（App 可能很久没在后台运行过）
-        if canSync { await sync(full: false, source: "快捷指令（微信）") }
+        // 先同步再发，但最多等 15 秒：快捷指令有时间限制，同步太慢就用手上的数据先发，别让提醒丢了
+        if canSync { await syncWithin(seconds: 15, source: "快捷指令（微信）") }
         let m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
         // 仍然没有也照样发一条，免得以为推送坏了
         let title = m?.title ?? "\(label)：暂无排班数据"
         let body = m?.body ?? "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"
         let ok = await pushToWeChat(title: title, content: body, force: true)
-        if !ok { (settings.weChatMorningSent, settings.weChatEveningSent) = before }
+        // 发出去了才记「已发」，App 之后运行时就不会再补发同一条
+        if ok {
+            settings.weChatMorningSent = today
+            if !morning { settings.weChatEveningSent = today }
+        }
         return ok ? "已发送到微信：\(title)" : (settings.weChatMessage ?? "微信推送失败")
+    }
+
+    /// 同步，但最多等 seconds 秒；超时就先返回（同步自己继续在后台做完）。
+    func syncWithin(seconds: Double, source: String) async {
+        final class Once { var done = false }
+        let once = Once()
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            Task { @MainActor in
+                _ = await self.sync(full: false, source: source)
+                if !once.done { once.done = true; c.resume() }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                if !once.done { once.done = true; c.resume() }
+            }
+        }
     }
 
     /// 下一次该发微信提醒的时间，用来请求系统在那之后尽快唤醒 App。
