@@ -21,7 +21,7 @@ enum WeChatPush {
         let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw PushError.noToken }
 
-        var request = URLRequest(url: URL(string: "https://www.pushplus.plus/send")!, timeoutInterval: 20)
+        var request = URLRequest(url: URL(string: "https://www.pushplus.plus/send")!, timeoutInterval: 10)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: [

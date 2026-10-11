@@ -729,16 +729,24 @@ final class AppStore: ObservableObject {
 
     /// 系统在后台唤醒 App 时调用（时间由 iOS 决定，不保证准时）。
     func backgroundRefresh() async {
-        // 先发到点的微信（只需要几秒），再同步；同步用完后台时间也不耽误微信
-        await sendDueWeChatReminders()
-        if canSync {
-            await sync(full: false)
-            // 同步前还没有数据、没发出去的，同步后再试一次
+        BackgroundRefresh.schedule(notBefore: nextWeChatReminder)   // 先约好下一次，万一这次被系统打断
+        await withTaskCancellationHandler {
+            // 先发到点的微信（只需要几秒），再同步；同步用完后台时间也不耽误微信
             await sendDueWeChatReminders()
+            if canSync {
+                await sync(full: false)
+                // 同步前还没有数据、没发出去的，同步后再试一次
+                await sendDueWeChatReminders()
+            }
+            await rescheduleNotifications()
+        } onCancel: {
+            // 系统收回后台时间：让正在进行的同步马上停下（等待中的网页会抛出取消），不被系统强行杀掉
+            Task { @MainActor in AppStore.shared.cancelRunningSync() }
         }
-        await rescheduleNotifications()
         BackgroundRefresh.schedule(notBefore: nextWeChatReminder)
     }
+
+    func cancelRunningSync() { syncTask?.cancel() }
 
     // MARK: - 微信
 
@@ -804,14 +812,18 @@ final class AppStore: ObservableObject {
             return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
         }
         let today = DayKey.today
+        let before = settings.weChatWeekSent
         settings.weChatWeekSent = today
         if canSync { await sync(full: false) }
         guard let w = planner.weekMessage(on: today, schedule: reminderSchedule) else {
             let ok = await pushToWeChat(title: "🗓 接下来一周：暂无排班数据",
                                         content: "没有取到接下来一周的排班（\(settings.lastSyncMessage ?? "还没同步过")）。", force: true)
+            // 没数据时让 App 之后有了数据再补发
+            settings.weChatWeekSent = before
             return ok ? "已发送到微信：暂无排班数据" : (settings.weChatMessage ?? "微信推送失败")
         }
         let ok = await pushToWeChat(title: w.title, content: w.body, force: true)
+        if !ok { settings.weChatWeekSent = before }
         return ok ? "已发送到微信：\(w.title)" : (settings.weChatMessage ?? "微信推送失败")
     }
 
@@ -849,10 +861,17 @@ final class AppStore: ObservableObject {
         guard settings.weChatEnabled, settings.weChatDaily else { return nil }
         let now = Date()
         let times = [settings.morningEnabled ? settings.morning : nil, settings.eveningEnabled ? settings.evening : nil].compactMap { $0 }
-        return [DayKey.today, DayKey.today.adding(days: 1)]
+        var candidates = [DayKey.today, DayKey.today.adding(days: 1)]
             .flatMap { day in times.map { day.date(calendar: .app, hour: $0.hour, minute: $0.minute) } }
-            .filter { $0 > now }
-            .min()
+        // 周日的下周预告（晚上提醒关掉时按 20:00）
+        if settings.weeklyPreview {
+            let t = settings.eveningEnabled ? settings.evening : ClockTime(hour: 20, minute: 0)
+            for day in [DayKey.today, DayKey.today.adding(days: 1)]
+            where Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12)) == 1 {
+                candidates.append(day.date(calendar: .app, hour: t.hour, minute: t.minute))
+            }
+        }
+        return candidates.filter { $0 > now }.min()
     }
 
     // MARK: - 收藏的同事
