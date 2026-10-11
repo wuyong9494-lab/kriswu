@@ -419,7 +419,10 @@ final class AppStore: ObservableObject {
     /// 旧的在替换提醒之前会发现自己被取消，不会用过时的排班覆盖。
     func rescheduleNotifications() async {
         rescheduleTask?.cancel()
-        let task = Task { [weak self] in await self?.performReschedule() }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.performReschedule()
+        }
         rescheduleTask = task
         await task.value
     }

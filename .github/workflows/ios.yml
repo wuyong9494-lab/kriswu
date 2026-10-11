@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 核心逻辑单元测试
-        shell: bash -o pipefail {0}
+        shell: bash -eo pipefail {0}
         run: |
           swift test 2>&1 | tee swift-test.log || {
             # 失败的断言也作为注释显示在检查结果里，方便查看
@@ -29,7 +29,7 @@ jobs:
           xcodegen generate
 
       - name: 编译 App（未签名）
-        shell: bash -o pipefail {0}
+        shell: bash -eo pipefail {0}
         run: |
           xcodebuild build \
             -project ShiftReminder.xcodeproj \
