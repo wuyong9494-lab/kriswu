@@ -649,17 +649,17 @@ final class WorkloadTests: XCTestCase {
         // 10/12 周一 … 10/18 周日（不在假期里），下面的 5…11 对应周一到周日
         let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day + 7) }
         let roster: Roster = [
-            // 周一遥测 → 周二周三休息是值班调休；周四调度；周五没排；周六遥测；周日休息是值班调休
+            // 平时：周一遥测，周二周三休息（值班换来的也算休息）；周四调度；周五没排；周六遥测；周日休息
             "张三": [d(5): "遥测", d(6): "休息", d(7): "休息", d(8): "调度", d(10): "遥测", d(11): "休息"],
             "李四": [d(5): "出差", d(6): "出差", d(8): "调休"],
             "王五": [d(9): "组C+休息", d(11): "组D"],
         ]
         let result = count(roster, (5...11).map(d))
         XCTAssertEqual(result["张三"]?.dutyDays, 2)
-        XCTAssertEqual(result["张三"]?.dutyRestDays, 3)
+        XCTAssertEqual(result["张三"]?.dutyRestDays, 0)
         XCTAssertEqual(result["张三"]?.regularDays, 2)
-        XCTAssertEqual(result["张三"]?.workDays, 7)
-        XCTAssertEqual(result["张三"]?.offDays, 0)
+        XCTAssertEqual(result["张三"]?.workDays, 4)
+        XCTAssertEqual(result["张三"]?.offDays, 3)
         // 李四：出差 2 天；和值班无关的调休 + 周末 2 天 = 休息 3 天；周三、周五日常
         XCTAssertEqual(result["李四"]?.tripDays, 2)
         XCTAssertEqual(result["李四"]?.offDays, 3)
@@ -673,22 +673,18 @@ final class WorkloadTests: XCTestCase {
         }
     }
 
-    func testRestRightAfterDutyOnly() {
-        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day + 7) }   // 5 = 周一
-        // 遥测后隔了一天才休息：不算值班调休；第三天的休息也不算（最多 2 天）
-        let roster: Roster = [
-            "甲": [d(5): "遥测", d(6): "组A", d(7): "休息"],
-            "乙": [d(5): "遥测", d(6): "休息", d(7): "调休", d(8): "休息"],
-        ]
-        let result = count(roster, (5...9).map(d))
-        XCTAssertEqual(result["甲"]?.dutyRestDays, 0)
-        XCTAssertEqual(result["甲"]?.offDays, 1)
-        XCTAssertEqual(result["乙"]?.dutyRestDays, 2)
-        XCTAssertEqual(result["乙"]?.offDays, 1)
-        // 统计范围从 10/13 开始，但 10/12 遥测：10/13 的休息仍算值班调休
-        let later = count(roster, (6...9).map(d))
-        XCTAssertEqual(later["乙"]?.dutyRestDays, 2)
-        XCTAssertEqual(later["乙"]?.dutyDays, 0)
+    func testHolidayRestAfterDutyOnly() {
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
+        // 国庆：1 日遥测，2、3 日休息 → 两天都是值班调休；4 日组A，5 日休息（隔开了）→ 休息
+        // 7 日遥测，8 日（已上班）休息 → 平时的休息
+        let roster: Roster = ["甲": [d(1): "遥测", d(2): "休息", d(3): "调休", d(4): "组A", d(5): "休息",
+                                    d(7): "遥测", d(8): "休息"]]
+        let result = count(roster, (1...9).map(d))
+        XCTAssertEqual(result["甲"]?.dutyRestDays, 2)
+        XCTAssertEqual(result["甲"]?.offDays, 2)
+        XCTAssertEqual(result["甲"]?.dutyDays, 2)
+        // 统计范围从 2 日开始，1 日遥测：2 日的休息仍算值班调休
+        XCTAssertEqual(count(roster, (2...3).map(d))["甲"]?.dutyRestDays, 2)
     }
 
     func testNationalHoliday() {

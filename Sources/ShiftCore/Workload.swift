@@ -2,7 +2,8 @@ import Foundation
 
 /// 每个人一段时间（一般是一个月到今天）的工作量，每一天归到一类：
 /// - 值班：遥测（工作到第二天 8:30）
-/// - 值班调休：遥测后紧接着的休息、调休（最多 2 天）。这是值班换来的，算工作量
+/// - 值班调休：法定节假日里，遥测后紧接着的休息、调休。节假日值班换来的，算工作量
+///   （平时的休息、调休，不管是值班换来的还是请假，都算休息）
 /// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位的日子
 /// - 出差
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
@@ -12,7 +13,7 @@ public struct PersonWorkload: Equatable {
     public var name: String
     /// 值班（遥测）天数
     public var dutyDays: Int
-    /// 值班后的调休天数（算工作量）
+    /// 节假日值班后的调休天数（算工作量）
     public var dutyRestDays: Int
     /// 日常班天数：各组、调度等岗位，加上工作日没排岗位的日子
     public var regularDays: Int
@@ -62,7 +63,8 @@ public enum WorkloadCounter {
         return .off   // 网站上写了休息、调休的，节假日里也算休息
     }
 
-    /// 某人每一天的类别：遥测后紧接着写了休息、调休的日子（最多 2 天）算值班调休。
+    /// 某人每一天的类别：法定节假日里，遥测后紧接着写了休息、调休的日子（最多 2 天）算值班调休；
+    /// 平时的休息不管怎么来的都算休息。
     /// history：这个人全部的排班（用来看统计范围前一两天是不是遥测）。
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher,
                              calendar: Calendar = .current) -> [DayKey: Kind] {
@@ -86,7 +88,7 @@ public enum WorkloadCounter {
             if isDutyDay(day) {
                 var next = day.adding(days: 1, calendar: calendar)
                 for _ in 0..<restPerDuty where restPosts(next) {
-                    if result[next] != nil { result[next] = .dutyRest }
+                    if result[next] != nil, ChinaHolidays.isHoliday(next) { result[next] = .dutyRest }
                     next = next.adding(days: 1, calendar: calendar)
                 }
             }
