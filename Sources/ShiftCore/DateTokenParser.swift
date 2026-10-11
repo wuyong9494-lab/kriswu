@@ -11,7 +11,7 @@ public struct DateTokenParser {
         self.reference = reference
     }
 
-    private static let fullDate = try! NSRegularExpression(pattern: #"^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?"#)
+    private static let fullDate = try! NSRegularExpression(pattern: #"^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?(?=$|[\sT])"#)
     private static let compactDate = try! NSRegularExpression(pattern: #"^(\d{4})(\d{2})(\d{2})(?:$|T|\s)"#)
     private static let monthDay = try! NSRegularExpression(pattern: #"^(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?$"#)
     private static let dayOnly = try! NSRegularExpression(pattern: #"^(\d{1,2})\s*日?$"#)

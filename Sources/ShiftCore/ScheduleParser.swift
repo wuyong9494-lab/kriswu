@@ -19,16 +19,33 @@ public struct ParseResult: Equatable {
 
     public var entries: [DayKey: String]
     public var format: Format
+    /// 确实取到了的日子（多段时，中间没取到的那一段不在里面）。nil = 用 range
+    public var coveredDays: Set<DayKey>?
 
-    public init(entries: [DayKey: String], format: Format) {
+    public init(entries: [DayKey: String], format: Format, coveredDays: Set<DayKey>? = nil) {
         self.entries = entries
         self.format = format
+        self.coveredDays = coveredDays
     }
 
     /// 解析出的日期范围；同步时用新数据整体替换这一段。
     public var range: ClosedRange<DayKey>? {
         guard let lo = entries.keys.min(), let hi = entries.keys.max() else { return nil }
         return lo...hi
+    }
+
+    /// 同步时整体替换的日子：取到了的那几段（没取到的周保持原样，不会被当成没排班）
+    public func replacedDays(calendar: Calendar = .current) -> Set<DayKey> {
+        if let coveredDays { return coveredDays }
+        guard let range else { return [] }
+        return Self.days(in: range, calendar: calendar)
+    }
+
+    public static func days(in range: ClosedRange<DayKey>, calendar: Calendar = .current) -> Set<DayKey> {
+        var result = Set<DayKey>()
+        var d = range.lowerBound
+        while d <= range.upperBound { result.insert(d); d = d.adding(days: 1, calendar: calendar) }
+        return result
     }
 }
 
@@ -70,10 +87,25 @@ public struct ScheduleParser {
         s.lowercased().filter { !$0.isWhitespace }
     }
 
+    /// 格子里有我的名字。「张伟(3)」「张伟-夜班」「夜班 张伟」算；同事「张伟东」不算
+    /// （名字后面紧跟着别的汉字，说明是另一个更长的名字）。
     func isMe(_ cell: String) -> Bool {
         let c = Self.normalize(cell)
         guard !c.isEmpty else { return false }
-        return aliases.contains { c == $0 || c.contains($0) }
+        return aliases.contains { alias in
+            if c == alias { return true }
+            var search = c.startIndex..<c.endIndex
+            while let r = c.range(of: alias, range: search) {
+                let next = r.upperBound < c.endIndex ? c[r.upperBound] : nil
+                if !(next.map(Self.isHan) ?? false) { return true }
+                search = r.upperBound..<c.endIndex
+            }
+            return false
+        }
+    }
+
+    static func isHan(_ ch: Character) -> Bool {
+        ch.unicodeScalars.first.map { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) } ?? false
     }
 
     /// 去掉文字里的名字，例如 "张伟-夜班" → "夜班"。
@@ -296,6 +328,11 @@ public struct ScheduleParser {
         for (r, row) in body.enumerated() {
             if anyMine && !row.contains(where: isMe) { continue }
             let dated = row.enumerated().compactMap { i, cell in dates.parse(cell).map { (i, $0) } }
+            // 日期前面还有别的话（「请大家 10月20日 前提交」）：是通知文字，不是排班
+            if let first = dated.first,
+               row[..<first.0].contains(where: { !isFiller($0) && !isMe($0) && DateTokenParser.cleaned($0).count > 1 }) {
+                continue
+            }
             if dated.count == 1, let col = shiftCol, col < row.count, col != dated[0].0 {
                 Self.add(removingAliases(row[col]), to: dated[0].1, in: &entries)
                 continue

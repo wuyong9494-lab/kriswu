@@ -96,16 +96,17 @@ public enum HTMLText {
 
     static func decodeEntities(_ s: String) -> String {
         var out = s
-        let named = ["&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&amp;": "&"]
+        // &amp; 最后换，「&amp;lt;」才会变成「&lt;」而不是「<」
+        let named = [("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&amp;", "&")]
         for (k, v) in named { out = out.replacingOccurrences(of: k, with: v, options: .caseInsensitive) }
 
-        let re = try! NSRegularExpression(pattern: #"&#(x?)([0-9a-fA-F]+);"#)
+        let re = try! NSRegularExpression(pattern: #"&#([xX]?)([0-9a-fA-F]+);"#)
         let ns = out as NSString
         var result = ""
         var last = 0
         for m in re.matches(in: out, range: NSRange(location: 0, length: ns.length)) {
             result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
-            let hex = ns.substring(with: m.range(at: 1)) == "x"
+            let hex = !ns.substring(with: m.range(at: 1)).isEmpty
             let num = UInt32(ns.substring(with: m.range(at: 2)), radix: hex ? 16 : 10)
             result += num.flatMap(Unicode.Scalar.init).map { String(Character($0)) } ?? ns.substring(with: m.range)
             last = m.range.location + m.range.length

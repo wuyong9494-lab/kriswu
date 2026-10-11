@@ -9,6 +9,11 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     private var continuation: CheckedContinuation<Void, Error>?
     private let username: String
     private let password: String
+    /// 只把账号密码交给这个网站（HTTP 认证）
+    private var host: String?
+    /// 到这个时间就不再翻页、不再补发请求，尽快结束（后台只有约 30 秒）
+    private var deadline: Date?
+    private var outOfTime: Bool { deadline.map { Date() > $0 } ?? false }
 
     private init(username: String, password: String) {
         self.username = username
@@ -36,9 +41,11 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     static func load(url: URL, username: String, password: String, extraTabs: [String] = [],
                      pager: [(label: String, steps: Int)] = [],
                      afterTabs: ([CapturedRequest]) -> [CapturedRequest] = { _ in [] },
-                     desktop: Bool = false,
+                     desktop: Bool = false, timeBudget: TimeInterval? = nil,
                      replay: ([CapturedRequest]) -> [CapturedRequest]) async throws -> Page {
         let loader = WebPageLoader(username: username, password: password)
+        loader.deadline = timeBudget.map { Date().addingTimeInterval($0) }
+        loader.host = url.host
         return try await loader.load(url, extraTabs: extraTabs, pager: pager, afterTabs: afterTabs, desktop: desktop, replay: replay)
     }
 
@@ -127,6 +134,11 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             continuation = c
             webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30))
+            // 网页一直不结束加载时也要能返回
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 35_000_000_000)
+                self?.finish(URLError(.timedOut))
+            }
         }
 
         var html = try await settledHTML(webView)
@@ -159,7 +171,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             var last = try await settledHTML(webView)
             if !tab.isEmpty { extraHTML.append(last) }
             for (label, steps) in pager {
-                for _ in 0..<steps {
+                for _ in 0..<steps where !outOfTime {
                     let pressed = (try? await webView.callAsyncJavaScript(
                         Self.clickTabScript, arguments: ["label": label], in: nil, contentWorld: .page)) as? Bool ?? false
                     guard pressed, let html = try await changedHTML(webView, from: last) else { break }
@@ -177,7 +189,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     /// 在页面里用同样的请求头和登录状态逐个发出请求，返回各自的内容。
     private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [String] {
         var replies: [String] = []
-        for request in requests {
+        for request in requests where !outOfTime {
             let reply = try? await webView.callAsyncJavaScript(
                 Self.replayScript,
                 arguments: ["url": request.url, "method": request.method, "headers": request.headers,
@@ -271,6 +283,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     const init = { method, headers, credentials: 'include' };
     if (body !== null && method !== 'GET' && method !== 'HEAD') init.body = body;
     const r = await fetch(url, init);
+    if (!r.ok) return null;   // 出错的那一周不要，免得当成「没排班」
     return await r.text();
     """
 
@@ -280,7 +293,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         for _ in 0..<15 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let html = (try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String) ?? ""
-            if !html.isEmpty && html == last { break }
+            if !html.isEmpty && (html == last || outOfTime) { last = html; break }
             last = html
         }
         return last
@@ -331,11 +344,21 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        finish(error)
+        finishUnlessRedirect(error)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finishUnlessRedirect(error)
+    }
+
+    /// 网页加载中跳转到别的地址时，上一次加载会以「已取消」结束，继续等新的页面
+    private func finishUnlessRedirect(_ error: Error) {
+        if (error as NSError).domain == NSURLErrorDomain, (error as NSError).code == NSURLErrorCancelled { return }
         finish(error)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        finish(URLError(.cannotLoadFromNetwork))
     }
 
     // 网站用浏览器弹窗式的账号密码（HTTP 认证）时，自动填入设置里的用户名密码
@@ -343,7 +366,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
                  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         let method = challenge.protectionSpace.authenticationMethod
         if (method == NSURLAuthenticationMethodHTTPBasic || method == NSURLAuthenticationMethodHTTPDigest),
-           !username.isEmpty, challenge.previousFailureCount == 0 {
+           !username.isEmpty, challenge.previousFailureCount == 0, challenge.protectionSpace.host == host {
             completionHandler(.useCredential, URLCredential(user: username, password: password, persistence: .forSession))
         } else {
             completionHandler(.performDefaultHandling, nil)

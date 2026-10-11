@@ -25,8 +25,13 @@ public enum RosterExtractor {
     /// 常见岗位名：即使「班次类型」里没有，也当作岗位
     private static let postWords = ["遥测", "调度", "值班", "交班", "休息", "调休", "请假", "出差", "加班", "组"]
 
+    private static let dayWord = try! NSRegularExpression(
+        pattern: #"^(?:(?:周|星期|礼拜)[一二三四五六日天]|今天|明天|昨天|今日)$"#)
+
     static func looksLikeName(_ s: String) -> Bool {
-        guard !s.isEmpty, !uiWords.contains(s), DateTokenParser.cleaned(s) == s else { return false }   // 排除「周一」这类
+        // 排除「周一」「今天」这类，但「周天宇」这样的真名字要保留
+        guard !s.isEmpty, !uiWords.contains(s),
+              dayWord.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) == nil else { return false }
         let r = NSRange(s.startIndex..., in: s)
         return chineseName.firstMatch(in: s, range: r) != nil || latinName.firstMatch(in: s, range: r) != nil
     }
@@ -131,7 +136,9 @@ public enum RosterExtractor {
             let cells = row.flatMap { $0.components(separatedBy: CharacterSet(charactersIn: "：:")) }
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
-            if let d = cells.lazy.compactMap({ dates.parse($0) }).first {
+            // 日期行：日期加上「上一天」「周六」这类短词；夹在长句子里的日期（通知文字）不算
+            if let d = cells.lazy.compactMap({ dates.parse($0) }).first,
+               cells.count <= 5, cells.allSatisfy({ dates.parse($0) != nil || $0.count <= 4 }) {
                 day = d
                 pendingPost = nil
                 continue

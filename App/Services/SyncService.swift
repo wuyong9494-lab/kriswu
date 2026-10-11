@@ -84,7 +84,9 @@ enum SyncService {
                 url: url, username: username, password: password, extraTabs: includeRoster ? ["值班查看"] : [],
                 // 「值班查看」一次只显示一天：先往前翻到本周第一天，再往后翻，能翻到的日子都读一遍
                 pager: includeRoster ? [(label: "上一天", steps: 7), (label: "下一天", steps: 21)] : [],
-                afterTabs: rosterWeeks) { captured in
+                afterTabs: rosterWeeks,
+                // 后台、快捷指令里只有约 30 秒
+                timeBudget: includeRoster ? nil : 20) { captured in
                 found = APIDiscovery.find(in: captured, preferred: preferredAPI, aliases: aliases,
                                           matcher: matcher, reference: reference)
                 guard let f = found, f.request.hasDateParameter, weeksAhead > 0 else { return [] }
@@ -96,11 +98,19 @@ enum SyncService {
                                                 reference: reference, matcher: matcher)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries
+                // 每一段（本周、后面各周）各自的日期范围；没取到的那一周不算，原来的排班保留
+                func span(_ e: [DayKey: String]) -> Set<DayKey> {
+                    guard let lo = e.keys.min(), let hi = e.keys.max() else { return [] }
+                    return ParseResult.days(in: lo...hi, calendar: .app)
+                }
+                var covered = span(f.entries)
                 for reply in page.replies {
                     let more = JSONScheduleExtractor.extract(reply, aliases: aliases, matcher: matcher, reference: reference)
                     for (day, value) in more where entries[day] == nil { entries[day] = value }
+                    covered.formUnion(span(more))
                 }
-                return Outcome(result: ParseResult(entries: entries, format: .api), apiSignature: f.request.signature,
+                return Outcome(result: ParseResult(entries: entries, format: .api, coveredDays: covered),
+                               apiSignature: f.request.signature,
                                roster: roster, groupNotes: notes, restBalance: rest)
             }
             if HTMLText.looksLikeLoginPage(page.html) { throw SyncError.needsLogin }

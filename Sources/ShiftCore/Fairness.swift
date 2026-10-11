@@ -156,7 +156,7 @@ public enum FairnessAnalyzer {
                             + (gaps.count > 6 ? "…" : ""))
             penalty += min(15, gaps.count * 3)
         }
-        // 2. 两次遥测之间至少隔 3 天（值完班要休息）
+        // 2. 两次遥测之间至少隔 2 天（值完班要休息）
         for (name, list) in duties {
             let sorted = list.sorted()
             for (a, b) in zip(sorted, sorted.dropFirst()) {

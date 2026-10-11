@@ -23,6 +23,9 @@ public enum ChinaHolidays {
         "2026-01-04", "2026-02-14", "2026-02-28", "2026-05-09", "2026-09-20", "2026-10-10",
     ]
 
+    /// 已经录入节假日安排的年份
+    public static let knownYears: Set<Int> = [2025, 2026]
+
     /// 法定节假日（放假的日子，含调休连休）
     public static func isHoliday(_ day: DayKey) -> Bool { off.contains(day.description) }
 

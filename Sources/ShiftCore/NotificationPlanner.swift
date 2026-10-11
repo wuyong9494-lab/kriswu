@@ -38,8 +38,8 @@ public struct NotificationPlanner {
     /// 每周日晚上预告下周一到周日的安排
     public var weekly = false
 
-    /// iOS 最多保留 64 条待发通知，留一点余量。
-    public static let maxPending = 60
+    /// iOS 最多保留 64 条待发通知；还要给签名到期、很久没同步、排班变动等几条留位置。
+    public static let maxPending = 56
 
     public init(morning: ClockTime?, evening: ClockTime?, notifyWhenEmpty: Bool,
                 matcher: ShiftMatcher, calendar: Calendar = .current) {

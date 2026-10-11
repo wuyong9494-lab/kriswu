@@ -100,8 +100,10 @@ public enum WorkloadCounter {
     /// days：统计哪些日子（已读到全员排班的日子）；名单是全员排班里出现过的所有人。
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher,
                              calendar: Calendar = .current) -> [PersonWorkload] {
-        guard !days.isEmpty else { return [] }
-        return roster.map { name, history in
+        guard let first = days.min(), let last = days.max() else { return [] }
+        // 只算这段时间前后两周里在网站上出现过的人（调走的、还没来的不算，免得把没排班的日子都算成日常）
+        let window = first.adding(days: -14, calendar: calendar)...last.adding(days: 14, calendar: calendar)
+        return roster.filter { $0.value.keys.contains(where: window.contains) }.map { name, history in
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
             let dayKinds = kinds(of: history, days: days, matcher: matcher, calendar: calendar)

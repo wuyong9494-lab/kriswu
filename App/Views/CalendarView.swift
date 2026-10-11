@@ -31,7 +31,9 @@ struct CalendarView: View {
                 }
                 .padding()
             }
-            .gesture(DragGesture(minimumDistance: 30).onEnded { value in
+            .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
+                // 只认明显的横向滑动，上下滚动时不翻月
+                guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
                 if value.translation.width < -60 { move(1) }
                 if value.translation.width > 60 { move(-1) }
             })

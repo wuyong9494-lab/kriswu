@@ -100,6 +100,9 @@ struct DiagnosticsView: View {
             Row(label: "排班最远到", value: store.schedule.keys.max()?.dateText ?? "—", ok: nil),
             Row(label: "上次成功结果", value: s.lastSuccessMessage ?? "—", ok: nil),
             Row(label: "全员排班", value: rosterSummary, ok: !store.roster.isEmpty),
+            Row(label: "节假日安排", value: ChinaHolidays.knownYears.contains(DayKey.today.year)
+                ? "已有 \(DayKey.today.year) 年" : "缺 \(DayKey.today.year) 年的法定节假日，工作量统计会把假期算成工作日，请更新 App",
+                ok: ChinaHolidays.knownYears.contains(DayKey.today.year)),
         ]
 
         let authText: (String, Bool) = {

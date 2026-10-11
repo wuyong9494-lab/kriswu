@@ -804,3 +804,67 @@ final class FairnessTests: XCTestCase {
     }
 }
 
+final class RegressionTests: XCTestCase {
+    let ref = DayKey(year: 2026, month: 10, day: 9)
+    let m = ShiftMatcher(types: ShiftType.defaults)
+
+    func testLongerColleagueNameIsNotMe() {
+        let p = ScheduleParser(aliases: ["张伟"], reference: ref)
+        XCTAssertTrue(p.isMe("张伟"))
+        XCTAssertTrue(p.isMe("张伟(3)"))
+        XCTAssertTrue(p.isMe("张伟-夜班"))
+        XCTAssertTrue(p.isMe("李四 张伟"))
+        XCTAssertFalse(p.isMe("张伟东"))
+        XCTAssertFalse(p.isMe("张伟东(2)"))
+        XCTAssertTrue(p.isMe("张伟东 张伟"))
+    }
+
+    func testNamesContainingWeekdayWords() {
+        XCTAssertTrue(RosterExtractor.looksLikeName("周天宇"))
+        XCTAssertTrue(RosterExtractor.looksLikeName("周一鸣"))
+        XCTAssertFalse(RosterExtractor.looksLikeName("周一"))
+        XCTAssertFalse(RosterExtractor.looksLikeName("今天"))
+        XCTAssertEqual(RosterExtractor.restBalances("2026-10-12\t周天宇(4)", matcher: m)["周天宇"], 4)
+    }
+
+    func testDateInsideSentenceIsNotAnEntry() throws {
+        let p = ScheduleParser(aliases: [], reference: ref)
+        let r = try p.parse("""
+        请大家 10月20日 前提交 值班表
+        10月12日 白班
+        """)
+        XCTAssertEqual(r.entries, [DayKey(year: 2026, month: 10, day: 12): "白班"])
+        // 「2026年9月20日发射」不是日期格子
+        XCTAssertNil(DateTokenParser(reference: ref).parse("2026年9月20日发射"))
+        XCTAssertEqual(DateTokenParser(reference: ref).parse("2026-09-20T08:00:00"), DayKey(year: 2026, month: 9, day: 20))
+        XCTAssertEqual(DateTokenParser(reference: ref).parse("2026-09-20 周日"), DayKey(year: 2026, month: 9, day: 20))
+    }
+
+    func testMissingWeekIsNotReplaced() {
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
+        // 取到了 12–18 和 26–31，19–25 那一周没取到：不应该被替换
+        let covered = ParseResult.days(in: d(12)...d(18)).union(ParseResult.days(in: d(26)...d(31)))
+        let r = ParseResult(entries: [d(12): "组A", d(31): "组B"], format: .api, coveredDays: covered)
+        XCTAssertFalse(r.replacedDays().contains(d(20)))
+        XCTAssertTrue(r.replacedDays().contains(d(15)))
+        // 没给 coveredDays 时还是首尾之间
+        XCTAssertTrue(ParseResult(entries: [d(12): "组A", d(31): "组B"], format: .list).replacedDays().contains(d(20)))
+    }
+
+    func testHTMLEntitiesDecodedOnce() {
+        XCTAssertEqual(HTMLText.decodeEntities("&amp;lt;b&amp;gt; &#X4E00; &#x4e00;"), "&lt;b&gt; 一 一")
+    }
+
+    func testWorkloadSkipsPeopleNotAround() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let roster: Roster = [
+            "在岗": [DayKey(year: 2026, month: 10, day: 13): "组A"],
+            "调走": [DayKey(year: 2026, month: 8, day: 3): "组B"],
+        ]
+        let days = (12...16).map { DayKey(year: 2026, month: 10, day: $0) }
+        let names = WorkloadCounter.count(roster: roster, days: days, matcher: m, calendar: cal).map(\.name)
+        XCTAssertEqual(names, ["在岗"])
+    }
+}
+

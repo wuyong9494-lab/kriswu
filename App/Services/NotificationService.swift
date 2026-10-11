@@ -35,11 +35,14 @@ enum NotificationService {
                 voiceFiles.insert(file)
             }
             content.threadIdentifier = "shift"
-            let when = DateComponents(year: n.day.year, month: n.day.month, day: n.day.day,
-                                      hour: n.time.hour, minute: n.time.minute)
+            // 指定公历：手机设成日本、佛历等日历时也能按时提醒
+            let when = DateComponents(calendar: Calendar(identifier: .gregorian), year: n.day.year, month: n.day.month,
+                                      day: n.day.day, hour: n.time.hour, minute: n.time.minute)
             let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: false)
             requests.append(UNNotificationRequest(identifier: n.id, content: content, trigger: trigger))
         }
+        // 已经有更新的一次在排队：这次的内容过时了，不要替换
+        if Task.isCancelled { return }
         let old = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
         center.removePendingNotificationRequests(withIdentifiers: old)
         for request in requests { try? await center.add(request) }
@@ -67,8 +70,9 @@ enum NotificationService {
     static func scheduleStaleReminder(after lastSync: Date?) async {
         let id = "sync-stale-scheduled"
         center.removePendingNotificationRequests(withIdentifiers: [id])
-        guard let lastSync else { return }
-        let fire = max(lastSync.addingTimeInterval(2 * 86_400), Date().addingTimeInterval(3_600))
+        // 已经超过两天了：首页红色提示和那一次通知已经提醒过，这里不再每小时重复
+        guard let lastSync, lastSync.addingTimeInterval(2 * 86_400) > Date().addingTimeInterval(60) else { return }
+        let fire = lastSync.addingTimeInterval(2 * 86_400)
         let content = UNMutableNotificationContent()
         content.title = "⚠️ 已经两天没同步排班了"
         content.body = "现在的提醒可能不是最新排班。打开值班提醒下拉刷新一下；一直失败的话到「设置 › 诊断」看原因。"

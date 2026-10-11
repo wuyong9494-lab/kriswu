@@ -49,8 +49,9 @@ struct ShiftWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: ShiftEntry
 
-    private var todayTitle: String { entry.today?.title ?? (entry.hasData ? "未排班" : "打开 App") }
-    private var tomorrowTitle: String { entry.tomorrow?.title ?? "未排班" }
+    // App 会把「取到了但没排班」的日子写成「未排班」；这里查不到的是还没取到数据的日子
+    private var todayTitle: String { entry.today?.title ?? (entry.hasData ? "暂无数据" : "打开 App") }
+    private var tomorrowTitle: String { entry.tomorrow?.title ?? "—" }
     private var color: Color { entry.today.map { Color(hex: $0.colorHex) } ?? .gray }
 
     private var weekday: String {

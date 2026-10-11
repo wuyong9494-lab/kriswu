@@ -5,6 +5,8 @@ import AVFoundation
 @MainActor
 enum VoiceSound {
     private static let synthesizer = AVSpeechSynthesizer()
+    /// 试听用另一个，不会打断正在录的提示音
+    private static let previewSynthesizer = AVSpeechSynthesizer()
     private static let prefix = "voice-"
 
     private static var directory: URL {
@@ -39,8 +41,8 @@ enum VoiceSound {
 
     /// 设置里「试听」。
     static func speakNow(_ text: String) {
-        synthesizer.stopSpeaking(at: .immediate)
-        synthesizer.speak(utterance(text))
+        previewSynthesizer.stopSpeaking(at: .immediate)
+        previewSynthesizer.speak(utterance(text))
     }
 
     private final class Recorder: @unchecked Sendable {
@@ -59,9 +61,27 @@ enum VoiceSound {
         }
     }
 
-    private static func render(_ text: String, to url: URL) async -> Bool {
-        let recorder = Recorder()
+    /// 先录到临时文件，录完整了再换成正式文件；录一半失败或超时的不会留下来当铃声。
+    private static func render(_ text: String, to finalURL: URL) async -> Bool {
+        let url = finalURL.deletingLastPathComponent().appendingPathComponent("tmp-" + finalURL.lastPathComponent)
         try? FileManager.default.removeItem(at: url)
+        let ok = await record(text, to: url)
+        guard ok else {
+            try? FileManager.default.removeItem(at: url)
+            return false
+        }
+        try? FileManager.default.removeItem(at: finalURL)
+        do {
+            try FileManager.default.moveItem(at: url, to: finalURL)
+            return true
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return false
+        }
+    }
+
+    private static func record(_ text: String, to url: URL) async -> Bool {
+        let recorder = Recorder()
         return await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
             recorder.continuation = c
             synthesizer.write(utterance(text)) { buffer in
@@ -86,9 +106,9 @@ enum VoiceSound {
                     recorder.finish(false)
                 }
             }
-            // 万一系统没有送来结束标记，10 秒后按已录到的内容结束
+            // 万一系统没有送来结束标记，10 秒后算失败（用默认铃声），不留半截文件
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                recorder.finish(FileManager.default.fileExists(atPath: url.path))
+                recorder.finish(false)
             }
         }
     }
