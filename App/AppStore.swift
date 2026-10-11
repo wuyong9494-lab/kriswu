@@ -73,6 +73,9 @@ struct AppSettings: Codable, Equatable {
     /// 电脑版「值班查看」的网址（空 = 用同步网址的 #/duty）
     var desktopNotesURL = ""
     var desktopRosterMessage: String?
+    /// 每个人还有几天待休（网页上人名后括号里的数字）
+    var restBalance: [String: Int] = [:]
+    var restBalanceUpdated: Date?
     /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
     var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
@@ -123,6 +126,8 @@ struct AppSettings: Codable, Equatable {
         desktopNotesMessage = try c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
         desktopNotesURL = try c.decodeIfPresent(String.self, forKey: .desktopNotesURL) ?? ""
         desktopRosterMessage = try c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
+        restBalance = try c.decodeIfPresent([String: Int].self, forKey: .restBalance) ?? [:]
+        restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
         desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
@@ -468,6 +473,7 @@ final class AppStore: ObservableObject {
             let rosterBefore = roster
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             mergeRoster(outcome.roster)
+            updateRestBalance(outcome.restBalance)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
             let hadData = !schedule.isEmpty
@@ -530,6 +536,7 @@ final class AppStore: ObservableObject {
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
         mergeRoster(result.roster)
+        updateRestBalance(result.restBalance)
         let days = Set(result.roster.values.flatMap(\.keys))
         if let lo = days.min(), let hi = days.max() {
             settings.desktopRosterMessage = "读到 \(result.roster.count) 人、\(days.count) 天（\(lo.dateText) – \(hi.dateText)）"
@@ -542,6 +549,13 @@ final class AppStore: ObservableObject {
         }
         await applyDesktopNotes(result.notes)
         return true
+    }
+
+    /// 人名后括号里的待休天数：这次读到的人以新数字为准。
+    func updateRestBalance(_ new: [String: Int]) {
+        guard !new.isEmpty else { return }
+        settings.restBalance.merge(new) { _, n in n }
+        settings.restBalanceUpdated = Date()
     }
 
     /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），保留最近 200 天。
@@ -811,11 +825,11 @@ final class AppStore: ObservableObject {
         }
         var text = "\(year)年\(month)月工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位和工作日没排岗位的日子））"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位和工作日没排岗位的日子）+ 出差）"
         }
         for p in people {
-            text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)），休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天"
-                + (p.tripDays > 0 ? "，出差 \(p.tripDays) 天" : "")
+            text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)，出差 \(p.tripDays)），休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天"
+                + (settings.restBalance[p.name].map { "，待休 \($0) 天" } ?? "")
                 + (p.holidayWorkedDays > 0 ? "，节假日上班 \(p.holidayWorkedDays) 天" : "") + "；"
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
         }

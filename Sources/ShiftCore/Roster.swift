@@ -54,6 +54,22 @@ public enum RosterExtractor {
         }
     }
 
+    private static let nameWithNumber = try! NSRegularExpression(
+        pattern: #"([\x{4e00}-\x{9fa5}·]{2,5})\s*[（(]\s*(\d{1,3})\s*[)）]"#)
+
+    /// 「张三(5)」括号里的数字：还有几天待休。同一个人出现多次时取第一次（当前这一页）。
+    public static func restBalances(_ text: String, matcher: ShiftMatcher) -> [String: Int] {
+        var result: [String: Int] = [:]
+        let ns = text as NSString
+        for m in nameWithNumber.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let name = ns.substring(with: m.range(at: 1))
+            guard result[name] == nil, looksLikeName(name), !isPost(name, matcher: matcher),
+                  let n = Int(ns.substring(with: m.range(at: 2))) else { continue }
+            result[name] = n
+        }
+        return result
+    }
+
     public static func merge(_ new: Roster, into roster: inout Roster) {
         for (name, days) in new {
             roster[name, default: [:]].merge(days) { _, n in n }

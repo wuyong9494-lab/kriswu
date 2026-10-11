@@ -5,10 +5,10 @@ import Foundation
 /// - 值班调休：法定节假日里，遥测后紧接着的休息、调休。节假日值班换来的，算工作量
 ///   （平时的休息、调休，不管是值班换来的还是请假，都算休息）
 /// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位的日子
-/// - 出差
+/// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
-/// 工作量 = 值班 + 值班调休 + 日常。
+/// 工作量 = 值班 + 值班调休 + 日常 + 出差。
 public struct PersonWorkload: Equatable {
     public var name: String
     /// 值班（遥测）天数
@@ -27,8 +27,8 @@ public struct PersonWorkload: Equatable {
     /// 各岗位天数（不含日常班）
     public var posts: [String: Int]
 
-    /// 工作量 = 值班 + 值班调休 + 日常
-    public var workDays: Int { dutyDays + dutyRestDays + regularDays }
+    /// 工作量 = 值班 + 值班调休 + 日常 + 出差
+    public var workDays: Int { dutyDays + dutyRestDays + regularDays + tripDays }
 }
 
 public enum WorkloadCounter {

@@ -737,3 +737,70 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["李四"]?.offDays, 2)
     }
 }
+
+final class FairnessTests: XCTestCase {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+    let m = ShiftMatcher(types: ShiftType.defaults)
+
+    func testRestBalancesFromText() {
+        let text = "2026-10-12\t周一\t李家宝(5)\t高梦瑶(3)\t吴庸（1）\t组A(2)\n2026-10-13\t周二\t李家宝(4)"
+        let rest = RosterExtractor.restBalances(text, matcher: m)
+        XCTAssertEqual(rest["李家宝"], 5)        // 取第一次出现的
+        XCTAssertEqual(rest["高梦瑶"], 3)
+        XCTAssertEqual(rest["吴庸"], 1)
+        XCTAssertNil(rest["组A"])
+    }
+
+    func testGroupWeek() {
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }   // 12 周一 … 16 周五
+        var roster: Roster = [:]
+        let groups = ["组A", "组B", "组C", "组D", "组E"]
+        let people = ["甲", "乙", "丙", "丁", "戊"]
+        // 每天轮换，很均匀
+        for (i, day) in (12...16).enumerated() {
+            for (j, name) in people.enumerated() { roster[name, default: [:]][d(day)] = groups[(i + j) % 5] }
+        }
+        let good = FairnessAnalyzer.groupWeek(roster: roster, days: (12...18).map(d), restBalance: [:], matcher: m, calendar: cal)
+        XCTAssertEqual(good.score, 100, good.findings.joined(separator: "\n"))
+        XCTAssertEqual(good.verdict, "合理")
+        XCTAssertEqual(good.rows.count, 5)
+        XCTAssertEqual(good.rows.first?.count, 5)
+
+        // 甲一直组A，周三组C没人、组A两个人；丙待休 6 天还排满
+        var bad = roster
+        for day in 12...16 { bad["甲"]![d(day)] = "组A" }
+        let r = FairnessAnalyzer.groupWeek(roster: bad, days: (12...18).map(d), restBalance: ["丙": 6, "甲": 6], matcher: m, calendar: cal)
+        XCTAssertLessThan(r.score, 85)
+        XCTAssertTrue(r.findings.contains { $0.contains("甲本周组A排了 5 次") }, r.findings.joined(separator: "\n"))
+        XCTAssertTrue(r.findings.contains { $0.contains("组A排了 2 个人") })
+        XCTAssertTrue(r.findings.contains { $0.contains("没有人") })
+        XCTAssertNotNil(r.rows.first { $0.name == "甲" }?.warning)
+    }
+
+    func testTelemetryMonth() {
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
+        let days = (12...31).map(d)
+        var roster: Roster = [:]
+        let people = ["甲", "乙", "丙", "丁"]
+        for (i, day) in (12...31).enumerated() { roster[people[i % 4], default: [:]][d(day)] = "遥测" }
+        let good = FairnessAnalyzer.telemetryMonth(roster: roster, days: days, restBalance: [:], matcher: m, calendar: cal)
+        XCTAssertEqual(good.score, 100, good.findings.joined(separator: "\n"))
+        XCTAssertEqual(good.average, 5)
+        XCTAssertTrue(good.rows.first { $0.name == "乙" }!.detail.contains("17末"))   // 10/17 周六
+
+        // 乙 13、14 日连着两天；甲多排很多
+        var bad = roster
+        bad["乙"]![d(14)] = "遥测"
+        bad["丙"]![d(14)] = nil
+        for day in [21, 25, 29] { bad["甲"]![d(day)] = "遥测"; for p in ["乙", "丙", "丁"] { bad[p]![d(day)] = nil } }
+        let r = FairnessAnalyzer.telemetryMonth(roster: bad, days: days, restBalance: [:], matcher: m, calendar: cal)
+        XCTAssertLessThan(r.score, 85)
+        XCTAssertTrue(r.findings.contains { $0.contains("乙 10/13 和 10/14 两次遥测只隔 0 天") }, r.findings.joined(separator: "\n"))
+        XCTAssertTrue(r.findings.contains { $0.contains("甲本月遥测 8 次") }, r.findings.joined(separator: "\n"))
+    }
+}
+

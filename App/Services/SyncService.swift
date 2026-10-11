@@ -26,6 +26,8 @@ enum SyncService {
         var roster: Roster = [:]
         /// 各组的工作内容
         var groupNotes: [String: String] = [:]
+        /// 人名后括号里的数字：还有几天待休
+        var restBalance: [String: Int] = [:]
     }
 
     /// 全员排班接口：再取上一周和后面三周，「值班表」里可以前后切换日期。
@@ -47,9 +49,10 @@ enum SyncService {
 
     /// 从网页文字和接口数据里收集全员排班与各组说明。
     private static func collect(texts: [String], json: [String], reference: DayKey, matcher: ShiftMatcher)
-        -> (Roster, [String: String]) {
+        -> (Roster, [String: String], [String: Int]) {
         var roster: Roster = [:]
         var notes: [String: String] = [:]
+        var rest: [String: Int] = [:]
         for body in json {
             RosterExtractor.merge(RosterExtractor.fromJSON(body, reference: reference, matcher: matcher), into: &roster)
             notes.merge(GroupNotes.fromJSON(body)) { _, n in n }
@@ -58,8 +61,9 @@ enum SyncService {
             RosterExtractor.merge(RosterExtractor.fromTable(text, reference: reference, matcher: matcher), into: &roster)
             RosterExtractor.merge(RosterExtractor.fromCards(text, reference: reference, matcher: matcher), into: &roster)
             notes.merge(GroupNotes.fromText(text, reference: reference)) { _, n in n }
+            rest.merge(RosterExtractor.restBalances(text, matcher: matcher)) { first, _ in first }
         }
-        return (roster, notes)
+        return (roster, notes, rest)
     }
 
     /// 取回排班。
@@ -88,8 +92,8 @@ enum SyncService {
             }
             let texts = ([page.html] + page.extraHTML).map(HTMLText.toText)
             let bodies: [String] = page.captured.map { $0.body } + page.replies + page.extraReplies
-            let (roster, notes) = collect(texts: texts, json: bodies,
-                                          reference: reference, matcher: matcher)
+            let (roster, notes, rest) = collect(texts: texts, json: bodies,
+                                                reference: reference, matcher: matcher)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries
                 for reply in page.replies {
@@ -97,20 +101,23 @@ enum SyncService {
                     for (day, value) in more where entries[day] == nil { entries[day] = value }
                 }
                 return Outcome(result: ParseResult(entries: entries, format: .api), apiSignature: f.request.signature,
-                               roster: roster, groupNotes: notes)
+                               roster: roster, groupNotes: notes, restBalance: rest)
             }
             if HTMLText.looksLikeLoginPage(page.html) { throw SyncError.needsLogin }
-            return Outcome(result: try parser.parse(texts[0]), apiSignature: nil, roster: roster, groupNotes: notes)
+            return Outcome(result: try parser.parse(texts[0]), apiSignature: nil, roster: roster, groupNotes: notes,
+                           restBalance: rest)
         }
         let text = try await fetchText(urlString: urlString, username: username, password: password)
-        let (roster, notes) = collect(texts: [text], json: [text], reference: parser.reference, matcher: matcher)
-        return Outcome(result: try parser.parse(text), apiSignature: nil, roster: roster, groupNotes: notes)
+        let (roster, notes, rest) = collect(texts: [text], json: [text], reference: parser.reference, matcher: matcher)
+        return Outcome(result: try parser.parse(text), apiSignature: nil, roster: roster, groupNotes: notes, restBalance: rest)
     }
 
     struct DesktopNotes {
         var notes: [String: String]
         /// 电脑版周表里的全员排班（往前翻了几周）
         var roster: Roster = [:]
+        /// 人名后括号里的待休天数（本周那一页）
+        var restBalance: [String: Int] = [:]
         var url: String
         /// 没读到时的原因和页面文字（给「设置 › 各组工作内容」排查用）
         var reason: String?
@@ -155,7 +162,9 @@ enum SyncService {
         }
         var roster: Roster = [:]
         var notes: [String: String] = [:]
+        var rest: [String: Int] = [:]
         for html in [page.html] + page.extraHTML {
+            rest.merge(RosterExtractor.restBalances(HTMLText.toText(html), matcher: matcher)) { first, _ in first }
             RosterExtractor.merge(RosterExtractor.fromDesktopHTML(html, reference: reference, matcher: matcher), into: &roster)
             if notes.isEmpty { notes = groupNotes(fromHTML: html, reference: reference) }
         }
@@ -169,8 +178,8 @@ enum SyncService {
                 : text.contains("组A") ? "页面上有「组A」，但没认出说明的位置"
                 : "页面上没有「组A」等字样，可能不是电脑版「值班查看」页面"
         }
-        return DesktopNotes(notes: notes, roster: roster, url: page.url ?? dutyURL.absoluteString, reason: reason,
-                            pageText: String(text.prefix(6000)))
+        return DesktopNotes(notes: notes, roster: roster, restBalance: rest, url: page.url ?? dutyURL.absoluteString,
+                            reason: reason, pageText: String(text.prefix(6000)))
     }
 
     /// 全员排班接口往前取 weeksBack 周（以及后面三周）。

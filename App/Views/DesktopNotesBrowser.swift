@@ -36,6 +36,7 @@ struct DesktopNotesBrowser: View {
                             // 顺便存下这一页周表里的全员排班
                             let weekRoster = RosterExtractor.fromDesktopHTML(html, reference: .today, matcher: store.matcher)
                             store.mergeRoster(weekRoster)
+                            store.updateRestBalance(RosterExtractor.restBalances(HTMLText.toText(html), matcher: store.matcher))
                             let notes = SyncService.groupNotes(fromHTML: html, reference: .today)
                             if notes.isEmpty {
                                 toast = "这一页上没认出「组A」等说明" + (weekRoster.isEmpty ? "。换到「值班查看」页面再试"
