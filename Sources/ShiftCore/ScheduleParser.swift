@@ -90,10 +90,12 @@ public struct ScheduleParser {
     /// 格子里有我的名字。「张伟(3)」「张伟-夜班」「夜班 张伟」算；同事「张伟东」不算
     /// （名字后面紧跟着别的汉字，说明是另一个更长的名字）。
     func isMe(_ cell: String) -> Bool {
-        let c = Self.normalize(cell)
-        guard !c.isEmpty else { return false }
+        let normalized = Self.normalize(cell)
+        guard !normalized.isEmpty else { return false }
+        // 保留空格来判断名字后面紧跟的是不是汉字（「张伟 白班」是我，「张伟东」不是）
+        let c = cell.lowercased()
         return aliases.contains { alias in
-            if c == alias { return true }
+            if normalized == alias { return true }
             var search = c.startIndex..<c.endIndex
             while let r = c.range(of: alias, range: search) {
                 let next = r.upperBound < c.endIndex ? c[r.upperBound] : nil

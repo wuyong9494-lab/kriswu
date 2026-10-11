@@ -817,6 +817,7 @@ final class RegressionTests: XCTestCase {
         XCTAssertFalse(p.isMe("张伟东"))
         XCTAssertFalse(p.isMe("张伟东(2)"))
         XCTAssertTrue(p.isMe("张伟东 张伟"))
+        XCTAssertTrue(p.isMe("张伟 白班"))
     }
 
     func testNamesContainingWeekdayWords() {
