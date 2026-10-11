@@ -84,7 +84,19 @@ public struct ShiftMatcher {
         return type.name
     }
 
-    static func isSeparator(_ c: Character) -> Bool { c == "+" || c == "、" }
+    /// 一天多个岗位的分隔：组A+组E、组A、组E、组A,组E（数据库拼接常见）、组A/组E
+    static func isSeparator(_ c: Character) -> Bool { "+、,，;；/".contains(c) }
+
+    /// 严格判断是不是班次/岗位名：和名称、代码完全相同，或者含有两个字以上的关键字。
+    /// 人名里常有「中」「白」「夜」这类单字（王建中），不能只凭一个字就当成岗位。
+    public func isStrictMatch(_ raw: String) -> Bool {
+        let text = Self.normalize(raw)
+        guard !text.isEmpty else { return false }
+        return types.contains { t in
+            Self.normalize(t.name) == text || t.codes.contains { Self.normalize($0) == text }
+                || t.keywords.contains { k in let nk = Self.normalize(k); nk.count >= 2 && text.contains(nk) }
+        }
+    }
 
     static func normalize(_ s: String) -> String {
         s.lowercased().filter { !$0.isWhitespace }

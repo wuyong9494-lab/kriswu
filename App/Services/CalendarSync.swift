@@ -23,6 +23,9 @@ enum CalendarSync {
         return (try? await store.requestAccess(to: .event)) ?? false
     }
 
+    /// 上次同步失败的原因（设置、诊断页显示）
+    static var lastError: String?
+
     private static func calendar(create: Bool) -> EKCalendar? {
         if let id = UserDefaults.standard.string(forKey: idKey), let c = store.calendar(withIdentifier: id) {
             return c
@@ -32,16 +35,26 @@ enum CalendarSync {
             return c
         }
         guard create else { return nil }
-        let c = EKCalendar(for: .event, eventStore: store)
-        c.title = calendarTitle
-        c.cgColor = UIColor.systemBlue.cgColor
-        // 优先放在默认日历所在的账户（通常是 iCloud，Apple Watch / Mac 也能看到），没有就放本机
-        c.source = store.defaultCalendarForNewEvents?.source
-            ?? store.sources.first { $0.sourceType == .local }
-            ?? store.sources.first
-        guard c.source != nil, (try? store.saveCalendar(c, commit: true)) != nil else { return nil }
-        UserDefaults.standard.set(c.calendarIdentifier, forKey: idKey)
-        return c
+        // 依次试：默认日历所在的账户、iCloud、本机。谷歌、Exchange 这类账户往往不让新建日历，要换下一个
+        var candidates: [EKSource] = []
+        if let s = store.defaultCalendarForNewEvents?.source { candidates.append(s) }
+        candidates += store.sources.filter { $0.sourceType == .calDAV && $0.title.lowercased().contains("icloud") }
+        candidates += store.sources.filter { $0.sourceType == .local }
+        candidates += store.sources
+        var tried = Set<String>()
+        for source in candidates where tried.insert(source.sourceIdentifier).inserted {
+            let c = EKCalendar(for: .event, eventStore: store)
+            c.title = calendarTitle
+            c.cgColor = UIColor.systemBlue.cgColor
+            c.source = source
+            if (try? store.saveCalendar(c, commit: true)) != nil {
+                UserDefaults.standard.set(c.calendarIdentifier, forKey: idKey)
+                lastError = nil
+                return c
+            }
+        }
+        lastError = "没法在 iPhone 日历里新建「\(calendarTitle)」日历（各个账户都不允许）"
+        return nil
     }
 
     /// 让日历和排班一致：过去 2 周到未来约 2 个月，有排班的日子一个全天事件，没有的删掉。

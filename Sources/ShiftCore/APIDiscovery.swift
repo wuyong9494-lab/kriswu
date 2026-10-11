@@ -198,7 +198,33 @@ public enum JSONScheduleExtractor {
         return nil
     }
 
+    private static let zonedDateTime = try! NSRegularExpression(
+        pattern: #"^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})$"#)
+
+    /// 「2026-10-04T16:00:00.000+0000」这种带时区的时间：换算成手机所在时区的日期
+    /// （Java 后端常按 UTC 输出，北京时间 10 月 5 日 0 点会写成 10 月 4 日 16 点）
+    static func zonedDay(_ value: String) -> DayKey? {
+        let s = value.trimmingCharacters(in: .whitespaces)
+        let ns = s as NSString
+        guard let m = zonedDateTime.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        func int(_ i: Int) -> Int? { m.range(at: i).location == NSNotFound ? nil : Int(ns.substring(with: m.range(at: i))) }
+        guard let y = int(1), let mo = int(2), let d = int(3), let h = int(4), let mi = int(5) else { return nil }
+        let zone = ns.substring(with: m.range(at: 7))
+        var offset = 0
+        if zone != "Z" {
+            let digits = zone.dropFirst().replacingOccurrences(of: ":", with: "")
+            guard let hh = Int(digits.prefix(2)), let mm = Int(digits.suffix(2)) else { return nil }
+            offset = (hh * 3600 + mm * 60) * (zone.hasPrefix("-") ? -1 : 1)
+        }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        guard let local = utc.date(from: DateComponents(year: y, month: mo, day: d, hour: h, minute: mi, second: int(6) ?? 0))
+        else { return nil }
+        return DayKey(date: local.addingTimeInterval(TimeInterval(-offset)), calendar: Calendar(identifier: .gregorian))
+    }
+
     static func day(from value: String, dates: DateTokenParser) -> DayKey? {
+        if let d = zonedDay(value) { return d }
         if let d = dates.parse(value) { return d }
         // 毫秒 / 秒时间戳
         if value.count == 13 || value.count == 10, let n = Double(value), n > 1_400_000_000 {

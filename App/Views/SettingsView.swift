@@ -143,6 +143,9 @@ struct SettingsView: View {
                         }
                     }
                 }))
+            if store.settings.calendarSync, let error = CalendarSync.lastError {
+                Text(error).font(.footnote).foregroundStyle(.orange)
+            }
             if let calendarMessage {
                 Text(calendarMessage).font(.footnote).foregroundStyle(.orange)
             }

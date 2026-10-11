@@ -6,7 +6,9 @@ public typealias Roster = [String: [DayKey: String]]
 /// 从网页表格或接口数据里读出所有人的排班，用于「搜索成员」。
 public enum RosterExtractor {
     private static let suffix = try! NSRegularExpression(pattern: #"[（(][^)）]*[)）]"#)
-    private static let chineseName = try! NSRegularExpression(pattern: #"^[\x{4e00}-\x{9fa5}·]{2,5}$"#)
+    /// 2–5 个汉字，或者带间隔号的少数民族名字（阿依古丽·买买提）
+    private static let chineseName = try! NSRegularExpression(
+        pattern: #"^(?:[\x{4e00}-\x{9fa5}]{2,5}|[\x{4e00}-\x{9fa5}]{1,8}(?:[·・•][\x{4e00}-\x{9fa5}]{1,10})+)$"#)
     private static let latinName = try! NSRegularExpression(pattern: #"^[A-Za-z][A-Za-z .'-]{1,24}$"#)
 
     /// 「张伟(1)」→「张伟」
@@ -37,19 +39,37 @@ public enum RosterExtractor {
     }
 
     static func names(inCell cell: String, matcher: ShiftMatcher) -> [String] {
-        cell.components(separatedBy: CharacterSet(charactersIn: " 、,，;；/\t"))
+        var tokens = cell.components(separatedBy: CharacterSet(charactersIn: " \u{3000}、,，;；/\t"))
             .map(cleanName)
-            .filter { looksLikeName($0) && !isPost($0, matcher: matcher) }
+            .filter { !$0.isEmpty }
+        // 两个字的名字常被排版成「王　五」：相邻两个单字合回一个名字
+        var merged: [String] = []
+        var i = 0
+        while i < tokens.count {
+            if tokens[i].count == 1, i + 1 < tokens.count, tokens[i + 1].count == 1 {
+                merged.append(tokens[i] + tokens[i + 1]); i += 2
+            } else {
+                merged.append(tokens[i]); i += 1
+            }
+        }
+        tokens = merged
+        return tokens.filter { looksLikeName($0) && !isPost($0, matcher: matcher) }
     }
 
     /// 像岗位的词：遥测、调度、组A、值班交班前、休息、调休……（人名不算）
     static func isPost(_ s: String, matcher: ShiftMatcher) -> Bool {
         let t = cleanName(s)
         guard !t.isEmpty, !uiWords.contains(t) else { return false }
-        return matcher.match(t) != nil || postWords.contains { t.contains($0) }
+        return matcher.isStrictMatch(t) || postWords.contains { t.contains($0) }
     }
 
     static func add(_ post: String, for name: String, on day: DayKey, to roster: inout Roster) {
+        // 「组A,组E」「组A/组E」拆开，统一用 + 连接
+        let parts = post.split(whereSeparator: ShiftMatcher.isSeparator)
+        if parts.count > 1 {
+            for part in parts { add(String(part), for: name, on: day, to: &roster) }
+            return
+        }
         let post = post.trimmingCharacters(in: .whitespaces)
         guard !post.isEmpty else { return }
         if let existing = roster[name]?[day] {
@@ -60,7 +80,7 @@ public enum RosterExtractor {
     }
 
     private static let nameWithNumber = try! NSRegularExpression(
-        pattern: #"([\x{4e00}-\x{9fa5}·]{2,5})\s*[（(]\s*(\d{1,3})\s*[)）]"#)
+        pattern: #"([\x{4e00}-\x{9fa5}][\x{4e00}-\x{9fa5}·・•]{1,18})\s*[（(]\s*(\d{1,3})\s*[)）]"#)
 
     /// 「张三(5)」括号里的数字：还有几天待休。同一个人出现多次时取第一次（当前这一页）。
     public static func restBalances(_ text: String, matcher: ShiftMatcher) -> [String: Int] {
@@ -69,7 +89,9 @@ public enum RosterExtractor {
         for m in nameWithNumber.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             let name = ns.substring(with: m.range(at: 1))
             guard result[name] == nil, looksLikeName(name), !isPost(name, matcher: matcher),
-                  let n = Int(ns.substring(with: m.range(at: 2))) else { continue }
+                  // 全角数字「（５）」也认
+                  let n = Int(ns.substring(with: m.range(at: 2)).applyingTransform(.fullwidthToHalfwidth, reverse: false)
+                              ?? ns.substring(with: m.range(at: 2))) else { continue }
             result[name] = n
         }
         return result

@@ -134,7 +134,10 @@ public struct ScheduleParser {
     }
 
     /// 班次名和关键字（白班、夜、休息、组…），长度至少 1
-    private static let shiftWords: [String] = ShiftType.defaults.flatMap { [$0.name] + $0.keywords }.filter { !$0.isEmpty }
+    static let defaultMatcher = ShiftMatcher(types: ShiftType.defaults)
+
+    /// 单个字（中、白、夜）可能是更长名字的一部分（王建 vs 王建中），只认两个字以上的，以及「组」
+    private static let shiftWords: [String] = ShiftType.defaults.flatMap { [$0.name] + $0.keywords }.filter { $0.count >= 2 } + ["组"]
 
     static func isHan(_ ch: Character) -> Bool {
         ch.unicodeScalars.first.map { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) } ?? false
@@ -301,7 +304,9 @@ public struct ScheduleParser {
                   !header.contains(where: { dates.parse($0) != nil }) else { continue }
             var entries: [DayKey: String] = [:]
             for row in rows[(h + 1)...] where col < row.count {
-                guard let day = row.lazy.compactMap({ self.dates.parse($0) }).first, dates.parse(row[col]) == nil else { continue }
+                // 「周一」这类星期格子不是班次（表头其实是「您好，张伟」这种问候行时会对到这一列）
+                guard let day = row.lazy.compactMap({ self.dates.parse($0) }).first, dates.parse(row[col]) == nil,
+                      !isFiller(row[col]) else { continue }
                 Self.add(row[col], to: day, in: &entries)
             }
             if !entries.isEmpty { return ParseResult(entries: entries, format: .column) }
@@ -372,13 +377,19 @@ public struct ScheduleParser {
             }
             for (n, (i, day)) in dated.enumerated() {
                 let end = n + 1 < dated.count ? dated[n + 1].0 : row.count
-                let value = row[(i + 1)..<end]
+                let candidates = row[(i + 1)..<end]
                     .enumerated()
-                    .first { offset, cell in
+                    .filter { offset, cell in
                         let col = i + 1 + offset
                         return col != nameCol && !isFiller(cell) && !removingAliases(cell).isEmpty
                     }
                     .map { removingAliases($0.element) }
+                // 第一个是班次；后面紧跟着的也是班次（「组A 组E」两个标签）就一起算，用 + 连接
+                var value = candidates.first
+                if let first = value {
+                    let more = candidates.dropFirst().prefix { Self.defaultMatcher.isStrictMatch($0) }
+                    if Self.defaultMatcher.isStrictMatch(first), !more.isEmpty { value = ([first] + more).joined(separator: "+") }
+                }
                 if let value {
                     if fromNextLine.remove(day) != nil { entries[day] = nil }
                     Self.add(value, to: day, in: &entries)
@@ -386,7 +397,9 @@ public struct ScheduleParser {
                           !body[r + 1].contains(where: { dates.parse($0) != nil }) {
                     // 手机网页的卡片：一行 "2026-10-05 周一"，下一行 "组A、组E"
                     let parts = body[r + 1].filter { !isFiller($0) }.map(removingAliases).filter { !$0.isEmpty }
-                    let text = parts.joined(separator: " ")
+                    // 都是班次（「组A 组E」）用 + 连接，否则按原文
+                    let text = parts.count > 1 && parts.allSatisfy(Self.defaultMatcher.isStrictMatch)
+                        ? parts.joined(separator: "+") : parts.joined(separator: " ")
                     if !text.isEmpty && text.count <= 40 {
                         entries[day] = text
                         fromNextLine.insert(day)

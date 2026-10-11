@@ -850,6 +850,28 @@ final class RegressionTests: XCTestCase {
         XCTAssertNil(CapturedRequest(url: "http://h/api?v=20261001&start=2026-10-12&end=2026-10-18", method: "GET").dateWindow)
     }
 
+    func testRound6Parsing() {
+        let m = ShiftMatcher(types: ShiftType.defaults)
+        // 名字里有「中」「白」不是岗位
+        XCTAssertTrue(RosterExtractor.names(inCell: "王建中(3)、李四", matcher: m).contains("王建中"))
+        XCTAssertFalse(RosterExtractor.isPost("王建中", matcher: m))
+        XCTAssertTrue(RosterExtractor.isPost("值班交班前", matcher: m))
+        XCTAssertTrue(RosterExtractor.isPost("组A", matcher: m))
+        // 「王　五」合回一个名字；带间隔号的名字
+        XCTAssertEqual(RosterExtractor.names(inCell: "王　五", matcher: m), ["王五"])
+        XCTAssertTrue(RosterExtractor.looksLikeName("阿依古丽·买买提"))
+        // 王建 不等于 王建中
+        XCTAssertFalse(ScheduleParser(aliases: ["王建"], reference: ref).isMe("王建中(3)"))
+        // 组A,组E 拆开
+        var roster: Roster = [:]
+        RosterExtractor.add("组A,组E", for: "张三", on: ref, to: &roster)
+        XCTAssertEqual(roster["张三"]?[ref], "组A+组E")
+        // UTC 时间换算成本地日期（测试时区按系统）
+        let local = JSONScheduleExtractor.zonedDay("2026-10-04T16:00:00.000+0000")
+        let expected = DayKey(date: Date(timeIntervalSince1970: 1_791_129_600), calendar: Calendar(identifier: .gregorian))
+        XCTAssertEqual(local, expected)
+    }
+
     func testHTMLEntitiesDecodedOnce() {
         XCTAssertEqual(HTMLText.decodeEntities("&amp;lt;b&amp;gt; &#X4E00; &#x4e00;"), "&lt;b&gt; 一 一")
     }
