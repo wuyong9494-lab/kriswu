@@ -94,7 +94,10 @@ public struct ShiftMatcher {
         guard !text.isEmpty else { return false }
         return types.contains { t in
             Self.normalize(t.name) == text || t.codes.contains { Self.normalize($0) == text }
-                || t.keywords.contains { k in let nk = Self.normalize(k); nk.count >= 2 && text.contains(nk) }
+                || t.keywords.contains { k in
+                    let nk = Self.normalize(k)
+                    return nk.count >= 2 && text.contains(nk)
+                }
         }
     }
 
