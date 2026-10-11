@@ -693,7 +693,7 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["王五"]?.regularDays, 6)
         XCTAssertEqual(result["王五"]?.offDays, 1)
         for p in result.values {
-            XCTAssertEqual(p.workDays + p.offDays + p.holidayDays + p.tripDays, 7, p.name)
+            XCTAssertEqual(p.workDays + p.offDays + p.holidayDays, 7, p.name)   // 出差已算在工作量里
         }
     }
 
