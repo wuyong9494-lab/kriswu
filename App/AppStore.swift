@@ -824,22 +824,23 @@ final class AppStore: ObservableObject {
         var text: String
     }
 
-    /// 某月每个人的工作量（来自全员排班），按值班天数从多到少。
+    /// 某月每个人的工作量（来自全员排班），按上班天数从多到少。
     func workload(year: Int, month: Int) -> Workload {
         // 只统计到今天：网站上提前排好的以后的日子还没上，不算
         let today = DayKey.today
         let days = Set(roster.values.flatMap(\.keys)).filter { $0.year == year && $0.month == month && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
         let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, calendar: .app).sorted { a, b in
-            a.dutyDays != b.dutyDays ? a.dutyDays > b.dutyDays : a.name.compare(b.name, locale: zh) == .orderedAscending
+            a.workDays != b.workDays ? a.workDays > b.workDays : a.name.compare(b.name, locale: zh) == .orderedAscending
         }
         var text = "\(year)年\(month)月工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；值班 = 遥测，日常班 = 各组、调度等岗位和工作日没排岗位的日子）"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；上班 = 值班（遥测）+ 日常（各组、调度等岗位和工作日没排岗位的日子））"
         }
         for p in people {
-            text += "\n\(p.name)：值班 \(p.dutyDays) 天，日常班 \(p.regularDays) 天"
-                + (p.tripDays > 0 ? "，出差 \(p.tripDays) 天" : "") + "，休 \(p.offDays) 天；"
+            text += "\n\(p.name)：上班 \(p.workDays) 天（值班 \(p.dutyDays)，日常 \(p.regularDays)），休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天"
+                + (p.tripDays > 0 ? "，出差 \(p.tripDays) 天" : "")
+                + (p.holidayWorkedDays > 0 ? "，节假日上班 \(p.holidayWorkedDays) 天" : "") + "；"
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
         }
         return Workload(days: days, people: people, text: text)

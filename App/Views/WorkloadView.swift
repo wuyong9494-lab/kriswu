@@ -22,7 +22,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。法定节假日不算工作日，调休上班的周末算。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。「上班」= 值班 + 日常；「节假日」是中秋、国庆、春节、清明、五一等法定假日没上班的天数，周末没排岗位算休息。调休上班的周末算工作日。")
             }
             Section {
                 Button {
@@ -51,15 +51,11 @@ struct WorkloadView: View {
                             .font(.headline)
                             .foregroundStyle(store.isMe(person.name) ? Color.accentColor : Color.primary)
                         Spacer()
-                        Text("值班 \(person.dutyDays) 天").bold()
-                        Text("· 日常 \(person.regularDays)").foregroundStyle(.secondary)
-                        if person.tripDays > 0 {
-                            Text("· 差 \(person.tripDays)").foregroundStyle(.secondary)
-                        }
-                        if person.offDays > 0 {
-                            Text("· 休 \(person.offDays)").foregroundStyle(.secondary)
-                        }
+                        Text("上班 \(person.workDays) 天").font(.headline)
                     }
+                    Text(summary(person))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     FlowChips(items: AppStore.sortedPosts(person).map { (text: "\($0.post) ×\($0.count)", raw: $0.post) })
                 }
             }
@@ -71,6 +67,14 @@ struct WorkloadView: View {
                 ShareLink(item: report.text) { Label("分享", systemImage: "square.and.arrow.up") }
             }
         }
+    }
+
+    /// 「值班 2 · 日常 8 · 休息 3 · 节假日 7」，出差、节假日上班有才显示
+    private func summary(_ p: PersonWorkload) -> String {
+        var parts = ["值班 \(p.dutyDays)", "日常 \(p.regularDays)", "休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
+        if p.tripDays > 0 { parts.append("出差 \(p.tripDays)") }
+        if p.holidayWorkedDays > 0 { parts.append("其中节假日上班 \(p.holidayWorkedDays)") }
+        return parts.joined(separator: " · ")
     }
 
     private func move(_ delta: Int) {

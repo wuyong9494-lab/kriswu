@@ -1,19 +1,30 @@
 import Foundation
 
-/// 每个人一个月的工作量。
-/// 只有「遥测」算值班；各组、调度等其它岗位，和工作日（周一到周五，按法定节假日调整）没写在任何岗位上的日子，都算日常班。
-/// 出差、休息（调休、请假、无分工）另外统计。
+/// 每个人一段时间（一般是一个月到今天）的工作量，每一天归到一类：
+/// - 值班：遥测
+/// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位的日子
+/// - 出差
+/// - 节假日：中秋、国庆、春节、清明、五一等法定假日没上班的日子
+/// - 休息：休息、调休、请假、无分工，以及周末没排岗位的日子
+/// 上班 = 值班 + 日常。
 public struct PersonWorkload: Equatable {
     public var name: String
     /// 值班（遥测）天数
     public var dutyDays: Int
     /// 日常班天数：各组、调度等岗位，加上工作日没排岗位的日子
     public var regularDays: Int
-    /// 休息、调休、请假、无分工
+    /// 休息：休息、调休、请假、无分工，周末没排岗位
     public var offDays: Int
+    /// 法定节假日没上班的天数
+    public var holidayDays: Int
     public var tripDays: Int
+    /// 其中在法定节假日上班（值班或日常）的天数
+    public var holidayWorkedDays: Int
     /// 各岗位天数（不含日常班）
     public var posts: [String: Int]
+
+    /// 上班天数 = 值班 + 日常
+    public var workDays: Int { dutyDays + regularDays }
 }
 
 public enum WorkloadCounter {
@@ -31,27 +42,40 @@ public enum WorkloadCounter {
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher,
                              calendar: Calendar = .current) -> [PersonWorkload] {
         // 工作日：周一到周五，去掉法定假日，加上调休上班的周末
-        let weekdays = Set(days.filter { ChinaHolidays.isWorkday($0, calendar: calendar) })
+        let workdays = Set(days.filter { ChinaHolidays.isWorkday($0, calendar: calendar) })
+        let holidays = Set(days.filter(ChinaHolidays.isHoliday))
         return roster.keys.compactMap { name in
-            var p = PersonWorkload(name: name, dutyDays: 0, regularDays: 0, offDays: 0, tripDays: 0, posts: [:])
+            var p = PersonWorkload(name: name, dutyDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
+                                   tripDays: 0, holidayWorkedDays: 0, posts: [:])
             for day in days {
+                let holiday = holidays.contains(day)
                 guard let raw = roster[name]?[day] else {
-                    if weekdays.contains(day) { p.regularDays += 1 }
+                    if workdays.contains(day) {
+                        p.regularDays += 1
+                    } else if holiday {
+                        p.holidayDays += 1
+                    } else {
+                        p.offDays += 1
+                    }
                     continue
                 }
                 let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
                 for post in posts { p.posts[post, default: 0] += 1 }
                 if posts.contains(where: isDuty) {
                     p.dutyDays += 1
+                    if holiday { p.holidayWorkedDays += 1 }
                 } else if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) {
                     p.regularDays += 1
+                    if holiday { p.holidayWorkedDays += 1 }
                 } else if posts.contains(where: isTrip) {
                     p.tripDays += 1
+                } else if holiday {
+                    p.holidayDays += 1
                 } else {
                     p.offDays += 1
                 }
             }
-            return p.dutyDays + p.regularDays + p.offDays + p.tripDays > 0 ? p : nil
+            return days.isEmpty ? nil : p
         }
     }
 }
