@@ -272,6 +272,30 @@ final class ScheduleDiffTests: XCTestCase {
         XCTAssertEqual(text, "10月11日 周日：夜班 → 白班\n10月12日 周一：休息 → 无\n10月13日 周二：无 → 夜班")
     }
 
+    func testSwapExplainer() {
+        let day = DayKey(year: 2026, month: 10, day: 12)
+        let m = ShiftMatcher(types: ShiftType.defaults)
+        let isMe = { (n: String) in n == "我" }
+        let before: Roster = ["我": [day: "组D"], "李四": [day: "组B"], "王五": [day: "组C"]]
+        let change = ScheduleChange(day: day, old: "组D", new: "组B")
+        // 对换
+        let swapped: Roster = ["我": [day: "组B"], "李四": [day: "组D"], "王五": [day: "组C"]]
+        XCTAssertEqual(SwapExplainer.describe(change, before: before, after: swapped, fresh: true, matcher: m, isMe: isMe),
+                       "和李四对换：李四原来是组B，现在是组D")
+        // 这次没读到全员排班：只能说原来是谁
+        XCTAssertEqual(SwapExplainer.describe(change, before: before, after: before, fresh: false, matcher: m, isMe: isMe),
+                       "组B原来是李四，可能是和李四换的")
+        // 三个人转着换：李四去了组C，王五接了我的组D
+        let rotated: Roster = ["我": [day: "组B"], "李四": [day: "组C"], "王五": [day: "组D"]]
+        XCTAssertEqual(SwapExplainer.describe(change, before: before, after: rotated, fresh: true, matcher: m, isMe: isMe),
+                       "组B原来是李四（李四现在是组C）；组D现在是王五（王五原来是组C）")
+        // 我被换下来休息
+        let off = ScheduleChange(day: day, old: "组D", new: "无分工")
+        let replaced: Roster = ["我": [day: "休息"], "李四": [day: "组B"], "王五": [day: "组D"]]
+        XCTAssertEqual(SwapExplainer.describe(off, before: before, after: replaced, fresh: true, matcher: m, isMe: isMe),
+                       "组D现在是王五（王五原来是组C）")
+    }
+
     func testSummaryDetail() {
         let changes = [ScheduleChange(day: DayKey(year: 2026, month: 10, day: 12), old: "组D", new: "组B")]
         var cal = Calendar(identifier: .gregorian)

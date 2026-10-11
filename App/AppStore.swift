@@ -584,32 +584,8 @@ final class AppStore: ObservableObject {
     /// 排班变动的补充说明：新组原来是谁的、我原来的组现在是谁（一天一人一组，多半就是和他换的）。
     /// before：同步前的全员排班；fresh：这次重新读到全员排班的日子（只有这些日子的「现在是谁」可信）。
     func swapDetail(_ change: ScheduleChange, before: Roster, fresh: Set<DayKey>) -> String? {
-        func key(_ s: String) -> String { s.filter { !$0.isWhitespace }.uppercased() }
-        func groups(_ raw: String?) -> [String] {
-            guard let raw else { return [] }
-            return matcher.displayName(raw).split(separator: "+").map(String.init)
-                .filter { matcher.match($0)?.id != "off" && $0 != "未排班" }
-        }
-        func holders(_ group: String, in r: Roster) -> [String] {
-            r.compactMap { name, days in
-                guard !isMe(name), let posts = days[change.day],
-                      posts.split(separator: "+").contains(where: { key(String($0)) == key(group) }) else { return nil }
-                return name
-            }.sorted()
-        }
-        var parts: [String] = []
-        let oldGroups = groups(change.old), newGroups = groups(change.new)
-        for g in newGroups where !oldGroups.contains(g) {
-            let who = holders(g, in: before)
-            if !who.isEmpty { parts.append("\(g)原来是\(who.joined(separator: "、"))") }
-        }
-        if fresh.contains(change.day) {
-            for g in oldGroups where !newGroups.contains(g) {
-                let who = holders(g, in: roster)
-                if !who.isEmpty { parts.append("\(g)现在是\(who.joined(separator: "、"))") }
-            }
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: "，")
+        SwapExplainer.describe(change, before: before, after: roster, fresh: fresh.contains(change.day),
+                               matcher: matcher, isMe: isMe)
     }
 
     /// 打开 App 时，距离上次同步超过 3 分钟就自动同步一次。

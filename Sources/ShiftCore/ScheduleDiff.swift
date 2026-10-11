@@ -39,3 +39,60 @@ public enum ScheduleDiff {
         return lines.joined(separator: "\n")
     }
 }
+
+/// 我的班组变了时，说明是和谁换的：「和李四对换：李四原来是组B，现在是组D」。
+public enum SwapExplainer {
+    /// before / after：变动前后的全员排班；fresh：after 里这一天是不是这次刚读到的（不是的话只能说「原来是谁」）。
+    public static func describe(_ change: ScheduleChange, before: Roster, after: Roster, fresh: Bool,
+                                matcher: ShiftMatcher, isMe: (String) -> Bool) -> String? {
+        func key(_ s: String) -> String { s.filter { !$0.isWhitespace }.uppercased() }
+        /// 真正的岗位（不含休息、未排班）
+        func groups(_ raw: String?) -> [String] {
+            guard let raw else { return [] }
+            return matcher.displayName(raw).split(separator: "+").map(String.init)
+                .filter { matcher.match($0)?.id != "off" && $0 != "未排班" && $0 != "无分工" }
+        }
+        func holders(_ group: String, in r: Roster) -> [String] {
+            r.compactMap { name, days in
+                guard !isMe(name), let posts = days[change.day],
+                      posts.split(separator: "+").contains(where: { key(String($0)) == key(group) }) else { return nil }
+                return name
+            }.sorted()
+        }
+        func post(of name: String, in r: Roster) -> String {
+            r[name]?[change.day].map(matcher.displayName) ?? "没排班"
+        }
+        let oldGroups = groups(change.old), newGroups = groups(change.new)
+        let gained = newGroups.filter { g in !oldGroups.contains { key($0) == key(g) } }
+        let lost = oldGroups.filter { g in !newGroups.contains { key($0) == key(g) } }
+        var parts: [String] = []
+        var mentioned = Set<String>()
+
+        // 我新接的组原来是谁的
+        for g in gained {
+            for x in holders(g, in: before) {
+                mentioned.insert(x)
+                if fresh {
+                    let now = post(of: x, in: after)
+                    if lost.contains(where: { o in groups(now).contains { key($0) == key(o) } }) {
+                        parts.append("和\(x)对换：\(x)原来是\(g)，现在是\(now)")
+                    } else {
+                        parts.append("\(g)原来是\(x)（\(x)现在是\(now)）")
+                    }
+                } else {
+                    parts.append("\(g)原来是\(x)，可能是和\(x)换的")
+                }
+            }
+        }
+        // 我原来的组现在是谁、他原来是哪个组
+        if fresh {
+            for o in lost {
+                for y in holders(o, in: after) where !mentioned.contains(y) {
+                    mentioned.insert(y)
+                    parts.append("\(o)现在是\(y)（\(y)原来是\(post(of: y, in: before))）")
+                }
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "；")
+    }
+}
