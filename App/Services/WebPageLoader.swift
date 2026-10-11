@@ -14,6 +14,8 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     /// 到这个时间就不再翻页、不再补发请求，尽快结束（后台只有约 30 秒）
     private var deadline: Date?
     private var outOfTime: Bool { deadline.map { Date() > $0 } ?? false }
+    /// 补发数据请求很快（每个零点几秒），比翻页多给几秒
+    private var outOfRequestTime: Bool { deadline.map { Date() > $0.addingTimeInterval(6) } ?? false }
 
     private init(username: String, password: String) {
         self.username = username
@@ -189,7 +191,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     /// 在页面里用同样的请求头和登录状态逐个发出请求，返回各自的内容。
     private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [String] {
         var replies: [String] = []
-        for request in requests where !outOfTime {
+        for request in requests where !outOfRequestTime {
             let reply = try? await webView.callAsyncJavaScript(
                 Self.replayScript,
                 arguments: ["url": request.url, "method": request.method, "headers": request.headers,
@@ -287,11 +289,11 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     return await r.text();
     """
 
-    /// 等页面里的脚本把内容画出来：连续两次内容不变就认为加载完成，最多等 15 秒。
+    /// 等页面里的脚本把内容画出来：连续两次（隔 0.5 秒）内容不变就认为加载完成，最多等 15 秒。
     private func settledHTML(_ webView: WKWebView) async throws -> String {
         var last = ""
-        for _ in 0..<15 {
-            try await Task.sleep(nanoseconds: 1_000_000_000)
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 500_000_000)
             let html = (try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String) ?? ""
             if !html.isEmpty && (html == last || outOfTime) { last = html; break }
             last = html

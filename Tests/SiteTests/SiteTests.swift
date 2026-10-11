@@ -66,6 +66,8 @@ final class SiteTests: XCTestCase {
 
     /// 后台同步：不翻页，只靠接口逐天补取，20 秒内也要拿到前后几周的全员排班
     func testBackgroundSyncReadsRosterWithoutPaging() async throws {
+        // 模拟器第一次启动网页进程很慢（真机没有这么慢），先热身一次再计时
+        _ = try? await WebPageLoader.load(url: URL(string: base)!, username: "", password: "", replay: { _ in [] })
         let start = Date()
         let outcome = try await SyncService.fetchSchedule(
             urlString: base + "#/mine", username: "zhangsan", password: "pw123", viaWeb: true,

@@ -774,7 +774,8 @@ final class BalanceTests: XCTestCase {
         XCTAssertEqual(r.rows.first { $0.name == "乙" }?.level, .less)
         XCTAssertEqual(r.rows.first { $0.name == "甲" }?.level, .normal)   // 多 1.7 天，不到 2 天
         XCTAssertEqual(r.rows.first { $0.name == "甲" }?.groupDays, 2)
-        XCTAssertTrue(r.findings.contains { $0.contains("乙干得少") && $0.contains("休息 3 天") }, r.findings.joined(separator: "\n"))
+        // 乙：周二到周四休息 3 天，加上周末 2 天
+        XCTAssertTrue(r.findings.contains { $0.contains("乙干得少") && $0.contains("休息 5 天") }, r.findings.joined(separator: "\n"))
 
         // 差不多的一周：均衡
         let even: Roster = ["甲": [d(12): "组A"], "乙": [d(13): "组B"], "丙": [d(14): "组C"]]
