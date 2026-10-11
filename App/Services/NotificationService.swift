@@ -43,9 +43,12 @@ enum NotificationService {
         }
         // 已经有更新的一次在排队：这次的内容过时了，不要替换
         if Task.isCancelled { return }
-        let old = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
-        center.removePendingNotificationRequests(withIdentifiers: old)
+        // 先登记新的（同一个 id 直接替换旧内容），再删掉不再需要的：
+        // 中途被系统挂起时，最多是多一两条旧提醒，不会出现一条提醒都没有
         for request in requests { try? await center.add(request) }
+        let keep = Set(requests.map(\.identifier))
+        let stale = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) && !keep.contains($0) }
+        center.removePendingNotificationRequests(withIdentifiers: stale)
         VoiceSound.removeFiles(except: voiceFiles)
     }
 

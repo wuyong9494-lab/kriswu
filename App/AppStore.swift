@@ -80,6 +80,8 @@ struct AppSettings: Codable, Equatable {
     var nextSyncIsBaseline = false
     /// 网站排了班、但没给我排的日子也提醒（显示「未排班」）
     var remindUnassigned = true
+    /// 还没发到微信的排班变动
+    var pendingWeChatChange: ChangeLogEntry?
     /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
     var desktopGroupNotes: [String: String] = [:]
     /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
@@ -134,6 +136,7 @@ struct AppSettings: Codable, Equatable {
         restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
         nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
         remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
+        pendingWeChatChange = try c.decodeIfPresent(ChangeLogEntry.self, forKey: .pendingWeChatChange)
         desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
         lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
@@ -314,9 +317,15 @@ final class AppStore: ObservableObject {
 
     /// 导入/同步：用新数据整体替换它覆盖的那段日期（这段时间里被删掉的班次也会同步删除）。
     @discardableResult
-    func apply(_ result: ParseResult) -> [ScheduleChange] {
+    /// publishedBefore：同步前网站已经排了班的日子。以后的日子在网站正式排班前取到的只是请假、调休，
+    /// 网站第一次排出这一周时不算「变动」。
+    func apply(_ result: ParseResult, publishedBefore: Set<DayKey>? = nil) -> [ScheduleChange] {
         let old = schedule
-        let knownBefore = covered
+        let today = DayKey.today
+        let knownBefore = covered.filter { day in
+            guard let published = publishedBefore, !published.isEmpty else { return true }
+            return day <= today || published.contains(day)
+        }
         var new = schedule
         let replaced = result.replacedDays(calendar: .app)
         if !replaced.isEmpty {
@@ -420,6 +429,9 @@ final class AppStore: ObservableObject {
     /// 马上重新登记（等它做完）。一次接一次排队做，绝不同时进行：
     /// 每次开始时读的都是当时最新的排班，不会有慢的旧任务最后完成、把新提醒盖掉。
     func rescheduleNotifications() async {
+        // 这一次会读最新的状态，排着的「0.3 秒后再做一次」不需要了（后台时间到了也不会多做一半）
+        debounceTask?.cancel()
+        debounceTask = nil
         let previous = rescheduleTask
         let task = Task { [weak self] in
             await previous?.value
@@ -567,6 +579,7 @@ final class AppStore: ObservableObject {
             }
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
             let rosterBefore = roster
+            let publishedBefore = publishedDays
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             mergeRoster(outcome.roster)
             updateRestBalance(outcome.restBalance)
@@ -575,7 +588,7 @@ final class AppStore: ObservableObject {
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
             // 同步途中又改了名字：这次用的是旧名字，下次还要当作重新开始
             if settings.aliases == aliasesAtStart { settings.nextSyncIsBaseline = false }
-            let changes = apply(result)
+            let changes = apply(result, publishedBefore: publishedBefore)
             settings.lastSync = Date()
             settings.loginExpiredNotified = false
             settings.syncStaleNotified = false
@@ -584,18 +597,22 @@ final class AppStore: ObservableObject {
                 + (outcome.roster.isEmpty ? "" : "，全员 \(outcome.roster.count) 人")
             settings.lastSuccessMessage = settings.lastSyncMessage
             // 第一次导入不算“变动”，之后每次同步发现不同就提醒
-            if hadData && !changes.isEmpty && settings.notifyChanges {
+            if hadData && !changes.isEmpty {
                 let title = "📢 排班有更新（\(changes.count) 处）"
                 let body = ScheduleDiff.summary(changes, matcher: matcher, calendar: .app) {
                     self.swapDetail($0, before: rosterBefore, fresh: freshDays)
                 }
+                // 首页「最近排班变动」总是记下；通知、微信看开关
                 settings.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + settings.changeLog).prefix(20))
-                // 每次变动一条，后一次不会把前一次顶掉
-                await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
-                // 微信：可以关掉；同样的变动不重复发
-                if settings.weChatChanges && settings.lastWeChatChangeDigest != body {
-                    settings.lastWeChatChangeDigest = body
-                    await pushToWeChat(title: title, content: body)
+                if settings.notifyChanges {
+                    // 每次变动一条，后一次不会把前一次顶掉
+                    await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
+                    // 微信：可以关掉；同样的变动不重复发；没发出去的留着下次补发
+                    if settings.weChatEnabled && settings.weChatChanges && settings.lastWeChatChangeDigest != body {
+                        settings.lastWeChatChangeDigest = body
+                        settings.pendingWeChatChange = ChangeLogEntry(date: Date(), text: title + "\n" + body)
+                        await sendPendingWeChatChange()
+                    }
                 }
             }
             // 手机版没有各组工作内容：打开 App 时每天用电脑版页面读一次（读不到不影响同步结果，过 1 小时再试）
@@ -767,7 +784,17 @@ final class AppStore: ObservableObject {
     /// iPhone 不能准点在后台运行，所以每天的微信提醒在 App 有机会运行时补发：
     /// 过了早上提醒时间、今天还没发过 → 发「今天」；过了晚上提醒时间 → 发「明天」。
     /// 早上那条过了晚上提醒时间就不再补发。
+    /// 排班变动的微信通知：发成功才清掉，没发出去（网络、后台时间到了）下次 App 运行时补发
+    func sendPendingWeChatChange() async {
+        guard settings.weChatEnabled, let pending = settings.pendingWeChatChange else { return }
+        let parts = pending.text.split(separator: "\n", maxSplits: 1).map(String.init)
+        if await pushToWeChat(title: parts[0], content: parts.count > 1 ? parts[1] : "") {
+            settings.pendingWeChatChange = nil
+        }
+    }
+
     func sendDueWeChatReminders() async {
+        await sendPendingWeChatChange()
         guard settings.weChatEnabled, settings.weChatDaily else { return }
         let now = Date()
         let today = DayKey.today
