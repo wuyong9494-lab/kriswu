@@ -4,8 +4,8 @@ import Foundation
 /// - 值班：遥测
 /// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位的日子
 /// - 出差
-/// - 节假日：中秋、国庆、春节、清明、五一等法定假日没上班的日子
-/// - 休息：休息、调休、请假、无分工，以及周末没排岗位的日子
+/// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
+/// - 休息：网站上写了休息、调休、请假、无分工的日子（节假日里也算休息），以及周末没排岗位的日子
 /// 上班 = 值班 + 日常。
 public struct PersonWorkload: Equatable {
     public var name: String
@@ -38,44 +38,44 @@ public enum WorkloadCounter {
     /// 值班只有遥测
     public static func isDuty(_ post: String) -> Bool { post.contains("遥测") }
 
+    /// 一天归到哪一类
+    public enum Kind: String {
+        case duty = "值班", regular = "日常", trip = "出差", holiday = "节假日", off = "休息"
+    }
+
+    /// raw：网站上这天的岗位（没排为 nil）
+    public static func classify(_ raw: String?, workday: Bool, holiday: Bool, matcher: ShiftMatcher) -> Kind {
+        guard let raw else { return workday ? .regular : (holiday ? .holiday : .off) }
+        let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+        if posts.contains(where: isDuty) { return .duty }
+        if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) { return .regular }
+        if posts.contains(where: isTrip) { return .trip }
+        return .off   // 网站上写了休息、调休的，节假日里也算休息
+    }
+
     /// days：统计哪些日子（已读到全员排班的日子）；名单是全员排班里出现过的所有人。
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher,
                              calendar: Calendar = .current) -> [PersonWorkload] {
+        guard !days.isEmpty else { return [] }
         // 工作日：周一到周五，去掉法定假日，加上调休上班的周末
         let workdays = Set(days.filter { ChinaHolidays.isWorkday($0, calendar: calendar) })
         let holidays = Set(days.filter(ChinaHolidays.isHoliday))
-        return roster.keys.compactMap { name in
+        return roster.keys.map { name in
             var p = PersonWorkload(name: name, dutyDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
             for day in days {
+                let raw = roster[name]?[day]
+                for post in raw?.split(separator: "+") ?? [] { p.posts[matcher.displayName(String(post)), default: 0] += 1 }
                 let holiday = holidays.contains(day)
-                guard let raw = roster[name]?[day] else {
-                    if workdays.contains(day) {
-                        p.regularDays += 1
-                    } else if holiday {
-                        p.holidayDays += 1
-                    } else {
-                        p.offDays += 1
-                    }
-                    continue
-                }
-                let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
-                for post in posts { p.posts[post, default: 0] += 1 }
-                if posts.contains(where: isDuty) {
-                    p.dutyDays += 1
-                    if holiday { p.holidayWorkedDays += 1 }
-                } else if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) {
-                    p.regularDays += 1
-                    if holiday { p.holidayWorkedDays += 1 }
-                } else if posts.contains(where: isTrip) {
-                    p.tripDays += 1
-                } else if holiday {
-                    p.holidayDays += 1
-                } else {
-                    p.offDays += 1
+                switch classify(raw, workday: workdays.contains(day), holiday: holiday, matcher: matcher) {
+                case .duty: p.dutyDays += 1; if holiday { p.holidayWorkedDays += 1 }
+                case .regular: p.regularDays += 1; if holiday { p.holidayWorkedDays += 1 }
+                case .trip: p.tripDays += 1
+                case .holiday: p.holidayDays += 1
+                case .off: p.offDays += 1
                 }
             }
-            return days.isEmpty ? nil : p
+            return p
         }
     }
 }

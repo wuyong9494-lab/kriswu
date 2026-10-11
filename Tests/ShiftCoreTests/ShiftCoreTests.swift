@@ -685,7 +685,7 @@ final class WorkloadTests: XCTestCase {
         XCTAssertTrue(ChinaHolidays.isHoliday(d(3)))
         XCTAssertFalse(ChinaHolidays.isHoliday(d(11)))
         XCTAssertTrue(ChinaHolidays.isHoliday(DayKey(year: 2026, month: 9, day: 25)))   // 中秋
-        // 10/1–10/11：张三 10/2 遥测（节假日上班），10/9 组A；李四 10/3 写了休息（假期里算节假日）
+        // 10/1–10/11：张三 10/2 遥测（节假日上班），10/9 组A；李四 10/3 网站上写了休息（假期里也算休息）
         let roster: Roster = ["张三": [d(2): "遥测", d(9): "组A"], "李四": [d(3): "休息"]]
         let result = count(roster, (1...11).map(d))
         XCTAssertEqual(result["张三"]?.dutyDays, 1)
@@ -695,7 +695,7 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["张三"]?.holidayWorkedDays, 1)
         XCTAssertEqual(result["张三"]?.offDays, 1)            // 11 日周日
         XCTAssertEqual(result["李四"]?.workDays, 3)
-        XCTAssertEqual(result["李四"]?.holidayDays, 7)
-        XCTAssertEqual(result["李四"]?.offDays, 1)
+        XCTAssertEqual(result["李四"]?.holidayDays, 6)
+        XCTAssertEqual(result["李四"]?.offDays, 2)
     }
 }

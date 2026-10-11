@@ -22,7 +22,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。「上班」= 值班 + 日常；「节假日」是中秋、国庆、春节、清明、五一等法定假日没上班的天数，周末没排岗位算休息。调休上班的周末算工作日。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位，以及工作日没排岗位的日子，都算「日常班」。「上班」= 值班 + 日常；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
             }
             Section {
                 Button {
@@ -46,12 +46,16 @@ struct WorkloadView: View {
             }
             ForEach(report.people, id: \.name) { person in
                 Section {
+                    NavigationLink {
+                        WorkloadDetailView(name: person.name, days: report.days)
+                    } label: {
                     HStack {
                         Text(person.name)
                             .font(.headline)
                             .foregroundStyle(store.isMe(person.name) ? Color.accentColor : Color.primary)
                         Spacer()
                         Text("上班 \(person.workDays) 天").font(.headline)
+                    }
                     }
                     Text(summary(person))
                         .font(.subheadline)
@@ -106,6 +110,48 @@ private struct FlowChips: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// 某个人每一天怎么算的：日期、网站上的岗位、归到哪一类。
+struct WorkloadDetailView: View {
+    @EnvironmentObject private var store: AppStore
+    let name: String
+    let days: [DayKey]
+
+    var body: some View {
+        List(days.reversed()) { day in
+            let raw = store.roster[name]?[day]
+            let holiday = ChinaHolidays.isHoliday(day)
+            let kind = WorkloadCounter.classify(raw, workday: ChinaHolidays.isWorkday(day, calendar: .app),
+                                                holiday: holiday, matcher: store.matcher)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(day.dateText)
+                    Text(raw.map(store.matcher.displayName) ?? (holiday ? "网站上没排（法定假日）" : "网站上没排"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(kind.rawValue)
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(color(kind).opacity(0.2), in: Capsule())
+            }
+        }
+        .navigationTitle(name)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func color(_ kind: WorkloadCounter.Kind) -> Color {
+        switch kind {
+        case .duty: return .blue
+        case .regular: return .teal
+        case .trip: return .orange
+        case .holiday: return .red
+        case .off: return .green
         }
     }
 }
