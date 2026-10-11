@@ -190,7 +190,23 @@ final class AppStore: ObservableObject {
     /// 已经取到过结果的日子：有排班的显示班次，没排班的显示「未排班」；不在这里的日子还没有数据
     @Published private(set) var covered: Set<DayKey>
     /// 全员排班（姓名 → 日期 → 岗位），只存在手机上，用于搜索成员
-    @Published private(set) var roster: Roster = [:]
+    @Published private(set) var roster: Roster = [:] {
+        didSet { publishedDays = Self.published(in: roster, matcher: matcher) }
+    }
+    /// 网站上已经正式排了班的日子：这一天有人排了组别（组A–E）或遥测。
+    /// 只有提前申请的请假、调休、出差的日子还没排班，不能当成「这天大家都在上日常班」。
+    @Published private(set) var publishedDays: Set<DayKey> = []
+
+    static func published(in roster: Roster, matcher: ShiftMatcher) -> Set<DayKey> {
+        var result = Set<DayKey>()
+        for days in roster.values {
+            for (day, raw) in days where !result.contains(day) {
+                let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+                if posts.contains(where: { WorkloadBalance.isGroup($0) || WorkloadCounter.isDuty($0) }) { result.insert(day) }
+            }
+        }
+        return result
+    }
     @Published private(set) var isSyncing = false
     /// 上次读电脑版页面时看到的文字（只在内存里，排查用）
     @Published var desktopPageText: String?
@@ -254,6 +270,8 @@ final class AppStore: ObservableObject {
             settings.lastSync = nil   // 打开 App 后马上重新同步
             save()
         }
+        // init 里赋值不会触发 didSet，手动算一次
+        publishedDays = Self.published(in: roster, matcher: ShiftMatcher(types: settings.shiftTypes))
     }
 
     private static let rosterVersion = 3
@@ -354,7 +372,12 @@ final class AppStore: ObservableObject {
     func isMe(_ name: String) -> Bool { parser.isMe(name) }
 
     /// 这一天是否已经取到过排班结果（没排班也算）。
-    func isCovered(_ day: DayKey) -> Bool { covered.contains(day) || schedule[day] != nil }
+    /// 以后的日子，全员排班里还没人排组别、遥测（网站还没排到那天）时，不算取到了
+    func isCovered(_ day: DayKey) -> Bool {
+        if schedule[day] != nil { return true }
+        guard covered.contains(day) else { return false }
+        return day <= .today || roster.isEmpty || publishedDays.contains(day)
+    }
 
     func clearSchedule() {
         schedule = [:]
@@ -399,7 +422,8 @@ final class AppStore: ObservableObject {
     var reminderSchedule: [DayKey: String] {
         var s = schedule
         let today = DayKey.today
-        for day in covered where day >= today && s[day] == nil { s[day] = "未排班" }
+        // 网站还没排到的日子不提醒「未排班」
+        for day in covered where day >= today && s[day] == nil && isCovered(day) { s[day] = "未排班" }
         return s
     }
 
@@ -867,7 +891,7 @@ final class AppStore: ObservableObject {
     func workload(year: Int, month: Int) -> Workload {
         // 只统计到今天：网站上提前排好的以后的日子还没上，不算
         let today = DayKey.today
-        let days = Set(roster.values.flatMap(\.keys)).filter { $0.year == year && $0.month == month && $0 <= today }.sorted()
+        let days = publishedDays.filter { $0.year == year && $0.month == month && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
         let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, calendar: .app).sorted { a, b in
             a.workDays != b.workDays ? a.workDays > b.workDays : a.name.compare(b.name, locale: zh) == .orderedAscending

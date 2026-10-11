@@ -29,7 +29,7 @@ struct FairnessView: View {
     }
 
     var body: some View {
-        let known = Set(store.roster.values.flatMap(\.keys))
+        let known = store.publishedDays
         let week = usable(weekDays, known: known)
         let monthKnown = usable(monthDays, known: known)
         let weekReport = WorkloadBalance.analyze(roster: store.roster, days: week, matcher: store.matcher,
@@ -40,7 +40,7 @@ struct FairnessView: View {
             Section {
                 Toggle("只算到今天", isOn: $untilToday)
             } footer: {
-                Text("比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 节假日值班调休 + 日常（各组、调度、工作日没排岗位）+ 出差。关掉「只算到今天」时，网站上已经排好的以后几天也算进去，看排班本身是否均衡。")
+                Text("比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 节假日值班调休 + 日常（各组、调度、工作日没排岗位）+ 出差。关掉「只算到今天」时，网站上已经排好组别、遥测的以后几天也算进去，看排班本身是否均衡；只有提前申请的请假、调休的日子不算。")
             }
             Section {
                 switcher(title: "\(weekDays[0].month)/\(weekDays[0].day) – \(weekDays[6].month)/\(weekDays[6].day)",
@@ -111,7 +111,7 @@ struct FairnessView: View {
                         + (row.level == .normal ? "" : " \(row.level.rawValue)")
                 }.joined(separator: "\n")
         }
-        let known = Set(store.roster.values.flatMap(\.keys))
+        let known = store.publishedDays
         return block("本周工作量（\(rangeText(usable(weekDays, known: known)) ?? "")）", week) + "\n\n"
             + block("\(year)年\(month)月工作量（\(rangeText(usable(monthDays, known: known)) ?? "")）", month)
     }
