@@ -610,7 +610,14 @@ final class AppStore: ObservableObject {
                     // 微信：可以关掉；同样的变动不重复发；没发出去的留着下次补发
                     if settings.weChatEnabled && settings.weChatChanges && settings.lastWeChatChangeDigest != body {
                         settings.lastWeChatChangeDigest = body
-                        settings.pendingWeChatChange = ChangeLogEntry(date: Date(), text: title + "\n" + body)
+                        // 上次没发出去的先补发；还是发不出去就合在一起，不丢掉前一次的变动
+                        await sendPendingWeChatChange()
+                        if let older = settings.pendingWeChatChange {
+                            let olderBody = older.text.split(separator: "\n", maxSplits: 1).dropFirst().joined()
+                            settings.pendingWeChatChange = ChangeLogEntry(date: Date(), text: title + "\n" + body + "\n" + olderBody)
+                        } else {
+                            settings.pendingWeChatChange = ChangeLogEntry(date: Date(), text: title + "\n" + body)
+                        }
                         await sendPendingWeChatChange()
                     }
                 }
