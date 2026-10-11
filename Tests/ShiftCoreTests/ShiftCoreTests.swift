@@ -700,6 +700,24 @@ final class WorkloadTests: XCTestCase {
         }
     }
 
+    func testRotationMembers() {
+        let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day + 7) }   // 10/12 周一 … 10/18 周日
+        let roster: Roster = [
+            "甲": [d(5): "组A", d(6): "遥测"],          // 设置里的轮班人员：周三到周五没排不算
+            "乙": [d(5): "调度"],                       // 排过调度：也按轮班算
+            "丙": [d(5): "组B"],                        // 不在名单里：一直没有组别的日常班人员，没排的工作日算日常
+        ]
+        let m = ShiftMatcher(types: ShiftType.defaults)
+        let result = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
+            roster: roster, days: (5...11).map(d), matcher: m, members: ["甲"], calendar: cal).map { ($0.name, $0) })
+        XCTAssertEqual(result["甲"]?.workDays, 2)
+        XCTAssertEqual(result["甲"]?.unassignedDays, 3)
+        XCTAssertEqual(result["乙"]?.workDays, 1)
+        XCTAssertEqual(result["乙"]?.unassignedDays, 4)
+        XCTAssertEqual(result["丙"]?.workDays, 5)
+        XCTAssertEqual(result["丙"]?.unassignedDays, 0)
+    }
+
     func testHolidayRestAfterDutyOnly() {
         let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
         // 国庆：1 日遥测，2、3 日休息 → 两天都是值班调休；4 日组A，5 日休息（隔开了）→ 休息

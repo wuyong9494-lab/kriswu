@@ -57,15 +57,15 @@ public enum WorkloadCounter {
              unassigned = "未排班"
     }
 
-    /// 轮班的人：排过组别（组A–E）、遥测或调度。这些人没排岗位的日子就是没给他排班，不算上班；
+    /// 轮班的人：设置里勾选的轮班人员，加上排过调度的人。这些人没排岗位的日子就是没给他排班，不算上班；
     /// 其他人（一直没有组别的日常班人员）工作日没排岗位就是在上日常班。
-    public static func isRotating(_ history: [DayKey: String], matcher: ShiftMatcher) -> Bool {
-        history.values.contains { raw in
-            raw.split(separator: "+").contains { part in
-                let post = matcher.displayName(String(part))
-                return GroupNotes.isGroup(post) || isDuty(post) || post.contains("调度")
-            }
-        }
+    /// members 为空（还没设置）时，排过组别（组A–E）、遥测或调度的人都算轮班的。
+    public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
+                                  matcher: ShiftMatcher) -> Bool {
+        let posts = history.values.flatMap { $0.split(separator: "+").map { matcher.displayName(String($0)) } }
+        if posts.contains(where: { $0.contains("调度") }) { return true }
+        if let members, !members.isEmpty { return members.contains(name) }
+        return posts.contains { GroupNotes.isGroup($0) || isDuty($0) }
     }
 
     /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）
@@ -85,10 +85,9 @@ public enum WorkloadCounter {
     /// 某人每一天的类别：法定节假日里，遥测后紧接着写了休息、调休的日子（最多 2 天）算值班调休；
     /// 平时的休息不管怎么来的都算休息。
     /// history：这个人全部的排班（用来看统计范围前一两天是不是遥测）。
-    public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher,
+    public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
                              calendar: Calendar = .current) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
-        let rotating = isRotating(history, matcher: matcher)
         for day in days {
             result[day] = classify(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
                                    holiday: ChinaHolidays.isHoliday(day), rotating: rotating, matcher: matcher)
@@ -118,7 +117,8 @@ public enum WorkloadCounter {
     }
 
     /// days：统计哪些日子（已读到全员排班的日子）；名单是全员排班里出现过的所有人。
-    public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher,
+    /// members：设置里的轮班人员（见 isRotating）
+    public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher, members: Set<String>? = nil,
                              calendar: Calendar = .current) -> [PersonWorkload] {
         guard let first = days.min(), let last = days.max() else { return [] }
         // 只算这段时间前后两周里在网站上出现过的人（调走的、还没来的不算，免得把没排班的日子都算成日常）
@@ -126,7 +126,8 @@ public enum WorkloadCounter {
         return roster.filter { $0.value.keys.contains(where: window.contains) }.map { name, history in
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
-            let dayKinds = kinds(of: history, days: days, matcher: matcher, calendar: calendar)
+            let rotating = isRotating(name: name, history: history, members: members, matcher: matcher)
+            let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: rotating, calendar: calendar)
             for day in days {
                 for post in history[day]?.split(separator: "+") ?? [] { p.posts[matcher.displayName(String(post)), default: 0] += 1 }
                 let holiday = ChinaHolidays.isHoliday(day)

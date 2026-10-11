@@ -33,9 +33,9 @@ struct FairnessView: View {
         let week = usable(weekDays, known: known)
         let monthKnown = usable(monthDays, known: known)
         let weekReport = WorkloadBalance.analyze(roster: store.roster, days: week, matcher: store.matcher,
-                                                 tolerance: 2, calendar: .app)
+                                                 tolerance: 2, members: store.rotationMembers, calendar: .app)
         let monthReport = WorkloadBalance.analyze(roster: store.roster, days: monthKnown, matcher: store.matcher,
-                                                  tolerance: 3, calendar: .app)
+                                                  tolerance: 3, members: store.rotationMembers, calendar: .app)
         List {
             if !ChinaHolidays.knownYears.contains(year) {
                 Label("App 里还没有 \(year) 年的法定节假日，假期会被当成工作日算，请更新 App", systemImage: "exclamationmark.triangle")

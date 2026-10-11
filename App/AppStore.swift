@@ -62,6 +62,8 @@ struct AppSettings: Codable, Equatable {
     var weChatWeekSent: DayKey?
     /// 收藏的同事，首页显示他们今天、明天在哪个组
     var favorites: [String] = []
+    /// 轮班人员（轮组别、遥测的人）：这些人和排过调度的人，工作日网站上没排岗位不算工作量
+    var rotationMembers: [String] = []
     /// 最近的排班变动（首页显示）
     var changeLog: [ChangeLogEntry] = []
     /// 已经提醒过「很久没同步成功」，同步成功后恢复
@@ -129,6 +131,7 @@ struct AppSettings: Codable, Equatable {
         weeklyPreview = try c.decodeIfPresent(Bool.self, forKey: .weeklyPreview) ?? d.weeklyPreview
         weChatWeekSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
         favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
+        rotationMembers = try c.decodeIfPresent([String].self, forKey: .rotationMembers) ?? []
         changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
         syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
         lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
@@ -968,6 +971,15 @@ final class AppStore: ObservableObject {
 
     // MARK: - 收藏的同事
 
+    /// 设置里的轮班人员；没设置时为 nil（按排过组别、遥测、调度自动判断）
+    var rotationMembers: Set<String>? {
+        settings.rotationMembers.isEmpty ? nil : Set(settings.rotationMembers)
+    }
+
+    func isRotating(_ name: String) -> Bool {
+        WorkloadCounter.isRotating(name: name, history: roster[name] ?? [:], members: rotationMembers, matcher: matcher)
+    }
+
     func isFavorite(_ name: String) -> Bool { settings.favorites.contains(name) }
 
     func toggleFavorite(_ name: String) {
@@ -1077,7 +1089,8 @@ final class AppStore: ObservableObject {
         let today = DayKey.today
         let days = publishedDays.filter { $0.year == year && $0.month == month && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
-        let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, calendar: .app).sorted { a, b in
+        let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, members: rotationMembers,
+                                           calendar: .app).sorted { a, b in
             a.workDays != b.workDays ? a.workDays > b.workDays : a.name.compare(b.name, locale: zh) == .orderedAscending
         }
         var text = "\(year)年\(month)月工作量统计"
