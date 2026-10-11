@@ -546,7 +546,8 @@ final class AppStore: ObservableObject {
             let runningWasUser = syncTaskUserInitiated
             let ok = await running.value
             // 自动同步不会重试登录、不采用异常结果；手动下拉要自己再来一次
-            guard userInitiated, !runningWasUser else { return ok }
+            // 只有那次自动同步失败（没登录上、结果异常被忽略）时才再来一次
+            guard userInitiated, !runningWasUser, !ok else { return ok }
             // 等待期间别人已经开始了新的一次：用那一次
             if let next = syncTask { return await next.value }
         }
@@ -633,7 +634,9 @@ final class AppStore: ObservableObject {
                 if settings.notifyChanges {
                     // 每次变动一条，后一次不会把前一次顶掉
                     await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
-                    // 微信：可以关掉；同样的变动不重复发；没发出去的留着下次补发
+                }
+                do {
+                    // 微信有自己的开关，和 iPhone 通知分开；同样的变动不重复发；没发出去的留着下次补发
                     if settings.weChatEnabled && settings.weChatChanges && settings.lastWeChatChangeDigest != body {
                         settings.lastWeChatChangeDigest = body
                         // 上次没发出去的先补发；还是发不出去就合在一起，不丢掉前一次的变动
