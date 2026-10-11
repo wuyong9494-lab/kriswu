@@ -4,6 +4,8 @@ struct TodayView: View {
     @EnvironmentObject private var store: AppStore
     @State private var editing: DayKey?
     @State private var searching = false
+    /// 下拉刷新后在顶部显示几秒「同步完成：没有变动 / 3 处变动」
+    @State private var toast: String?
 
     var body: some View {
         NavigationStack {
@@ -42,7 +44,26 @@ struct TodayView: View {
                     .padding()
                 }
             }
-            .refreshable { await store.sync(userInitiated: true) }
+            .refreshable {
+                await store.sync(userInitiated: true)
+                toast = store.settings.lastSyncMessage
+                Task {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    toast = nil
+                }
+            }
+            .overlay(alignment: .top) {
+                if let toast {
+                    Text(toast)
+                        .font(.subheadline)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.top, 4)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut, value: toast)
             .navigationTitle("值班提醒")
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {

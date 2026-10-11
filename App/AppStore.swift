@@ -335,12 +335,14 @@ final class AppStore: ObservableObject {
     @discardableResult
     /// publishedBefore：同步前网站已经排了班的日子。以后的日子在网站正式排班前取到的只是请假、调休，
     /// 网站第一次排出这一周时不算「变动」。
-    func apply(_ result: ParseResult, publishedBefore: Set<DayKey>? = nil) -> [ScheduleChange] {
+    func apply(_ result: ParseResult, publishedBefore: Set<DayKey>? = nil, rosterDaysBefore: Set<DayKey> = []) -> [ScheduleChange] {
         let old = schedule
         let today = DayKey.today
+        // 只有这种情况不算「之前就知道」：以后的某天，全员排班里只有请假、调休这些提前申请的记录，
+        // 还没人排组别、遥测（网站还没排到那天）。全员排班里根本没有那天的数据时，照常算变动。
         let knownBefore = covered.filter { day in
             guard let published = publishedBefore, !published.isEmpty else { return true }
-            return day <= today || published.contains(day)
+            return day <= today || published.contains(day) || !rosterDaysBefore.contains(day)
         }
         var new = schedule
         let replaced = result.replacedDays(calendar: .app)
@@ -611,7 +613,8 @@ final class AppStore: ObservableObject {
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
             // 同步途中又改了名字：这次用的是旧名字，下次还要当作重新开始
             if settings.aliases == aliasesAtStart { settings.nextSyncIsBaseline = false }
-            let changes = apply(result, publishedBefore: publishedBefore)
+            let changes = apply(result, publishedBefore: publishedBefore,
+                                rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
             settings.lastSync = Date()
             settings.loginExpiredNotified = false
             settings.syncStaleNotified = false
