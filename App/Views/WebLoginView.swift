@@ -106,6 +106,9 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     let webView: WKWebView
     @Published var isLoading = false
     @Published var currentURL: String?
+    /// 单页网站（#/mine → #/duty）换页不会触发加载回调，用 KVO 跟踪能不能后退、当前地址
+    @Published var canGoBack = false
+    private var observers: [NSKeyValueObservation] = []
     /// 设置里的账号密码；打开登录页时自动填好并点「登录」
     var credentials: (user: String, password: String)?
     private var autoLoginTried = false
@@ -120,6 +123,16 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
         super.init()
         webView.navigationDelegate = self
         webView.allowsBackForwardNavigationGestures = true
+        observers = [
+            webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] _, change in
+                let value = change.newValue ?? false
+                Task { @MainActor in self?.canGoBack = value }
+            },
+            webView.observe(\.url, options: [.new]) { [weak self] _, change in
+                let value = (change.newValue ?? nil)?.absoluteString
+                Task { @MainActor in self?.currentURL = value }
+            },
+        ]
     }
 
     func load(_ address: String) {

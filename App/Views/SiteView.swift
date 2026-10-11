@@ -32,7 +32,7 @@ struct SiteView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button { model.webView.goBack() } label: { Image(systemName: "chevron.left") }
-                        .disabled(!model.webView.canGoBack)
+                        .disabled(!model.canGoBack)
                 }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button { model.load(store.settings.sourceURL) } label: { Image(systemName: "house") }

@@ -106,8 +106,17 @@ public struct ScheduleParser {
             let a = Array(alias)
             guard !a.isEmpty, a.count <= chars.count else { return false }
             if chars == a { return true }
+            // 拼音、账号这类英文数字名字：前后不能紧挨着别的字母数字（zhangwei ≠ zhangweidong、zhangwei2）
+            let latin = a.last.map { $0.isASCII && ($0.isLetter || $0.isNumber) } ?? false
+            func alnum(_ c: Character) -> Bool { c.isLetter || c.isNumber }
             for start in 0...(chars.count - a.count) where Array(chars[start..<(start + a.count)]) == a {
                 let end = start + a.count
+                if latin {
+                    let beforeOK = start == 0 || spaceAfter[start - 1] || !alnum(chars[start - 1])
+                    let afterOK = end == chars.count || spaceAfter[end - 1] || !alnum(chars[end])
+                    if beforeOK && afterOK { return true }
+                    continue
+                }
                 // 名字在最后、后面有空格、或者后面不是汉字：是我
                 if end == chars.count || spaceAfter[end - 1] || !Self.isHan(chars[end]) { return true }
                 // 后面紧跟着汉字：紧接着就是班次名（「张伟夜班」）才是我，否则是更长的名字（「张伟东」「张伟东 夜班」）
@@ -340,7 +349,8 @@ public struct ScheduleParser {
         let nameCol = header?.firstIndex { cell in Self.nameHeaders.contains(where: { Self.normalize(cell).contains($0) }) }
 
         let body = rows.enumerated().filter { $0.offset != headerIndex }.map(\.element)
-        let anyMine = body.contains { $0.contains(where: isMe) }
+        // 只看带日期的行：页面顶部「欢迎，张伟」这类标题行不算
+        let anyMine = body.contains { r in r.contains(where: isMe) && r.contains { dates.parse($0) != nil } }
         if nameCol != nil && !anyMine && !aliases.isEmpty {
             throw ScheduleParseError.nameNotFound(aliases)
         }

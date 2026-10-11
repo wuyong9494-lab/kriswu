@@ -801,6 +801,11 @@ final class RegressionTests: XCTestCase {
         XCTAssertTrue(p.isMe("张 伟(3)"))
         XCTAssertTrue(p.isMe("张伟夜班"))
         XCTAssertFalse(p.isMe("张伟东 夜班"))
+        let q = ScheduleParser(aliases: ["zhangwei"], reference: ref)
+        XCTAssertTrue(q.isMe("zhangwei"))
+        XCTAssertTrue(q.isMe("ZhangWei(3)"))
+        XCTAssertFalse(q.isMe("zhangweidong"))
+        XCTAssertFalse(q.isMe("zhangwei2"))
     }
 
     func testNamesContainingWeekdayWords() {
