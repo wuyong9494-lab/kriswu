@@ -1301,8 +1301,8 @@ final class AppStore: ObservableObject {
     }
 
     /// 导出成表格文件（CSV，Excel / WPS / Numbers 能直接打开），返回临时文件地址
-    func workloadCSVFile(year: Int, month: Int?) -> URL? {
-        let report = workload(year: year, month: month)
+    func workloadCSVFile(year: Int, month: Int?, report: Workload? = nil) -> URL? {
+        let report = report ?? workload(year: year, month: month)
         let name = "工作量\(year)年" + (month.map { "\($0)月" } ?? "全年") + ".csv"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         // 带 BOM，Excel 才认得出中文
