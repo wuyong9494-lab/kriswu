@@ -242,7 +242,8 @@ struct WorkloadDetailView: View {
             }
             .contentShape(Rectangle())
             .contextMenu {
-                // 网站读错或有特殊情况：手动改这一天（以后同步也不会被冲掉）
+                // 网站读错或有特殊情况：手动改这一天（以后同步也不会被冲掉）；只有管理员能改
+                if store.canEdit {
                 ForEach([WorkloadCounter.Kind.regular, .attendance, .duty, .dutyRest, .trip, .off, .holiday, .unassigned], id: \.self) { k in
                     Button(k.rawValue) { store.setOverride(name, day, k.rawValue) }
                 }
@@ -250,10 +251,11 @@ struct WorkloadDetailView: View {
                 if store.override(name, day) != nil {
                     Button("恢复自动", role: .destructive) { store.setOverride(name, day, nil) }
                 }
+                }
             }
         }
         .safeAreaInset(edge: .top) {
-            Text("长按某一天可以手动改（网站读错时用）")
+            Text(store.canEdit ? "长按某一天可以手动改（网站读错时用）" : "只读：管理员登录后才能手动改")
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
@@ -344,6 +346,7 @@ struct RotationMembersView: View {
             }
         }
         .appList()
+        .adminOnly()
         .navigationTitle("只按排班算的人")
         .navigationBarTitleDisplayMode(.inline)
     }

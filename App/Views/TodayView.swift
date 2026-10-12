@@ -6,6 +6,14 @@ struct TodayView: View {
     @State private var searching = false
 
     var body: some View {
+        if store.role == .manager {
+            ManagerHomeView()
+        } else {
+            personal
+        }
+    }
+
+    private var personal: some View {
         NavigationStack {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let today = DayKey(date: context.date, calendar: .app)
@@ -572,5 +580,103 @@ private struct DutyInsightCard: View {
         }
         let ahead = t.ahead == 0 ? "下一个就是你" : "前面还有 \(t.ahead) 人"
         return (t.day.map { "大约 \($0.dateText) · " } ?? "") + ahead
+    }
+}
+
+
+/// 管理者（领导）首页：自己没有排班，看全员今天、明天的分工，以及各种全员统计的入口
+struct ManagerHomeView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var searching = false
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: 4)
+
+    var body: some View {
+        NavigationStack {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                let today = DayKey(date: context.date, calendar: .app)
+                ScrollView {
+                    VStack(spacing: DS.Space.m) {
+                        DateHeader(date: context.date)
+                        Label("管理者模式：只能查看，不能修改", systemImage: "eye")
+                            .font(DS.Font.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        rosterCard(title: "今天全员分工", day: today)
+                        rosterCard(title: "明天", day: today.adding(days: 1))
+                        VStack(alignment: .leading, spacing: DS.Space.s) {
+                            Text("查看").font(DS.Font.overline).kerning(0.6).foregroundStyle(.secondary)
+                            LazyVGrid(columns: columns, spacing: DS.Space.s) {
+                                tile("本周全员", "tablecells") { WeekRosterView() }
+                                tile("按日查看", "calendar") { DayRosterView(day: today) }
+                                tile("工作量", "chart.bar") { WorkloadView() }
+                                tile("均衡分析", "scalemass") { FairnessView() }
+                                tile("排班规律", "wand.and.stars") { SchedulePatternsView() }
+                                tile("全年统计", "calendar.badge.clock") { YearStatsView() }
+                                tile("换班记录", "arrow.left.arrow.right") { TeamChangesView() }
+                                Button { searching = true } label: { label("搜索成员", "magnifyingglass") }
+                                    .buttonStyle(PressableStyle())
+                            }
+                        }
+                        .card()
+                        SyncStatus()
+                    }
+                    .padding(.horizontal, DS.Space.m)
+                    .padding(.bottom, DS.Space.l)
+                }
+                .appBackground()
+            }
+            .refreshable {
+                let ok = await store.sync(userInitiated: true)
+                ToastCenter.shared.show(store.settings.lastSyncMessage ?? (ok ? "已同步" : "同步失败"), style: ok ? .success : .error)
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $searching) { MemberSearchView() }
+        }
+    }
+
+    private func rosterCard(title: String, day: DayKey) -> some View {
+        let list = store.dayRoster(day)
+        return NavigationLink { DayRosterView(day: day) } label: {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                HStack {
+                    Text(title).font(DS.Font.headline).foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+                if list.isEmpty {
+                    Text("网站上还没有这天的全员排班").font(DS.Font.caption).foregroundStyle(.secondary)
+                }
+                ForEach(list, id: \.post) { item in
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+                        Text(store.matcher.displayName(item.post))
+                            .font(DS.Font.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 72, alignment: .leading)
+                        Text(item.names.joined(separator: "、"))
+                            .font(DS.Font.body)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .card()
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    private func tile<D: View>(_ title: String, _ icon: String, @ViewBuilder destination: @escaping () -> D) -> some View {
+        NavigationLink(destination: destination) { label(title, icon) }
+            .buttonStyle(PressableStyle())
+    }
+
+    private func label(_ title: String, _ icon: String) -> some View {
+        VStack(spacing: DS.Space.xxs + 2) {
+            IconBadge(icon: icon, size: 40)
+            Text(title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
     }
 }

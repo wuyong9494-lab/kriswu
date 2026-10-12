@@ -46,7 +46,7 @@ struct DataCheckView: View {
             if issue.kind == .noRestAfterDuty, let name = issue.name, let day = issue.day {
                 if let fixed = store.override(name, day) {
                     Text("已手动改成：\(fixed)").font(.caption).foregroundStyle(.orange)
-                } else {
+                } else if store.canEdit {
                     HStack {
                         Button("这天其实休息") { store.setOverride(name, day, WorkloadCounter.Kind.off.rawValue) }
                         Button("确实上班了") { store.setOverride(name, day, WorkloadCounter.Kind.attendance.rawValue) }
@@ -77,6 +77,7 @@ struct WorkloadRulesView: View {
 
     var body: some View {
         Form {
+            if !store.canEdit { Section { ReadOnlyNotice() } }
             Section {
                 Toggle("工作日没排岗位、也没写休息算上班（不算工作量）", isOn: $store.settings.workloadRules.blankWorkdayIsWork)
                 Toggle("调度只算排班表上有名字的日子", isOn: $store.settings.workloadRules.dispatchScheduleOnly)
@@ -108,6 +109,7 @@ struct WorkloadRulesView: View {
                 Button("恢复默认规则") { store.settings.workloadRules = WorkloadRules() }
             }
         }
+        .disabled(!store.canEdit)
         .appList()
         .navigationTitle("工作量规则")
         .navigationBarTitleDisplayMode(.inline)

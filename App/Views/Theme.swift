@@ -758,3 +758,41 @@ struct WorkPresentPair: View {
         }
     }
 }
+
+
+/// 不是管理员时显示「只读」提示
+struct ReadOnlyNotice: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        if !store.canEdit {
+            Label(store.role == .manager ? "管理者只能查看，不能修改" : "只读：管理员登录后才能修改",
+                  systemImage: "lock.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+
+/// 只有管理员能操作的页面：其他人看得到内容，但按钮、输入框都不能用，顶部提示只读
+struct AdminOnlyModifier: ViewModifier {
+    @EnvironmentObject private var store: AppStore
+
+    func body(content: Content) -> some View {
+        content
+            .disabled(!store.canEdit)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !store.canEdit {
+                    ReadOnlyNotice()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(.bar)
+                }
+            }
+    }
+}
+
+extension View {
+    func adminOnly() -> some View { modifier(AdminOnlyModifier()) }
+}

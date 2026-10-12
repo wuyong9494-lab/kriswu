@@ -347,6 +347,19 @@ final class AppStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             guard settings != oldValue else { return }
+            // 不是管理员：排班数据改不了（同步自动更新的不受影响）
+            if !canEdit {
+                var fixed = settings
+                fixed.workloadRules = oldValue.workloadRules
+                fixed.workloadOverrides = oldValue.workloadOverrides
+                fixed.customHolidayOff = oldValue.customHolidayOff
+                fixed.customHolidayWork = oldValue.customHolidayWork
+                fixed.manualGroupNotes = oldValue.manualGroupNotes
+                fixed.scheduleOnlyMembers = oldValue.scheduleOnlyMembers
+                fixed.shiftTypes = oldValue.shiftTypes
+                if fixed != settings { settings = fixed }
+                guard settings != oldValue else { return }
+            }
             if settings.aliases != oldValue.aliases { settings.nextSyncIsBaseline = true }
             if settings.shiftTypes != oldValue.shiftTypes {
                 publishedDays = Self.published(in: roster, matcher: matcher)
@@ -516,6 +529,7 @@ final class AppStore: ObservableObject {
 
     /// 工作量手动纠正：value 为 nil 时恢复自动
     func setOverride(_ name: String, _ day: DayKey, _ value: String?) {
+        guard canEdit else { ToastCenter.shared.show("只有管理员能修改", style: .error); return }
         var all = settings.workloadOverrides
         var days = all[name] ?? [:]
         days[day.description] = value
@@ -548,6 +562,7 @@ final class AppStore: ObservableObject {
     func shift(on day: DayKey) -> String? { schedule[day] }
 
     func setShift(_ value: String?, on day: DayKey) {
+        guard canEdit else { ToastCenter.shared.show("只有管理员能修改排班", style: .error); return }
         let v = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         schedule[day] = (v?.isEmpty ?? true) ? nil : v
         covered.insert(day)
@@ -628,8 +643,33 @@ final class AppStore: ObservableObject {
             .sorted { rank($0.post) < rank($1.post) }
     }
 
-    /// 是不是我自己（按「我的名字」判断）。
-    func isMe(_ name: String) -> Bool { parser.isMe(name) }
+    /// 是不是我自己（按「我的名字」判断）。管理者自己没有排班，谁都不是「我」。
+    func isMe(_ name: String) -> Bool { role != .manager && parser.isMe(name) }
+
+    // MARK: - 身份
+
+    /// 当前身份（存在本机，不随备份走）
+    @Published private(set) var role: UserRole = AppStore.isDemo
+        ? .admin : (UserRole(rawValue: UserDefaults.standard.string(forKey: "userRole") ?? "") ?? .user)
+
+    /// 只有管理员能改排班数据（手动改班、工作量纠正、规则、节假日、各组内容、班次类型、导入、恢复备份）
+    var canEdit: Bool { role == .admin }
+
+    /// 输入密码登录；返回登录后的身份，密码不对返回 nil
+    func login(password: String) async -> UserRole? {
+        guard let r = await RoleAuth.role(for: password) else { return nil }
+        setRole(r)
+        return r
+    }
+
+    func logout() { setRole(.user) }
+
+    private func setRole(_ r: UserRole) {
+        role = r
+        UserDefaults.standard.set(r.rawValue, forKey: "userRole")
+        dutyTurnCache = nil
+        requestReschedule()
+    }
 
     /// 这一天是否已经取到过排班结果（没排班也算）。
     /// 以后的日子，全员排班里还没人排组别、遥测（网站还没排到那天）时，不算取到了
@@ -640,6 +680,7 @@ final class AppStore: ObservableObject {
     }
 
     func clearSchedule() {
+        guard canEdit else { ToastCenter.shared.show("只有管理员能清空排班", style: .error); return }
         schedule = [:]
         covered = []
         roster = [:]
@@ -1559,6 +1600,7 @@ final class AppStore: ObservableObject {
 
     /// 从备份恢复：设置、排班、全员排班整体替换。返回恢复了多少天。
     func restore(from data: Data) throws -> Int {
+        guard canEdit else { throw NSError(domain: "role", code: 1, userInfo: [NSLocalizedDescriptionKey: "只有管理员能从备份恢复"]) }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let file = try decoder.decode(BackupFile.self, from: data)

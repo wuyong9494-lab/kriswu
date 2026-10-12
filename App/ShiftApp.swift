@@ -197,6 +197,8 @@ enum ScreenCatalog {
         case "rest": RestTrendView()
         case "forecast": DutyForecastView()
         case "worklog": WorkLogView()
+        case "manager": ManagerHomeView()
+        case "role": RoleView()
         case "patterns": SchedulePatternsView()
         case "holidays": HolidaysView()
         case "rules": WorkloadRulesView()

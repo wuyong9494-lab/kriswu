@@ -247,6 +247,9 @@ struct DayEditor: View {
                         Label("换班账本", systemImage: "book.closed")
                     }
                 }
+                if !store.canEdit {
+                    Section { ReadOnlyNotice() }
+                } else {
                 Section("选择班次") {
                     ForEach(store.settings.shiftTypes) { type in
                         Button {
@@ -283,6 +286,7 @@ struct DayEditor: View {
                             dismiss()
                         }
                     }
+                }
                 }
             }
             .appList()

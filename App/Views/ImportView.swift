@@ -84,6 +84,7 @@ struct ImportView: View {
             }
         }
         .appList()
+        .adminOnly()
         .navigationTitle("导入排班")
         .fileImporter(isPresented: $showingFilePicker,
                       allowedContentTypes: [.commaSeparatedText, .tabSeparatedText, .plainText, .json, .calendarEvent, .html, .data]) { result in

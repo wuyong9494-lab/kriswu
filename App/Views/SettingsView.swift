@@ -20,6 +20,11 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    NavigationLink { RoleView() } label: {
+                        row("身份", icon: store.role.symbol, detail: store.role.title)
+                    }
+                }
+                Section {
                     NavigationLink {
                         Form { sourceSection; nameSection }.appList().navigationTitle("账号与同步")
                     } label: {
@@ -80,7 +85,9 @@ struct SettingsView: View {
                     } label: {
                         row("诊断", icon: "stethoscope", detail: "出问题时看这里")
                     }
-                    Button("清空所有排班", role: .destructive) { confirmClear = true }
+                    if store.canEdit {
+                        Button("清空所有排班", role: .destructive) { confirmClear = true }
+                    }
                 }
             }
             .appList()
@@ -451,6 +458,7 @@ struct ShiftTypesView: View {
             }
         }
         .appList()
+        .adminOnly()
         .navigationTitle("班次类型")
         .toolbar { EditButton() }
     }
@@ -601,6 +609,7 @@ struct GroupNotesView: View {
             }
         }
         .appList()
+        .adminOnly()
         .navigationTitle("各组工作内容")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -797,5 +806,83 @@ struct WhoAmIView: View {
         .appList()
         .navigationTitle("我是谁")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+/// 身份：普通使用者 / 管理者（输入密码只能查看所有人）/ 管理员（输入密码能修改）
+struct RoleView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var password = ""
+    @State private var checking = false
+    @State private var error: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Form {
+            Section {
+                Label(store.role.title, systemImage: store.role.symbol).font(DS.Font.headline)
+                Text(describe(store.role)).font(.footnote).foregroundStyle(.secondary)
+            } header: {
+                Text("当前身份")
+            }
+            if store.role == .user {
+                Section {
+                    SecureField("密码", text: $password)
+                        .keyboardType(.numberPad)
+                        .textContentType(.password)
+                        .focused($focused)
+                    Button {
+                        Task { @MainActor in
+                            checking = true
+                            let r = await store.login(password: password)
+                            checking = false
+                            if let r {
+                                error = nil
+                                password = ""
+                                ToastCenter.shared.show("已登录：\(r.title)", style: .success)
+                            } else {
+                                error = "密码不对"
+                                Haptics.warning()
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text("登录")
+                            if checking { Spacer(); DSSpinner() }
+                        }
+                    }
+                    .disabled(password.isEmpty || checking)
+                    if let error {
+                        Text(error).font(.footnote).foregroundStyle(DS.Palette.warning)
+                    }
+                } header: {
+                    Text("管理者 / 管理员登录")
+                } footer: {
+                    Text("管理者输入管理者密码，可以查看所有人的排班；管理员输入管理员密码，可以修改信息。")
+                }
+            } else {
+                Section {
+                    Button("退出登录，回到普通使用者", role: .destructive) {
+                        store.logout()
+                        ToastCenter.shared.show("已退出登录", style: .success)
+                    }
+                }
+            }
+        }
+        .appList()
+        .navigationTitle("身份")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func describe(_ role: UserRole) -> String {
+        switch role {
+        case .user:
+            return "可以看自己的排班、统计，改自己的名字、网站账号、提醒和显示设置；排班数据（手动改班、工作量纠正、规则、节假日、各组工作内容、班次类型、导入、恢复备份）只能看不能改。"
+        case .manager:
+            return "领导查看用：自己没有排班，首页显示全员今天的分工，可以看所有人的排班、工作量、均衡分析、排班规律，不能修改任何信息。"
+        case .admin:
+            return "可以修改所有信息。"
+        }
     }
 }

@@ -103,6 +103,7 @@ struct SwapLedgerView: View {
                 }
             }
         }
+        .adminOnly()
         .appList()
         .navigationTitle("换班账本")
         .navigationBarTitleDisplayMode(.inline)
@@ -429,6 +430,7 @@ struct HolidaysView: View {
             }
         }
         .appList()
+        .adminOnly()
         .navigationTitle("法定节假日")
         .navigationBarTitleDisplayMode(.inline)
     }

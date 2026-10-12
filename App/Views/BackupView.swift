@@ -58,6 +58,8 @@ struct BackupView: View {
                 } label: {
                     Label("从备份文件恢复", systemImage: "square.and.arrow.down")
                 }
+                .disabled(!store.canEdit)
+                ReadOnlyNotice()
             } footer: {
                 Text("会用备份里的内容替换现在的设置和排班。")
             }
