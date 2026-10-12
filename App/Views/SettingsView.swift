@@ -96,12 +96,25 @@ struct SettingsView: View {
         }
     }
 
+    /// 像系统设置那样：彩色圆角方块里的图标
     private func row(_ title: String, icon: String, detail: String) -> some View {
-        HStack {
-            Label(title, systemImage: icon)
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(Self.iconColor(icon), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text(title)
             Spacer()
             Text(detail).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
         }
+    }
+
+    private static func iconColor(_ icon: String) -> Color {
+        let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .indigo, .red, .brown, .mint, .cyan]
+        // 同一个图标总是同一种颜色
+        let sum = icon.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+        return palette[sum % palette.count]
     }
 
     private var syncSummary: String {

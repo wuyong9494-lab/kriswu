@@ -56,13 +56,17 @@ struct RootView: View {
     var body: some View {
         TabView {
             TodayView()
-                .tabItem { Label("今天", systemImage: "sun.max") }
+                .tabItem { Label("今天", systemImage: "sun.max.fill") }
             CalendarView()
                 .tabItem { Label("日历", systemImage: "calendar") }
+            NavigationStack { WorkloadView() }
+                .tabItem { Label("统计", systemImage: "chart.bar.xaxis") }
             SiteView()
                 .tabItem { Label("网站", systemImage: "globe") }
             SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tabItem { Label("设置", systemImage: "gearshape.fill") }
         }
+        .tint(Theme.accent)
+        .fontDesign(.rounded)
     }
 }

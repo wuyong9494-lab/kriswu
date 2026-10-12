@@ -13,7 +13,7 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     header
                     LazyVGrid(columns: columns, spacing: 4) {
                         ForEach(weekdays, id: \.self) { w in
@@ -24,13 +24,15 @@ struct CalendarView: View {
                         }
                         ForEach(days) { day in
                             DayCell(day: day, isToday: day == DayKey.today)
-                                .onTapGesture { editing = day }
+                                .onTapGesture { Haptics.tap(); editing = day }
                         }
                     }
+                    .card(padding: 10)
                     MonthSummary(days: days)
                 }
                 .padding()
             }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
                 // 只认明显的横向滑动，上下滚动时不翻月
                 guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
@@ -39,6 +41,7 @@ struct CalendarView: View {
             })
             .refreshable { await store.sync(userInitiated: true) }
             .navigationTitle("排班日历")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
@@ -74,14 +77,31 @@ struct CalendarView: View {
     }
 
     private var header: some View {
-        HStack {
-            Button { move(-1) } label: { Image(systemName: "chevron.left") }
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(verbatim: "\(year)年").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Text(verbatim: "\(month)月").font(.largeTitle.bold())
+            }
             Spacer()
-            Text(verbatim: "\(year)年\(month)月").font(.title2.bold())
-            Spacer()
-            Button { move(1) } label: { Image(systemName: "chevron.right") }
+            if year != DayKey.today.year || month != DayKey.today.month {
+                Button("今天") {
+                    Haptics.tap()
+                    withAnimation { year = DayKey.today.year; month = DayKey.today.month }
+                }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.bordered)
+                .clipShape(Capsule())
+            }
+            Button { Haptics.tap(); move(-1) } label: {
+                Image(systemName: "chevron.left").font(.headline).frame(width: 40, height: 40)
+                    .background(Color(.secondarySystemGroupedBackground), in: Circle())
+            }
+            Button { Haptics.tap(); move(1) } label: {
+                Image(systemName: "chevron.right").font(.headline).frame(width: 40, height: 40)
+                    .background(Color(.secondarySystemGroupedBackground), in: Circle())
+            }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 4)
     }
 
     private func move(_ delta: Int) {
@@ -115,14 +135,18 @@ private struct DayCell: View {
         let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
         // 取到过结果但没给我排班：灰底「未排班」；还没取到数据的日子：留空
         let unassigned = display == nil && store.isCovered(day)
-        VStack(spacing: 2) {
+        let holiday = ChinaHolidays.isHoliday(day)
+        VStack(spacing: 3) {
             Text("\(day.day)")
-                .font(.subheadline.weight(isToday ? .bold : .regular))
-                .foregroundStyle(isToday ? Color.accentColor : Color.primary)
+                .font(.subheadline.weight(isToday ? .heavy : .semibold))
+                .foregroundStyle(isToday ? Color.white : (holiday ? Color.red : Color.primary))
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(isToday ? Theme.accent : Color.clear))
             if let display {
                 Text(display.emoji).font(.caption)
                 Text(display.name)
-                    .font(.caption2)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(display.color.blended(with: .black, 0.3))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             } else if unassigned {
@@ -134,14 +158,17 @@ private struct DayCell: View {
                     .minimumScaleFactor(0.6)
                 Spacer(minLength: 0)
             } else {
+                if holiday { Text("休").font(.caption2.bold()).foregroundStyle(.red) }
                 Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64)
-        .padding(.vertical, 2)
-        .background(display.map { $0.color.opacity(0.2) } ?? (unassigned ? Color.gray.opacity(0.18) : .clear),
-                    in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(isToday ? Color.accentColor : .clear, lineWidth: 2))
+        .frame(maxWidth: .infinity, minHeight: 70, maxHeight: 70)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(display.map { $0.color.opacity(0.18) } ?? (unassigned ? Color.gray.opacity(0.12) : Color(.secondarySystemGroupedBackground)))
+        )
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isToday ? Theme.accent : .clear, lineWidth: 2))
         .contentShape(Rectangle())
     }
 }
@@ -156,8 +183,8 @@ private struct MonthSummary: View {
             .map { (name: $0.key, emoji: $0.value[0].emoji, color: $0.value[0].color, count: $0.value.count) }
             .sorted { $0.count > $1.count }
         if !counts.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("本月统计").font(.headline)
+            VStack(alignment: .leading, spacing: 10) {
+                CardTitle(title: "本月统计", icon: "chart.pie.fill")
                 ForEach(counts, id: \.name) { item in
                     HStack {
                         Circle().fill(item.color).frame(width: 10, height: 10)
@@ -167,8 +194,7 @@ private struct MonthSummary: View {
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+            .card()
         }
     }
 }

@@ -13,17 +13,22 @@ struct TodayView: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let today = DayKey(date: context.date, calendar: .app)
                 ScrollView {
-                    VStack(spacing: 16) {
-                        Text(context.date.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).year().month().day().weekday(.wide)))
-                            .font(.title3.bold())
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(spacing: 18) {
+                        // 问候 + 日期
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Theme.greeting(context.date))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text(context.date.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).month().day().weekday(.wide)))
+                                .font(.largeTitle.bold())
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
                         if let days = SigningInfo.daysLeft, days <= 2 {
                             Label("签名还有 \(days) 天到期：打开 LocalDevVPN，再到 SideStore 点「Refresh All」续签",
                                   systemImage: "exclamationmark.triangle.fill")
                                 .font(.subheadline)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                                .background(Color.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 16))
+                                .card(tint: .orange)
                         }
                         if store.syncIsStale {
                             StaleSyncBanner()
@@ -31,24 +36,24 @@ struct TodayView: View {
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }
-                        ShiftCard(label: "今天", day: today, large: true,
-                                  reminder: store.settings.morningEnabled ? "每天 \(store.settings.morning.text) 提醒" : nil)
-                            .onTapGesture { editing = today }
+                        TodayHero(day: today, now: context.date)
+                            .onTapGesture { Haptics.tap(); editing = today }
+                        WeekStrip(from: today) { Haptics.tap(); editing = $0 }
                         TaskChecklistCard(day: today)
-                        ShiftCard(label: "明天", day: today.adding(days: 1), large: false,
-                                  reminder: store.settings.eveningEnabled ? "前一天 \(store.settings.evening.text) 提醒" : nil)
-                            .onTapGesture { editing = today.adding(days: 1) }
                         RecentChanges()
+                        QuickActions(today: today) { searching = true }
                         FavoritesCard(today: today)
-                        UpcomingList(from: today.adding(days: 2), count: 12) { editing = $0 }
-                        ToolsCard()
+                        UpcomingList(from: today.adding(days: 7), count: 14) { editing = $0 }
                         SyncStatus()
                     }
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
                 }
+                .background(Color(.systemGroupedBackground).ignoresSafeArea())
             }
             .refreshable {
                 await store.sync(userInitiated: true)
+                Haptics.success()
                 toast = store.settings.lastSyncMessage
                 toastTask?.cancel()
                 toastTask = Task {
@@ -69,6 +74,7 @@ struct TodayView: View {
             }
             .animation(.easeInOut, value: toast)
             .navigationTitle("值班提醒")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     NavigationLink {
@@ -87,43 +93,175 @@ struct TodayView: View {
     }
 }
 
-struct ShiftCard: View {
+/// 今天的大卡片：按班次颜色的渐变，大字显示分工、组别工作内容，下面带明天。
+struct TodayHero: View {
     @EnvironmentObject private var store: AppStore
-    let label: String
     let day: DayKey
-    let large: Bool
-    let reminder: String?
+    let now: Date
 
     var body: some View {
-        let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
-        HStack(spacing: 16) {
-            DateBadge(day: day, size: large ? 64 : 46)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(label) · \(day.dateText)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(display.map { "\($0.emoji) \($0.name)" } ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
-                    .font(large ? .largeTitle.bold() : .title2.bold())
-                    .foregroundStyle(display == nil ? Color.secondary : Color.primary)
-                // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）
-                ForEach(store.notes(for: store.shift(on: day)), id: \.group) { item in
-                    Text(store.notes(for: store.shift(on: day)).count > 1 ? "\(item.group)：\(item.note)" : item.note)
-                        .font(large ? .subheadline : .footnote)
-                        .foregroundStyle(.primary.opacity(0.85))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let reminder {
-                    Label(reminder, systemImage: "bell")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        let raw = store.shift(on: day)
+        let display = ShiftDisplay(raw: raw, matcher: store.matcher)
+        let color = display?.color ?? Color(hex: "#8E8E93")
+        let tomorrow = ShiftDisplay(raw: store.shift(on: day.adding(days: 1)), matcher: store.matcher)
+        let isDuty = raw.map { WorkloadCounter.isDuty(store.matcher.displayName($0)) } ?? false
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("今天").font(.subheadline.weight(.semibold)).opacity(0.85)
+                Spacer()
+                if store.settings.morningEnabled {
+                    Label(store.settings.morning.text, systemImage: "bell.fill")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(.white.opacity(0.2), in: Capsule())
                 }
             }
-            Spacer()
+            HStack(alignment: .center, spacing: 14) {
+                Text(display?.emoji ?? "🗓️")
+                    .font(.system(size: 34))
+                    .frame(width: 62, height: 62)
+                    .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(display?.name ?? (store.isCovered(day) ? "未排班" : "暂无数据"))
+                        .font(.system(size: 38, weight: .heavy, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    if isDuty {
+                        Text("值班到明天 08:30").font(.subheadline.weight(.medium)).opacity(0.9)
+                    }
+                }
+            }
+            // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）
+            let notes = store.notes(for: raw)
+            if !notes.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(notes, id: \.group) { item in
+                        Text(notes.count > 1 ? "\(item.group)：\(item.note)" : item.note)
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            Divider().overlay(Color.white.opacity(0.35))
+            HStack(spacing: 8) {
+                Image(systemName: "sunrise.fill").font(.caption)
+                Text("明天").font(.subheadline.weight(.semibold))
+                Text(tomorrow.map { "\($0.emoji) \($0.name)" } ?? (store.isCovered(day.adding(days: 1)) ? "未排班" : "—"))
+                    .font(.subheadline)
+                Spacer()
+                if store.settings.eveningEnabled {
+                    Text("\(store.settings.evening.text) 提醒").font(.caption).opacity(0.8)
+                }
+            }
         }
-        .padding(large ? 24 : 16)
-        .background((display?.color ?? .gray).opacity(0.18), in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke((display?.color ?? .gray).opacity(0.5), lineWidth: 1))
+        .foregroundStyle(.white)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.gradient(color), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: color.opacity(0.35), radius: 16, x: 0, y: 8)
         .contentShape(Rectangle())
+    }
+}
+
+/// 接下来 7 天，一格一天，横着滑。
+private struct WeekStrip: View {
+    @EnvironmentObject private var store: AppStore
+    let from: DayKey
+    let onTap: (DayKey) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(1...7, id: \.self) { i in
+                    let day = from.adding(days: i)
+                    let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
+                    let holiday = ChinaHolidays.isHoliday(day)
+                    Button { onTap(day) } label: {
+                        VStack(spacing: 6) {
+                            Text(i == 1 ? "明天" : day.weekdayText)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(holiday ? Color.red : Color.secondary)
+                            Text("\(day.day)").font(.title3.bold())
+                            Text(display?.emoji ?? (store.isCovered(day) ? "·" : " ")).font(.title3)
+                            Text(display?.name ?? (store.isCovered(day) ? "未排" : "—"))
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                        .frame(width: 62, height: 112)
+                        .background {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill((display?.color ?? .gray).opacity(display == nil ? 0.08 : 0.18))
+                        }
+                    }
+                    .buttonStyle(PressableStyle())
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+}
+
+/// 常用功能，一格一个
+private struct QuickActions: View {
+    @EnvironmentObject private var store: AppStore
+    let today: DayKey
+    let onSearch: () -> Void
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            CardTitle(title: "常用", icon: "square.grid.2x2.fill")
+            LazyVGrid(columns: columns, spacing: 16) {
+                tile("本周全员", "tablecells.fill", .blue) { WeekRosterView() }
+                tile("工作量", "chart.bar.fill", .purple) { WorkloadView() }
+                tile("均衡分析", "scalemass.fill", .indigo) { FairnessView() }
+                tile("请假规划", "calendar.badge.minus", .orange) { LeavePlannerView() }
+                tile("找人换班", "person.2.fill", .teal) { SwapHelperView(day: nextWorkDay) }
+                tile("换班账本", "book.closed.fill", .brown) { SwapLedgerView() }
+                Button(action: { Haptics.tap(); onSearch() }) { label("搜索成员", "magnifyingglass", .pink) }
+                    .buttonStyle(PressableStyle())
+                tile("自动同步", "wand.and.stars", store.automationLooksMissing ? .red : .green) { AutomationGuideView() }
+            }
+            if store.automationLooksMissing {
+                NavigationLink { AutomationGuideView() } label: {
+                    Label("还没设置快捷指令自动同步，App 关掉后排班变动收不到。点这里一步步设置。", systemImage: "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.leading)
+                }
+            }
+        }
+        .card()
+    }
+
+    /// 下一个有班的日子（找人换班用），没有就明天
+    private var nextWorkDay: DayKey {
+        (0...30).map { today.adding(days: $0) }
+            .first { !SwapLedger.posts(store.shift(on: $0), matcher: store.matcher).isEmpty } ?? today.adding(days: 1)
+    }
+
+    private func tile<D: View>(_ title: String, _ icon: String, _ color: Color, @ViewBuilder destination: @escaping () -> D) -> some View {
+        NavigationLink(destination: destination) { label(title, icon, color) }
+            .buttonStyle(PressableStyle())
+            .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+    }
+
+    private func label(_ title: String, _ icon: String, _ color: Color) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(LinearGradient(colors: [color.opacity(0.85), color], startPoint: .top, endPoint: .bottom),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            Text(title).font(.caption).foregroundStyle(.primary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -135,8 +273,7 @@ private struct UpcomingList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("接下来")
-                .font(.headline)
+            CardTitle(title: "之后两周", icon: "calendar")
                 .padding(.bottom, 8)
             ForEach(0..<count, id: \.self) { i in
                 let day = from.adding(days: i)
@@ -167,8 +304,7 @@ private struct UpcomingList: View {
                 if i < count - 1 { Divider() }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 
@@ -188,7 +324,7 @@ private struct StaleSyncBanner: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
+        .background(Theme.gradient(.red), in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
     }
 }
 
@@ -200,10 +336,7 @@ private struct RecentChanges: View {
         let recent = store.settings.changeLog.filter { Date().timeIntervalSince($0.date) < 3 * 86_400 }
         if !recent.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label("最近排班变动", systemImage: "arrow.left.arrow.right")
-                        .font(.headline)
-                    Spacer()
+                CardTitle(title: "最近排班变动", icon: "arrow.left.arrow.right", color: .orange) {
                     Button("清除") { store.settings.changeLog = [] }
                         .font(.footnote)
                 }
@@ -218,9 +351,7 @@ private struct RecentChanges: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
+            .card(tint: .orange)
         }
     }
 }
@@ -233,8 +364,7 @@ private struct FavoritesCard: View {
     var body: some View {
         if !store.settings.favorites.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("同事")
-                    .font(.headline)
+                CardTitle(title: "关注的同事", icon: "star.fill", color: .yellow)
                     .padding(.bottom, 8)
                 ForEach(Array(store.settings.favorites.enumerated()), id: \.element) { i, name in
                     NavigationLink {
@@ -253,8 +383,7 @@ private struct FavoritesCard: View {
                     if i < store.settings.favorites.count - 1 { Divider() }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+            .card()
         }
     }
 
@@ -277,9 +406,7 @@ private struct EmptyScheduleHint: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+        .card(tint: Theme.accent)
     }
 }
 
