@@ -81,7 +81,7 @@ struct WorkloadRulesView: View {
                 Toggle("工作日没排岗位、也没写休息算上班", isOn: $store.settings.workloadRules.blankWorkdayIsWork)
                 Toggle("调度只算排班表上有名字的日子", isOn: $store.settings.workloadRules.dispatchScheduleOnly)
             } footer: {
-                Text("第一项关掉后，所有人没排岗位的工作日都不算工作量（显示「没排班」）。第二项关掉后，调度也按第一项算。调度的人 = 最近三个月最常排调度的人，偶尔顶一次调度的不算。")
+                Text("第一项关掉后，所有人没排岗位的工作日都不算工作量（显示「没排班」）。第二项关掉后，调度也按第一项算。调度的人 = 最近三个月一半以上排的是调度的人，偶尔顶几次调度的不算。")
             }
             Section {
                 Toggle("节假日值完遥测的第二天没写休息算工作量", isOn: $store.settings.workloadRules.blankHolidayAfterDutyIsRest)
