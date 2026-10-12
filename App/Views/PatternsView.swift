@@ -58,6 +58,11 @@ struct SchedulePatternsView: View {
             days: days.count)
     }
 
+    /// ①②③…（序号和名字不会被拆到两行）
+    static func circled(_ n: Int) -> String {
+        n <= 20 ? String(UnicodeScalar(0x2460 + n - 1)!) : "\(n)\u{2060}."
+    }
+
     private func pct(_ rate: Double) -> String { "\(Int((rate * 100).rounded()))%" }
 
     private func verdict(_ rate: Double) -> (String, Color) {
@@ -89,7 +94,7 @@ struct SchedulePatternsView: View {
                 Text(deferralConclusion(r)).font(.footnote).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text("现在的顺序（下一个在最前）").font(.caption).foregroundStyle(.secondary)
-                    Text(r.order.enumerated().map { "\($0.offset + 1).\($0.element)" }.joined(separator: "  "))
+                    Text(r.order.enumerated().map { Self.circled($0.offset + 1) + $0.element }.joined(separator: "  "))
                         .font(.subheadline)
                     Text("\(r.order.count) 人轮，平均每人约 \(Int(r.cycleDays.rounded())) 天一次").font(.caption).foregroundStyle(.secondary)
                 }
