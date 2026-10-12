@@ -31,7 +31,7 @@ struct DataCheckView: View {
         }
         .navigationTitle("数据核对")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: "\(store.roster.count)-\(store.publishedDays.count)-\(store.settings.workloadOverrides.count)") {
+        .task(id: "\(store.roster.count)-\(store.publishedDays.count)-\(store.settings.workloadOverrides.count)-\(store.settings.lastSync?.timeIntervalSince1970 ?? 0)-\(store.settings.workloadRules.blankWorkdayIsWork)") {
             issues = DataCheck.issues(roster: store.roster, published: store.publishedDays, matcher: store.matcher,
                                       members: store.rotationMembers, today: .today, calendar: .app)
         }

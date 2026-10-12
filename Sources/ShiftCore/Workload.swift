@@ -116,9 +116,10 @@ public enum WorkloadCounter {
     /// history：这个人全部的排班（用来看统计范围前一两天是不是遥测）。
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
                              name: String? = nil, calendar: Calendar = .current) -> [DayKey: Kind] {
-        var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, calendar: calendar)
+        let fixed = name.flatMap { overrides[$0] } ?? [:]
+        var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, fixed: fixed, calendar: calendar)
         // 手动纠正优先
-        if let name, let fixed = overrides[name] {
+        if !fixed.isEmpty {
             for day in days {
                 guard let value = fixed[day] else { continue }
                 result[day] = value == excluded ? nil : (Kind(rawValue: value) ?? result[day])
@@ -127,8 +128,9 @@ public enum WorkloadCounter {
         return result
     }
 
+    /// fixed：手动纠正（改成值班 / 不是值班的日子，影响后面一天算不算值班调休）
     static func autoKinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
-                          calendar: Calendar) -> [DayKey: Kind] {
+                          fixed: [DayKey: String] = [:], calendar: Calendar) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
         // 这个人在网站上出现的前后两周以外（还没来、已经调走）没数据的日子不算
         let keys = history.keys
@@ -145,7 +147,8 @@ public enum WorkloadCounter {
             return !posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) && posts.contains(where: isRest)
         }
         func isDutyDay(_ day: DayKey) -> Bool {
-            history[day]?.split(separator: "+").contains { isDuty(matcher.displayName(String($0))) } ?? false
+            if let value = fixed[day] { return value == Kind.duty.rawValue }
+            return history[day]?.split(separator: "+").contains { isDuty(matcher.displayName(String($0))) } ?? false
         }
         // 从统计范围前两天开始找遥测，往后接着的休息算调休
         guard rules.holidayDutyRestCounts, let first = days.min(), let last = days.max() else { return result }

@@ -8,6 +8,8 @@ struct FairnessView: View {
     @State private var month = DayKey.today.month
     /// 只算到今天（关掉则包括已经排好的以后几天）
     @State private var untilToday = false
+    /// 导出的表格（换周、换月、同步后重新生成，不在每次刷新界面时写文件）
+    @State private var csvURL: URL?
 
     private var weekDays: [DayKey] {
         let cal = Calendar.app
@@ -72,16 +74,19 @@ struct FairnessView: View {
                 Section { ForEach(monthReport.rows, id: \.name) { RowView(row: $0) } }
             }
         }
+        .task(id: "\(weekOffset)-\(year)-\(month)-\(untilToday)-\(store.settings.lastSync?.timeIntervalSince1970 ?? 0)-\(store.settings.workloadOverrides.count)") {
+            csvURL = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",
+                                   text: WorkloadCSV.balance(weekReport, title: "本周（\(rangeText(week) ?? "")）") + "\n"
+                                       + WorkloadCSV.balance(monthReport, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）"))
+        }
         .navigationTitle("工作量均衡")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     ShareLink(item: shareText(weekReport, monthReport)) { Label("分享文字", systemImage: "text.alignleft") }
-                    if let file = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",
-                                                text: WorkloadCSV.balance(weekReport, title: "本周（\(rangeText(week) ?? "")）") + "\n"
-                                                    + WorkloadCSV.balance(monthReport, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）")) {
-                        ShareLink(item: file) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
+                    if let csvURL {
+                        ShareLink(item: csvURL) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
                     }
                 } label: {
                     Label("分享", systemImage: "square.and.arrow.up")

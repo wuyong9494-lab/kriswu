@@ -19,7 +19,14 @@ public enum HolidayDutyStats {
         for (name, history) in roster {
             var duty: [DayKey] = []
             var work = 0
+            let fixed = WorkloadCounter.overrides[name] ?? [:]
             for day in holidays {
+                // 手动纠正过的日子按纠正的算
+                if let value = fixed[day] {
+                    if value == WorkloadCounter.Kind.duty.rawValue { duty.append(day) }
+                    if value == WorkloadCounter.Kind.duty.rawValue || value == WorkloadCounter.Kind.regular.rawValue { work += 1 }
+                    continue
+                }
                 guard let raw = history[day] else { continue }
                 let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
                 if posts.contains(where: WorkloadCounter.isDuty) { duty.append(day) }
@@ -108,7 +115,8 @@ public enum DataCheck {
         let recent = published.filter { $0 >= start && $0 <= today }
 
         // 1. 遥测后接下来的工作日网站上什么都没写：按规则算上班，可能是没读到「休息」
-        for (name, history) in roster where !WorkloadCounter.isRotating(name: name, history: history, members: members, matcher: matcher) {
+        for (name, history) in roster where WorkloadCounter.rules.blankWorkdayIsWork
+            && !WorkloadCounter.isRotating(name: name, history: history, members: members, matcher: matcher) {
             for (day, raw) in history where day >= start && day <= today
                 && raw.split(separator: "+").contains(where: { WorkloadCounter.isDuty(matcher.displayName(String($0))) }) {
                 for offset in 1...3 {

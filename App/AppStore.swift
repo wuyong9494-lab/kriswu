@@ -1106,10 +1106,14 @@ final class AppStore: ObservableObject {
         guard settings.monthlyReport, settings.weChatEnabled else { return }
         let today = DayKey.today
         let key = String(format: "%04d-%02d", today.year, today.month)
-        guard settings.lastMonthlyReport != key else { return }
+        // 第一次（刚升级、刚打开）不补发上个月的，从下个月 1 号开始
+        guard let last = settings.lastMonthlyReport else { settings.lastMonthlyReport = key; return }
+        guard last != key else { return }
+        // 先记上，免得同时运行两次发两遍；没发出去再改回来
+        settings.lastMonthlyReport = key
         let (y, m) = today.month == 1 ? (today.year - 1, 12) : (today.year, today.month - 1)
         let report = workload(year: y, month: m)
-        guard !report.people.isEmpty else { return }
+        guard !report.people.isEmpty else { settings.lastMonthlyReport = last; return }
         let balance = WorkloadBalance.analyze(roster: roster, days: report.days, matcher: matcher, tolerance: 3,
                                               members: rotationMembers, calendar: .app)
         var lines = ["\(y)年\(m)月（\(report.days.count) 天）工作量从多到少："]
@@ -1117,9 +1121,8 @@ final class AppStore: ObservableObject {
             "\(p.name)：\(p.workDays) 天（遥测 \(p.dutyDays)，休息 \(p.offDays)）" + (settings.restBalance[p.name].map { "，待休 \($0)" } ?? "")
         }
         if !balance.rows.isEmpty { lines.append("\n有组别的人：\(balance.verdict)。" + balance.findings.joined(separator: "；")) }
-        if await pushToWeChat(title: "📊 \(m)月工作量月报", content: lines.joined(separator: "\n")) {
-            settings.lastMonthlyReport = key
-        }
+        let sent = await pushToWeChat(title: "📊 \(m)月工作量月报", content: lines.joined(separator: "\n"))
+        if !sent { settings.lastMonthlyReport = last }
     }
 
     func sendDueWeChatReminders() async {

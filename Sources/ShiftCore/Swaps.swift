@@ -204,12 +204,13 @@ public enum RosterDiff {
                                now: Date = Date()) -> [TeamChange] {
         var result: [TeamChange] = []
         for day in days.sorted() {
-            let b = holders(before, day: day, matcher: matcher), a = holders(after, day: day, matcher: matcher)
-            // 之前这天还没正式排班（没人有岗位）：第一次排出来不算换班
-            guard !b.isEmpty, !a.isEmpty else { continue }
+            // 只比前后两次都读到这天的人：这次没读全、或者之前只排了一部分，都不当成换班
+            let both = Set(before.filter { $0.value[day] != nil }.keys).intersection(after.filter { $0.value[day] != nil }.keys)
+            let b = holders(before.filter { both.contains($0.key) }, day: day, matcher: matcher)
+            let a = holders(after.filter { both.contains($0.key) }, day: day, matcher: matcher)
             for key in Set(b.keys).union(a.keys).sorted() {
-                let from = b[key]?.names ?? [], to = a[key]?.names ?? []
-                guard Set(from) != Set(to) else { continue }
+                // 岗位之前没人或现在没人（第一次排出来、取消了）不算换班
+                guard let from = b[key]?.names, let to = a[key]?.names, Set(from) != Set(to) else { continue }
                 result.append(TeamChange(detected: now, day: day, post: a[key]?.post ?? b[key]?.post ?? key,
                                          from: from.filter { !to.contains($0) }, to: to.filter { !from.contains($0) }))
             }
