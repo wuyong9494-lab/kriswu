@@ -48,6 +48,7 @@ struct MemberSearchView: View {
                 }
             }
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "输入姓名")
+            .appList()
             .navigationTitle("搜索成员")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -90,6 +91,7 @@ struct MemberScheduleView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle(name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

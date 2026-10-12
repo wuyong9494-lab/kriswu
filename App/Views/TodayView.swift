@@ -4,23 +4,21 @@ struct TodayView: View {
     @EnvironmentObject private var store: AppStore
     @State private var editing: DayKey?
     @State private var searching = false
-    /// 下拉刷新后在顶部显示几秒「同步完成：没有变动 / 3 处变动」
-    @State private var toast: String?
-    @State private var toastTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 let today = DayKey(date: context.date, calendar: .app)
                 ScrollView {
-                    VStack(spacing: 18) {
+                    VStack(spacing: DS.Space.m) {
                         // 问候 + 日期
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(Theme.greeting(context.date))
-                                .font(.subheadline.weight(.semibold))
+                        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                            Text(Theme.greeting(context.date).uppercased())
+                                .font(DS.Font.overline)
+                                .kerning(0.8)
                                 .foregroundStyle(.secondary)
                             Text(context.date.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).month().day().weekday(.wide)))
-                                .font(.largeTitle.bold())
+                                .font(DS.Font.display)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
@@ -51,29 +49,14 @@ struct TodayView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 24)
                 }
-                .background(Color(.systemGroupedBackground).ignoresSafeArea())
+                .appBackground()
             }
             .refreshable {
-                if await store.sync(userInitiated: true) { Haptics.success() }
-                toast = store.settings.lastSyncMessage
-                toastTask?.cancel()
-                toastTask = Task {
-                    try? await Task.sleep(nanoseconds: 4_000_000_000)
-                    if !Task.isCancelled { toast = nil }
-                }
+                // 下拉刷新后在顶部显示几秒「同步完成：没有变动 / 3 处变动」
+                let ok = await store.sync(userInitiated: true)
+                ToastCenter.shared.show(store.settings.lastSyncMessage ?? (ok ? "已同步" : "同步失败"),
+                                        style: ok ? .success : .error)
             }
-            .overlay(alignment: .top) {
-                if let toast {
-                    Text(toast)
-                        .font(.subheadline)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(.top, 4)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut, value: toast)
             .navigationTitle("值班提醒")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -426,7 +409,7 @@ struct SyncStatus: View {
     var body: some View {
         VStack(spacing: 4) {
             if store.isSyncing {
-                ProgressView("正在同步…")
+                HStack(spacing: DS.Space.xs) { DSSpinner(size: 14); Text("正在同步…") }
             } else if store.canSync {
                 if let message = store.settings.lastSyncMessage {
                     Text(message)

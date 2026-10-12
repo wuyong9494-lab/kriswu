@@ -71,6 +71,7 @@ struct DayRosterView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("值班表")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

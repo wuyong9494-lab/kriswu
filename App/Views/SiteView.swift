@@ -27,6 +27,7 @@ struct SiteView: View {
             .overlay(alignment: .top) {
                 if model.isLoading { ProgressView().padding(6) }
             }
+            .appList()
             .navigationTitle("值班网站")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

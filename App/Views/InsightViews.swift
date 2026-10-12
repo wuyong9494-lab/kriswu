@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 // MARK: - 数据核对
@@ -26,9 +27,10 @@ struct DataCheckView: View {
                     }
                 }
             } else {
-                ProgressView()
+                DSSpinner(size: 28).frame(maxWidth: .infinity).padding(DS.Space.xl)
             }
         }
+        .appList()
         .navigationTitle("数据核对")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(store.roster.count)-\(store.publishedDays.count)-\(store.settings.workloadOverrides.count)-\(store.settings.lastSync?.timeIntervalSince1970 ?? 0)-\(store.settings.workloadRules.blankWorkdayIsWork)") {
@@ -105,6 +107,7 @@ struct WorkloadRulesView: View {
                 Button("恢复默认规则") { store.settings.workloadRules = WorkloadRules() }
             }
         }
+        .appList()
         .navigationTitle("工作量规则")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -135,6 +138,7 @@ struct TeamChangesView: View {
             }
         }
         .searchable(text: $query, prompt: "按名字或岗位查")
+        .appList()
         .navigationTitle("全员换班记录")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -230,6 +234,7 @@ struct YearSummaryView: View {
             }
             .padding()
         }
+        .appList()
         .navigationTitle("年度总结")
         .navigationBarTitleDisplayMode(.inline)
         .task { build() }
@@ -254,5 +259,52 @@ struct YearSummaryView: View {
         let renderer = ImageRenderer(content: c)
         renderer.scale = 3
         image = renderer.uiImage.map { Image(uiImage: $0) }
+    }
+}
+
+// MARK: - 图表
+
+
+/// 每人一根横条（工作量），我高亮，可选一条平均线
+struct WorkloadBarChart: View {
+    struct Item: Identifiable {
+        var id: String { name }
+        let name: String
+        let value: Int
+        let highlight: Bool
+    }
+
+    let items: [Item]
+    var average: Double?
+
+    var body: some View {
+        Chart {
+            ForEach(items) { item in
+                BarMark(x: .value("天", item.value), y: .value("姓名", item.name))
+                    .foregroundStyle(item.highlight
+                                     ? AnyShapeStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.7), DS.Palette.accent],
+                                                                    startPoint: .leading, endPoint: .trailing))
+                                     : AnyShapeStyle(DS.Palette.accent.opacity(0.28)))
+                    .cornerRadius(DS.Radius.s / 2)
+                    .annotation(position: .trailing, spacing: DS.Space.xxs) {
+                        Text("\(item.value)").font(DS.Font.caption).foregroundStyle(.secondary)
+                    }
+            }
+            if let average {
+                RuleMark(x: .value("平均", average))
+                    .foregroundStyle(DS.Palette.warning)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                    .annotation(position: .top, alignment: .leading) {
+                        Text("平均 \(String(format: "%.1f", average))").font(DS.Font.caption).foregroundStyle(DS.Palette.warning)
+                    }
+            }
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis {
+            AxisMarks { _ in
+                AxisValueLabel().font(DS.Font.caption)
+            }
+        }
+        .frame(height: CGFloat(max(items.count, 1)) * 26 + (average == nil ? 8 : 28))
     }
 }

@@ -145,3 +145,71 @@ jobs:
       - name: 网站访问记录
         if: always()
         run: tail -150 mock.log
+
+  # 用虚构的演示数据（启动参数 -demo）在模拟器里打开各个页面截图，浅色、深色各一套，推到 screenshots 分支方便查看界面
+  screenshots:
+    runs-on: macos-15
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 编译模拟器版本
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro') or x['name'].startswith('iPhone')))")
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcodebuild build \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Debug \
+            -destination "id=$DEVICE" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
+
+      - name: 截图
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
+          ID=com.kriswu.shiftreminder
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          # 中文界面
+          xcrun simctl spawn "$DEVICE" defaults write -g AppleLanguages -array zh-Hans
+          xcrun simctl spawn "$DEVICE" defaults write -g AppleLocale zh_CN
+          xcrun simctl shutdown "$DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          mkdir -p shots
+          SCREENS="today calendar stats settings fairness week swap ledger year summary check rest forecast holidays rules team leave automation backup diagnostics search day roster holidayduty"
+          for mode in light dark; do
+            xcrun simctl ui "$DEVICE" appearance $mode
+            for s in $SCREENS; do
+              xcrun simctl launch "$DEVICE" $ID -demo -screen $s > /dev/null
+              sleep 4
+              xcrun simctl io "$DEVICE" screenshot "shots/$mode-$s.png" > /dev/null 2>&1
+              xcrun simctl terminate "$DEVICE" $ID || true
+              sips -s format jpeg -s formatOptions 70 -Z 1100 "shots/$mode-$s.png" --out "shots/$mode-$s.jpg" > /dev/null
+              rm "shots/$mode-$s.png"
+            done
+          done
+          ls -la shots
+
+      - name: 推到 screenshots 分支
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd shots
+          git init -q
+          git checkout -q -b screenshots
+          git -c user.name=ci -c user.email=ci@example.com add .
+          git -c user.name=ci -c user.email=ci@example.com commit -qm "Screenshots for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" screenshots

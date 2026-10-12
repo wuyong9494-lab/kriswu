@@ -19,17 +19,17 @@ struct SettingsView: View {
             Form {
                 Section {
                     NavigationLink {
-                        Form { sourceSection; nameSection }.navigationTitle("账号与同步")
+                        Form { sourceSection; nameSection }.appList().navigationTitle("账号与同步")
                     } label: {
                         row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
                     }
                     NavigationLink {
-                        Form { reminderSection; calendarSection }.navigationTitle("提醒")
+                        Form { reminderSection; calendarSection }.appList().navigationTitle("提醒")
                     } label: {
                         row("提醒", icon: "bell", detail: reminderSummary)
                     }
                     NavigationLink {
-                        Form { weChatSection }.navigationTitle("微信推送")
+                        Form { weChatSection }.appList().navigationTitle("微信推送")
                     } label: {
                         row("微信推送", icon: "message", detail: store.settings.weChatEnabled ? "已开启" : "未开启")
                     }
@@ -56,7 +56,7 @@ struct SettingsView: View {
                             detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
                     }
                     NavigationLink {
-                        Form { displaySection }.navigationTitle("显示")
+                        Form { displaySection }.appList().navigationTitle("显示")
                     } label: {
                         row("显示", icon: "paintpalette", detail: store.settings.appearance.title)
                     }
@@ -80,6 +80,7 @@ struct SettingsView: View {
                     Button("清空所有排班", role: .destructive) { confirmClear = true }
                 }
             }
+            .appList()
             .navigationTitle("设置")
             .onAppear {
                 aliasText = store.settings.aliases.joined(separator: ", ")
@@ -276,7 +277,7 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Text("发送一条测试消息到微信")
-                        if sendingWeChatTest { Spacer(); ProgressView() }
+                        if sendingWeChatTest { Spacer(); DSSpinner() }
                     }
                 }
                 .disabled(pushToken.isEmpty || sendingWeChatTest)
@@ -324,7 +325,7 @@ struct SettingsView: View {
             } label: {
                 HStack {
                     Label("立即同步", systemImage: "arrow.triangle.2.circlepath")
-                    if store.isSyncing { Spacer(); ProgressView() }
+                    if store.isSyncing { Spacer(); DSSpinner() }
                 }
             }
             .disabled(!store.canSync || store.isSyncing)
@@ -394,6 +395,7 @@ struct ShiftTypesView: View {
                 Button("恢复默认") { store.settings.shiftTypes = ShiftType.defaults }
             }
         }
+        .appList()
         .navigationTitle("班次类型")
         .toolbar { EditButton() }
     }
@@ -431,6 +433,7 @@ private struct ShiftTypeEditor: View {
                 Text("排班文字完全等于其中一个才算，适合 D / N 这样的单字母。")
             }
         }
+        .appList()
         .navigationTitle(type.name)
         .onAppear {
             keywords = type.keywords.joined(separator: ", ")
@@ -483,7 +486,7 @@ struct GroupNotesView: View {
                 } label: {
                     HStack {
                         Text("现在从电脑版网页读取")
-                        if reading || store.isReadingDesktop { Spacer(); ProgressView() }
+                        if reading || store.isReadingDesktop { Spacer(); DSSpinner() }
                     }
                 }
                 .disabled(reading || store.isReadingDesktop || !store.canSync)
@@ -504,6 +507,7 @@ struct GroupNotesView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding()
                         }
+                        .appList()
                         .navigationTitle("读到的页面")
                     }
                 }
@@ -541,6 +545,7 @@ struct GroupNotesView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("各组工作内容")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -561,6 +566,7 @@ struct GroupNotesView: View {
                         Text("每个组用「组A：」开头，下面几行都算这个组的内容，直到下一个「组B：」。会替换这些组现在的说明。")
                     }
                 }
+                .appList()
                 .navigationTitle("粘贴各组工作内容")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

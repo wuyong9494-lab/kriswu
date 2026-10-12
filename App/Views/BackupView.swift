@@ -65,6 +65,7 @@ struct BackupView: View {
                 Section { Text(message) }
             }
         }
+        .appList()
         .navigationTitle("备份与恢复")
         .task { backupURL = try? store.backupFileURL() }
         // 一个页面只能有一个 fileImporter：选文件夹和选备份文件共用，看是哪个按钮打开的

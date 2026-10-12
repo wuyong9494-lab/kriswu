@@ -13,6 +13,7 @@ struct ShiftApp: App {
                 .environmentObject(store)
                 .preferredColorScheme(store.settings.appearance.colorScheme)
                 .task {
+                    guard !AppStore.isDemo else { return }
                     _ = await NotificationService.requestAuthorization()
                     await store.rescheduleNotifications()
                 }
@@ -20,6 +21,7 @@ struct ShiftApp: App {
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .active:
+                guard !AppStore.isDemo else { break }
                 Task {
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()
@@ -53,20 +55,73 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 }
 
 struct RootView: View {
+    enum Tab: String { case today, calendar, stats, site, settings }
+    @State private var tab: Tab
+
+    init() {
+        Appearance.apply()
+        // 截图时用启动参数 -screen xxx 直接打开某一页
+        _tab = State(initialValue: Tab(rawValue: UserDefaults.standard.string(forKey: "screen") ?? "") ?? .today)
+    }
+
     var body: some View {
-        TabView {
-            TodayView()
-                .tabItem { Label("今天", systemImage: "sun.max.fill") }
-            CalendarView()
-                .tabItem { Label("日历", systemImage: "calendar") }
-            NavigationStack { WorkloadView() }
-                .tabItem { Label("统计", systemImage: "chart.bar.xaxis") }
-            SiteView()
-                .tabItem { Label("网站", systemImage: "globe") }
-            SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+        Group {
+            if let screen = UserDefaults.standard.string(forKey: "screen"), Tab(rawValue: screen) == nil {
+                NavigationStack { ScreenCatalog.view(screen) }
+            } else {
+                TabView(selection: $tab) {
+                    TodayView()
+                        .tabItem { Label("今天", systemImage: "sun.max.fill") }
+                        .tag(Tab.today)
+                    CalendarView()
+                        .tabItem { Label("日历", systemImage: "calendar") }
+                        .tag(Tab.calendar)
+                    NavigationStack { WorkloadView() }
+                        .tabItem { Label("统计", systemImage: "chart.bar.xaxis") }
+                        .tag(Tab.stats)
+                    SiteView()
+                        .tabItem { Label("网站", systemImage: "globe") }
+                        .tag(Tab.site)
+                    SettingsView()
+                        .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                        .tag(Tab.settings)
+                }
+                .onChange(of: tab) { _ in Haptics.select() }
+            }
         }
-        .tint(Theme.accent)
+        .tint(DS.Palette.accent)
         .fontDesign(.rounded)
+        .overlay { ToastOverlay() }
+    }
+}
+
+/// 截图用：按名字打开某一页（只在启动参数 -screen 时用到）
+enum ScreenCatalog {
+    @MainActor @ViewBuilder
+    static func view(_ name: String) -> some View {
+        let today = DayKey.today
+        switch name {
+        case "fairness": FairnessView()
+        case "week": WeekRosterView()
+        case "swap": SwapHelperView(day: today.adding(days: 1))
+        case "ledger": SwapLedgerView()
+        case "year": YearStatsView()
+        case "summary": YearSummaryView(year: today.year)
+        case "check": DataCheckView()
+        case "rest": RestTrendView()
+        case "forecast": DutyForecastView()
+        case "holidays": HolidaysView()
+        case "rules": WorkloadRulesView()
+        case "team": TeamChangesView()
+        case "leave": LeavePlannerView()
+        case "automation": AutomationGuideView()
+        case "backup": BackupView()
+        case "diagnostics": DiagnosticsView()
+        case "search": MemberSearchView()
+        case "day": DayEditor(day: today)
+        case "roster": DayRosterView(day: today)
+        case "holidayduty": HolidayDutyView()
+        default: TodayView()
+        }
     }
 }

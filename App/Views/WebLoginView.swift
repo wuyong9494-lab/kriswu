@@ -36,6 +36,7 @@ struct WebLoginView: View {
                         .background(.thinMaterial)
                 }
             }
+            .appList()
             .navigationTitle("网页登录")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

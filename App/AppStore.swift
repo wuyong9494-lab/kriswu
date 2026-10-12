@@ -339,6 +339,7 @@ final class AppStore: ObservableObject {
     }
 
     private func saveRoster() {
+        if Self.isDemo { return }
         let raw = roster.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) }
         if let data = try? JSONEncoder().encode(raw) {
             try? data.write(to: Self.rosterURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
@@ -387,6 +388,56 @@ final class AppStore: ObservableObject {
         // init 里赋值不会触发 didSet，手动算一次
         publishedDays = Self.published(in: roster, matcher: ShiftMatcher(types: settings.shiftTypes))
         applyCustomHolidays()
+        if Self.isDemo { loadDemoData() }
+    }
+
+    /// 截图用的演示模式（启动参数 -demo）：全是虚构数据，不读写手机上的文件、不联网
+    static let isDemo = ProcessInfo.processInfo.arguments.contains("-demo")
+
+    private func loadDemoData() {
+        let me = "陈晨"
+        let people = [me, "林夏", "周远", "孙悦", "赵一凡", "钱程", "苏桐", "郑宁"]
+        let groups = ["组A", "组B", "组C", "组D", "组E"]
+        let today = DayKey.today
+        var r: Roster = [:]
+        for offset in -40...14 {
+            let day = today.adding(days: offset)
+            let weekday = Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12))
+            let workday = weekday != 1 && weekday != 7
+            let duty = people[((offset % 8) + 8) % 8]
+            r[duty, default: [:]][day] = "遥测"
+            // 值完遥测的第二天休息
+            let resting = people[((offset - 1) % 8 + 8) % 8]
+            r[resting, default: [:]][day] = "休息"
+            if workday {
+                var g = 0
+                for (i, p) in people.enumerated() where p != duty && p != resting && g < groups.count {
+                    if (i + offset) % 7 == 0 { continue }   // 有人没排岗位：正常上班
+                    r[p, default: [:]][day] = groups[(g + offset + 50) % groups.count]
+                    g += 1
+                }
+                r["何安", default: [:]][day] = "调度"
+            }
+            if offset == 3 { r["钱程", default: [:]][day] = "出差" }
+        }
+        var s = AppSettings()
+        s.aliases = [me]
+        s.favorites = ["林夏", "周远"]
+        s.restBalance = ["陈晨": 3, "林夏": 5, "周远": 1, "孙悦": 2, "赵一凡": 4, "钱程": 0, "苏桐": 6, "郑宁": 2]
+        s.restHistory = [me: [RestPoint(day: today.adding(days: -30), value: 1), RestPoint(day: today.adding(days: -18), value: 2),
+                              RestPoint(day: today.adding(days: -9), value: 4), RestPoint(day: today, value: 3)]]
+        s.manualGroupNotes = ["组A": "1、巡检机房；2、填写运行日志；3、16:30 前交接", "组B": "数据处理与归档",
+                              "组C": "设备维护", "组D": "值守监控", "组E": "外场保障"]
+        s.changeLog = [ChangeLogEntry(date: Date().addingTimeInterval(-3600),
+                                      text: "\(today.adding(days: 2).dateText)：组B → 组D（和周远对换：周远原来是组D，现在是组B）")]
+        s.swapRecords = [SwapRecord(day: today.adding(days: -6), person: "林夏", myOld: "遥测", myNew: "休息", effect: -1)]
+        s.teamChanges = [TeamChange(day: today.adding(days: 2), post: "组B", from: ["周远"], to: [me])]
+        s.lastSync = Date().addingTimeInterval(-600)
+        s.lastSyncMessage = "同步成功：网页接口，30 天，没有变动，全员 9 人"
+        settings = s
+        roster = r
+        schedule = r[me] ?? [:]
+        covered = Set((-40...14).map { today.adding(days: $0) })
     }
 
     /// 把自己录入的节假日交给统计用的节假日表
@@ -413,6 +464,7 @@ final class AppStore: ObservableObject {
     private static let rosterVersion = 3
 
     private func save() {
+        if Self.isDemo { return }
         let state = PersistedState(settings: settings,
                                    schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }),
                                    covered: covered.map(\.description).sorted())
@@ -641,7 +693,7 @@ final class AppStore: ObservableObject {
 
     // MARK: - 同步
 
-    var canSync: Bool { !settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty }
+    var canSync: Bool { !Self.isDemo && !settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty }
 
     @discardableResult
     /// full：一页页翻「值班查看」读全员排班（较慢，约半分钟）；后台和快捷指令里不翻页，只用网站接口补取全员排班，避免超过系统给的时间。

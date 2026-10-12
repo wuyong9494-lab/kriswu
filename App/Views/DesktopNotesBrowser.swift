@@ -20,6 +20,7 @@ struct DesktopNotesBrowser: View {
                     .frame(maxWidth: .infinity)
                     .background(.thinMaterial)
             }
+            .appList()
             .navigationTitle("电脑版网页")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

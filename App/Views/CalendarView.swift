@@ -5,7 +5,6 @@ struct CalendarView: View {
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
     @State private var editing: DayKey?
-    @State private var weChatResult: String?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
     private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
@@ -32,7 +31,7 @@ struct CalendarView: View {
                 }
                 .padding()
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .appBackground()
             .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
                 // 只认明显的横向滑动，上下滚动时不翻月
                 guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
@@ -52,7 +51,8 @@ struct CalendarView: View {
                             Task {
                                 let ok = await store.pushToWeChat(title: "\(year)年\(month)月排班统计",
                                                                   content: store.monthReport(year: year, month: month), force: true)
-                                weChatResult = ok ? "已发送到微信" : (store.settings.weChatMessage ?? "微信推送失败")
+                                ToastCenter.shared.show(ok ? "已发送到微信" : (store.settings.weChatMessage ?? "微信推送失败"),
+                                                        style: ok ? .success : .error)
                             }
                         } label: {
                             Label("把本月统计发到微信", systemImage: "message")
@@ -69,9 +69,6 @@ struct CalendarView: View {
                     }
                 }
             }
-            .alert(weChatResult ?? "", isPresented: Binding(get: { weChatResult != nil }, set: { if !$0 { weChatResult = nil } })) {
-                Button("好") {}
-            }
             .sheet(item: $editing) { DayEditor(day: $0) }
         }
     }
@@ -80,7 +77,7 @@ struct CalendarView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(verbatim: "\(year)年").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                Text(verbatim: "\(month)月").font(.largeTitle.bold())
+                Text(verbatim: "\(month)月").font(DS.Font.display)
             }
             Spacer()
             if year != DayKey.today.year || month != DayKey.today.month {
@@ -94,11 +91,11 @@ struct CalendarView: View {
             }
             Button { Haptics.tap(); move(-1) } label: {
                 Image(systemName: "chevron.left").font(.headline).frame(width: 40, height: 40)
-                    .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                    .background(.ultraThinMaterial, in: Circle())
             }
             Button { Haptics.tap(); move(1) } label: {
                 Image(systemName: "chevron.right").font(.headline).frame(width: 40, height: 40)
-                    .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                    .background(.ultraThinMaterial, in: Circle())
             }
         }
         .padding(.horizontal, 4)
@@ -268,6 +265,7 @@ struct DayEditor: View {
                     }
                 }
             }
+            .appList()
             .navigationTitle(day.dateText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

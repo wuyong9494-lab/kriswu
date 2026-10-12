@@ -70,7 +70,7 @@ struct WorkloadView: View {
                 } label: {
                     HStack {
                         Text("从电脑版网页读取前两个月")
-                        if reading || store.isReadingDesktop { Spacer(); ProgressView() }
+                        if reading || store.isReadingDesktop { Spacer(); DSSpinner() }
                     }
                 }
                 .disabled(reading || store.isReadingDesktop || !store.canSync)
@@ -89,6 +89,16 @@ struct WorkloadView: View {
                 }
             } footer: {
                 Text("用电脑版打开「值班查看」，点「上一周」往前翻 9 周，把每周的全员排班存下来（约半分钟）。每天第一次打开 App 时也会自动读一次。")
+            }
+            if !report.people.isEmpty {
+                Section {
+                    WorkloadBarChart(items: report.people.prefix(12).map {
+                        .init(name: $0.name, value: $0.workDays, highlight: store.isMe($0.name))
+                    })
+                    .padding(.vertical, DS.Space.xs)
+                } header: {
+                    Text("工作量排行")
+                }
             }
             ForEach(report.people, id: \.name) { person in
                 Section {
@@ -118,6 +128,7 @@ struct WorkloadView: View {
             }
         }
         .task(id: "\(year)-\(month)-\(store.roster.count)") { monthFile = store.workloadCSVFile(year: year, month: month) }
+        .appList()
         .navigationTitle("工作量统计")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -225,6 +236,7 @@ struct WorkloadDetailView: View {
                 .padding(.vertical, 4)
                 .background(.bar)
         }
+        .appList()
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -295,6 +307,7 @@ struct RotationMembersView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("只按排班算的人")
         .navigationBarTitleDisplayMode(.inline)
     }

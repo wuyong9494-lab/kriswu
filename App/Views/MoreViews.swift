@@ -83,6 +83,7 @@ struct WeekRosterView: View {
                 WeekTable(days: days).padding(8)
             }
         }
+        .appList()
         .navigationTitle("本周全员")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -214,6 +215,7 @@ struct AutomationGuideView: View {
                 Text("也可以直接对 Siri 说：「值班提醒明天什么班」「值班提醒今天谁值遥测」「值班提醒我下次遥测」。")
             }
         }
+        .appList()
         .navigationTitle("自动同步设置")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -258,6 +260,7 @@ struct HolidayDutyView: View {
                      : "统计 \(range.min()!.dateText) – \(range.max()!.dateText) 之间 App 记下的 \(range.count) 天法定假日（春节、国庆、中秋等），按节假日遥测次数排序。")
             }
         }
+        .appList()
         .navigationTitle("节假日值班")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -310,6 +313,7 @@ struct LeavePlannerView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("请假规划")
         .navigationBarTitleDisplayMode(.inline)
     }

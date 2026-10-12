@@ -79,6 +79,7 @@ struct FairnessView: View {
                                    text: WorkloadCSV.balance(weekReport, title: "本周（\(rangeText(week) ?? "")）") + "\n"
                                        + WorkloadCSV.balance(monthReport, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）"))
         }
+        .appList()
         .navigationTitle("工作量均衡")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -137,6 +138,7 @@ struct FairnessView: View {
 }
 
 private struct Summary: View {
+    @EnvironmentObject private var store: AppStore
     let report: BalanceReport
     let empty: String?
     var range: String?
@@ -153,13 +155,14 @@ private struct Summary: View {
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(report.verdict)
-                    .font(.title2.bold())
+                    .font(DS.Font.title)
                     .foregroundStyle(color)
                 Spacer()
-                Text("相差 \(report.spread) 天 · 平均 \(String(format: "%.1f", report.average)) 天")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Chip(text: "相差 \(report.spread) 天", color: color)
             }
+            WorkloadBarChart(items: report.rows.map { .init(name: $0.name, value: $0.workload.workDays, highlight: store.isMe($0.name)) },
+                             average: report.average)
+                .padding(.vertical, DS.Space.xs)
             ForEach(report.findings, id: \.self) { line in
                 Text(line).font(.subheadline)
             }
@@ -168,9 +171,9 @@ private struct Summary: View {
 
     private var color: Color {
         switch report.verdict {
-        case "均衡": return .green
-        case "基本均衡": return .orange
-        default: return .red
+        case "均衡": return DS.Palette.success
+        case "基本均衡": return DS.Palette.warning
+        default: return DS.Palette.danger
         }
     }
 }

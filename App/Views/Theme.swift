@@ -1,16 +1,78 @@
 import SwiftUI
 import UIKit
 
-/// 全 App 统一的样式：主色、卡片、标题、触感反馈。
-enum Theme {
-    /// 主色：沉稳的蓝
-    static let accent = Color(hex: "#3D6DF2")
-    static let cardRadius: CGFloat = 22
+// MARK: - 设计系统（Design System）
+//
+// 全 App 只从这里取颜色、间距、圆角、字体、阴影，页面里不写死数值。
+// 间距走 8pt 网格；表面用毛玻璃 + 极细描边（Glassmorphism），浅色模式下卡片顶边带一道高光（少量 Neumorphism）。
 
-    /// 按班次颜色做的渐变（左上亮、右下深）
+enum DS {
+    /// 8pt 网格（4 只用于图标和文字之间的微小间隔）
+    enum Space {
+        static let xxs: CGFloat = 4
+        static let xs: CGFloat = 8
+        static let s: CGFloat = 12
+        static let m: CGFloat = 16
+        static let l: CGFloat = 24
+        static let xl: CGFloat = 32
+        static let xxl: CGFloat = 48
+    }
+
+    enum Radius {
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+        static let xl: CGFloat = 24
+        static let xxl: CGFloat = 32
+    }
+
+    /// 颜色变量（自动适配浅色 / 深色）
+    enum Palette {
+        static let accent = Color(light: 0x5E6AD2, dark: 0x8A93FF)
+        static let accentSoft = Color(light: 0x5E6AD2, dark: 0x8A93FF, opacity: 0.14)
+        static let success = Color(light: 0x22A06B, dark: 0x4CC38A)
+        static let warning = Color(light: 0xE5900B, dark: 0xF5B342)
+        static let danger = Color(light: 0xE5484D, dark: 0xFF6369)
+        static let info = Color(light: 0x0E9AA7, dark: 0x3DD1DB)
+
+        static let background = Color(light: 0xF3F4F7, dark: 0x09090B)
+        static let backgroundGlowA = Color(light: 0x5E6AD2, dark: 0x5E6AD2, opacity: 0.10)
+        static let backgroundGlowB = Color(light: 0x0E9AA7, dark: 0x0E9AA7, opacity: 0.07)
+        /// 卡片表面（叠在毛玻璃上）
+        static let surface = Color(light: 0xFFFFFF, dark: 0x17181C, opacity: 0.78)
+        static let surfaceSunken = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.045)
+        static let hairline = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.07)
+        static let textTertiary = Color(uiColor: .tertiaryLabel)
+        static let shadow = Color(light: 0x1B1F3B, dark: 0x000000, opacity: 0.08)
+    }
+
+    /// 字体层级（全部圆体）
+    enum Font {
+        static let display = SwiftUI.Font.system(size: 34, weight: .bold, design: .rounded)
+        static let hero = SwiftUI.Font.system(size: 40, weight: .heavy, design: .rounded)
+        static let title = SwiftUI.Font.system(size: 22, weight: .semibold, design: .rounded)
+        static let headline = SwiftUI.Font.system(size: 17, weight: .semibold, design: .rounded)
+        static let body = SwiftUI.Font.system(size: 15, weight: .regular, design: .rounded)
+        static let callout = SwiftUI.Font.system(size: 15, weight: .medium, design: .rounded)
+        static let caption = SwiftUI.Font.system(size: 12, weight: .medium, design: .rounded)
+        static let overline = SwiftUI.Font.system(size: 11, weight: .semibold, design: .rounded)
+        static let number = SwiftUI.Font.system(size: 28, weight: .bold, design: .rounded).monospacedDigit()
+    }
+
+    enum Motion {
+        static let spring = Animation.spring(response: 0.38, dampingFraction: 0.82)
+        static let snappy = Animation.spring(response: 0.25, dampingFraction: 0.75)
+    }
+}
+
+/// 旧名字保留，页面里还在用
+enum Theme {
+    static var accent: Color { DS.Palette.accent }
+    static let cardRadius: CGFloat = DS.Radius.xl
+
+    /// 按班次颜色做的渐变（压暗一些，白字才看得清）
     static func gradient(_ color: Color) -> LinearGradient {
-        // 浅色（休息的绿、白班的橙）也要压暗一些，白字才看得清
-        LinearGradient(colors: [color.blended(with: .black, 0.18), color.blended(with: .black, 0.42)],
+        LinearGradient(colors: [color.blended(with: .black, 0.12), color.blended(with: .black, 0.45)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
@@ -26,7 +88,16 @@ enum Theme {
 }
 
 extension Color {
-    /// 和另一种颜色按比例混合（iOS 16 没有自带的 mix）
+    /// 浅色 / 深色两套颜色
+    init(light: UInt32, dark: UInt32, opacity: Double = 1) {
+        func ui(_ hex: UInt32) -> UIColor {
+            UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                    blue: CGFloat(hex & 0xFF) / 255, alpha: CGFloat(opacity))
+        }
+        self.init(uiColor: UIColor { $0.userInterfaceStyle == .dark ? ui(dark) : ui(light) })
+    }
+
+    /// 和另一种颜色按比例混合
     func blended(with other: Color, _ amount: CGFloat) -> Color {
         var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
         var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
@@ -37,49 +108,76 @@ extension Color {
     }
 }
 
-/// 卡片：圆角、柔和阴影，深色模式下用浅一点的底色
+// MARK: - 背景
+
+/// 全 App 统一背景：底色 + 两团很淡的光
+struct AppBackground: View {
+    var body: some View {
+        ZStack {
+            DS.Palette.background
+            RadialGradient(colors: [DS.Palette.backgroundGlowA, .clear], center: .topLeading, startRadius: 0, endRadius: 420)
+            RadialGradient(colors: [DS.Palette.backgroundGlowB, .clear], center: .bottomTrailing, startRadius: 0, endRadius: 380)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+extension View {
+    /// 列表、表单页面：去掉系统灰底，换成 App 背景
+    func appList() -> some View {
+        scrollContentBackground(.hidden)
+            .background(AppBackground())
+    }
+
+    /// 普通滚动页面的背景
+    func appBackground() -> some View {
+        background(AppBackground())
+    }
+}
+
+// MARK: - 卡片
+
+/// 玻璃卡片：毛玻璃 + 半透明表面 + 极细描边 + 柔和阴影；浅色模式下顶边一道高光
 struct CardModifier: ViewModifier {
     var tint: Color?
-    var padding: CGFloat = 16
+    var padding: CGFloat = DS.Space.m
+    @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous)
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-                    .overlay {
-                        if let tint {
-                            RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).fill(tint.opacity(0.12))
-                        }
-                    }
-                    .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
+                shape.fill(.ultraThinMaterial)
+                    .overlay(shape.fill(DS.Palette.surface))
+                    .overlay { if let tint { shape.fill(tint.opacity(scheme == .dark ? 0.14 : 0.08)) } }
+                    .overlay(shape.strokeBorder(
+                        LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.10 : 0.9), DS.Palette.hairline],
+                                       startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                    .shadow(color: DS.Palette.shadow, radius: 18, x: 0, y: 8)
+                    .shadow(color: DS.Palette.shadow.opacity(0.5), radius: 2, x: 0, y: 1)
             }
     }
 }
 
 extension View {
-    func card(tint: Color? = nil, padding: CGFloat = 16) -> some View {
+    func card(tint: Color? = nil, padding: CGFloat = DS.Space.m) -> some View {
         modifier(CardModifier(tint: tint, padding: padding))
     }
 }
 
-/// 卡片里的小标题：图标 + 文字 + 右边可选内容
+/// 卡片小标题：图标块 + 文字 + 右边可选内容
 struct CardTitle<Trailing: View>: View {
     let title: String
     let icon: String
-    var color: Color = Theme.accent
+    var color: Color = DS.Palette.accent
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(color)
-                .frame(width: 26, height: 26)
-                .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            Text(title).font(.headline)
+        HStack(spacing: DS.Space.xs) {
+            IconBadge(icon: icon, color: color, size: 28)
+            Text(title).font(DS.Font.headline)
             Spacer(minLength: 0)
             trailing()
         }
@@ -87,23 +185,315 @@ struct CardTitle<Trailing: View>: View {
 }
 
 extension CardTitle where Trailing == EmptyView {
-    init(title: String, icon: String, color: Color = Theme.accent) {
+    init(title: String, icon: String, color: Color = DS.Palette.accent) {
         self.init(title: title, icon: icon, color: color) { EmptyView() }
     }
 }
 
-/// 轻触反馈
-enum Haptics {
-    static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+/// 图标块：淡色底 + 彩色图标（filled 时为渐变底 + 白色图标）
+struct IconBadge: View {
+    let icon: String
+    var color: Color = DS.Palette.accent
+    var size: CGFloat = 32
+    var filled = false
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .foregroundStyle(filled ? Color.white : color)
+            .frame(width: size, height: size)
+            .background {
+                RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+                    .fill(filled ? AnyShapeStyle(LinearGradient(colors: [color.opacity(0.85), color],
+                                                                startPoint: .top, endPoint: .bottom))
+                                 : AnyShapeStyle(color.opacity(0.14)))
+            }
+    }
 }
 
-/// 按下时略微缩小的按钮样式
+/// 小标签（无边框）
+struct Chip: View {
+    let text: String
+    var color: Color = DS.Palette.accent
+    var icon: String?
+
+    var body: some View {
+        HStack(spacing: DS.Space.xxs) {
+            if let icon { Image(systemName: icon).font(.system(size: 10, weight: .bold)) }
+            Text(text).font(DS.Font.caption)
+        }
+        .padding(.horizontal, DS.Space.xs)
+        .padding(.vertical, DS.Space.xxs)
+        .foregroundStyle(color)
+        .background(color.opacity(0.13), in: Capsule())
+    }
+}
+
+/// 数字 + 说明
+struct StatTile: View {
+    let value: String
+    let label: String
+    var color: Color = .primary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(DS.Font.number).foregroundStyle(color)
+            Text(label).font(DS.Font.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// 分组小标题
+struct SectionLabel: View {
+    let text: String
+    var body: some View {
+        Text(text).font(DS.Font.overline).foregroundStyle(.secondary).kerning(0.6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Space.xxs)
+    }
+}
+
+/// 没有内容时
+struct EmptyState: View {
+    let icon: String
+    let title: String
+    var message: String?
+
+    var body: some View {
+        VStack(spacing: DS.Space.s) {
+            IconBadge(icon: icon, color: .secondary, size: 56)
+            Text(title).font(DS.Font.headline)
+            if let message {
+                Text(message).font(DS.Font.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, DS.Space.xl)
+    }
+}
+
+// MARK: - 按钮
+
+/// 主按钮 / 次按钮 / 轻按钮，按下时缩小、变暗
+struct DSButtonStyle: ButtonStyle {
+    enum Kind { case primary, secondary, ghost, destructive }
+    var kind: Kind = .primary
+    var fullWidth = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        DSButtonBody(configuration: configuration, kind: kind, fullWidth: fullWidth)
+    }
+}
+
+private struct DSButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let kind: DSButtonStyle.Kind
+    let fullWidth: Bool
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+        configuration.label
+            .font(DS.Font.callout)
+            .padding(.horizontal, DS.Space.m)
+            .padding(.vertical, DS.Space.s)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .foregroundStyle(foreground)
+            .background {
+                switch kind {
+                case .primary:
+                    shape.fill(LinearGradient(colors: [DS.Palette.accent.opacity(0.88), DS.Palette.accent],
+                                              startPoint: .top, endPoint: .bottom))
+                        .shadow(color: DS.Palette.accent.opacity(0.3), radius: configuration.isPressed ? 4 : 10, y: 4)
+                case .destructive:
+                    shape.fill(DS.Palette.danger)
+                case .secondary:
+                    shape.fill(.ultraThinMaterial).overlay(shape.strokeBorder(DS.Palette.hairline))
+                case .ghost:
+                    shape.fill(configuration.isPressed ? DS.Palette.accentSoft : Color.clear)
+                }
+            }
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .brightness(configuration.isPressed ? -0.04 : 0)
+            .opacity(isEnabled ? 1 : 0.45)
+            .animation(DS.Motion.snappy, value: configuration.isPressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .primary, .destructive: return .white
+        case .secondary: return .primary
+        case .ghost: return DS.Palette.accent
+        }
+    }
+}
+
+extension ButtonStyle where Self == DSButtonStyle {
+    static var primary: DSButtonStyle { DSButtonStyle(kind: .primary) }
+    static var primaryWide: DSButtonStyle { DSButtonStyle(kind: .primary, fullWidth: true) }
+    static var secondary: DSButtonStyle { DSButtonStyle(kind: .secondary) }
+    static var ghost: DSButtonStyle { DSButtonStyle(kind: .ghost) }
+}
+
+/// 按下时略微缩小（卡片、图块用）
 struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(DS.Motion.snappy, value: configuration.isPressed)
+    }
+}
+
+// MARK: - 输入框
+
+/// 圆角输入框：浅底、无边框
+struct DSFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .font(DS.Font.body)
+            .padding(DS.Space.s)
+            .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+    }
+}
+
+// MARK: - Loading
+
+/// 旋转的渐变圆环
+struct DSSpinner: View {
+    var size: CGFloat = 18
+    @State private var spinning = false
+
+    var body: some View {
+        Circle()
+            .trim(from: 0.08, to: 1)
+            .stroke(AngularGradient(colors: [DS.Palette.accent.opacity(0), DS.Palette.accent], center: .center),
+                    style: StrokeStyle(lineWidth: max(2, size * 0.14), lineCap: .round))
+            .frame(width: size, height: size)
+            .rotationEffect(.degrees(spinning ? 360 : 0))
+            .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: spinning)
+            .onAppear { spinning = true }
+    }
+}
+
+// MARK: - Toast
+
+/// 全局轻提示：顶部毛玻璃胶囊，几秒后自动收起
+@MainActor
+final class ToastCenter: ObservableObject {
+    static let shared = ToastCenter()
+
+    struct Toast: Equatable {
+        enum Style { case info, success, warning, error }
+        var id = UUID()
+        var text: String
+        var style: Style
+    }
+
+    @Published private(set) var current: Toast?
+    private var hideTask: Task<Void, Never>?
+
+    func show(_ text: String, style: Toast.Style = .info, seconds: Double = 3.5) {
+        withAnimation(DS.Motion.spring) { current = Toast(text: text, style: style) }
+        if style == .success { Haptics.success() } else if style == .error || style == .warning { Haptics.warning() }
+        hideTask?.cancel()
+        hideTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            withAnimation(DS.Motion.spring) { self?.current = nil }
+        }
+    }
+
+    func hide() { withAnimation(DS.Motion.spring) { current = nil } }
+}
+
+struct ToastOverlay: View {
+    @ObservedObject private var center = ToastCenter.shared
+
+    var body: some View {
+        VStack {
+            if let toast = center.current {
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: icon(toast.style)).foregroundStyle(color(toast.style))
+                    Text(toast.text).font(DS.Font.callout).lineLimit(3)
+                }
+                .padding(.horizontal, DS.Space.m)
+                .padding(.vertical, DS.Space.s)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(DS.Palette.hairline))
+                .shadow(color: DS.Palette.shadow, radius: 16, y: 6)
+                .padding(.horizontal, DS.Space.l)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onTapGesture { center.hide() }
+                .id(toast.id)
+            }
+            Spacer()
+        }
+        .padding(.top, DS.Space.xs)
+    }
+
+    private func icon(_ s: ToastCenter.Toast.Style) -> String {
+        switch s {
+        case .info: return "info.circle.fill"
+        case .success: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.octagon.fill"
+        }
+    }
+
+    private func color(_ s: ToastCenter.Toast.Style) -> Color {
+        switch s {
+        case .info: return DS.Palette.accent
+        case .success: return DS.Palette.success
+        case .warning: return DS.Palette.warning
+        case .error: return DS.Palette.danger
+        }
+    }
+}
+
+// MARK: - 触感
+
+enum Haptics {
+    static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+    static func select() { UISelectionFeedbackGenerator().selectionChanged() }
+    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+}
+
+// MARK: - 导航栏、标签栏外观
+
+enum Appearance {
+    /// 导航栏、标签栏：毛玻璃、圆体标题、没有分隔线
+    static func apply() {
+        func rounded(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
+            let base = UIFont.systemFont(ofSize: size, weight: weight)
+            return base.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: size) } ?? base
+        }
+        let nav = UINavigationBarAppearance()
+        nav.configureWithDefaultBackground()
+        nav.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
+        nav.shadowColor = .clear
+        nav.largeTitleTextAttributes = [.font: rounded(32, .bold)]
+        nav.titleTextAttributes = [.font: rounded(17, .semibold)]
+        let edge = UINavigationBarAppearance()
+        edge.configureWithTransparentBackground()
+        edge.largeTitleTextAttributes = nav.largeTitleTextAttributes
+        edge.titleTextAttributes = nav.titleTextAttributes
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().compactAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = edge
+
+        let tab = UITabBarAppearance()
+        tab.configureWithDefaultBackground()
+        tab.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
+        tab.shadowColor = .clear
+        let item = UITabBarItemAppearance()
+        item.normal.titleTextAttributes = [.font: rounded(10, .medium)]
+        item.selected.titleTextAttributes = [.font: rounded(10, .semibold)]
+        tab.stackedLayoutAppearance = item
+        tab.inlineLayoutAppearance = item
+        tab.compactInlineLayoutAppearance = item
+        UITabBar.appearance().standardAppearance = tab
+        UITabBar.appearance().scrollEdgeAppearance = tab
     }
 }

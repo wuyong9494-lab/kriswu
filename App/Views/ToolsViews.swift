@@ -47,6 +47,7 @@ struct SwapHelperView: View {
                 .padding(.vertical, 2)
             }
         }
+        .appList()
         .navigationTitle("找人换班")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -100,6 +101,7 @@ struct SwapLedgerView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("换班账本")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -135,6 +137,7 @@ private struct AddSwapView: View {
                 }
                 .pickerStyle(.inline)
             }
+            .appList()
             .navigationTitle("手动记一笔")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -190,7 +193,7 @@ struct YearStatsView: View {
                 } label: {
                     HStack {
                         Text("从电脑版网页读取 \(String(year)) 年 1 月以来的全员排班")
-                        if store.isReadingDesktop { Spacer(); ProgressView() }
+                        if store.isReadingDesktop { Spacer(); DSSpinner() }
                     }
                 }
                 .disabled(store.isReadingDesktop || !store.canSync)
@@ -214,6 +217,7 @@ struct YearStatsView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("全年统计")
         .navigationBarTitleDisplayMode(.inline)
         // 全年数据量大：换年份或全员排班更新时算一次，不在每次刷新界面时重算
@@ -246,6 +250,7 @@ struct DutyForecastView: View {
                 Text("按每个人过去值遥测的间隔（取中间值）推算：已经排好的显示排好的日子，没排的 = 上次 + 间隔。只是估计，换班、请假、出差都会打乱。")
             }
         }
+        .appList()
         .navigationTitle("遥测轮转预测")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -293,12 +298,29 @@ struct RestTrendView: View {
                     LabeledContent("现在待休", value: "\(store.settings.restBalance[selected] ?? 0) 天")
                     if points.count >= 2 {
                         Chart(points, id: \.day) { p in
+                            AreaMark(x: .value("日期", p.day.date(calendar: .app, hour: 12)), y: .value("待休", p.value))
+                                .interpolationMethod(.stepEnd)
+                                .foregroundStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.28), DS.Palette.accent.opacity(0.02)],
+                                                                startPoint: .top, endPoint: .bottom))
                             LineMark(x: .value("日期", p.day.date(calendar: .app, hour: 12)), y: .value("待休", p.value))
                                 .interpolationMethod(.stepEnd)
+                                .foregroundStyle(DS.Palette.accent)
+                                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                             PointMark(x: .value("日期", p.day.date(calendar: .app, hour: 12)), y: .value("待休", p.value))
+                                .foregroundStyle(DS.Palette.accent)
+                                .symbolSize(36)
                         }
-                        .chartYAxisLabel("天")
-                        .frame(height: 180)
+                        .chartYAxis {
+                            AxisMarks(position: .leading) { _ in
+                                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3])).foregroundStyle(DS.Palette.hairline)
+                                AxisValueLabel().font(DS.Font.caption)
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks { _ in AxisValueLabel(format: .dateTime.month().day()).font(DS.Font.caption) }
+                        }
+                        .frame(height: 200)
+                        .padding(.vertical, DS.Space.xs)
                     } else {
                         Text("数字变过两次以上才画得出趋势。App 每次同步读到人名后面的括号数字时记一笔。")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -317,6 +339,7 @@ struct RestTrendView: View {
                 Text("你的待休到了这个数会提醒一次，之后再涨才再提醒。" + (me == nil ? "（还没在全员排班里认出你的名字，先在「账号与同步」里填好名字。）" : ""))
             }
         }
+        .appList()
         .navigationTitle("待休趋势")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -371,6 +394,7 @@ struct HolidaysView: View {
                 }
             }
         }
+        .appList()
         .navigationTitle("法定节假日")
         .navigationBarTitleDisplayMode(.inline)
     }

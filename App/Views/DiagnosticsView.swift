@@ -52,6 +52,7 @@ struct DiagnosticsView: View {
                 Text("复制的内容不包含密码和 token，可以直接发给帮你排查问题的人。")
             }
         }
+        .appList()
         .navigationTitle("诊断")
         .task { await load() }
     }
