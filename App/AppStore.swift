@@ -1007,6 +1007,18 @@ final class AppStore: ObservableObject {
         return true
     }
 
+    /// 把这个 App 设成某个人用：名字换成他，清掉和上一个人有关的提醒记录，马上按新名字同步
+    func setMe(_ name: String) {
+        var s = settings
+        s.aliases = [name]
+        s.warnedRestKeys = []
+        s.restAlertNotified = nil
+        settings = s
+        dutyTurnCache = nil
+        guard canSync else { return }
+        Task { await sync(userInitiated: true, source: "换了使用者") }
+    }
+
     // MARK: 排班规律：下次遥测、排班预警
 
     /// 按「顺序 + 请假出差顺延」推算的下次遥测

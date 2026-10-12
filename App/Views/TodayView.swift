@@ -22,6 +22,15 @@ struct TodayView: View {
                         if store.syncIsStale {
                             StaleSyncBanner()
                         }
+                        if store.settings.aliases.isEmpty && !store.roster.isEmpty {
+                            NavigationLink { WhoAmIView() } label: {
+                                Label("还没设置你是谁：点这里从全员名单里选自己", systemImage: "person.crop.circle.badge.questionmark")
+                                    .font(DS.Font.body)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .card(tint: DS.Palette.accent)
+                            }
+                            .buttonStyle(PressableStyle())
+                        }
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }

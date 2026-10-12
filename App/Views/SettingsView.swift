@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var pendingCount = 0
     @State private var calendarMessage: String?
+    @State private var syncingName = false
 
     var body: some View {
         NavigationStack {
@@ -225,10 +226,35 @@ struct SettingsView: View {
                         .map { $0.trimmingCharacters(in: .whitespaces) }
                         .filter { !$0.isEmpty }
                 }
+            NavigationLink {
+                WhoAmIView { aliasText = $0 }
+            } label: {
+                Label("从全员名单里选我是谁", systemImage: "person.crop.circle.badge.checkmark")
+            }
+            Button {
+                syncingName = true
+                Task { @MainActor in
+                    let ok = await store.sync(userInitiated: true, source: "改名字后同步")
+                    syncingName = false
+                    ToastCenter.shared.show(store.settings.lastSyncMessage ?? (ok ? "已同步" : "同步失败"), style: ok ? .success : .error)
+                }
+            } label: {
+                HStack {
+                    Label("用这个名字同步", systemImage: "arrow.triangle.2.circlepath")
+                    if syncingName || store.isSyncing { Spacer(); DSSpinner() }
+                }
+            }
+            .disabled(!store.canSync || syncingName || store.isSyncing || store.settings.aliases.isEmpty)
+            if let me = store.myRosterName {
+                Label("全员排班里认出你是：\(me)", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.footnote)
+            } else if !store.settings.aliases.isEmpty && !store.roster.isEmpty {
+                Label("全员排班里还没找到这个名字：检查写法，或者从名单里选", systemImage: "questionmark.circle")
+                    .foregroundStyle(DS.Palette.warning).font(.footnote)
+            }
         } header: {
             Text("我的名字")
         } footer: {
-            Text("多人排班表里用这些名字找到你，多个写法用逗号分开（中文名、拼音、工号都可以）。")
+            Text("谁用这个 App，就把名字设成谁：多人排班表里用这些名字找到你，多个写法用逗号分开（中文名、拼音、工号都可以）。改完点「用这个名字同步」，提醒、统计、预测都会换成这个人的。")
         }
     }
 
@@ -707,5 +733,69 @@ struct VoicePickerView: View {
             }
             .contentShape(Rectangle())
         }
+    }
+}
+
+
+/// 从全员排班的名单里点一下，把这个 App 设成这个人用
+struct WhoAmIView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    var onPick: (String) -> Void = { _ in }
+
+    var body: some View {
+        let zh = Locale(identifier: "zh_CN")
+        let today = DayKey.today
+        let names = store.roster.keys
+            .filter { query.isEmpty || $0.localizedCaseInsensitiveContains(query) }
+            .sorted { $0.compare($1, locale: zh) == .orderedAscending }
+        List {
+            if store.roster.isEmpty {
+                Section {
+                    Text("还没有全员名单。先在「账号与同步」里填好网址和账号，同步一次就能在这里选。")
+                        .foregroundStyle(.secondary)
+                    Button {
+                        Task { await store.sync(userInitiated: true, source: "选我是谁") }
+                    } label: {
+                        HStack {
+                            Label("现在同步", systemImage: "arrow.triangle.2.circlepath")
+                            if store.isSyncing { Spacer(); DSSpinner() }
+                        }
+                    }
+                    .disabled(!store.canSync || store.isSyncing)
+                }
+            } else {
+                Section {
+                    ForEach(names, id: \.self) { name in
+                        Button {
+                            Haptics.tap()
+                            store.setMe(name)
+                            onPick(name)
+                            ToastCenter.shared.show("已设为 \(name)，正在同步", style: .success)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: DS.Space.s) {
+                                Avatar(name: name, size: 30)
+                                Text(name).foregroundStyle(Color.primary)
+                                Spacer()
+                                if let post = store.roster[name]?[today] {
+                                    Text("今天 " + store.matcher.displayName(post)).font(.caption).foregroundStyle(.secondary)
+                                }
+                                if store.myRosterName == name {
+                                    Image(systemName: "checkmark").foregroundStyle(DS.Palette.accent).fontWeight(.semibold)
+                                }
+                            }
+                        }
+                    }
+                } footer: {
+                    Text("选好后提醒、工作量、遥测预测、排班预警都会换成这个人的，并马上重新同步一次。")
+                }
+            }
+        }
+        .searchable(text: $query, prompt: "搜名字")
+        .appList()
+        .navigationTitle("我是谁")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
