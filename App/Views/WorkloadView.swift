@@ -17,35 +17,53 @@ struct WorkloadView: View {
                     .foregroundStyle(.orange)
             }
             Section {
-                NavigationLink {
-                    FairnessView()
-                } label: {
-                    Label("工作量均衡分析（本周、本月谁干得多 / 少）", systemImage: "scalemass")
-                        .font(.headline)
-                }
-            }
-            Section {
-                HStack {
-                    Button { move(-1) } label: { Image(systemName: "chevron.left") }
+                HStack(spacing: DS.Space.s) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(verbatim: "\(year)年").font(DS.Font.caption).foregroundStyle(.secondary)
+                        Text(verbatim: "\(month)月").font(DS.Font.title)
+                    }
                     Spacer()
-                    Text(verbatim: "\(year)年\(month)月").font(.headline)
-                    Spacer()
-                    Button { move(1) } label: { Image(systemName: "chevron.right") }
+                    Button { Haptics.tap(); move(-1) } label: {
+                        Image(systemName: "chevron.left").font(.headline).frame(width: 36, height: 36)
+                            .background(DS.Palette.surfaceSunken, in: Circle())
+                    }
+                    Button { Haptics.tap(); move(1) } label: {
+                        Image(systemName: "chevron.right").font(.headline).frame(width: 36, height: 36)
+                            .background(DS.Palette.surfaceSunken, in: Circle())
+                    }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                if let first = report.days.first, let last = report.days.last {
+                    HStack(spacing: DS.Space.xs) {
+                        Chip(text: "\(report.days.count) 天", icon: "calendar")
+                        Chip(text: "\(first.month)/\(first.day) – \(last.month)/\(last.day)", color: .secondary)
+                        Chip(text: "\(report.people.count) 人", color: DS.Palette.info, icon: "person.2.fill")
+                    }
+                }
+                if !report.people.isEmpty {
+                    WorkloadBarChart(items: report.people.prefix(12).map {
+                        .init(name: $0.name, value: $0.workDays, highlight: store.isMe($0.name))
+                    })
+                    .padding(.vertical, DS.Space.xs)
+                }
             } footer: {
-                Text(report.days.isEmpty
-                     ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位算「日常班」；工作日网站上没排岗位、也没写休息的是正常上班，也算日常班；调度没排班的日子不算。节假日里遥测后紧接着的休息是节假日值班换来的，算「值班调休」；平时的休息、调休（值班换来的、请假的）都算休息。「工作量」= 值班 + 值班调休 + 日常 + 出差；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                if report.days.isEmpty {
+                    Text("这个月还没有全员排班数据。")
+                } else {
+                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「值班」只算遥测；各组、调度等岗位算「日常班」；工作日网站上没排岗位、也没写休息的是正常上班，也算日常班；调度没排班的日子不算。节假日里遥测后紧接着的休息算「值班调休」；平时的休息、调休都算休息。「工作量」= 值班 + 值班调休 + 日常 + 出差；「节假日」是法定假日里网站上没排任何岗位的天数。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                }
             }
             Section {
-                NavigationLink { YearStatsView() } label: { Label("全年统计 / 导出表格", systemImage: "calendar") }
-                NavigationLink { DutyForecastView() } label: { Label("遥测轮转预测", systemImage: "antenna.radiowaves.left.and.right") }
-                NavigationLink { DataCheckView() } label: { Label("数据核对（找读漏、读错）", systemImage: "checkmark.shield") }
-                NavigationLink { WorkloadRulesView() } label: { Label("工作量规则", systemImage: "slider.horizontal.3") }
-                NavigationLink { TeamChangesView() } label: { Label("全员换班记录", systemImage: "arrow.left.arrow.right") }
-                NavigationLink { HolidayDutyView() } label: { Label("节假日值班统计", systemImage: "flag") }
-                NavigationLink { RestTrendView() } label: { Label("待休趋势", systemImage: "chart.line.uptrend.xyaxis") }
+                ToolGrid(items: [
+                    .init(title: "均衡分析", icon: "scalemass.fill", color: .indigo, destination: AnyView(FairnessView())),
+                    .init(title: "全年统计", icon: "calendar", color: .blue, destination: AnyView(YearStatsView())),
+                    .init(title: "遥测预测", icon: "antenna.radiowaves.left.and.right", color: .teal, destination: AnyView(DutyForecastView())),
+                    .init(title: "数据核对", icon: "checkmark.shield.fill", color: .green, destination: AnyView(DataCheckView())),
+                    .init(title: "规则", icon: "slider.horizontal.3", color: .gray, destination: AnyView(WorkloadRulesView())),
+                    .init(title: "换班记录", icon: "arrow.left.arrow.right", color: .orange, destination: AnyView(TeamChangesView())),
+                    .init(title: "节假日值班", icon: "flag.fill", color: .red, destination: AnyView(HolidayDutyView())),
+                    .init(title: "待休趋势", icon: "chart.line.uptrend.xyaxis", color: .purple, destination: AnyView(RestTrendView())),
+                ])
                 NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
                 if let monthFile {
                     ShareLink(item: monthFile) { Label("导出本月表格（Excel 能打开）", systemImage: "tablecells") }
@@ -89,16 +107,6 @@ struct WorkloadView: View {
                 }
             } footer: {
                 Text("用电脑版打开「值班查看」，点「上一周」往前翻 9 周，把每周的全员排班存下来（约半分钟）。每天第一次打开 App 时也会自动读一次。")
-            }
-            if !report.people.isEmpty {
-                Section {
-                    WorkloadBarChart(items: report.people.prefix(12).map {
-                        .init(name: $0.name, value: $0.workDays, highlight: store.isMe($0.name))
-                    })
-                    .padding(.vertical, DS.Space.xs)
-                } header: {
-                    Text("工作量排行")
-                }
             }
             ForEach(report.people, id: \.name) { person in
                 Section {

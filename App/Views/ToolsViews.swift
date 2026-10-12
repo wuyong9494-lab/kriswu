@@ -201,20 +201,36 @@ struct YearStatsView: View {
                     Text(message).font(.footnote).foregroundStyle(.secondary)
                 }
             } footer: {
-                Text(self.report == nil ? "正在统计…" : report.days.isEmpty ? "这一年还没有全员排班数据。"
-                     : "统计 \(report.days.first!.dateText) – \(report.days.last!.dateText) 共 \(report.days.count) 天（只算到今天），规则和每月统计一样。前面缺的月份点上面的按钮，用电脑版「值班查看」一周周往前翻着读（翻几十周要 1–2 分钟，读的时候别离开 App）。")
+                if self.report == nil {
+                    Text("正在统计…")
+                } else if report.days.isEmpty {
+                    Text("这一年还没有全员排班数据。")
+                } else {
+                    ExpandableText(text: "统计 \(report.days.first!.dateText) – \(report.days.last!.dateText) 共 \(report.days.count) 天（只算到今天），规则和每月统计一样。前面缺的月份点上面的按钮，用电脑版「值班查看」一周周往前翻着读（翻几十周要 1–2 分钟，读的时候别离开 App）。")
+                }
             }
             ForEach(report.people, id: \.name) { p in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(p.name).font(.headline)
-                            .foregroundStyle(store.isMe(p.name) ? Color.accentColor : Color.primary)
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(p.name).font(DS.Font.headline)
+                            .foregroundStyle(store.isMe(p.name) ? DS.Palette.accent : Color.primary)
                         Spacer()
-                        Text("工作量 \(p.workDays) 天").font(.headline)
+                        Text("\(p.workDays)").font(DS.Font.title.monospacedDigit())
+                        Text("天").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
-                    Text("遥测 \(p.dutyDays) 次 · 节假日上班 \(p.holidayWorkedDays) 天 · 值班调休 \(p.dutyRestDays) · 日常 \(p.regularDays) · 出差 \(p.tripDays) · 休息 \(p.offDays) · 节假日 \(p.holidayDays)")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: DS.Space.xxs) {
+                            Chip(text: "遥测 \(p.dutyDays)", color: DS.Palette.info)
+                            Chip(text: "节假日上班 \(p.holidayWorkedDays)", color: DS.Palette.danger)
+                            Chip(text: "日常 \(p.regularDays)", color: DS.Palette.accent)
+                            if p.dutyRestDays > 0 { Chip(text: "值班调休 \(p.dutyRestDays)", color: .indigo) }
+                            if p.tripDays > 0 { Chip(text: "出差 \(p.tripDays)", color: DS.Palette.warning) }
+                            Chip(text: "休息 \(p.offDays)", color: DS.Palette.success)
+                            Chip(text: "节假日 \(p.holidayDays)", color: .secondary)
+                        }
+                    }
                 }
+                .padding(.vertical, DS.Space.xxs)
             }
         }
         .appList()

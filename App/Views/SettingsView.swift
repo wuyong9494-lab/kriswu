@@ -112,10 +112,20 @@ struct SettingsView: View {
     }
 
     private static func iconColor(_ icon: String) -> Color {
-        let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .indigo, .red, .brown, .mint, .cyan]
-        // 同一个图标总是同一种颜色
-        let sum = icon.unicodeScalars.reduce(0) { $0 + Int($1.value) }
-        return palette[sum % palette.count]
+        switch icon {
+        case "arrow.triangle.2.circlepath": return .blue
+        case "bell": return .red
+        case "message": return .green
+        case "list.bullet.rectangle": return .orange
+        case "wand.and.stars": return .purple
+        case "book.closed": return .brown
+        case "calendar.badge.exclamationmark": return .pink
+        case "paintpalette": return .indigo
+        case "square.and.arrow.down": return .teal
+        case "externaldrive": return .gray
+        case "stethoscope": return .mint
+        default: return DS.Palette.accent
+        }
     }
 
     private var syncSummary: String {

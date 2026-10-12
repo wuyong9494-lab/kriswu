@@ -70,20 +70,37 @@ struct WeekRosterView: View {
 
     var body: some View {
         let days = self.days
-        VStack(spacing: 8) {
-            HStack {
-                Button { weekOffset -= 1 } label: { Image(systemName: "chevron.left") }
-                Spacer()
-                Text("\(days[0].dateText) – \(days[6].dateText)").font(.headline)
-                Spacer()
-                Button { weekOffset += 1 } label: { Image(systemName: "chevron.right") }
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                HStack(spacing: DS.Space.s) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(weekOffset == 0 ? "本周" : (weekOffset == 1 ? "下周" : (weekOffset == -1 ? "上周" : "第 \(weekOffset) 周")))
+                            .font(DS.Font.caption).foregroundStyle(.secondary)
+                        Text("\(days[0].month)/\(days[0].day) – \(days[6].month)/\(days[6].day)").font(DS.Font.title)
+                    }
+                    Spacer()
+                    Button { Haptics.tap(); withAnimation(DS.Motion.spring) { weekOffset -= 1 } } label: {
+                        Image(systemName: "chevron.left").font(.headline).frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    Button { Haptics.tap(); withAnimation(DS.Motion.spring) { weekOffset += 1 } } label: {
+                        Image(systemName: "chevron.right").font(.headline).frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, DS.Space.m)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    WeekTable(days: days)
+                        .padding(DS.Space.s)
+                        .card(padding: 0)
+                        .padding(.horizontal, DS.Space.m)
+                        .padding(.bottom, DS.Space.l)
+                }
             }
-            .padding(.horizontal)
-            ScrollView([.horizontal, .vertical]) {
-                WeekTable(days: days).padding(8)
-            }
+            .padding(.top, DS.Space.xs)
         }
-        .appList()
+        .appBackground()
         .navigationTitle("本周全员")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -130,7 +147,7 @@ private struct WeekTable: View {
             if ra != rb { return ra }
             return a.compare(b, locale: zh) == .orderedAscending
         }
-        Grid(horizontalSpacing: 2, verticalSpacing: 2) {
+        Grid(horizontalSpacing: DS.Space.xxs, verticalSpacing: DS.Space.xxs) {
             GridRow {
                 Text("").frame(width: 64)
                 ForEach(days, id: \.self) { d in
@@ -144,17 +161,18 @@ private struct WeekTable: View {
             }
             ForEach(names, id: \.self) { name in
                 GridRow {
-                    Text(name).font(.caption.bold()).lineLimit(1).frame(width: 64, alignment: .leading)
+                    Text(name).font(DS.Font.caption.weight(.semibold)).lineLimit(1).frame(width: 64, alignment: .leading)
                         .foregroundStyle(store.isMe(name) ? Color.accentColor : Color.primary)
                     ForEach(days, id: \.self) { d in
                         let raw = people[name]?[d]
                         let type = raw.flatMap(store.matcher.match)
                         Text(raw.map(store.matcher.displayName) ?? "")
-                            .font(.caption2)
+                            .font(DS.Font.caption)
                             .lineLimit(2)
                             .minimumScaleFactor(0.7)
-                            .frame(width: 58, height: 30)
-                            .background((type.map { Color(hex: $0.colorHex) } ?? .clear).opacity(0.22))
+                            .frame(width: 58, height: 32)
+                            .background((type.map { Color(hex: $0.colorHex) } ?? DS.Palette.surfaceSunken).opacity(type == nil ? 1 : 0.2),
+                                        in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
                     }
                 }
             }

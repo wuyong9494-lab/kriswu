@@ -1129,8 +1129,10 @@ final class UpgradeTests: XCTestCase {
         for i in 0..<6 { roster["人\(i)"] = Dictionary(uniqueKeysWithValues: (12...16).map { (d($0), "组B") }) }
         roster["人0"]?[d(16)] = nil
         for i in 1..<6 { roster["人\(i)"]?[d(16)] = nil }   // 16 日只剩甲乙以外 0 人
-        let issues = DataCheck.issues(roster: roster, published: Set((12...16).map(d)), matcher: m, members: nil,
-                                      today: d(16), calendar: cal)
+        roster["人0"]?[d(17)] = "遥测"      // 周六只有值班的人：不算人数偏少
+        let issues = DataCheck.issues(roster: roster, published: Set((12...17).map(d)), matcher: m, members: nil,
+                                      today: d(17), calendar: cal)
+        XCTAssertFalse(issues.contains { $0.kind == .thinDay && $0.day == d(17) })
         XCTAssertTrue(issues.contains { $0.kind == .noRestAfterDuty && $0.name == "甲" && $0.day == d(13) }, "\(issues)")
         XCTAssertTrue(issues.contains { $0.kind == .unknownPost && $0.text.contains("测控岗") })
         XCTAssertTrue(issues.contains { $0.kind == .thinDay && $0.day == d(16) })

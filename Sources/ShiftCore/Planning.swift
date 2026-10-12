@@ -150,9 +150,12 @@ public enum DataCheck {
         }
 
         // 3. 某天读到的人明显比平时少：可能这天没读全
-        let counts = recent.map { d in (d, roster.values.filter { $0[d] != nil }.count) }
-        let sorted = counts.map(\.1).sorted()
-        if sorted.count >= 5 {
+        // 工作日和周末、假日分开比（周末本来就只有遥测、休息的人）
+        for workday in [true, false] {
+            let counts = recent.filter { ChinaHolidays.isWorkday($0, calendar: calendar) == workday }
+                .map { d in (d, roster.values.filter { $0[d] != nil }.count) }
+            let sorted = counts.map(\.1).sorted()
+            guard sorted.count >= 5 else { continue }
             let median = sorted[sorted.count / 2]
             for (d, n) in counts.sorted(by: { $0.0 > $1.0 }) where n * 2 < median {
                 result.append(DataIssue(kind: .thinDay, day: d, name: nil, text: "\(d.month)月\(d.day)日只读到 \(n) 人（平时约 \(median) 人），可能没读全"))

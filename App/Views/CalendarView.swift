@@ -163,7 +163,7 @@ private struct DayCell: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(display.map { $0.color.opacity(0.18) } ?? (unassigned ? Color.gray.opacity(0.12) : Color(.secondarySystemGroupedBackground)))
+                .fill(display.map { $0.color.opacity(0.18) } ?? (unassigned ? DS.Palette.surfaceSunken : Color.clear))
         )
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isToday ? Theme.accent : .clear, lineWidth: 2))
         .contentShape(Rectangle())

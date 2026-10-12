@@ -165,15 +165,17 @@ struct YearSummaryCard: View {
         let busiest = months.max { $0.work < $1.work }
         VStack(alignment: .leading, spacing: 14) {
             Text(verbatim: "\(year) 年 · \(me.name)").font(.title2.bold())
-            HStack(spacing: 18) {
-                stat("\(me.workDays)", "天工作量")
-                stat("\(me.dutyDays)", "次遥测")
-                stat("\(holidayDuty)", "次节假日遥测")
-            }
-            HStack(spacing: 18) {
-                stat("\(me.holidayWorkedDays)", "天节假日上班")
-                stat("\(me.tripDays)", "天出差")
-                stat("\(me.offDays)", "天休息")
+            Grid(alignment: .leading, horizontalSpacing: DS.Space.l, verticalSpacing: DS.Space.s) {
+                GridRow {
+                    stat("\(me.workDays)", "天工作量")
+                    stat("\(me.dutyDays)", "次遥测")
+                    stat("\(holidayDuty)", "次节假日遥测")
+                }
+                GridRow {
+                    stat("\(me.holidayWorkedDays)", "天节假日上班")
+                    stat("\(me.tripDays)", "天出差")
+                    stat("\(me.offDays)", "天休息")
+                }
             }
             if let busiest, busiest.work > 0 {
                 Text("最忙的是 \(busiest.month) 月，上了 \(busiest.work) 天").font(.headline)

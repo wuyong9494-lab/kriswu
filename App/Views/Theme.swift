@@ -497,3 +497,57 @@ enum ChromeAppearance {
         UITabBar.appearance().scrollEdgeAppearance = tab
     }
 }
+
+// MARK: - 可展开的说明文字
+
+/// 长说明默认只露两行，点「展开说明」看全部（减少满屏文字）
+struct ExpandableText: View {
+    let text: String
+    var lines = 2
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            Text(text)
+                .lineLimit(expanded ? nil : lines)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(expanded ? "收起" : "展开说明") {
+                Haptics.tap()
+                withAnimation(DS.Motion.spring) { expanded.toggle() }
+            }
+            .font(DS.Font.caption)
+            .foregroundStyle(DS.Palette.accent)
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+/// 一行工具图标（列表页顶部用）：图标块 + 名字，四个一行
+struct ToolGrid: View {
+    struct Item: Identifiable {
+        let id = UUID()
+        let title: String
+        let icon: String
+        let color: Color
+        let destination: AnyView
+    }
+
+    let items: [Item]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.s), count: 4)
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: DS.Space.m) {
+            ForEach(items) { item in
+                NavigationLink(destination: item.destination) {
+                    VStack(spacing: DS.Space.xs) {
+                        IconBadge(icon: item.icon, color: item.color, size: 44, filled: true)
+                        Text(item.title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PressableStyle())
+            }
+        }
+        .padding(.vertical, DS.Space.xs)
+    }
+}

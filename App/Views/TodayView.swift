@@ -57,7 +57,7 @@ struct TodayView: View {
                 ToastCenter.shared.show(store.settings.lastSyncMessage ?? (ok ? "已同步" : "同步失败"),
                                         style: ok ? .success : .error)
             }
-            .navigationTitle("值班提醒")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
