@@ -64,44 +64,72 @@ public enum HolidayInput {
     private static let dateToken = try! NSRegularExpression(
         pattern: #"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*日?|\d{1,2}\s*[-/.月]\s*\d{1,2}\s*日?|\d{1,2}\s*日"#)
 
+    private enum Kind { case off, work }
+
+    /// 一个分句说的是放假还是上班（没写就是 nil，跟着同一句里后面/前面的分句）
+    private static func kind(of clause: String) -> Kind? {
+        if (clause.contains("上班") || clause.contains("补班")) && !clause.contains("放假") { return .work }
+        if clause.contains("放假") || clause.contains("休") { return .off }
+        return nil
+    }
+
     public static func parse(_ text: String, reference: DayKey, calendar: Calendar = .current) -> Result {
         var result = Result(off: [], work: [], skipped: [])
         let parser = DateTokenParser(reference: reference)
         for rawLine in text.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
-            let isWork = line.contains("班") && !line.contains("放假")
-            // 按「至」「~」分成前后两半，每半找出里面的日期（旁边写的「元旦」「春节」之类不管）
-            var pieces = [line]
-            for sep in rangeSeparators where line.contains(sep) {
-                pieces = line.components(separatedBy: sep)
-                break
-            }
-            func token(_ piece: String) -> String? {
-                guard let m = dateToken.firstMatch(in: piece, range: NSRange(piece.startIndex..., in: piece)),
-                      let r = Range(m.range, in: piece) else { return nil }
-                return String(piece[r])
-            }
-            var dates = pieces.compactMap { token($0).flatMap(parser.parse) }
-            // 「1月1日至3日」：后半只写了日
-            if dates.count == 1, pieces.count == 2, let first = dates.first, let t = token(pieces[1]),
-               let end = parser.parseDayOnly(t, year: first.year, month: first.month) {
-                dates.append(end)
-            }
-            guard let first = dates.first, dates.count == pieces.count else {
-                result.skipped.append(line)
-                continue
-            }
-            var days = [first]
-            if dates.count == 2, let last = dates.last, last > first {
-                var d = first
-                while d < last, days.count < 40 {
-                    d = d.adding(days: 1, calendar: calendar)
-                    days.append(d)
+            var found = false
+            // 一行里可能有好几句：「1月1日（周五）至3日（周日）放假调休，共3天。1月4日（周一）上班」
+            for sentence in line.split(whereSeparator: { "。；;".contains($0) }).map(String.init) {
+                let clauses = sentence.split(whereSeparator: { "，,".contains($0) }).map(String.init)
+                let kinds = clauses.map(kind(of:))
+                for (i, clause) in clauses.enumerated() {
+                    let days = dates(in: clause, parser: parser, calendar: calendar)
+                    guard !days.isEmpty else { continue }
+                    found = true
+                    // 分句里没写放假还是上班：看同一句后面的，再看前面的，都没有算放假
+                    let k = kinds[i] ?? kinds[(i + 1)...].compactMap { $0 }.first
+                        ?? kinds[..<i].compactMap { $0 }.last ?? .off
+                    if k == .work { result.work += days } else { result.off += days }
                 }
             }
-            if isWork { result.work += days } else { result.off += days }
+            if !found { result.skipped.append(line) }
         }
         return result
+    }
+
+    /// 分句里所有日期：「1月1日至3日」展开成 1、2、3 日，「2月14日、2月28日」是两天
+    private static func dates(in clause: String, parser: DateTokenParser, calendar: Calendar) -> [DayKey] {
+        let ns = clause as NSString
+        let matches = dateToken.matches(in: clause, range: NSRange(location: 0, length: ns.length))
+        var days: [DayKey] = []
+        var previous: DayKey?
+        var lastEnd = 0
+        for m in matches {
+            let token = ns.substring(with: m.range)
+            let between = ns.substring(with: NSRange(location: lastEnd, length: m.range.location - lastEnd))
+            lastEnd = m.range.location + m.range.length
+            let isRangeEnd = previous != nil && rangeSeparators.contains(where: between.contains)
+            var day = parser.parse(token)
+            if day == nil, let p = previous { day = parser.parseDayOnly(token, year: p.year, month: p.month) }
+            guard var d = day else { continue }
+            if isRangeEnd, let first = previous {
+                // 跨年：「12月31日至1月2日」
+                if d < first { d = DayKey(year: d.year + 1, month: d.month, day: d.day) }
+                var x = first
+                var count = 0
+                while x < d, count < 40 {
+                    x = x.adding(days: 1, calendar: calendar)
+                    days.append(x)
+                    count += 1
+                }
+                previous = nil   // 一段范围结束
+            } else {
+                days.append(d)
+                previous = d
+            }
+        }
+        return days
     }
 }

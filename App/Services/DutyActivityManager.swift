@@ -57,7 +57,11 @@ enum DutyActivityManager {
                 Task { await activity.end(nil, dismissalPolicy: .immediate) }
             }
         }
-        guard let target, !showing, UIApplication.shared.applicationState == .active else { return }
+        // 每次值班只自动显示一次：你划掉了（或系统 8 小时后收起）就不再弹出来
+        let key = "dutyActivityShownDay"
+        guard let target, !showing, UIApplication.shared.applicationState == .active,
+              UserDefaults.standard.string(forKey: key) != target.day.description else { return }
+        UserDefaults.standard.set(target.day.description, forKey: key)
         _ = try? Activity.request(attributes: DutyAttributes(day: target.day.description, post: target.post),
                                   content: ActivityContent(state: target.state, staleDate: target.state.end),
                                   pushType: nil)

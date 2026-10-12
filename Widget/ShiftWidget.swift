@@ -174,11 +174,15 @@ struct DutyLiveActivity: Widget {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("离下班").font(.caption2).foregroundStyle(.secondary)
-                    Text(context.state.end, style: .timer)
-                        .font(.title2.monospacedDigit().bold())
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 110, alignment: .trailing)
+                    if context.isStale {
+                        Text("已下班").font(.title3.bold())
+                    } else {
+                        Text("离下班").font(.caption2).foregroundStyle(.secondary)
+                        Text(timerInterval: context.state.start...max(context.state.start, context.state.end), countsDown: true)
+                            .font(.title2.monospacedDigit().bold())
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 110, alignment: .trailing)
+                    }
                 }
             }
             .padding()
@@ -189,7 +193,7 @@ struct DutyLiveActivity: Widget {
                     Text("📡 \(context.attributes.post)").font(.headline)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.end, style: .timer)
+                    Text(timerInterval: context.state.start...max(context.state.start, context.state.end), countsDown: true)
                         .font(.headline.monospacedDigit())
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 90, alignment: .trailing)
@@ -200,7 +204,7 @@ struct DutyLiveActivity: Widget {
             } compactLeading: {
                 Text("📡")
             } compactTrailing: {
-                Text(context.state.end, style: .timer)
+                Text(timerInterval: context.state.start...max(context.state.start, context.state.end), countsDown: true)
                     .monospacedDigit()
                     .frame(maxWidth: 56)
             } minimal: {

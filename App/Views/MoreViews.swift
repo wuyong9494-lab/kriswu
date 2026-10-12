@@ -7,6 +7,9 @@ struct TaskChecklistCard: View {
     @EnvironmentObject private var store: AppStore
     let day: DayKey
 
+    /// 同样的事项写了两遍也分得开
+    static func key(_ index: Int, _ item: String) -> String { "\(index).\(item)" }
+
     var body: some View {
         let groups = store.notes(for: store.shift(on: day))
             .map { (group: $0.group, items: TaskList.items(from: $0.note)) }
@@ -14,7 +17,8 @@ struct TaskChecklistCard: View {
         if !groups.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 let total = groups.map(\.items.count).reduce(0, +)
-                let done = groups.flatMap { g in g.items.filter { store.isTaskDone(day, g.group, $0) } }.count
+                let done = groups.map { g in g.items.indices.filter { store.isTaskDone(day, g.group, Self.key($0, g.items[$0])) }.count }
+                    .reduce(0, +)
                 HStack {
                     Label("今天要做", systemImage: "checklist").font(.headline)
                     Spacer()
@@ -22,10 +26,10 @@ struct TaskChecklistCard: View {
                 }
                 ForEach(groups, id: \.group) { g in
                     if groups.count > 1 { Text(g.group).font(.subheadline.bold()) }
-                    ForEach(g.items, id: \.self) { item in
-                        let checked = store.isTaskDone(day, g.group, item)
+                    ForEach(Array(g.items.enumerated()), id: \.offset) { i, item in
+                        let checked = store.isTaskDone(day, g.group, Self.key(i, item))
                         Button {
-                            store.toggleTask(day, g.group, item)
+                            store.toggleTask(day, g.group, Self.key(i, item))
                         } label: {
                             HStack(alignment: .top) {
                                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
@@ -142,8 +146,10 @@ private struct WeekTable: View {
         let range = days[0]...days[6]
         let people = store.roster.filter { $0.value.keys.contains(where: range.contains) }
         let zh = Locale(identifier: "zh_CN")
+        // 先算好谁是轮班的，别在排序里一遍遍翻整段历史
+        let rotating = Set(people.keys.filter(store.isRotating))
         let names = people.keys.sorted { a, b in
-            let ra = store.isRotating(a), rb = store.isRotating(b)
+            let ra = rotating.contains(a), rb = rotating.contains(b)
             if ra != rb { return ra }
             return a.compare(b, locale: zh) == .orderedAscending
         }

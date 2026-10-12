@@ -164,9 +164,10 @@ struct YearStatsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var year = DayKey.today.year
     @State private var file: URL?
+    @State private var report: AppStore.Workload?
 
     var body: some View {
-        let report = store.workload(year: year, month: nil)
+        let report = self.report ?? AppStore.Workload(days: [], people: [], text: "")
         List {
             Section {
                 HStack {
@@ -182,7 +183,7 @@ struct YearStatsView: View {
                     ShareLink(item: file) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
                 }
             } footer: {
-                Text(report.days.isEmpty ? "这一年还没有全员排班数据。"
+                Text(self.report == nil ? "正在统计…" : report.days.isEmpty ? "这一年还没有全员排班数据。"
                      : "统计 \(report.days.first!.dateText) – \(report.days.last!.dateText) 共 \(report.days.count) 天（App 从开始同步起记下的全员排班，只算到今天），规则和每月统计一样。")
             }
             ForEach(report.people, id: \.name) { p in
@@ -200,7 +201,11 @@ struct YearStatsView: View {
         }
         .navigationTitle("全年统计")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: year) { file = store.workloadCSVFile(year: year, month: nil) }
+        // 全年数据量大：换年份或全员排班更新时算一次，不在每次刷新界面时重算
+        .task(id: "\(year)-\(store.roster.count)-\(store.publishedDays.count)") {
+            report = store.workload(year: year, month: nil)
+            file = store.workloadCSVFile(year: year, month: nil)
+        }
     }
 }
 

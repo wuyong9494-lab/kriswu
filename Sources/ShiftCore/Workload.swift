@@ -89,7 +89,12 @@ public enum WorkloadCounter {
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
                              calendar: Calendar = .current) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
+        // 这个人在网站上出现的前后两周以外（还没来、已经调走）没数据的日子不算
+        let keys = history.keys
+        let active = keys.min().flatMap { lo in keys.max().map {
+            lo.adding(days: -14, calendar: calendar)...$0.adding(days: 14, calendar: calendar) } }
         for day in days {
+            guard history[day] != nil || active?.contains(day) == true else { continue }
             result[day] = classify(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
                                    holiday: ChinaHolidays.isHoliday(day), rotating: rotating, matcher: matcher)
         }
@@ -132,7 +137,8 @@ public enum WorkloadCounter {
             for day in days {
                 for post in history[day]?.split(separator: "+") ?? [] { p.posts[matcher.displayName(String(post)), default: 0] += 1 }
                 let holiday = ChinaHolidays.isHoliday(day)
-                switch dayKinds[day] ?? .off {
+                guard let kind = dayKinds[day] else { continue }
+                switch kind {
                 case .duty: p.dutyDays += 1; if holiday { p.holidayWorkedDays += 1 }
                 case .dutyRest: p.dutyRestDays += 1
                 case .regular: p.regularDays += 1; if holiday { p.holidayWorkedDays += 1 }

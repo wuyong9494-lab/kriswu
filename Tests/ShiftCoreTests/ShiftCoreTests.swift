@@ -1016,6 +1016,17 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(r.work, [DayKey(year: 2027, month: 2, day: 14)])
         XCTAssertEqual(r.skipped, ["随便写的一行"])
 
+        // 国务院通知的写法：一行里放假、上班都有，括号里写星期，一句里两个上班日，跨年
+        let notice = HolidayInput.parse("""
+        一、元旦：1月1日（周五）至3日（周日）放假调休，共3天。1月4日（周一）上班。
+        二、春节：2月14日（周日）、2月20日（周六）上班
+        12月31日至1月2日放假
+        """, reference: DayKey(year: 2027, month: 7, day: 1), calendar: cal)
+        XCTAssertEqual(notice.off.map(\.description), ["2027-01-01", "2027-01-02", "2027-01-03",
+                                                       "2027-12-31", "2028-01-01", "2028-01-02"])
+        XCTAssertEqual(notice.work.map(\.description), ["2027-01-04", "2027-02-14", "2027-02-20"])
+        XCTAssertTrue(notice.skipped.isEmpty)
+
         XCTAssertFalse(ChinaHolidays.knownYears.contains(2027))
         ChinaHolidays.customOff = Set(r.off.map(\.description))
         ChinaHolidays.customWork = Set(r.work.map(\.description))

@@ -5,8 +5,9 @@ import UniformTypeIdentifiers
 struct BackupView: View {
     @EnvironmentObject private var store: AppStore
     @State private var backupURL: URL?
-    @State private var importing = false
-    @State private var choosingFolder = false
+    /// 选文件夹（自动备份）还是选备份文件（恢复）
+    @State private var pickFolder = false
+    @State private var showImporter = false
     @State private var confirmRestore: Data?
     @State private var message: String?
 
@@ -25,13 +26,11 @@ struct BackupView: View {
             }
             Section {
                 Button {
-                    choosingFolder = true
+                    pickFolder = true
+                    showImporter = true
                 } label: {
                     Label(store.settings.backupFolderBookmark == nil ? "选择自动备份的文件夹" : "换一个文件夹",
                           systemImage: "folder.badge.gearshape")
-                }
-                .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
-                    if case .success(let url) = result { store.setBackupFolder(url) }
                 }
                 if store.settings.backupFolderBookmark != nil {
                     if let message = store.settings.autoBackupMessage {
@@ -54,7 +53,8 @@ struct BackupView: View {
             }
             Section {
                 Button {
-                    importing = true
+                    pickFolder = false
+                    showImporter = true
                 } label: {
                     Label("从备份文件恢复", systemImage: "square.and.arrow.down")
                 }
@@ -67,7 +67,12 @@ struct BackupView: View {
         }
         .navigationTitle("备份与恢复")
         .task { backupURL = try? store.backupFileURL() }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
+        // 一个页面只能有一个 fileImporter：选文件夹和选备份文件共用，看是哪个按钮打开的
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: pickFolder ? [.folder] : [.json, .data]) { result in
+            if pickFolder {
+                if case .success(let url) = result { store.setBackupFolder(url) }
+                return
+            }
             switch result {
             case .success(let url):
                 let scoped = url.startAccessingSecurityScopedResource()

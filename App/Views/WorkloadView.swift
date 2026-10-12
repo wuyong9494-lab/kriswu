@@ -175,7 +175,7 @@ struct WorkloadDetailView: View {
         List(days.reversed()) { day in
             let raw = store.roster[name]?[day]
             let holiday = ChinaHolidays.isHoliday(day)
-            let kind = kinds[day] ?? .off
+            let kind = kinds[day]
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(day.dateText)
@@ -184,11 +184,11 @@ struct WorkloadDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(kind.rawValue)
+                Text(kind?.rawValue ?? "不在岗")
                     .font(.subheadline.bold())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(color(kind).opacity(0.2), in: Capsule())
+                    .background((kind.map(color) ?? .gray).opacity(0.2), in: Capsule())
             }
         }
         .navigationTitle(name)
