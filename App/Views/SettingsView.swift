@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UserNotifications
 
@@ -255,9 +256,13 @@ struct SettingsView: View {
             Toggle("收藏的同事排班变了也通知我", isOn: $store.settings.notifyFavorites)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
+                NavigationLink {
+                    VoicePickerView()
+                } label: {
+                    LabeledContent("播报声音", value: VoiceSound.currentVoice.map { "\($0.name)（\(VoiceSound.qualityText($0))）" } ?? "系统默认")
+                }
                 Button("试听") {
-                    let name = ShiftDisplay(raw: store.shift(on: .today), matcher: store.matcher)?.name ?? "未排班"
-                    VoiceSound.speakNow("今天，\(name.replacingOccurrences(of: "+", with: "和"))")
+                    VoiceSound.speakNow(VoicePickerView.sample(store))
                 }
             }
             Button("发送一条测试通知") {
@@ -606,5 +611,101 @@ struct GroupNotesView: View {
             }
         }
         .onDisappear { Task { await store.rescheduleNotifications() } }
+    }
+}
+
+
+/// 选播报用的声音和语速。手机上下载的「增强」「高级」中文声音比自带的标准声音自然得多。
+struct VoicePickerView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var voices: [AVSpeechSynthesisVoice] = []
+
+    static func sample(_ store: AppStore) -> String {
+        let name = ShiftDisplay(raw: store.shift(on: .today), matcher: store.matcher)?.name ?? "未排班"
+        return "今天，\(name.replacingOccurrences(of: "+", with: "和"))"
+    }
+
+    var body: some View {
+        let selected = store.settings.voiceIdentifier
+        List {
+            Section {
+                row(title: "自动（用手机上最好的）",
+                    detail: VoiceSound.automaticVoice.map { "现在是 \($0.name) · \(VoiceSound.qualityText($0))" } ?? "",
+                    checked: selected.isEmpty) {
+                    store.settings.voiceIdentifier = ""
+                    VoiceSound.speakNow(Self.sample(store), voice: VoiceSound.automaticVoice)
+                }
+                ForEach(voices, id: \.identifier) { voice in
+                    row(title: voice.name,
+                        detail: "\(VoiceSound.languageText(voice)) · \(VoiceSound.qualityText(voice))",
+                        checked: selected == voice.identifier) {
+                        store.settings.voiceIdentifier = voice.identifier
+                        VoiceSound.speakNow(Self.sample(store), voice: voice)
+                    }
+                }
+            } header: {
+                Text("声音（点一下试听并选中）")
+            }
+            Section {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    HStack {
+                        Text("语速")
+                        Spacer()
+                        Text(rateText).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    Slider(value: $store.settings.voiceRate, in: 0.35...0.6, step: 0.01) {
+                        Text("语速")
+                    } minimumValueLabel: {
+                        Image(systemName: "tortoise")
+                    } maximumValueLabel: {
+                        Image(systemName: "hare")
+                    } onEditingChanged: { editing in
+                        if !editing { VoiceSound.speakNow(Self.sample(store)) }
+                    }
+                }
+            }
+            Section {
+                Text("自带的「标准」声音比较生硬。到 iPhone「设置 › 辅助功能 › 朗读内容 › 声音 › 中文」，下载名字后面标着「增强」或「高级」的声音（几十到几百 MB，建议连 Wi-Fi），下载完回到这里就能选。")
+                    .font(.footnote)
+                Button("打开 iPhone 设置") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+            } header: {
+                Text("想要更好听的声音")
+            } footer: {
+                Text("换了声音或语速后，下一次提醒就会用新的声音。")
+            }
+        }
+        .appList()
+        .navigationTitle("播报声音")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { voices = VoiceSound.chineseVoices }
+        // 从系统设置下载完声音回来时刷新列表
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            voices = VoiceSound.chineseVoices
+        }
+    }
+
+    private var rateText: String {
+        let r = store.settings.voiceRate
+        return r < 0.43 ? "慢" : (r > 0.52 ? "快" : "适中")
+    }
+
+    private func row(title: String, detail: String, checked: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).foregroundStyle(Color.primary)
+                    if !detail.isEmpty {
+                        Text(detail).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if checked {
+                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor).fontWeight(.semibold)
+                }
+            }
+            .contentShape(Rectangle())
+        }
     }
 }

@@ -16,16 +16,69 @@ enum VoiceSound {
         return dir
     }
 
-    private static func utterance(_ text: String) -> AVSpeechUtterance {
+    /// 选中的声音（空 = 自动选手机上最好的中文声音）和语速（App 启动、改设置时写进来）
+    static var voiceIdentifier = ""
+    static var rate: Float = 0.47
+
+    /// 手机上装的中文声音：高级 > 增强 > 标准，同档普通话在前。
+    static var chineseVoices: [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("zh") }
+            .sorted { a, b in
+                if a.quality != b.quality { return a.quality.rawValue > b.quality.rawValue }
+                if a.language != b.language { return languageRank(a.language) < languageRank(b.language) }
+                return a.name < b.name
+            }
+    }
+
+    private static func languageRank(_ language: String) -> Int {
+        switch language {
+        case "zh-CN": return 0
+        case "zh-TW": return 1
+        default: return 2   // 粤语
+        }
+    }
+
+    /// 自动：最好的普通话声音（不选粤语）
+    static var automaticVoice: AVSpeechSynthesisVoice? {
+        chineseVoices.first { $0.language != "zh-HK" } ?? AVSpeechSynthesisVoice(language: "zh-CN")
+    }
+
+    static var currentVoice: AVSpeechSynthesisVoice? {
+        if !voiceIdentifier.isEmpty, let v = AVSpeechSynthesisVoice(identifier: voiceIdentifier) { return v }
+        return automaticVoice
+    }
+
+    static func qualityText(_ voice: AVSpeechSynthesisVoice) -> String {
+        switch voice.quality {
+        case .premium: return "高级"
+        case .enhanced: return "增强"
+        default: return "标准"
+        }
+    }
+
+    static func languageText(_ voice: AVSpeechSynthesisVoice) -> String {
+        switch voice.language {
+        case "zh-CN": return "普通话"
+        case "zh-TW": return "普通话（台湾）"
+        case "zh-HK": return "粤语"
+        default: return voice.language
+        }
+    }
+
+    private static func utterance(_ text: String, voice: AVSpeechSynthesisVoice? = nil) -> AVSpeechUtterance {
         let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
+        u.voice = voice ?? currentVoice
+        u.rate = rate
+        u.pitchMultiplier = 1.0
+        u.preUtteranceDelay = 0.15
         return u
     }
 
     /// 返回铃声文件名（同样的文字只录一次）；录制失败返回 nil，用默认铃声。
     static func file(for text: String) async -> String? {
-        let name = prefix + stableHash(text) + ".caf"
+        // 换了声音或语速要重新录：文件名里带上它们
+        let name = prefix + stableHash(text + "|" + (currentVoice?.identifier ?? "") + "|" + String(rate)) + ".caf"
         let url = directory.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: url.path) { return name }
         return await render(text, to: url) ? name : nil
@@ -40,9 +93,9 @@ enum VoiceSound {
     }
 
     /// 设置里「试听」。
-    static func speakNow(_ text: String) {
+    static func speakNow(_ text: String, voice: AVSpeechSynthesisVoice? = nil) {
         previewSynthesizer.stopSpeaking(at: .immediate)
-        previewSynthesizer.speak(utterance(text))
+        previewSynthesizer.speak(utterance(text, voice: voice))
     }
 
     private final class Recorder: @unchecked Sendable {

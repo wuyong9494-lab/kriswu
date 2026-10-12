@@ -63,6 +63,10 @@ struct AppSettings: Codable, Equatable {
     var notifyWhenEmpty = false
     /// 到点时用语音读出「今天，组D」（作为通知铃声）
     var voiceEnabled = false
+    /// 播报用的声音（空 = 自动选手机上最好的中文声音）
+    var voiceIdentifier = ""
+    /// 播报语速（0.3–0.6，系统默认 0.5）
+    var voiceRate: Float = 0.47
     var appearance: Appearance = .system
     var accentTheme: AccentTheme = .system
     var sourceURL = ""
@@ -178,6 +182,8 @@ struct AppSettings: Codable, Equatable {
         evening = try c.decodeIfPresent(ClockTime.self, forKey: .evening) ?? d.evening
         notifyWhenEmpty = try c.decodeIfPresent(Bool.self, forKey: .notifyWhenEmpty) ?? d.notifyWhenEmpty
         voiceEnabled = try c.decodeIfPresent(Bool.self, forKey: .voiceEnabled) ?? d.voiceEnabled
+        voiceIdentifier = try c.decodeIfPresent(String.self, forKey: .voiceIdentifier) ?? d.voiceIdentifier
+        voiceRate = try c.decodeIfPresent(Float.self, forKey: .voiceRate) ?? d.voiceRate
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
         accentTheme = try c.decodeIfPresent(AccentTheme.self, forKey: .accentTheme) ?? .system
         sourceURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? d.sourceURL
@@ -337,7 +343,8 @@ final class AppStore: ObservableObject {
             }
             if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
                 || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides
-                || settings.accentTheme != oldValue.accentTheme {
+                || settings.accentTheme != oldValue.accentTheme
+                || settings.voiceIdentifier != oldValue.voiceIdentifier || settings.voiceRate != oldValue.voiceRate {
                 applyCustomHolidays()
             }
             save()
@@ -487,6 +494,8 @@ final class AppStore: ObservableObject {
     /// 把自己录入的节假日交给统计用的节假日表
     func applyCustomHolidays() {
         AccentTheme.current = settings.accentTheme
+        VoiceSound.voiceIdentifier = settings.voiceIdentifier
+        VoiceSound.rate = min(max(settings.voiceRate, 0.3), 0.6)
         ChinaHolidays.customOff = Set(settings.customHolidayOff)
         ChinaHolidays.customWork = Set(settings.customHolidayWork)
         WorkloadCounter.rules = settings.workloadRules
