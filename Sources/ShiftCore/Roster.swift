@@ -25,7 +25,7 @@ public enum RosterExtractor {
     ]
 
     /// 常见岗位名：即使「班次类型」里没有，也当作岗位
-    private static let postWords = ["遥测", "调度", "值班", "交班", "休息", "调休", "请假", "出差", "加班", "组",
+    private static let postWords = ["遥测", "调度", "值班", "交班", "交接", "休息", "调休", "请假", "出差", "加班", "组",
                                     "休", "假", "班"]   // 年假、补休、早班这类
 
     private static let dayWord = try! NSRegularExpression(

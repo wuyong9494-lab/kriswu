@@ -1251,6 +1251,8 @@ final class PatternTests: XCTestCase {
         XCTAssertTrue(WorkloadCounter.isDuty("遥测"))
         XCTAssertTrue(WorkloadCounter.isDuty("值班"))
         XCTAssertFalse(WorkloadCounter.isDuty("值班交班前"))
+        XCTAssertFalse(WorkloadCounter.isDuty("值班交接前"))
+        XCTAssertNil(WorkloadCounter.effective("值班交接前", matcher: m))
         XCTAssertTrue(WorkloadCounter.isDuty(m.displayName("值")))
         // 网站上有的写遥测、有的写值班：都在同一个轮转里
         var roster: Roster = [:]

@@ -606,7 +606,7 @@ final class AppStore: ObservableObject {
             case "遥测": return (0, post)
             case "调度": return (1, post)
             case _ where post.hasPrefix("组"): return (2, post)
-            case _ where post.hasPrefix("值班") || post.contains("交班"): return (3, post)
+            case _ where post.hasPrefix("值班") || post.contains("交班") || post.contains("交接"): return (3, post)
             case "休息": return (4, post)
             case "调休": return (5, post)
             case "请假": return (6, post)

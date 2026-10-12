@@ -79,8 +79,8 @@ public enum WorkloadCounter {
     public static func isTrip(_ post: String) -> Bool { post.contains("出差") }
 
     /// 值班只有遥测
-    /// 不参与统计和分析的岗位：「值班交班前」（网站上单独一列，当作这天没写）
-    public static func isIgnored(_ post: String) -> Bool { post.contains("交班") }
+    /// 不参与统计和分析的岗位：「值班交接前」（也有写成「值班交班前」的，网站上单独一列，当作这天没写）
+    public static func isIgnored(_ post: String) -> Bool { post.contains("交班") || post.contains("交接") }
 
     /// 去掉不参与统计的岗位；剩下的为空就当这天网站上没写（nil）
     public static func effective(_ raw: String?, matcher: ShiftMatcher) -> String? {
@@ -89,9 +89,9 @@ public enum WorkloadCounter {
         return kept.isEmpty ? nil : kept.joined(separator: "+")
     }
 
-    /// 值班就是遥测：网站上写「遥测」或「值班」都算；「值班交班前」是网站上单独的一列，不算
+    /// 值班就是遥测：网站上写「遥测」或「值班」都算；「值班交接前」是网站上单独的一列，不算
     public static func isDuty(_ post: String) -> Bool {
-        post.contains("遥测") || (post.contains("值班") && !post.contains("交班"))
+        post.contains("遥测") || (post.contains("值班") && !isIgnored(post))
     }
 
     /// 值班换来的休息：休息、调休（请假不算）
