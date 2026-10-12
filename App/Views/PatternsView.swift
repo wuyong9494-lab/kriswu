@@ -45,21 +45,27 @@ struct SchedulePatternsView: View {
         .appList()
         .navigationTitle("排班规律")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: "\(months)-\(store.roster.count)-\(store.publishedDays.count)") { compute() }
+        .task(id: "\(months)-\(store.roster.count)-\(store.publishedDays.count)") { await compute() }
     }
 
-    private func compute() {
+    /// 在后台算（全年数据多时不卡界面）
+    private func compute() async {
         let start = DayKey.today.adding(days: -months * 30)
         let days = store.publishedDays.filter { $0 >= start }.sorted()
         let roster = store.roster
         let m = store.matcher
-        result = Result(
-            duty: SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: m, calendar: .app),
-            dispatch: SchedulePatterns.rotation(post: "调度", roster: roster, days: days, matcher: m, calendar: .app),
-            rest: SchedulePatterns.restRule(roster: roster, days: days, published: store.publishedDays, matcher: m, calendar: .app),
-            groups: SchedulePatterns.groupPattern(roster: roster, days: days, matcher: m, calendar: .app),
-            audit: store.restBalanceAudit(),
-            days: days.count)
+        let published = store.publishedDays
+        let points = store.settings.restHistory.mapValues { $0.map(\.point) }
+        let computed = await Task.detached(priority: .userInitiated) {
+            Result(
+                duty: SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: m, calendar: .app),
+                dispatch: SchedulePatterns.rotation(post: "调度", roster: roster, days: days, matcher: m, calendar: .app),
+                rest: SchedulePatterns.restRule(roster: roster, days: days, published: published, matcher: m, calendar: .app),
+                groups: SchedulePatterns.groupPattern(roster: roster, days: days, matcher: m, calendar: .app),
+                audit: RestBalanceAudit.analyze(points: points, roster: roster, matcher: m, calendar: .app),
+                days: days.count)
+        }.value
+        result = computed
     }
 
     /// ①②③…（序号和名字不会被拆到两行）
