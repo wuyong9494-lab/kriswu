@@ -79,6 +79,16 @@ public enum WorkloadCounter {
     public static func isTrip(_ post: String) -> Bool { post.contains("出差") }
 
     /// 值班只有遥测
+    /// 不参与统计和分析的岗位：「值班交班前」（网站上单独一列，当作这天没写）
+    public static func isIgnored(_ post: String) -> Bool { post.contains("交班") }
+
+    /// 去掉不参与统计的岗位；剩下的为空就当这天网站上没写（nil）
+    public static func effective(_ raw: String?, matcher: ShiftMatcher) -> String? {
+        guard let raw else { return nil }
+        let kept = raw.split(separator: "+").map(String.init).filter { !isIgnored(matcher.displayName($0)) }
+        return kept.isEmpty ? nil : kept.joined(separator: "+")
+    }
+
     /// 值班就是遥测：网站上写「遥测」或「值班」都算；「值班交班前」是网站上单独的一列，不算
     public static func isDuty(_ post: String) -> Bool {
         post.contains("遥测") || (post.contains("值班") && !post.contains("交班"))
@@ -139,6 +149,7 @@ public enum WorkloadCounter {
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
                              name: String? = nil, calendar: Calendar = .current) -> [DayKey: Kind] {
         let fixed = name.flatMap { overrides[$0] } ?? [:]
+        let history = history.compactMapValues { effective($0, matcher: matcher) }
         var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, fixed: fixed, calendar: calendar)
         // 手动纠正优先
         if !fixed.isEmpty {
@@ -206,7 +217,9 @@ public enum WorkloadCounter {
             let rotating = isRotating(name: name, history: history, members: members, matcher: matcher, asOf: last)
             let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: rotating, name: name, calendar: calendar)
             for day in days {
-                for post in history[day]?.split(separator: "+") ?? [] { p.posts[matcher.displayName(String(post)), default: 0] += 1 }
+                for post in effective(history[day], matcher: matcher)?.split(separator: "+") ?? [] {
+                    p.posts[matcher.displayName(String(post)), default: 0] += 1
+                }
                 let holiday = ChinaHolidays.isHoliday(day)
                 guard let kind = dayKinds[day] else { continue }
                 switch kind {

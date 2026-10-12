@@ -1260,6 +1260,18 @@ final class PatternTests: XCTestCase {
         let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...6).map(d), matcher: m, calendar: cal)
         XCTAssertEqual(r?.slots, 6)
         XCTAssertEqual(r?.matched, 6)
+
+        // 「值班交班前」不参与统计：当作这天没写
+        XCTAssertNil(WorkloadCounter.effective("值班交班前", matcher: m))
+        XCTAssertEqual(WorkloadCounter.effective("组A+值班交班前", matcher: m), "组A")
+        let w = WorkloadCounter.count(roster: ["乙": [d(1): "组A", d(6): "值班交班前"]], days: (1...7).map(d), matcher: m, calendar: cal).first
+        XCTAssertEqual(w?.regularDays, 5)      // 周六只有值班交班前：不算上班
+        XCTAssertEqual(w?.offDays, 2)
+        XCTAssertNil(w?.posts["值班交班前"])
+        // 值完遥测第二天只写了值班交班前：不算回来上班
+        let rule = SchedulePatterns.restRule(roster: ["丙": [d(1): "遥测", d(2): "值班交班前+休息", d(3): "休息"]],
+                                             days: (1...7).map(d), published: Set((1...7).map(d)), matcher: m, calendar: cal)
+        XCTAssertEqual(rule.matched, 1)
     }
 
     func testRestWarnings() {

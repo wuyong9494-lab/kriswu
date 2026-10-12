@@ -6,8 +6,9 @@ import Foundation
 /// - 组A–E 是怎么轮的、哪些日子是手动调整的
 /// 都是按已有数据统计出来的，不是网站真正的程序。
 public enum SchedulePatterns {
+    /// 这天的岗位（「值班交班前」不算）
     static func posts(_ raw: String?, matcher: ShiftMatcher) -> [String] {
-        raw?.split(separator: "+").map { matcher.displayName(String($0)) } ?? []
+        raw?.split(separator: "+").map { matcher.displayName(String($0)) }.filter { !WorkloadCounter.isIgnored($0) } ?? []
     }
 
     static func weekdayIndex(_ day: DayKey, calendar: Calendar) -> Int {
@@ -68,7 +69,7 @@ public enum SchedulePatterns {
 
     /// 为什么这天轮不到他（nil = 可以排）。leave：是不是请假、出差、休息这类。
     static func unavailable(_ raw: String?, post: String, matcher: ShiftMatcher) -> (reason: String, leave: Bool)? {
-        guard let raw else { return nil }
+        guard let raw = WorkloadCounter.effective(raw, matcher: matcher) else { return nil }
         let list = posts(raw, matcher: matcher)
         if list.contains(where: { matches($0, post) }) { return nil }
         if RosterExtractor.isLeave(raw, matcher: matcher) {
@@ -236,7 +237,7 @@ public enum SchedulePatterns {
                 var d = day.adding(days: 1, calendar: calendar)
                 for _ in 0..<10 {
                     guard published.contains(d) else { break }
-                    let raw = history[d]
+                    let raw = WorkloadCounter.effective(history[d], matcher: matcher)
                     let works = raw.map { !RosterExtractor.isLeave($0, matcher: matcher) }
                         ?? ChinaHolidays.isWorkday(d, calendar: calendar)
                     if works { actualBack = d; break }
@@ -443,7 +444,7 @@ extension SchedulePatterns {
             let restText = describe(rest, calendar: calendar)
             for day in rest where day >= from && published.contains(day) {
                 let head = "\(monthDay(duty, calendar: calendar))遥测，按规则应休\(restText)，"
-                if let raw = history[day] {
+                if let raw = WorkloadCounter.effective(history[day], matcher: matcher) {
                     guard !RosterExtractor.isLeave(raw, matcher: matcher) else { continue }
                     let what = posts(raw, matcher: matcher).joined(separator: "+")
                     result.append(Warning(duty: duty, day: day, kind: .assigned,
