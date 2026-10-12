@@ -133,7 +133,10 @@ struct WorkloadView: View {
                                 .background(Color.green.opacity(0.2), in: Capsule())
                         }
                         Spacer()
-                        Text("工作量 \(person.workDays) 天").font(.headline)
+                        VStack(alignment: .trailing, spacing: 0) {
+                            Text("工作量 \(person.workDays) 天").font(.headline)
+                            Text("上班 \(person.presentDays) 天").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     }
                     Text(summary(person))
@@ -167,7 +170,9 @@ struct WorkloadView: View {
     /// 「值班 2 · 日常 8 · 休息 3 · 节假日 7」，出差、节假日上班有才显示
     private func summary(_ p: PersonWorkload) -> String {
         var parts = ["值班 \(p.dutyDays)", "值班调休 \(p.dutyRestDays)", "日常 \(p.regularDays)",
-                     "出差 \(p.tripDays)", "休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
+                     "出差 \(p.tripDays)"]
+        if p.attendanceDays > 0 { parts.append("上班没排岗位 \(p.attendanceDays)（不算工作量）") }
+        parts += ["休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
         if p.unassignedDays > 0 { parts.append("没排班 \(p.unassignedDays)") }
         if p.holidayWorkedDays > 0 { parts.append("其中节假日上班 \(p.holidayWorkedDays)") }
         return parts.joined(separator: " · ")
@@ -230,7 +235,8 @@ struct WorkloadDetailView: View {
                 if store.override(name, day) != nil {
                     Text("手动").font(.caption2).foregroundStyle(.orange)
                 }
-                Text(kind?.rawValue ?? (store.override(name, day) == WorkloadCounter.excluded ? "不算" : "不在岗"))
+                Text(kind.map { $0 == .attendance ? "上班·不算工作量" : $0.rawValue }
+                     ?? (store.override(name, day) == WorkloadCounter.excluded ? "不算" : "不在岗"))
                     .font(.subheadline.bold())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -239,7 +245,7 @@ struct WorkloadDetailView: View {
             .contentShape(Rectangle())
             .contextMenu {
                 // 网站读错或有特殊情况：手动改这一天（以后同步也不会被冲掉）
-                ForEach([WorkloadCounter.Kind.regular, .duty, .dutyRest, .trip, .off, .holiday, .unassigned], id: \.self) { k in
+                ForEach([WorkloadCounter.Kind.regular, .attendance, .duty, .dutyRest, .trip, .off, .holiday, .unassigned], id: \.self) { k in
                     Button(k.rawValue) { store.setOverride(name, day, k.rawValue) }
                 }
                 Button("这天不算") { store.setOverride(name, day, WorkloadCounter.excluded) }
@@ -281,6 +287,7 @@ struct WorkloadDetailView: View {
         case .holiday: return .red
         case .off: return .green
         case .unassigned: return .gray
+        case .attendance: return .mint
         }
     }
 }

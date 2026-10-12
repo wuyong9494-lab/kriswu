@@ -278,7 +278,7 @@ private struct MonthStatCard: View {
                         CountUpText(value: me?.workDays ?? 0, font: DS.Font.giant)
                         Text("天").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
-                    Text("工作量").font(DS.Font.caption).foregroundStyle(.secondary)
+                    Text("工作量 · 上班 \(me?.presentDays ?? 0) 天").font(DS.Font.caption).foregroundStyle(.secondary)
                 }
                 HStack(spacing: DS.Space.m) {
                     VStack(alignment: .leading, spacing: 0) {

@@ -204,9 +204,14 @@ private struct RowView: View {
                         .padding(.vertical, 2)
                         .background((row.level == .more ? Color.red : Color.blue).opacity(0.2), in: Capsule())
                 }
-                Text("\(w.workDays) 天").bold()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("工作量 \(w.workDays) 天").bold()
+                    Text("上班 \(w.presentDays) 天").font(.caption).foregroundStyle(.secondary)
+                }
             }
-            Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它日常 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays) · 休息 \(w.offDays)"
+            Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它岗位 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays)"
+                 + (w.attendanceDays > 0 ? " · 上班没排岗位 \(w.attendanceDays)（不算工作量）" : "")
+                 + " · 休息 \(w.offDays)"
                  + (w.holidayDays > 0 ? " · 节假日 \(w.holidayDays)" : "")
                  + (w.unassignedDays > 0 ? " · 没排班 \(w.unassignedDays)" : ""))
                 .font(.footnote)

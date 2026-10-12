@@ -4,19 +4,21 @@ import Foundation
 /// - 值班：遥测（工作到第二天 8:30）
 /// - 值班调休：法定节假日值完遥测的第二天，网站上没写休息（还在上班），算工作量
 ///   （网站上写了休息、调休、请假的，不管节假日还是平时，都算休息，不算工作量）
-/// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位、也没写休息的日子（正常上班）
+/// - 日常：各组、调度等其它岗位（排班表上有岗位的日子）
+/// - 上班（没排岗位）：工作日网站上没给排岗位、也没写休息的日子。人在正常上班，算上班天数，但不算工作量
 /// - 未排班：调度（最近三个月一半以上排的是调度的人，以及设置里「只按排班算」的人）工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
 /// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
-/// 工作量 = 值班 + 值班调休 + 日常 + 出差。
+/// 工作量 = 值班 + 值班调休 + 日常 + 出差（只算排班表上有岗位的日子）；
+/// 上班天数 = 工作量 + 没排岗位的上班日。
 public struct PersonWorkload: Equatable {
     public var name: String
     /// 值班（遥测）天数
     public var dutyDays: Int
     /// 节假日值班后的调休天数（算工作量）
     public var dutyRestDays: Int
-    /// 日常班天数：各组、调度等岗位，加上工作日没排岗位的日子
+    /// 日常班天数：各组、调度等岗位（有岗位的日子）
     public var regularDays: Int
     /// 休息：和值班无关的休息、调休、请假、无分工，周末没排岗位
     public var offDays: Int
@@ -27,11 +29,15 @@ public struct PersonWorkload: Equatable {
     public var holidayWorkedDays: Int
     /// 各岗位天数（不含日常班）
     public var posts: [String: Int]
-    /// 轮组别、遥测、调度的人，工作日没排岗位的天数（不算工作量）
+    /// 调度（只按排班算的人）工作日没排岗位的天数（不算工作量，也不算上班）
     public var unassignedDays: Int = 0
+    /// 工作日没排岗位、也没写休息：正常上班，但不算工作量
+    public var attendanceDays: Int = 0
 
     /// 工作量 = 值班 + 值班调休 + 日常 + 出差
     public var workDays: Int { dutyDays + dutyRestDays + regularDays + tripDays }
+    /// 上班天数 = 工作量 + 没排岗位的上班日
+    public var presentDays: Int { workDays + attendanceDays }
 }
 
 /// 工作量规则开关（设置里可以改）
@@ -41,7 +47,7 @@ public struct WorkloadRules: Codable, Equatable {
     public var holidayDutyRestCounts = false
     /// 节假日值完遥测的第二天，网站上没写也算值班调休
     public var blankHolidayAfterDutyIsRest = true
-    /// 工作日没排岗位、也没写休息的算正常上班（日常）
+    /// 工作日没排岗位、也没写休息的算正常上班（算上班天数，不算工作量）
     public var blankWorkdayIsWork = true
     /// 调度只算排班表上有名字的日子
     public var dispatchScheduleOnly = true
@@ -105,7 +111,10 @@ public enum WorkloadCounter {
     /// 一天归到哪一类
     public enum Kind: String {
         case duty = "值班", dutyRest = "值班调休", regular = "日常", trip = "出差", holiday = "节假日", off = "休息",
-             unassigned = "未排班"
+             unassigned = "未排班", attendance = "上班"
+
+        /// 算不算工作量
+        public var isWorkload: Bool { [.duty, .dutyRest, .regular, .trip].contains(self) }
     }
 
     /// 只按排班算的人：调度的人（排班表上有名字才算一天），加上设置里另外加的人。
@@ -134,7 +143,7 @@ public enum WorkloadCounter {
                                 matcher: ShiftMatcher) -> Kind {
         guard let raw else {
             if holiday { return .holiday }
-            return workday ? (rotating || !rules.blankWorkdayIsWork ? .unassigned : .regular) : .off
+            return workday ? (rotating || !rules.blankWorkdayIsWork ? .unassigned : .attendance) : .off
         }
         let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
         if posts.contains(where: isDuty) { return .duty }
@@ -230,6 +239,7 @@ public enum WorkloadCounter {
                 case .holiday: p.holidayDays += 1
                 case .off: p.offDays += 1
                 case .unassigned: p.unassignedDays += 1
+                case .attendance: p.attendanceDays += 1
                 }
             }
             return p

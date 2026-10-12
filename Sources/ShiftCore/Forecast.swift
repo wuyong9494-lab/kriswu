@@ -60,11 +60,11 @@ public enum WorkloadCSV {
     }
 
     public static func make(_ people: [PersonWorkload], restBalance: [String: Int] = [:]) -> String {
-        var lines = ["姓名,工作量,值班(遥测),值班调休,日常,出差,休息,节假日,没排班,节假日上班,待休,各岗位"]
+        var lines = ["姓名,工作量,上班天数,值班(遥测),值班调休,日常,出差,上班没排岗位(不算工作量),休息,节假日,没排班,节假日上班,待休,各岗位"]
         for p in people {
             let posts = p.posts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map { "\($0.key)×\($0.value)" }.joined(separator: " ")
-            let cells = [p.name, "\(p.workDays)", "\(p.dutyDays)", "\(p.dutyRestDays)", "\(p.regularDays)", "\(p.tripDays)",
-                         "\(p.offDays)", "\(p.holidayDays)", "\(p.unassignedDays)", "\(p.holidayWorkedDays)",
+            let cells = [p.name, "\(p.workDays)", "\(p.presentDays)", "\(p.dutyDays)", "\(p.dutyRestDays)", "\(p.regularDays)",
+                         "\(p.tripDays)", "\(p.attendanceDays)", "\(p.offDays)", "\(p.holidayDays)", "\(p.unassignedDays)", "\(p.holidayWorkedDays)",
                          restBalance[p.name].map(String.init) ?? "", posts]
             lines.append(cells.map(field).joined(separator: ","))
         }
@@ -74,11 +74,12 @@ public enum WorkloadCSV {
     /// 工作量均衡分析导出
     public static func balance(_ report: BalanceReport, title: String) -> String {
         var lines = [field(title), "结论," + field(report.verdict), "平均," + String(format: "%.1f", report.average),
-                     "姓名,工作量,和平均差,判断,遥测,组别天数,其它日常,出差,休息,节假日"]
+                     "姓名,工作量,上班天数,和平均差,判断,遥测,组别天数,其它岗位,出差,上班没排岗位(不算工作量),休息,节假日"]
         for row in report.rows {
             let w = row.workload
-            lines.append([row.name, "\(w.workDays)", String(format: "%+.1f", row.diff), row.level.rawValue, "\(w.dutyDays)",
-                          "\(row.groupDays)", "\(max(0, w.regularDays - row.groupDays))", "\(w.tripDays)", "\(w.offDays)",
+            lines.append([row.name, "\(w.workDays)", "\(w.presentDays)", String(format: "%+.1f", row.diff), row.level.rawValue,
+                          "\(w.dutyDays)", "\(row.groupDays)", "\(max(0, w.regularDays - row.groupDays))", "\(w.tripDays)",
+                          "\(w.attendanceDays)", "\(w.offDays)",
                           "\(w.holidayDays)"].map(field).joined(separator: ","))
         }
         lines += report.findings.map(field)
