@@ -157,11 +157,13 @@ extension View {
     func appList() -> some View {
         scrollContentBackground(.hidden)
             .background(AppBackground())
+            .modifier(AvoidTabBar())
     }
 
     /// 普通滚动页面的背景
     func appBackground() -> some View {
         background(AppBackground())
+            .modifier(AvoidTabBar())
     }
 }
 
@@ -841,4 +843,24 @@ struct AdminOnlyModifier: ViewModifier {
 
 extension View {
     func adminOnly() -> some View { modifier(AdminOnlyModifier()) }
+}
+
+
+/// 页面被悬浮标签栏盖住多少，就在底部多留多少：列表、滚动页面最后几行能滚到标签栏上面
+struct AvoidTabBar: ViewModifier {
+    @Environment(\.floatingTabBarTop) private var tabBarTop
+    @State private var bottom: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: tabBarTop.isFinite ? max(0, bottom - tabBarTop) : 0)
+            }
+            // 量的是整个页面（加了留白之后外框不变），不会来回跳
+            .background(GeometryReader { g in
+                Color.clear
+                    .onAppear { bottom = g.frame(in: .global).maxY }
+                    .onChange(of: g.frame(in: .global).maxY) { bottom = $0 }
+            })
+    }
 }
