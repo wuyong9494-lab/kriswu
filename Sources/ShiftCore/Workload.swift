@@ -34,7 +34,36 @@ public struct PersonWorkload: Equatable {
     public var workDays: Int { dutyDays + dutyRestDays + regularDays + tripDays }
 }
 
+/// 工作量规则开关（设置里可以改）
+public struct WorkloadRules: Codable, Equatable {
+    /// 法定节假日值完遥测后的休息算工作量（值班调休）
+    public var holidayDutyRestCounts = true
+    /// 节假日值完遥测的第二天，网站上没写也算值班调休
+    public var blankHolidayAfterDutyIsRest = true
+    /// 工作日没排岗位、也没写休息的算正常上班（日常）
+    public var blankWorkdayIsWork = true
+    /// 调度只算排班表上有名字的日子
+    public var dispatchScheduleOnly = true
+
+    public init() {}
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = WorkloadRules()
+        holidayDutyRestCounts = try c.decodeIfPresent(Bool.self, forKey: .holidayDutyRestCounts) ?? d.holidayDutyRestCounts
+        blankHolidayAfterDutyIsRest = try c.decodeIfPresent(Bool.self, forKey: .blankHolidayAfterDutyIsRest) ?? d.blankHolidayAfterDutyIsRest
+        blankWorkdayIsWork = try c.decodeIfPresent(Bool.self, forKey: .blankWorkdayIsWork) ?? d.blankWorkdayIsWork
+        dispatchScheduleOnly = try c.decodeIfPresent(Bool.self, forKey: .dispatchScheduleOnly) ?? d.dispatchScheduleOnly
+    }
+}
+
 public enum WorkloadCounter {
+    /// 当前规则（App 启动和改设置时写进来）
+    public static var rules = WorkloadRules()
+    /// 手动纠正：人名 → 日期 → 类别（Kind 的中文名，或「不算」表示这天不统计）
+    public static var overrides: [String: [DayKey: String]] = [:]
+    public static let excluded = "不算"
+
     /// 休息、调休、请假、无分工都不算上班。
     public static func isOff(_ post: String, matcher: ShiftMatcher) -> Bool {
         matcher.match(post)?.id == "off" || post.contains("休") || post.contains("假") || post == "无分工"
@@ -62,6 +91,7 @@ public enum WorkloadCounter {
     public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
                                   matcher: ShiftMatcher) -> Bool {
         if members?.contains(name) == true { return true }
+        guard rules.dispatchScheduleOnly else { return false }
         return history.values.contains { raw in
             raw.split(separator: "+").contains { matcher.displayName(String($0)).contains("调度") }
         }
@@ -72,7 +102,7 @@ public enum WorkloadCounter {
                                 matcher: ShiftMatcher) -> Kind {
         guard let raw else {
             if holiday { return .holiday }
-            return workday ? (rotating ? .unassigned : .regular) : .off
+            return workday ? (rotating || !rules.blankWorkdayIsWork ? .unassigned : .regular) : .off
         }
         let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
         if posts.contains(where: isDuty) { return .duty }
@@ -85,7 +115,20 @@ public enum WorkloadCounter {
     /// 平时的休息不管怎么来的都算休息。
     /// history：这个人全部的排班（用来看统计范围前一两天是不是遥测）。
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
-                             calendar: Calendar = .current) -> [DayKey: Kind] {
+                             name: String? = nil, calendar: Calendar = .current) -> [DayKey: Kind] {
+        var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, calendar: calendar)
+        // 手动纠正优先
+        if let name, let fixed = overrides[name] {
+            for day in days {
+                guard let value = fixed[day] else { continue }
+                result[day] = value == excluded ? nil : (Kind(rawValue: value) ?? result[day])
+            }
+        }
+        return result
+    }
+
+    static func autoKinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
+                          calendar: Calendar) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
         // 这个人在网站上出现的前后两周以外（还没来、已经调走）没数据的日子不算
         let keys = history.keys
@@ -105,13 +148,13 @@ public enum WorkloadCounter {
             history[day]?.split(separator: "+").contains { isDuty(matcher.displayName(String($0))) } ?? false
         }
         // 从统计范围前两天开始找遥测，往后接着的休息算调休
-        guard let first = days.min(), let last = days.max() else { return result }
+        guard rules.holidayDutyRestCounts, let first = days.min(), let last = days.max() else { return result }
         var day = first.adding(days: -restPerDuty, calendar: calendar)
         while day <= last {
             if isDutyDay(day) {
                 var next = day.adding(days: 1, calendar: calendar)
                 // 节假日值完遥测的第二天：网站上没写岗位（没排班）也是值班后的休息，算工作量
-                if history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
+                if rules.blankHolidayAfterDutyIsRest, history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
                     result[next] = .dutyRest
                 }
                 for _ in 0..<restPerDuty where restPosts(next) {
@@ -135,7 +178,7 @@ public enum WorkloadCounter {
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
             let rotating = isRotating(name: name, history: history, members: members, matcher: matcher)
-            let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: rotating, calendar: calendar)
+            let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: rotating, name: name, calendar: calendar)
             for day in days {
                 for post in history[day]?.split(separator: "+") ?? [] { p.posts[matcher.displayName(String(post)), default: 0] += 1 }
                 let holiday = ChinaHolidays.isHoliday(day)

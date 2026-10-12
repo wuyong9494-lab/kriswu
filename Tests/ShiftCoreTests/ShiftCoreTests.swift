@@ -1092,4 +1092,47 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(TaskList.items(from: "1、巡检机房；2、填写日志\n3. 交接班"), ["巡检机房", "填写日志", "交接班"])
         XCTAssertEqual(TaskList.items(from: "负责数据处理。"), ["负责数据处理"])
     }
+
+    func testRulesAndOverrides() {
+        let roster: Roster = ["甲": [d(12): "组A", d(14): "休息"]]      // 10/12 周一
+        let days = (12...16).map(d)
+        func c() -> PersonWorkload? { WorkloadCounter.count(roster: roster, days: days, matcher: m, calendar: cal).first }
+        defer { WorkloadCounter.rules = WorkloadRules(); WorkloadCounter.overrides = [:] }
+        XCTAssertEqual(c()?.workDays, 4)
+        // 关掉「没排没写休息算上班」
+        WorkloadCounter.rules.blankWorkdayIsWork = false
+        XCTAssertEqual(c()?.workDays, 1)
+        XCTAssertEqual(c()?.unassignedDays, 3)
+        WorkloadCounter.rules = WorkloadRules()
+        // 手动纠正：13 日其实休息，15 日不算
+        WorkloadCounter.overrides = ["甲": [d(13): "休息", d(15): WorkloadCounter.excluded]]
+        XCTAssertEqual(c()?.workDays, 2)
+        XCTAssertEqual(c()?.offDays, 2)
+        // 规则从 JSON 读：缺的字段用默认
+        let rules = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"blankWorkdayIsWork":false}"#.utf8))
+        XCTAssertEqual(rules?.blankWorkdayIsWork, false)
+        XCTAssertEqual(rules?.holidayDutyRestCounts, true)
+    }
+
+    func testTeamChanges() {
+        let before: Roster = ["甲": [d(15): "组A"], "乙": [d(15): "组B"], "丙": [d(15): "休息"], "丁": [d(16): "休息"]]
+        let after: Roster = ["甲": [d(15): "组B"], "乙": [d(15): "组A"], "丙": [d(15): "休息"],
+                             "丁": [d(16): "遥测"], "戊": [d(17): "组C"]]
+        let c = RosterDiff.changes(before: before, after: after, days: [d(15), d(16), d(17)], matcher: m)
+        XCTAssertEqual(c.map(\.summary), ["组A：甲 → 乙", "组B：乙 → 甲"])   // 16 日之前没人有岗位，17 日之前没数据：不算
+        XCTAssertTrue(c[0].involves("甲"))
+    }
+
+    func testDataCheck() {
+        // 甲 10/12 周一遥测，13 日网站上什么都没写；10/12–10/16 每天都有 6 人
+        var roster: Roster = ["甲": [d(12): "遥测", d(14): "组A"], "乙": [d(12): "测控岗"]]
+        for i in 0..<6 { roster["人\(i)"] = Dictionary(uniqueKeysWithValues: (12...16).map { (d($0), "组B") }) }
+        roster["人0"]?[d(16)] = nil
+        for i in 1..<6 { roster["人\(i)"]?[d(16)] = nil }   // 16 日只剩甲乙以外 0 人
+        let issues = DataCheck.issues(roster: roster, published: Set((12...16).map(d)), matcher: m, members: nil,
+                                      today: d(16), calendar: cal)
+        XCTAssertTrue(issues.contains { $0.kind == .noRestAfterDuty && $0.name == "甲" && $0.day == d(13) }, "\(issues)")
+        XCTAssertTrue(issues.contains { $0.kind == .unknownPost && $0.text.contains("测控岗") })
+        XCTAssertTrue(issues.contains { $0.kind == .thinDay && $0.day == d(16) })
+    }
 }

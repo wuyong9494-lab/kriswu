@@ -215,6 +215,7 @@ struct SettingsView: View {
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
+            Toggle("收藏的同事排班变了也通知我", isOn: $store.settings.notifyFavorites)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
                 Button("试听") {
@@ -249,6 +250,7 @@ struct SettingsView: View {
                     .onChange(of: pushToken) { Keychain.set($0.trimmingCharacters(in: .whitespacesAndNewlines), for: .pushPlusToken) }
                 Toggle("每天的提醒也发到微信", isOn: $store.settings.weChatDaily)
                 Toggle("排班变动也发到微信", isOn: $store.settings.weChatChanges)
+                Toggle("每月 1 号发上个月的工作量月报", isOn: $store.settings.monthlyReport)
                 Button {
                     sendingWeChatTest = true
                     Task {

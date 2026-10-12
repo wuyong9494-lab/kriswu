@@ -45,7 +45,7 @@ public enum WorkloadBalance {
         /// 算在「日常」里的组别天数（同一天还有遥测的算值班，不在这里）
         func regularGroupDays(_ name: String, _ history: [DayKey: String]) -> Int {
             let rotating = WorkloadCounter.isRotating(name: name, history: history, members: members, matcher: matcher)
-            let kinds = WorkloadCounter.kinds(of: history, days: days, matcher: matcher, rotating: rotating, calendar: calendar)
+            let kinds = WorkloadCounter.kinds(of: history, days: days, matcher: matcher, rotating: rotating, name: name, calendar: calendar)
             return days.filter { kinds[$0] == .regular && hasGroup(history[$0]) }.count
         }
         // 只比较这段时间有组别排班的人

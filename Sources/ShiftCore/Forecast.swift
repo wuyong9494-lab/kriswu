@@ -70,4 +70,18 @@ public enum WorkloadCSV {
         }
         return lines.joined(separator: "\n") + "\n"
     }
+
+    /// 工作量均衡分析导出
+    public static func balance(_ report: BalanceReport, title: String) -> String {
+        var lines = [field(title), "结论," + field(report.verdict), "平均," + String(format: "%.1f", report.average),
+                     "姓名,工作量,和平均差,判断,遥测,组别天数,其它日常,出差,休息,节假日"]
+        for row in report.rows {
+            let w = row.workload
+            lines.append([row.name, "\(w.workDays)", String(format: "%+.1f", row.diff), row.level.rawValue, "\(w.dutyDays)",
+                          "\(row.groupDays)", "\(max(0, w.regularDays - row.groupDays))", "\(w.tripDays)", "\(w.offDays)",
+                          "\(w.holidayDays)"].map(field).joined(separator: ","))
+        }
+        lines += report.findings.map(field)
+        return lines.joined(separator: "\n") + "\n"
+    }
 }

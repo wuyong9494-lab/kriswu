@@ -43,7 +43,7 @@ enum WidgetStore {
     static func save(_ snapshot: WidgetSnapshot) {
         guard let url = fileURL, let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: url, options: .atomic)
-        WidgetCenter.shared.reloadTimelines(ofKind: kind)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     static func load() -> WidgetSnapshot? {

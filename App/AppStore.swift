@@ -77,6 +77,17 @@ struct AppSettings: Codable, Equatable {
     var restAlertNotified: Int?
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
+    /// 工作量规则开关
+    var workloadRules = WorkloadRules()
+    /// 工作量手动纠正：人名 → yyyy-MM-dd → 类别（或「不算」）
+    var workloadOverrides: [String: [String: String]] = [:]
+    /// 每月 1 号把上个月的工作量发到微信
+    var monthlyReport: Bool = true
+    var lastMonthlyReport: String?
+    /// 关注的同事排班变了也通知
+    var notifyFavorites: Bool = true
+    /// 全员换班记录
+    var teamChanges: [TeamChange] = []
     /// 遥测下班后补觉到几点（给快捷指令的勿扰自动化用）
     var restFocusUntil = ClockTime(hour: 14, minute: 0)
     /// 组别任务清单勾选：「yyyy-MM-dd|组A」→ 做完的事项
@@ -161,6 +172,12 @@ struct AppSettings: Codable, Equatable {
         restAlertThreshold = try c.decodeIfPresent(Int.self, forKey: .restAlertThreshold) ?? 5
         restAlertNotified = try c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
         liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
+        workloadRules = try c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules) ?? WorkloadRules()
+        workloadOverrides = try c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides) ?? [:]
+        monthlyReport = try c.decodeIfPresent(Bool.self, forKey: .monthlyReport) ?? true
+        lastMonthlyReport = try c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
+        notifyFavorites = try c.decodeIfPresent(Bool.self, forKey: .notifyFavorites) ?? true
+        teamChanges = try c.decodeIfPresent([TeamChange].self, forKey: .teamChanges) ?? []
         restFocusUntil = try c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil) ?? ClockTime(hour: 14, minute: 0)
         taskChecks = try c.decodeIfPresent([String: [String]].self, forKey: .taskChecks) ?? [:]
         backupFolderBookmark = try c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
@@ -275,7 +292,8 @@ final class AppStore: ObservableObject {
             if settings.shiftTypes != oldValue.shiftTypes {
                 publishedDays = Self.published(in: roster, matcher: matcher)
             }
-            if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork {
+            if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
+                || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides {
                 applyCustomHolidays()
             }
             save()
@@ -375,7 +393,22 @@ final class AppStore: ObservableObject {
     func applyCustomHolidays() {
         ChinaHolidays.customOff = Set(settings.customHolidayOff)
         ChinaHolidays.customWork = Set(settings.customHolidayWork)
+        WorkloadCounter.rules = settings.workloadRules
+        WorkloadCounter.overrides = settings.workloadOverrides.mapValues { days in
+            Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
+        }
     }
+
+    /// 工作量手动纠正：value 为 nil 时恢复自动
+    func setOverride(_ name: String, _ day: DayKey, _ value: String?) {
+        var all = settings.workloadOverrides
+        var days = all[name] ?? [:]
+        days[day.description] = value
+        all[name] = days.isEmpty ? nil : days
+        settings.workloadOverrides = all
+    }
+
+    func override(_ name: String, _ day: DayKey) -> String? { settings.workloadOverrides[name]?[day.description] }
 
     private static let rosterVersion = 3
 
@@ -694,7 +727,9 @@ final class AppStore: ObservableObject {
             let rosterBefore = roster
             let publishedBefore = publishedDays
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
+            let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
             mergeRoster(outcome.roster)
+            if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
             updateRestBalance(outcome.restBalance)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
@@ -1049,8 +1084,47 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// 全员谁和谁换了班：记下来；关注的同事以后的班变了就通知
+    private func recordTeamChanges(before: Roster, days: Set<DayKey>) async {
+        let found = RosterDiff.changes(before: before, after: roster, days: days, matcher: matcher)
+        guard !found.isEmpty else { return }
+        var log = settings.teamChanges
+        for c in found where !log.contains(where: { $0.day == c.day && $0.post == c.post && $0.from == c.from && $0.to == c.to }) {
+            log.insert(c, at: 0)
+        }
+        settings.teamChanges = Array(log.sorted { ($0.detected, $0.day) > ($1.detected, $1.day) }.prefix(500))
+        let today = DayKey.today
+        let watched = found.filter { c in c.day >= today && settings.favorites.contains(where: c.involves) }
+        if settings.notifyFavorites, !watched.isEmpty {
+            let body = watched.map { "\($0.day.dateText) \($0.summary)" }.joined(separator: "\n")
+            await NotificationService.notifyNow(id: "favorites-\(UUID().uuidString)", title: "⭐ 关注的同事排班有变", body: body)
+        }
+    }
+
+    /// 每月 1 号起第一次运行时，把上个月全员工作量发到微信
+    func sendMonthlyReportIfDue() async {
+        guard settings.monthlyReport, settings.weChatEnabled else { return }
+        let today = DayKey.today
+        let key = String(format: "%04d-%02d", today.year, today.month)
+        guard settings.lastMonthlyReport != key else { return }
+        let (y, m) = today.month == 1 ? (today.year - 1, 12) : (today.year, today.month - 1)
+        let report = workload(year: y, month: m)
+        guard !report.people.isEmpty else { return }
+        let balance = WorkloadBalance.analyze(roster: roster, days: report.days, matcher: matcher, tolerance: 3,
+                                              members: rotationMembers, calendar: .app)
+        var lines = ["\(y)年\(m)月（\(report.days.count) 天）工作量从多到少："]
+        lines += report.people.map { p in
+            "\(p.name)：\(p.workDays) 天（遥测 \(p.dutyDays)，休息 \(p.offDays)）" + (settings.restBalance[p.name].map { "，待休 \($0)" } ?? "")
+        }
+        if !balance.rows.isEmpty { lines.append("\n有组别的人：\(balance.verdict)。" + balance.findings.joined(separator: "；")) }
+        if await pushToWeChat(title: "📊 \(m)月工作量月报", content: lines.joined(separator: "\n")) {
+            settings.lastMonthlyReport = key
+        }
+    }
+
     func sendDueWeChatReminders() async {
         await sendPendingWeChatChange()
+        await sendMonthlyReportIfDue()
         guard settings.weChatEnabled, settings.weChatDaily else { return }
         let now = Date()
         let today = DayKey.today
@@ -1307,6 +1381,13 @@ final class AppStore: ObservableObject {
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
         }
         return Workload(days: days, people: people, text: text)
+    }
+
+    /// 把一段 CSV 文字存成临时文件（带 BOM，Excel 才认得出中文）
+    func csvFile(named name: String, text: String) -> URL? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        let data = Data([0xEF, 0xBB, 0xBF]) + Data(text.utf8)
+        return (try? data.write(to: url, options: .atomic)) != nil ? url : nil
     }
 
     /// 导出成表格文件（CSV，Excel / WPS / Numbers 能直接打开），返回临时文件地址

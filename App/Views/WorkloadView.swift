@@ -41,6 +41,9 @@ struct WorkloadView: View {
             Section {
                 NavigationLink { YearStatsView() } label: { Label("全年统计 / 导出表格", systemImage: "calendar") }
                 NavigationLink { DutyForecastView() } label: { Label("遥测轮转预测", systemImage: "antenna.radiowaves.left.and.right") }
+                NavigationLink { DataCheckView() } label: { Label("数据核对（找读漏、读错）", systemImage: "checkmark.shield") }
+                NavigationLink { WorkloadRulesView() } label: { Label("工作量规则", systemImage: "slider.horizontal.3") }
+                NavigationLink { TeamChangesView() } label: { Label("全员换班记录", systemImage: "arrow.left.arrow.right") }
                 NavigationLink { HolidayDutyView() } label: { Label("节假日值班统计", systemImage: "flag") }
                 NavigationLink { RestTrendView() } label: { Label("待休趋势", systemImage: "chart.line.uptrend.xyaxis") }
                 NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
@@ -181,7 +184,7 @@ struct WorkloadDetailView: View {
 
     var body: some View {
         let kinds = WorkloadCounter.kinds(of: store.roster[name] ?? [:], days: days, matcher: store.matcher,
-                                          rotating: store.isRotating(name), calendar: .app)
+                                          rotating: store.isRotating(name), name: name, calendar: .app)
         List(days.reversed()) { day in
             let raw = store.roster[name]?[day]
             let holiday = ChinaHolidays.isHoliday(day)
@@ -194,12 +197,33 @@ struct WorkloadDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(kind?.rawValue ?? "不在岗")
+                if store.override(name, day) != nil {
+                    Text("手动").font(.caption2).foregroundStyle(.orange)
+                }
+                Text(kind?.rawValue ?? (store.override(name, day) == WorkloadCounter.excluded ? "不算" : "不在岗"))
                     .font(.subheadline.bold())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background((kind.map(color) ?? .gray).opacity(0.2), in: Capsule())
             }
+            .contentShape(Rectangle())
+            .contextMenu {
+                // 网站读错或有特殊情况：手动改这一天（以后同步也不会被冲掉）
+                ForEach([WorkloadCounter.Kind.regular, .duty, .dutyRest, .trip, .off, .holiday, .unassigned], id: \.self) { k in
+                    Button(k.rawValue) { store.setOverride(name, day, k.rawValue) }
+                }
+                Button("这天不算") { store.setOverride(name, day, WorkloadCounter.excluded) }
+                if store.override(name, day) != nil {
+                    Button("恢复自动", role: .destructive) { store.setOverride(name, day, nil) }
+                }
+            }
+        }
+        .safeAreaInset(edge: .top) {
+            Text("长按某一天可以手动改（网站读错时用）")
+                .font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .background(.bar)
         }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)

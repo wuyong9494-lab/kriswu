@@ -182,6 +182,9 @@ struct YearStatsView: View {
                 if let file {
                     ShareLink(item: file) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
                 }
+                NavigationLink { YearSummaryView(year: year) } label: {
+                    Label("我的 \(String(year)) 年度总结（可存图片）", systemImage: "star.circle")
+                }
                 Button {
                     Task { await store.readHistory(since: year) }
                 } label: {

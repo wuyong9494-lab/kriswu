@@ -160,3 +160,60 @@ public enum SwapFinder {
         }
     }
 }
+
+/// 全员排班里某天某个岗位换了人（谁和谁换了班）
+public struct TeamChange: Codable, Hashable, Identifiable {
+    public var id: UUID
+    public var detected: Date
+    public var day: DayKey
+    public var post: String
+    public var from: [String]
+    public var to: [String]
+
+    public init(id: UUID = UUID(), detected: Date = Date(), day: DayKey, post: String, from: [String], to: [String]) {
+        self.id = id
+        self.detected = detected
+        self.day = day
+        self.post = post
+        self.from = from
+        self.to = to
+    }
+
+    public var summary: String {
+        "\(post)：\(from.isEmpty ? "（没人）" : from.joined(separator: "、")) → \(to.isEmpty ? "（没人）" : to.joined(separator: "、"))"
+    }
+
+    public func involves(_ name: String) -> Bool { from.contains(name) || to.contains(name) }
+}
+
+public enum RosterDiff {
+    /// 某天每个岗位（组别、遥测、调度等，不含休息）是谁
+    static func holders(_ roster: Roster, day: DayKey, matcher: ShiftMatcher) -> [String: (post: String, names: [String])] {
+        var result: [String: (post: String, names: [String])] = [:]
+        for (name, days) in roster {
+            for post in SwapLedger.posts(days[day], matcher: matcher) {
+                let key = SwapLedger.key(post)
+                result[key, default: (post, [])].names.append(name)
+            }
+        }
+        return result.mapValues { ($0.post, $0.names.sorted()) }
+    }
+
+    /// days：这次重新读到、之前也读到过的日子
+    public static func changes(before: Roster, after: Roster, days: Set<DayKey>, matcher: ShiftMatcher,
+                               now: Date = Date()) -> [TeamChange] {
+        var result: [TeamChange] = []
+        for day in days.sorted() {
+            let b = holders(before, day: day, matcher: matcher), a = holders(after, day: day, matcher: matcher)
+            // 之前这天还没正式排班（没人有岗位）：第一次排出来不算换班
+            guard !b.isEmpty, !a.isEmpty else { continue }
+            for key in Set(b.keys).union(a.keys).sorted() {
+                let from = b[key]?.names ?? [], to = a[key]?.names ?? []
+                guard Set(from) != Set(to) else { continue }
+                result.append(TeamChange(detected: now, day: day, post: a[key]?.post ?? b[key]?.post ?? key,
+                                         from: from.filter { !to.contains($0) }, to: to.filter { !from.contains($0) }))
+            }
+        }
+        return result
+    }
+}

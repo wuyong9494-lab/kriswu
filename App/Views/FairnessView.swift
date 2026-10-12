@@ -76,7 +76,16 @@ struct FairnessView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: shareText(weekReport, monthReport)) { Label("分享", systemImage: "square.and.arrow.up") }
+                Menu {
+                    ShareLink(item: shareText(weekReport, monthReport)) { Label("分享文字", systemImage: "text.alignleft") }
+                    if let file = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",
+                                                text: WorkloadCSV.balance(weekReport, title: "本周（\(rangeText(week) ?? "")）") + "\n"
+                                                    + WorkloadCSV.balance(monthReport, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）")) {
+                        ShareLink(item: file) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
+                    }
+                } label: {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                }
             }
         }
     }

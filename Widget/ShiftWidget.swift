@@ -158,6 +158,8 @@ struct ShiftWidget: Widget {
 struct ShiftWidgetBundle: WidgetBundle {
     var body: some Widget {
         ShiftWidget()
+        WeekWidget()
+        NextDutyWidget()
         DutyLiveActivity()
     }
 }
@@ -210,6 +212,181 @@ struct DutyLiveActivity: Widget {
             } minimal: {
                 Text("📡")
             }
+        }
+    }
+}
+
+// MARK: - 本周 7 天
+
+struct WeekEntry: TimelineEntry {
+    let date: Date
+    let days: [(key: String, label: String, day: WidgetDay?)]
+}
+
+struct WeekProvider: TimelineProvider {
+    func placeholder(in context: Context) -> WeekEntry { entry(for: Date(), snapshot: nil) }
+
+    func getSnapshot(in context: Context, completion: @escaping (WeekEntry) -> Void) {
+        completion(entry(for: Date(), snapshot: WidgetStore.load()))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<WeekEntry>) -> Void) {
+        let snapshot = WidgetStore.load()
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.startOfDay(for: Date())
+        let entries = [entry(for: Date(), snapshot: snapshot)] + (1...3).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: start).map { entry(for: $0, snapshot: snapshot) }
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
+    }
+
+    /// 从今天起 7 天
+    func entry(for date: Date, snapshot: WidgetSnapshot?) -> WeekEntry {
+        let calendar = Calendar(identifier: .gregorian)
+        let byDate = Dictionary((snapshot?.days ?? []).map { ($0.date, $0) }, uniquingKeysWith: { a, _ in a })
+        let names = ["日", "一", "二", "三", "四", "五", "六"]
+        let days = (0..<7).compactMap { offset -> (key: String, label: String, day: WidgetDay?)? in
+            guard let d = calendar.date(byAdding: .day, value: offset, to: date) else { return nil }
+            let key = WidgetStore.key(for: d)
+            let label = offset == 0 ? "今" : names[calendar.component(.weekday, from: d) - 1]
+            return (key, label, byDate[key])
+        }
+        return WeekEntry(date: date, days: days)
+    }
+}
+
+struct WeekWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "WeekWidget", provider: WeekProvider()) { entry in
+            HStack(spacing: 4) {
+                ForEach(entry.days, id: \.key) { d in
+                    VStack(spacing: 4) {
+                        Text(d.label).font(.caption2.bold()).foregroundStyle(.secondary)
+                        Text(d.day?.emoji ?? "").font(.caption)
+                        Text(d.day?.title ?? "—")
+                            .font(.caption2.bold())
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.5)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.vertical, 6)
+                    .background((d.day.map { Color(hex: $0.colorHex) } ?? .gray).opacity(0.22),
+                                in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .padding(10)
+            .widgetBackground(Color(.systemBackground))
+        }
+        .configurationDisplayName("本周排班")
+        .description("从今天起 7 天的分工。")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+// MARK: - 下次遥测
+
+struct NextDutyEntry: TimelineEntry {
+    let date: Date
+    /// 下一次遥测那天（yyyy-MM-dd）和离今天几天；nil 表示一个月内没有
+    let next: (key: String, days: Int)?
+}
+
+struct NextDutyProvider: TimelineProvider {
+    func placeholder(in context: Context) -> NextDutyEntry { NextDutyEntry(date: Date(), next: ("", 3)) }
+
+    func getSnapshot(in context: Context, completion: @escaping (NextDutyEntry) -> Void) {
+        completion(entry(for: Date(), snapshot: WidgetStore.load()))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<NextDutyEntry>) -> Void) {
+        let snapshot = WidgetStore.load()
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.startOfDay(for: Date())
+        let entries = [entry(for: Date(), snapshot: snapshot)] + (1...7).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: start).map { entry(for: $0, snapshot: snapshot) }
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
+    }
+
+    func entry(for date: Date, snapshot: WidgetSnapshot?) -> NextDutyEntry {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = WidgetStore.key(for: date)
+        let next = (snapshot?.days ?? []).filter { $0.date >= today && $0.title.contains("遥测") }.map(\.date).min()
+        guard let next, let nextDate = DateFormatterCache.day.date(from: next) else { return NextDutyEntry(date: date, next: nil) }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: nextDate)).day ?? 0
+        return NextDutyEntry(date: date, next: (next, days))
+    }
+}
+
+enum DateFormatterCache {
+    static let day: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+}
+
+struct NextDutyWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "NextDutyWidget", provider: NextDutyProvider()) { entry in
+            NextDutyView(entry: entry)
+        }
+        .configurationDisplayName("下次遥测")
+        .description("距离下一次遥测还有几天。")
+        .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular])
+    }
+}
+
+struct NextDutyView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: NextDutyEntry
+
+    private var big: String {
+        guard let n = entry.next else { return "—" }
+        return n.days == 0 ? "今天" : "\(n.days)"
+    }
+    private var dateText: String {
+        guard let key = entry.next?.key, key.count == 10 else { return "一个月内没有" }
+        return "\(Int(key.dropFirst(5).prefix(2)) ?? 0)月\(Int(key.suffix(2)) ?? 0)日"
+    }
+
+    var body: some View {
+        switch family {
+        case .accessoryCircular:
+            ZStack {
+                AccessoryWidgetBackground()
+                VStack(spacing: 0) {
+                    Text("📡").font(.caption2)
+                    Text(big).font(.system(size: 18, weight: .bold)).minimumScaleFactor(0.5)
+                }
+            }
+            .widgetBackground(Color.clear)
+        case .accessoryRectangular:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("📡 下次遥测").font(.caption2)
+                Text(entry.next.map { $0.days == 0 ? "今天" : "\($0.days) 天后" } ?? "—").font(.headline)
+                Text(dateText).font(.caption2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .widgetBackground(Color.clear)
+        default:
+            VStack(alignment: .leading, spacing: 4) {
+                Text("📡 下次遥测").font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(big).font(.system(size: 44, weight: .heavy, design: .rounded)).minimumScaleFactor(0.4)
+                    if let n = entry.next, n.days > 0 { Text("天后").font(.caption) }
+                }
+                Spacer(minLength: 0)
+                Text(dateText).font(.caption)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding()
+            .widgetBackground(Color(hex: "#17A2B8").gradient)
         }
     }
 }
