@@ -146,8 +146,15 @@ private struct WeekTable: View {
         let range = days[0]...days[6]
         let people = store.roster.filter { $0.value.keys.contains(where: range.contains) }
         let zh = Locale(identifier: "zh_CN")
-        // 先算好谁是轮班的，别在排序里一遍遍翻整段历史
-        let rotating = Set(people.keys.filter(store.isRotating))
+        // 轮组别、遥测、调度的人排在前面（先算好，别在排序里一遍遍翻整段历史）
+        let rotating = Set(people.keys.filter { name in
+            people[name]?.values.contains { raw in
+                raw.split(separator: "+").contains { p in
+                    let post = store.matcher.displayName(String(p))
+                    return GroupNotes.isGroup(post) || WorkloadCounter.isDuty(post) || post.contains("调度")
+                }
+            } ?? false
+        })
         let names = people.keys.sorted { a, b in
             let ra = rotating.contains(a), rb = rotating.contains(b)
             if ra != rb { return ra }

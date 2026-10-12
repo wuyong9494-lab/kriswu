@@ -36,7 +36,7 @@ struct WorkloadView: View {
             } footer: {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
-                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位算「日常班」；一直没有组别的日常班人员，工作日没排岗位也算日常班。轮班人员和调度，工作日网站上没给排岗位的算「没排班」，不算工作量。节假日里遥测后紧接着的休息是节假日值班换来的，算「值班调休」；平时的休息、调休（值班换来的、请假的）都算休息。「工作量」= 值班 + 值班调休 + 日常 + 出差；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                     : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位算「日常班」；工作日网站上没排岗位、也没写休息的是正常上班，也算日常班；调度没排班的日子不算。节假日里遥测后紧接着的休息是节假日值班换来的，算「值班调休」；平时的休息、调休（值班换来的、请假的）都算休息。「工作量」= 值班 + 值班调休 + 日常 + 出差；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
             }
             Section {
                 NavigationLink { YearStatsView() } label: { Label("全年统计 / 导出表格", systemImage: "calendar") }
@@ -52,10 +52,10 @@ struct WorkloadView: View {
                 NavigationLink {
                     RotationMembersView()
                 } label: {
-                    LabeledContent("轮班人员", value: store.settings.rotationMembers.isEmpty ? "自动判断" : "\(store.settings.rotationMembers.count) 人")
+                    LabeledContent("只按排班算的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
                 }
             } footer: {
-                Text("轮班人员和排过调度的人，工作日网站上没给排岗位的日子不算工作量；其他人（没有组别和调度任务的人，即使值遥测）工作日没排岗位算日常班。")
+                Text("调度（排班表上有名字才算一天）和这里另加的人，工作日网站上没给排岗位不算工作量；其他人（包括你们轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常；写了休息、调休的算休息。")
             }
             Section {
                 Button {
@@ -218,12 +218,12 @@ struct WorkloadDetailView: View {
     }
 }
 
-/// 设置轮班人员：可以直接粘贴名字，也可以在全员排班的名单里勾选。
+/// 设置「只按排班算」的人（调度自动算在内）：可以直接粘贴名字，也可以在全员排班的名单里勾选。
 struct RotationMembersView: View {
     @EnvironmentObject private var store: AppStore
     @State private var text = ""
 
-    private var members: [String] { store.settings.rotationMembers }
+    private var members: [String] { store.settings.scheduleOnlyMembers }
 
     var body: some View {
         let zh = Locale(identifier: "zh_CN")
@@ -234,28 +234,28 @@ struct RotationMembersView: View {
         List {
             Section {
                 TextField("粘贴名字，用空格、逗号或顿号隔开", text: $text, axis: .vertical)
-                Button("设为轮班人员") {
+                Button("设为只按排班算") {
                     let parsed = text.split { " ,，、;；\n\t".contains($0) }.map(String.init).filter { !$0.isEmpty }
                     var seen = Set<String>()
-                    store.settings.rotationMembers = parsed.filter { seen.insert($0).inserted }
+                    store.settings.scheduleOnlyMembers = parsed.filter { seen.insert($0).inserted }
                     text = ""
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if !members.isEmpty {
-                    Button("清空（改回自动判断）", role: .destructive) { store.settings.rotationMembers = [] }
+                    Button("清空（只按调度）", role: .destructive) { store.settings.scheduleOnlyMembers = [] }
                 }
             } footer: {
                 Text(members.isEmpty
-                     ? "还没设置：现在按「有组别任务或调度任务」自动判断谁是轮班的；只值遥测的不算。"
-                     : "已设置 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也按轮班算。")
+                     ? "现在只有排过调度的人按排班算（排班表上有名字才算一天）。其他人没排岗位、没写休息的工作日都算正常上班。一般不用加人。"
+                     : "另加了 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也按排班算。")
             }
             Section("全员排班里的人（点一下勾选）") {
                 ForEach(names, id: \.self) { name in
                     Button {
-                        if let i = store.settings.rotationMembers.firstIndex(of: name) {
-                            store.settings.rotationMembers.remove(at: i)
+                        if let i = store.settings.scheduleOnlyMembers.firstIndex(of: name) {
+                            store.settings.scheduleOnlyMembers.remove(at: i)
                         } else {
-                            store.settings.rotationMembers.append(name)
+                            store.settings.scheduleOnlyMembers.append(name)
                         }
                     } label: {
                         HStack {
@@ -264,14 +264,14 @@ struct RotationMembersView: View {
                             if members.contains(name) {
                                 Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
                             } else if store.isRotating(name) {
-                                Text(members.isEmpty ? "自动：轮班" : "调度").font(.caption).foregroundStyle(.secondary)
+                                Text("调度").font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
                 }
             }
         }
-        .navigationTitle("轮班人员")
+        .navigationTitle("只按排班算的人")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

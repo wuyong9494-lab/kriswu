@@ -4,8 +4,8 @@ import Foundation
 /// - 值班：遥测（工作到第二天 8:30）
 /// - 值班调休：法定节假日里，遥测后紧接着的休息、调休。节假日值班换来的，算工作量
 ///   （平时的休息、调休，不管是值班换来的还是请假，都算休息）
-/// - 日常：各组、调度等其它岗位；一直没有组别的日常班人员，工作日（按法定节假日调整）没排岗位的日子
-/// - 未排班：轮组别、遥测、调度的人，工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
+/// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位、也没写休息的日子（正常上班）
+/// - 未排班：调度（以及设置里「只按排班算」的人）工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
 /// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
@@ -57,16 +57,14 @@ public enum WorkloadCounter {
              unassigned = "未排班"
     }
 
-    /// 轮班的人：设置里勾选的轮班人员，加上排过调度的人。这些人没排岗位的日子就是没给他排班，不算上班；
-    /// 其他人（一直没有组别的日常班人员）工作日没排岗位就是在上日常班。
-    /// members 为空（还没设置）时，排过组别（组A–E）或调度的人算轮班的；只值遥测的不算。
+    /// 只按排班算的人：排过调度的人（排班表上有名字才算一天），加上设置里另外加的人。
+    /// 这些人没排岗位的工作日不算工作量；其他人（包括轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常。
     public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
                                   matcher: ShiftMatcher) -> Bool {
-        let posts = history.values.flatMap { $0.split(separator: "+").map { matcher.displayName(String($0)) } }
-        if posts.contains(where: { $0.contains("调度") }) { return true }
-        if let members, !members.isEmpty { return members.contains(name) }
-        // 只值遥测、没有组别任务的人不算轮班：没排的工作日照样是在上日常班
-        return posts.contains { GroupNotes.isGroup($0) }
+        if members?.contains(name) == true { return true }
+        return history.values.contains { raw in
+            raw.split(separator: "+").contains { matcher.displayName(String($0)).contains("调度") }
+        }
     }
 
     /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）
@@ -127,7 +125,7 @@ public enum WorkloadCounter {
     }
 
     /// days：统计哪些日子（已读到全员排班的日子）；名单是全员排班里出现过的所有人。
-    /// members：设置里的轮班人员（见 isRotating）
+    /// members：设置里「只按排班算」的人（见 isRotating）
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher, members: Set<String>? = nil,
                              calendar: Calendar = .current) -> [PersonWorkload] {
         guard let first = days.min(), let last = days.max() else { return [] }

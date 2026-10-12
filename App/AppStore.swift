@@ -62,8 +62,8 @@ struct AppSettings: Codable, Equatable {
     var weChatWeekSent: DayKey?
     /// 收藏的同事，首页显示他们今天、明天在哪个组
     var favorites: [String] = []
-    /// 轮班人员（轮组别、遥测的人）：这些人和排过调度的人，工作日网站上没排岗位不算工作量
-    var rotationMembers: [String] = []
+    /// 只按排班算的人（除调度外另加的）：工作日网站上没排岗位不算工作量
+    var scheduleOnlyMembers: [String] = []
     /// 换班账本
     var swapRecords: [SwapRecord] = []
     /// 自己录入的节假日（yyyy-MM-dd）：放假的日子、调休上班的周末
@@ -153,7 +153,7 @@ struct AppSettings: Codable, Equatable {
         weeklyPreview = try c.decodeIfPresent(Bool.self, forKey: .weeklyPreview) ?? d.weeklyPreview
         weChatWeekSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
         favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
-        rotationMembers = try c.decodeIfPresent([String].self, forKey: .rotationMembers) ?? []
+        scheduleOnlyMembers = try c.decodeIfPresent([String].self, forKey: .scheduleOnlyMembers) ?? []
         swapRecords = try c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords) ?? []
         customHolidayOff = try c.decodeIfPresent([String].self, forKey: .customHolidayOff) ?? []
         customHolidayWork = try c.decodeIfPresent([String].self, forKey: .customHolidayWork) ?? []
@@ -1168,9 +1168,9 @@ final class AppStore: ObservableObject {
 
     // MARK: - 收藏的同事
 
-    /// 设置里的轮班人员；没设置时为 nil（按排过组别、遥测、调度自动判断）
+    /// 设置里另加的「只按排班算」的人（调度自动算在内）
     var rotationMembers: Set<String>? {
-        settings.rotationMembers.isEmpty ? nil : Set(settings.rotationMembers)
+        settings.scheduleOnlyMembers.isEmpty ? nil : Set(settings.scheduleOnlyMembers)
     }
 
     func isRotating(_ name: String) -> Bool {
@@ -1298,7 +1298,7 @@ final class AppStore: ObservableObject {
         }
         var text = "\(year)年" + (month.map { "\($0)月" } ?? "全年") + "工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位；一直没有组别的日常班人员工作日没排岗位的日子）+ 出差）"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位，以及没排岗位、没写休息的工作日；调度没排班的日子不算）+ 出差）"
         }
         for p in people {
             text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)，出差 \(p.tripDays)），休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天" + (p.unassignedDays > 0 ? "，没排班 \(p.unassignedDays) 天" : "")
