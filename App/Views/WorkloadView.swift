@@ -7,6 +7,21 @@ struct WorkloadView: View {
     @State private var month = DayKey.today.month
     @State private var reading = false
     @State private var monthFile: URL?
+    /// 点了工具格子里的第几个
+    @State private var toolIndex: Int?
+
+    private var tools: [ToolGrid.Item] {
+        [
+            .init(title: "均衡分析", icon: "scalemass.fill", color: .indigo, destination: AnyView(FairnessView())),
+            .init(title: "全年统计", icon: "calendar", color: .blue, destination: AnyView(YearStatsView())),
+            .init(title: "遥测预测", icon: "antenna.radiowaves.left.and.right", color: .teal, destination: AnyView(DutyForecastView())),
+            .init(title: "数据核对", icon: "checkmark.shield.fill", color: .green, destination: AnyView(DataCheckView())),
+            .init(title: "规则", icon: "slider.horizontal.3", color: .gray, destination: AnyView(WorkloadRulesView())),
+            .init(title: "换班记录", icon: "arrow.left.arrow.right", color: .orange, destination: AnyView(TeamChangesView())),
+            .init(title: "节假日值班", icon: "flag.fill", color: .red, destination: AnyView(HolidayDutyView())),
+            .init(title: "待休趋势", icon: "chart.line.uptrend.xyaxis", color: .purple, destination: AnyView(RestTrendView())),
+        ]
+    }
 
     var body: some View {
         let report = store.workload(year: year, month: month)
@@ -54,16 +69,7 @@ struct WorkloadView: View {
                 }
             }
             Section {
-                ToolGrid(items: [
-                    .init(title: "均衡分析", icon: "scalemass.fill", color: .indigo, destination: AnyView(FairnessView())),
-                    .init(title: "全年统计", icon: "calendar", color: .blue, destination: AnyView(YearStatsView())),
-                    .init(title: "遥测预测", icon: "antenna.radiowaves.left.and.right", color: .teal, destination: AnyView(DutyForecastView())),
-                    .init(title: "数据核对", icon: "checkmark.shield.fill", color: .green, destination: AnyView(DataCheckView())),
-                    .init(title: "规则", icon: "slider.horizontal.3", color: .gray, destination: AnyView(WorkloadRulesView())),
-                    .init(title: "换班记录", icon: "arrow.left.arrow.right", color: .orange, destination: AnyView(TeamChangesView())),
-                    .init(title: "节假日值班", icon: "flag.fill", color: .red, destination: AnyView(HolidayDutyView())),
-                    .init(title: "待休趋势", icon: "chart.line.uptrend.xyaxis", color: .purple, destination: AnyView(RestTrendView())),
-                ])
+                ToolGrid(items: tools, selection: $toolIndex)
                 NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
                 if let monthFile {
                     ShareLink(item: monthFile) { Label("导出本月表格（Excel 能打开）", systemImage: "tablecells") }
@@ -138,6 +144,9 @@ struct WorkloadView: View {
         }
         .task(id: "\(year)-\(month)-\(store.roster.count)") { monthFile = store.workloadCSVFile(year: year, month: month) }
         .appList()
+        .navigationDestination(isPresented: Binding(get: { toolIndex != nil }, set: { if !$0 { toolIndex = nil } })) {
+            if let i = toolIndex { tools[i].destination }
+        }
         .navigationTitle("工作量统计")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

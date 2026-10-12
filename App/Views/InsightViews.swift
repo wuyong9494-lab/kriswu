@@ -282,7 +282,7 @@ struct WorkloadBarChart: View {
     var body: some View {
         Chart {
             ForEach(items) { item in
-                BarMark(x: .value("天", item.value), y: .value("姓名", item.name))
+                BarMark(x: .value("天", item.value), y: .value("姓名", item.name), height: .fixed(12))
                     .foregroundStyle(item.highlight
                                      ? AnyShapeStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.7), DS.Palette.accent],
                                                                     startPoint: .leading, endPoint: .trailing))
@@ -307,6 +307,6 @@ struct WorkloadBarChart: View {
                 AxisValueLabel().font(DS.Font.caption)
             }
         }
-        .frame(height: CGFloat(max(items.count, 1)) * 26 + (average == nil ? 8 : 28))
+        .frame(height: CGFloat(max(items.count, 1)) * 32 + (average == nil ? 8 : 28))
     }
 }

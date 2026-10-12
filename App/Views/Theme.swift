@@ -523,10 +523,10 @@ struct ExpandableText: View {
     }
 }
 
-/// 一行工具图标（列表页顶部用）：图标块 + 名字，四个一行
+/// 一行工具图标（列表页里用）：图标块 + 名字，四个一行。
+/// 列表里的 NavigationLink 会自动带箭头，所以这里用按钮，跳转交给页面上的 navigationDestination。
 struct ToolGrid: View {
-    struct Item: Identifiable {
-        let id = UUID()
+    struct Item {
         let title: String
         let icon: String
         let color: Color
@@ -534,15 +534,19 @@ struct ToolGrid: View {
     }
 
     let items: [Item]
+    @Binding var selection: Int?
     private let columns = Array(repeating: GridItem(.flexible(), spacing: DS.Space.s), count: 4)
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: DS.Space.m) {
-            ForEach(items) { item in
-                NavigationLink(destination: item.destination) {
+            ForEach(items.indices, id: \.self) { i in
+                Button {
+                    Haptics.tap()
+                    selection = i
+                } label: {
                     VStack(spacing: DS.Space.xs) {
-                        IconBadge(icon: item.icon, color: item.color, size: 44, filled: true)
-                        Text(item.title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
+                        IconBadge(icon: items[i].icon, color: items[i].color, size: 44, filled: true)
+                        Text(items[i].title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
                     }
                     .frame(maxWidth: .infinity)
                 }
