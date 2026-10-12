@@ -59,7 +59,7 @@ struct RootView: View {
     @State private var tab: Tab
 
     init() {
-        Appearance.apply()
+        ChromeAppearance.apply()
         // 截图时用启动参数 -screen xxx 直接打开某一页
         _tab = State(initialValue: Tab(rawValue: UserDefaults.standard.string(forKey: "screen") ?? "") ?? .today)
     }

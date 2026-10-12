@@ -462,7 +462,7 @@ enum Haptics {
 
 // MARK: - 导航栏、标签栏外观
 
-enum Appearance {
+enum ChromeAppearance {
     /// 导航栏、标签栏：毛玻璃、圆体标题、没有分隔线
     static func apply() {
         func rounded(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
