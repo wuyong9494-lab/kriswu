@@ -130,7 +130,8 @@ struct TodayHero: View {
     var body: some View {
         let raw = store.shift(on: day)
         let display = ShiftDisplay(raw: raw, matcher: store.matcher)
-        let color = display?.color ?? Color(hex: "#6E6E78")
+        // 没排班也用主题色，不再是一块灰
+        let color = display?.color ?? DS.Palette.accent
         let tomorrow = ShiftDisplay(raw: store.shift(on: day.adding(days: 1)), matcher: store.matcher)
         let isDuty = raw.map { WorkloadCounter.isDuty(store.matcher.displayName($0)) } ?? false
         VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -254,10 +255,14 @@ private struct WeekStrip: View {
                         }
                         .frame(width: 64, height: 116)
                         .background {
+                            // 按这天的班次上色：组别蓝、遥测紫……没排的保持素色
                             let shape = RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
+                            let tint = display?.color
                             shape.fill(.ultraThinMaterial)
                                 .overlay(shape.fill(DS.Palette.surface.opacity(0.7)))
-                                .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 1))
+                                .overlay(shape.fill(LinearGradient(colors: [(tint ?? .clear).opacity(0.32), (tint ?? .clear).opacity(0.10)],
+                                                                   startPoint: .top, endPoint: .bottom)))
+                                .overlay(shape.strokeBorder((tint ?? DS.Palette.hairline).opacity(tint == nil ? 1 : 0.45), lineWidth: 1))
                         }
                     }
                     .buttonStyle(PressableStyle())
@@ -284,6 +289,7 @@ private struct MonthStatCard: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .lastTextBaseline, spacing: DS.Space.xxs) {
                         CountUpText(value: me?.workDays ?? 0, font: DS.Font.giant)
+                            .foregroundStyle(LinearGradient(colors: [DS.Palette.accent, DS.Palette.vivid[2]], startPoint: .leading, endPoint: .trailing))
                         Text("天").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                     Text("工作量").font(DS.Font.caption).foregroundStyle(.secondary)
@@ -291,14 +297,17 @@ private struct MonthStatCard: View {
                 HStack(spacing: DS.Space.m) {
                     VStack(alignment: .leading, spacing: 0) {
                         CountUpText(value: me?.presentDays ?? 0, font: DS.Font.title)
+                            .foregroundStyle(DS.Palette.vivid[6])
                         Text("上班").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 0) {
                         CountUpText(value: me?.dutyDays ?? 0, font: DS.Font.title)
+                            .foregroundStyle(DS.Palette.vivid[1])
                         Text("遥测").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 0) {
                         CountUpText(value: rest ?? 0, font: DS.Font.title)
+                            .foregroundStyle(DS.Palette.vivid[4])
                         Text("待休").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -568,7 +577,7 @@ private struct DutyInsightCard: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .card(tint: warnings.contains { $0.kind == .assigned } ? DS.Palette.warning : nil)
+                .card(tint: warnings.contains { $0.kind == .assigned } ? DS.Palette.warning : DS.Palette.vivid[1])
             }
             .buttonStyle(PressableStyle())
         }

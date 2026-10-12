@@ -39,10 +39,10 @@ enum DS {
         /// 页面背景：不是一整块纯色，上浅下深，再叠两团很淡的光
         static let background = Color(light: 0xF4F5F8, dark: 0x0B0B0F)
         static let backgroundBottom = Color(light: 0xEEF0F5, dark: 0x111218)
-        static let backgroundGlowA = Color(light: 0x5B8DEF, dark: 0x5B8DEF, opacity: 0.07)
-        static let backgroundGlowB = Color(light: 0x8E7CF0, dark: 0x8E7CF0, opacity: 0.05)
+        static let backgroundGlowA = Color(light: 0x5B8DEF, dark: 0x3F7BFF, opacity: 0.10)
+        static let backgroundGlowB = Color(light: 0x8E7CF0, dark: 0xA25CFF, opacity: 0.08)
         /// 卡片表面（叠在毛玻璃上），要比背景明显亮一级，卡片才「浮」得起来
-        static let surface = Color(light: 0xFFFFFF, dark: 0x1B1C22, opacity: 0.82)
+        static let surface = Color(light: 0xFFFFFF, dark: 0x1A1D2B, opacity: 0.84)
         static let surfaceSunken = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.05)
         /// 图标方块：玻璃感的单色底
         static let glass = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.06)
@@ -52,6 +52,25 @@ enum DS {
         static let iconSecondary = Color(light: 0x8A8A93, dark: 0x8A8A93)
         static let textTertiary = Color(uiColor: .tertiaryLabel)
         static let shadow = Color(light: 0x1B1F3B, dark: 0x000000, opacity: 0.08)
+
+        /// 图标用的一组鲜艳颜色（深色背景上也亮）
+        static let vivid: [Color] = [
+            Color(light: 0x0A84FF, dark: 0x409CFF),   // 蓝
+            Color(light: 0x5E5CE6, dark: 0x7D7AFF),   // 靛
+            Color(light: 0xBF5AF2, dark: 0xDA8FFF),   // 紫
+            Color(light: 0xFF375F, dark: 0xFF6482),   // 粉红
+            Color(light: 0xFF9F0A, dark: 0xFFB340),   // 橙
+            Color(light: 0x30B0C7, dark: 0x5DE6FF),   // 青
+            Color(light: 0x30D158, dark: 0x4CE07A),   // 绿
+            Color(light: 0xFF453A, dark: 0xFF6961),   // 红
+        ]
+
+        /// 每个图标固定一种颜色（同一个功能到哪都是同一个颜色）
+        static func vivid(for key: String) -> Color {
+            var h: UInt32 = 2166136261
+            for b in key.utf8 { h = (h ^ UInt32(b)) &* 16777619 }
+            return vivid[Int(h % UInt32(vivid.count))]
+        }
     }
 
     /// 字体层级（全部圆体）
@@ -162,7 +181,12 @@ struct CardModifier: ViewModifier {
             .background {
                 shape.fill(.ultraThinMaterial)
                     .overlay(shape.fill(DS.Palette.surface))
-                    .overlay { if let tint { shape.fill(tint.opacity(scheme == .dark ? 0.14 : 0.08)) } }
+                    // 深色模式下卡片带一点主题色，不是一片灰
+                    .overlay {
+                        shape.fill(LinearGradient(colors: [(tint ?? DS.Palette.accent).opacity(scheme == .dark ? (tint == nil ? 0.10 : 0.24) : (tint == nil ? 0.02 : 0.10)),
+                                                           (tint ?? DS.Palette.accent).opacity(scheme == .dark ? (tint == nil ? 0.03 : 0.10) : 0.02)],
+                                                  startPoint: .topLeading, endPoint: .bottomTrailing))
+                    }
                     .overlay(shape.strokeBorder(
                         LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.10 : 0.9), DS.Palette.hairline],
                                        startPoint: .top, endPoint: .bottom), lineWidth: 1))
@@ -212,15 +236,16 @@ struct IconBadge: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+        // 没指定颜色就按图标给一个固定的鲜艳颜色，不再全是灰色
+        let tint = color ?? DS.Palette.vivid(for: icon)
         Image(systemName: icon)
-            .font(.system(size: size * 0.44, weight: .medium))
+            .font(.system(size: size * 0.44, weight: .semibold))
             .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(color ?? DS.Palette.iconPrimary)
+            .foregroundStyle(tint)
             .frame(width: size, height: size)
             .background {
-                shape.fill(.ultraThinMaterial)
-                    .overlay(shape.fill(color.map { $0.opacity(0.12) } ?? DS.Palette.glass))
-                    .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 0.5))
+                shape.fill(LinearGradient(colors: [tint.opacity(0.26), tint.opacity(0.14)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .overlay(shape.strokeBorder(tint.opacity(0.35), lineWidth: 0.75))
             }
     }
 }
