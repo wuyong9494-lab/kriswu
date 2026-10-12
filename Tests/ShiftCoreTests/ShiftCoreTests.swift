@@ -1301,7 +1301,7 @@ final class PatternTests: XCTestCase {
             "丁": [d(7): "遥测", d(12): "遥测"],
             "戊": [d(6): "遥测"],                      // 网站上没加：对不上
         ]
-        let p = { (a: Int, b: Int) -> [RestBalanceHistory.Point] in [(d(1), a, true), (d(25), b, true)] }
+        let p = { [d] (a: Int, b: Int) -> [RestBalanceHistory.Point] in [(d(1), a, true), (d(25), b, true)] }
         let points = ["甲": p(2, 3), "乙": p(5, 4), "丙": p(1, 1), "丁": p(0, 2), "戊": p(3, 3)]
         let r = RestBalanceAudit.analyze(points: points, roster: roster, matcher: m, calendar: cal)
         XCTAssertEqual(r?.rule, RestBalanceAudit.Rule(longDuty: 1, shortDuty: 0, overtime: 0, compRest: -1, rest: 0, leave: 0))

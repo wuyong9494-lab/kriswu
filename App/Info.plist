@@ -51,6 +51,21 @@
 	<string>「工作留痕」里拍照留存现场情况，照片只存在手机上。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>「工作留痕」里录音、试听播报声音，录音只存在手机上。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>把「工作留痕」里的录音转成文字，默认只在手机上识别。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>打开「工作留痕」前验证是你本人。</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.kriswu.shiftreminder</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>shiftreminder</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

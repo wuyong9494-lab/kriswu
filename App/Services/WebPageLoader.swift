@@ -194,21 +194,39 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
                     url: webView.url?.absoluteString)
     }
 
-    /// 在页面里用同样的请求头和登录状态逐个发出请求，返回各自的内容。
+    /// 在页面里用同样的请求头和登录状态发出请求，返回各自的内容（顺序和 requests 一样，失败的不要）。
+    /// 一次并发 4 个：后台只有约 30 秒，逐个发太慢，一个月的逐天请求会来不及。
     private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [(request: CapturedRequest, reply: String)] {
         var replies: [(request: CapturedRequest, reply: String)] = []
-        for request in requests where !outOfRequestTime {
-            // 网络慢时单个请求可能超时：再试一次，免得整周排班丢掉
-            for attempt in 0..<2 where attempt == 0 || !outOfRequestTime {
-                let reply = try? await webView.callAsyncJavaScript(
-                    Self.replayScript,
-                    arguments: ["url": request.url, "method": request.method, "headers": request.headers,
-                                "body": request.requestBody ?? NSNull()],
-                    in: nil, contentWorld: .page)
-                if let text = reply as? String { replies.append((request, text)); break }
+        var index = 0
+        while index < requests.count && !outOfRequestTime {
+            let chunk = Array(requests[index..<min(index + 4, requests.count)])
+            index += chunk.count
+            var results = [String?](repeating: nil, count: chunk.count)
+            await withTaskGroup(of: (Int, String?).self) { group in
+                for (i, request) in chunk.enumerated() {
+                    group.addTask { @MainActor in (i, await self.replayOne(request, in: webView)) }
+                }
+                for await (i, text) in group { results[i] = text }
+            }
+            for (i, text) in results.enumerated() {
+                if let text { replies.append((chunk[i], text)) }
             }
         }
         return replies
+    }
+
+    /// 发一个请求；网络慢时可能超时，再试一次，免得整周排班丢掉
+    private func replayOne(_ request: CapturedRequest, in webView: WKWebView) async -> String? {
+        for attempt in 0..<2 where attempt == 0 || !outOfRequestTime {
+            let reply = try? await webView.callAsyncJavaScript(
+                Self.replayScript,
+                arguments: ["url": request.url, "method": request.method, "headers": request.headers,
+                            "body": request.requestBody ?? NSNull()],
+                in: nil, contentWorld: .page)
+            if let text = reply as? String { return text }
+        }
+        return nil
     }
 
     /// 点按钮后等页面变化（最多 4 秒）；没变化说明已经翻到头了，返回 nil。

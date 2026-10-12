@@ -9,9 +9,21 @@ struct WidgetDay: Codable, Hashable {
     var colorHex: String
 }
 
+/// 今天组别要做的一件事（小组件上可以直接勾）
+struct WidgetTask: Codable, Hashable {
+    var day: String
+    var group: String
+    /// 和 App 里任务清单的 key 一样（「0.巡检机房」）
+    var key: String
+    var title: String
+    var done: Bool
+}
+
 struct WidgetSnapshot: Codable {
     var days: [WidgetDay]
     var updated: Date
+    /// 今天的任务清单（旧版本写的没有这一项）
+    var tasks: [WidgetTask]? = nil
 }
 
 enum WidgetStore {

@@ -58,7 +58,9 @@ struct WorkLogCard: View {
 
 /// 全部记录：按天分组，可以拍照、从相册选、录音、记文字、导入通话录音
 struct WorkLogView: View {
+    @EnvironmentObject private var store: AppStore
     @ObservedObject private var log = WorkLogStore.shared
+    @State private var query = ""
     @State private var camera = false
     @State private var recording = false
     @State private var writing = false
@@ -68,9 +70,27 @@ struct WorkLogView: View {
     @State private var filter: WorkLogEntry.Kind?
 
     var body: some View {
-        let shown = log.entries.filter { filter == nil || $0.kind == filter }
+        if store.settings.workLogLock && !log.unlocked {
+            VStack(spacing: DS.Space.m) {
+                Image(systemName: "lock.fill").font(.system(size: 44)).foregroundStyle(.secondary)
+                Text("工作留痕已上锁").font(DS.Font.headline)
+                Button("用面容 ID 解锁") { Task { await log.unlock() } }
+                    .buttonStyle(DSButtonStyle(kind: .primary))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .appBackground()
+            .navigationTitle("工作留痕")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { await log.unlock() }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        let shown = log.entries.filter { (filter == nil || $0.kind == filter) && $0.matches(query) }
         let groups = Dictionary(grouping: shown) { DayKey(date: $0.date, calendar: .app) }
-        List {
+        return List {
             Section {
                 HStack(spacing: DS.Space.s) {
                     big("拍照", "camera.fill") { camera = true }
@@ -98,7 +118,11 @@ struct WorkLogView: View {
             }
             if shown.isEmpty {
                 Section {
-                    EmptyState(icon: "tray", title: "还没有记录", message: "拍照、录音、记一笔，都会按日期和当天的班次存好。")
+                    if query.isEmpty {
+                        EmptyState(icon: "tray", title: "还没有记录", message: "拍照、录音、记一笔，都会按日期和当天的班次存好。")
+                    } else {
+                        EmptyState(icon: "magnifyingglass", title: "没找到「\(query)」", message: "说明、录音转出的文字、班次都会搜。")
+                    }
                 }
             }
             ForEach(groups.keys.sorted(by: >), id: \.self) { day in
@@ -115,11 +139,22 @@ struct WorkLogView: View {
                 }
             }
             Section {
-                EmptyView()
+                Toggle("录音自动转成文字", isOn: $store.settings.workLogAutoTranscribe)
+                Toggle("只在手机上识别（不联网）", isOn: $store.settings.speechOnDeviceOnly)
+                Toggle("打开工作留痕要面容 ID", isOn: $store.settings.workLogLock)
+                    .onChange(of: store.settings.workLogLock) { locked in
+                        log.relocate(hidden: locked)
+                        log.unlocked = true
+                    }
+            } header: {
+                Text("设置")
             } footer: {
-                Text("文件只存在手机上：「文件」App › 我的 iPhone › 值班提醒 › 工作留痕 也能看到，可以整个文件夹拷走备份。")
+                Text(store.settings.workLogLock
+                     ? "已上锁：文件挪到了 App 内部，「文件」App 里看不到，只能在这里看。所有文件都加密存储，手机锁屏时无法读取。"
+                     : "文件只存在手机上并加密存储：「文件」App › 我的 iPhone › 值班提醒 › 工作留痕 也能看到，可以整个文件夹拷走备份。打开面容 ID 锁后会挪到 App 内部。")
             }
         }
+        .searchable(text: $query, prompt: "搜说明、录音文字、班次")
         .appList()
         .navigationTitle("工作留痕")
         .navigationBarTitleDisplayMode(.inline)
@@ -204,7 +239,7 @@ struct WorkLogRow: View {
                 IconBadge(icon: entry.kind.symbol, size: 44)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.note.isEmpty ? entry.kind.title : entry.note)
+                Text(entry.note.isEmpty ? (entry.transcript ?? entry.kind.title) : entry.note)
                     .font(.subheadline)
                     .lineLimit(2)
                 HStack(spacing: DS.Space.xs) {
@@ -227,9 +262,11 @@ struct WorkLogRow: View {
 /// 一条记录：看照片、听录音、改说明、分享、删除
 struct WorkLogDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var log = WorkLogStore.shared
     @StateObject private var player = AudioPlayerModel()
     @State var entry: WorkLogEntry
     @State private var confirmDelete = false
+    @State private var transcribeError: String?
 
     var body: some View {
         let url = WorkLogStore.shared.url(for: entry)
@@ -267,6 +304,33 @@ struct WorkLogDetailView: View {
                     .padding(.vertical, DS.Space.xxs)
                 }
             }
+            if entry.isAudio {
+                let current = log.entries.first { $0.id == entry.id } ?? entry
+                Section {
+                    if log.transcribing.contains(entry.id) {
+                        HStack(spacing: DS.Space.s) { ProgressView(); Text("正在转文字…").foregroundStyle(.secondary) }
+                    } else if let text = current.transcript {
+                        Text(text).textSelection(.enabled)
+                        Button { UIPasteboard.general.string = text; ToastCenter.shared.show("已复制", style: .success) } label: {
+                            Label("复制文字", systemImage: "doc.on.doc")
+                        }
+                        Button { Task { transcribeError = await log.transcribe(current) } } label: {
+                            Label("重新转一次", systemImage: "arrow.clockwise")
+                        }
+                    } else {
+                        Button { Task { transcribeError = await log.transcribe(current) } } label: {
+                            Label("转成文字", systemImage: "text.bubble")
+                        }
+                    }
+                    if let transcribeError {
+                        Text(transcribeError).font(.footnote).foregroundStyle(DS.Palette.warning)
+                    }
+                } header: {
+                    Text("录音文字")
+                } footer: {
+                    Text("用 iPhone 自带的语音识别，默认只在手机上识别，录音不出手机。")
+                }
+            }
             Section {
                 TextField(entry.kind == .note ? "内容" : "说明（可选）", text: $entry.note, axis: .vertical)
                     .lineLimit(3...12)
@@ -291,7 +355,7 @@ struct WorkLogDetailView: View {
         .onAppear { if let url, entry.kind == .audio || entry.kind == .call { player.load(url) } }
         .onDisappear {
             player.stop()
-            WorkLogStore.shared.update(entry)
+            WorkLogStore.shared.updateNote(entry.id, entry.note)
         }
         .confirmationDialog("删除后找不回来", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("删除", role: .destructive) {
@@ -307,6 +371,8 @@ struct RecorderSheet: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var recorder = VoiceRecorder()
     @State private var note = ""
+    /// 从控制中心、操作按钮打开时直接开始录
+    var autoStart = false
 
     var body: some View {
         NavigationStack {
@@ -370,6 +436,7 @@ struct RecorderSheet: View {
         }
         .interactiveDismissDisabled(recorder.isRecording)
         .presentationDetents([.medium, .large])
+        .task { if autoStart && !recorder.isRecording { await recorder.start() } }
     }
 }
 

@@ -161,6 +161,11 @@ struct ShiftWidgetBundle: WidgetBundle {
         WeekWidget()
         NextDutyWidget()
         DutyLiveActivity()
+        CaptureWidget()
+        if #available(iOSApplicationExtension 18.0, *) {
+            RecordControl()
+            PhotoControl()
+        }
     }
 }
 
@@ -388,5 +393,142 @@ struct NextDutyView: View {
             .padding()
             .widgetBackground(Color(hex: "#17A2B8").gradient)
         }
+    }
+}
+
+
+// MARK: - 工作留痕 + 今天要做（可以直接勾）
+
+struct CaptureEntry: TimelineEntry {
+    let date: Date
+    let tasks: [WidgetTask]
+}
+
+struct CaptureProvider: TimelineProvider {
+    static let sample = [
+        WidgetTask(day: "", group: "组A", key: "0.巡检机房", title: "巡检机房", done: true),
+        WidgetTask(day: "", group: "组A", key: "1.填写日志", title: "填写日志", done: false),
+        WidgetTask(day: "", group: "组A", key: "2.交接班", title: "交接班", done: false),
+    ]
+
+    func placeholder(in context: Context) -> CaptureEntry { CaptureEntry(date: Date(), tasks: Self.sample) }
+
+    func getSnapshot(in context: Context, completion: @escaping (CaptureEntry) -> Void) {
+        completion(context.isPreview ? placeholder(in: context) : entry())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<CaptureEntry>) -> Void) {
+        let calendar = Calendar(identifier: .gregorian)
+        let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date())) ?? Date().addingTimeInterval(3600)
+        completion(Timeline(entries: [entry()], policy: .after(midnight)))
+    }
+
+    private func entry() -> CaptureEntry {
+        let today = WidgetStore.key(for: Date())
+        return CaptureEntry(date: Date(), tasks: (WidgetStore.load()?.tasks ?? []).filter { $0.day == today })
+    }
+}
+
+struct CaptureWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: CaptureEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                captureButton(.photo, "camera.fill", "拍照")
+                captureButton(.record, "mic.fill", "录音")
+                captureButton(.note, "square.and.pencil", "记一笔")
+            }
+            if entry.tasks.isEmpty {
+                Text("今天没有任务清单").font(.caption).foregroundStyle(.secondary)
+            } else {
+                let done = entry.tasks.filter(\.done).count
+                HStack {
+                    Text("今天要做").font(.caption.weight(.semibold))
+                    Spacer()
+                    Text("\(done)/\(entry.tasks.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                ForEach(entry.tasks.prefix(family == .systemLarge ? 9 : 2), id: \.key) { task in
+                    taskRow(task)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(family == .systemLarge ? 16 : 12)
+        .widgetBackground(Color(.systemBackground))
+    }
+
+    private func captureButton(_ action: CaptureAction, _ icon: String, _ title: String) -> some View {
+        Link(destination: action.url) {
+            VStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 18, weight: .semibold))
+                Text(title).font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(Color.accentColor)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private func taskRow(_ task: WidgetTask) -> some View {
+        let label = HStack(spacing: 6) {
+            Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(task.done ? Color.green : Color.secondary)
+            Text(task.title)
+                .font(.caption)
+                .strikethrough(task.done)
+                .foregroundStyle(task.done ? Color.secondary : Color.primary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        if #available(iOSApplicationExtension 17.0, *) {
+            Button(intent: ToggleWidgetTaskIntent(day: task.day, group: task.group, key: task.key)) { label }
+                .buttonStyle(.plain)
+        } else {
+            label
+        }
+    }
+}
+
+struct CaptureWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "CaptureWidget", provider: CaptureProvider()) { entry in
+            CaptureWidgetView(entry: entry)
+        }
+        .configurationDisplayName("工作留痕")
+        .description("一点就拍照、录音、记一笔；今天的任务直接在这里勾。")
+        .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}
+
+// MARK: - 控制中心 / 锁屏 / 操作按钮（iOS 18）
+
+@available(iOSApplicationExtension 18.0, *)
+struct RecordControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "com.kriswu.shiftreminder.record") {
+            ControlWidgetButton(action: CaptureRecordIntent()) {
+                Label("录音留痕", systemImage: "mic.fill")
+            }
+        }
+        .displayName("录音留痕")
+        .description("打开值班提醒马上开始录音。")
+    }
+}
+
+@available(iOSApplicationExtension 18.0, *)
+struct PhotoControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "com.kriswu.shiftreminder.photo") {
+            ControlWidgetButton(action: CapturePhotoIntent()) {
+                Label("拍照留痕", systemImage: "camera.fill")
+            }
+        }
+        .displayName("拍照留痕")
+        .description("打开值班提醒的相机，拍完存进工作留痕。")
     }
 }

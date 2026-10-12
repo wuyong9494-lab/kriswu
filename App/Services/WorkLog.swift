@@ -1,4 +1,6 @@
 import AVFoundation
+import LocalAuthentication
+import Speech
 import UIKit
 import UniformTypeIdentifiers
 
@@ -38,6 +40,17 @@ struct WorkLogEntry: Codable, Identifiable, Hashable {
     var shift: String?
     /// 录音时长（秒）
     var duration: TimeInterval?
+    /// 录音转出来的文字
+    var transcript: String?
+
+    var isAudio: Bool { kind == .audio || kind == .call }
+
+    /// 搜索用
+    func matches(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return true }
+        return [note, transcript ?? "", shift ?? "", kind.title, file ?? ""].contains { $0.localizedCaseInsensitiveContains(q) }
+    }
 }
 
 /// 工作留痕：文件存在 App 的「文稿 › 工作留痕」里（「文件」App › 我的 iPhone › 值班提醒 能看到），
@@ -47,12 +60,64 @@ final class WorkLogStore: ObservableObject {
     static let shared = WorkLogStore()
 
     @Published private(set) var entries: [WorkLogEntry] = []
+    /// 正在转文字的记录
+    @Published private(set) var transcribing: Set<UUID> = []
+    /// 加了面容 ID 锁后，这次打开 App 是否已经解锁（退到后台就重新锁上）
+    @Published var unlocked = false
+
+    /// 没加锁：放在「文稿」里，「文件」App 能看到；加了锁：放到「资料库」里，「文件」App 看不到
+    private static var hidden: Bool { AppStore.shared.settings.workLogLock }
+
+    private static func baseFolder(hidden: Bool) -> URL {
+        let base = FileManager.default.urls(for: hidden ? .applicationSupportDirectory : .documentDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("工作留痕", isDirectory: true)
+    }
 
     static var folder: URL {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("工作留痕", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = baseFolder(hidden: hidden)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                                 attributes: [.protectionKey: FileProtectionType.complete])
         return dir
+    }
+
+    /// 开关面容 ID 锁时把整个文件夹搬过去
+    func relocate(hidden: Bool) {
+        let from = Self.baseFolder(hidden: !hidden), to = Self.baseFolder(hidden: hidden)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: from.path) else { return }
+        try? fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: to.path) {
+            try? fm.moveItem(at: from, to: to)
+        } else {
+            for name in (try? fm.contentsOfDirectory(atPath: from.path)) ?? [] {
+                try? fm.moveItem(at: from.appendingPathComponent(name), to: to.appendingPathComponent(name))
+            }
+            try? fm.removeItem(at: from)
+        }
+        protectAll()
+    }
+
+    /// 文件都设成「锁屏后加密、解锁后才能读」
+    private func protectAll() {
+        let fm = FileManager.default
+        for name in (try? fm.contentsOfDirectory(atPath: Self.folder.path)) ?? [] {
+            try? fm.setAttributes([.protectionKey: FileProtectionType.complete],
+                                  ofItemAtPath: Self.folder.appendingPathComponent(name).path)
+        }
+    }
+
+    /// 打开工作留痕前验证面容 ID / 触控 ID（没设置时用锁屏密码）
+    func unlock() async -> Bool {
+        if unlocked || !AppStore.shared.settings.workLogLock { return true }
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            unlocked = true   // 手机没设密码：没法锁
+            return true
+        }
+        let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "查看工作留痕")) ?? false
+        unlocked = ok
+        return ok
     }
 
     private static var indexURL: URL { folder.appendingPathComponent("记录.json") }
@@ -67,15 +132,18 @@ final class WorkLogStore: ObservableObject {
             ]
             return
         }
+        // 上次开关锁时没搬完（比如中途退出）：以设置为准再搬一次
+        relocate(hidden: Self.hidden)
         if let data = try? Data(contentsOf: Self.indexURL),
            let list = try? JSONDecoder().decode([WorkLogEntry].self, from: data) {
             entries = list.sorted { $0.date > $1.date }
         }
+        protectAll()
     }
 
     private func save() {
         guard !AppStore.isDemo, let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: Self.indexURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try? data.write(to: Self.indexURL, options: [.atomic, .completeFileProtection])
     }
 
     func url(for entry: WorkLogEntry) -> URL? {
@@ -112,7 +180,7 @@ final class WorkLogStore: ObservableObject {
     func addPhoto(_ image: UIImage, note: String = "") -> WorkLogEntry? {
         guard let data = image.jpegData(compressionQuality: 0.85) else { return nil }
         let name = newFileName(.photo, ext: "jpg")
-        guard (try? data.write(to: Self.folder.appendingPathComponent(name), options: .atomic)) != nil else { return nil }
+        guard (try? data.write(to: Self.folder.appendingPathComponent(name), options: [.atomic, .completeFileProtection])) != nil else { return nil }
         let entry = WorkLogEntry(date: Date(), kind: .photo, file: name, note: note, shift: todayShift)
         insert(entry)
         return entry
@@ -127,9 +195,12 @@ final class WorkLogStore: ObservableObject {
     @discardableResult
     func addRecording(from temp: URL, duration: TimeInterval, note: String = "") -> WorkLogEntry? {
         let name = newFileName(.audio, ext: temp.pathExtension.isEmpty ? "m4a" : temp.pathExtension)
-        guard (try? FileManager.default.moveItem(at: temp, to: Self.folder.appendingPathComponent(name))) != nil else { return nil }
+        let target = Self.folder.appendingPathComponent(name)
+        guard (try? FileManager.default.moveItem(at: temp, to: target)) != nil else { return nil }
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: target.path)
         let entry = WorkLogEntry(date: Date(), kind: .audio, file: name, note: note, shift: todayShift, duration: duration)
         insert(entry)
+        autoTranscribe(entry)
         return entry
     }
 
@@ -149,6 +220,7 @@ final class WorkLogStore: ObservableObject {
         let target = Self.folder.appendingPathComponent(name)
         do {
             try FileManager.default.copyItem(at: source, to: target)
+            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: target.path)
         } catch {
             return nil
         }
@@ -162,7 +234,15 @@ final class WorkLogStore: ObservableObject {
         let entry = WorkLogEntry(date: Date(), kind: detected, file: name,
                                  note: detected == .file || detected == .call ? original : "", shift: todayShift, duration: duration)
         insert(entry)
+        autoTranscribe(entry)
         return entry
+    }
+
+    /// 只改说明（详情页关掉时保存；转文字可能已经在后台更新了这条）
+    func updateNote(_ id: UUID, _ note: String) {
+        guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].note != note else { return }
+        entries[i].note = note
+        save()
     }
 
     func update(_ entry: WorkLogEntry) {
@@ -175,6 +255,29 @@ final class WorkLogStore: ObservableObject {
         if let url = url(for: entry) { try? FileManager.default.removeItem(at: url) }
         entries.removeAll { $0.id == entry.id }
         save()
+    }
+
+    // MARK: 录音转文字
+
+    private func autoTranscribe(_ entry: WorkLogEntry) {
+        guard entry.isAudio, AppStore.shared.settings.workLogAutoTranscribe else { return }
+        Task { _ = await transcribe(entry) }
+    }
+
+    /// 转文字，结果存进这条记录；失败返回原因
+    func transcribe(_ entry: WorkLogEntry) async -> String? {
+        guard entry.isAudio, let url = url(for: entry), !transcribing.contains(entry.id) else { return nil }
+        transcribing.insert(entry.id)
+        defer { transcribing.remove(entry.id) }
+        switch await Transcriber.transcribe(url, onDeviceOnly: AppStore.shared.settings.speechOnDeviceOnly) {
+        case .success(let text):
+            guard var current = entries.first(where: { $0.id == entry.id }) else { return nil }
+            current.transcript = text.isEmpty ? "（没听出文字）" : text
+            update(current)
+            return nil
+        case .failure(let error):
+            return error.message
+        }
     }
 
     func count(on day: DayKey) -> Int {
@@ -322,6 +425,61 @@ final class AudioPlayerModel: NSObject, ObservableObject, AVAudioPlayerDelegate 
             self.stopTimer()
             self.isPlaying = false
             self.progress = 0
+        }
+    }
+}
+
+
+/// 用 iPhone 自带的语音识别把录音转成文字（默认只在手机上识别，录音不出手机）
+enum Transcriber {
+    struct Failure: Error {
+        let message: String
+    }
+
+    static func authorize() async -> Bool {
+        await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) }
+        }
+    }
+
+    static func transcribe(_ url: URL, onDeviceOnly: Bool) async -> Result<String, Failure> {
+        guard await authorize() else {
+            return .failure(Failure(message: "没有语音识别权限：到 iPhone「设置 › 值班提醒」里打开「语音识别」。"))
+        }
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")), recognizer.isAvailable else {
+            return .failure(Failure(message: "这台手机现在用不了中文语音识别。"))
+        }
+        let request = SFSpeechURLRecognitionRequest(url: url)
+        request.shouldReportPartialResults = false
+        request.addsPunctuation = true
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        } else if onDeviceOnly {
+            return .failure(Failure(message: "这台手机不支持离线中文识别。可以在工作留痕的设置里允许联网识别（录音会发给苹果识别）。"))
+        }
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            /// 第一次调用返回 true
+            func claim() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+        }
+        let once = Once()
+        return await withCheckedContinuation { (c: CheckedContinuation<Result<String, Failure>, Never>) in
+            recognizer.recognitionTask(with: request) { result, error in
+                if let result, result.isFinal {
+                    guard once.claim() else { return }
+                    c.resume(returning: .success(result.bestTranscription.formattedString))
+                } else if let error {
+                    guard once.claim() else { return }
+                    let nsError = error as NSError
+                    // 1110：没听到说话
+                    if nsError.code == 1110 {
+                        c.resume(returning: .success(""))
+                    } else {
+                        c.resume(returning: .failure(Failure(message: "转文字失败：\(error.localizedDescription)")))
+                    }
+                }
+            }
         }
     }
 }

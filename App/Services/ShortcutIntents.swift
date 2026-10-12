@@ -158,6 +158,21 @@ struct RestAfterDutyIntent: AppIntent {
     }
 }
 
+/// 「值班提醒记一笔」：不用打开 App，说完直接存进工作留痕
+struct AddWorkNoteIntent: AppIntent {
+    static var title: LocalizedStringResource = "记一笔工作留痕"
+    static var description = IntentDescription("把一句话存进工作留痕，带上日期和当天的班次。")
+
+    @Parameter(title: "内容", requestValueDialog: "要记什么？")
+    var text: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        WorkLogStore.shared.addNote(text)
+        return .result(dialog: "记好了。")
+    }
+}
+
 struct ShiftShortcuts: AppShortcutsProvider {
     @AppShortcutsBuilder
     static var appShortcuts: [AppShortcut] {
@@ -176,6 +191,17 @@ struct ShiftShortcuts: AppShortcutsProvider {
         ])
         AppShortcut(intent: SyncScheduleIntent(), phrases: [
             "\(.applicationName)同步排班",
+        ])
+        AppShortcut(intent: AddWorkNoteIntent(), phrases: [
+            "\(.applicationName)记一笔",
+            "用\(.applicationName)记一笔",
+        ])
+        AppShortcut(intent: CaptureRecordIntent(), phrases: [
+            "\(.applicationName)录音留痕",
+            "\(.applicationName)开始录音",
+        ])
+        AppShortcut(intent: CapturePhotoIntent(), phrases: [
+            "\(.applicationName)拍照留痕",
         ])
     }
 }

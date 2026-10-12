@@ -117,6 +117,10 @@ struct AppSettings: Codable, Equatable {
     var restAlertNotified: Int?
     /// 已经提醒过的「值完遥测该休却排了岗位」（避免重复提醒）
     var warnedRestKeys: [String] = []
+    /// 工作留痕：录音自动转文字、只在手机上识别（不联网）、打开要面容 ID
+    var workLogAutoTranscribe = true
+    var speechOnDeviceOnly = true
+    var workLogLock = false
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
     /// 工作量规则开关
@@ -217,6 +221,9 @@ struct AppSettings: Codable, Equatable {
         restAlertThreshold = try c.decodeIfPresent(Int.self, forKey: .restAlertThreshold) ?? 5
         restAlertNotified = try c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
         warnedRestKeys = try c.decodeIfPresent([String].self, forKey: .warnedRestKeys) ?? []
+        workLogAutoTranscribe = try c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe) ?? d.workLogAutoTranscribe
+        speechOnDeviceOnly = try c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly) ?? d.speechOnDeviceOnly
+        workLogLock = try c.decodeIfPresent(Bool.self, forKey: .workLogLock) ?? d.workLogLock
         liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
         workloadRules = try c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules) ?? WorkloadRules()
         workloadOverrides = try c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides) ?? [:]
@@ -751,7 +758,31 @@ final class AppStore: ObservableObject {
             return WidgetDay(date: day.description, title: matcher.displayName(raw),
                              emoji: type?.emoji ?? "📌", colorHex: type?.colorHex ?? "#8E8E93")
         }
-        WidgetStore.save(WidgetSnapshot(days: days, updated: Date()))
+        WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today)))
+    }
+
+    /// 今天组别的任务清单（和首页「今天要做」一样）
+    func widgetTasks(for day: DayKey) -> [WidgetTask] {
+        notes(for: shift(on: day)).flatMap { g -> [WidgetTask] in
+            let items = TaskList.items(from: g.note)
+            guard items.count > 1 else { return [] }
+            return items.enumerated().map { i, item in
+                let key = TaskChecklistCard.key(i, item)
+                return WidgetTask(day: day.description, group: g.group, key: key, title: item,
+                                  done: isTaskDone(day, g.group, key))
+            }
+        }
+    }
+
+    /// 小组件上勾过的任务合并进来
+    func applyPendingTaskToggles() {
+        let pending = PendingTaskToggles.load()
+        guard !pending.isEmpty else { return }
+        PendingTaskToggles.clear()
+        for item in pending {
+            guard let day = DayKey(string: item.day), isTaskDone(day, item.group, item.key) != item.done else { continue }
+            toggleTask(day, item.group, item.key)
+        }
     }
 
     // MARK: - 同步
@@ -1094,6 +1125,7 @@ final class AppStore: ObservableObject {
         let cutoff = DayKey.today.adding(days: -14).description
         checks = checks.filter { $0.key.prefix(10) >= cutoff }
         settings.taskChecks = checks
+        updateWidget()
     }
 
     // MARK: - 自动备份

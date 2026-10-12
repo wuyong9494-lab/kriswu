@@ -22,6 +22,7 @@ struct ShiftApp: App {
             switch phase {
             case .active:
                 guard !AppStore.isDemo else { break }
+                store.applyPendingTaskToggles()
                 Task {
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()
@@ -30,6 +31,8 @@ struct ShiftApp: App {
                 }
             case .background:
                 BackgroundRefresh.schedule(notBefore: store.nextWeChatReminder)
+                // 工作留痕的面容 ID 锁：退到后台就重新锁上
+                WorkLogStore.shared.unlocked = false
             default:
                 break
             }
@@ -58,8 +61,15 @@ struct RootView: View {
     enum Tab: String, CaseIterable { case today, calendar, stats, site, settings }
     @EnvironmentObject private var store: AppStore
     @State private var tab: Tab
-    /// 从「备忘录」等分享进来的录音存好后打开工作留痕
-    @State private var showWorkLog = false
+    /// 从「备忘录」等分享进来的录音存好后打开工作留痕；控制中心、操作按钮、小组件来的拍照 / 录音 / 记一笔
+    @State private var rootSheet: RootSheet?
+    @State private var camera = false
+    @Environment(\.scenePhase) private var scenePhase
+
+    enum RootSheet: String, Identifiable {
+        case workLog, record, note
+        var id: String { rawValue }
+    }
 
     init() {
         ChromeAppearance.apply()
@@ -98,21 +108,63 @@ struct RootView: View {
         .tint(DS.Palette.accent)
         .fontDesign(.rounded)
         .overlay { ToastOverlay() }
-        // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕
+        // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕；
+        // shiftreminder://capture/photo|record|note：小组件上的按钮
         .onOpenURL { url in
-            guard url.isFileURL else { return }
-            if WorkLogStore.shared.importFile(url) != nil {
-                tab = .today
-                showWorkLog = true
-                ToastCenter.shared.show("已存进工作留痕", style: .success)
-            } else {
-                ToastCenter.shared.show("没能存进工作留痕", style: .error)
+            if url.isFileURL {
+                if WorkLogStore.shared.importFile(url) != nil {
+                    tab = .today
+                    rootSheet = .workLog
+                    ToastCenter.shared.show("已存进工作留痕", style: .success)
+                } else {
+                    ToastCenter.shared.show("没能存进工作留痕", style: .error)
+                }
+            } else if url.scheme == "shiftreminder", url.host == "capture",
+                      let action = CaptureAction(rawValue: url.lastPathComponent) {
+                startCapture(action)
             }
         }
-        .sheet(isPresented: $showWorkLog) {
-            NavigationStack {
-                WorkLogView()
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showWorkLog = false } } }
+        // 控制中心、操作按钮、快捷指令：动作写在 App Group 里，App 打开后接着做
+        .onReceive(NotificationCenter.default.publisher(for: .pendingCapture)) { _ in
+            if let action = PendingCapture.take() { startCapture(action) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pendingTaskToggles)) { _ in
+            store.applyPendingTaskToggles()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active, let action = PendingCapture.take() { startCapture(action) }
+        }
+        .sheet(item: $rootSheet) { sheet in
+            switch sheet {
+            case .workLog:
+                NavigationStack {
+                    WorkLogView()
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
+                }
+            case .record: RecorderSheet(autoStart: true)
+            case .note: NoteSheet()
+            }
+        }
+        .fullScreenCover(isPresented: $camera) {
+            CameraPicker { image in
+                if WorkLogStore.shared.addPhoto(image) != nil {
+                    ToastCenter.shared.show("照片已存进工作留痕", style: .success)
+                }
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    private func startCapture(_ action: CaptureAction) {
+        tab = .today
+        // 先关掉正在显示的，再打开要的
+        rootSheet = nil
+        camera = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            switch action {
+            case .photo: camera = true
+            case .record: rootSheet = .record
+            case .note: rootSheet = .note
             }
         }
     }
