@@ -163,13 +163,16 @@ struct AddWorkNoteIntent: AppIntent {
     static var title: LocalizedStringResource = "记一笔工作留痕"
     static var description = IntentDescription("把一句话存进工作留痕，带上日期和当天的班次。")
 
+    /// 工作留痕加密存储，手机解锁后才能写
+    static var authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
+
     @Parameter(title: "内容", requestValueDialog: "要记什么？")
     var text: String
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        WorkLogStore.shared.addNote(text)
-        return .result(dialog: "记好了。")
+        let ok = WorkLogStore.shared.addNote(text)
+        return .result(dialog: ok ? "记好了。" : "现在存不进去，解锁手机后再试一次。")
     }
 }
 

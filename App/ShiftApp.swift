@@ -23,6 +23,7 @@ struct ShiftApp: App {
             case .active:
                 guard !AppStore.isDemo else { break }
                 store.applyPendingTaskToggles()
+                WorkLogStore.shared.reloadIfNeeded()
                 Task {
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()

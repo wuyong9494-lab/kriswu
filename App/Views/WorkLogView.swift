@@ -459,8 +459,11 @@ struct NoteSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        WorkLogStore.shared.addNote(text)
-                        ToastCenter.shared.show("已记下", style: .success)
+                        if WorkLogStore.shared.addNote(text) {
+                            ToastCenter.shared.show("已记下", style: .success)
+                        } else {
+                            ToastCenter.shared.show("没存进去，解锁手机后再试一次", style: .error)
+                        }
                         dismiss()
                     }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

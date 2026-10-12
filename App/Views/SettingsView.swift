@@ -461,6 +461,8 @@ struct ShiftTypesView: View {
         .adminOnly()
         .navigationTitle("班次类型")
         .toolbar { EditButton() }
+        // 工具栏按钮也只有管理员能用
+        .disabled(!store.canEdit)
     }
 }
 
@@ -619,6 +621,8 @@ struct GroupNotesView: View {
                 }
             }
         }
+        // 工具栏按钮也只有管理员能用
+        .disabled(!store.canEdit)
         .fullScreenCover(isPresented: $browsing) { DesktopNotesBrowser() }
         .sheet(isPresented: $pasting) {
             NavigationStack {

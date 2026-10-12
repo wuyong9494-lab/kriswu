@@ -134,15 +134,47 @@ final class WorkLogStore: ObservableObject {
         }
         // 上次开关锁时没搬完（比如中途退出）：以设置为准再搬一次
         relocate(hidden: Self.hidden)
-        if let data = try? Data(contentsOf: Self.indexURL),
-           let list = try? JSONDecoder().decode([WorkLogEntry].self, from: data) {
-            entries = list.sorted { $0.date > $1.date }
-        }
+        load()
         protectAll()
     }
 
+    /// 读记录时手机锁着（文件加密读不出来）：先不写，免得用空列表把原来的记录覆盖掉
+    private var loadFailed = false
+
+    private func load() {
+        let url = Self.indexURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            entries = []
+            loadFailed = false
+            return
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            loadFailed = true      // 多半是手机锁着，解锁后再读
+            return
+        }
+        if let list = try? JSONDecoder().decode([WorkLogEntry].self, from: data) {
+            entries = list.sorted { $0.date > $1.date }
+        } else {
+            // 文件坏了：留一份备份，从头开始
+            try? FileManager.default.moveItem(at: url, to: url.deletingPathExtension().appendingPathExtension("bad-\(Int(Date().timeIntervalSince1970)).json"))
+            entries = []
+        }
+        loadFailed = false
+    }
+
+    /// 打开 App 时调用：之前没读出来的再读一次
+    func reloadIfNeeded() {
+        if loadFailed { load() }
+    }
+
+    /// 能不能写：记录读出来了才写
+    private var canWrite: Bool {
+        reloadIfNeeded()
+        return !loadFailed
+    }
+
     private func save() {
-        guard !AppStore.isDemo, let data = try? JSONEncoder().encode(entries) else { return }
+        guard !AppStore.isDemo, !loadFailed, let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: Self.indexURL, options: [.atomic, .completeFileProtection])
     }
 
@@ -178,7 +210,7 @@ final class WorkLogStore: ObservableObject {
 
     @discardableResult
     func addPhoto(_ image: UIImage, note: String = "") -> WorkLogEntry? {
-        guard let data = image.jpegData(compressionQuality: 0.85) else { return nil }
+        guard canWrite, let data = image.jpegData(compressionQuality: 0.85) else { return nil }
         let name = newFileName(.photo, ext: "jpg")
         guard (try? data.write(to: Self.folder.appendingPathComponent(name), options: [.atomic, .completeFileProtection])) != nil else { return nil }
         let entry = WorkLogEntry(date: Date(), kind: .photo, file: name, note: note, shift: todayShift)
@@ -186,14 +218,17 @@ final class WorkLogStore: ObservableObject {
         return entry
     }
 
-    func addNote(_ text: String) {
+    @discardableResult
+    func addNote(_ text: String) -> Bool {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return }
+        guard !t.isEmpty, canWrite else { return false }
         insert(WorkLogEntry(date: Date(), kind: .note, note: t, shift: todayShift))
+        return true
     }
 
     @discardableResult
     func addRecording(from temp: URL, duration: TimeInterval, note: String = "") -> WorkLogEntry? {
+        guard canWrite else { return nil }
         let name = newFileName(.audio, ext: temp.pathExtension.isEmpty ? "m4a" : temp.pathExtension)
         let target = Self.folder.appendingPathComponent(name)
         guard (try? FileManager.default.moveItem(at: temp, to: target)) != nil else { return nil }
@@ -207,6 +242,7 @@ final class WorkLogStore: ObservableObject {
     /// 导入文件（「备忘录」里的通话录音分享过来、或者从「文件」里选）。音频默认当作通话录音。
     @discardableResult
     func importFile(_ source: URL, kind: WorkLogEntry.Kind? = nil) -> WorkLogEntry? {
+        guard canWrite else { return nil }
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         let type = UTType(filenameExtension: source.pathExtension)

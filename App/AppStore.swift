@@ -1079,7 +1079,7 @@ final class AppStore: ObservableObject {
     func myDutyTurn() -> DutyTurn? {
         guard let me = myRosterName else { return nil }
         let today = DayKey.today
-        let key = "\(today)-\(roster.count)-\(publishedDays.count)-\(roster[me]?.count ?? 0)"
+        let key = "\(today)-\(me)-\(roster.count)-\(publishedDays.count)-\(roster[me]?.count ?? 0)-\(schedule.count)"
         if let cache = dutyTurnCache, cache.key == key { return cache.value }
         let value: DutyTurn?
         let mine = (roster[me] ?? [:]).merging(schedule) { a, _ in a }
