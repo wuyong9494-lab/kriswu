@@ -4,13 +4,13 @@ import Foundation
 /// - 值班：遥测（工作到第二天 8:30）
 /// - 值班调休：法定节假日值完遥测的第二天，网站上没写休息（还在上班），算工作量
 ///   （网站上写了休息、调休、请假的，不管节假日还是平时，都算休息，不算工作量）
-/// - 日常：各组、调度等其它岗位（排班表上有岗位的日子）
-/// - 上班（没排岗位）：工作日网站上没给排岗位、也没写休息的日子。人在正常上班，算上班天数，但不算工作量
+/// - 日常：各组、调度等其它岗位；不轮组别的人工作日没排岗位、也没写休息的日子（在做别的日常工作）
+/// - 上班（没排岗位）：轮组别（组A–E）的人工作日网站上没给排岗位、也没写休息的日子。正常上班，算上班天数，但不算工作量
 /// - 未排班：调度（最近三个月一半以上排的是调度的人，以及设置里「只按排班算」的人）工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
 /// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
-/// 工作量 = 值班 + 值班调休 + 日常 + 出差（只算排班表上有岗位的日子）；
+/// 工作量 = 值班 + 值班调休 + 日常 + 出差；
 /// 上班天数 = 工作量 + 没排岗位的上班日。
 public struct PersonWorkload: Equatable {
     public var name: String
@@ -138,12 +138,33 @@ public enum WorkloadCounter {
         return dispatch >= 3 && dispatch * 2 >= total
     }
 
-    /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）
+    /// 轮组别（组A–E）的人：asOf（默认最后出现的日子）前三个月里，组别占他所有岗位（不含休息、出差）的一半以上。
+    /// 这些人没排岗位的工作日是正常上班，但不算工作量；不轮组别的人那些日子在做别的日常工作，算工作量。
+    public static func isGroupMember(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
+        guard let end = asOf ?? history.keys.max() else { return false }
+        let start = end.adding(days: -90, calendar: .current)
+        var group = 0, total = 0
+        for (day, raw) in history where day >= start && day <= end {
+            for part in effective(raw, matcher: matcher)?.split(separator: "+") ?? [] {
+                let post = matcher.displayName(String(part))
+                guard !isOff(post, matcher: matcher), !isTrip(post) else { continue }
+                total += 1
+                if WorkloadBalance.isGroup(post) { group += 1 }
+            }
+        }
+        return group >= 1 && group * 2 >= total
+    }
+
+    /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是只按排班算（调度）；
+    /// groupMember：是不是轮组别的人）
     public static func classify(_ raw: String?, workday: Bool, holiday: Bool, rotating: Bool = false,
-                                matcher: ShiftMatcher) -> Kind {
+                                groupMember: Bool = false, matcher: ShiftMatcher) -> Kind {
         guard let raw else {
             if holiday { return .holiday }
-            return workday ? (rotating || !rules.blankWorkdayIsWork ? .unassigned : .attendance) : .off
+            guard workday else { return .off }
+            if rotating || !rules.blankWorkdayIsWork { return .unassigned }
+            // 轮组别的人：没排岗位是正常上班，不算工作量；不轮组别的人：在做别的日常工作，算工作量
+            return groupMember ? .attendance : .regular
         }
         let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
         if posts.contains(where: isDuty) { return .duty }
@@ -155,11 +176,14 @@ public enum WorkloadCounter {
     /// 某人每一天的类别：法定节假日里，遥测后紧接着写了休息、调休的日子（最多 2 天）算值班调休；
     /// 平时的休息不管怎么来的都算休息。
     /// history：这个人全部的排班（用来看统计范围前一两天是不是遥测）。
+    /// groupMember：是不是轮组别的人（nil = 按这段时间最后一天往前三个月自动判断）
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
-                             name: String? = nil, calendar: Calendar = .current) -> [DayKey: Kind] {
+                             groupMember: Bool? = nil, name: String? = nil, calendar: Calendar = .current) -> [DayKey: Kind] {
         let fixed = name.flatMap { overrides[$0] } ?? [:]
+        let member = groupMember ?? isGroupMember(history: history, matcher: matcher, asOf: days.max())
         let history = history.compactMapValues { effective($0, matcher: matcher) }
-        var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, fixed: fixed, calendar: calendar)
+        var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, groupMember: member,
+                               fixed: fixed, calendar: calendar)
         // 手动纠正优先
         if !fixed.isEmpty {
             for day in days {
@@ -172,7 +196,7 @@ public enum WorkloadCounter {
 
     /// fixed：手动纠正（改成值班 / 不是值班的日子，影响后面一天算不算值班调休）
     static func autoKinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
-                          fixed: [DayKey: String] = [:], calendar: Calendar) -> [DayKey: Kind] {
+                          groupMember: Bool = false, fixed: [DayKey: String] = [:], calendar: Calendar) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
         // 这个人在网站上第一次出现前两周、最后一次出现两个月以后（还没来、已经调走）没数据的日子不算。
         // 不轮组别的人可能好几周都不出现在表上（一直在做日常），所以往后放宽到两个月
@@ -182,7 +206,8 @@ public enum WorkloadCounter {
         for day in days {
             guard history[day] != nil || active?.contains(day) == true else { continue }
             result[day] = classify(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
-                                   holiday: ChinaHolidays.isHoliday(day), rotating: rotating, matcher: matcher)
+                                   holiday: ChinaHolidays.isHoliday(day), rotating: rotating, groupMember: groupMember,
+                                   matcher: matcher)
         }
         func restPosts(_ day: DayKey) -> Bool {
             guard let raw = history[day] else { return false }

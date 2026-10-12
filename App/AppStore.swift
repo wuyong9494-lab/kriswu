@@ -1665,7 +1665,7 @@ final class AppStore: ObservableObject {
         }
         var text = "\(year)年" + (month.map { "\($0)月" } ?? "全年") + "工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等有岗位的日子）+ 出差；上班 = 工作量 + 没排岗位、没写休息的工作日）"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位；不轮组别的人没排岗位、没写休息的工作日也算）+ 出差；上班 = 工作量 + 轮组别的人没排岗位、没写休息的工作日）"
         }
         for p in people {
             text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)，出差 \(p.tripDays)），上班 \(p.presentDays) 天"
