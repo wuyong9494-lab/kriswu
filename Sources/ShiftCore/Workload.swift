@@ -108,9 +108,26 @@ public enum WorkloadCounter {
         }
         // 从统计范围前两天开始找遥测，往后接着的休息算调休
         guard let first = days.min(), let last = days.max() else { return result }
-        var day = first.adding(days: -restPerDuty, calendar: calendar)
+        var day = first.adding(days: -3, calendar: calendar)
         while day <= last {
             if isDutyDay(day) {
+                // 平时值完遥测调休两天：网站上没写岗位的工作日（遥测后三天内，最多两天）是在调休，不是在上日常班。
+                // 周六值班 → 周日本来就休，周一、周二调休。轮班的人没排班本来就不算，不用改。
+                if !rotating {
+                    var left = restPerDuty
+                    for offset in 1...3 where left > 0 {
+                        let d = day.adding(days: offset, calendar: calendar)
+                        if let raw = history[d] {
+                            let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+                            // 接着上班了，调休就到此为止
+                            if posts.contains(where: { !isOff($0, matcher: matcher) }) { break }
+                            if ChinaHolidays.isWorkday(d, calendar: calendar) { left -= 1 }
+                        } else if ChinaHolidays.isWorkday(d, calendar: calendar) {
+                            if result[d] == .regular { result[d] = .off }
+                            left -= 1
+                        }
+                    }
+                }
                 var next = day.adding(days: 1, calendar: calendar)
                 // 节假日值完遥测的第二天：网站上没写岗位（没排班）也是值班后的休息，算工作量
                 if history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
