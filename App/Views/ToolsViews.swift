@@ -182,9 +182,21 @@ struct YearStatsView: View {
                 if let file {
                     ShareLink(item: file) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
                 }
+                Button {
+                    Task { await store.readHistory(since: year) }
+                } label: {
+                    HStack {
+                        Text("从电脑版网页读取 \(String(year)) 年 1 月以来的全员排班")
+                        if store.isReadingDesktop { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(store.isReadingDesktop || !store.canSync)
+                if let message = store.settings.desktopRosterMessage {
+                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                }
             } footer: {
                 Text(self.report == nil ? "正在统计…" : report.days.isEmpty ? "这一年还没有全员排班数据。"
-                     : "统计 \(report.days.first!.dateText) – \(report.days.last!.dateText) 共 \(report.days.count) 天（App 从开始同步起记下的全员排班，只算到今天），规则和每月统计一样。")
+                     : "统计 \(report.days.first!.dateText) – \(report.days.last!.dateText) 共 \(report.days.count) 天（只算到今天），规则和每月统计一样。前面缺的月份点上面的按钮，用电脑版「值班查看」一周周往前翻着读（翻几十周要 1–2 分钟，读的时候别离开 App）。")
             }
             ForEach(report.people, id: \.name) { p in
                 VStack(alignment: .leading, spacing: 4) {

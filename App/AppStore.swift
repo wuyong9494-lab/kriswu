@@ -776,18 +776,27 @@ final class AppStore: ObservableObject {
     @discardableResult
     /// 读电脑版页面要半分钟左右：不占用「正在同步」，快捷指令、后台同步不用等它；
     /// 但等正在进行的同步结束后再开始，两个隐藏浏览器不会同时登录。
-    func readDesktopNotes(mayLogin: Bool = true) async -> Bool {
+    /// weeksBack：电脑版页面往前翻几周（默认 9 周，约两个月）
+    func readDesktopNotes(mayLogin: Bool = true, weeksBack: Int = 9) async -> Bool {
         guard !isReadingDesktop else { return false }
         isReadingDesktop = true
         defer { isReadingDesktop = false }
         while isSyncing { try? await Task.sleep(nanoseconds: 500_000_000) }
-        return await readDesktopNotesNow(mayLogin: mayLogin)
+        return await readDesktopNotesNow(mayLogin: mayLogin, weeksBack: weeksBack)
+    }
+
+    /// 从电脑版页面一周周往前翻，读到某年 1 月 1 日为止（App 只留一年多的全员排班）
+    @discardableResult
+    func readHistory(since year: Int) async -> Bool {
+        let start = DayKey(year: year, month: 1, day: 1).date(calendar: .app, hour: 12)
+        let days = Calendar.app.dateComponents([.day], from: start, to: Date()).day ?? 0
+        return await readDesktopNotes(weeksBack: min(60, max(1, days / 7 + 1)))
     }
 
     @Published private(set) var isReadingDesktop = false
 
     @discardableResult
-    private func readDesktopNotesNow(mayLogin: Bool) async -> Bool {
+    private func readDesktopNotesNow(mayLogin: Bool, weeksBack: Int = 9) async -> Bool {
         settings.lastDesktopNotesAttempt = Date()
         let result = await Task {
             await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
@@ -795,7 +804,7 @@ final class AppStore: ObservableObject {
                                                      username: settings.sourceUsername,
                                                      password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
                                                      reference: .today,
-                                                     matcher: matcher)
+                                                     matcher: matcher, weeksBack: weeksBack)
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
         mergeRoster(result.roster)

@@ -71,6 +71,16 @@ struct WorkloadView: View {
                     }
                 }
                 .disabled(reading || store.isReadingDesktop || !store.canSync)
+                Button {
+                    reading = true
+                    Task {
+                        _ = await store.readHistory(since: year)
+                        reading = false
+                    }
+                } label: {
+                    Text("读取 \(String(year)) 年 1 月以来全部（1–2 分钟）")
+                }
+                .disabled(reading || store.isReadingDesktop || !store.canSync)
                 if let message = store.settings.desktopRosterMessage {
                     Text(message).font(.footnote).foregroundStyle(.secondary)
                 }
