@@ -1089,8 +1089,10 @@ final class AppStore: ObservableObject {
         let found = RosterDiff.changes(before: before, after: roster, days: days, matcher: matcher)
         guard !found.isEmpty else { return }
         var log = settings.teamChanges
-        for c in found where !log.contains(where: { $0.day == c.day && $0.post == c.post && $0.from == c.from && $0.to == c.to }) {
-            log.insert(c, at: 0)
+        // 同一天同一岗位只和最近记下的那条比，一样就不重复记（换过去又换回来再换过去也能记上）
+        for c in found {
+            let latest = log.filter { $0.day == c.day && $0.post == c.post }.max { $0.detected < $1.detected }
+            if latest.map({ $0.from == c.from && $0.to == c.to }) != true { log.insert(c, at: 0) }
         }
         settings.teamChanges = Array(log.sorted { ($0.detected, $0.day) > ($1.detected, $1.day) }.prefix(500))
         let today = DayKey.today
