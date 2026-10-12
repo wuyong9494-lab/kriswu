@@ -36,14 +36,16 @@ struct TodayView: View {
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }
-                        TodayHero(day: today, now: context.date)
-                            .onTapGesture { Haptics.tap(); editing = today }
+                        TodayHero(day: today, now: context.date) {
+                            Haptics.tap(); editing = today.adding(days: 1)
+                        }
+                        .onTapGesture { Haptics.tap(); editing = today }
                         WeekStrip(from: today) { Haptics.tap(); editing = $0 }
                         TaskChecklistCard(day: today)
                         RecentChanges()
                         QuickActions(today: today) { searching = true }
                         FavoritesCard(today: today)
-                        UpcomingList(from: today.adding(days: 7), count: 14) { editing = $0 }
+                        UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }
                         SyncStatus()
                     }
                     .padding(.horizontal)
@@ -52,8 +54,7 @@ struct TodayView: View {
                 .background(Color(.systemGroupedBackground).ignoresSafeArea())
             }
             .refreshable {
-                await store.sync(userInitiated: true)
-                Haptics.success()
+                if await store.sync(userInitiated: true) { Haptics.success() }
                 toast = store.settings.lastSyncMessage
                 toastTask?.cancel()
                 toastTask = Task {
@@ -98,6 +99,8 @@ struct TodayHero: View {
     @EnvironmentObject private var store: AppStore
     let day: DayKey
     let now: Date
+    /// 点「明天」那一行
+    var onTomorrow: () -> Void = {}
 
     var body: some View {
         let raw = store.shift(on: day)
@@ -110,7 +113,7 @@ struct TodayHero: View {
                 Text("今天").font(.subheadline.weight(.semibold)).opacity(0.85)
                 Spacer()
                 if store.settings.morningEnabled {
-                    Label(store.settings.morning.text, systemImage: "bell.fill")
+                    Label("每天 \(store.settings.morning.text)", systemImage: "bell.fill")
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.white.opacity(0.2), in: Capsule())
@@ -146,16 +149,28 @@ struct TodayHero: View {
                 .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             Divider().overlay(Color.white.opacity(0.35))
-            HStack(spacing: 8) {
-                Image(systemName: "sunrise.fill").font(.caption)
-                Text("明天").font(.subheadline.weight(.semibold))
-                Text(tomorrow.map { "\($0.emoji) \($0.name)" } ?? (store.isCovered(day.adding(days: 1)) ? "未排班" : "—"))
-                    .font(.subheadline)
-                Spacer()
-                if store.settings.eveningEnabled {
-                    Text("\(store.settings.evening.text) 提醒").font(.caption).opacity(0.8)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sunrise.fill").font(.caption)
+                    Text("明天").font(.subheadline.weight(.semibold))
+                    Text(tomorrow.map { "\($0.emoji) \($0.name)" } ?? (store.isCovered(day.adding(days: 1)) ? "未排班" : "—"))
+                        .font(.subheadline)
+                    Spacer()
+                    if store.settings.eveningEnabled {
+                        Text("前一天 \(store.settings.evening.text) 提醒").font(.caption).opacity(0.8)
+                    }
+                    Image(systemName: "chevron.right").font(.caption2).opacity(0.7)
+                }
+                let tomorrowNotes = store.notes(for: store.shift(on: day.adding(days: 1)))
+                if let first = tomorrowNotes.first {
+                    Text(tomorrowNotes.count > 1 ? "\(first.group)：\(first.note)" : first.note)
+                        .font(.caption)
+                        .opacity(0.85)
+                        .lineLimit(2)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTomorrow)
         }
         .foregroundStyle(.white)
         .padding(20)
@@ -221,7 +236,7 @@ private struct QuickActions: View {
                 tile("工作量", "chart.bar.fill", .purple) { WorkloadView() }
                 tile("均衡分析", "scalemass.fill", .indigo) { FairnessView() }
                 tile("请假规划", "calendar.badge.minus", .orange) { LeavePlannerView() }
-                tile("找人换班", "person.2.fill", .teal) { SwapHelperView(day: nextWorkDay) }
+                tile("找人换班", "person.2.fill", .teal) { NextWorkSwapView(today: today) }
                 tile("换班账本", "book.closed.fill", .brown) { SwapLedgerView() }
                 Button(action: { Haptics.tap(); onSearch() }) { label("搜索成员", "magnifyingglass", .pink) }
                     .buttonStyle(PressableStyle())
@@ -239,11 +254,6 @@ private struct QuickActions: View {
         .card()
     }
 
-    /// 下一个有班的日子（找人换班用），没有就明天
-    private var nextWorkDay: DayKey {
-        (0...30).map { today.adding(days: $0) }
-            .first { !SwapLedger.posts(store.shift(on: $0), matcher: store.matcher).isEmpty } ?? today.adding(days: 1)
-    }
 
     private func tile<D: View>(_ title: String, _ icon: String, _ color: Color, @ViewBuilder destination: @escaping () -> D) -> some View {
         NavigationLink(destination: destination) { label(title, icon, color) }
@@ -364,7 +374,7 @@ private struct FavoritesCard: View {
     var body: some View {
         if !store.settings.favorites.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                CardTitle(title: "关注的同事", icon: "star.fill", color: .yellow)
+                CardTitle(title: "关注的同事", icon: "star.fill", color: .orange)
                     .padding(.bottom, 8)
                 ForEach(Array(store.settings.favorites.enumerated()), id: \.element) { i, name in
                     NavigationLink {
@@ -433,32 +443,14 @@ struct SyncStatus: View {
     }
 }
 
-/// 显示真实日期的小日历（顶部是星期，下面是几号），代替固定画着「7月17日」的 📅 表情。
-struct DateBadge: View {
-    let day: DayKey
-    let size: CGFloat
-
-    private var weekday: String {
-        let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
-        return names[Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12)) - 1]
-    }
+/// 找人换班：点开时才找下一个有班的日子（没有就明天）
+private struct NextWorkSwapView: View {
+    @EnvironmentObject private var store: AppStore
+    let today: DayKey
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text(weekday)
-                .font(.system(size: size * 0.2, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, size * 0.05)
-                .background(Color.red)
-            Text("\(day.day)")
-                .font(.system(size: size * 0.46, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.primary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(width: size, height: size)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.2))
-        .overlay(RoundedRectangle(cornerRadius: size * 0.2).stroke(Color.primary.opacity(0.1)))
+        let day = (0...30).map { today.adding(days: $0) }
+            .first { !SwapLedger.posts(store.shift(on: $0), matcher: store.matcher).isEmpty } ?? today.adding(days: 1)
+        SwapHelperView(day: day)
     }
 }

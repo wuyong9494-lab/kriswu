@@ -53,37 +53,6 @@ struct TaskChecklistCard: View {
     }
 }
 
-// MARK: - 首页工具入口
-
-struct ToolsCard: View {
-    @EnvironmentObject private var store: AppStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            link("本周全员排班表", icon: "tablecells.badge.ellipsis") { WeekRosterView() }
-            Divider()
-            link("请假规划", icon: "calendar.badge.minus") { LeavePlannerView() }
-            Divider()
-            link("自动同步设置向导" + (store.automationLooksMissing ? "（建议设置）" : ""),
-                 icon: "wand.and.stars", highlight: store.automationLooksMissing) { AutomationGuideView() }
-        }
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func link<D: View>(_ title: String, icon: String, highlight: Bool = false,
-                               @ViewBuilder destination: @escaping () -> D) -> some View {
-        NavigationLink(destination: destination) {
-            HStack {
-                Label(title, systemImage: icon).foregroundStyle(highlight ? Color.orange : Color.primary)
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-            }
-            .padding()
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 // MARK: - 本周全员排班表
 
 struct WeekRosterView: View {

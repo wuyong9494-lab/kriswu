@@ -146,7 +146,7 @@ private struct DayCell: View {
                 Text(display.emoji).font(.caption)
                 Text(display.name)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(display.color.blended(with: .black, 0.3))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             } else if unassigned {

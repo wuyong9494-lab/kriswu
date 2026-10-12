@@ -9,7 +9,8 @@ enum Theme {
 
     /// 按班次颜色做的渐变（左上亮、右下深）
     static func gradient(_ color: Color) -> LinearGradient {
-        LinearGradient(colors: [color.opacity(0.95), color.blended(with: .black, 0.25)],
+        // 浅色（休息的绿、白班的橙）也要压暗一些，白字才看得清
+        LinearGradient(colors: [color.blended(with: .black, 0.18), color.blended(with: .black, 0.42)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
