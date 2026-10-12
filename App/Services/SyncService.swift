@@ -164,6 +164,8 @@ enum SyncService {
         var roster: Roster = [:]
         /// 人名后括号里的待休天数（本周那一页）
         var restBalance: [String: Int] = [:]
+        /// 每一周表上每一天人名后的待休天数（往前翻的几周都有）：人名 → 日期 → 天数
+        var restByDay: [String: [DayKey: Int]] = [:]
         var url: String
         /// 没读到时的原因和页面文字（给「设置 › 各组工作内容」排查用）
         var reason: String?
@@ -209,8 +211,12 @@ enum SyncService {
         var roster: Roster = [:]
         var notes: [String: String] = [:]
         var rest: [String: Int] = [:]
+        var restByDay: [String: [DayKey: Int]] = [:]
         for html in [page.html] + page.extraHTML {
             rest.merge(RosterExtractor.restBalances(HTMLText.toText(html), matcher: matcher)) { first, _ in first }
+            for (name, days) in RestBalanceHistory.fromTable(HTMLText.tablesOnly(html), reference: reference, matcher: matcher) {
+                restByDay[name, default: [:]].merge(days) { first, _ in first }
+            }
             RosterExtractor.merge(RosterExtractor.fromDesktopHTML(html, reference: reference, matcher: matcher), into: &roster)
             if notes.isEmpty { notes = groupNotes(fromHTML: html, reference: reference) }
         }
@@ -224,7 +230,7 @@ enum SyncService {
                 : text.contains("组A") ? "页面上有「组A」，但没认出说明的位置"
                 : "页面上没有「组A」等字样，可能不是电脑版「值班查看」页面"
         }
-        return DesktopNotes(notes: notes, roster: roster, restBalance: rest, url: page.url ?? dutyURL.absoluteString,
+        return DesktopNotes(notes: notes, roster: roster, restBalance: rest, restByDay: restByDay, url: page.url ?? dutyURL.absoluteString,
                             reason: reason, pageText: String(text.prefix(6000)))
     }
 

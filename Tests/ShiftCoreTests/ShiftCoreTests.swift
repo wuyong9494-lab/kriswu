@@ -1142,6 +1142,29 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(b["戊"]?[d(15)], "休息")
     }
 
+    func testRestBalanceHistory() {
+        let text = "日期\t星期\t遥测\t休息\n2026-10-12\t周一\t张三(5)\t李四(3) 王五（２）\n2026-10-13\t周二\t张三(4)\t组A(1)"
+        let byDay = RestBalanceHistory.fromTable(text, reference: d(12), matcher: m)
+        XCTAssertEqual(byDay["张三"], [d(12): 5, d(13): 4])
+        XCTAssertEqual(byDay["李四"], [d(12): 3])
+        XCTAssertEqual(byDay["王五"], [d(12): 2])
+        XCTAssertNil(byDay["组A"])
+
+        // 合并：按日期排好，同一天新的为准，只留数字变了的点
+        let merged = RestBalanceHistory.merge([(d(1), 2), (d(5), 3)], [d(3): 2, d(5): 4, d(8): 4, d(12): 2])
+        XCTAssertEqual(merged.map { $0.day }, [d(1), d(5), d(12)])
+        XCTAssertEqual(merged.map { $0.value }, [2, 4, 2])
+
+        // 说明：5 日 2→3（前面 3 日国庆遥测），12 日 3→2（9 日调休）；最新的在前
+        let steps = RestBalanceHistory.steps(points: [(d(1), 2), (d(5), 3), (d(12), 2)],
+                                             history: [d(3): "遥测", d(9): "调休", d(10): "组A"], matcher: m, calendar: cal)
+        XCTAssertEqual(steps.map(\.day), [d(12), d(5)])
+        XCTAssertEqual(steps.map(\.delta), [-1, 1])
+        XCTAssertTrue(steps[1].events.contains { $0.day == d(3) && $0.post == "遥测" && $0.tag == "节假日" })
+        XCTAssertTrue(steps[0].events.contains { $0.day == d(9) && $0.post == "调休" })
+        XCTAssertFalse(steps[0].events.contains { $0.post == "组A" })
+    }
+
     func testNamesGluedTogetherInCell() {
         XCTAssertEqual(RosterExtractor.names(inCell: "张三(5)李四(3)王小五（2）", matcher: m), ["张三", "李四", "王小五"])
     }

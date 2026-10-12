@@ -257,6 +257,18 @@ struct WorkloadDetailView: View {
         .appList()
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let rest = store.settings.restBalance[name] {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink {
+                        RestTrendView(name: name)
+                    } label: {
+                        Label("待休 \(rest)", systemImage: "bed.double")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+            }
+        }
     }
 
     private func color(_ kind: WorkloadCounter.Kind) -> Color {

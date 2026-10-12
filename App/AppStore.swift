@@ -934,6 +934,7 @@ final class AppStore: ObservableObject {
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
         mergeRoster(result.roster)
+        mergeRestHistory(result.restByDay)
         updateRestBalance(result.restBalance)
         let days = Set(result.roster.values.flatMap(\.keys))
         if let lo = days.min(), let hi = days.max() {
@@ -949,16 +950,29 @@ final class AppStore: ObservableObject {
         return true
     }
 
+    /// 电脑版周表上每天的待休天数（往前翻的几周）补进待休记录，用来说明数字是怎么变的。
+    func mergeRestHistory(_ byDay: [String: [DayKey: Int]]) {
+        guard !byDay.isEmpty else { return }
+        var s = settings
+        let today = DayKey.today
+        for (name, days) in byDay {
+            // 以后几周表上的数字还没发生，不记
+            let past = days.filter { $0.key <= today }
+            guard !past.isEmpty else { continue }
+            let old = (s.restHistory[name] ?? []).map { (day: $0.day, value: $0.value) }
+            s.restHistory[name] = RestBalanceHistory.merge(old, past).map { RestPoint(day: $0.day, value: $0.value) }
+        }
+        settings = s
+    }
+
     /// 人名后括号里的待休天数：这次读到的人以新数字为准。
     func updateRestBalance(_ new: [String: Int]) {
         guard !new.isEmpty else { return }
         var s = settings
         let today = DayKey.today
-        for (name, value) in new where s.restHistory[name]?.last?.value != value {
-            var points = s.restHistory[name] ?? []
-            if points.last?.day == today { points.removeLast() }
-            points.append(RestPoint(day: today, value: value))
-            s.restHistory[name] = Array(points.suffix(120))
+        for (name, value) in new {
+            let old = (s.restHistory[name] ?? []).filter { $0.day <= today }.map { (day: $0.day, value: $0.value) }
+            s.restHistory[name] = RestBalanceHistory.merge(old, [today: value]).map { RestPoint(day: $0.day, value: $0.value) }
         }
         s.restBalance.merge(new) { _, n in n }
         s.restBalanceUpdated = Date()

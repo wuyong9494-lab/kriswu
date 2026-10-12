@@ -301,6 +301,8 @@ struct RestTrendView: View {
     @EnvironmentObject private var store: AppStore
     @State private var name: String?
 
+    init(name: String? = nil) { _name = State(initialValue: name) }
+
     var body: some View {
         let zh = Locale(identifier: "zh_CN")
         let me = store.myRosterName
@@ -345,10 +347,8 @@ struct RestTrendView: View {
                         Text("数字变过两次以上才画得出趋势。App 每次同步读到人名后面的括号数字时记一笔。")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                    ForEach(points.reversed(), id: \.day) { p in
-                        LabeledContent(p.day.dateText, value: "\(p.value) 天")
-                    }
                 }
+                RestStepsSection(name: selected)
             } else {
                 Text("还没读到待休天数（人名后面括号里的数字）。").foregroundStyle(.secondary)
             }
@@ -428,5 +428,53 @@ struct HolidaysView: View {
         store.settings.customHolidayWork = work.sorted()
         message = "加入放假 \(r.off.count) 天、上班 \(r.work.count) 天" + (r.skipped.isEmpty ? "" : "；没看懂：" + r.skipped.joined(separator: " / "))
         if r.skipped.isEmpty { text = "" }
+    }
+}
+
+
+/// 待休天数是怎么变过来的：每次变化（几号从几天变成几天），以及前后排的遥测、休息、调休、请假。
+struct RestStepsSection: View {
+    @EnvironmentObject private var store: AppStore
+    let name: String
+
+    var body: some View {
+        let points = (store.settings.restHistory[name] ?? []).map { (day: $0.day, value: $0.value) }
+        let steps = RestBalanceHistory.steps(points: points, history: store.roster[name] ?? [:],
+                                             matcher: store.matcher, calendar: .app)
+        Section {
+            if steps.isEmpty {
+                Text(points.isEmpty ? "还没有记录。" : "从 \(points[0].day.dateText) 起一直是 \(points[0].value) 天，没变过。")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(steps, id: \.day) { step in
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                    HStack {
+                        Text(step.day.dateText).font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text("\(step.from) → \(step.to) 天")
+                            .font(.subheadline.monospacedDigit())
+                        Text(step.delta > 0 ? "+\(step.delta)" : "\(step.delta)")
+                            .font(.caption.weight(.bold).monospacedDigit())
+                            .foregroundStyle(step.delta > 0 ? Color.orange : Color.green)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background((step.delta > 0 ? Color.orange : Color.green).opacity(0.15), in: Capsule())
+                    }
+                    if step.events.isEmpty {
+                        Text("\(step.since.dateText) 以来网站上没排遥测、休息、请假（可能是领导直接调整的）")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("这段时间：" + step.events.map { e in
+                            "\(e.day.month)/\(e.day.day) \(e.post)" + (e.tag.map { "（\($0)）" } ?? "")
+                        }.joined(separator: "、"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("怎么来的")
+        } footer: {
+            Text("数字取自网站上人名后面的括号。增加一般是周末、节假日值了遥测或加班，减少一般是休了、调休了；列出的是上次记录前两天到这天之间网站上排的遥测、加班、休息、请假、出差。在工作量统计页点「读取今年 1 月以来全部」能补全以前的记录。")
+        }
     }
 }
