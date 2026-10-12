@@ -23,6 +23,12 @@ struct SettingsView: View {
                     NavigationLink { RoleView() } label: {
                         row("身份", icon: store.role.symbol, detail: store.role.title)
                     }
+                    Button {
+                        store.settings.onboardingDone = false
+                    } label: {
+                        row("设置向导", icon: "wand.and.rays", detail: "一步步重新设置一遍")
+                    }
+                    .foregroundStyle(.primary)
                 }
                 Section {
                     NavigationLink {

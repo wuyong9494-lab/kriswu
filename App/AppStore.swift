@@ -121,6 +121,8 @@ struct AppSettings: Codable, Equatable {
     var workLogAutoTranscribe = true
     var speechOnDeviceOnly = true
     var workLogLock = false
+    /// 第一次打开的设置向导走完了没有
+    var onboardingDone = false
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
     /// 工作量规则开关
@@ -224,6 +226,9 @@ struct AppSettings: Codable, Equatable {
         workLogAutoTranscribe = try c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe) ?? d.workLogAutoTranscribe
         speechOnDeviceOnly = try c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly) ?? d.speechOnDeviceOnly
         workLogLock = try c.decodeIfPresent(Bool.self, forKey: .workLogLock) ?? d.workLogLock
+        // 老用户（已经填过网址）不再弹向导
+        let savedURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
+        onboardingDone = try c.decodeIfPresent(Bool.self, forKey: .onboardingDone) ?? !savedURL.isEmpty
         liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
         workloadRules = try c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules) ?? WorkloadRules()
         workloadOverrides = try c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides) ?? [:]

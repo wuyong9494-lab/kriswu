@@ -149,6 +149,11 @@ struct RootView: View {
             case .note: NoteSheet()
             }
         }
+        // 第一次打开：设置向导
+        .fullScreenCover(isPresented: Binding(get: { !AppStore.isDemo && !store.settings.onboardingDone },
+                                              set: { if !$0 { store.settings.onboardingDone = true } })) {
+            OnboardingView()
+        }
         .fullScreenCover(isPresented: $camera) {
             CameraPicker { image in
                 if WorkLogStore.shared.addPhoto(image) != nil {
@@ -202,6 +207,7 @@ enum ScreenCatalog {
         case "forecast": DutyForecastView()
         case "worklog": WorkLogView()
         case "manager": ManagerHomeView()
+        case "onboarding": OnboardingView()
         case "role": RoleView()
         case "patterns": SchedulePatternsView()
         case "holidays": HolidaysView()
