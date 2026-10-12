@@ -58,15 +58,16 @@ struct WorkloadView: View {
                 }
                 if !report.people.isEmpty {
                     WorkloadBarChart(items: report.people.prefix(12).map {
-                        .init(name: $0.name, value: $0.workDays, highlight: store.isMe($0.name))
+                        .init(name: $0.name, value: $0.workDays, highlight: store.isMe($0.name), present: $0.presentDays)
                     })
+                    Text("深色是工作量，后面浅色是上班天数").font(.caption2).foregroundStyle(.secondary)
                     .padding(.vertical, DS.Space.xs)
                 }
             } footer: {
                 if report.days.isEmpty {
                     Text("这个月还没有全员排班数据。")
                 } else {
-                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「值班」只算遥测；各组、调度等岗位算「日常班」；工作日网站上没排岗位、也没写休息的是正常上班，也算日常班；调度没排班的日子不算。节假日里遥测后紧接着的休息算「值班调休」；平时的休息、调休都算休息。「工作量」= 值班 + 值班调休 + 日常 + 出差；「节假日」是法定假日里网站上没排任何岗位的天数。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」只算排班表上有岗位的日子：值班（遥测）+ 节假日值完遥测的第二天 + 日常（各组、调度等岗位）+ 出差。「上班」= 工作量 + 工作日网站上没排岗位、也没写休息的日子（正常上班，但不算工作量）。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日」是法定假日里网站上没排任何岗位的天数，调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
                 }
             }
             Section {
@@ -133,10 +134,7 @@ struct WorkloadView: View {
                                 .background(Color.green.opacity(0.2), in: Capsule())
                         }
                         Spacer()
-                        VStack(alignment: .trailing, spacing: 0) {
-                            Text("工作量 \(person.workDays) 天").font(.headline)
-                            Text("上班 \(person.presentDays) 天").font(.caption).foregroundStyle(.secondary)
-                        }
+                        WorkPresentPair(work: person.workDays, present: person.presentDays)
                     }
                     }
                     Text(summary(person))

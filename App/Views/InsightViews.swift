@@ -275,6 +275,8 @@ struct WorkloadBarChart: View {
         let name: String
         let value: Int
         let highlight: Bool
+        /// 上班天数（有的话画在工作量后面，浅色）
+        var present: Int? = nil
     }
 
     let items: [Item]
@@ -284,7 +286,14 @@ struct WorkloadBarChart: View {
     var body: some View {
         Chart {
             ForEach(items) { item in
-                BarMark(x: .value("天", grown ? Double(item.value) : 0.0001), y: .value("姓名", item.name), height: .fixed(14))
+                if let present = item.present, present > item.value {
+                    BarMark(x: .value("天", grown ? Double(present) : 0.0001), y: .value("姓名", item.name), height: .fixed(14),
+                            stacking: .unstacked)
+                        .foregroundStyle((item.highlight ? DS.Palette.accent : DS.Palette.iconSecondary).opacity(0.14))
+                        .cornerRadius(7)
+                }
+                BarMark(x: .value("天", grown ? Double(item.value) : 0.0001), y: .value("姓名", item.name), height: .fixed(14),
+                        stacking: .unstacked)
                     .foregroundStyle(item.highlight
                                      ? AnyShapeStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.65), DS.Palette.accent],
                                                                     startPoint: .leading, endPoint: .trailing))
@@ -292,7 +301,7 @@ struct WorkloadBarChart: View {
                                                                     startPoint: .leading, endPoint: .trailing)))
                     .cornerRadius(7)
                     .annotation(position: .trailing, spacing: DS.Space.xxs + 2) {
-                        Text("\(item.value)")
+                        Text(item.present.map { $0 > item.value ? "\(item.value) · 上班\($0)" : "\(item.value)" } ?? "\(item.value)")
                             .font(DS.Font.caption.monospacedDigit())
                             .foregroundStyle(item.highlight ? DS.Palette.accent : .secondary)
                             .opacity(grown ? 1 : 0)
@@ -313,7 +322,7 @@ struct WorkloadBarChart: View {
                 AxisValueLabel().font(DS.Font.caption)
             }
         }
-        .chartXScale(domain: 0...Double(max(items.map(\.value).max() ?? 1, Int((average ?? 0).rounded(.up)), 1)) * 1.18)
+        .chartXScale(domain: 0...Double(max(items.map { max($0.value, $0.present ?? 0) }.max() ?? 1, Int((average ?? 0).rounded(.up)), 1)) * 1.3)
         .frame(height: CGFloat(max(items.count, 1)) * 32 + (average == nil ? 8 : 28))
         .onAppear {
             guard !grown else { return }

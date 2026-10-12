@@ -218,8 +218,7 @@ struct YearStatsView: View {
                         Text(p.name).font(DS.Font.headline)
                             .foregroundStyle(store.isMe(p.name) ? DS.Palette.accent : Color.primary)
                         Spacer()
-                        Text("\(p.workDays)").font(DS.Font.title.monospacedDigit())
-                        Text("天").font(DS.Font.caption).foregroundStyle(.secondary)
+                        WorkPresentPair(work: p.workDays, present: p.presentDays)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: DS.Space.xxs) {
@@ -228,7 +227,6 @@ struct YearStatsView: View {
                             Chip(text: "日常 \(p.regularDays)", color: .secondary)
                             if p.dutyRestDays > 0 { Chip(text: "值班调休 \(p.dutyRestDays)", color: .secondary) }
                             if p.tripDays > 0 { Chip(text: "出差 \(p.tripDays)", color: .secondary) }
-                            Chip(text: "上班 \(p.presentDays)", color: .secondary)
                             Chip(text: "休息 \(p.offDays)", color: .secondary)
                             Chip(text: "节假日 \(p.holidayDays)", color: .secondary)
                         }

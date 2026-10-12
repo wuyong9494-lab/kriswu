@@ -733,3 +733,28 @@ struct FloatingTabBar<Tab: Hashable>: View {
         .padding(.bottom, DS.Space.xs)
     }
 }
+
+
+/// 「工作量 5 天 | 上班 6 天」两个数字并排、一样大
+struct WorkPresentPair: View {
+    let work: Int
+    let present: Int
+
+    var body: some View {
+        HStack(spacing: DS.Space.s) {
+            item(work, "工作量")
+            Rectangle().fill(DS.Palette.hairline).frame(width: 1, height: 26)
+            item(present, "上班")
+        }
+    }
+
+    private func item(_ value: Int, _ label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text("\(value)").font(DS.Font.headline.monospacedDigit())
+                Text("天").font(.caption2).foregroundStyle(.secondary)
+            }
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+}
