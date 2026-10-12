@@ -186,7 +186,8 @@ private struct RowView: View {
         let w = row.workload
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(row.name).font(.headline)
+                Avatar(name: row.name, size: 28)
+                Text(row.name).font(DS.Font.headline)
                     .foregroundStyle(store.isMe(row.name) ? Color.accentColor : Color.primary)
                 if let rest = store.settings.restBalance[row.name], rest > 0 {
                     Text("待休 \(rest)")

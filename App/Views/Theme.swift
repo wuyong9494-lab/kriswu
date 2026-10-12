@@ -551,3 +551,33 @@ struct ToolGrid: View {
         .padding(.vertical, DS.Space.xs)
     }
 }
+
+// MARK: - 头像
+
+/// 名字缩写放在渐变色圆里，每个人颜色固定
+struct Avatar: View {
+    let name: String
+    var size: CGFloat = 32
+
+    private var initials: String {
+        let clean = name.filter { !$0.isWhitespace && $0 != "(" && $0 != "（" }
+        return String(clean.count >= 3 ? clean.suffix(2) : clean.suffix(min(clean.count, 2)))
+    }
+
+    private var hue: Double {
+        Double(name.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF } % 360) / 360
+    }
+
+    var body: some View {
+        Text(initials)
+            .font(.system(size: size * (initials.count > 1 ? 0.36 : 0.44), weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(
+                LinearGradient(colors: [Color(hue: hue, saturation: 0.45, brightness: 0.88),
+                                        Color(hue: hue, saturation: 0.6, brightness: 0.68)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+    }
+}

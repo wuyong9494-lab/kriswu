@@ -29,7 +29,8 @@ struct SwapHelperView: View {
             ForEach(list, id: \.name) { c in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(c.name).font(.headline)
+                        Avatar(name: c.name, size: 32)
+                        Text(c.name).font(DS.Font.headline)
                         Text(c.thatDay).font(.caption).foregroundStyle(.secondary)
                         Spacer()
                         Text("本月已上 \(c.recentWork) 天").font(.caption).foregroundStyle(.secondary)
@@ -71,7 +72,8 @@ struct SwapLedgerView: View {
                 }
                 ForEach(balances, id: \.key) { name, value in
                     HStack {
-                        Text(name).font(.headline)
+                        Avatar(name: name, size: 28)
+                        Text(name).font(DS.Font.headline)
                         Spacer()
                         Text(value > 0 ? "欠你 \(value) 天" : "你欠 \(-value) 天")
                             .foregroundStyle(value > 0 ? Color.green : Color.orange)
@@ -211,7 +213,8 @@ struct YearStatsView: View {
             }
             ForEach(report.people, id: \.name) { p in
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
-                    HStack(alignment: .firstTextBaseline) {
+                    HStack(alignment: .center) {
+                        Avatar(name: p.name, size: 30)
                         Text(p.name).font(DS.Font.headline)
                             .foregroundStyle(store.isMe(p.name) ? DS.Palette.accent : Color.primary)
                         Spacer()
@@ -274,7 +277,8 @@ struct DutyForecastView: View {
     private func row(_ f: DutyForecast, today: DayKey) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(f.name).font(.headline)
+                Avatar(name: f.name, size: 28)
+                Text(f.name).font(DS.Font.headline)
                 Spacer()
                 if let s = f.scheduled {
                     Text("已排 \(s.dateText)").foregroundStyle(Color.accentColor)

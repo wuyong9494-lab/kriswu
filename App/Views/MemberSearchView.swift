@@ -35,6 +35,7 @@ struct MemberSearchView: View {
                                 if store.isFavorite(name) {
                                     Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption)
                                 }
+                                Avatar(name: name, size: 30)
                                 Text(name)
                                 Spacer()
                                 if let today = store.roster[name]?[.today] {

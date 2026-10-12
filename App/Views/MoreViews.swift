@@ -262,7 +262,8 @@ struct HolidayDutyView: View {
                 ForEach(stats, id: \.name) { s in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(s.name).font(.headline)
+                            Avatar(name: s.name, size: 28)
+                            Text(s.name).font(DS.Font.headline)
                                 .foregroundStyle(store.isMe(s.name) ? Color.accentColor : Color.primary)
                             Spacer()
                             Text("遥测 \(s.dutyDays) 次 · 上班 \(s.workDays) 天")

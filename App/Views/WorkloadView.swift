@@ -114,6 +114,7 @@ struct WorkloadView: View {
                         WorkloadDetailView(name: person.name, days: report.days)
                     } label: {
                     HStack {
+                        Avatar(name: person.name, size: 30)
                         Text(person.name)
                             .font(.headline)
                             .foregroundStyle(store.isMe(person.name) ? Color.accentColor : Color.primary)

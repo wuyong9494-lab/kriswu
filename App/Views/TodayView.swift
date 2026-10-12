@@ -364,6 +364,7 @@ private struct FavoritesCard: View {
                         MemberScheduleView(name: name)
                     } label: {
                         HStack {
+                            Avatar(name: name, size: 28)
                             Text(name)
                             Spacer()
                             post("今天", store.roster[name]?[today])
