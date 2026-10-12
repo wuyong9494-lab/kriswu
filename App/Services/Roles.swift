@@ -29,7 +29,7 @@ enum UserRole: String {
 /// 这只是手机上的一道门：真正的数据安全还要靠不把 App 和代码给外人。
 enum RoleAuth {
     private static let salt = "shiftreminder-role-v1|"
-    private static let adminHash = "a9c2c4a9743b841130f3f73ec06cfea6e1b9c080dc33e2cd60162554cc8996af"
+    private static let adminHash = "09af71b732b51680058ac13769e9dab232d4dbc143a85ca3276845c57ff6342e"
     private static let managerHash = "09af71b732b51680058ac13769e9dab232d4dbc143a85ca3276845c57ff6342e"
 
     static func hash(_ password: String) -> String {
@@ -41,13 +41,11 @@ enum RoleAuth {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    /// 密码对应的身份；不对返回 nil
-    static func role(for password: String) async -> UserRole? {
+    /// 用 password 登录成 role（管理者或管理员）：密码对返回 true
+    static func verify(_ password: String, as role: UserRole) async -> Bool {
         let input = password.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !input.isEmpty else { return nil }
+        guard !input.isEmpty, role != .user else { return false }
         let h = await Task.detached(priority: .userInitiated) { hash(input) }.value
-        if h == adminHash { return .admin }
-        if h == managerHash { return .manager }
-        return nil
+        return h == (role == .admin ? adminHash : managerHash)
     }
 }

@@ -832,34 +832,15 @@ struct RoleView: View {
                         .keyboardType(.numberPad)
                         .textContentType(.password)
                         .focused($focused)
-                    Button {
-                        Task { @MainActor in
-                            checking = true
-                            let r = await store.login(password: password)
-                            checking = false
-                            if let r {
-                                error = nil
-                                password = ""
-                                ToastCenter.shared.show("已登录：\(r.title)", style: .success)
-                            } else {
-                                error = "密码不对"
-                                Haptics.warning()
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            Text("登录")
-                            if checking { Spacer(); DSSpinner() }
-                        }
-                    }
-                    .disabled(password.isEmpty || checking)
+                    loginButton(.manager, "以管理者登录（只能查看）")
+                    loginButton(.admin, "以管理员登录（可以修改）")
                     if let error {
                         Text(error).font(.footnote).foregroundStyle(DS.Palette.warning)
                     }
                 } header: {
                     Text("管理者 / 管理员登录")
                 } footer: {
-                    Text("管理者输入管理者密码，可以查看所有人的排班；管理员输入管理员密码，可以修改信息。")
+                    Text("输入密码后选登录方式：管理者可以查看所有人的排班，不能修改；管理员可以修改信息。")
                 }
             } else {
                 Section {
@@ -873,6 +854,30 @@ struct RoleView: View {
         .appList()
         .navigationTitle("身份")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func loginButton(_ role: UserRole, _ title: String) -> some View {
+        Button {
+            Task { @MainActor in
+                checking = true
+                let ok = await store.login(password: password, as: role)
+                checking = false
+                if ok {
+                    error = nil
+                    password = ""
+                    ToastCenter.shared.show("已登录：\(role.title)", style: .success)
+                } else {
+                    error = "密码不对"
+                    Haptics.warning()
+                }
+            }
+        } label: {
+            HStack {
+                Label(title, systemImage: role.symbol)
+                if checking { Spacer(); DSSpinner() }
+            }
+        }
+        .disabled(password.isEmpty || checking)
     }
 
     private func describe(_ role: UserRole) -> String {

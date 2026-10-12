@@ -655,11 +655,11 @@ final class AppStore: ObservableObject {
     /// 只有管理员能改排班数据（手动改班、工作量纠正、规则、节假日、各组内容、班次类型、导入、恢复备份）
     var canEdit: Bool { role == .admin }
 
-    /// 输入密码登录；返回登录后的身份，密码不对返回 nil
-    func login(password: String) async -> UserRole? {
-        guard let r = await RoleAuth.role(for: password) else { return nil }
-        setRole(r)
-        return r
+    /// 以管理者或管理员身份登录；密码不对返回 false
+    func login(password: String, as role: UserRole) async -> Bool {
+        guard await RoleAuth.verify(password, as: role) else { return false }
+        setRole(role)
+        return true
     }
 
     func logout() { setRole(.user) }
