@@ -711,7 +711,8 @@ final class WorkloadTests: XCTestCase {
         let result = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
             roster: roster, days: (5...11).map(d), matcher: m, members: ["甲"], calendar: cal).map { ($0.name, $0) })
         XCTAssertEqual(result["甲"]?.workDays, 2)
-        XCTAssertEqual(result["甲"]?.unassignedDays, 3)
+        XCTAssertEqual(result["甲"]?.unassignedDays, 1)   // 周二遥测，周三周四调休（休息），周五没排班
+        XCTAssertEqual(result["甲"]?.offDays, 4)
         XCTAssertEqual(result["乙"]?.workDays, 1)
         XCTAssertEqual(result["乙"]?.unassignedDays, 4)
         XCTAssertEqual(result["丙"]?.workDays, 5)
@@ -749,7 +750,7 @@ final class WorkloadTests: XCTestCase {
                                     d(7): "遥测", d(8): "休息"]]
         let result = count(roster, (1...9).map(d))
         XCTAssertEqual(result["甲"]?.dutyRestDays, 2)
-        XCTAssertEqual(result["甲"]?.offDays, 2)
+        XCTAssertEqual(result["甲"]?.offDays, 3)          // 5 日休息；7 日遥测后 8 日休息、9 日没写也是调休
         XCTAssertEqual(result["甲"]?.dutyDays, 2)
         // 别人：国庆 5 日遥测，6 日网站上没写（值班后休息），7 日也没写（普通假期）
         let other = count(["乙": [d(5): "遥测", d(8): "组B"]], (5...8).map(d))["乙"]

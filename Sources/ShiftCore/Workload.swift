@@ -112,8 +112,8 @@ public enum WorkloadCounter {
         while day <= last {
             if isDutyDay(day) {
                 // 平时值完遥测调休两天：网站上没写岗位的工作日（遥测后三天内，最多两天）是在调休，不是在上日常班。
-                // 周六值班 → 周日本来就休，周一、周二调休。轮班的人没排班本来就不算，不用改。
-                if !rotating {
+                // 周六值班 → 周日本来就休，周一、周二调休。轮班的人这两天显示「休息」而不是「没排班」，同样不算工作量。
+                do {
                     var left = restPerDuty
                     for offset in 1...3 where left > 0 {
                         let d = day.adding(days: offset, calendar: calendar)
@@ -123,7 +123,7 @@ public enum WorkloadCounter {
                             if posts.contains(where: { !isOff($0, matcher: matcher) }) { break }
                             if ChinaHolidays.isWorkday(d, calendar: calendar) { left -= 1 }
                         } else if ChinaHolidays.isWorkday(d, calendar: calendar) {
-                            if result[d] == .regular { result[d] = .off }
+                            if result[d] == .regular || result[d] == .unassigned { result[d] = .off }
                             left -= 1
                         }
                     }
