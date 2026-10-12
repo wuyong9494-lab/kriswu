@@ -77,6 +77,15 @@ struct AppSettings: Codable, Equatable {
     var restAlertNotified: Int?
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
+    /// 遥测下班后补觉到几点（给快捷指令的勿扰自动化用）
+    var restFocusUntil = ClockTime(hour: 14, minute: 0)
+    /// 组别任务清单勾选：「yyyy-MM-dd|组A」→ 做完的事项
+    var taskChecks: [String: [String]] = [:]
+    /// 自动备份到的文件夹（「文件」App 里选的，存成书签）
+    var backupFolderBookmark: Data?
+    var backupFolderName: String?
+    var lastAutoBackup: Date?
+    var autoBackupMessage: String?
     /// 最近的排班变动（首页显示）
     var changeLog: [ChangeLogEntry] = []
     /// 已经提醒过「很久没同步成功」，同步成功后恢复
@@ -152,6 +161,12 @@ struct AppSettings: Codable, Equatable {
         restAlertThreshold = try c.decodeIfPresent(Int.self, forKey: .restAlertThreshold) ?? 5
         restAlertNotified = try c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
         liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
+        restFocusUntil = try c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil) ?? ClockTime(hour: 14, minute: 0)
+        taskChecks = try c.decodeIfPresent([String: [String]].self, forKey: .taskChecks) ?? [:]
+        backupFolderBookmark = try c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
+        backupFolderName = try c.decodeIfPresent(String.self, forKey: .backupFolderName)
+        lastAutoBackup = try c.decodeIfPresent(Date.self, forKey: .lastAutoBackup)
+        autoBackupMessage = try c.decodeIfPresent(String.self, forKey: .autoBackupMessage)
         changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
         syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
         lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
@@ -210,6 +225,26 @@ private struct PersistedState: Codable {
     var schedule: [String: String]
     /// 已经取到过排班结果的日子（包括没给我排班的日子）
     var covered: [String]?
+}
+
+extension ClockTime {
+    /// 给时间选择器用的 Date（日期部分无意义）
+    var date: Date {
+        Calendar.app.date(from: DateComponents(year: 2000, month: 1, day: 1, hour: hour, minute: minute)) ?? Date()
+    }
+
+    init(date: Date) {
+        let c = Calendar.app.dateComponents([.hour, .minute], from: date)
+        self.init(hour: c.hour ?? 0, minute: c.minute ?? 0)
+    }
+}
+
+extension DayKey {
+    /// 周一…周日
+    var weekdayText: String {
+        let w = Calendar.app.component(.weekday, from: date(calendar: .app, hour: 12))
+        return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][w - 1]
+    }
 }
 
 extension Calendar {
@@ -796,6 +831,86 @@ final class AppStore: ObservableObject {
         Task { await notifyRestIfNeeded() }
     }
 
+    /// 昨天值了遥测、现在是今天 8:30 到设定的补觉结束时间之间
+    func isRestingAfterDuty(now: Date = Date()) -> Bool {
+        let today = DayKey(date: now, calendar: .app)
+        guard let raw = schedule[today.adding(days: -1)], WorkloadCounter.isDuty(matcher.displayName(raw)) else { return false }
+        let start = today.date(calendar: .app, hour: 8, minute: 30)
+        let end = today.date(calendar: .app, hour: settings.restFocusUntil.hour, minute: settings.restFocusUntil.minute)
+        return now >= start && now < end
+    }
+
+    // MARK: - 组别任务清单
+
+    func taskKey(_ day: DayKey, _ group: String) -> String { "\(day.description)|\(group)" }
+
+    func isTaskDone(_ day: DayKey, _ group: String, _ item: String) -> Bool {
+        settings.taskChecks[taskKey(day, group)]?.contains(item) ?? false
+    }
+
+    func toggleTask(_ day: DayKey, _ group: String, _ item: String) {
+        var checks = settings.taskChecks
+        let key = taskKey(day, group)
+        var done = checks[key] ?? []
+        if let i = done.firstIndex(of: item) { done.remove(at: i) } else { done.append(item) }
+        checks[key] = done.isEmpty ? nil : done
+        // 只留最近两周
+        let cutoff = DayKey.today.adding(days: -14).description
+        checks = checks.filter { $0.key.prefix(10) >= cutoff }
+        settings.taskChecks = checks
+    }
+
+    // MARK: - 自动备份
+
+    /// 在「文件」App 里选一个文件夹（建议 iCloud 云盘），以后每天自动存一份备份；删掉 App 也还在。
+    func setBackupFolder(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            settings.backupFolderBookmark = try url.bookmarkData()
+            settings.backupFolderName = url.lastPathComponent
+            settings.lastAutoBackup = nil
+            autoBackupIfNeeded(force: true)
+        } catch {
+            settings.autoBackupMessage = "没法记住这个文件夹：\(error.localizedDescription)"
+        }
+    }
+
+    /// 每天最多一次，存「值班提醒备份-日期.json」，只留最近 8 份
+    func autoBackupIfNeeded(force: Bool = false) {
+        guard let bookmark = settings.backupFolderBookmark else { return }
+        if !force, let last = settings.lastAutoBackup, Date().timeIntervalSince(last) < 20 * 3600 { return }
+        var stale = false
+        guard let folder = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &stale) else {
+            settings.autoBackupMessage = "找不到备份文件夹了，请重新选一次"
+            return
+        }
+        let scoped = folder.startAccessingSecurityScopedResource()
+        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        do {
+            let file = folder.appendingPathComponent("值班提醒备份-\(DayKey.today.description).json")
+            try backupData().write(to: file, options: .atomic)
+            let fm = FileManager.default
+            let old = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+            for url in old.filter({ $0.lastPathComponent.hasPrefix("值班提醒备份-") && $0.pathExtension == "json" })
+                .sorted(by: { $0.lastPathComponent > $1.lastPathComponent }).dropFirst(8) {
+                try? fm.removeItem(at: url)
+            }
+            if stale { settings.backupFolderBookmark = try? folder.bookmarkData() }
+            settings.lastAutoBackup = Date()
+            settings.autoBackupMessage = "已备份到「\(settings.backupFolderName ?? folder.lastPathComponent)」"
+        } catch {
+            settings.autoBackupMessage = "自动备份失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// 两天里没有一次快捷指令同步：多半还没设自动化
+    var automationLooksMissing: Bool {
+        guard canSync else { return false }
+        let since = Date().addingTimeInterval(-2 * 86_400)
+        return !settings.syncLog.contains { $0.date > since && $0.source.hasPrefix("快捷指令") }
+    }
+
     /// 我在网站上的名字（全员排班里认出是我的那个）
     var myRosterName: String? { roster.keys.first(where: isMe) ?? settings.restBalance.keys.first(where: isMe) }
 
@@ -880,6 +995,7 @@ final class AppStore: ObservableObject {
                 await sendDueWeChatReminders()
             }
             await rescheduleNotifications()
+            autoBackupIfNeeded()
         } onCancel: {
             // 系统收回后台时间：让正在进行的同步马上停下（等待中的网页会抛出取消），不被系统强行杀掉
             Task { @MainActor in AppStore.shared.cancelRunningSync() }
@@ -1141,6 +1257,11 @@ final class AppStore: ObservableObject {
         newSettings.nextSyncIsBaseline = true
         // 重装后日历权限要重新给，没给就先关掉
         if newSettings.calendarSync && !CalendarSync.authorized { newSettings.calendarSync = false }
+        // 自动备份的文件夹是这台手机上选的，不用备份里的
+        newSettings.backupFolderBookmark = settings.backupFolderBookmark
+        newSettings.backupFolderName = settings.backupFolderName
+        newSettings.lastAutoBackup = settings.lastAutoBackup
+        newSettings.autoBackupMessage = settings.autoBackupMessage
         settings = newSettings
         scheduleChanged()
         Task { [weak self] in await self?.sync(userInitiated: true) }

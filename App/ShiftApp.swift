@@ -24,6 +24,7 @@ struct ShiftApp: App {
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()
                     await store.rescheduleNotifications()
+                    store.autoBackupIfNeeded()
                 }
             case .background:
                 BackgroundRefresh.schedule(notBefore: store.nextWeChatReminder)

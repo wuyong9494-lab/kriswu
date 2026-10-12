@@ -6,6 +6,7 @@ struct BackupView: View {
     @EnvironmentObject private var store: AppStore
     @State private var backupURL: URL?
     @State private var importing = false
+    @State private var choosingFolder = false
     @State private var confirmRestore: Data?
     @State private var message: String?
 
@@ -21,6 +22,35 @@ struct BackupView: View {
                 }
             } footer: {
                 Text("包含设置、你的排班、全员排班、组别说明和收藏的同事。可以选「存储到“文件”」，或发到微信「文件传输助手」。\n网站密码和 PushPlus token 不在备份里：同一台手机删掉重装时手机还记着，换新手机要重新填一次。")
+            }
+            Section {
+                Button {
+                    choosingFolder = true
+                } label: {
+                    Label(store.settings.backupFolderBookmark == nil ? "选择自动备份的文件夹" : "换一个文件夹",
+                          systemImage: "folder.badge.gearshape")
+                }
+                .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
+                    if case .success(let url) = result { store.setBackupFolder(url) }
+                }
+                if store.settings.backupFolderBookmark != nil {
+                    if let message = store.settings.autoBackupMessage {
+                        Text(message).font(.footnote)
+                    }
+                    if let last = store.settings.lastAutoBackup {
+                        LabeledContent("上次自动备份", value: last.formatted(date: .abbreviated, time: .shortened))
+                    }
+                    Button("现在备份一次") { store.autoBackupIfNeeded(force: true) }
+                    Button("停止自动备份", role: .destructive) {
+                        store.settings.backupFolderBookmark = nil
+                        store.settings.backupFolderName = nil
+                        store.settings.autoBackupMessage = nil
+                    }
+                }
+            } header: {
+                Text("自动备份")
+            } footer: {
+                Text("建议选「iCloud 云盘」里新建的文件夹：之后每天打开 App 或同步时自动存一份（只留最近 8 份），删掉 App、换手机都还在。恢复时点下面的「从备份文件恢复」，选最新的一份。")
             }
             Section {
                 Button {

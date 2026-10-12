@@ -39,6 +39,12 @@ struct SettingsView: View {
                         row("各组工作内容", icon: "list.bullet.rectangle", detail: groupNotesSummary)
                     }
                     NavigationLink {
+                        AutomationGuideView()
+                    } label: {
+                        row("自动同步设置向导", icon: "wand.and.stars",
+                            detail: store.automationLooksMissing ? "还没设置" : "已在运行")
+                    }
+                    NavigationLink {
                         SwapLedgerView()
                     } label: {
                         row("换班账本", icon: "book.closed", detail: ledgerSummary)

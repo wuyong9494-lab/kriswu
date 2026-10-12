@@ -1035,4 +1035,30 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(lines.count, 2)
         XCTAssertTrue(lines[1].hasPrefix("\"张,三\",6,2,0,3,1,1,0,1,0,4,"), String(lines[1]))
     }
+
+    func testHolidayDutyStats() {
+        // 国庆 10/1–10/7；10/9 不是假期
+        let roster: Roster = ["甲": [d(1): "遥测", d(3): "组A", d(9): "遥测"], "乙": [d(2): "休息"], "丙": [d(4): "遥测"]]
+        let s = HolidayDutyStats.count(roster: roster, days: Set((1...11).map(d)), matcher: m)
+        XCTAssertEqual(s.map(\.name), ["甲", "丙"])
+        XCTAssertEqual(s[0].dutyDays, 1)
+        XCTAssertEqual(s[0].workDays, 2)
+        XCTAssertEqual(s[0].dutyDates, [d(1)])
+    }
+
+    func testLeavePlan() {
+        // 10/12 周一 … 10/18 周日；网站排到 15 日
+        let mine: [DayKey: String] = [d(12): "组A", d(13): "休息", d(14): "遥测"]
+        let published = Set((12...15).map(d))
+        let p = LeavePlanner.plan(from: d(12), to: d(18), mine: mine, published: published, matcher: m, calendar: cal)
+        XCTAssertEqual(p.needDays, [d(12), d(14), d(16)])
+        XCTAssertEqual(p.dutyDays, [d(14)])
+        XCTAssertEqual(p.unknownDays, [d(16)])
+        XCTAssertEqual(p.freeDays, [d(13), d(15), d(17), d(18)])
+    }
+
+    func testTaskList() {
+        XCTAssertEqual(TaskList.items(from: "1、巡检机房；2、填写日志\n3. 交接班"), ["巡检机房", "填写日志", "交接班"])
+        XCTAssertEqual(TaskList.items(from: "负责数据处理。"), ["负责数据处理"])
+    }
 }

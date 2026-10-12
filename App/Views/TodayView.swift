@@ -34,12 +34,14 @@ struct TodayView: View {
                         ShiftCard(label: "今天", day: today, large: true,
                                   reminder: store.settings.morningEnabled ? "每天 \(store.settings.morning.text) 提醒" : nil)
                             .onTapGesture { editing = today }
+                        TaskChecklistCard(day: today)
                         ShiftCard(label: "明天", day: today.adding(days: 1), large: false,
                                   reminder: store.settings.eveningEnabled ? "前一天 \(store.settings.evening.text) 提醒" : nil)
                             .onTapGesture { editing = today.adding(days: 1) }
                         RecentChanges()
                         FavoritesCard(today: today)
                         UpcomingList(from: today.adding(days: 2), count: 12) { editing = $0 }
+                        ToolsCard()
                         SyncStatus()
                     }
                     .padding()

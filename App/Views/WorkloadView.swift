@@ -41,6 +41,7 @@ struct WorkloadView: View {
             Section {
                 NavigationLink { YearStatsView() } label: { Label("全年统计 / 导出表格", systemImage: "calendar") }
                 NavigationLink { DutyForecastView() } label: { Label("遥测轮转预测", systemImage: "antenna.radiowaves.left.and.right") }
+                NavigationLink { HolidayDutyView() } label: { Label("节假日值班统计", systemImage: "flag") }
                 NavigationLink { RestTrendView() } label: { Label("待休趋势", systemImage: "chart.line.uptrend.xyaxis") }
                 NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
                 if let monthFile {
