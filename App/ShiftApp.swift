@@ -65,6 +65,7 @@ struct RootView: View {
     /// 从「备忘录」等分享进来的录音存好后打开工作留痕；控制中心、操作按钮、小组件来的拍照 / 录音 / 记一笔
     @State private var rootSheet: RootSheet?
     @State private var camera = false
+    @State private var tabBarTop: CGFloat = .infinity
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
@@ -102,6 +103,8 @@ struct RootView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     FloatingTabBar(items: tabs, selection: $tab)
                 }
+                .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
+                .environment(\.floatingTabBarTop, tabBarTop)
             }
         }
         // 换主题色时整个界面重画一遍

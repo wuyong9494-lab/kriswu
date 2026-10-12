@@ -4,6 +4,7 @@ import WebKit
 /// 「网站」标签页：直接显示值班网站的手机版，用保存的账号自动登录。网页上有的内容在这里都能看到。
 struct SiteView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.floatingTabBarTop) private var tabBarTop
     @StateObject private var model = WebModel()
     @State private var loaded = false
 
@@ -21,7 +22,12 @@ struct SiteView: View {
                     }
                     .padding()
                 } else {
-                    WebView(webView: model.webView)
+                    // 网页停在悬浮标签栏上面：网页自己底部的按钮不被挡住
+                    GeometryReader { g in
+                        let overlap = tabBarTop.isFinite ? max(0, g.frame(in: .global).maxY - tabBarTop + 4) : 0
+                        WebView(webView: model.webView)
+                            .padding(.bottom, overlap)
+                    }
                 }
             }
             .overlay(alignment: .top) {

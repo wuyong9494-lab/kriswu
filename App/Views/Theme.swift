@@ -756,6 +756,27 @@ struct FloatingTabBar<Tab: Hashable>: View {
         }
         .padding(.horizontal, DS.Space.l)
         .padding(.bottom, DS.Space.xs)
+        // 告诉页面标签栏的上边在哪（网页要停在它上面，不然网页底部的按钮被挡住）
+        .background(GeometryReader { g in
+            Color.clear.preference(key: TabBarTopKey.self, value: g.frame(in: .global).minY)
+        })
+    }
+}
+
+struct TabBarTopKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
+}
+
+private struct TabBarTopEnvironmentKey: EnvironmentKey {
+    static let defaultValue: CGFloat = .infinity
+}
+
+extension EnvironmentValues {
+    /// 悬浮标签栏上边的位置（全局坐标）；没有标签栏时是 .infinity
+    var floatingTabBarTop: CGFloat {
+        get { self[TabBarTopEnvironmentKey.self] }
+        set { self[TabBarTopEnvironmentKey.self] = newValue }
     }
 }
 
