@@ -737,6 +737,11 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["甲"]?.dutyRestDays, 2)
         XCTAssertEqual(result["甲"]?.offDays, 2)
         XCTAssertEqual(result["甲"]?.dutyDays, 2)
+        // 别人：国庆 5 日遥测，6 日网站上没写（值班后休息），7 日也没写（普通假期）
+        let other = count(["乙": [d(5): "遥测", d(8): "组B"]], (5...8).map(d))["乙"]
+        XCTAssertEqual(other?.dutyRestDays, 1)
+        XCTAssertEqual(other?.holidayDays, 1)
+        XCTAssertEqual(other?.workDays, 3)
         // 统计范围从 2 日开始，1 日遥测：2 日的休息仍算值班调休
         XCTAssertEqual(count(roster, (2...3).map(d))["甲"]?.dutyRestDays, 2)
     }

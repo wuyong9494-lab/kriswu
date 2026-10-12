@@ -112,6 +112,10 @@ public enum WorkloadCounter {
         while day <= last {
             if isDutyDay(day) {
                 var next = day.adding(days: 1, calendar: calendar)
+                // 节假日值完遥测的第二天：网站上没写岗位（没排班）也是值班后的休息，算工作量
+                if history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
+                    result[next] = .dutyRest
+                }
                 for _ in 0..<restPerDuty where restPosts(next) {
                     if result[next] != nil, ChinaHolidays.isHoliday(next) { result[next] = .dutyRest }
                     next = next.adding(days: 1, calendar: calendar)
