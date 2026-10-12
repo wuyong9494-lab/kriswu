@@ -58,6 +58,8 @@ struct RootView: View {
     enum Tab: String, CaseIterable { case today, calendar, stats, site, settings }
     @EnvironmentObject private var store: AppStore
     @State private var tab: Tab
+    /// 从「备忘录」等分享进来的录音存好后打开工作留痕
+    @State private var showWorkLog = false
 
     init() {
         ChromeAppearance.apply()
@@ -96,6 +98,23 @@ struct RootView: View {
         .tint(DS.Palette.accent)
         .fontDesign(.rounded)
         .overlay { ToastOverlay() }
+        // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕
+        .onOpenURL { url in
+            guard url.isFileURL else { return }
+            if WorkLogStore.shared.importFile(url) != nil {
+                tab = .today
+                showWorkLog = true
+                ToastCenter.shared.show("已存进工作留痕", style: .success)
+            } else {
+                ToastCenter.shared.show("没能存进工作留痕", style: .error)
+            }
+        }
+        .sheet(isPresented: $showWorkLog) {
+            NavigationStack {
+                WorkLogView()
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showWorkLog = false } } }
+            }
+        }
     }
 
     @ViewBuilder
@@ -125,6 +144,7 @@ enum ScreenCatalog {
         case "check": DataCheckView()
         case "rest": RestTrendView()
         case "forecast": DutyForecastView()
+        case "worklog": WorkLogView()
         case "patterns": SchedulePatternsView()
         case "holidays": HolidaysView()
         case "rules": WorkloadRulesView()

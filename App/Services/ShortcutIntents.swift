@@ -120,7 +120,7 @@ struct WhoOnDutyIntent: AppIntent {
 /// 「值班提醒我下次遥测哪天」
 struct NextDutyIntent: AppIntent {
     static var title: LocalizedStringResource = "我下次遥测"
-    static var description = IntentDescription("说出你下一次遥测：网站已经排好就说排好的日子，没排就按过去的间隔估计。")
+    static var description = IntentDescription("说出你下一次遥测：网站已经排好就说排好的日子，没排就按遥测顺序推算。")
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
@@ -129,6 +129,9 @@ struct NextDutyIntent: AppIntent {
         let text: String
         if let next = store.schedule.filter({ $0.key > today && WorkloadCounter.isDuty(store.matcher.displayName($0.value)) }).keys.min() {
             text = "你下次遥测是\(next.dateText)。"
+        } else if let turn = store.myDutyTurn(), !turn.scheduled {
+            let ahead = turn.ahead == 0 ? "下一个就轮到你" : "前面还有\(turn.ahead)个人"
+            text = "网站还没排。按顺序\(ahead)" + (turn.day.map { "，大约是\($0.dateText)。" } ?? "。")
         } else if let me = store.myRosterName,
                   let f = DutyForecaster.forecast(roster: store.roster, today: today, matcher: store.matcher, calendar: .app)
                     .first(where: { $0.name == me }), let p = f.predicted {

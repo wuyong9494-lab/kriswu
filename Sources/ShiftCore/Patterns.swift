@@ -409,3 +409,136 @@ public enum SchedulePatterns {
                             adjustments: Array(adjustments.sorted { $0.day > $1.day }.prefix(40)))
     }
 }
+
+// MARK: - 排班预警
+
+extension SchedulePatterns {
+    public struct Warning: Equatable, Hashable {
+        public enum Kind: String { case assigned, unmarked }
+        public var duty: DayKey
+        public var day: DayKey
+        public var kind: Kind
+        public var text: String
+        /// 用来记「已经提醒过」
+        public var key: String { "\(duty)|\(day)|\(kind.rawValue)" }
+    }
+
+    static func monthDay(_ day: DayKey, calendar: Calendar) -> String {
+        "\(day.month)月\(day.day)日（\(weekdayName(weekdayIndex(day, calendar: calendar)))）"
+    }
+
+    /// 某人 from 前后的遥测：按规则该休的日子，网站上却排了岗位（assigned），或者工作日什么都没写（unmarked，按规则算上班）。
+    public static func restWarnings(name: String, roster: Roster, published: Set<DayKey>, from: DayKey,
+                                    matcher: ShiftMatcher, calendar: Calendar = .current) -> [Warning] {
+        guard let history = roster[name] else { return [] }
+        let start = from.adding(days: -3, calendar: calendar)
+        var result: [Warning] = []
+        for (duty, raw) in history where duty >= start && posts(raw, matcher: matcher).contains(where: WorkloadCounter.isDuty) {
+            let rest = expectedRest(after: duty, calendar: calendar)
+            let restText = describe(rest, calendar: calendar)
+            for day in rest where day >= from && published.contains(day) {
+                let head = "\(monthDay(duty, calendar: calendar))遥测，按规则应休\(restText)，"
+                if let raw = history[day] {
+                    guard !RosterExtractor.isLeave(raw, matcher: matcher) else { continue }
+                    let what = posts(raw, matcher: matcher).joined(separator: "+")
+                    result.append(Warning(duty: duty, day: day, kind: .assigned,
+                                          text: head + "但\(monthDay(day, calendar: calendar))排了\(what)"))
+                } else if ChinaHolidays.isWorkday(day, calendar: calendar) {
+                    result.append(Warning(duty: duty, day: day, kind: .unmarked,
+                                          text: head + "但\(monthDay(day, calendar: calendar))网站上没写休息（会算上班）"))
+                }
+            }
+        }
+        return result.sorted { $0.day < $1.day }
+    }
+}
+
+// MARK: - 待休核对
+
+/// 反推待休天数是怎么加减的：拿每个人记录里第一次和最后一次的待休，和这段时间排的遥测、加班、休息、调休、请假对比，
+/// 找一条最吻合的简单规则（比如「周五到周日值遥测 +1，调休 −1」），再列出对不上的人。
+public enum RestBalanceAudit {
+    public struct Rule: Equatable {
+        /// 周五到周日、节假日（多休一天的）值遥测
+        public var longDuty: Int
+        /// 平时值遥测
+        public var shortDuty: Int
+        public var overtime: Int
+        public var compRest: Int
+        public var rest: Int
+        public var leave: Int
+
+        var coefficients: [Int] { [longDuty, shortDuty, overtime, compRest, rest, leave] }
+
+        public var text: String {
+            let names = ["周五到周日、节假日值遥测", "平时值遥测", "加班", "调休", "休息", "请假"]
+            let parts = zip(names, coefficients).filter { $0.1 != 0 }.map { "\($0.0) \($0.1 > 0 ? "+" : "−")\(abs($0.1))" }
+            return parts.isEmpty ? "看不出和排班有关" : parts.joined(separator: "，")
+        }
+    }
+
+    public struct Row: Equatable {
+        public var name: String
+        public var from: DayKey
+        public var to: DayKey
+        /// 网站上的变化
+        public var observed: Int
+        /// 按规则算的变化
+        public var expected: Int
+        public var diff: Int { observed - expected }
+    }
+
+    public struct Result: Equatable {
+        public var rule: Rule
+        public var rows: [Row]
+        public var matched: Int { rows.filter { $0.diff == 0 }.count }
+    }
+
+    /// (from, to] 之间的：多休一天的遥测、平时遥测、加班、调休、休息、请假 天数
+    static func features(_ history: [DayKey: String], from: DayKey, to: DayKey, matcher: ShiftMatcher,
+                         calendar: Calendar) -> [Int] {
+        var f = [0, 0, 0, 0, 0, 0]
+        for (day, raw) in history where day > from && day <= to {
+            let posts = SchedulePatterns.posts(raw, matcher: matcher)
+            if posts.contains(where: WorkloadCounter.isDuty) {
+                if SchedulePatterns.expectedRest(after: day, calendar: calendar).count == 3 { f[0] += 1 } else { f[1] += 1 }
+            }
+            if posts.contains(where: { $0.contains("加班") }) { f[2] += 1 }
+            if posts.contains(where: { $0.contains("调休") }) { f[3] += 1 }
+            else if posts.contains(where: { $0.contains("休息") }) { f[4] += 1 }
+            if posts.contains(where: { $0.contains("请假") || ($0.contains("假") && !$0.contains("休")) }) { f[5] += 1 }
+        }
+        return f
+    }
+
+    /// points：每个人的待休记录（按日期排好）；记录跨度不到 minSpan 天的人不算。
+    public static func analyze(points: [String: [RestBalanceHistory.Point]], roster: Roster, matcher: ShiftMatcher,
+                               minSpan: Int = 21, calendar: Calendar = .current) -> Result? {
+        var samples: [(name: String, from: DayKey, to: DayKey, observed: Int, features: [Int])] = []
+        for (name, list) in points {
+            guard let first = list.first, let last = list.last,
+                  last.day >= first.day.adding(days: minSpan, calendar: calendar) else { continue }
+            samples.append((name, first.day, last.day, last.value - first.value,
+                            features(roster[name] ?? [:], from: first.day, to: last.day, matcher: matcher, calendar: calendar)))
+        }
+        guard samples.count >= 2 else { return nil }
+        var best: (rule: Rule, error: Int, size: Int)?
+        for a in 0...3 { for b in 0...2 { for c in 0...1 { for d in -1...0 { for e in -1...0 { for g in -1...0 {
+            let rule = Rule(longDuty: a, shortDuty: b, overtime: c, compRest: d, rest: e, leave: g)
+            let k = rule.coefficients
+            let error = samples.reduce(0) { sum, s in
+                sum + abs(s.observed - zip(k, s.features).reduce(0) { $0 + $1.0 * $1.1 })
+            }
+            let size = k.reduce(0) { $0 + abs($1) }
+            if best == nil || error < best!.error || (error == best!.error && size < best!.size) {
+                best = (rule, error, size)
+            }
+        } } } } } }
+        let rule = best!.rule
+        let rows = samples.map { s in
+            Row(name: s.name, from: s.from, to: s.to, observed: s.observed,
+                expected: zip(rule.coefficients, s.features).reduce(0) { $0 + $1.0 * $1.1 })
+        }.sorted { abs($0.diff) != abs($1.diff) ? abs($0.diff) > abs($1.diff) : $0.name < $1.name }
+        return Result(rule: rule, rows: rows)
+    }
+}

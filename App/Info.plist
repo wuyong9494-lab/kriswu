@@ -47,6 +47,29 @@
 	<string>把排班写进「日历」App 里单独的「值班提醒」日历。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>把排班写进「日历」App 里单独的「值班提醒」日历，并在排班变动时更新或删除其中的事件。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>「工作留痕」里拍照留存现场情况，照片只存在手机上。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>「工作留痕」里录音、试听播报声音，录音只存在手机上。</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>录音</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.audio</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

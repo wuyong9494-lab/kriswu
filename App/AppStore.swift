@@ -115,6 +115,8 @@ struct AppSettings: Codable, Equatable {
     var restAlertThreshold: Int = 5
     /// 上次提醒时的待休天数（再涨了才再提醒）
     var restAlertNotified: Int?
+    /// 已经提醒过的「值完遥测该休却排了岗位」（避免重复提醒）
+    var warnedRestKeys: [String] = []
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
     /// 工作量规则开关
@@ -214,6 +216,7 @@ struct AppSettings: Codable, Equatable {
         restHistory = try c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory) ?? [:]
         restAlertThreshold = try c.decodeIfPresent(Int.self, forKey: .restAlertThreshold) ?? 5
         restAlertNotified = try c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
+        warnedRestKeys = try c.decodeIfPresent([String].self, forKey: .warnedRestKeys) ?? []
         liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
         workloadRules = try c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules) ?? WorkloadRules()
         workloadOverrides = try c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides) ?? [:]
@@ -711,13 +714,19 @@ final class AppStore: ObservableObject {
         await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)
     }
 
-    /// 今天该用哪个图标：组A–组E 用对应字母（一天多个组取第一个），无分工/休息用「休」，其它用默认的「值」。
+    /// 今天该用哪个图标：遥测「遥」，组A–组E 用对应字母（一天多个组取第一个），调度「调」，出差「差」，
+    /// 无分工/休息/调休/请假「休」，其它用默认的「值」。
     func iconName(for raw: String?) -> String? {
         guard let raw else { return nil }
+        let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+        if posts.contains(where: WorkloadCounter.isDuty) { return "IconDuty" }
         if let r = raw.range(of: #"组\s*[A-Ea-e]"#, options: .regularExpression), let letter = raw[r].last {
             return "Icon" + letter.uppercased()
         }
-        return matcher.match(raw)?.id == "off" ? "IconRest" : nil
+        if posts.contains(where: { $0.contains("调度") }) { return "IconDispatch" }
+        if posts.contains(where: WorkloadCounter.isTrip) { return "IconTrip" }
+        if posts.allSatisfy({ WorkloadCounter.isOff($0, matcher: matcher) }) || matcher.match(raw)?.id == "off" { return "IconRest" }
+        return nil
     }
 
     /// iPhone 只允许 App 在前台时换图标，每次换系统会弹一个「已更改图标」的提示。
@@ -836,6 +845,7 @@ final class AppStore: ObservableObject {
             let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
             mergeRoster(outcome.roster)
             if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
+            await notifyRestWarnings()
             updateRestBalance(outcome.restBalance)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
@@ -950,6 +960,7 @@ final class AppStore: ObservableObject {
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
         mergeRoster(result.roster)
         mergeRestHistory(result.restByDay)
+        await notifyRestWarnings()
         updateRestBalance(result.restBalance)
         let days = Set(result.roster.values.flatMap(\.keys))
         if let lo = days.min(), let hi = days.max() {
@@ -963,6 +974,67 @@ final class AppStore: ObservableObject {
         }
         await applyDesktopNotes(result.notes)
         return true
+    }
+
+    // MARK: 排班规律：下次遥测、排班预警
+
+    /// 按「顺序 + 请假出差顺延」推算的下次遥测
+    struct DutyTurn {
+        /// 网站已经排好的日子，或者按顺序推算的日子（推不出来为 nil）
+        var day: DayKey?
+        /// 前面还有几个人
+        var ahead: Int
+        /// 是不是网站上已经排好的
+        var scheduled: Bool
+        /// 一共几个人轮
+        var total: Int
+    }
+
+    private var dutyTurnCache: (key: String, value: DutyTurn?)?
+
+    func myDutyTurn() -> DutyTurn? {
+        guard let me = myRosterName else { return nil }
+        let today = DayKey.today
+        let key = "\(today)-\(roster.count)-\(publishedDays.count)-\(roster[me]?.count ?? 0)"
+        if let cache = dutyTurnCache, cache.key == key { return cache.value }
+        let value: DutyTurn?
+        let mine = (roster[me] ?? [:]).merging(schedule) { a, _ in a }
+        if let next = mine.filter({ $0.key >= today && $0.value.split(separator: "+").contains { WorkloadCounter.isDuty(matcher.displayName(String($0))) } }).keys.min() {
+            value = DutyTurn(day: next, ahead: 0, scheduled: true, total: 0)
+        } else {
+            let days = publishedDays.filter { $0 >= today.adding(days: -180) }.sorted()
+            if let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: 60, calendar: .app),
+               let index = r.order.firstIndex(of: me) {
+                value = DutyTurn(day: r.forecast.first { $0.name == me }?.day, ahead: index, scheduled: false, total: r.order.count)
+            } else {
+                value = nil
+            }
+        }
+        dutyTurnCache = (key, value)
+        return value
+    }
+
+    /// 我最近和以后的遥测：按规则该休的日子排了岗位、或者工作日没写休息
+    func myRestWarnings() -> [SchedulePatterns.Warning] {
+        guard let me = myRosterName else { return [] }
+        return SchedulePatterns.restWarnings(name: me, roster: roster, published: publishedDays, from: .today,
+                                             matcher: matcher, calendar: .app)
+    }
+
+    /// 同步后：新出现的「该休却排了岗位」提醒一次（没写休息的只在首页显示，不推送）
+    func notifyRestWarnings() async {
+        guard !Self.isDemo else { return }
+        let new = myRestWarnings().filter { $0.kind == .assigned && !settings.warnedRestKeys.contains($0.key) }
+        guard !new.isEmpty else { return }
+        settings.warnedRestKeys = Array((settings.warnedRestKeys + new.map(\.key)).suffix(100))
+        await NotificationService.notifyNow(id: "rest-warning-\(new[0].key)", title: "⚠️ 排班可能和规则不一致",
+                                            body: new.map(\.text).joined(separator: "\n") + "\n去网站上核对一下。")
+    }
+
+    /// 待休核对：按待休记录反推加减规则，列出对不上的人
+    func restBalanceAudit() -> RestBalanceAudit.Result? {
+        RestBalanceAudit.analyze(points: settings.restHistory.mapValues { $0.map(\.point) }, roster: roster,
+                                 matcher: matcher, calendar: .app)
     }
 
     /// 电脑版周表上每天的待休天数（往前翻的几周）补进待休记录，用来说明数字是怎么变的。

@@ -1247,6 +1247,41 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(rule.exceptions, [SchedulePatterns.RestException(day: d(1), name: "乙", expected: "二三", actual: "二")])
     }
 
+    func testRestWarnings() {
+        // 甲周五遥测，周一应该休却排了组A；乙周一遥测，周三网站上没写休息
+        let roster: Roster = ["甲": [d(5): "遥测", d(8): "组A"], "乙": [d(1): "遥测", d(2): "休息"]]
+        let published = Set((1...14).map(d))
+        let a = SchedulePatterns.restWarnings(name: "甲", roster: roster, published: published, from: d(1), matcher: m, calendar: cal)
+        XCTAssertEqual(a.map(\.day), [d(8)])
+        XCTAssertEqual(a.first?.kind, .assigned)
+        XCTAssertTrue(a.first?.text.contains("应休六日一") == true, a.first?.text ?? "")
+        XCTAssertTrue(a.first?.text.contains("组A") == true)
+        let b = SchedulePatterns.restWarnings(name: "乙", roster: roster, published: published, from: d(1), matcher: m, calendar: cal)
+        XCTAssertEqual(b.map(\.day), [d(3)])
+        XCTAssertEqual(b.first?.kind, .unmarked)
+        // 已经过去很久的不提醒
+        XCTAssertTrue(SchedulePatterns.restWarnings(name: "甲", roster: roster, published: published, from: d(12), matcher: m, calendar: cal).isEmpty)
+    }
+
+    func testRestBalanceAuditFindsRule() {
+        // 真实规则：周五到周日值遥测 +1，调休 −1，平时遥测和休息不变
+        let roster: Roster = [
+            "甲": [d(6): "遥测"],
+            "乙": [d(9): "调休"],
+            "丙": [d(2): "遥测", d(3): "休息", d(4): "休息"],
+            "丁": [d(7): "遥测", d(12): "遥测"],
+            "戊": [d(6): "遥测"],                      // 网站上没加：对不上
+        ]
+        let p = { (a: Int, b: Int) -> [RestBalanceHistory.Point] in [(d(1), a, true), (d(25), b, true)] }
+        let points = ["甲": p(2, 3), "乙": p(5, 4), "丙": p(1, 1), "丁": p(0, 2), "戊": p(3, 3)]
+        let r = RestBalanceAudit.analyze(points: points, roster: roster, matcher: m, calendar: cal)
+        XCTAssertEqual(r?.rule, RestBalanceAudit.Rule(longDuty: 1, shortDuty: 0, overtime: 0, compRest: -1, rest: 0, leave: 0))
+        XCTAssertEqual(r?.rule.text, "周五到周日、节假日值遥测 +1，调休 −1")
+        XCTAssertEqual(r?.matched, 4)
+        XCTAssertEqual(r?.rows.first?.name, "戊")
+        XCTAssertEqual(r?.rows.first?.diff, -1)
+    }
+
     func testGroupRotationAndResumeAfterLeave() {
         let groups = ["组A", "组B", "组C"]
         let workdays = [1, 2, 3, 4, 5, 8, 9, 10, 11, 12].map(d)   // 两周的周一到周五

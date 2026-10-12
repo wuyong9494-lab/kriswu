@@ -258,8 +258,23 @@ struct DutyForecastView: View {
         let list = DutyForecaster.forecast(roster: store.roster, today: today, matcher: store.matcher, calendar: .app)
         let mine = list.first { store.isMe($0.name) }
         List {
+            if let turn = store.myDutyTurn() {
+                Section {
+                    if turn.scheduled, let day = turn.day {
+                        LabeledContent("网站已排", value: day.dateText)
+                    } else {
+                        LabeledContent("前面还有", value: turn.ahead == 0 ? "下一个就是你" : "\(turn.ahead) 人（共 \(turn.total) 人轮）")
+                        if let day = turn.day { LabeledContent("大约", value: day.dateText) }
+                    }
+                    NavigationLink("看完整顺序和规律") { SchedulePatternsView() }
+                } header: {
+                    Text("按顺序推算（请假出差自动顺延）")
+                } footer: {
+                    Text("按排班规律里推出的遥测顺序：轮到最久没值的人，请假、出差、休息的跳过、回来后排最前。比下面按间隔估的准。")
+                }
+            }
             if let mine {
-                Section("我") { row(mine, today: today) }
+                Section("我（按间隔估）") { row(mine, today: today) }
             }
             Section {
                 ForEach(list.filter { !store.isMe($0.name) }, id: \.name) { row($0, today: today) }

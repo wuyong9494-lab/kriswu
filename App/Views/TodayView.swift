@@ -30,6 +30,8 @@ struct TodayView: View {
                             .onTapGesture { Haptics.tap(); editing = today }
                             .staggered(1)
                         WeekStrip(from: today) { Haptics.tap(); editing = $0 }.staggered(2)
+                        WorkLogCard(day: today).staggered(2)
+                        DutyInsightCard(today: today).staggered(3)
                         TaskChecklistCard(day: today).staggered(3)
                         RecentChanges().staggered(3)
                         // 两列：左边本月数字，右边常用入口（高度不同，有节奏）
@@ -509,5 +511,53 @@ private struct NextWorkSwapView: View {
         let day = (0...30).map { today.adding(days: $0) }
             .first { !SwapLedger.posts(store.shift(on: $0), matcher: store.matcher).isEmpty } ?? today.adding(days: 1)
         SwapHelperView(day: day)
+    }
+}
+
+
+/// 下次遥测（按顺序推算）和排班预警（值完遥测该休却排了岗位、工作日没写休息）
+private struct DutyInsightCard: View {
+    @EnvironmentObject private var store: AppStore
+    let today: DayKey
+
+    var body: some View {
+        let turn = store.myDutyTurn()
+        let warnings = store.myRestWarnings()
+        if turn != nil || !warnings.isEmpty {
+            NavigationLink { SchedulePatternsView() } label: {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
+                    if let turn {
+                        HStack(spacing: DS.Space.s) {
+                            IconBadge(icon: "antenna.radiowaves.left.and.right", size: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("下次遥测").font(DS.Font.caption).foregroundStyle(.secondary)
+                                Text(turnText(turn)).font(DS.Font.headline).foregroundStyle(.primary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        }
+                    }
+                    ForEach(warnings.prefix(3), id: \.key) { w in
+                        Label {
+                            Text(w.text).font(DS.Font.caption).foregroundStyle(.primary).multilineTextAlignment(.leading)
+                        } icon: {
+                            Image(systemName: w.kind == .assigned ? "exclamationmark.triangle.fill" : "questionmark.circle")
+                                .foregroundStyle(w.kind == .assigned ? DS.Palette.warning : Color.secondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .card(tint: warnings.contains { $0.kind == .assigned } ? DS.Palette.warning : nil)
+            }
+            .buttonStyle(PressableStyle())
+        }
+    }
+
+    private func turnText(_ t: AppStore.DutyTurn) -> String {
+        if t.scheduled, let day = t.day {
+            return day == today ? "今天" : "\(day.dateText)（网站已排）"
+        }
+        let ahead = t.ahead == 0 ? "下一个就是你" : "前面还有 \(t.ahead) 人"
+        return (t.day.map { "大约 \($0.dateText) · " } ?? "") + ahead
     }
 }

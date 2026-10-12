@@ -11,6 +11,7 @@ struct SchedulePatternsView: View {
         var dispatch: SchedulePatterns.Rotation?
         var rest: SchedulePatterns.RestRule
         var groups: SchedulePatterns.GroupPattern?
+        var audit: RestBalanceAudit.Result?
         var days: Int
     }
 
@@ -30,10 +31,12 @@ struct SchedulePatternsView: View {
                 if result.days == 0 {
                     Section { Text("还没有全员排班数据。").foregroundStyle(.secondary) }
                 } else {
+                    warningSection
                     dutySection(result.duty, title: "遥测轮转", icon: "antenna.radiowaves.left.and.right")
                     restSection(result.rest)
                     groupSection(result.groups)
                     dutySection(result.dispatch, title: "调度轮转", icon: "dial.medium")
+                    auditSection(result.audit)
                 }
             } else {
                 Section { SkeletonRows(rows: 5) }
@@ -55,6 +58,7 @@ struct SchedulePatternsView: View {
             dispatch: SchedulePatterns.rotation(post: "调度", roster: roster, days: days, matcher: m, calendar: .app),
             rest: SchedulePatterns.restRule(roster: roster, days: days, published: store.publishedDays, matcher: m, calendar: .app),
             groups: SchedulePatterns.groupPattern(roster: roster, days: days, matcher: m, calendar: .app),
+            audit: store.restBalanceAudit(),
             days: days.count)
     }
 
@@ -234,4 +238,66 @@ struct SchedulePatternsView: View {
             }
         }
     }
+
+    // MARK: 排班预警
+
+    @ViewBuilder
+    private var warningSection: some View {
+        let warnings = store.myRestWarnings()
+        Section {
+            if warnings.isEmpty {
+                Label("你最近和以后的遥测，休息都按规则排了", systemImage: "checkmark.circle").foregroundStyle(.green)
+            }
+            ForEach(warnings, id: \.key) { w in
+                Label {
+                    Text(w.text).font(.subheadline)
+                } icon: {
+                    Image(systemName: w.kind == .assigned ? "exclamationmark.triangle.fill" : "questionmark.circle")
+                        .foregroundStyle(w.kind == .assigned ? DS.Palette.warning : Color.secondary)
+                }
+            }
+        } header: {
+            Text("我的排班预警")
+        } footer: {
+            Text("按「值完遥测休两天，周五到周日值的多休一天」核对你的排班。该休却排了岗位的，同步到时会推送提醒；网站上没写休息的只在这里和首页显示。")
+        }
+    }
+
+    // MARK: 待休核对
+
+    @ViewBuilder
+    private func auditSection(_ audit: RestBalanceAudit.Result?) -> some View {
+        Section {
+            if let audit {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("反推的规则").font(.caption).foregroundStyle(.secondary)
+                    Text(audit.rule.text).font(.subheadline.weight(.semibold))
+                    Text("\(audit.rows.count) 人里 \(audit.matched) 人对得上").font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(audit.rows, id: \.name) { row in
+                    HStack {
+                        name(row.name)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("网站 \(signed(row.observed)) · 按规则 \(signed(row.expected))").font(.caption.monospacedDigit())
+                            Text("\(row.from.month)/\(row.from.day)–\(row.to.month)/\(row.to.day)").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Text(row.diff == 0 ? "对" : signed(row.diff))
+                            .font(.caption.weight(.bold).monospacedDigit())
+                            .foregroundStyle(row.diff == 0 ? Color.green : DS.Palette.warning)
+                            .frame(minWidth: 28)
+                    }
+                }
+            } else {
+                Text("待休记录还不够：至少要两个人、每人三周以上的记录。先在工作量统计页「读取今年 1 月以来全部」。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("待休核对")
+        } footer: {
+            Text("拿每个人记录里第一次和最后一次的待休天数，和这段时间排的遥测、加班、休息、调休、请假对比，找一条最吻合的加减规则。对不上的多半是网站手动改过，或者有 App 没读到的加减。")
+        }
+    }
+
+    private func signed(_ n: Int) -> String { n > 0 ? "+\(n)" : (n < 0 ? "−\(abs(n))" : "0") }
 }

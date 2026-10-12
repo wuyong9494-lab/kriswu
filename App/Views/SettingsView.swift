@@ -142,7 +142,7 @@ struct SettingsView: View {
             } label: {
                 Label("班次类型与颜色", systemImage: "paintpalette")
             }
-            Toggle("图标显示今天的组", isOn: $store.settings.dynamicIcon)
+            Toggle("图标显示今天的班（遥、A–E、调、差、休）", isOn: $store.settings.dynamicIcon)
                 .onChange(of: store.settings.dynamicIcon) { _ in store.updateAppIcon() }
             Picker("外观", selection: $store.settings.appearance) {
                 ForEach(Appearance.allCases) { Text($0.title).tag($0) }
