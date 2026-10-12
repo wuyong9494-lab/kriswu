@@ -274,6 +274,13 @@ final class WorkLogStore: ObservableObject {
         return entry
     }
 
+    /// 手动改识别出的文字
+    func updateTranscript(_ id: UUID, _ text: String) {
+        guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].transcript != text else { return }
+        entries[i].transcript = text
+        save()
+    }
+
     /// 只改说明（详情页关掉时保存；转文字可能已经在后台更新了这条）
     func updateNote(_ id: UUID, _ note: String) {
         guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].note != note else { return }
@@ -301,11 +308,13 @@ final class WorkLogStore: ObservableObject {
     }
 
     /// 转文字，结果存进这条记录；失败返回原因
-    func transcribe(_ entry: WorkLogEntry) async -> String? {
+    /// online：这一次用联网识别（更准，录音会发给苹果）
+    func transcribe(_ entry: WorkLogEntry, online: Bool = false) async -> String? {
         guard entry.isAudio, let url = url(for: entry), !transcribing.contains(entry.id) else { return nil }
         transcribing.insert(entry.id)
         defer { transcribing.remove(entry.id) }
-        switch await Transcriber.transcribe(url, onDeviceOnly: AppStore.shared.settings.speechOnDeviceOnly) {
+        let onDevice = online ? false : AppStore.shared.settings.speechOnDeviceOnly
+        switch await Transcriber.transcribe(url, onDeviceOnly: onDevice, vocabulary: AppStore.shared.speechVocabulary) {
         case .success(let text):
             guard var current = entries.first(where: { $0.id == entry.id }) else { return nil }
             current.transcript = text.isEmpty ? "（没听出文字）" : text
@@ -500,21 +509,58 @@ enum Transcriber {
         }
     }
 
-    static func transcribe(_ url: URL, onDeviceOnly: Bool) async -> Result<String, Failure> {
+    /// 把录音切成不到一分钟一段（联网识别一次最多一分钟；分段离线识别也更准）
+    static func chunks(of url: URL, seconds: Double = 50) -> [URL] {
+        guard let file = try? AVAudioFile(forReading: url) else { return [url] }
+        let format = file.processingFormat
+        let perChunk = AVAudioFramePosition(format.sampleRate * seconds)
+        guard file.length > perChunk + AVAudioFramePosition(format.sampleRate * 5) else { return [url] }
+        var urls: [URL] = []
+        while file.framePosition < file.length {
+            let count = AVAudioFrameCount(min(perChunk, file.length - file.framePosition))
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: count),
+                  (try? file.read(into: buffer, frameCount: count)) != nil else { break }
+            let out = FileManager.default.temporaryDirectory.appendingPathComponent("chunk-\(UUID().uuidString).caf")
+            guard let writer = try? AVAudioFile(forWriting: out, settings: format.settings,
+                                                commonFormat: format.commonFormat, interleaved: format.isInterleaved),
+                  (try? writer.write(from: buffer)) != nil else { break }
+            urls.append(out)
+        }
+        return urls.isEmpty ? [url] : urls
+    }
+
+    /// onDeviceOnly：只在手机上识别（不联网，准确度差一些）；false 时用苹果的联网识别（更准，录音会发给苹果）。
+    /// vocabulary：常用词（同事名字、遥测、组A、星名……），识别时优先往这些词上靠
+    static func transcribe(_ url: URL, onDeviceOnly: Bool, vocabulary: [String] = []) async -> Result<String, Failure> {
         guard await authorize() else {
             return .failure(Failure(message: "没有语音识别权限：到 iPhone「设置 › 值班提醒」里打开「语音识别」。"))
         }
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")), recognizer.isAvailable else {
-            return .failure(Failure(message: "这台手机现在用不了中文语音识别。"))
+            return .failure(Failure(message: "这台手机现在用不了中文语音识别（联网识别要连上网）。"))
         }
+        if onDeviceOnly && !recognizer.supportsOnDeviceRecognition {
+            return .failure(Failure(message: "这台手机不支持离线中文识别。点「联网识别（更准）」试试（录音会发给苹果识别）。"))
+        }
+        let parts = chunks(of: url)
+        defer { for part in parts where part != url { try? FileManager.default.removeItem(at: part) } }
+        var texts: [String] = []
+        for part in parts {
+            switch await recognize(part, recognizer: recognizer, onDevice: onDeviceOnly, vocabulary: vocabulary) {
+            case .success(let text): if !text.isEmpty { texts.append(text) }
+            case .failure(let f): return .failure(f)
+            }
+        }
+        return .success(texts.joined(separator: "\n"))
+    }
+
+    private static func recognize(_ url: URL, recognizer: SFSpeechRecognizer, onDevice: Bool,
+                                  vocabulary: [String]) async -> Result<String, Failure> {
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.shouldReportPartialResults = false
         request.addsPunctuation = true
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        } else if onDeviceOnly {
-            return .failure(Failure(message: "这台手机不支持离线中文识别。可以在工作留痕的设置里允许联网识别（录音会发给苹果识别）。"))
-        }
+        request.taskHint = .dictation
+        request.requiresOnDeviceRecognition = onDevice
+        request.contextualStrings = Array(vocabulary.prefix(100))
         final class Once: @unchecked Sendable {
             private let lock = NSLock()
             private var done = false

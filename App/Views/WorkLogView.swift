@@ -267,6 +267,8 @@ struct WorkLogDetailView: View {
     @State var entry: WorkLogEntry
     @State private var confirmDelete = false
     @State private var transcribeError: String?
+    /// 识别出的文字，可以手动改（关掉页面时保存）
+    @State private var transcriptDraft: String?
 
     var body: some View {
         let url = WorkLogStore.shared.url(for: entry)
@@ -309,18 +311,20 @@ struct WorkLogDetailView: View {
                 Section {
                     if log.transcribing.contains(entry.id) {
                         HStack(spacing: DS.Space.s) { ProgressView(); Text("正在转文字…").foregroundStyle(.secondary) }
-                    } else if let text = current.transcript {
-                        Text(text).textSelection(.enabled)
-                        Button { UIPasteboard.general.string = text; ToastCenter.shared.show("已复制", style: .success) } label: {
+                    } else if current.transcript != nil {
+                        // 识别错的字直接改
+                        TextField("识别出的文字", text: Binding(get: { transcriptDraft ?? current.transcript ?? "" },
+                                                          set: { transcriptDraft = $0 }), axis: .vertical)
+                            .lineLimit(3...20)
+                        Button {
+                            UIPasteboard.general.string = transcriptDraft ?? current.transcript
+                            ToastCenter.shared.show("已复制", style: .success)
+                        } label: {
                             Label("复制文字", systemImage: "doc.on.doc")
                         }
-                        Button { Task { transcribeError = await log.transcribe(current) } } label: {
-                            Label("重新转一次", systemImage: "arrow.clockwise")
-                        }
+                        recognizeButtons(current)
                     } else {
-                        Button { Task { transcribeError = await log.transcribe(current) } } label: {
-                            Label("转成文字", systemImage: "text.bubble")
-                        }
+                        recognizeButtons(current)
                     }
                     if let transcribeError {
                         Text(transcribeError).font(.footnote).foregroundStyle(DS.Palette.warning)
@@ -328,7 +332,7 @@ struct WorkLogDetailView: View {
                 } header: {
                     Text("录音文字")
                 } footer: {
-                    Text("用 iPhone 自带的语音识别，默认只在手机上识别，录音不出手机。")
+                    Text("默认只在手机上识别，录音不出手机，但准确度一般。「联网识别」用苹果的服务器识别，准很多，但这条录音会发给苹果。识别时会参考同事名字、组别、星名等常用词；错字可以直接改。")
                 }
             }
             Section {
@@ -356,11 +360,33 @@ struct WorkLogDetailView: View {
         .onDisappear {
             player.stop()
             WorkLogStore.shared.updateNote(entry.id, entry.note)
+            if let transcriptDraft { WorkLogStore.shared.updateTranscript(entry.id, transcriptDraft) }
         }
         .confirmationDialog("删除后找不回来", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("删除", role: .destructive) {
                 WorkLogStore.shared.delete(entry)
                 dismiss()
+            }
+        }
+    }
+}
+
+extension WorkLogDetailView {
+    @ViewBuilder
+    func recognizeButtons(_ current: WorkLogEntry) -> some View {
+        Button {
+            transcriptDraft = nil
+            Task { transcribeError = await WorkLogStore.shared.transcribe(current) }
+        } label: {
+            Label(current.transcript == nil ? "转成文字" : "重新识别",
+                  systemImage: current.transcript == nil ? "text.bubble" : "arrow.clockwise")
+        }
+        if AppStore.shared.settings.speechOnDeviceOnly {
+            Button {
+                transcriptDraft = nil
+                Task { transcribeError = await WorkLogStore.shared.transcribe(current, online: true) }
+            } label: {
+                Label("联网识别（更准，录音发给苹果）", systemImage: "icloud.and.arrow.up")
             }
         }
     }

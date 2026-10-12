@@ -1283,6 +1283,24 @@ final class AppStore: ObservableObject {
                                             body: "网站上你的待休从 \(prev.value) 变成 \(cur.value) 天（\(signed(observed))），按规律（\(audit.rule.text)）应该是 \(signed(expected))。去网站上核对一下。")
     }
 
+    /// 语音转文字的常用词：同事名字、岗位、组别、各组工作内容里的星名和编号、值班常用词
+    var speechVocabulary: [String] {
+        var words: [String] = ["遥测", "调度", "值班", "交接班", "交班", "接班", "值班长", "组A", "组B", "组C", "组D", "组E",
+                               "数传", "过境", "测控", "上行", "下行", "遥控", "轨道", "卫星", "故障", "应急", "备份", "休息", "调休", "请假", "出差"]
+        words += settings.shiftTypes.map(\.name)
+        words += roster.keys.sorted()
+        // 各组工作内容里的编号（JXGF07A02）、「一号星」这类词
+        let notes = groupNotes.values.joined(separator: " ")
+        let patterns = [#"[A-Za-z]{2,}[A-Za-z0-9/]*\d[A-Za-z0-9/]*"#, #"[\x{4e00}-\x{9fa5}]{1,4}号星"#]
+        for pattern in patterns {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            let ns = notes as NSString
+            words += re.matches(in: notes, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range) }
+        }
+        var seen = Set<String>()
+        return words.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     /// 没建档案时自动判断的角色
     func suggestedRole(_ name: String) -> PersonRole {
         PersonDirectory.suggest(name: name, history: roster[name] ?? [:], matcher: matcher)
