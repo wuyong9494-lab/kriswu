@@ -517,6 +517,13 @@ public enum RestBalanceAudit {
         return f
     }
 
+    /// 按规则，(from, to] 之间待休应该变多少
+    public static func expectedChange(_ history: [DayKey: String], from: DayKey, to: DayKey, rule: Rule,
+                                      matcher: ShiftMatcher, calendar: Calendar = .current) -> Int {
+        zip(rule.coefficients, features(history, from: from, to: to, matcher: matcher, calendar: calendar))
+            .reduce(0) { $0 + $1.0 * $1.1 }
+    }
+
     /// points：每个人的待休记录（按日期排好）；记录跨度不到 minSpan 天的人不算。
     public static func analyze(points: [String: [RestBalanceHistory.Point]], roster: Roster, matcher: ShiftMatcher,
                                minSpan: Int = 21, calendar: Calendar = .current) -> Result? {

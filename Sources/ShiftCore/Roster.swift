@@ -113,21 +113,8 @@ public enum RosterExtractor {
     /// 这次读到的所有日子里一个休息、请假都没有，就保留之前读到的休息、请假，不能被冲掉。
     /// 只要这次读到的有休息列（哪天有人休息），就整天以新的为准（取消的请假也会去掉）。
     public static func replacingDays(of old: Roster, with new: Roster, matcher: ShiftMatcher) -> Roster {
-        guard !new.isEmpty else { return old }
-        let days = Set(new.values.flatMap(\.keys))
-        var newHasLeave = Set<DayKey>()
-        for history in new.values {
-            for (day, raw) in history where isLeave(raw, matcher: matcher) { newHasLeave.insert(day) }
-        }
-        var merged: Roster = [:]
-        for (name, history) in old {
-            let kept = history.filter { day, raw in
-                !days.contains(day) || (newHasLeave.isEmpty && new[name]?[day] == nil && isLeave(raw, matcher: matcher))
-            }
-            if !kept.isEmpty { merged[name] = kept }
-        }
-        merge(new, into: &merged)
-        return merged
+        RosterMerger.merge(old: old, oldSources: [:], new: new, source: "", at: Date(),
+                           carriesLeave: RosterMerger.hasLeave(new, matcher: matcher), matcher: matcher).roster
     }
 
     public static func merge(_ new: Roster, into roster: inout Roster) {

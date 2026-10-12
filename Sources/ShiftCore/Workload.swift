@@ -73,6 +73,15 @@ public struct WorkloadRules: Codable, Equatable {
 public enum WorkloadCounter {
     /// 当前规则（App 启动和改设置时写进来）
     public static var rules = WorkloadRules()
+    /// 规则改动历史：某天以前按当时的规则算
+    public static var ruleHistory: [RuleVersion] = []
+    /// 人员档案（管理员确认过的角色、来走日期）
+    public static var profiles: [String: PersonProfile] = [:]
+
+    /// 某天用哪套规则
+    public static func rules(on day: DayKey) -> WorkloadRules {
+        RuleVersion.rules(on: day, versions: ruleHistory, current: rules)
+    }
     /// 手动纠正：人名 → 日期 → 类别（Kind 的中文名，或「不算」表示这天不统计）
     public static var overrides: [String: [DayKey: String]] = [:]
     public static let excluded = "不算"
@@ -118,17 +127,25 @@ public enum WorkloadCounter {
     }
 
     /// 只按排班算的人：调度的人（排班表上有名字才算一天），加上设置里另外加的人。
-    /// 调度的人 = asOf（默认这个人最后出现的日子）前三个月里，调度至少 3 天、占他所有岗位（不含休息出差）的一半以上。
-    /// 只是偶尔顶一次调度的人（组别、遥测的人）不算，他们没排岗位、没写休息的工作日照样算日常。
+    /// 有档案的按档案；没有的自动判断（见 autoIsDispatch）。
     public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
                                   matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
         if members?.contains(name) == true { return true }
-        guard rules.dispatchScheduleOnly, let end = asOf ?? history.keys.max() else { return false }
+        guard let end = asOf ?? history.keys.max() else { return false }
+        guard rules(on: end).dispatchScheduleOnly else { return false }
+        if let role = profiles[name]?.role(on: end) { return role == .dispatch }
+        return autoIsDispatch(history: history, matcher: matcher, asOf: end)
+    }
+
+    /// 自动判断是不是调度：asOf（默认最后出现的日子）前三个月里，调度至少 3 天、占他所有岗位（不含休息出差）的一半以上。
+    /// 只是偶尔顶一次调度的人（组别、遥测的人）不算。
+    public static func autoIsDispatch(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
+        guard let end = asOf ?? history.keys.max() else { return false }
         let start = end.adding(days: -90, calendar: .current)
         // 组A、组B… 分开数的话，轮组别的人可能调度反而最多，所以和其它岗位的总数比
         var dispatch = 0, total = 0
         for (day, raw) in history where day >= start && day <= end {
-            for part in raw.split(separator: "+") {
+            for part in effective(raw, matcher: matcher)?.split(separator: "+") ?? [] {
                 let post = matcher.displayName(String(part))
                 guard !isOff(post, matcher: matcher), !isTrip(post) else { continue }
                 total += 1
@@ -138,9 +155,16 @@ public enum WorkloadCounter {
         return dispatch >= 3 && dispatch * 2 >= total
     }
 
-    /// 轮组别（组A–E）的人：asOf（默认最后出现的日子）前三个月里，组别占他所有岗位（不含休息、出差）的一半以上。
+    /// 是不是轮组别（组A–E）的人：有档案按档案，没有的自动判断（见 autoIsGroupMember）。
     /// 这些人没排岗位的工作日是正常上班，但不算工作量；不轮组别的人那些日子在做别的日常工作，算工作量。
-    public static func isGroupMember(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
+    public static func isGroupMember(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil,
+                                     name: String? = nil) -> Bool {
+        if let name, let end = asOf ?? history.keys.max(), let role = profiles[name]?.role(on: end) { return role == .group }
+        return autoIsGroupMember(history: history, matcher: matcher, asOf: asOf)
+    }
+
+    /// 自动判断是不是轮组别的人：asOf 前三个月里，组别占他所有岗位（不含休息、出差）的一半以上。
+    public static func autoIsGroupMember(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
         guard let end = asOf ?? history.keys.max() else { return false }
         let start = end.adding(days: -90, calendar: .current)
         var group = 0, total = 0
@@ -155,59 +179,105 @@ public enum WorkloadCounter {
         return group >= 1 && group * 2 >= total
     }
 
+    /// 某一天怎么算的：类别和原因
+    public struct DayExplanation: Equatable {
+        public var kind: Kind
+        public var reason: String
+    }
+
     /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是只按排班算（调度）；
     /// groupMember：是不是轮组别的人）
     public static func classify(_ raw: String?, workday: Bool, holiday: Bool, rotating: Bool = false,
                                 groupMember: Bool = false, matcher: ShiftMatcher) -> Kind {
+        explain(raw, workday: workday, holiday: holiday, rotating: rotating, groupMember: groupMember,
+                rules: rules, matcher: matcher).kind
+    }
+
+    /// 同 classify，另外给出原因
+    static func explain(_ raw: String?, workday: Bool, holiday: Bool, rotating: Bool, groupMember: Bool,
+                        rules r: WorkloadRules, matcher: ShiftMatcher, roleNote: String = "") -> DayExplanation {
         guard let raw else {
-            if holiday { return .holiday }
-            guard workday else { return .off }
-            if rotating || !rules.blankWorkdayIsWork { return .unassigned }
+            if holiday { return DayExplanation(kind: .holiday, reason: "法定节假日，网站上没排岗位") }
+            guard workday else { return DayExplanation(kind: .off, reason: "周末，网站上没排岗位") }
+            if !r.blankWorkdayIsWork {
+                return DayExplanation(kind: .unassigned, reason: "工作日没排岗位（规则：没排岗位不算上班）")
+            }
+            if rotating {
+                return DayExplanation(kind: .unassigned, reason: "调度只按排班表算：这天网站上没排他" + roleNote)
+            }
             // 轮组别的人：没排岗位是正常上班，不算工作量；不轮组别的人：在做别的日常工作，算工作量
-            return groupMember ? .attendance : .regular
+            return groupMember
+                ? DayExplanation(kind: .attendance, reason: "轮组别的人工作日没排岗位、没写休息：正常上班，不算工作量" + roleNote)
+                : DayExplanation(kind: .regular, reason: "不轮组别的人工作日没排岗位、没写休息：在做别的日常工作，算工作量" + roleNote)
         }
         let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
-        if posts.contains(where: isDuty) { return .duty }
-        if posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) { return .regular }
-        if posts.contains(where: isTrip) { return .trip }
-        return .off   // 网站上写了休息、调休的，节假日里也算休息
+        if posts.contains(where: isDuty) { return DayExplanation(kind: .duty, reason: "网站上排了遥测（值班）") }
+        if let post = posts.first(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) {
+            return DayExplanation(kind: .regular, reason: "网站上排了\(post)")
+        }
+        if posts.contains(where: isTrip) { return DayExplanation(kind: .trip, reason: "网站上写了出差（算工作量）") }
+        return DayExplanation(kind: .off, reason: "网站上写了\(posts.joined(separator: "+"))：休息，不算工作量")
     }
 
     /// 某人每一天的类别：法定节假日里，遥测后紧接着写了休息、调休的日子（最多 2 天）算值班调休；
     /// 平时的休息不管怎么来的都算休息。
     /// history：这个人全部的排班（用来看统计范围前一两天是不是遥测）。
-    /// groupMember：是不是轮组别的人（nil = 按这段时间最后一天往前三个月自动判断）
+    /// groupMember：是不是轮组别的人（nil = 按这段时间最后一天往前三个月判断，有档案按档案）
     public static func kinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
                              groupMember: Bool? = nil, name: String? = nil, calendar: Calendar = .current) -> [DayKey: Kind] {
+        explained(of: history, days: days, matcher: matcher, rotating: rotating, groupMember: groupMember,
+                  name: name, calendar: calendar).mapValues(\.kind)
+    }
+
+    /// 同 kinds，每天另外给出原因（每日明细里显示「为什么这样算」）
+    public static func explained(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
+                                 groupMember: Bool? = nil, name: String? = nil,
+                                 calendar: Calendar = .current) -> [DayKey: DayExplanation] {
         let fixed = name.flatMap { overrides[$0] } ?? [:]
-        let member = groupMember ?? isGroupMember(history: history, matcher: matcher, asOf: days.max())
+        let member = groupMember ?? isGroupMember(history: history, matcher: matcher, asOf: days.max(), name: name)
+        let profile = name.flatMap { profiles[$0] }
         let history = history.compactMapValues { effective($0, matcher: matcher) }
         var result = autoKinds(of: history, days: days, matcher: matcher, rotating: rotating, groupMember: member,
-                               fixed: fixed, calendar: calendar)
+                               profile: profile, fixed: fixed, calendar: calendar)
         // 手动纠正优先
-        if !fixed.isEmpty {
-            for day in days {
-                guard let value = fixed[day] else { continue }
-                result[day] = value == excluded ? nil : (Kind(rawValue: value) ?? result[day])
+        for day in days {
+            guard let value = fixed[day] else { continue }
+            if value == excluded {
+                result[day] = nil
+            } else if let kind = Kind(rawValue: value) {
+                result[day] = DayExplanation(kind: kind, reason: "管理员手动改成「\(value)」")
             }
         }
         return result
     }
 
     /// fixed：手动纠正（改成值班 / 不是值班的日子，影响后面一天算不算值班调休）
+    /// profile：人员档案（每天的角色、来走日期）；没有档案时用 rotating、groupMember
     static func autoKinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
-                          groupMember: Bool = false, fixed: [DayKey: String] = [:], calendar: Calendar) -> [DayKey: Kind] {
-        var result: [DayKey: Kind] = [:]
+                          groupMember: Bool = false, profile: PersonProfile? = nil, fixed: [DayKey: String] = [:],
+                          calendar: Calendar) -> [DayKey: DayExplanation] {
+        var result: [DayKey: DayExplanation] = [:]
         // 这个人在网站上第一次出现前两周、最后一次出现两个月以后（还没来、已经调走）没数据的日子不算。
-        // 不轮组别的人可能好几周都不出现在表上（一直在做日常），所以往后放宽到两个月
+        // 不轮组别的人可能好几周都不出现在表上（一直在做日常），所以往后放宽到两个月；档案里填了来走日期的按档案
         let keys = history.keys
         let active = keys.min().flatMap { lo in keys.max().map {
             lo.adding(days: -14, calendar: calendar)...$0.adding(days: activeAfter, calendar: calendar) } }
         for day in days {
-            guard history[day] != nil || active?.contains(day) == true else { continue }
-            result[day] = classify(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
-                                   holiday: ChinaHolidays.isHoliday(day), rotating: rotating, groupMember: groupMember,
-                                   matcher: matcher)
+            if let inPost = profile?.isActive(on: day) {
+                guard inPost else { continue }
+            } else {
+                guard history[day] != nil || active?.contains(day) == true else { continue }
+            }
+            let role = profile?.role(on: day)
+            if role == .leader { continue }   // 领导自己没有排班，不统计
+            let dayRules = rules(on: day)
+            let dayRotating = role.map { $0 == .dispatch && dayRules.dispatchScheduleOnly } ?? rotating
+            let dayMember = role.map { $0 == .group } ?? groupMember
+            let note = role.map { "（档案：\($0.rawValue)）" }
+                ?? "（自动判断：\(dayRotating ? "调度" : (dayMember ? "轮组别" : "不轮组别"))）"
+            result[day] = explain(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
+                                  holiday: ChinaHolidays.isHoliday(day), rotating: dayRotating, groupMember: dayMember,
+                                  rules: dayRules, matcher: matcher, roleNote: note)
         }
         func restPosts(_ day: DayKey) -> Bool {
             guard let raw = history[day] else { return false }
@@ -218,18 +288,21 @@ public enum WorkloadCounter {
             if let value = fixed[day] { return value == Kind.duty.rawValue }
             return history[day]?.split(separator: "+").contains { isDuty(matcher.displayName(String($0))) } ?? false
         }
-        // 从统计范围前两天开始找遥测，往后接着的日子看算不算值班调休
-        guard rules.holidayDutyRestCounts || rules.blankHolidayAfterDutyIsRest, let first = days.min(), let last = days.max() else { return result }
+        // 从统计范围前两天开始找遥测，往后接着的日子看算不算值班调休（规则按那天生效的算）
+        guard let first = days.min(), let last = days.max() else { return result }
         var day = first.adding(days: -restPerDuty, calendar: calendar)
         while day <= last {
             if isDutyDay(day) {
                 var next = day.adding(days: 1, calendar: calendar)
+                let r = rules(on: next)
                 // 节假日值完遥测的第二天：网站上没写岗位（没排班）也是值班后的休息，算工作量
-                if rules.blankHolidayAfterDutyIsRest, history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
-                    result[next] = .dutyRest
+                if r.blankHolidayAfterDutyIsRest, history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
+                    result[next] = DayExplanation(kind: .dutyRest, reason: "节假日值完遥测的第二天，网站上没写休息：算值班调休（工作量）")
                 }
-                for _ in 0..<restPerDuty where rules.holidayDutyRestCounts && restPosts(next) {
-                    if result[next] != nil, ChinaHolidays.isHoliday(next) { result[next] = .dutyRest }
+                for _ in 0..<restPerDuty where r.holidayDutyRestCounts && restPosts(next) {
+                    if result[next] != nil, ChinaHolidays.isHoliday(next) {
+                        result[next] = DayExplanation(kind: .dutyRest, reason: "节假日值完遥测后的休息（规则：算工作量）")
+                    }
                     next = next.adding(days: 1, calendar: calendar)
                 }
             }
@@ -245,11 +318,12 @@ public enum WorkloadCounter {
         guard let first = days.min(), let last = days.max() else { return [] }
         // 只算这段时间前两个月到后两周里在网站上出现过的人（调走的、还没来的不算，免得把没排班的日子都算成日常）
         let window = first.adding(days: -activeAfter, calendar: calendar)...last.adding(days: 14, calendar: calendar)
-        return roster.filter { $0.value.keys.contains(where: window.contains) }.map { name, history in
+        return roster.filter { $0.value.keys.contains(where: window.contains) }.compactMap { name, history -> PersonWorkload? in
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
             let rotating = isRotating(name: name, history: history, members: members, matcher: matcher, asOf: last)
             let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: rotating, name: name, calendar: calendar)
+            if dayKinds.isEmpty, profiles[name]?.role(on: last) == .leader { return nil }
             for day in days {
                 for post in effective(history[day], matcher: matcher)?.split(separator: "+") ?? [] {
                     p.posts[matcher.displayName(String(post)), default: 0] += 1

@@ -1392,3 +1392,123 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(g?.adjustments.first?.name, "乙")
     }
 }
+
+final class SystemLogicTests: XCTestCase {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+    let m = ShiftMatcher(types: ShiftType.defaults)
+    /// 10/12 周一 … 10/18 周日
+    let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
+
+    override func tearDown() {
+        WorkloadCounter.profiles = [:]
+        WorkloadCounter.ruleHistory = []
+        WorkloadCounter.rules = WorkloadRules()
+        WorkloadCounter.overrides = [:]
+    }
+
+    private func count(_ roster: Roster) -> [String: PersonWorkload] {
+        Dictionary(uniqueKeysWithValues: WorkloadCounter.count(roster: roster, days: (12...18).map(d), matcher: m, calendar: cal)
+            .map { ($0.name, $0) })
+    }
+
+    func testProfileOverridesAutomaticRole() {
+        // 乙只值遥测：自动判断是不轮组别（没排的工作日算工作量）
+        let roster: Roster = ["乙": [d(12): "遥测"]]
+        XCTAssertEqual(count(roster)["乙"]?.regularDays, 4)
+        // 档案里写成轮组别：没排的工作日只算上班
+        WorkloadCounter.profiles = ["乙": PersonProfile(name: "乙", spans: [RoleSpan(from: nil, role: .group)])]
+        XCTAssertEqual(count(roster)["乙"]?.regularDays, 0)
+        XCTAssertEqual(count(roster)["乙"]?.attendanceDays, 4)
+        // 从 15 日起改成调度：15、16 日没排就不算
+        var p = WorkloadCounter.profiles["乙"]!
+        p.setRole(.dispatch, from: d(15))
+        WorkloadCounter.profiles["乙"] = p
+        XCTAssertEqual(count(roster)["乙"]?.attendanceDays, 2)
+        XCTAssertEqual(count(roster)["乙"]?.unassignedDays, 2)
+        // 领导不统计
+        WorkloadCounter.profiles["乙"] = PersonProfile(name: "乙", spans: [RoleSpan(from: nil, role: .leader)])
+        XCTAssertNil(count(roster)["乙"])
+        // 来走日期：14 日才来
+        WorkloadCounter.profiles["乙"] = PersonProfile(name: "乙", spans: [RoleSpan(from: nil, role: .daily)], joined: d(14))
+        XCTAssertEqual(count(roster)["乙"]?.dutyDays, 0)
+        XCTAssertEqual(count(roster)["乙"]?.regularDays, 3)
+        // 自动判断建议
+        XCTAssertEqual(PersonDirectory.suggest(name: "乙", history: roster["乙"]!, matcher: m), .daily)
+    }
+
+    func testExplanationsSayWhy() {
+        let e = WorkloadCounter.explained(of: [d(12): "组A", d(14): "休息"], days: (12...18).map(d), matcher: m,
+                                          rotating: false, name: "甲", calendar: cal)
+        XCTAssertEqual(e[d(12)]?.kind, .regular)
+        XCTAssertTrue(e[d(12)]?.reason.contains("组A") == true)
+        XCTAssertTrue(e[d(13)]?.reason.contains("轮组别") == true, e[d(13)]?.reason ?? "")
+        XCTAssertTrue(e[d(13)]?.reason.contains("自动判断") == true)
+        XCTAssertTrue(e[d(14)]?.reason.contains("休息") == true)
+        XCTAssertTrue(e[d(17)]?.reason.contains("周末") == true)
+        WorkloadCounter.overrides = ["甲": [d(13): "休息"]]
+        let f = WorkloadCounter.explained(of: [d(12): "组A"], days: [d(13)], matcher: m, rotating: false, name: "甲", calendar: cal)
+        XCTAssertTrue(f[d(13)]?.reason.contains("手动") == true)
+    }
+
+    func testRulesWithEffectiveDate() {
+        // 不轮组别的乙：16 日起「没排岗位算上班」关掉
+        let roster: Roster = ["乙": [d(12): "遥测"]]
+        var newRules = WorkloadRules()
+        newRules.blankWorkdayIsWork = false
+        WorkloadCounter.ruleHistory = RuleVersion.adding([], current: WorkloadCounter.rules, changeFrom: d(16))
+        WorkloadCounter.rules = newRules
+        let p = count(roster)["乙"]
+        XCTAssertEqual(p?.regularDays, 3)        // 13–15 日按旧规则
+        XCTAssertEqual(p?.unassignedDays, 1)     // 16 日按新规则
+        XCTAssertEqual(WorkloadCounter.rules(on: d(15)).blankWorkdayIsWork, true)
+        XCTAssertEqual(WorkloadCounter.rules(on: d(16)).blankWorkdayIsWork, false)
+    }
+
+    func testMergerKeepsSourcesAndRecordsEdits() {
+        let t0 = Date(timeIntervalSince1970: 1_000), t1 = Date(timeIntervalSince1970: 2_000)
+        let first = RosterMerger.merge(old: [:], oldSources: [:], new: ["甲": [d(15): "休息"], "乙": [d(15): "组A"]],
+                                       source: "desktop", at: t0, carriesLeave: true, matcher: m)
+        XCTAssertTrue(first.edits.isEmpty)                       // 第一次读到的不算变动
+        XCTAssertEqual(first.sources["甲"]?[d(15)]?.source, "desktop")
+        // 不带休息列的同步：甲的休息保留、来源还是电脑版；乙换成组B 记一条变动
+        let second = RosterMerger.merge(old: first.roster, oldSources: first.sources, new: ["乙": [d(15): "组B"]],
+                                        source: "sync", at: t1, carriesLeave: false, matcher: m)
+        XCTAssertEqual(second.roster["甲"]?[d(15)], "休息")
+        XCTAssertEqual(second.sources["甲"]?[d(15)]?.source, "desktop")
+        XCTAssertEqual(second.sources["乙"]?[d(15)], Provenance(source: "sync", at: t1))
+        XCTAssertEqual(second.edits, [RosterEdit(at: t1, day: d(15), name: "乙", old: "组A", new: "组B", source: "sync")])
+        // 带休息列的读取：甲的休息没了就是取消了
+        let third = RosterMerger.merge(old: second.roster, oldSources: second.sources, new: ["乙": [d(15): "组B"]],
+                                       source: "desktop", at: t1, carriesLeave: true, matcher: m)
+        XCTAssertNil(third.roster["甲"]?[d(15)])
+        XCTAssertEqual(third.edits.map(\.name), ["甲"])
+    }
+
+    func testPublishPattern() {
+        // 网站一般周五 15 点前后排下周（2026-10-16、10-23 是周五）
+        let f = DateFormatter()
+        f.calendar = cal
+        f.timeZone = cal.timeZone
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        let times = ["2026-10-02 15:10", "2026-10-09 14:40", "2026-10-16 15:20", "2026-10-07 09:00"].compactMap { f.date(from: $0) }
+        let hot = PublishPattern.hotSlots(times, calendar: cal)
+        XCTAssertEqual(hot.first?.slot.weekday, 6)
+        XCTAssertTrue(PublishPattern.isHot(f.date(from: "2026-10-23 15:00")!, times: times, calendar: cal))
+        XCTAssertFalse(PublishPattern.isHot(f.date(from: "2026-10-21 15:00")!, times: times, calendar: cal))
+        let next = PublishPattern.nextHot(after: f.date(from: "2026-10-20 10:00")!, times: times, calendar: cal)
+        XCTAssertEqual(next.map { cal.component(.weekday, from: $0) }, 6)
+        XCTAssertNotNil(PublishPattern.describe(times, calendar: cal))
+    }
+
+    func testRestLedgerExpectedChange() {
+        let rule = RestBalanceAudit.Rule(longDuty: 1, shortDuty: 0, overtime: 0, compRest: -1, rest: 0, leave: 0)
+        // 17 日周六遥测 +1，19 日调休 −1
+        let history: [DayKey: String] = [d(17): "遥测", d(19): "调休"]
+        XCTAssertEqual(RestBalanceAudit.expectedChange(history, from: d(12), to: d(18), rule: rule, matcher: m, calendar: cal), 1)
+        XCTAssertEqual(RestBalanceAudit.expectedChange(history, from: d(12), to: d(20), rule: rule, matcher: m, calendar: cal), 0)
+    }
+}
