@@ -150,7 +150,8 @@ struct RestAfterDutyIntent: AppIntent {
         let store = AppStore.shared
         let resting = store.isRestingAfterDuty()
         let until = store.settings.restFocusUntil.text
-        return .result(value: resting, dialog: resting ? "是，补觉到 \(until)" : "不是")
+        let text = resting ? "是，补觉到 \(until)" : "不是"
+        return .result(value: resting, dialog: "\(text)")
     }
 }
 
