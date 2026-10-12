@@ -52,8 +52,9 @@ public enum SwapLedger {
     /// 两件事是同一个人就是当天对换。只在这一天的全员排班是这次刚读到的时候（fresh）才判断。
     public static func detect(_ change: ScheduleChange, before: Roster, after: Roster, fresh: Bool,
                               matcher: ShiftMatcher, isMe: (String) -> Bool, now: Date = Date()) -> [SwapRecord] {
-        guard fresh else { return [] }
         let day = change.day
+        // 之前没读到过这天的全员排班，就分不出谁是新接手的
+        guard fresh, before.values.contains(where: { $0[day] != nil }) else { return [] }
         let oldPosts = posts(change.old, matcher: matcher), newPosts = posts(change.new, matcher: matcher)
         let gained = newPosts.filter { g in !oldPosts.contains { key($0) == key(g) } }
         let lost = oldPosts.filter { g in !newPosts.contains { key($0) == key(g) } }
