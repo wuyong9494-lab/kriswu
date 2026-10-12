@@ -30,6 +30,21 @@ struct TodayView: View {
                         if store.syncIsStale {
                             StaleSyncBanner()
                         }
+                        if let warning = store.settings.syncHealthWarning {
+                            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                                Label("网站可能改版了", systemImage: "exclamationmark.triangle.fill")
+                                    .font(DS.Font.headline)
+                                    .foregroundStyle(DS.Palette.warning)
+                                Text(warning).font(DS.Font.caption)
+                                HStack {
+                                    NavigationLink("看诊断") { DiagnosticsView() }
+                                    Spacer()
+                                    Button("知道了") { store.settings.syncHealthWarning = nil }
+                                }
+                                .font(DS.Font.caption.weight(.semibold))
+                            }
+                            .card(tint: DS.Palette.warning)
+                        }
                         if store.settings.aliases.isEmpty && !store.roster.isEmpty {
                             NavigationLink { WhoAmIView() } label: {
                                 Label("还没设置你是谁：点这里从全员名单里选自己", systemImage: "person.crop.circle.badge.questionmark")

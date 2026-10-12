@@ -123,6 +123,10 @@ struct AppSettings: Codable, Equatable {
     var workLogLock = false
     /// 第一次打开的设置向导走完了没有
     var onboardingDone = false
+    /// 网站改版自检：每种读取方式最近几次正常的结果、现在的提醒、哪天推送过
+    var syncHealth: [String: [SyncHealth.Metrics]] = [:]
+    var syncHealthWarning: String?
+    var syncHealthWarnedDay: DayKey?
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
     /// 工作量规则开关
@@ -226,6 +230,9 @@ struct AppSettings: Codable, Equatable {
         workLogAutoTranscribe = try c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe) ?? d.workLogAutoTranscribe
         speechOnDeviceOnly = try c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly) ?? d.speechOnDeviceOnly
         workLogLock = try c.decodeIfPresent(Bool.self, forKey: .workLogLock) ?? d.workLogLock
+        syncHealth = try c.decodeIfPresent([String: [SyncHealth.Metrics]].self, forKey: .syncHealth) ?? [:]
+        syncHealthWarning = try c.decodeIfPresent(String.self, forKey: .syncHealthWarning)
+        syncHealthWarnedDay = try c.decodeIfPresent(DayKey.self, forKey: .syncHealthWarnedDay)
         // 老用户（已经填过网址）不再弹向导
         let savedURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
         onboardingDone = try c.decodeIfPresent(Bool.self, forKey: .onboardingDone) ?? !savedURL.isEmpty
@@ -925,6 +932,7 @@ final class AppStore: ObservableObject {
             let publishedBefore = publishedDays
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
+            await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步")
             mergeRoster(outcome.roster)
             if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
             await notifyRestWarnings()
@@ -1040,6 +1048,7 @@ final class AppStore: ObservableObject {
                                                      matcher: matcher, weeksBack: weeksBack)
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
+        await checkSyncHealth(result.roster, source: weeksBack > 9 ? "desktop-long" : "desktop", title: "电脑版页面")
         mergeRoster(result.roster)
         mergeRestHistory(result.restByDay)
         await notifyRestWarnings()
@@ -1072,6 +1081,32 @@ final class AppStore: ObservableObject {
         scheduleChanged()
         guard canSync else { return }
         Task { await sync(userInitiated: true, source: "换了使用者") }
+    }
+
+    // MARK: 网站改版自检
+
+    /// 这次读到的全员排班和平时比：人数、天数、休息条数、组别条数突然少很多就提醒（一天最多推送一次）。
+    /// 不正常的结果不记进「平时」，免得把错的当成正常。
+    func checkSyncHealth(_ roster: Roster, source: String, title: String) async {
+        guard !Self.isDemo else { return }
+        let metrics = SyncHealth.metrics(roster, matcher: matcher)
+        var all = settings.syncHealth
+        let history = all[source] ?? []
+        let problems = SyncHealth.problems(metrics, history: history)
+        if problems.isEmpty {
+            all[source] = Array((history + [metrics]).suffix(10))
+            var s = settings
+            s.syncHealth = all
+            s.syncHealthWarning = nil
+            settings = s
+            return
+        }
+        let text = "\(title)读到的全员排班和平时不一样：" + problems.joined(separator: "；")
+            + "。可能是网站改版了，工作量统计、休息核对可能不准。"
+        settings.syncHealthWarning = text
+        guard settings.syncHealthWarnedDay != .today else { return }
+        settings.syncHealthWarnedDay = .today
+        await NotificationService.notifyNow(id: "sync-health", title: "⚠️ 值班网站可能改版了", body: text)
     }
 
     // MARK: 排班规律：下次遥测、排班预警

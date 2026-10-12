@@ -1314,6 +1314,24 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r["丙"]?.unassignedDays, 4)
     }
 
+    func testSyncHealth() {
+        let ok = SyncHealth.Metrics(people: 30, days: 28, leaves: 40, groups: 100)
+        let history = [ok, ok, SyncHealth.Metrics(people: 29, days: 28, leaves: 35, groups: 98)]
+        XCTAssertTrue(SyncHealth.problems(ok, history: history).isEmpty)
+        // 改版后休息列读不到了
+        let noLeave = SyncHealth.Metrics(people: 30, days: 28, leaves: 0, groups: 100)
+        XCTAssertEqual(SyncHealth.problems(noLeave, history: history).count, 1)
+        XCTAssertTrue(SyncHealth.problems(noLeave, history: history)[0].contains("休息"))
+        // 人数掉了一大半、组别也没了
+        let broken = SyncHealth.Metrics(people: 9, days: 28, leaves: 10, groups: 0)
+        XCTAssertEqual(SyncHealth.problems(broken, history: history).count, 2)
+        // 记录不到 3 次：先不判断
+        XCTAssertTrue(SyncHealth.problems(broken, history: [ok]).isEmpty)
+        // 从全员排班算
+        let roster: Roster = ["甲": [d(1): "组A", d(2): "休息"], "乙": [d(1): "遥测"]]
+        XCTAssertEqual(SyncHealth.metrics(roster, matcher: m), SyncHealth.Metrics(people: 2, days: 2, leaves: 1, groups: 1))
+    }
+
     func testRestWarnings() {
         // 甲周五遥测，周一应该休却排了组A；乙周一遥测，周三网站上没写休息
         let roster: Roster = ["甲": [d(5): "遥测", d(8): "组A"], "乙": [d(1): "遥测", d(2): "休息"]]
