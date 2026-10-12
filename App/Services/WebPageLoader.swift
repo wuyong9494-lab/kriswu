@@ -198,12 +198,15 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [(request: CapturedRequest, reply: String)] {
         var replies: [(request: CapturedRequest, reply: String)] = []
         for request in requests where !outOfRequestTime {
-            let reply = try? await webView.callAsyncJavaScript(
-                Self.replayScript,
-                arguments: ["url": request.url, "method": request.method, "headers": request.headers,
-                            "body": request.requestBody ?? NSNull()],
-                in: nil, contentWorld: .page)
-            if let text = reply as? String { replies.append((request, text)) }
+            // 网络慢时单个请求可能超时：再试一次，免得整周排班丢掉
+            for attempt in 0..<2 where attempt == 0 || !outOfRequestTime {
+                let reply = try? await webView.callAsyncJavaScript(
+                    Self.replayScript,
+                    arguments: ["url": request.url, "method": request.method, "headers": request.headers,
+                                "body": request.requestBody ?? NSNull()],
+                    in: nil, contentWorld: .page)
+                if let text = reply as? String { replies.append((request, text)); break }
+            }
         }
         return replies
     }
