@@ -14,6 +14,7 @@ struct WorkloadView: View {
         [
             .init(title: "均衡分析", icon: "scalemass.fill", color: .indigo, destination: AnyView(FairnessView())),
             .init(title: "全年统计", icon: "calendar", color: .blue, destination: AnyView(YearStatsView())),
+            .init(title: "排班规律", icon: "wand.and.stars", color: .pink, destination: AnyView(SchedulePatternsView())),
             .init(title: "遥测预测", icon: "antenna.radiowaves.left.and.right", color: .teal, destination: AnyView(DutyForecastView())),
             .init(title: "数据核对", icon: "checkmark.shield.fill", color: .green, destination: AnyView(DataCheckView())),
             .init(title: "规则", icon: "slider.horizontal.3", color: .gray, destination: AnyView(WorkloadRulesView())),

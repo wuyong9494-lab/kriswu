@@ -1201,3 +1201,74 @@ final class UpgradeTests: XCTestCase {
         XCTAssertTrue(issues.contains { $0.kind == .thinDay && $0.day == d(16) })
     }
 }
+
+final class PatternTests: XCTestCase {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+    let m = ShiftMatcher(types: ShiftType.defaults)
+    /// d(1) = 2026-11-02 周一
+    let d = { (i: Int) in DayKey(year: 2026, month: 11, day: i + 1) }
+
+    func testDutyRotationWithDeferralAndException() {
+        // 甲乙丙丁按顺序轮；6 日乙请假，丙先值、乙第二天补上；11 日本该乙，丁指定日期
+        let order = ["甲", "乙", "丙", "丁", "甲", "丙", "乙", "丁", "甲", "丙", "丁", "乙"]
+        var roster: Roster = [:]
+        for (i, name) in order.enumerated() { roster[name, default: [:]][d(i + 1)] = "遥测" }
+        roster["乙"]?[d(6)] = "请假"
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...12).map(d), matcher: m, forecastDays: 4, calendar: cal)
+        XCTAssertEqual(r?.slots, 12)
+        XCTAssertEqual(r?.matched, 11)
+        XCTAssertEqual(r?.strictMatched, 10)                 // 不管请假的话 6 日也猜错
+        XCTAssertEqual(r?.deferrals, [SchedulePatterns.Deferral(day: d(6), name: "乙", reason: "请假")])
+        XCTAssertEqual(r?.exceptions, [SchedulePatterns.Exception(day: d(11), actual: "丁", expected: "乙")])
+        XCTAssertEqual(r?.order, ["甲", "丙", "丁", "乙"])
+        XCTAssertEqual(r?.forecast.map(\.name), ["甲", "丙", "丁", "乙"])
+        XCTAssertEqual(r?.forecast.first?.day, d(13))
+    }
+
+    func testRestAfterDutyRule() {
+        // 规则：周一值休二三，周五值休六日一，周六值休日一二，周日值休一二三
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(1), calendar: cal), [d(2), d(3)])
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(5), calendar: cal), [d(6), d(7), d(8)])
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(6), calendar: cal), [d(7), d(8), d(9)])
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(7), calendar: cal), [d(8), d(9), d(10)])
+        // 甲周五值，周一写了休息，周二回来：符合；乙周一值，只休了周二，周三就上组A：不符合
+        let roster: Roster = ["甲": [d(5): "遥测", d(8): "休息"], "乙": [d(1): "遥测", d(2): "休息", d(3): "组A"]]
+        let rule = SchedulePatterns.restRule(roster: roster, days: (1...12).map(d), published: Set((1...14).map(d)),
+                                             matcher: m, calendar: cal)
+        XCTAssertEqual(rule.duties, 2)
+        XCTAssertEqual(rule.matched, 1)
+        let friday = rule.rows.first { $0.weekday == 6 }
+        XCTAssertEqual(friday?.expected, "六日一")
+        XCTAssertEqual(friday?.typical, "六日一")
+        XCTAssertEqual(rule.exceptions, [SchedulePatterns.RestException(day: d(1), name: "乙", expected: "二三", actual: "二")])
+    }
+
+    func testGroupRotationAndResumeAfterLeave() {
+        let groups = ["组A", "组B", "组C"]
+        let workdays = [1, 2, 3, 4, 5, 8, 9, 10, 11, 12].map(d)   // 两周的周一到周五
+        var roster: Roster = [:]
+        for p in 0..<3 {
+            let name = ["甲", "乙", "丙"][p]
+            var step = p
+            for day in workdays {
+                // 甲周三请假，回来接着上次的组往下排
+                if p == 0 && day == d(3) { roster[name, default: [:]][day] = "请假"; continue }
+                roster[name, default: [:]][day] = groups[step % 3]
+                step += 1
+            }
+        }
+        roster["乙"]?[d(12)] = "组A"   // 手动调整
+        let g = SchedulePatterns.groupPattern(roster: roster, days: (1...12).map(d), matcher: m, calendar: cal)
+        XCTAssertEqual(g?.groups, groups)
+        XCTAssertTrue(g?.best?.title.hasPrefix("每个上班日往后挪一组") == true, g?.best?.title ?? "")
+        XCTAssertEqual(g?.resumeTotal, 1)
+        XCTAssertEqual(g?.resumeHits, 1)
+        XCTAssertEqual(g?.calendarHits, 0)
+        XCTAssertEqual(g?.adjustments.map(\.day), [d(12)])
+        XCTAssertEqual(g?.adjustments.first?.name, "乙")
+    }
+}
