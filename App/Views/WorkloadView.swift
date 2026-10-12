@@ -213,7 +213,7 @@ struct WorkloadDetailView: View {
 
     var body: some View {
         let kinds = WorkloadCounter.kinds(of: store.roster[name] ?? [:], days: days, matcher: store.matcher,
-                                          rotating: store.isRotating(name), name: name, calendar: .app)
+                                          rotating: store.isRotating(name, asOf: days.max()), name: name, calendar: .app)
         List(days.reversed()) { day in
             let raw = store.roster[name]?[day]
             let holiday = ChinaHolidays.isHoliday(day)

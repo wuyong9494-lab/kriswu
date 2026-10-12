@@ -681,10 +681,10 @@ final class WorkloadTests: XCTestCase {
         let result = count(roster, (5...11).map(d))
         XCTAssertEqual(result["张三"]?.dutyDays, 2)
         XCTAssertEqual(result["张三"]?.dutyRestDays, 0)
-        // 张三排过调度：只按排班算，周五没排不算工作量
-        XCTAssertEqual(result["张三"]?.regularDays, 1)
-        XCTAssertEqual(result["张三"]?.unassignedDays, 1)
-        XCTAssertEqual(result["张三"]?.workDays, 3)
+        // 张三只是顶了一次调度（最常排的是遥测）：不算调度的人，周五没排、没写休息照样算日常
+        XCTAssertEqual(result["张三"]?.regularDays, 2)
+        XCTAssertEqual(result["张三"]?.unassignedDays, 0)
+        XCTAssertEqual(result["张三"]?.workDays, 4)
         XCTAssertEqual(result["张三"]?.offDays, 3)
         // 李四：出差 2 天；和值班无关的调休 + 周末 2 天 = 休息 3 天；周三、周五日常
         XCTAssertEqual(result["李四"]?.tripDays, 2)
@@ -704,7 +704,8 @@ final class WorkloadTests: XCTestCase {
         let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day + 7) }   // 10/12 周一 … 10/18 周日
         let roster: Roster = [
             "甲": [d(5): "组A", d(6): "遥测"],          // 设置里的轮班人员：周三到周五没排不算
-            "乙": [d(5): "调度"],                       // 排过调度：也按轮班算
+            "乙": [d(-2): "调度", d(-1): "调度", d(0): "调度", d(5): "调度"],   // 最常排调度：只按排班算
+            "己": [d(-2): "组A", d(-1): "组A", d(0): "组B", d(5): "调度"],    // 偶尔顶一次调度：照常算日常
             "丙": [d(5): "组B"],                        // 不在名单里：一直没有组别的日常班人员，没排的工作日算日常
         ]
         let m = ShiftMatcher(types: ShiftType.defaults)
@@ -716,6 +717,8 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["乙"]?.unassignedDays, 4)
         XCTAssertEqual(result["丙"]?.workDays, 5)
         XCTAssertEqual(result["丙"]?.unassignedDays, 0)
+        XCTAssertEqual(result["己"]?.workDays, 5)
+        XCTAssertEqual(result["己"]?.unassignedDays, 0)
 
         // 没设置名单时自动判断：只值遥测、没有组别和调度任务的人，没排的工作日算日常
         let auto = Dictionary(uniqueKeysWithValues: WorkloadCounter.count(
@@ -744,21 +747,24 @@ final class WorkloadTests: XCTestCase {
 
     func testHolidayRestAfterDutyOnly() {
         let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
-        // 国庆：1 日遥测，2、3 日休息 → 两天都是值班调休；4 日组A，5 日休息（隔开了）→ 休息
-        // 7 日遥测，8 日（已上班）休息 → 平时的休息
+        defer { WorkloadCounter.rules = WorkloadRules() }
+        // 国庆：1 日遥测，2、3 日写了休息、调休 → 写了休息就是休息，不算工作量；5、8 日的休息也一样
         let roster: Roster = ["甲": [d(1): "遥测", d(2): "休息", d(3): "调休", d(4): "组A", d(5): "休息",
                                     d(7): "遥测", d(8): "休息"]]
         let result = count(roster, (1...9).map(d))
-        XCTAssertEqual(result["甲"]?.dutyRestDays, 2)
-        XCTAssertEqual(result["甲"]?.offDays, 2)
+        XCTAssertEqual(result["甲"]?.dutyRestDays, 0)
+        XCTAssertEqual(result["甲"]?.offDays, 4)
         XCTAssertEqual(result["甲"]?.dutyDays, 2)
         // 别人：国庆 5 日遥测，6 日网站上没写（值班后休息），7 日也没写（普通假期）
         let other = count(["乙": [d(5): "遥测", d(8): "组B"]], (5...8).map(d))["乙"]
         XCTAssertEqual(other?.dutyRestDays, 1)
         XCTAssertEqual(other?.holidayDays, 1)
         XCTAssertEqual(other?.workDays, 3)
-        // 统计范围从 2 日开始，1 日遥测：2 日的休息仍算值班调休
+        XCTAssertEqual(count(roster, (2...3).map(d))["甲"]?.dutyRestDays, 0)
+        // 打开「写了休息也算」：统计范围从 2 日开始，1 日遥测，2、3 日的休息算值班调休
+        WorkloadCounter.rules.holidayDutyRestCounts = true
         XCTAssertEqual(count(roster, (2...3).map(d))["甲"]?.dutyRestDays, 2)
+        XCTAssertEqual(count(roster, (1...9).map(d))["甲"]?.offDays, 2)
     }
 
     func testNationalHoliday() {
@@ -772,17 +778,17 @@ final class WorkloadTests: XCTestCase {
         XCTAssertTrue(ChinaHolidays.isHoliday(d(3)))
         XCTAssertFalse(ChinaHolidays.isHoliday(d(11)))
         XCTAssertTrue(ChinaHolidays.isHoliday(DayKey(year: 2026, month: 9, day: 25)))   // 中秋
-        // 张三 10/2 遥测、10/3 休息（值班后休一天，算工作量），10/9 组A；李四 10/5 休息（和值班无关）
+        // 张三 10/2 遥测、10/3 写了休息（不算工作量），10/9 组A；李四 10/5 休息
         let roster: Roster = ["张三": [d(2): "遥测", d(3): "休息", d(9): "组A"], "李四": [d(5): "休息"]]
         let result = count(roster, (1...11).map(d))
         XCTAssertEqual(result["张三"]?.dutyDays, 1)
-        XCTAssertEqual(result["张三"]?.dutyRestDays, 1)
+        XCTAssertEqual(result["张三"]?.dutyRestDays, 0)
         XCTAssertEqual(result["张三"]?.regularDays, 3)        // 9 日组A；8、10 日没排、没写休息，正常上班
         XCTAssertEqual(result["张三"]?.unassignedDays, 0)
-        XCTAssertEqual(result["张三"]?.workDays, 5)
+        XCTAssertEqual(result["张三"]?.workDays, 4)
         XCTAssertEqual(result["张三"]?.holidayDays, 5)        // 1、4、5、6、7 日
         XCTAssertEqual(result["张三"]?.holidayWorkedDays, 1)
-        XCTAssertEqual(result["张三"]?.offDays, 1)            // 11 日周日
+        XCTAssertEqual(result["张三"]?.offDays, 2)            // 3 日写了休息，11 日周日
         XCTAssertEqual(result["李四"]?.workDays, 3)
         XCTAssertEqual(result["李四"]?.holidayDays, 6)
         XCTAssertEqual(result["李四"]?.offDays, 2)
@@ -1111,7 +1117,33 @@ final class UpgradeTests: XCTestCase {
         // 规则从 JSON 读：缺的字段用默认
         let rules = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"blankWorkdayIsWork":false}"#.utf8))
         XCTAssertEqual(rules?.blankWorkdayIsWork, false)
-        XCTAssertEqual(rules?.holidayDutyRestCounts, true)
+        XCTAssertEqual(rules?.holidayDutyRestCounts, false)
+        // 旧版本存的「值班后休息算工作量」打开：升级后关掉（写了休息就不算）；新版本存的照原样
+        let old = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"holidayDutyRestCounts":true}"#.utf8))
+        XCTAssertEqual(old?.holidayDutyRestCounts, false)
+        let new = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"holidayDutyRestCounts":true,"version":2}"#.utf8))
+        XCTAssertEqual(new?.holidayDutyRestCounts, true)
+        let saved = try? JSONDecoder().decode(WorkloadRules.self, from: JSONEncoder().encode(WorkloadRules()))
+        XCTAssertEqual(saved, WorkloadRules())
+    }
+
+    func testMergeKeepsLeaveWhenSourceHasNoRestColumn() {
+        // 之前读电脑版：甲 15 日休息、乙 15 日组A、丙 16 日请假
+        let old: Roster = ["甲": [d(15): "休息"], "乙": [d(15): "组A"], "丙": [d(16): "请假"], "丁": [d(15): "组C"]]
+        // 这次的读取不带休息列：15 日只有乙组B
+        let a = RosterExtractor.replacingDays(of: old, with: ["乙": [d(15): "组B"]], matcher: m)
+        XCTAssertEqual(a["甲"]?[d(15)], "休息")          // 休息保留
+        XCTAssertEqual(a["乙"]?[d(15)], "组B")           // 岗位以新的为准
+        XCTAssertNil(a["丁"]?[d(15)])                    // 没读到的岗位照常去掉
+        XCTAssertEqual(a["丙"]?[d(16)], "请假")          // 没读到的日子不动
+        // 这次读到的 15 日有休息列（戊休息）：整天以新的为准，甲的休息取消了
+        let b = RosterExtractor.replacingDays(of: old, with: ["乙": [d(15): "组B"], "戊": [d(15): "休息"]], matcher: m)
+        XCTAssertNil(b["甲"]?[d(15)])
+        XCTAssertEqual(b["戊"]?[d(15)], "休息")
+    }
+
+    func testNamesGluedTogetherInCell() {
+        XCTAssertEqual(RosterExtractor.names(inCell: "张三(5)李四(3)王小五（2）", matcher: m), ["张三", "李四", "王小五"])
     }
 
     func testTeamChanges() {

@@ -1062,13 +1062,12 @@ final class AppStore: ObservableObject {
                                             body: "网站上你名字后面的待休是 \(rest) 天，找个时间安排休息吧。")
     }
 
-    /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），保留最近 200 天。
+    /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），
+    /// 但不带休息列的读取不会冲掉之前读到的休息、请假（见 RosterExtractor.replacingDays）。
     func mergeRoster(_ new: Roster) {
         guard !new.isEmpty else { return }
-        let days = Set(new.values.flatMap(\.keys))
         // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
-        var merged = roster.mapValues { $0.filter { !days.contains($0.key) } }
-        RosterExtractor.merge(new, into: &merged)
+        let merged = RosterExtractor.replacingDays(of: roster, with: new, matcher: matcher)
         // 留一年多，全年统计用
         let cutoff = DayKey.today.adding(days: -400)
         roster = merged.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
@@ -1343,8 +1342,10 @@ final class AppStore: ObservableObject {
         settings.scheduleOnlyMembers.isEmpty ? nil : Set(settings.scheduleOnlyMembers)
     }
 
-    func isRotating(_ name: String) -> Bool {
-        WorkloadCounter.isRotating(name: name, history: roster[name] ?? [:], members: rotationMembers, matcher: matcher)
+    /// asOf：按哪一天往前三个月判断是不是调度的人（统计哪个月就传那个月最后一天，和列表一致）
+    func isRotating(_ name: String, asOf: DayKey? = nil) -> Bool {
+        WorkloadCounter.isRotating(name: name, history: roster[name] ?? [:], members: rotationMembers, matcher: matcher,
+                                   asOf: asOf)
     }
 
     func isFavorite(_ name: String) -> Bool { settings.favorites.contains(name) }

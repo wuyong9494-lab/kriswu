@@ -40,7 +40,9 @@ public enum RosterExtractor {
     }
 
     static func names(inCell cell: String, matcher: ShiftMatcher) -> [String] {
-        var tokens = cell.components(separatedBy: CharacterSet(charactersIn: " \u{3000}、,，;；/\t"))
+        // 「张三(5)李四(3)」挨在一起：在右括号后面断开
+        let spaced = cell.replacingOccurrences(of: ")", with: ") ").replacingOccurrences(of: "）", with: "） ")
+        var tokens = spaced.components(separatedBy: CharacterSet(charactersIn: " \u{3000}、,，;；/\t"))
             .map(cleanName)
             .filter { !$0.isEmpty }
         // 两个字的名字常被排版成「王　五」：相邻两个单字合回一个名字
@@ -98,6 +100,33 @@ public enum RosterExtractor {
             result[name] = n
         }
         return result
+    }
+
+    /// 这条是不是休息、调休、请假、出差这类（不是具体岗位）
+    static func isLeave(_ raw: String, matcher: ShiftMatcher) -> Bool {
+        let parts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+        return !parts.isEmpty && parts.allSatisfy { WorkloadCounter.isOff($0, matcher: matcher) || WorkloadCounter.isTrip($0) }
+    }
+
+    /// 把这次读到的全员排班合并进已保存的：读到的日子整天替换（换人、取消的以新数据为准）。
+    /// 例外：有的读取方式（手机版页面、数据接口）根本不带「休息」「调休」「请假」这几列，
+    /// 如果这次读到的某一天里一个休息、请假都没有，就保留之前读到的这天的休息、请假，不能被冲掉。
+    public static func replacingDays(of old: Roster, with new: Roster, matcher: ShiftMatcher) -> Roster {
+        guard !new.isEmpty else { return old }
+        let days = Set(new.values.flatMap(\.keys))
+        var newHasLeave = Set<DayKey>()
+        for history in new.values {
+            for (day, raw) in history where isLeave(raw, matcher: matcher) { newHasLeave.insert(day) }
+        }
+        var merged: Roster = [:]
+        for (name, history) in old {
+            let kept = history.filter { day, raw in
+                !days.contains(day) || (!newHasLeave.contains(day) && new[name]?[day] == nil && isLeave(raw, matcher: matcher))
+            }
+            if !kept.isEmpty { merged[name] = kept }
+        }
+        merge(new, into: &merged)
+        return merged
     }
 
     public static func merge(_ new: Roster, into roster: inout Roster) {

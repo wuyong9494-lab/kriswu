@@ -2,10 +2,10 @@ import Foundation
 
 /// 每个人一段时间（一般是一个月到今天）的工作量，每一天归到一类：
 /// - 值班：遥测（工作到第二天 8:30）
-/// - 值班调休：法定节假日里，遥测后紧接着的休息、调休。节假日值班换来的，算工作量
-///   （平时的休息、调休，不管是值班换来的还是请假，都算休息）
+/// - 值班调休：法定节假日值完遥测的第二天，网站上没写休息（还在上班），算工作量
+///   （网站上写了休息、调休、请假的，不管节假日还是平时，都算休息，不算工作量）
 /// - 日常：各组、调度等其它岗位；工作日（按法定节假日调整）没排岗位、也没写休息的日子（正常上班）
-/// - 未排班：调度（以及设置里「只按排班算」的人）工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
+/// - 未排班：调度（最近三个月最常排的岗位是调度的人，以及设置里「只按排班算」的人）工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
 /// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
@@ -36,14 +36,18 @@ public struct PersonWorkload: Equatable {
 
 /// 工作量规则开关（设置里可以改）
 public struct WorkloadRules: Codable, Equatable {
-    /// 法定节假日值完遥测后的休息算工作量（值班调休）
-    public var holidayDutyRestCounts = true
+    /// 法定节假日值完遥测后，网站上写了休息、调休的也算工作量（值班调休）。
+    /// 默认关：写了休息、调休、请假的，不管节假日还是平时都不算工作量
+    public var holidayDutyRestCounts = false
     /// 节假日值完遥测的第二天，网站上没写也算值班调休
     public var blankHolidayAfterDutyIsRest = true
     /// 工作日没排岗位、也没写休息的算正常上班（日常）
     public var blankWorkdayIsWork = true
     /// 调度只算排班表上有名字的日子
     public var dispatchScheduleOnly = true
+    /// 规则版本：2 起「写了休息就不算工作量」，旧设置里打开的值班调休开关要关掉
+    public var version = WorkloadRules.currentVersion
+    public static let currentVersion = 2
 
     public init() {}
 
@@ -54,6 +58,9 @@ public struct WorkloadRules: Codable, Equatable {
         blankHolidayAfterDutyIsRest = try c.decodeIfPresent(Bool.self, forKey: .blankHolidayAfterDutyIsRest) ?? d.blankHolidayAfterDutyIsRest
         blankWorkdayIsWork = try c.decodeIfPresent(Bool.self, forKey: .blankWorkdayIsWork) ?? d.blankWorkdayIsWork
         dispatchScheduleOnly = try c.decodeIfPresent(Bool.self, forKey: .dispatchScheduleOnly) ?? d.dispatchScheduleOnly
+        let stored = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        if stored < 2 { holidayDutyRestCounts = false }
+        version = WorkloadRules.currentVersion
     }
 }
 
@@ -79,6 +86,8 @@ public enum WorkloadCounter {
 
     /// 一个遥测值班最多换几天调休
     public static let restPerDuty = 2
+    /// 最后一次出现在网站上之后，还当作在岗的天数
+    public static let activeAfter = 60
 
     /// 一天归到哪一类
     public enum Kind: String {
@@ -86,15 +95,24 @@ public enum WorkloadCounter {
              unassigned = "未排班"
     }
 
-    /// 只按排班算的人：排过调度的人（排班表上有名字才算一天），加上设置里另外加的人。
-    /// 这些人没排岗位的工作日不算工作量；其他人（包括轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常。
+    /// 只按排班算的人：调度的人（排班表上有名字才算一天），加上设置里另外加的人。
+    /// 调度的人 = asOf（默认这个人最后出现的日子）前三个月里，最常排的岗位是调度。
+    /// 只是偶尔顶一次调度的人（组别、遥测的人）不算，他们没排岗位、没写休息的工作日照样算日常。
     public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
-                                  matcher: ShiftMatcher) -> Bool {
+                                  matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
         if members?.contains(name) == true { return true }
-        guard rules.dispatchScheduleOnly else { return false }
-        return history.values.contains { raw in
-            raw.split(separator: "+").contains { matcher.displayName(String($0)).contains("调度") }
+        guard rules.dispatchScheduleOnly, let end = asOf ?? history.keys.max() else { return false }
+        let start = end.adding(days: -90)
+        var counts: [String: Int] = [:]
+        for (day, raw) in history where day >= start && day <= end {
+            for part in raw.split(separator: "+") {
+                let post = matcher.displayName(String(part))
+                guard !isOff(post, matcher: matcher), !isTrip(post) else { continue }
+                counts[post.contains("调度") ? "调度" : post, default: 0] += 1
+            }
         }
+        guard let dispatch = counts["调度"], dispatch >= 3 else { return false }
+        return counts.allSatisfy { $0.key == "调度" || $0.value < dispatch }
     }
 
     /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）
@@ -132,10 +150,11 @@ public enum WorkloadCounter {
     static func autoKinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
                           fixed: [DayKey: String] = [:], calendar: Calendar) -> [DayKey: Kind] {
         var result: [DayKey: Kind] = [:]
-        // 这个人在网站上出现的前后两周以外（还没来、已经调走）没数据的日子不算
+        // 这个人在网站上第一次出现前两周、最后一次出现两个月以后（还没来、已经调走）没数据的日子不算。
+        // 不轮组别的人可能好几周都不出现在表上（一直在做日常），所以往后放宽到两个月
         let keys = history.keys
         let active = keys.min().flatMap { lo in keys.max().map {
-            lo.adding(days: -14, calendar: calendar)...$0.adding(days: 14, calendar: calendar) } }
+            lo.adding(days: -14, calendar: calendar)...$0.adding(days: activeAfter, calendar: calendar) } }
         for day in days {
             guard history[day] != nil || active?.contains(day) == true else { continue }
             result[day] = classify(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
@@ -150,8 +169,8 @@ public enum WorkloadCounter {
             if let value = fixed[day] { return value == Kind.duty.rawValue }
             return history[day]?.split(separator: "+").contains { isDuty(matcher.displayName(String($0))) } ?? false
         }
-        // 从统计范围前两天开始找遥测，往后接着的休息算调休
-        guard rules.holidayDutyRestCounts, let first = days.min(), let last = days.max() else { return result }
+        // 从统计范围前两天开始找遥测，往后接着的日子看算不算值班调休
+        guard rules.holidayDutyRestCounts || rules.blankHolidayAfterDutyIsRest, let first = days.min(), let last = days.max() else { return result }
         var day = first.adding(days: -restPerDuty, calendar: calendar)
         while day <= last {
             if isDutyDay(day) {
@@ -160,7 +179,7 @@ public enum WorkloadCounter {
                 if rules.blankHolidayAfterDutyIsRest, history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
                     result[next] = .dutyRest
                 }
-                for _ in 0..<restPerDuty where restPosts(next) {
+                for _ in 0..<restPerDuty where rules.holidayDutyRestCounts && restPosts(next) {
                     if result[next] != nil, ChinaHolidays.isHoliday(next) { result[next] = .dutyRest }
                     next = next.adding(days: 1, calendar: calendar)
                 }
@@ -175,12 +194,12 @@ public enum WorkloadCounter {
     public static func count(roster: Roster, days: [DayKey], matcher: ShiftMatcher, members: Set<String>? = nil,
                              calendar: Calendar = .current) -> [PersonWorkload] {
         guard let first = days.min(), let last = days.max() else { return [] }
-        // 只算这段时间前后两周里在网站上出现过的人（调走的、还没来的不算，免得把没排班的日子都算成日常）
-        let window = first.adding(days: -14, calendar: calendar)...last.adding(days: 14, calendar: calendar)
+        // 只算这段时间前两个月到后两周里在网站上出现过的人（调走的、还没来的不算，免得把没排班的日子都算成日常）
+        let window = first.adding(days: -activeAfter, calendar: calendar)...last.adding(days: 14, calendar: calendar)
         return roster.filter { $0.value.keys.contains(where: window.contains) }.map { name, history in
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
-            let rotating = isRotating(name: name, history: history, members: members, matcher: matcher)
+            let rotating = isRotating(name: name, history: history, members: members, matcher: matcher, asOf: last)
             let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: rotating, name: name, calendar: calendar)
             for day in days {
                 for post in history[day]?.split(separator: "+") ?? [] { p.posts[matcher.displayName(String(post)), default: 0] += 1 }
