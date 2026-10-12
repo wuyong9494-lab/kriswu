@@ -16,6 +16,14 @@ struct WorkloadView: View {
                     .foregroundStyle(.orange)
             }
             Section {
+                NavigationLink {
+                    FairnessView()
+                } label: {
+                    Label("工作量均衡分析（本周、本月谁干得多 / 少）", systemImage: "scalemass")
+                        .font(.headline)
+                }
+            }
+            Section {
                 HStack {
                     Button { move(-1) } label: { Image(systemName: "chevron.left") }
                     Spacer()
@@ -37,13 +45,6 @@ struct WorkloadView: View {
                 }
             } footer: {
                 Text("轮班人员和排过调度的人，工作日网站上没给排岗位的日子不算工作量；其他人（没有组别和调度任务的人，即使值遥测）工作日没排岗位算日常班。")
-            }
-            Section {
-                NavigationLink {
-                    FairnessView()
-                } label: {
-                    Label("工作量均衡分析（本周、本月谁干得多 / 少）", systemImage: "scalemass")
-                }
             }
             Section {
                 Button {
@@ -95,6 +96,13 @@ struct WorkloadView: View {
         .navigationTitle("工作量统计")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    FairnessView()
+                } label: {
+                    Label("均衡分析", systemImage: "scalemass")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: report.text) { Label("分享", systemImage: "square.and.arrow.up") }
             }
