@@ -1247,6 +1247,21 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(rule.exceptions, [SchedulePatterns.RestException(day: d(1), name: "乙", expected: "二三", actual: "二")])
     }
 
+    func testDutyAndTelemetryAreTheSame() {
+        XCTAssertTrue(WorkloadCounter.isDuty("遥测"))
+        XCTAssertTrue(WorkloadCounter.isDuty("值班"))
+        XCTAssertFalse(WorkloadCounter.isDuty("值班交班前"))
+        XCTAssertTrue(WorkloadCounter.isDuty(m.displayName("值")))
+        // 网站上有的写遥测、有的写值班：都在同一个轮转里
+        var roster: Roster = [:]
+        for (i, name) in ["甲", "乙", "丙", "甲", "乙", "丙"].enumerated() {
+            roster[name, default: [:]][d(i + 1)] = i % 2 == 0 ? "遥测" : "值班"
+        }
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...6).map(d), matcher: m, calendar: cal)
+        XCTAssertEqual(r?.slots, 6)
+        XCTAssertEqual(r?.matched, 6)
+    }
+
     func testRestWarnings() {
         // 甲周五遥测，周一应该休却排了组A；乙周一遥测，周三网站上没写休息
         let roster: Roster = ["甲": [d(5): "遥测", d(8): "组A"], "乙": [d(1): "遥测", d(2): "休息"]]

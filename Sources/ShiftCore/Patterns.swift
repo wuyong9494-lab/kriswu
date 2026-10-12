@@ -61,11 +61,16 @@ public enum SchedulePatterns {
         public var strictRate: Double { slots == 0 ? 0 : Double(strictMatched) / Double(slots) }
     }
 
+    /// 这个岗位算不算 post：「遥测」也认「值班」（同一个意思）
+    static func matches(_ name: String, _ post: String) -> Bool {
+        post == "遥测" ? WorkloadCounter.isDuty(name) : name.contains(post)
+    }
+
     /// 为什么这天轮不到他（nil = 可以排）。leave：是不是请假、出差、休息这类。
     static func unavailable(_ raw: String?, post: String, matcher: ShiftMatcher) -> (reason: String, leave: Bool)? {
         guard let raw else { return nil }
         let list = posts(raw, matcher: matcher)
-        if list.contains(where: { $0.contains(post) }) { return nil }
+        if list.contains(where: { matches($0, post) }) { return nil }
         if RosterExtractor.isLeave(raw, matcher: matcher) {
             if list.contains(where: WorkloadCounter.isTrip) { return ("出差", true) }
             if list.contains(where: { $0.contains("请假") || ($0.contains("假") && !$0.contains("休")) }) { return ("请假", true) }
@@ -81,7 +86,7 @@ public enum SchedulePatterns {
         let sorted = days.sorted()
         guard let start = sorted.first, let end = sorted.last else { return nil }
         func holds(_ name: String, _ day: DayKey) -> Bool {
-            posts(roster[name]?[day], matcher: matcher).contains { $0.contains(post) }
+            posts(roster[name]?[day], matcher: matcher).contains { matches($0, post) }
         }
         // 轮转的人：统计范围里至少值过两次
         var counts: [String: Int] = [:]

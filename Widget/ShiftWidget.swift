@@ -312,7 +312,7 @@ struct NextDutyProvider: TimelineProvider {
     func entry(for date: Date, snapshot: WidgetSnapshot?) -> NextDutyEntry {
         let calendar = Calendar(identifier: .gregorian)
         let today = WidgetStore.key(for: date)
-        let next = (snapshot?.days ?? []).filter { $0.date >= today && $0.title.contains("遥测") }.map(\.date).min()
+        let next = (snapshot?.days ?? []).filter { $0.date >= today && ($0.title.contains("遥测") || ($0.title.contains("值班") && !$0.title.contains("交班"))) }.map(\.date).min()
         guard let next, let nextDate = DateFormatterCache.day.date(from: next) else { return NextDutyEntry(date: date, next: nil) }
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: nextDate)).day ?? 0
         return NextDutyEntry(date: date, next: (next, days))
