@@ -96,23 +96,24 @@ public enum WorkloadCounter {
     }
 
     /// 只按排班算的人：调度的人（排班表上有名字才算一天），加上设置里另外加的人。
-    /// 调度的人 = asOf（默认这个人最后出现的日子）前三个月里，最常排的岗位是调度。
+    /// 调度的人 = asOf（默认这个人最后出现的日子）前三个月里，调度至少 3 天、占他所有岗位（不含休息出差）的一半以上。
     /// 只是偶尔顶一次调度的人（组别、遥测的人）不算，他们没排岗位、没写休息的工作日照样算日常。
     public static func isRotating(name: String, history: [DayKey: String], members: Set<String>?,
                                   matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
         if members?.contains(name) == true { return true }
         guard rules.dispatchScheduleOnly, let end = asOf ?? history.keys.max() else { return false }
-        let start = end.adding(days: -90)
-        var counts: [String: Int] = [:]
+        let start = end.adding(days: -90, calendar: .current)
+        // 组A、组B… 分开数的话，轮组别的人可能调度反而最多，所以和其它岗位的总数比
+        var dispatch = 0, total = 0
         for (day, raw) in history where day >= start && day <= end {
             for part in raw.split(separator: "+") {
                 let post = matcher.displayName(String(part))
                 guard !isOff(post, matcher: matcher), !isTrip(post) else { continue }
-                counts[post.contains("调度") ? "调度" : post, default: 0] += 1
+                total += 1
+                if post.contains("调度") { dispatch += 1 }
             }
         }
-        guard let dispatch = counts["调度"], dispatch >= 3 else { return false }
-        return counts.allSatisfy { $0.key == "调度" || $0.value < dispatch }
+        return dispatch >= 3 && dispatch * 2 >= total
     }
 
     /// 不看前后日子时这一天的类别（raw：网站上这天的岗位，没排为 nil；rotating：这个人是不是轮班的）

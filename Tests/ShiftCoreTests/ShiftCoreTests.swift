@@ -1150,13 +1150,21 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(byDay["王五"], [d(12): 2])
         XCTAssertNil(byDay["组A"])
 
-        // 合并：按日期排好，同一天新的为准，只留数字变了的点
-        let merged = RestBalanceHistory.merge([(d(1), 2), (d(5), 3)], [d(3): 2, d(5): 4, d(8): 4, d(12): 2])
-        XCTAssertEqual(merged.map { $0.day }, [d(1), d(5), d(12)])
-        XCTAssertEqual(merged.map { $0.value }, [2, 4, 2])
+        // 合并：按日期排好，只留数字变了的点；表上读的不覆盖当场读到的
+        let merged = RestBalanceHistory.merge([(d(1), 2, true), (d(5), 3, true)], [d(3): 2, d(5): 4, d(8): 4, d(12): 2], live: false)
+        XCTAssertEqual(merged.map { $0.day }, [d(1), d(5), d(8), d(12)])
+        XCTAssertEqual(merged.map { $0.value }, [2, 3, 4, 2])
+        // 当场读到的覆盖同一天表上读的
+        let live = RestBalanceHistory.merge(merged, [d(12): 5], live: true)
+        XCTAssertEqual(live.last?.value, 5)
+        XCTAssertEqual(live.last?.live, true)
+        // 以前几周每个人的数字都一样：是现在的数字，不当历史
+        let flat: [String: [DayKey: Int]] = ["甲": [d(1): 3, d(20): 3], "乙": [d(1): 1, d(20): 1], "丙": [d(2): 0, d(18): 0]]
+        XCTAssertTrue(RestBalanceHistory.looksLikeSnapshot(flat))
+        XCTAssertFalse(RestBalanceHistory.looksLikeSnapshot(flat.merging(["丁": [d(1): 2, d(20): 4]]) { a, _ in a }))
 
         // 说明：5 日 2→3（前面 3 日国庆遥测），12 日 3→2（9 日调休）；最新的在前
-        let steps = RestBalanceHistory.steps(points: [(d(1), 2), (d(5), 3), (d(12), 2)],
+        let steps = RestBalanceHistory.steps(points: [(d(1), 2, true), (d(5), 3, false), (d(12), 2, true)],
                                              history: [d(3): "遥测", d(9): "调休", d(10): "组A"], matcher: m, calendar: cal)
         XCTAssertEqual(steps.map(\.day), [d(12), d(5)])
         XCTAssertEqual(steps.map(\.delta), [-1, 1])

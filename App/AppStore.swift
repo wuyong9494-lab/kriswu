@@ -257,6 +257,12 @@ struct SyncLogEntry: Codable, Hashable {
 struct RestPoint: Codable, Hashable {
     var day: DayKey
     var value: Int
+    /// false = 从以前几周的表上读的；nil / true = 同步时当场读到的
+    var live: Bool? = nil
+
+    var point: RestBalanceHistory.Point { (day, value, live ?? true) }
+    init(day: DayKey, value: Int, live: Bool? = nil) { self.day = day; self.value = value; self.live = live }
+    init(_ p: RestBalanceHistory.Point) { self.init(day: p.day, value: p.value, live: p.live ? nil : false) }
 }
 
 struct ChangeLogEntry: Codable, Hashable {
@@ -952,15 +958,15 @@ final class AppStore: ObservableObject {
 
     /// 电脑版周表上每天的待休天数（往前翻的几周）补进待休记录，用来说明数字是怎么变的。
     func mergeRestHistory(_ byDay: [String: [DayKey: Int]]) {
-        guard !byDay.isEmpty else { return }
-        var s = settings
         let today = DayKey.today
-        for (name, days) in byDay {
-            // 以后几周表上的数字还没发生，不记
-            let past = days.filter { $0.key <= today }
-            guard !past.isEmpty else { continue }
-            let old = (s.restHistory[name] ?? []).map { (day: $0.day, value: $0.value) }
-            s.restHistory[name] = RestBalanceHistory.merge(old, past).map { RestPoint(day: $0.day, value: $0.value) }
+        // 以后几周表上的数字还没发生，不记
+        let past = byDay.mapValues { $0.filter { $0.key <= today } }.filter { !$0.value.isEmpty }
+        // 每个人以前几周的数字都和现在一样：网站显示的是现在的数字，不当历史用
+        guard !past.isEmpty, !RestBalanceHistory.looksLikeSnapshot(past) else { return }
+        var s = settings
+        for (name, days) in past {
+            let old = (s.restHistory[name] ?? []).map(\.point)
+            s.restHistory[name] = RestBalanceHistory.merge(old, days, live: false).map { RestPoint($0) }
         }
         settings = s
     }
@@ -971,8 +977,8 @@ final class AppStore: ObservableObject {
         var s = settings
         let today = DayKey.today
         for (name, value) in new {
-            let old = (s.restHistory[name] ?? []).filter { $0.day <= today }.map { (day: $0.day, value: $0.value) }
-            s.restHistory[name] = RestBalanceHistory.merge(old, [today: value]).map { RestPoint(day: $0.day, value: $0.value) }
+            let old = (s.restHistory[name] ?? []).filter { $0.day <= today }.map(\.point)
+            s.restHistory[name] = RestBalanceHistory.merge(old, [today: value], live: true).map { RestPoint($0) }
         }
         s.restBalance.merge(new) { _, n in n }
         s.restBalanceUpdated = Date()

@@ -258,8 +258,8 @@ struct WorkloadDetailView: View {
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let rest = store.settings.restBalance[name] {
-                ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
+                if let rest = store.settings.restBalance[name] {
                     NavigationLink {
                         RestTrendView(name: name)
                     } label: {

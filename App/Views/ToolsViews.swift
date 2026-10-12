@@ -438,7 +438,7 @@ struct RestStepsSection: View {
     let name: String
 
     var body: some View {
-        let points = (store.settings.restHistory[name] ?? []).map { (day: $0.day, value: $0.value) }
+        let points = (store.settings.restHistory[name] ?? []).map(\.point)
         let steps = RestBalanceHistory.steps(points: points, history: store.roster[name] ?? [:],
                                              matcher: store.matcher, calendar: .app)
         Section {
