@@ -208,6 +208,8 @@ enum ScreenCatalog {
         case "worklog": WorkLogView()
         case "manager": ManagerHomeView()
         case "onboarding": OnboardingView()
+        case "profiles": PeopleProfilesView()
+        case "rosterlog": RosterLogView()
         case "role": RoleView()
         case "patterns": SchedulePatternsView()
         case "holidays": HolidaysView()
