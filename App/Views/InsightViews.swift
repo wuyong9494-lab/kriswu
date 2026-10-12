@@ -74,25 +74,77 @@ struct DataCheckView: View {
 
 struct WorkloadRulesView: View {
     @EnvironmentObject private var store: AppStore
+    /// 改动从哪天起生效；关掉「只改以后」就所有日子都按新规则重算
+    @State private var effective = Date()
+    @State private var onlyFuture = true
+
+    /// 改规则：只改以后的话，effective 以前按原来的规则算
+    private func rule(_ keyPath: WritableKeyPath<WorkloadRules, Bool>) -> Binding<Bool> {
+        Binding {
+            store.settings.workloadRules[keyPath: keyPath]
+        } set: { value in
+            var new = store.settings.workloadRules
+            new[keyPath: keyPath] = value
+            apply(new)
+        }
+    }
+
+    private func apply(_ new: WorkloadRules) {
+        var s = store.settings
+        if onlyFuture {
+            s.ruleHistory = RuleVersion.adding(s.ruleHistory, current: s.workloadRules,
+                                               changeFrom: DayKey(date: effective, calendar: .app))
+        }
+        s.workloadRules = new
+        store.settings = s
+    }
 
     var body: some View {
         Form {
             if !store.canEdit { Section { ReadOnlyNotice() } }
             Section {
-                Toggle("工作日没排岗位、也没写休息算上班", isOn: $store.settings.workloadRules.blankWorkdayIsWork)
-                Toggle("调度只算排班表上有名字的日子", isOn: $store.settings.workloadRules.dispatchScheduleOnly)
+                Toggle("只改以后，以前的日子还按原来的规则", isOn: $onlyFuture)
+                if onlyFuture {
+                    DatePicker("从这天起生效", selection: $effective, displayedComponents: .date)
+                }
+            } header: {
+                Text("改动生效时间")
             } footer: {
-                Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。轮不轮组别按最近三个月组别是否占一半以上自动判断。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。第二项关掉后，调度也按第一项算。调度的人 = 最近三个月一半以上排的是调度的人，偶尔顶几次调度的不算。")
+                Text("单位规则变了时用：比如从下个月 1 号起换算法，以前月份的统计不受影响。关掉后所有日子都按新规则重算。")
             }
             Section {
-                Toggle("节假日值完遥测的第二天没写休息算工作量", isOn: $store.settings.workloadRules.blankHolidayAfterDutyIsRest)
-                Toggle("节假日值完遥测后写了休息也算工作量", isOn: $store.settings.workloadRules.holidayDutyRestCounts)
+                Toggle("工作日没排岗位、也没写休息算上班", isOn: rule(\.blankWorkdayIsWork))
+                Toggle("调度只算排班表上有名字的日子", isOn: rule(\.dispatchScheduleOnly))
+            } footer: {
+                Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班自动判断。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
+            }
+            Section {
+                Toggle("节假日值完遥测的第二天没写休息算工作量", isOn: rule(\.blankHolidayAfterDutyIsRest))
+                Toggle("节假日值完遥测后写了休息也算工作量", isOn: rule(\.holidayDutyRestCounts))
             } header: {
                 Text("休息")
             } footer: {
                 Text("默认：网站上写了休息、调休、请假的，不管节假日还是平时都不算工作量；出差算工作量。")
             }
+            if !store.settings.ruleHistory.isEmpty {
+                Section {
+                    ForEach(Array(store.settings.ruleHistory.enumerated()), id: \.offset) { _, v in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(v.until.dateText) 以前").font(.subheadline.weight(.semibold))
+                            Text(describe(v.rules)).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Button("清除历史，所有日子都按现在的规则", role: .destructive) { store.settings.ruleHistory = [] }
+                } header: {
+                    Text("以前的规则")
+                }
+            }
             Section {
+                NavigationLink {
+                    PeopleProfilesView()
+                } label: {
+                    LabeledContent("人员档案", value: "\(store.settings.profiles.count) 人已建")
+                }
                 NavigationLink {
                     RotationMembersView()
                 } label: {
@@ -106,13 +158,20 @@ struct WorkloadRulesView: View {
                 Text("在每个人的每日明细里长按某一天可以手动改。")
             }
             Section {
-                Button("恢复默认规则") { store.settings.workloadRules = WorkloadRules() }
+                Button("恢复默认规则") { apply(WorkloadRules()) }
             }
         }
         .disabled(!store.canEdit)
         .appList()
         .navigationTitle("工作量规则")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func describe(_ r: WorkloadRules) -> String {
+        [r.blankWorkdayIsWork ? "没排岗位算上班" : "没排岗位不算上班",
+         r.dispatchScheduleOnly ? "调度只按排班" : "调度也按上一条",
+         r.blankHolidayAfterDutyIsRest ? "节假日值班第二天没写算工作量" : "节假日值班第二天没写不算",
+         r.holidayDutyRestCounts ? "节假日值班后写了休息也算" : "写了休息不算"].joined(separator: "，")
     }
 }
 

@@ -459,6 +459,7 @@ struct RestStepsSection: View {
         let points = (store.settings.restHistory[name] ?? []).map(\.point)
         let steps = RestBalanceHistory.steps(points: points, history: store.roster[name] ?? [:],
                                              matcher: store.matcher, calendar: .app)
+        let audit = store.restBalanceAudit()
         Section {
             if steps.isEmpty {
                 Text(points.isEmpty ? "还没有记录。" : "从 \(points[0].day.dateText) 起一直是 \(points[0].value) 天，没变过。")
@@ -476,6 +477,15 @@ struct RestStepsSection: View {
                             .foregroundStyle(step.delta > 0 ? Color.orange : Color.green)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background((step.delta > 0 ? Color.orange : Color.green).opacity(0.15), in: Capsule())
+                    }
+                    // 待休对账：按反推的规律这次应该变多少
+                    if let audit {
+                        let expected = RestBalanceAudit.expectedChange(store.roster[name] ?? [:], from: step.since, to: step.day,
+                                                                       rule: audit.rule, matcher: store.matcher, calendar: .app)
+                        Label(expected == step.delta ? "和规律一致" : "按规律应该 \(expected > 0 ? "+" : "")\(expected)，对不上",
+                              systemImage: expected == step.delta ? "checkmark.circle" : "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(expected == step.delta ? DS.Palette.success : DS.Palette.warning)
                     }
                     if step.events.isEmpty {
                         Text("\(step.since.dateText) 以来网站上没排遥测、休息、请假（可能是领导直接调整的）")

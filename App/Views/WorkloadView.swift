@@ -14,6 +14,8 @@ struct WorkloadView: View {
         [
             .init(title: "均衡分析", icon: "scalemass.fill", color: .indigo, destination: AnyView(FairnessView())),
             .init(title: "全年统计", icon: "calendar", color: .blue, destination: AnyView(YearStatsView())),
+            .init(title: "人员档案", icon: "person.text.rectangle", color: .blue, destination: AnyView(PeopleProfilesView())),
+            .init(title: "变动历史", icon: "clock.arrow.circlepath", color: .orange, destination: AnyView(RosterLogView())),
             .init(title: "排班规律", icon: "wand.and.stars", color: .pink, destination: AnyView(SchedulePatternsView())),
             .init(title: "遥测预测", icon: "antenna.radiowaves.left.and.right", color: .teal, destination: AnyView(DutyForecastView())),
             .init(title: "数据核对", icon: "checkmark.shield.fill", color: .green, destination: AnyView(DataCheckView())),
@@ -216,18 +218,27 @@ struct WorkloadDetailView: View {
     let days: [DayKey]
 
     var body: some View {
-        let kinds = WorkloadCounter.kinds(of: store.roster[name] ?? [:], days: days, matcher: store.matcher,
-                                          rotating: store.isRotating(name, asOf: days.max()), name: name, calendar: .app)
+        let explained = WorkloadCounter.explained(of: store.roster[name] ?? [:], days: days, matcher: store.matcher,
+                                                  rotating: store.isRotating(name, asOf: days.max()), name: name, calendar: .app)
         List(days.reversed()) { day in
             let raw = store.roster[name]?[day]
             let holiday = ChinaHolidays.isHoliday(day)
-            let kind = kinds[day]
+            let kind = explained[day]?.kind
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(day.dateText)
                     Text(raw.map(store.matcher.displayName) ?? (holiday ? "网站上没排（法定假日）" : "网站上没排"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    // 为什么这样算、这条是从哪读来的
+                    if let reason = explained[day]?.reason {
+                        Text(reason).font(.caption2).foregroundStyle(DS.Palette.accent.opacity(0.9))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let p = store.provenance(name, day) {
+                        Text("来源：\(p.sourceTitle) · \(p.at.formatted(date: .numeric, time: .shortened))")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
                 }
                 Spacer()
                 if store.override(name, day) != nil {

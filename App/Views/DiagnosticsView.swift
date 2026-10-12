@@ -118,6 +118,9 @@ struct DiagnosticsView: View {
             Row(label: "已登记提醒", value: "\(pending) 条", ok: pending > 0),
             Row(label: "下一条", value: next.map { "\(fmt($0.date)) \($0.title)" } ?? "无", ok: next != nil),
             Row(label: "语音播报", value: s.voiceEnabled ? "开" : "关", ok: nil),
+            Row(label: "网站一般排班时间", value: PublishPattern.describe(s.publishTimes, calendar: .app) ?? "还在学（发现新排班 \(s.publishTimes.count) 次）",
+                ok: nil),
+            Row(label: "排班变动记录", value: "\(store.rosterLog.count) 条", ok: nil),
             Row(label: "网站改版自检", value: s.syncHealthWarning ?? "正常（已记 \(s.syncHealth.values.map(\.count).reduce(0, +)) 次）",
                 ok: s.syncHealthWarning == nil),
             Row(label: "同步到日历", value: s.calendarSync

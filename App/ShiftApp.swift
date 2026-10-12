@@ -31,7 +31,7 @@ struct ShiftApp: App {
                     store.autoBackupIfNeeded()
                 }
             case .background:
-                BackgroundRefresh.schedule(notBefore: store.nextWeChatReminder)
+                BackgroundRefresh.schedule(notBefore: store.nextBackgroundSync)
                 // 工作留痕的面容 ID 锁：退到后台就重新锁上
                 WorkLogStore.shared.unlocked = false
             default:

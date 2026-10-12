@@ -127,6 +127,16 @@ struct AppSettings: Codable, Equatable {
     var syncHealth: [String: [SyncHealth.Metrics]] = [:]
     var syncHealthWarning: String?
     var syncHealthWarnedDay: DayKey?
+    /// 人员档案（管理员确认过的角色、来走日期）
+    var profiles: [String: PersonProfile] = [:]
+    /// 规则改动历史（某天以前按当时的规则算）
+    var ruleHistory: [RuleVersion] = []
+    /// 读到过休息、请假的读取方式（说明带休息列）
+    var leaveSources: [String] = []
+    /// 网站排出新一周排班的时间（学网站一般什么时候排班）
+    var publishTimes: [Date] = []
+    /// 待休对账：已经提醒过的那次变化
+    var restLedgerNotified: String?
     /// 值遥测时在锁屏显示倒计时
     var liveActivity: Bool = true
     /// 工作量规则开关
@@ -233,6 +243,11 @@ struct AppSettings: Codable, Equatable {
         syncHealth = try c.decodeIfPresent([String: [SyncHealth.Metrics]].self, forKey: .syncHealth) ?? [:]
         syncHealthWarning = try c.decodeIfPresent(String.self, forKey: .syncHealthWarning)
         syncHealthWarnedDay = try c.decodeIfPresent(DayKey.self, forKey: .syncHealthWarnedDay)
+        profiles = try c.decodeIfPresent([String: PersonProfile].self, forKey: .profiles) ?? [:]
+        ruleHistory = try c.decodeIfPresent([RuleVersion].self, forKey: .ruleHistory) ?? []
+        leaveSources = try c.decodeIfPresent([String].self, forKey: .leaveSources) ?? []
+        publishTimes = try c.decodeIfPresent([Date].self, forKey: .publishTimes) ?? []
+        restLedgerNotified = try c.decodeIfPresent(String.self, forKey: .restLedgerNotified)
         // 老用户（已经填过网址）不再弹向导
         let savedURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
         onboardingDone = try c.decodeIfPresent(Bool.self, forKey: .onboardingDone) ?? !savedURL.isEmpty
@@ -359,6 +374,7 @@ final class AppStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             guard settings != oldValue else { return }
+            workloadCache = [:]
             // 不是管理员：排班数据改不了（同步自动更新的不受影响）
             if !canEdit {
                 var fixed = settings
@@ -369,6 +385,8 @@ final class AppStore: ObservableObject {
                 fixed.manualGroupNotes = oldValue.manualGroupNotes
                 fixed.scheduleOnlyMembers = oldValue.scheduleOnlyMembers
                 fixed.shiftTypes = oldValue.shiftTypes
+                fixed.profiles = oldValue.profiles
+                fixed.ruleHistory = oldValue.ruleHistory
                 if fixed != settings { settings = fixed }
                 guard settings != oldValue else { return }
             }
@@ -379,7 +397,8 @@ final class AppStore: ObservableObject {
             if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
                 || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides
                 || settings.accentTheme != oldValue.accentTheme
-                || settings.voiceIdentifier != oldValue.voiceIdentifier || settings.voiceRate != oldValue.voiceRate {
+                || settings.voiceIdentifier != oldValue.voiceIdentifier || settings.voiceRate != oldValue.voiceRate
+                || settings.profiles != oldValue.profiles || settings.ruleHistory != oldValue.ruleHistory {
                 applyCustomHolidays()
             }
             save()
@@ -387,7 +406,10 @@ final class AppStore: ObservableObject {
         }
     }
     @Published private(set) var schedule: [DayKey: String] {
-        didSet { dutyTurnCache = nil }
+        didSet {
+            dutyTurnCache = nil
+            workloadCache = [:]
+        }
     }
     /// 已经取到过结果的日子：有排班的显示班次，没排班的显示「未排班」；不在这里的日子还没有数据
     @Published private(set) var covered: Set<DayKey>
@@ -396,6 +418,7 @@ final class AppStore: ObservableObject {
         didSet {
             publishedDays = Self.published(in: roster, matcher: matcher)
             dutyTurnCache = nil
+            workloadCache = [:]
         }
     }
     /// 网站上已经正式排了班的日子：这一天有人排了组别（组A–E）或遥测。
@@ -420,6 +443,44 @@ final class AppStore: ObservableObject {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("roster.json")
     }()
+
+    private static let sourcesURL: URL = {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("roster-sources.json")
+    }()
+    private static let logURL: URL = {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("roster-log.json")
+    }()
+
+    /// 每条全员排班的来源（从哪读的、什么时候）
+    private(set) var rosterSources: RosterSources = AppStore.loadSources()
+    /// 排班变动历史（网站上谁哪天的岗位变了），最近 3000 条
+    @Published private(set) var rosterLog: [RosterEdit] = AppStore.loadLog()
+
+    private static func loadSources() -> RosterSources {
+        guard let data = try? Data(contentsOf: sourcesURL),
+              let raw = try? JSONDecoder().decode([String: [String: Provenance]].self, from: data) else { return [:] }
+        return raw.mapValues { days in
+            Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+
+    private static func loadLog() -> [RosterEdit] {
+        guard let data = try? Data(contentsOf: logURL) else { return [] }
+        return (try? JSONDecoder().decode([RosterEdit].self, from: data)) ?? []
+    }
+
+    private func saveSourcesAndLog() {
+        if Self.isDemo { return }
+        let raw = rosterSources.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) }
+        if let data = try? JSONEncoder().encode(raw) {
+            try? data.write(to: Self.sourcesURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
+        if let data = try? JSONEncoder().encode(rosterLog) {
+            try? data.write(to: Self.logURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
+    }
 
     private static func loadRoster() -> Roster {
         guard let data = try? Data(contentsOf: rosterURL),
@@ -539,6 +600,8 @@ final class AppStore: ObservableObject {
         ChinaHolidays.customOff = Set(settings.customHolidayOff)
         ChinaHolidays.customWork = Set(settings.customHolidayWork)
         WorkloadCounter.rules = settings.workloadRules
+        WorkloadCounter.ruleHistory = settings.ruleHistory
+        WorkloadCounter.profiles = settings.profiles
         WorkloadCounter.overrides = settings.workloadOverrides.mapValues { days in
             Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
         }
@@ -933,7 +996,7 @@ final class AppStore: ObservableObject {
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
             await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步")
-            mergeRoster(outcome.roster)
+            mergeRoster(outcome.roster, source: "sync")
             if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
             await notifyRestWarnings()
             updateRestBalance(outcome.restBalance)
@@ -1049,7 +1112,7 @@ final class AppStore: ObservableObject {
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
         await checkSyncHealth(result.roster, source: weeksBack > 9 ? "desktop-long" : "desktop", title: "电脑版页面")
-        mergeRoster(result.roster)
+        mergeRoster(result.roster, source: "desktop")
         mergeRestHistory(result.restByDay)
         await notifyRestWarnings()
         updateRestBalance(result.restBalance)
@@ -1197,7 +1260,41 @@ final class AppStore: ObservableObject {
         s.restBalance.merge(new) { _, n in n }
         s.restBalanceUpdated = Date()
         settings = s
-        Task { await notifyRestIfNeeded() }
+        Task {
+            await notifyRestIfNeeded()
+            await reconcileMyRestBalance()
+        }
+    }
+
+    /// 待休对账：我的待休这次变了，按反推的规律算一遍应该变多少，对不上就提醒一次
+    func reconcileMyRestBalance() async {
+        guard !Self.isDemo, let me = myRosterName, let audit = restBalanceAudit(),
+              let points = settings.restHistory[me], points.count >= 2 else { return }
+        let prev = points[points.count - 2], cur = points[points.count - 1]
+        let key = "\(cur.day)|\(cur.value)"
+        guard settings.restLedgerNotified != key else { return }
+        let expected = RestBalanceAudit.expectedChange(roster[me] ?? [:], from: prev.day, to: cur.day, rule: audit.rule,
+                                                       matcher: matcher, calendar: .app)
+        let observed = cur.value - prev.value
+        guard expected != observed else { return }
+        settings.restLedgerNotified = key
+        func signed(_ n: Int) -> String { n > 0 ? "+\(n)" : "\(n)" }
+        await NotificationService.notifyNow(id: "rest-ledger", title: "待休对不上",
+                                            body: "网站上你的待休从 \(prev.value) 变成 \(cur.value) 天（\(signed(observed))），按规律（\(audit.rule.text)）应该是 \(signed(expected))。去网站上核对一下。")
+    }
+
+    /// 没建档案时自动判断的角色
+    func suggestedRole(_ name: String) -> PersonRole {
+        PersonDirectory.suggest(name: name, history: roster[name] ?? [:], matcher: matcher)
+    }
+
+    /// 某人某天这条排班的来源
+    func provenance(_ name: String, _ day: DayKey) -> Provenance? { rosterSources[name]?[day] }
+
+    /// 下次后台同步最早什么时候：微信提醒前、网站常排班的时段前（取较早的）
+    var nextBackgroundSync: Date? {
+        let hot = PublishPattern.nextHot(after: Date(), times: settings.publishTimes, calendar: .app)
+        return [nextWeChatReminder, hot].compactMap { $0 }.min()
     }
 
     /// 昨天值了遥测、现在是今天 8:30 到设定的补觉结束时间之间
@@ -1299,14 +1396,29 @@ final class AppStore: ObservableObject {
 
     /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），
     /// 但不带休息列的读取不会冲掉之前读到的休息、请假（见 RosterExtractor.replacingDays）。
-    func mergeRoster(_ new: Roster) {
+    /// source：「sync」同步、「desktop」电脑版周表。每条记下来源；不带休息列的读取方式不会冲掉以前读到的休息、请假。
+    func mergeRoster(_ new: Roster, source: String = "sync") {
         guard !new.isEmpty else { return }
+        // 这种读取方式带不带休息列：读到过休息、请假就记住
+        var s = settings
+        let carries = s.leaveSources.contains(source) || RosterMerger.hasLeave(new, matcher: matcher)
+        if carries && !s.leaveSources.contains(source) { s.leaveSources.append(source) }
+        let lastPublished = publishedDays.max()
         // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
-        let merged = RosterExtractor.replacingDays(of: roster, with: new, matcher: matcher)
+        let result = RosterMerger.merge(old: roster, oldSources: rosterSources, new: new, source: source, at: Date(),
+                                        carriesLeave: carries, matcher: matcher)
         // 留一年多，全年统计用
         let cutoff = DayKey.today.adding(days: -400)
-        roster = merged.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+        roster = result.roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+        rosterSources = result.sources.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+        if !result.edits.isEmpty { rosterLog = Array((rosterLog + result.edits).suffix(3000)) }
+        // 网站排出了新的一周：记下时间，学网站一般什么时候排班
+        if let before = lastPublished, let after = publishedDays.max(), after > before.adding(days: 3) {
+            s.publishTimes = Array((s.publishTimes + [Date()]).suffix(40))
+        }
+        if s != settings { settings = s }
         saveRoster()
+        saveSourcesAndLog()
         // 已排班的日子变了，「未排班」提醒也要跟着变
         requestReschedule()
     }
@@ -1353,7 +1465,7 @@ final class AppStore: ObservableObject {
 
     /// 系统在后台唤醒 App 时调用（时间由 iOS 决定，不保证准时）。
     func backgroundRefresh() async {
-        BackgroundRefresh.schedule(notBefore: nextWeChatReminder)   // 先约好下一次，万一这次被系统打断
+        BackgroundRefresh.schedule(notBefore: nextBackgroundSync)   // 先约好下一次，万一这次被系统打断
         settings.lastBackgroundWake = Date()
         await withTaskCancellationHandler {
             // 先发到点的微信（只需要几秒），再同步；同步用完后台时间也不耽误微信
@@ -1369,7 +1481,7 @@ final class AppStore: ObservableObject {
             // 系统收回后台时间：让正在进行的同步马上停下（等待中的网页会抛出取消），不被系统强行杀掉
             Task { @MainActor in AppStore.shared.cancelRunningSync() }
         }
-        BackgroundRefresh.schedule(notBefore: nextWeChatReminder)
+        BackgroundRefresh.schedule(notBefore: nextBackgroundSync)
     }
 
     func cancelRunningSync() { syncTask?.cancel() }
@@ -1694,7 +1806,20 @@ final class AppStore: ObservableObject {
 
     /// 某月每个人的工作量（来自全员排班），按上班天数从多到少。
     /// month 为 nil 时统计全年（App 里留着的全员排班，最多一年多）
+    /// 统计结果缓存：全员排班、我的排班、设置变了就清掉（全年统计不用每次重算）
+    private var workloadCache: [String: Workload] = [:]
+
+    func invalidateWorkloadCache() { workloadCache = [:] }
+
     func workload(year: Int, month: Int?) -> Workload {
+        let key = "\(year)-\(month ?? 0)-\(DayKey.today)"
+        if let cached = workloadCache[key] { return cached }
+        let value = computeWorkload(year: year, month: month)
+        workloadCache[key] = value
+        return value
+    }
+
+    private func computeWorkload(year: Int, month: Int?) -> Workload {
         // 只统计到今天：网站上提前排好的以后的日子还没上，不算
         let today = DayKey.today
         let days = publishedDays.filter { $0.year == year && (month == nil || $0.month == month) && $0 <= today }.sorted()

@@ -36,7 +36,7 @@ struct DesktopNotesBrowser: View {
                             guard let html = await model.html() else { return }
                             // 顺便存下这一页周表里的全员排班
                             let weekRoster = RosterExtractor.fromDesktopHTML(html, reference: .today, matcher: store.matcher)
-                            store.mergeRoster(weekRoster)
+                            store.mergeRoster(weekRoster, source: "desktop")
                             store.updateRestBalance(RosterExtractor.restBalances(HTMLText.toText(html), matcher: store.matcher))
                             let notes = SyncService.groupNotes(fromHTML: html, reference: .today)
                             if notes.isEmpty {
