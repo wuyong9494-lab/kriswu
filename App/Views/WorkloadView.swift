@@ -50,9 +50,9 @@ struct WorkloadView: View {
                 .buttonStyle(.plain)
                 if let first = report.days.first, let last = report.days.last {
                     HStack(spacing: DS.Space.xs) {
-                        Chip(text: "\(report.days.count) 天", icon: "calendar")
+                        Chip(text: "\(report.days.count) 天", color: .secondary, icon: "calendar")
                         Chip(text: "\(first.month)/\(first.day) – \(last.month)/\(last.day)", color: .secondary)
-                        Chip(text: "\(report.people.count) 人", color: DS.Palette.info, icon: "person.2.fill")
+                        Chip(text: "\(report.people.count) 人", color: .secondary, icon: "person.2")
                     }
                 }
                 if !report.people.isEmpty {

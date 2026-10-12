@@ -190,13 +190,12 @@ struct TodayHero: View {
                 // 顶边高光 + 底部一点暗，像一块有厚度的玻璃
                 .overlay(shape.strokeBorder(LinearGradient(colors: [Color.white.opacity(0.45), Color.white.opacity(0.05)],
                                                             startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                .overlay(alignment: .topTrailing) {
+                // 右下角一个很淡的大图标水印，不抢文字
+                .overlay(alignment: .bottomTrailing) {
                     Image(systemName: display?.symbol ?? "calendar")
-                        .font(.system(size: 120, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.08))
-                        .rotationEffect(.degrees(-12))
-                        .offset(x: 24, y: -16)
-                        .clipped()
+                        .font(.system(size: 108, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.07))
+                        .offset(x: 18, y: 26)
                 }
                 .clipShape(shape)
         }

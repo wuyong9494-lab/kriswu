@@ -558,7 +558,7 @@ struct ToolGrid: View {
                     selection = i
                 } label: {
                     VStack(spacing: DS.Space.xs) {
-                        IconBadge(icon: items[i].icon, color: items[i].color, size: 44, filled: true)
+                        IconBadge(icon: items[i].icon, size: 44)
                         Text(items[i].title).font(DS.Font.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
                     }
                     .frame(maxWidth: .infinity)
