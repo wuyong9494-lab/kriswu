@@ -1,0 +1,161 @@
+import Foundation
+
+/// 换班账本里的一条：某天谁替谁上了班。
+/// effect：+1 他欠我一天（我替他上了），-1 我欠他一天（他替我上了），0 当天对换、两清。
+public struct SwapRecord: Codable, Hashable, Identifiable {
+    public var id: UUID
+    public var detected: Date
+    public var day: DayKey
+    public var person: String
+    /// 这天我原来 → 现在
+    public var myOld: String
+    public var myNew: String
+    public var effect: Int
+    /// 已经还清（手动标记）
+    public var settled: Bool
+    /// 手动添加的
+    public var manual: Bool
+
+    public init(id: UUID = UUID(), detected: Date = Date(), day: DayKey, person: String, myOld: String, myNew: String,
+                effect: Int, settled: Bool = false, manual: Bool = false) {
+        self.id = id
+        self.detected = detected
+        self.day = day
+        self.person = person
+        self.myOld = myOld
+        self.myNew = myNew
+        self.effect = effect
+        self.settled = settled
+        self.manual = manual
+    }
+
+    public var summary: String {
+        switch effect {
+        case 1: return "我替\(person)上了\(myNew)（\(person)欠我一天）"
+        case -1: return "\(person)替我上了\(myOld)（我欠\(person)一天）"
+        default: return "和\(person)对换：我\(myOld)→\(myNew)"
+        }
+    }
+}
+
+public enum SwapLedger {
+    static func key(_ s: String) -> String { s.filter { !$0.isWhitespace }.uppercased() }
+
+    /// 真正要上的岗位（不含休息、请假、未排班）
+    static func posts(_ raw: String?, matcher: ShiftMatcher) -> [String] {
+        guard let raw else { return [] }
+        return matcher.displayName(raw).split(separator: "+").map(String.init)
+            .filter { matcher.match($0)?.id != "off" && $0 != "未排班" && $0 != "无分工" && !$0.contains("出差") }
+    }
+
+    /// 从一处排班变动推断换班：我丢掉的岗位现在是谁上（他替我），我新接的岗位原来是谁的（我替他）。
+    /// 两件事是同一个人就是当天对换。只在这一天的全员排班是这次刚读到的时候（fresh）才判断。
+    public static func detect(_ change: ScheduleChange, before: Roster, after: Roster, fresh: Bool,
+                              matcher: ShiftMatcher, isMe: (String) -> Bool, now: Date = Date()) -> [SwapRecord] {
+        guard fresh else { return [] }
+        let day = change.day
+        let oldPosts = posts(change.old, matcher: matcher), newPosts = posts(change.new, matcher: matcher)
+        let gained = newPosts.filter { g in !oldPosts.contains { key($0) == key(g) } }
+        let lost = oldPosts.filter { g in !newPosts.contains { key($0) == key(g) } }
+        func has(_ name: String, _ post: String, in r: Roster) -> Bool {
+            posts(r[name]?[day], matcher: matcher).contains { key($0) == key(post) }
+        }
+        let people = Set(before.keys).union(after.keys).filter { !isMe($0) }
+        // 替我上的：现在有我丢掉的岗位，之前没有
+        let coveredMe = Set(people.filter { p in lost.contains { has(p, $0, in: after) && !has(p, $0, in: before) } })
+        // 我替他的：之前有我新接的岗位，现在没有
+        let iCovered = Set(people.filter { p in gained.contains { has(p, $0, in: before) && !has(p, $0, in: after) } })
+        let myOld = change.old.map(matcher.displayName) ?? "没排班"
+        let myNew = change.new.map(matcher.displayName) ?? "没排班"
+        return coveredMe.union(iCovered).sorted().map { p in
+            let effect = coveredMe.contains(p) && iCovered.contains(p) ? 0 : (coveredMe.contains(p) ? -1 : 1)
+            return SwapRecord(detected: now, day: day, person: p, myOld: myOld, myNew: myNew, effect: effect)
+        }
+    }
+
+    /// 每个人的账：正数他欠我几天，负数我欠他几天（已还清的不算）
+    public static func balances(_ records: [SwapRecord]) -> [String: Int] {
+        var result: [String: Int] = [:]
+        for r in records where !r.settled { result[r.person, default: 0] += r.effect }
+        return result
+    }
+
+    /// 加入新记录：同一天、同一个人、同样结果的不重复记。
+    public static func merge(_ new: [SwapRecord], into records: inout [SwapRecord]) {
+        for r in new where !records.contains(where: { $0.day == r.day && $0.person == r.person && $0.effect == r.effect }) {
+            records.append(r)
+        }
+        records.sort { ($0.day, $0.detected) > ($1.day, $1.detected) }
+    }
+}
+
+/// 换班助手：我想把某天的班换出去，谁能替我。
+public struct SwapCandidate: Equatable {
+    public var name: String
+    /// 他那天在干什么（没排班、休息、调休…）
+    public var thatDay: String
+    /// 他欠我几天（负数我欠他）
+    public var owesMe: Int
+    /// 以前和我换过几次
+    public var pastSwaps: Int
+    /// 这个月（到这天为止）他上了几天班
+    public var recentWork: Int
+    /// 以后两周里他有班、我正好没班的日子（可以换回来）
+    public var returnDays: [DayKey]
+    /// 为什么排在前面
+    public var reasons: [String]
+}
+
+public enum SwapFinder {
+    /// day：要换出去的那天；myPost：我那天的岗位；mine：我的排班；roster：全员排班；records：换班账本。
+    public static func candidates(day: DayKey, myPost: String, mine: [DayKey: String], roster: Roster,
+                                  records: [SwapRecord], matcher: ShiftMatcher, isMe: (String) -> Bool,
+                                  calendar: Calendar = .current) -> [SwapCandidate] {
+        let wantDuty = WorkloadCounter.isDuty(matcher.displayName(myPost))
+        let wantGroup = matcher.displayName(myPost).split(separator: "+").contains { GroupNotes.isGroup(String($0)) }
+        let balances = SwapLedger.balances(records)
+        let window = day.adding(days: -14, calendar: calendar)...day.adding(days: 14, calendar: calendar)
+        let monthStart = DayKey(year: day.year, month: day.month, day: 1)
+        func free(_ raw: String?) -> Bool { SwapLedger.posts(raw, matcher: matcher).isEmpty && !(raw ?? "").contains("假") }
+        func isDutyDay(_ raw: String?) -> Bool { raw.map { WorkloadCounter.isDuty(matcher.displayName($0)) } ?? false }
+
+        var result: [SwapCandidate] = []
+        for (name, history) in roster where !isMe(name) {
+            // 最近两周在网站上出现过（调走的人不算）
+            guard history.keys.contains(where: window.contains) else { continue }
+            let raw = history[day]
+            // 那天要有空：没排岗位，也不是请假、出差
+            guard free(raw), !(raw ?? "").contains("出差") else { continue }
+            // 前一天值了遥测的在调休，不打扰
+            guard !isDutyDay(history[day.adding(days: -1, calendar: calendar)]) else { continue }
+            let all = history.values.map { matcher.displayName($0) }
+            // 遥测找值过遥测的人，组别找轮过组别的人
+            if wantDuty && !all.contains(where: WorkloadCounter.isDuty) { continue }
+            if wantGroup && !all.contains(where: { $0.split(separator: "+").contains { GroupNotes.isGroup(String($0)) } }) { continue }
+            // 我上遥测换给他：他第二天有班就会连上，不推荐
+            if wantDuty && !free(history[day.adding(days: 1, calendar: calendar)]) { continue }
+
+            let past = records.filter { $0.person == name }.count
+            let recent = (0...max(0, calendar.dateComponents([.day], from: monthStart.date(calendar: calendar, hour: 12),
+                                                              to: day.date(calendar: calendar, hour: 12)).day ?? 0))
+                .map { monthStart.adding(days: $0, calendar: calendar) }
+                .filter { !SwapLedger.posts(history[$0], matcher: matcher).isEmpty }.count
+            let back = (1...14).map { day.adding(days: $0, calendar: calendar) }
+                .filter { !free(history[$0]) && free(mine[$0]) && !isDutyDay(mine[$0.adding(days: -1, calendar: calendar)]) }
+            var reasons: [String] = []
+            let owes = balances[name] ?? 0
+            if owes > 0 { reasons.append("欠你 \(owes) 天") }
+            if owes < 0 { reasons.append("你欠他 \(-owes) 天") }
+            if past > 0 { reasons.append("换过 \(past) 次") }
+            if !back.isEmpty { reasons.append("可以换回来") }
+            result.append(SwapCandidate(name: name, thatDay: raw.map(matcher.displayName) ?? "没排班", owesMe: owes,
+                                        pastSwaps: past, recentWork: recent, returnDays: Array(back.prefix(3)),
+                                        reasons: reasons))
+        }
+        // 欠我的优先，其次换过的、能换回来的、这个月上班少的
+        return result.sorted {
+            ($0.owesMe, $0.pastSwaps, $0.returnDays.isEmpty ? 0 : 1, -$0.recentWork, $1.name)
+                > ($1.owesMe, $1.pastSwaps, $1.returnDays.isEmpty ? 0 : 1, -$1.recentWork, $0.name)
+        }
+    }
+}

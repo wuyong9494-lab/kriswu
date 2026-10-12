@@ -3,7 +3,7 @@ name: ShiftReminder
 options:
   bundleIdPrefix: com.kriswu
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "16.2"
   developmentLanguage: zh-Hans
 settings:
   base:

@@ -6,6 +6,7 @@ struct WorkloadView: View {
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
     @State private var reading = false
+    @State private var monthFile: URL?
 
     var body: some View {
         let report = store.workload(year: year, month: month)
@@ -36,6 +37,15 @@ struct WorkloadView: View {
                 Text(report.days.isEmpty
                      ? "这个月还没有全员排班数据。"
                      : "统计范围：已读到全员排班的 \(report.days.count) 天（\(report.days.first!.dateText) – \(report.days.last!.dateText)），只算到今天。网站上能看到的日子才算得进来；「值班」只算遥测；各组、调度等岗位算「日常班」；一直没有组别的日常班人员，工作日没排岗位也算日常班。轮班人员和调度，工作日网站上没给排岗位的算「没排班」，不算工作量。节假日里遥测后紧接着的休息是节假日值班换来的，算「值班调休」；平时的休息、调休（值班换来的、请假的）都算休息。「工作量」= 值班 + 值班调休 + 日常 + 出差；「节假日」是中秋、国庆、春节、清明、五一等法定假日里网站上没排任何岗位的天数；网站上写了休息、调休的算休息，周末没排岗位也算休息。调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+            }
+            Section {
+                NavigationLink { YearStatsView() } label: { Label("全年统计 / 导出表格", systemImage: "calendar") }
+                NavigationLink { DutyForecastView() } label: { Label("遥测轮转预测", systemImage: "antenna.radiowaves.left.and.right") }
+                NavigationLink { RestTrendView() } label: { Label("待休趋势", systemImage: "chart.line.uptrend.xyaxis") }
+                NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
+                if let monthFile {
+                    ShareLink(item: monthFile) { Label("导出本月表格（Excel 能打开）", systemImage: "tablecells") }
+                }
             }
             Section {
                 NavigationLink {
@@ -93,6 +103,7 @@ struct WorkloadView: View {
                 }
             }
         }
+        .task(id: "\(year)-\(month)-\(store.roster.count)") { monthFile = store.workloadCSVFile(year: year, month: month) }
         .navigationTitle("工作量统计")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

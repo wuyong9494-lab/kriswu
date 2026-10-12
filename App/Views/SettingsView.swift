@@ -39,6 +39,17 @@ struct SettingsView: View {
                         row("各组工作内容", icon: "list.bullet.rectangle", detail: groupNotesSummary)
                     }
                     NavigationLink {
+                        SwapLedgerView()
+                    } label: {
+                        row("换班账本", icon: "book.closed", detail: ledgerSummary)
+                    }
+                    NavigationLink {
+                        HolidaysView()
+                    } label: {
+                        row("法定节假日", icon: "calendar.badge.exclamationmark",
+                            detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
+                    }
+                    NavigationLink {
                         Form { displaySection }.navigationTitle("显示")
                     } label: {
                         row("显示", icon: "paintpalette", detail: store.settings.appearance.title)
@@ -91,6 +102,11 @@ struct SettingsView: View {
         if store.settings.sourceURL.isEmpty { return "未设置" }
         guard let last = store.settings.lastSync else { return "未同步" }
         return "同步于 " + last.formatted(date: .omitted, time: .shortened)
+    }
+
+    private var ledgerSummary: String {
+        let open = SwapLedger.balances(store.settings.swapRecords).filter { $0.value != 0 }
+        return open.isEmpty ? "两清" : "\(open.count) 人没还清"
     }
 
     private var groupNotesSummary: String {
@@ -192,6 +208,7 @@ struct SettingsView: View {
             }
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
+            Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
                 Button("试听") {

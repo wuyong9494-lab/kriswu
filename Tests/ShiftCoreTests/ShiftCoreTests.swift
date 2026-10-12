@@ -927,3 +927,112 @@ final class RegressionTests: XCTestCase {
     }
 }
 
+
+final class UpgradeTests: XCTestCase {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+    let m = ShiftMatcher(types: ShiftType.defaults)
+    let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }
+
+    func testLedgerDetectsSwaps() {
+        let isMe = { (n: String) in n == "我" }
+        // 15 日：我组A → 休息，乙接了组A（乙原来没排）→ 我欠乙
+        let before: Roster = ["我": [d(15): "组A"], "乙": [d(14): "组B"], "丙": [d(15): "组C"]]
+        let after: Roster = ["我": [d(15): "休息"], "乙": [d(14): "组B", d(15): "组A"], "丙": [d(15): "组C"]]
+        let r = SwapLedger.detect(ScheduleChange(day: d(15), old: "组A", new: "休息"), before: before, after: after,
+                                  fresh: true, matcher: m, isMe: isMe)
+        XCTAssertEqual(r.map(\.person), ["乙"])
+        XCTAssertEqual(r.first?.effect, -1)
+        // 当天对换：我组A ↔ 丙组C
+        let after2: Roster = ["我": [d(15): "组C"], "乙": [d(14): "组B"], "丙": [d(15): "组A"]]
+        let r2 = SwapLedger.detect(ScheduleChange(day: d(15), old: "组A", new: "组C"), before: before, after: after2,
+                                   fresh: true, matcher: m, isMe: isMe)
+        XCTAssertEqual(r2.map(\.person), ["丙"])
+        XCTAssertEqual(r2.first?.effect, 0)
+        // 我替丙上了组C（我原来没排）→ 丙欠我
+        let before3: Roster = ["我": [:], "丙": [d(16): "组C"]]
+        let after3: Roster = ["我": [d(16): "组C"], "丙": [d(16): "休息"]]
+        let r3 = SwapLedger.detect(ScheduleChange(day: d(16), old: nil, new: "组C"), before: before3, after: after3,
+                                   fresh: true, matcher: m, isMe: isMe)
+        XCTAssertEqual(r3.first?.effect, 1)
+        XCTAssertTrue(SwapLedger.detect(ScheduleChange(day: d(16), old: nil, new: "组C"), before: before3, after: after3,
+                                        fresh: false, matcher: m, isMe: isMe).isEmpty)
+        var records: [SwapRecord] = []
+        SwapLedger.merge(r + r3, into: &records)
+        SwapLedger.merge(r, into: &records)   // 重复的不再记
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(SwapLedger.balances(records), ["乙": -1, "丙": 1])
+        records[0].settled = true
+        XCTAssertEqual(SwapLedger.balances(records).values.reduce(0, +), records[1].effect)
+    }
+
+    func testSwapFinder() {
+        let isMe = { (n: String) in n == "我" }
+        // 15 日（周四）我遥测，想换出去
+        let roster: Roster = [
+            "我": [d(15): "遥测"],
+            "甲": [d(10): "遥测", d(15): "休息"],                 // 有空、值过遥测
+            "乙": [d(12): "遥测", d(15): "组A"],                  // 那天有班
+            "丙": [d(14): "遥测"],                                // 前一天遥测，在调休
+            "丁": [d(15): "休息", d(13): "组B"],                  // 没值过遥测
+            "戊": [d(11): "遥测", d(16): "组C"],                  // 第二天有班
+            "己": [d(9): "遥测", d(17): "组D"],                   // 有空，欠我一天，17 日有班我没班 → 可以换回来
+        ]
+        let records = [SwapRecord(day: d(1), person: "己", myOld: "", myNew: "组A", effect: 1)]
+        let c = SwapFinder.candidates(day: d(15), myPost: "遥测", mine: [d(15): "遥测"], roster: roster,
+                                      records: records, matcher: m, isMe: isMe, calendar: cal)
+        XCTAssertEqual(c.map(\.name), ["己", "甲"])
+        XCTAssertEqual(c.first?.returnDays, [d(17)])
+        XCTAssertTrue(c.first?.reasons.contains("欠你 1 天") ?? false)
+    }
+
+    func testDutyForecast() {
+        let roster: Roster = [
+            "甲": [d(1): "遥测", d(7): "遥测", d(13): "遥测"],   // 每 6 天，下次 19 日
+            "乙": [d(5): "遥测", d(20): "遥测"],                 // 已排好 20 日
+            "丙": [d(3): "组A"],
+        ]
+        let f = DutyForecaster.forecast(roster: roster, today: d(14), matcher: m, calendar: cal)
+        XCTAssertEqual(f.map(\.name), ["甲", "乙"])
+        XCTAssertEqual(f[0].predicted, d(19))
+        XCTAssertEqual(f[0].interval, 6)
+        XCTAssertEqual(f[1].scheduled, d(20))
+        XCTAssertEqual(f[1].last, d(5))
+    }
+
+    func testHolidayInputAndCustom() {
+        let r = HolidayInput.parse("""
+        2027-01-01 至 2027-01-03 元旦放假
+        2月6日至12日 春节
+        2027年2月14日（周日）上班
+        随便写的一行
+        """, reference: DayKey(year: 2027, month: 7, day: 1), calendar: cal)
+        XCTAssertEqual(r.off.count, 3 + 7)
+        XCTAssertEqual(r.off.first, DayKey(year: 2027, month: 1, day: 1))
+        XCTAssertEqual(r.off.last, DayKey(year: 2027, month: 2, day: 12))
+        XCTAssertEqual(r.work, [DayKey(year: 2027, month: 2, day: 14)])
+        XCTAssertEqual(r.skipped, ["随便写的一行"])
+
+        XCTAssertFalse(ChinaHolidays.knownYears.contains(2027))
+        ChinaHolidays.customOff = Set(r.off.map(\.description))
+        ChinaHolidays.customWork = Set(r.work.map(\.description))
+        defer { ChinaHolidays.customOff = []; ChinaHolidays.customWork = [] }
+        XCTAssertTrue(ChinaHolidays.knownYears.contains(2027))
+        XCTAssertTrue(ChinaHolidays.isHoliday(DayKey(year: 2027, month: 2, day: 8)))
+        XCTAssertFalse(ChinaHolidays.isWorkday(DayKey(year: 2027, month: 2, day: 8), calendar: cal))
+        XCTAssertTrue(ChinaHolidays.isWorkday(DayKey(year: 2027, month: 2, day: 14), calendar: cal))
+    }
+
+    func testCSV() {
+        var p = PersonWorkload(name: "张,三", dutyDays: 2, dutyRestDays: 0, regularDays: 3, offDays: 1, holidayDays: 0,
+                               tripDays: 1, holidayWorkedDays: 0, posts: ["遥测": 2, "组A": 3])
+        p.unassignedDays = 1
+        let csv = WorkloadCSV.make([p], restBalance: ["张,三": 4])
+        let lines = csv.split(separator: "\n")
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines[1].hasPrefix("\"张,三\",6,2,0,3,1,1,0,1,0,4,"), String(lines[1]))
+    }
+}

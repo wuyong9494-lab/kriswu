@@ -64,6 +64,19 @@ struct AppSettings: Codable, Equatable {
     var favorites: [String] = []
     /// 轮班人员（轮组别、遥测的人）：这些人和排过调度的人，工作日网站上没排岗位不算工作量
     var rotationMembers: [String] = []
+    /// 换班账本
+    var swapRecords: [SwapRecord] = []
+    /// 自己录入的节假日（yyyy-MM-dd）：放假的日子、调休上班的周末
+    var customHolidayOff: [String] = []
+    var customHolidayWork: [String] = []
+    /// 每个人待休天数的变化（只在数字变了时记一笔）
+    var restHistory: [String: [RestPoint]] = [:]
+    /// 我的待休攒到几天提醒一次（0 不提醒）
+    var restAlertThreshold: Int = 5
+    /// 上次提醒时的待休天数（再涨了才再提醒）
+    var restAlertNotified: Int?
+    /// 值遥测时在锁屏显示倒计时
+    var liveActivity: Bool = true
     /// 最近的排班变动（首页显示）
     var changeLog: [ChangeLogEntry] = []
     /// 已经提醒过「很久没同步成功」，同步成功后恢复
@@ -132,6 +145,13 @@ struct AppSettings: Codable, Equatable {
         weChatWeekSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
         favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
         rotationMembers = try c.decodeIfPresent([String].self, forKey: .rotationMembers) ?? []
+        swapRecords = try c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords) ?? []
+        customHolidayOff = try c.decodeIfPresent([String].self, forKey: .customHolidayOff) ?? []
+        customHolidayWork = try c.decodeIfPresent([String].self, forKey: .customHolidayWork) ?? []
+        restHistory = try c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory) ?? [:]
+        restAlertThreshold = try c.decodeIfPresent(Int.self, forKey: .restAlertThreshold) ?? 5
+        restAlertNotified = try c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
+        liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
         changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
         syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
         lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
@@ -162,6 +182,12 @@ struct SyncLogEntry: Codable, Hashable {
     var ok: Bool
     var message: String
     var seconds: Int
+}
+
+/// 某天的待休天数
+struct RestPoint: Codable, Hashable {
+    var day: DayKey
+    var value: Int
 }
 
 struct ChangeLogEntry: Codable, Hashable {
@@ -213,6 +239,9 @@ final class AppStore: ObservableObject {
             if settings.aliases != oldValue.aliases { settings.nextSyncIsBaseline = true }
             if settings.shiftTypes != oldValue.shiftTypes {
                 publishedDays = Self.published(in: roster, matcher: matcher)
+            }
+            if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork {
+                applyCustomHolidays()
             }
             save()
             requestReschedule()
@@ -304,6 +333,13 @@ final class AppStore: ObservableObject {
         }
         // init 里赋值不会触发 didSet，手动算一次
         publishedDays = Self.published(in: roster, matcher: ShiftMatcher(types: settings.shiftTypes))
+        applyCustomHolidays()
+    }
+
+    /// 把自己录入的节假日交给统计用的节假日表
+    func applyCustomHolidays() {
+        ChinaHolidays.customOff = Set(settings.customHolidayOff)
+        ChinaHolidays.customWork = Set(settings.customHolidayWork)
     }
 
     private static let rosterVersion = 3
@@ -494,6 +530,7 @@ final class AppStore: ObservableObject {
         await NotificationService.reschedule(local.plan(schedule: reminderSchedule, now: Date()), voice: settings.voiceEnabled)
         updateWidget()
         updateAppIcon()
+        DutyActivityManager.update(schedule: schedule, matcher: matcher, enabled: settings.liveActivity)
         if settings.calendarSync { CalendarSync.sync(schedule, matcher: matcher) }
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
         // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
@@ -644,6 +681,14 @@ final class AppStore: ObservableObject {
                 let body = ScheduleDiff.summary(changes, matcher: matcher, calendar: .app) {
                     self.swapDetail($0, before: rosterBefore, fresh: freshDays)
                 }
+                // 换班账本：谁替我上了、我替谁上了
+                var records = settings.swapRecords
+                for change in changes {
+                    SwapLedger.merge(SwapLedger.detect(change, before: rosterBefore, after: roster,
+                                                       fresh: freshDays.contains(change.day), matcher: matcher, isMe: isMe),
+                                     into: &records)
+                }
+                if records != settings.swapRecords { settings.swapRecords = Array(records.prefix(300)) }
                 // 首页「最近排班变动」总是记下；通知、微信看开关
                 settings.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + settings.changeLog).prefix(20))
                 if settings.notifyChanges {
@@ -737,8 +782,34 @@ final class AppStore: ObservableObject {
     /// 人名后括号里的待休天数：这次读到的人以新数字为准。
     func updateRestBalance(_ new: [String: Int]) {
         guard !new.isEmpty else { return }
-        settings.restBalance.merge(new) { _, n in n }
-        settings.restBalanceUpdated = Date()
+        var s = settings
+        let today = DayKey.today
+        for (name, value) in new where s.restHistory[name]?.last?.value != value {
+            var points = s.restHistory[name] ?? []
+            if points.last?.day == today { points.removeLast() }
+            points.append(RestPoint(day: today, value: value))
+            s.restHistory[name] = Array(points.suffix(120))
+        }
+        s.restBalance.merge(new) { _, n in n }
+        s.restBalanceUpdated = Date()
+        settings = s
+        Task { await notifyRestIfNeeded() }
+    }
+
+    /// 我在网站上的名字（全员排班里认出是我的那个）
+    var myRosterName: String? { roster.keys.first(where: isMe) ?? settings.restBalance.keys.first(where: isMe) }
+
+    /// 我的待休攒到设定的天数时提醒一次，之后再涨才再提醒；休掉了就重新计
+    func notifyRestIfNeeded() async {
+        guard settings.restAlertThreshold > 0, let me = myRosterName, let rest = settings.restBalance[me] else { return }
+        if rest < settings.restAlertThreshold {
+            if settings.restAlertNotified != nil { settings.restAlertNotified = nil }
+            return
+        }
+        guard rest > (settings.restAlertNotified ?? 0) else { return }
+        settings.restAlertNotified = rest
+        await NotificationService.notifyNow(id: "rest-balance", title: "🛌 你已经攒了 \(rest) 天待休",
+                                            body: "网站上你名字后面的待休是 \(rest) 天，找个时间安排休息吧。")
     }
 
     /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），保留最近 200 天。
@@ -748,7 +819,8 @@ final class AppStore: ObservableObject {
         // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
         var merged = roster.mapValues { $0.filter { !days.contains($0.key) } }
         RosterExtractor.merge(new, into: &merged)
-        let cutoff = DayKey.today.adding(days: -200)
+        // 留一年多，全年统计用
+        let cutoff = DayKey.today.adding(days: -400)
         roster = merged.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
         saveRoster()
         // 已排班的日子变了，「未排班」提醒也要跟着变
@@ -1084,16 +1156,17 @@ final class AppStore: ObservableObject {
     }
 
     /// 某月每个人的工作量（来自全员排班），按上班天数从多到少。
-    func workload(year: Int, month: Int) -> Workload {
+    /// month 为 nil 时统计全年（App 里留着的全员排班，最多一年多）
+    func workload(year: Int, month: Int?) -> Workload {
         // 只统计到今天：网站上提前排好的以后的日子还没上，不算
         let today = DayKey.today
-        let days = publishedDays.filter { $0.year == year && $0.month == month && $0 <= today }.sorted()
+        let days = publishedDays.filter { $0.year == year && (month == nil || $0.month == month) && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
         let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, members: rotationMembers,
                                            calendar: .app).sorted { a, b in
             a.workDays != b.workDays ? a.workDays > b.workDays : a.name.compare(b.name, locale: zh) == .orderedAscending
         }
-        var text = "\(year)年\(month)月工作量统计"
+        var text = "\(year)年" + (month.map { "\($0)月" } ?? "全年") + "工作量统计"
         if let first = days.first, let last = days.last {
             text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位；一直没有组别的日常班人员工作日没排岗位的日子）+ 出差）"
         }
@@ -1104,6 +1177,16 @@ final class AppStore: ObservableObject {
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
         }
         return Workload(days: days, people: people, text: text)
+    }
+
+    /// 导出成表格文件（CSV，Excel / WPS / Numbers 能直接打开），返回临时文件地址
+    func workloadCSVFile(year: Int, month: Int?) -> URL? {
+        let report = workload(year: year, month: month)
+        let name = "工作量\(year)年" + (month.map { "\($0)月" } ?? "全年") + ".csv"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        // 带 BOM，Excel 才认得出中文
+        let data = Data([0xEF, 0xBB, 0xBF]) + Data(WorkloadCSV.make(report.people, restBalance: settings.restBalance).utf8)
+        return (try? data.write(to: url, options: .atomic)) != nil ? url : nil
     }
 
     static func sortedPosts(_ p: PersonWorkload) -> [(post: String, count: Int)] {

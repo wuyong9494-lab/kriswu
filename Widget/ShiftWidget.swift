@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import ActivityKit
 
 struct ShiftEntry: TimelineEntry {
     let date: Date
@@ -157,5 +158,54 @@ struct ShiftWidget: Widget {
 struct ShiftWidgetBundle: WidgetBundle {
     var body: some Widget {
         ShiftWidget()
+        DutyLiveActivity()
+    }
+}
+
+/// 值遥测时锁屏和灵动岛上的倒计时
+struct DutyLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: DutyAttributes.self) { context in
+            HStack(spacing: 12) {
+                Text("📡").font(.largeTitle)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(context.attributes.post)值班中").font(.headline)
+                    Text(context.state.after).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("离下班").font(.caption2).foregroundStyle(.secondary)
+                    Text(context.state.end, style: .timer)
+                        .font(.title2.monospacedDigit().bold())
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 110, alignment: .trailing)
+                }
+            }
+            .padding()
+            .activityBackgroundTint(Color(hex: "#17A2B8").opacity(0.25))
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Text("📡 \(context.attributes.post)").font(.headline)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    Text(context.state.end, style: .timer)
+                        .font(.headline.monospacedDigit())
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 90, alignment: .trailing)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text(context.state.after).font(.caption).foregroundStyle(.secondary)
+                }
+            } compactLeading: {
+                Text("📡")
+            } compactTrailing: {
+                Text(context.state.end, style: .timer)
+                    .monospacedDigit()
+                    .frame(maxWidth: 56)
+            } minimal: {
+                Text("📡")
+            }
+        }
     }
 }

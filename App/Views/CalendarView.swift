@@ -194,6 +194,18 @@ struct DayEditor: View {
                     } label: {
                         Label("查看这一天全部组别", systemImage: "tablecells")
                     }
+                    if let current, !SwapLedger.posts(current, matcher: store.matcher).isEmpty {
+                        NavigationLink {
+                            SwapHelperView(day: day)
+                        } label: {
+                            Label("找人换班", systemImage: "person.2.badge.gearshape")
+                        }
+                    }
+                    NavigationLink {
+                        SwapLedgerView()
+                    } label: {
+                        Label("换班账本", systemImage: "book.closed")
+                    }
                 }
                 Section("选择班次") {
                     ForEach(store.settings.shiftTypes) { type in
