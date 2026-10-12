@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
 struct RootView: View {
     enum Tab: String { case today, calendar, stats, site, settings }
+    @EnvironmentObject private var store: AppStore
     @State private var tab: Tab
 
     init() {
@@ -89,6 +90,8 @@ struct RootView: View {
                 .onChange(of: tab) { _ in Haptics.select() }
             }
         }
+        // 换主题色时整个界面重画一遍
+        .id(store.settings.accentTheme)
         .tint(DS.Palette.accent)
         .fontDesign(.rounded)
         .overlay { ToastOverlay() }

@@ -19,6 +19,41 @@ enum Appearance: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 主题色：默认跟随系统（iOS 系统蓝，自动适配浅色 / 深色），也可以选一种喜欢的颜色
+enum AccentTheme: String, Codable, CaseIterable, Identifiable {
+    case system, indigo, blue, teal, green, orange, pink, purple
+    var id: String { rawValue }
+
+    /// 当前用的主题色（App 启动、改设置时写进来，设计系统从这里取）
+    static var current: AccentTheme = .system
+
+    var title: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .indigo: return "靛蓝"
+        case .blue: return "海蓝"
+        case .teal: return "青碧"
+        case .green: return "松绿"
+        case .orange: return "暖橙"
+        case .pink: return "樱粉"
+        case .purple: return "葡萄紫"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .system: return Color(uiColor: .systemBlue)
+        case .indigo: return Color(light: 0x5E6AD2, dark: 0x8A93FF)
+        case .blue: return Color(light: 0x2F6FED, dark: 0x5B9BFF)
+        case .teal: return Color(light: 0x0E9AA7, dark: 0x3DD1DB)
+        case .green: return Color(light: 0x22A06B, dark: 0x4CC38A)
+        case .orange: return Color(light: 0xE5730B, dark: 0xFF9F43)
+        case .pink: return Color(light: 0xD6407A, dark: 0xFF6FA5)
+        case .purple: return Color(light: 0x8E4EC6, dark: 0xB57BEE)
+        }
+    }
+}
+
 struct AppSettings: Codable, Equatable {
     var aliases: [String] = []
     var morningEnabled = true
@@ -29,6 +64,7 @@ struct AppSettings: Codable, Equatable {
     /// 到点时用语音读出「今天，组D」（作为通知铃声）
     var voiceEnabled = false
     var appearance: Appearance = .system
+    var accentTheme: AccentTheme = .system
     var sourceURL = ""
     var sourceUsername = ""
     /// 用 App 内置浏览器同步（沿用网页登录状态）；关掉则直接下载文件
@@ -143,6 +179,7 @@ struct AppSettings: Codable, Equatable {
         notifyWhenEmpty = try c.decodeIfPresent(Bool.self, forKey: .notifyWhenEmpty) ?? d.notifyWhenEmpty
         voiceEnabled = try c.decodeIfPresent(Bool.self, forKey: .voiceEnabled) ?? d.voiceEnabled
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
+        accentTheme = try c.decodeIfPresent(AccentTheme.self, forKey: .accentTheme) ?? .system
         sourceURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? d.sourceURL
         sourceUsername = try c.decodeIfPresent(String.self, forKey: .sourceUsername) ?? d.sourceUsername
         syncViaWeb = try c.decodeIfPresent(Bool.self, forKey: .syncViaWeb) ?? d.syncViaWeb
@@ -293,7 +330,8 @@ final class AppStore: ObservableObject {
                 publishedDays = Self.published(in: roster, matcher: matcher)
             }
             if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
-                || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides {
+                || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides
+                || settings.accentTheme != oldValue.accentTheme {
                 applyCustomHolidays()
             }
             save()
@@ -442,6 +480,7 @@ final class AppStore: ObservableObject {
 
     /// 把自己录入的节假日交给统计用的节假日表
     func applyCustomHolidays() {
+        AccentTheme.current = settings.accentTheme
         ChinaHolidays.customOff = Set(settings.customHolidayOff)
         ChinaHolidays.customWork = Set(settings.customHolidayWork)
         WorkloadCounter.rules = settings.workloadRules

@@ -58,7 +58,8 @@ struct SettingsView: View {
                     NavigationLink {
                         Form { displaySection }.appList().navigationTitle("显示")
                     } label: {
-                        row("显示", icon: "paintpalette", detail: store.settings.appearance.title)
+                        row("显示", icon: "paintpalette", detail: store.settings.appearance == .system && store.settings.accentTheme == .system
+                            ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")
                     }
                     NavigationLink {
                         ImportView()
@@ -164,8 +165,39 @@ struct SettingsView: View {
             Picker("外观", selection: $store.settings.appearance) {
                 ForEach(Appearance.allCases) { Text($0.title).tag($0) }
             }
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                HStack {
+                    Text("主题色")
+                    Spacer()
+                    Text(store.settings.accentTheme.title).foregroundStyle(.secondary)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: DS.Space.s) {
+                        ForEach(AccentTheme.allCases) { theme in
+                            Button {
+                                Haptics.select()
+                                withAnimation(DS.Motion.spring) { store.settings.accentTheme = theme }
+                            } label: {
+                                ZStack {
+                                    Circle().fill(theme.color).frame(width: 34, height: 34)
+                                    if theme == .system {
+                                        Image(systemName: "iphone").font(.caption.bold()).foregroundStyle(.white)
+                                    }
+                                    if store.settings.accentTheme == theme {
+                                        Circle().strokeBorder(theme.color, lineWidth: 2).frame(width: 44, height: 44)
+                                    }
+                                }
+                                .frame(width: 46, height: 46)
+                            }
+                            .buttonStyle(PressableStyle())
+                            .accessibilityLabel(theme.title)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, DS.Space.xxs)
         } footer: {
-            Text("图标只能在打开 App 时更换，每次更换系统会弹出提示；想不打开 App 也每天更新，用主屏幕小组件「今日班组」。")
+            Text("外观（浅色 / 深色）和主题色默认都跟随系统：系统切换深色模式时 App 一起变，主题色用系统蓝。也可以固定成喜欢的颜色。\n图标只能在打开 App 时更换，每次更换系统会弹出提示；想不打开 App 也每天更新，用主屏幕小组件「今日班组」。")
         }
     }
 

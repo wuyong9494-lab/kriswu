@@ -28,8 +28,9 @@ enum DS {
 
     /// 颜色变量（自动适配浅色 / 深色）
     enum Palette {
-        static let accent = Color(light: 0x5E6AD2, dark: 0x8A93FF)
-        static let accentSoft = Color(light: 0x5E6AD2, dark: 0x8A93FF, opacity: 0.14)
+        /// 主题色：跟随设置里选的颜色（默认跟随系统）
+        static var accent: Color { AccentTheme.current.color }
+        static var accentSoft: Color { AccentTheme.current.color.opacity(0.14) }
         static let success = Color(light: 0x22A06B, dark: 0x4CC38A)
         static let warning = Color(light: 0xE5900B, dark: 0xF5B342)
         static let danger = Color(light: 0xE5484D, dark: 0xFF6369)
