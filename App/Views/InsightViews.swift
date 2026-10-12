@@ -291,7 +291,7 @@ struct WorkloadBarChart: View {
                 if let present = item.present, present > item.value {
                     BarMark(x: .value("天", grown ? Double(present) : 0.0001), y: .value("姓名", item.name), height: .fixed(14),
                             stacking: .unstacked)
-                        .foregroundStyle((item.highlight ? DS.Palette.accent : DS.Palette.iconSecondary).opacity(0.14))
+                        .foregroundStyle((item.highlight ? DS.Palette.accent : DS.Palette.vivid[2]).opacity(0.16))
                         .cornerRadius(7)
                 }
                 BarMark(x: .value("天", grown ? Double(item.value) : 0.0001), y: .value("姓名", item.name), height: .fixed(14),
@@ -299,7 +299,7 @@ struct WorkloadBarChart: View {
                     .foregroundStyle(item.highlight
                                      ? AnyShapeStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.65), DS.Palette.accent],
                                                                     startPoint: .leading, endPoint: .trailing))
-                                     : AnyShapeStyle(LinearGradient(colors: [DS.Palette.iconSecondary.opacity(0.22), DS.Palette.iconSecondary.opacity(0.42)],
+                                     : AnyShapeStyle(LinearGradient(colors: [DS.Palette.vivid[1].opacity(0.35), DS.Palette.vivid[2].opacity(0.6)],
                                                                     startPoint: .leading, endPoint: .trailing)))
                     .cornerRadius(7)
                     .annotation(position: .trailing, spacing: DS.Space.xxs + 2) {
