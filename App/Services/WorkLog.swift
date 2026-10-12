@@ -333,6 +333,9 @@ final class VoiceRecorder: NSObject, ObservableObject {
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
     private var url: URL?
+    private var interruptionObserver: NSObjectProtocol?
+    /// 被来电、闹钟打断时：已经录到的部分交给这里保存
+    var onInterrupted: ((URL, TimeInterval) -> Void)?
 
     func start() async {
         error = nil
@@ -369,6 +372,17 @@ final class VoiceRecorder: NSObject, ObservableObject {
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
+            // 来电、闹钟会打断录音：停下来，把录到的部分存好
+            interruptionObserver = NotificationCenter.default.addObserver(
+                forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+                guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+                Task { @MainActor in
+                    guard let self, let result = self.stop() else { return }
+                    self.error = "录音被来电或闹钟打断，已保存前面的部分。"
+                    self.onInterrupted?(result.url, result.duration)
+                }
+            }
         } catch {
             self.error = "录音没能开始，请再试一次。"
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
@@ -386,10 +400,16 @@ final class VoiceRecorder: NSObject, ObservableObject {
     /// 停止并返回录好的临时文件和时长
     func stop() -> (url: URL, duration: TimeInterval)? {
         guard let r = recorder, let url else { return nil }
-        let duration = r.currentTime
+        let current = r.currentTime
         r.stop()
         cleanup()
-        return duration >= 0.5 ? (url, duration) : nil
+        // 停下以后从文件里读时长（被打断时 currentTime 可能是 0）
+        let duration = max(current, (try? AVAudioPlayer(contentsOf: url))?.duration ?? 0)
+        guard duration >= 0.5 else {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        return (url, duration)
     }
 
     func cancel() {
@@ -399,6 +419,8 @@ final class VoiceRecorder: NSObject, ObservableObject {
     }
 
     private func cleanup() {
+        if let interruptionObserver { NotificationCenter.default.removeObserver(interruptionObserver) }
+        interruptionObserver = nil
         timer?.invalidate()
         timer = nil
         recorder = nil

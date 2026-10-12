@@ -110,7 +110,8 @@ public enum RosterExtractor {
 
     /// 把这次读到的全员排班合并进已保存的：读到的日子整天替换（换人、取消的以新数据为准）。
     /// 例外：有的读取方式（手机版页面、数据接口）根本不带「休息」「调休」「请假」这几列，
-    /// 如果这次读到的某一天里一个休息、请假都没有，就保留之前读到的这天的休息、请假，不能被冲掉。
+    /// 这次读到的所有日子里一个休息、请假都没有，就保留之前读到的休息、请假，不能被冲掉。
+    /// 只要这次读到的有休息列（哪天有人休息），就整天以新的为准（取消的请假也会去掉）。
     public static func replacingDays(of old: Roster, with new: Roster, matcher: ShiftMatcher) -> Roster {
         guard !new.isEmpty else { return old }
         let days = Set(new.values.flatMap(\.keys))
@@ -121,7 +122,7 @@ public enum RosterExtractor {
         var merged: Roster = [:]
         for (name, history) in old {
             let kept = history.filter { day, raw in
-                !days.contains(day) || (!newHasLeave.contains(day) && new[name]?[day] == nil && isLeave(raw, matcher: matcher))
+                !days.contains(day) || (newHasLeave.isEmpty && new[name]?[day] == nil && isLeave(raw, matcher: matcher))
             }
             if !kept.isEmpty { merged[name] = kept }
         }

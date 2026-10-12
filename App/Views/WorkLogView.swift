@@ -436,7 +436,14 @@ struct RecorderSheet: View {
         }
         .interactiveDismissDisabled(recorder.isRecording)
         .presentationDetents([.medium, .large])
-        .task { if autoStart && !recorder.isRecording { await recorder.start() } }
+        .task {
+            recorder.onInterrupted = { url, duration in
+                if WorkLogStore.shared.addRecording(from: url, duration: duration, note: note) != nil {
+                    ToastCenter.shared.show("录音被打断，已保存前面的部分", style: .success)
+                }
+            }
+            if autoStart && !recorder.isRecording { await recorder.start() }
+        }
     }
 }
 

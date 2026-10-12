@@ -374,12 +374,17 @@ final class AppStore: ObservableObject {
             requestReschedule()
         }
     }
-    @Published private(set) var schedule: [DayKey: String]
+    @Published private(set) var schedule: [DayKey: String] {
+        didSet { dutyTurnCache = nil }
+    }
     /// 已经取到过结果的日子：有排班的显示班次，没排班的显示「未排班」；不在这里的日子还没有数据
     @Published private(set) var covered: Set<DayKey>
     /// 全员排班（姓名 → 日期 → 岗位），只存在手机上，用于搜索成员
     @Published private(set) var roster: Roster = [:] {
-        didSet { publishedDays = Self.published(in: roster, matcher: matcher) }
+        didSet {
+            publishedDays = Self.published(in: roster, matcher: matcher)
+            dutyTurnCache = nil
+        }
     }
     /// 网站上已经正式排了班的日子：这一天有人排了组别（组A–E）或遥测。
     /// 只有提前申请的请假、调休、出差的日子还没排班，不能当成「这天大家都在上日常班」。
@@ -1055,7 +1060,11 @@ final class AppStore: ObservableObject {
         s.warnedRestKeys = []
         s.restAlertNotified = nil
         settings = s
+        // 换人：先用全员排班里这个人的班顶上，不留上一个人的；同步后再用网站上「我的分工」更新
+        schedule = roster[name] ?? [:]
+        covered = publishedDays.union(schedule.keys)
         dutyTurnCache = nil
+        scheduleChanged()
         guard canSync else { return }
         Task { await sync(userInitiated: true, source: "换了使用者") }
     }
@@ -1656,7 +1665,7 @@ final class AppStore: ObservableObject {
         }
         var text = "\(year)年" + (month.map { "\($0)月" } ?? "全年") + "工作量统计"
         if let first = days.first, let last = days.last {
-            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等岗位，以及没排岗位、没写休息的工作日；调度没排班的日子不算）+ 出差）"
+            text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 值班调休 + 日常（各组、调度等有岗位的日子）+ 出差；上班 = 工作量 + 没排岗位、没写休息的工作日）"
         }
         for p in people {
             text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)，值班调休 \(p.dutyRestDays)，日常 \(p.regularDays)，出差 \(p.tripDays)），上班 \(p.presentDays) 天"

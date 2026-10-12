@@ -1154,6 +1154,9 @@ final class UpgradeTests: XCTestCase {
         let b = RosterExtractor.replacingDays(of: old, with: ["乙": [d(15): "组B"], "戊": [d(15): "休息"]], matcher: m)
         XCTAssertNil(b["甲"]?[d(15)])
         XCTAssertEqual(b["戊"]?[d(15)], "休息")
+        // 这次读到的别的日子有休息列（16 日戊请假）：说明带休息列，15 日甲的休息没了就是取消了
+        let c = RosterExtractor.replacingDays(of: old, with: ["乙": [d(15): "组B"], "戊": [d(16): "请假"]], matcher: m)
+        XCTAssertNil(c["甲"]?[d(15)])
     }
 
     func testRestBalanceHistory() {
