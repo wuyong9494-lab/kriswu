@@ -111,7 +111,12 @@ struct MemberScheduleView: View {
                 .fontWeight(isToday ? .bold : .regular)
                 .foregroundStyle(isToday ? Color.accentColor : Color.secondary)
             Spacer()
-            Text("\(display?.emoji ?? "") \(display?.name ?? post)")
+            HStack(spacing: DS.Space.xxs) {
+                if let display {
+                    Image(systemName: display.symbol).font(.system(size: 11, weight: .semibold)).foregroundStyle(display.color)
+                }
+                Text(display?.name ?? post)
+            }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background((display?.color ?? .gray).opacity(0.18), in: Capsule())

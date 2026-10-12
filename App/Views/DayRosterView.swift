@@ -64,9 +64,11 @@ struct DayRosterView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } header: {
-                    HStack(spacing: 6) {
-                        Circle().fill(display?.color ?? .gray).frame(width: 8, height: 8)
-                        Text("\(display?.emoji ?? "") \(row.post)")
+                    HStack(spacing: DS.Space.xs) {
+                        Image(systemName: display?.symbol ?? "pin.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(display?.color ?? .gray)
+                        Text(row.post)
                     }
                 }
             }

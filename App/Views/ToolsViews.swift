@@ -204,7 +204,7 @@ struct YearStatsView: View {
                 }
             } footer: {
                 if self.report == nil {
-                    Text("正在统计…")
+                    SkeletonRows(rows: 3)
                 } else if report.days.isEmpty {
                     Text("这一年还没有全员排班数据。")
                 } else {
@@ -223,12 +223,12 @@ struct YearStatsView: View {
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: DS.Space.xxs) {
-                            Chip(text: "遥测 \(p.dutyDays)", color: DS.Palette.info)
-                            Chip(text: "节假日上班 \(p.holidayWorkedDays)", color: DS.Palette.danger)
-                            Chip(text: "日常 \(p.regularDays)", color: DS.Palette.accent)
-                            if p.dutyRestDays > 0 { Chip(text: "值班调休 \(p.dutyRestDays)", color: .indigo) }
-                            if p.tripDays > 0 { Chip(text: "出差 \(p.tripDays)", color: DS.Palette.warning) }
-                            Chip(text: "休息 \(p.offDays)", color: DS.Palette.success)
+                            Chip(text: "遥测 \(p.dutyDays)", color: DS.Palette.accent)
+                            Chip(text: "节假日上班 \(p.holidayWorkedDays)", color: .secondary)
+                            Chip(text: "日常 \(p.regularDays)", color: .secondary)
+                            if p.dutyRestDays > 0 { Chip(text: "值班调休 \(p.dutyRestDays)", color: .secondary) }
+                            if p.tripDays > 0 { Chip(text: "出差 \(p.tripDays)", color: .secondary) }
+                            Chip(text: "休息 \(p.offDays)", color: .secondary)
                             Chip(text: "节假日 \(p.holidayDays)", color: .secondary)
                         }
                     }

@@ -5,6 +5,8 @@ struct CalendarView: View {
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
     @State private var editing: DayKey?
+    /// 翻月方向，决定日历从哪边滑进来
+    @State private var flipForward = true
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
     private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
@@ -14,7 +16,7 @@ struct CalendarView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     header
-                    LazyVGrid(columns: columns, spacing: 4) {
+                    LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
                         ForEach(weekdays, id: \.self) { w in
                             Text(w).font(.caption).foregroundStyle(.secondary)
                         }
@@ -26,7 +28,10 @@ struct CalendarView: View {
                                 .onTapGesture { Haptics.tap(); editing = day }
                         }
                     }
-                    .card(padding: 10)
+                    .card(padding: DS.Space.s)
+                    .id("\(year)-\(month)")
+                    .transition(.asymmetric(insertion: .move(edge: flipForward ? .trailing : .leading).combined(with: .opacity),
+                                            removal: .opacity))
                     MonthSummary(days: days)
                 }
                 .padding()
@@ -105,7 +110,8 @@ struct CalendarView: View {
         var m = month + delta, y = year
         if m < 1 { m = 12; y -= 1 }
         if m > 12 { m = 1; y += 1 }
-        withAnimation { month = m; year = y }
+        flipForward = delta > 0
+        withAnimation(DS.Motion.spring) { month = m; year = y }
     }
 
     private var firstDay: DayKey { DayKey(year: year, month: month, day: 1) }
@@ -130,42 +136,40 @@ private struct DayCell: View {
 
     var body: some View {
         let display = ShiftDisplay(raw: store.shift(on: day), matcher: store.matcher)
-        // 取到过结果但没给我排班：灰底「未排班」；还没取到数据的日子：留空
+        // 取到过结果但没给我排班：淡淡一个点；还没取到数据的日子：留空
         let unassigned = display == nil && store.isCovered(day)
         let holiday = ChinaHolidays.isHoliday(day)
-        VStack(spacing: 3) {
+        VStack(spacing: DS.Space.xxs) {
             Text("\(day.day)")
-                .font(.subheadline.weight(isToday ? .heavy : .semibold))
-                .foregroundStyle(isToday ? Color.white : (holiday ? Color.red : Color.primary))
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(isToday ? Theme.accent : Color.clear))
+                .font(.system(size: 15, weight: isToday ? .heavy : .medium, design: .rounded))
+                .foregroundStyle(isToday ? Color.white : (holiday ? DS.Palette.danger : Color.primary))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(isToday ? DS.Palette.accent : Color.clear))
             if let display {
-                Text(display.emoji).font(.caption)
+                // 颜色只用在图标和字上，格子本身不涂色
+                Image(systemName: display.symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(display.color)
                 Text(display.name)
-                    .font(.caption2.weight(.semibold))
+                    .font(DS.Font.overline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             } else if unassigned {
-                Spacer(minLength: 0)
-                Text("未排班")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                Circle().fill(DS.Palette.iconSecondary.opacity(0.5)).frame(width: 4, height: 4).padding(.top, DS.Space.xxs)
                 Spacer(minLength: 0)
             } else {
-                if holiday { Text("休").font(.caption2.bold()).foregroundStyle(.red) }
                 Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 70, maxHeight: 70)
-        .padding(.vertical, 3)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(display.map { $0.color.opacity(0.18) } ?? (unassigned ? DS.Palette.surfaceSunken : Color.clear))
-        )
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isToday ? Theme.accent : .clear, lineWidth: 2))
+        .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66)
+        .padding(.vertical, DS.Space.xxs)
+        .background {
+            // 只有遥测这种重要的日子才给一层很淡的底
+            if let display, WorkloadCounter.isDuty(display.name) {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).fill(display.color.opacity(0.12))
+            }
+        }
         .contentShape(Rectangle())
     }
 }
@@ -177,17 +181,30 @@ private struct MonthSummary: View {
     var body: some View {
         let counts = Dictionary(grouping: days.compactMap { ShiftDisplay(raw: store.shift(on: $0), matcher: store.matcher) },
                                 by: \.name)
-            .map { (name: $0.key, emoji: $0.value[0].emoji, color: $0.value[0].color, count: $0.value.count) }
+            .map { (name: $0.key, symbol: $0.value[0].symbol, color: $0.value[0].color, count: $0.value.count) }
             .sorted { $0.count > $1.count }
         if !counts.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                CardTitle(title: "本月统计", icon: "chart.pie.fill")
+                CardTitle(title: "本月统计", icon: "chart.pie")
+                let total = max(1, counts.map(\.count).reduce(0, +))
                 ForEach(counts, id: \.name) { item in
-                    HStack {
-                        Circle().fill(item.color).frame(width: 10, height: 10)
-                        Text("\(item.emoji) \(item.name)")
-                        Spacer()
-                        Text("\(item.count) 天").foregroundStyle(.secondary)
+                    VStack(spacing: DS.Space.xxs) {
+                        HStack(spacing: DS.Space.xs) {
+                            Image(systemName: item.symbol).font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(item.color).frame(width: 18)
+                            Text(item.name).font(DS.Font.body)
+                            Spacer()
+                            Text("\(item.count) 天").font(DS.Font.callout.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        // 占比条
+                        GeometryReader { geo in
+                            Capsule().fill(DS.Palette.surfaceSunken)
+                                .overlay(alignment: .leading) {
+                                    Capsule().fill(item.color.opacity(0.7))
+                                        .frame(width: geo.size.width * CGFloat(item.count) / CGFloat(total))
+                                }
+                        }
+                        .frame(height: 4)
                     }
                 }
             }
@@ -236,8 +253,11 @@ struct DayEditor: View {
                             store.setShift(type.name, on: day)
                             dismiss()
                         } label: {
-                            HStack {
-                                Text(type.emoji)
+                            HStack(spacing: DS.Space.s) {
+                                Image(systemName: type.symbol)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Color(hex: type.colorHex))
+                                    .frame(width: 20)
                                 Text(type.name).foregroundStyle(Color.primary)
                                 Spacer()
                                 Circle().fill(Color(hex: type.colorHex)).frame(width: 12, height: 12)

@@ -27,7 +27,7 @@ struct DataCheckView: View {
                     }
                 }
             } else {
-                DSSpinner(size: 28).frame(maxWidth: .infinity).padding(DS.Space.xl)
+                Section { SkeletonRows(rows: 5) }
             }
         }
         .appList()
@@ -267,7 +267,7 @@ struct YearSummaryView: View {
 // MARK: - 图表
 
 
-/// 每人一根横条（工作量），我高亮，可选一条平均线
+/// 每人一根横条（工作量）：渐变条、打开时从 0 长出来、数字浮在条尾；我这条用主题色，别人是灰色
 struct WorkloadBarChart: View {
     struct Item: Identifiable {
         var id: String { name }
@@ -278,24 +278,29 @@ struct WorkloadBarChart: View {
 
     let items: [Item]
     var average: Double?
+    @State private var grown = false
 
     var body: some View {
         Chart {
             ForEach(items) { item in
-                BarMark(x: .value("天", item.value), y: .value("姓名", item.name), height: .fixed(12))
+                BarMark(x: .value("天", grown ? Double(item.value) : 0.0001), y: .value("姓名", item.name), height: .fixed(14))
                     .foregroundStyle(item.highlight
-                                     ? AnyShapeStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.7), DS.Palette.accent],
+                                     ? AnyShapeStyle(LinearGradient(colors: [DS.Palette.accent.opacity(0.65), DS.Palette.accent],
                                                                     startPoint: .leading, endPoint: .trailing))
-                                     : AnyShapeStyle(DS.Palette.accent.opacity(0.28)))
-                    .cornerRadius(DS.Radius.s / 2)
-                    .annotation(position: .trailing, spacing: DS.Space.xxs) {
-                        Text("\(item.value)").font(DS.Font.caption).foregroundStyle(.secondary)
+                                     : AnyShapeStyle(LinearGradient(colors: [DS.Palette.iconSecondary.opacity(0.22), DS.Palette.iconSecondary.opacity(0.42)],
+                                                                    startPoint: .leading, endPoint: .trailing)))
+                    .cornerRadius(7)
+                    .annotation(position: .trailing, spacing: DS.Space.xxs + 2) {
+                        Text("\(item.value)")
+                            .font(DS.Font.caption.monospacedDigit())
+                            .foregroundStyle(item.highlight ? DS.Palette.accent : .secondary)
+                            .opacity(grown ? 1 : 0)
                     }
             }
             if let average {
                 RuleMark(x: .value("平均", average))
-                    .foregroundStyle(DS.Palette.warning)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                    .foregroundStyle(DS.Palette.warning.opacity(0.9))
+                    .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 4]))
                     .annotation(position: .top, alignment: .leading) {
                         Text("平均 \(String(format: "%.1f", average))").font(DS.Font.caption).foregroundStyle(DS.Palette.warning)
                     }
@@ -307,6 +312,11 @@ struct WorkloadBarChart: View {
                 AxisValueLabel().font(DS.Font.caption)
             }
         }
+        .chartXScale(domain: 0...Double(max(items.map(\.value).max() ?? 1, Int((average ?? 0).rounded(.up)), 1)) * 1.18)
         .frame(height: CGFloat(max(items.count, 1)) * 32 + (average == nil ? 8 : 28))
+        .onAppear {
+            guard !grown else { return }
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.85).delay(0.1)) { grown = true }
+        }
     }
 }

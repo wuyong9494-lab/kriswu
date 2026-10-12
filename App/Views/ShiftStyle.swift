@@ -10,10 +10,31 @@ extension Color {
     }
 }
 
+extension ShiftType {
+    /// 界面上统一用 SF Symbol（表情符号只留给通知、小组件）
+    var symbol: String {
+        switch id {
+        case "group": return "person.2.fill"
+        case "telemetry": return "antenna.radiowaves.left.and.right"
+        case "dispatch": return "dial.medium.fill"
+        case "day": return "sun.max.fill"
+        case "middle": return "sunset.fill"
+        case "night": return "moon.stars.fill"
+        case "duty": return "shield.fill"
+        case "trip": return "suitcase.fill"
+        case "overtime": return "clock.badge.exclamationmark"
+        case "off": return "bed.double.fill"
+        default: return "pin.fill"
+        }
+    }
+}
+
 /// 某一天班次的显示信息。
 struct ShiftDisplay {
     var name: String
     var emoji: String
+    /// SF Symbol 名
+    var symbol: String
     var color: Color
 
     init?(raw: String?, matcher: ShiftMatcher) {
@@ -22,6 +43,28 @@ struct ShiftDisplay {
         // 和通知用同一套规则：简写（"白"）显示类型名，"组D"、"调休" 等照原文显示
         name = matcher.displayName(raw)
         emoji = type?.emoji ?? "📌"
+        symbol = type?.symbol ?? "pin.fill"
         color = type.map { Color(hex: $0.colorHex) } ?? .gray
+    }
+}
+
+/// 「图标 + 名字」一行，图标是 SF Symbol
+struct ShiftLabel: View {
+    let display: ShiftDisplay?
+    var fallback = "—"
+    var font: Font = DS.Font.body
+
+    var body: some View {
+        HStack(spacing: DS.Space.xxs + 2) {
+            if let display {
+                Image(systemName: display.symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(display.color)
+                Text(display.name)
+            } else {
+                Text(fallback).foregroundStyle(.secondary)
+            }
+        }
+        .font(font)
     }
 }

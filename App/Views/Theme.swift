@@ -36,13 +36,20 @@ enum DS {
         static let danger = Color(light: 0xE5484D, dark: 0xFF6369)
         static let info = Color(light: 0x0E9AA7, dark: 0x3DD1DB)
 
-        static let background = Color(light: 0xF3F4F7, dark: 0x09090B)
-        static let backgroundGlowA = Color(light: 0x5E6AD2, dark: 0x5E6AD2, opacity: 0.10)
-        static let backgroundGlowB = Color(light: 0x0E9AA7, dark: 0x0E9AA7, opacity: 0.07)
-        /// 卡片表面（叠在毛玻璃上）
-        static let surface = Color(light: 0xFFFFFF, dark: 0x17181C, opacity: 0.78)
-        static let surfaceSunken = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.045)
+        /// 页面背景：不是一整块纯色，上浅下深，再叠两团很淡的光
+        static let background = Color(light: 0xF4F5F8, dark: 0x0B0B0F)
+        static let backgroundBottom = Color(light: 0xEEF0F5, dark: 0x111218)
+        static let backgroundGlowA = Color(light: 0x5B8DEF, dark: 0x5B8DEF, opacity: 0.07)
+        static let backgroundGlowB = Color(light: 0x8E7CF0, dark: 0x8E7CF0, opacity: 0.05)
+        /// 卡片表面（叠在毛玻璃上），要比背景明显亮一级，卡片才「浮」得起来
+        static let surface = Color(light: 0xFFFFFF, dark: 0x1B1C22, opacity: 0.82)
+        static let surfaceSunken = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.05)
+        /// 图标方块：玻璃感的单色底
+        static let glass = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.06)
         static let hairline = Color(light: 0x000000, dark: 0xFFFFFF, opacity: 0.07)
+        /// 图标、标签栏的单色
+        static let iconPrimary = Color(light: 0x2C2C30, dark: 0xE8E8E8)
+        static let iconSecondary = Color(light: 0x8A8A93, dark: 0x8A8A93)
         static let textTertiary = Color(uiColor: .tertiaryLabel)
         static let shadow = Color(light: 0x1B1F3B, dark: 0x000000, opacity: 0.08)
     }
@@ -50,7 +57,8 @@ enum DS {
     /// 字体层级（全部圆体）
     enum Font {
         static let display = SwiftUI.Font.system(size: 34, weight: .bold, design: .rounded)
-        static let hero = SwiftUI.Font.system(size: 40, weight: .heavy, design: .rounded)
+        static let hero = SwiftUI.Font.system(size: 56, weight: .heavy, design: .rounded)
+        static let giant = SwiftUI.Font.system(size: 72, weight: .heavy, design: .rounded)
         static let title = SwiftUI.Font.system(size: 22, weight: .semibold, design: .rounded)
         static let headline = SwiftUI.Font.system(size: 17, weight: .semibold, design: .rounded)
         static let body = SwiftUI.Font.system(size: 15, weight: .regular, design: .rounded)
@@ -115,9 +123,11 @@ extension Color {
 struct AppBackground: View {
     var body: some View {
         ZStack {
-            DS.Palette.background
-            RadialGradient(colors: [DS.Palette.backgroundGlowA, .clear], center: .topLeading, startRadius: 0, endRadius: 420)
-            RadialGradient(colors: [DS.Palette.backgroundGlowB, .clear], center: .bottomTrailing, startRadius: 0, endRadius: 380)
+            LinearGradient(colors: [DS.Palette.background, DS.Palette.backgroundBottom], startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [DS.Palette.backgroundGlowA, .clear], center: UnitPoint(x: 0.15, y: 0.0),
+                           startRadius: 0, endRadius: 460)
+            RadialGradient(colors: [DS.Palette.backgroundGlowB, .clear], center: UnitPoint(x: 0.9, y: 0.35),
+                           startRadius: 0, endRadius: 360)
         }
         .ignoresSafeArea()
     }
@@ -156,8 +166,8 @@ struct CardModifier: ViewModifier {
                     .overlay(shape.strokeBorder(
                         LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.10 : 0.9), DS.Palette.hairline],
                                        startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                    .shadow(color: DS.Palette.shadow, radius: 18, x: 0, y: 8)
-                    .shadow(color: DS.Palette.shadow.opacity(0.5), radius: 2, x: 0, y: 1)
+                    .shadow(color: DS.Palette.shadow, radius: 24, x: 0, y: 12)
+                    .shadow(color: DS.Palette.shadow.opacity(0.6), radius: 2, x: 0, y: 1)
             }
     }
 }
@@ -191,23 +201,26 @@ extension CardTitle where Trailing == EmptyView {
     }
 }
 
-/// 图标块：淡色底 + 彩色图标（filled 时为渐变底 + 白色图标）
+/// 图标块：统一的单色玻璃方块 + SF Symbol。
+/// color 只在需要表达状态（成功 / 警告 / 危险 / 选中）时传，平时是单色，整套界面才安静。
 struct IconBadge: View {
     let icon: String
-    var color: Color = DS.Palette.accent
+    var color: Color? = nil
     var size: CGFloat = 32
+    /// 兼容旧调用，现在不再画彩色渐变底
     var filled = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
         Image(systemName: icon)
-            .font(.system(size: size * 0.46, weight: .semibold))
-            .foregroundStyle(filled ? Color.white : color)
+            .font(.system(size: size * 0.44, weight: .medium))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(color ?? DS.Palette.iconPrimary)
             .frame(width: size, height: size)
             .background {
-                RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                    .fill(filled ? AnyShapeStyle(LinearGradient(colors: [color.opacity(0.85), color],
-                                                                startPoint: .top, endPoint: .bottom))
-                                 : AnyShapeStyle(color.opacity(0.14)))
+                shape.fill(.ultraThinMaterial)
+                    .overlay(shape.fill(color.map { $0.opacity(0.12) } ?? DS.Palette.glass))
+                    .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 0.5))
             }
     }
 }
@@ -579,10 +592,144 @@ struct Avatar: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(
-                LinearGradient(colors: [Color(hue: hue, saturation: 0.45, brightness: 0.88),
-                                        Color(hue: hue, saturation: 0.6, brightness: 0.68)],
+                LinearGradient(colors: [Color(hue: hue, saturation: 0.28, brightness: 0.78),
+                                        Color(hue: hue, saturation: 0.36, brightness: 0.6)],
                                startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: Circle())
-            .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+    }
+}
+
+
+// MARK: - 微动画
+
+/// 进场：卡片一张接一张淡入上浮（index 越大越晚）
+struct StaggeredAppear: ViewModifier {
+    let index: Int
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 14)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(DS.Motion.spring.delay(Double(index) * 0.045)) { shown = true }
+            }
+    }
+}
+
+extension View {
+    func staggered(_ index: Int) -> some View { modifier(StaggeredAppear(index: index)) }
+}
+
+/// 数字从 0 跳到目标值（Count Up）
+struct CountUpText: View {
+    let value: Int
+    var font: Font = DS.Font.number
+    @State private var shown = 0
+
+    var body: some View {
+        Text("\(shown)")
+            .font(font)
+            .contentTransition(.numericText())
+            .onAppear { withAnimation(.spring(response: 0.9, dampingFraction: 0.85)) { shown = value } }
+            .onChange(of: value) { v in withAnimation(DS.Motion.spring) { shown = v } }
+    }
+}
+
+/// 骨架屏：灰条带闪光，数据还没到时占位
+struct SkeletonBlock: View {
+    var height: CGFloat = 14
+    var width: CGFloat? = nil
+    @State private var phase: CGFloat = -1
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+            .fill(DS.Palette.surfaceSunken)
+            .frame(width: width, height: height)
+            .overlay {
+                GeometryReader { geo in
+                    LinearGradient(colors: [.clear, Color.white.opacity(0.25), .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: geo.size.width * 0.5)
+                        .offset(x: phase * geo.size.width * 1.5)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+            }
+            .onAppear { withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) { phase = 1 } }
+    }
+}
+
+struct SkeletonRows: View {
+    var rows = 4
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            ForEach(0..<rows, id: \.self) { i in
+                HStack(spacing: DS.Space.s) {
+                    SkeletonBlock(height: 28, width: 28)
+                    SkeletonBlock(height: 12, width: CGFloat(90 + (i * 37) % 80))
+                    Spacer()
+                    SkeletonBlock(height: 12, width: 40)
+                }
+            }
+        }
+        .padding(.vertical, DS.Space.xs)
+    }
+}
+
+// MARK: - 悬浮标签栏
+
+/// 悬浮在页面底部的玻璃胶囊，选中项后面有一颗会滑动的药丸
+struct FloatingTabBar<Tab: Hashable>: View {
+    struct Item {
+        let tab: Tab
+        let title: String
+        let icon: String
+    }
+
+    let items: [Item]
+    @Binding var selection: Tab
+    @Namespace private var pill
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(items, id: \.tab) { item in
+                let selected = item.tab == selection
+                Button {
+                    guard !selected else { return }
+                    Haptics.select()
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { selection = item.tab }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 20, weight: selected ? .semibold : .regular))
+                            .symbolRenderingMode(.hierarchical)
+                            .scaleEffect(selected ? 1.08 : 1)
+                        Text(item.title).font(.system(size: 10, weight: selected ? .semibold : .medium, design: .rounded))
+                    }
+                    .foregroundStyle(selected ? DS.Palette.accent : DS.Palette.iconSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background {
+                        if selected {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(DS.Palette.accent.opacity(0.14))
+                                .matchedGeometryEffect(id: "pill", in: pill)
+                        }
+                    }
+                }
+                .buttonStyle(PressableStyle())
+            }
+        }
+        .padding(DS.Space.xs)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(DS.Palette.surface.opacity(0.6)))
+                .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 1))
+                .shadow(color: DS.Palette.shadow, radius: 24, x: 0, y: 10)
+        }
+        .padding(.horizontal, DS.Space.l)
+        .padding(.bottom, DS.Space.xs)
     }
 }

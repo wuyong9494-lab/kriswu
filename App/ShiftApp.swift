@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 }
 
 struct RootView: View {
-    enum Tab: String { case today, calendar, stats, site, settings }
+    enum Tab: String, CaseIterable { case today, calendar, stats, site, settings }
     @EnvironmentObject private var store: AppStore
     @State private var tab: Tab
 
@@ -65,29 +65,30 @@ struct RootView: View {
         _tab = State(initialValue: Tab(rawValue: UserDefaults.standard.string(forKey: "screen") ?? "") ?? .today)
     }
 
+    private let tabs: [FloatingTabBar<Tab>.Item] = [
+        .init(tab: .today, title: "今天", icon: "sun.max"),
+        .init(tab: .calendar, title: "日历", icon: "calendar"),
+        .init(tab: .stats, title: "统计", icon: "chart.bar"),
+        .init(tab: .site, title: "网站", icon: "globe"),
+        .init(tab: .settings, title: "设置", icon: "gearshape"),
+    ]
+
     var body: some View {
         Group {
             if let screen = UserDefaults.standard.string(forKey: "screen"), Tab(rawValue: screen) == nil {
                 NavigationStack { ScreenCatalog.view(screen) }
             } else {
-                TabView(selection: $tab) {
-                    TodayView()
-                        .tabItem { Label("今天", systemImage: "sun.max.fill") }
-                        .tag(Tab.today)
-                    CalendarView()
-                        .tabItem { Label("日历", systemImage: "calendar") }
-                        .tag(Tab.calendar)
-                    NavigationStack { WorkloadView() }
-                        .tabItem { Label("统计", systemImage: "chart.bar.xaxis") }
-                        .tag(Tab.stats)
-                    SiteView()
-                        .tabItem { Label("网站", systemImage: "globe") }
-                        .tag(Tab.site)
-                    SettingsView()
-                        .tabItem { Label("设置", systemImage: "gearshape.fill") }
-                        .tag(Tab.settings)
+                // 五页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮的玻璃标签栏
+                ZStack {
+                    page(.today) { TodayView() }
+                    page(.calendar) { CalendarView() }
+                    page(.stats) { NavigationStack { WorkloadView() } }
+                    page(.site) { SiteView() }
+                    page(.settings) { SettingsView() }
                 }
-                .onChange(of: tab) { _ in Haptics.select() }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    FloatingTabBar(items: tabs, selection: $tab)
+                }
             }
         }
         // 换主题色时整个界面重画一遍
@@ -95,6 +96,17 @@ struct RootView: View {
         .tint(DS.Palette.accent)
         .fontDesign(.rounded)
         .overlay { ToastOverlay() }
+    }
+
+    @ViewBuilder
+    private func page<V: View>(_ t: Tab, @ViewBuilder content: () -> V) -> some View {
+        let selected = tab == t
+        content()
+            .opacity(selected ? 1 : 0)
+            .scaleEffect(selected ? 1 : 0.985)
+            .allowsHitTesting(selected)
+            .accessibilityHidden(!selected)
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: tab)
     }
 }
 

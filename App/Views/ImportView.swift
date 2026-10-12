@@ -57,7 +57,7 @@ struct ImportView: View {
                                 Text(entry.key.dateText).foregroundStyle(.secondary)
                                 Spacer()
                                 let display = ShiftDisplay(raw: entry.value, matcher: store.matcher)
-                                Text("\(display?.emoji ?? "") \(display?.name ?? entry.value)")
+                                ShiftLabel(display: display, fallback: entry.value)
                             }
                         }
                     } header: {

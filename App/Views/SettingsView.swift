@@ -98,36 +98,17 @@ struct SettingsView: View {
         }
     }
 
-    /// 像系统设置那样：彩色圆角方块里的图标
+    /// 统一的单色玻璃图标 + 标题 + 右边的状态
     private func row(_ title: String, icon: String, detail: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(Self.iconColor(icon), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            Text(title)
+        HStack(spacing: DS.Space.s) {
+            IconBadge(icon: icon, size: 30)
+            Text(title).font(DS.Font.body)
             Spacer()
-            Text(detail).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+            Text(detail).font(DS.Font.caption).foregroundStyle(.secondary).lineLimit(1)
         }
+        .padding(.vertical, DS.Space.xxs)
     }
 
-    private static func iconColor(_ icon: String) -> Color {
-        switch icon {
-        case "arrow.triangle.2.circlepath": return .blue
-        case "bell": return .red
-        case "message": return .green
-        case "list.bullet.rectangle": return .orange
-        case "wand.and.stars": return .purple
-        case "book.closed": return .brown
-        case "calendar.badge.exclamationmark": return .pink
-        case "paintpalette": return .indigo
-        case "square.and.arrow.down": return .teal
-        case "externaldrive": return .gray
-        case "stethoscope": return .mint
-        default: return DS.Palette.accent
-        }
-    }
 
     private var syncSummary: String {
         if store.settings.sourceURL.isEmpty { return "未设置" }
@@ -415,8 +396,9 @@ struct ShiftTypesView: View {
                         ShiftTypeEditor(type: $type)
                     } label: {
                         HStack {
-                            Circle().fill(Color(hex: type.colorHex)).frame(width: 14, height: 14)
-                            Text("\(type.emoji) \(type.name)")
+                            Image(systemName: type.symbol).font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color(hex: type.colorHex)).frame(width: 20)
+                            Text(type.name)
                             Spacer()
                             Text((type.keywords + type.codes).joined(separator: " "))
                                 .font(.caption)
