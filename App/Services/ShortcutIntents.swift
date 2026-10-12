@@ -171,8 +171,8 @@ struct AddWorkNoteIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let ok = WorkLogStore.shared.addNote(text)
-        return .result(dialog: ok ? "记好了。" : "现在存不进去，解锁手机后再试一次。")
+        let reply = WorkLogStore.shared.addNote(text) ? "记好了。" : "现在存不进去，解锁手机后再试一次。"
+        return .result(dialog: "\(reply)")
     }
 }
 
