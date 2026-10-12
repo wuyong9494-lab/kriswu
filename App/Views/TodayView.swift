@@ -25,11 +25,10 @@ struct TodayView: View {
                         if store.schedule.isEmpty {
                             EmptyScheduleHint()
                         }
-                        Button { Haptics.tap(); editing = today } label: {
-                            TodayHero(day: today, now: context.date) { Haptics.tap(); editing = today.adding(days: 1) }
-                        }
-                        .buttonStyle(PressableStyle())
-                        .staggered(1)
+                        // 外层用轻点手势、里面「明天」是按钮：按钮优先，不会被外层吞掉
+                        TodayHero(day: today, now: context.date) { Haptics.tap(); editing = today.adding(days: 1) }
+                            .onTapGesture { Haptics.tap(); editing = today }
+                            .staggered(1)
                         WeekStrip(from: today) { Haptics.tap(); editing = $0 }.staggered(2)
                         TaskChecklistCard(day: today).staggered(3)
                         RecentChanges().staggered(3)
