@@ -21,7 +21,7 @@ public struct DateTokenParser {
         options: [.caseInsensitive])
 
     static func cleaned(_ raw: String) -> String {
-        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let s = raw.halfwidthAlnum.trimmingCharacters(in: .whitespacesAndNewlines)
         let range = NSRange(s.startIndex..., in: s)
         return noise.stringByReplacingMatches(in: s, range: range, withTemplate: "")
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",，")))

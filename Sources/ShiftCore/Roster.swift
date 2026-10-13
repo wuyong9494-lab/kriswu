@@ -324,12 +324,12 @@ public enum GroupNotes {
     static let minLength = 8
 
     static func isGroup(_ s: String) -> Bool {
-        let t = s.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "：:")))
+        let t = s.halfwidthAlnum.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "：:")))
         return groupName.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil
     }
 
     static func normalizeGroup(_ s: String) -> String {
-        s.filter { !$0.isWhitespace && $0 != "：" && $0 != ":" }.uppercased()
+        s.halfwidthAlnum.filter { !$0.isWhitespace && $0 != "：" && $0 != ":" }.uppercased()
     }
 
     /// 表格文字：一行开头是「组E」，后面的格子是说明；或者「组E」单独一行，下一行是说明。

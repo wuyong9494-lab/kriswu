@@ -120,6 +120,6 @@ public struct ShiftMatcher {
     }
 
     static func normalize(_ s: String) -> String {
-        s.lowercased().filter { !$0.isWhitespace }
+        s.halfwidthAlnum.lowercased().filter { !$0.isWhitespace }
     }
 }

@@ -647,6 +647,14 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testFullwidthInput() {
+        XCTAssertEqual("２０２６年１０月９日 组Ａ".halfwidthAlnum, "2026年10月9日 组A")
+        XCTAssertEqual(DateTokenParser(reference: DayKey(year: 2026, month: 10, day: 1)).parse("２０２６年１０月９日"),
+                       DayKey(year: 2026, month: 10, day: 9))
+        XCTAssertEqual(ShiftMatcher(types: ShiftType.defaults).match("Ｄ")?.id, "day")
+        XCTAssertEqual(GroupNotes.normalizeGroup("组ａ"), "组A")
+    }
+
     func testHolidayPlanMidHoliday() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
