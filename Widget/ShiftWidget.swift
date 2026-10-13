@@ -156,8 +156,6 @@ struct ShiftWidgetView: View {
 }
 
 extension View {
-    /// iOS 17 起小组件要用 containerBackground 设置背景，iOS 16 用普通背景。
-    @ViewBuilder
     /// iOS 17 起系统自己留边距，再加一层会显得字小、挤；iOS 16 自己加
     @ViewBuilder
     func widgetPadding(_ length: CGFloat? = nil) -> some View {
@@ -170,6 +168,8 @@ extension View {
         }
     }
 
+    /// iOS 17 起小组件要用 containerBackground 设置背景，iOS 16 用普通背景。
+    @ViewBuilder
     func widgetBackground<S: ShapeStyle>(_ style: S) -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
             containerBackground(style, for: .widget)
