@@ -106,6 +106,10 @@ public enum WorkloadCounter {
     /// 统计用的岗位：「值班交接前」换成「交接休息」（休息），其它不变
     public static func effective(_ raw: String?, matcher: ShiftMatcher) -> String? {
         guard let raw else { return nil }
+        return matcher.cachedEffective(raw) { uncachedEffective(raw, matcher: matcher) }
+    }
+
+    private static func uncachedEffective(_ raw: String, matcher: ShiftMatcher) -> String? {
         let parts = raw.split(separator: "+").map(String.init)
             .map { isIgnored(matcher.displayName($0)) ? handoverRest : $0 }
         var seen = Set<String>()
@@ -365,6 +369,8 @@ public enum WorkloadCounter {
         guard let first = days.min(), let last = days.max() else { return [] }
         // 只算这段时间前两个月到后两周里在网站上出现过的人（调走的、还没来的不算，免得把没排班的日子都算成日常）
         let window = first.adding(days: -activeAfter, calendar: calendar)...last.adding(days: 14, calendar: calendar)
+        // 节假日先查好（每人每天都要问）
+        let holidays = Set(days.filter(ChinaHolidays.isHoliday))
         return roster.filter { $0.value.keys.contains(where: window.contains) }.compactMap { name, history -> PersonWorkload? in
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
@@ -373,7 +379,7 @@ public enum WorkloadCounter {
             // 这段时间一天都不统计（领导、已经走了、还没来）：不列出来
             if dayKinds.isEmpty { return nil }
             for day in days {
-                let holiday = ChinaHolidays.isHoliday(day)
+                let holiday = holidays.contains(day)
                 // 不统计的日子（手动改成不算、已经调走）岗位也不计
                 guard let kind = dayKinds[day] else { continue }
                 for post in effective(history[day], matcher: matcher)?.split(separator: "+") ?? [] {

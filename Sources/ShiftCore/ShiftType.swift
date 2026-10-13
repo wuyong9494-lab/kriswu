@@ -45,7 +45,7 @@ public struct ShiftType: Identifiable, Hashable, Codable {
 public struct ShiftMatcher {
     public var types: [ShiftType] { didSet { index = Self.buildIndex(types); cache = MatchCache() } }
     /// 识别结果缓存：排班里的写法就那么几十种，统计、推算却要问几十万次。可以多线程用
-    private var cache = MatchCache()
+    fileprivate(set) var cache = MatchCache()
 
     /// 预先整理好的名称、代码、关键字（match 每次调用不用再整理一遍）
     private struct Entry {
@@ -149,4 +149,16 @@ final class MatchCache {
     }
     let matches = NSCache<NSString, Hit>()
     let names = NSCache<NSString, NSString>()
+    /// 统计用的岗位（WorkloadCounter.effective）；空字符串表示 nil
+    let effective = NSCache<NSString, NSString>()
+}
+
+extension ShiftMatcher {
+    /// 按文字缓存「统计用的岗位」（一年几十人几百天，写法却只有几十种）
+    func cachedEffective(_ raw: String, compute: () -> String?) -> String? {
+        if let hit = cache.effective.object(forKey: raw as NSString) { return hit.length == 0 ? nil : hit as String }
+        let value = compute()
+        cache.effective.setObject((value ?? "") as NSString, forKey: raw as NSString)
+        return value
+    }
 }
