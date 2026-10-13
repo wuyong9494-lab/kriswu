@@ -30,6 +30,8 @@ struct SiteCodeFinderView: View {
             .padding(10)
             .background(.thinMaterial)
         }
+        // 底部的悬浮标签栏会挡住「查找」按钮：留出位置
+        .appBackground()
         .navigationTitle("查找网页排班代码")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
