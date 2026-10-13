@@ -1388,6 +1388,35 @@ final class PatternTests: XCTestCase {
         XCTAssertNil(RosterExtractor.identify(mine: [d(1): "组A"], roster: roster, matcher: m))   // 太少，不认
     }
 
+    func testDutyRotationTwoLines() {
+        // 工作日生产岗丙丁戊轮，周末研发岗甲乙轮（网站两份轮转名单）
+        let base = DayKey(year: 2026, month: 11, day: 2)      // 周一
+        let e = { (i: Int) in base.adding(days: i - 1, calendar: self.cal) }
+        var roster: Roster = [:]
+        var p = 0, q = 0
+        for i in 1...21 {
+            let weekend = SiteAPI.siteWeekday(e(i), calendar: cal) >= 6
+            let name = weekend ? ["甲", "乙"][q % 2] : ["丙", "丁", "戊"][p % 3]
+            if weekend { q += 1 } else { p += 1 }
+            roster[name, default: [:]][e(i)] = "遥测"
+        }
+        let people = ["甲": SiteAPI.Person(category: "研发岗"), "乙": SiteAPI.Person(category: "研发岗"),
+                      "丙": SiteAPI.Person(category: "生产岗"), "丁": SiteAPI.Person(category: "生产岗"),
+                      "戊": SiteAPI.Person(category: "生产岗")]
+        let plain = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...21).map(e), matcher: m, calendar: cal)
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...21).map(e), matcher: m,
+                                          forecastDays: 7, calendar: cal, people: people)
+        XCTAssertEqual(r?.slots, 21)
+        XCTAssertEqual(r?.matched, 21)
+        XCTAssertLessThan(plain?.matched ?? 0, 21)
+        XCTAssertTrue(r?.model.contains("两条线") == true)
+        // 往后推：周末是研发岗，工作日是生产岗
+        for f in r?.forecast ?? [] {
+            let weekend = SiteAPI.siteWeekday(f.day, calendar: cal) >= 6
+            XCTAssertEqual(people[f.name]?.category, weekend ? "研发岗" : "生产岗", "\(f.day)")
+        }
+    }
+
     func testRosterPreview() {
         // 5 人轮流值了 10 天；网站排到第 10 天。预演第 11 天起：甲值，前一天戊值完在休息；丙已经申请了请假
         let base = DayKey(year: 2026, month: 11, day: 2)      // 周一

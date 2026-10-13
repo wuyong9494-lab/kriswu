@@ -155,23 +155,51 @@ public enum SchedulePatterns {
             }
         }
 
-        // 固定顺序：谁后面最常接着谁（请假顺延、换班只是偶尔打乱）
-        var sequence: [String] = []
-        for day in sorted {
-            sequence += roster.keys.filter { pool.contains($0) && holds($0, day) }.sorted()
+        // 网站把人分成研发岗、生产岗，两类各有一份轮转名单（研发循环、生产循环）：分开轮
+        func line(_ name: String) -> String {
+            guard post == "遥测", let c = people[name]?.category else { return "" }
+            return c.contains("研") ? "研发" : (c.contains("生") ? "生产" : "")
         }
-        var successors: [String: [String: Int]] = [:]
-        for (a, b) in zip(sequence, sequence.dropFirst()) where a != b { successors[a, default: [:]][b, default: 0] += 1 }
+        let lines = Set(pool.map(line))
+        let split = lines.count >= 2 && !lines.contains("")
+        // 每个星期几一般是哪条线值（研发岗只在自己能值的星期几值）
+        var lineByWeekday: [Int: [String: Int]] = [:]
+        if split {
+            for day in sorted {
+                for h in roster.keys where pool.contains(h) && holds(h, day) {
+                    lineByWeekday[siteWeekday(day), default: [:]][line(h), default: 0] += 1
+                }
+            }
+        }
+        func lineFor(_ day: DayKey) -> String? {
+            lineByWeekday[siteWeekday(day)]?.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+        }
+        /// 这天该哪条线值：那条线的人排前面
+        func ordered(_ list: [String], _ day: DayKey) -> [String] {
+            guard split, let l = lineFor(day) else { return list }
+            return list.filter { line($0) == l } + list.filter { line($0) != l }
+        }
+
+        // 固定顺序：谁后面最常接着谁（请假顺延、换班只是偶尔打乱）；分两条线时每条线各自算
         var cycle: [String] = []
-        if var current = sequence.first {
-            cycle = [current]
-            while cycle.count < pool.count {
-                let next = successors[current, default: [:]].filter { !cycle.contains($0.key) }
+        for l in lines.sorted() {
+            let members = pool.filter { line($0) == l }
+            var sequence: [String] = []
+            for day in sorted {
+                sequence += roster.keys.filter { members.contains($0) && holds($0, day) }.sorted()
+            }
+            var successors: [String: [String: Int]] = [:]
+            for (a, b) in zip(sequence, sequence.dropFirst()) where a != b { successors[a, default: [:]][b, default: 0] += 1 }
+            guard var current = sequence.first else { continue }
+            var part = [current]
+            while part.count < members.count {
+                let next = successors[current, default: [:]].filter { !part.contains($0.key) }
                     .max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
-                    ?? queue(initial).first { !cycle.contains($0) }!
-                cycle.append(next)
+                    ?? queue(initial).first { members.contains($0) && !part.contains($0) }!
+                part.append(next)
                 current = next
             }
+            cycle += part
         }
 
         /// 两种模型：recency = 轮到最久没值的人；cycle = 按固定顺序一轮一轮来，这一轮值过的（指定日期提前值了的也算）等下一轮
@@ -188,7 +216,11 @@ public enum SchedulePatterns {
                 s.last[h] = day
                 s.served.insert(h)
             }
-            if s.served.count >= pool.count { s.served = [] }
+            // 一条线的人都值过一轮了：这条线开始新的一轮
+            for l in lines {
+                let members = pool.filter { line($0) == l }
+                if members.isSubset(of: s.served) { s.served.subtract(members) }
+            }
         }
         /// 这天排不了：请假、出差、休息（leave），或者还在自己上次值班后的休息里
         func blocked(_ name: String, _ day: DayKey, _ s: State, leaveAware: Bool) -> (reason: String, leave: Bool)? {
@@ -215,7 +247,7 @@ public enum SchedulePatterns {
                 guard !holders.isEmpty else { continue }
                 var predicted: [String] = []
                 var deferredToday: Set<String> = []
-                for name in priority(run.state, model) where predicted.count < holders.count {
+                for name in ordered(priority(run.state, model), day) where predicted.count < holders.count {
                     if let why = blocked(name, day, run.state, leaveAware: leaveAware) {
                         if why.leave {
                             deferredToday.insert(name)
@@ -258,7 +290,7 @@ public enum SchedulePatterns {
         var day = end
         for _ in 0..<forecastDays {
             day = day.adding(days: 1, calendar: calendar)
-            guard let next = priority(state, model).first(where: { blocked($0, day, state, leaveAware: true) == nil })
+            guard let next = ordered(priority(state, model), day).first(where: { blocked($0, day, state, leaveAware: true) == nil })
             else { continue }
             forecast.append(ForecastDay(day: day, name: next))
             observe(&state, [next], day)
@@ -268,9 +300,9 @@ public enum SchedulePatterns {
                         strictMatched: strict.matched, deferrals: Array(run.deferrals.reversed()),
                         exceptions: Array(run.exceptions.reversed()), forecast: forecast,
                         cycleDays: Double(pool.count) / max(perDay, 1),
-                        model: model == .cycle
+                        model: (split ? "研发岗、生产岗两条线分开轮；" : "") + (model == .cycle
                             ? "按固定顺序一轮一轮来：\(cycle.joined(separator: "→"))；指定日期提前值了的，这一轮不再轮到"
-                            : "轮到最久没值的人；指定日期、换班值了的，从值的那天重新排队",
+                            : "轮到最久没值的人；指定日期、换班值了的，从值的那天重新排队"),
                         fixedDays: run.fixed,
                         usesSiteSettings: post == "遥测" && people.values.contains { $0.telemetryWeekdays?.isEmpty == false || $0.onDuty != nil })
     }
