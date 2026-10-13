@@ -159,7 +159,20 @@ private struct AddSwapView: View {
         NavigationStack {
             Form {
                 DatePicker("日期", selection: $date, displayedComponents: .date)
-                TextField("同事名字", text: $person)
+                HStack {
+                    TextField("同事名字", text: $person)
+                    // 从全员名单里选，名字打错了账就对不上
+                    if !store.roster.isEmpty {
+                        Menu {
+                            ForEach(store.roster.keys.filter { !store.isMe($0) }
+                                .sorted { $0.compare($1, locale: Locale(identifier: "zh_CN")) == .orderedAscending }, id: \.self) { name in
+                                Button(name) { person = name }
+                            }
+                        } label: {
+                            Image(systemName: "person.crop.circle.badge.plus").accessibilityLabel("从名单里选")
+                        }
+                    }
+                }
                 Picker("谁替谁", selection: $iCovered) {
                     Text("我替他上了班").tag(true)
                     Text("他替我上了班").tag(false)
