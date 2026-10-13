@@ -772,6 +772,7 @@ struct FloatingTabBar<Tab: Hashable>: View {
                     }
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         .padding(DS.Space.xs)

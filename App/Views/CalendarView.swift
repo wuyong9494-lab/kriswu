@@ -28,8 +28,11 @@ struct CalendarView: View {
                             Color.clear.frame(height: 64).id("blank-\(i)")
                         }
                         ForEach(days) { day in
-                            DayCell(day: day, isToday: day == DayKey.today)
-                                .onTapGesture { Haptics.tap(); editing = day }
+                            // 按钮（读屏会说「按钮」，也有按下效果）
+                            Button { Haptics.tap(); editing = day } label: {
+                                DayCell(day: day, isToday: day == DayKey.today)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .card(padding: DS.Space.s)
