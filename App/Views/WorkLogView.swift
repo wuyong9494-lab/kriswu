@@ -82,6 +82,7 @@ struct WorkLogView: View {
     @State private var showGuide = false
     @State private var filter: WorkLogEntry.Kind?
     @State private var pendingDelete: [WorkLogEntry] = []
+    @State private var sharing: ShareBundle?
 
     var body: some View {
         if store.settings.workLogLock && !log.unlocked {
@@ -116,7 +117,10 @@ struct WorkLogView: View {
             HStack {
                 Text(title)
                 Spacer()
-                ShareLink(items: exportItems(day: day, entries: entries), preview: { SharePreview($0.name) }) {
+                // 点了才写文字汇总；照片、录音按原来的文件类型分享（微信、文件 App 都认得）
+                Button {
+                    sharing = ShareBundle(urls: exportItems(day: day, entries: entries))
+                } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .accessibilityLabel("分享这天的全部留痕")
@@ -125,7 +129,7 @@ struct WorkLogView: View {
     }
 
     /// 这天的文件 + 一份文字汇总
-    private func exportItems(day: DayKey, entries: [WorkLogEntry]) -> [WorkLogShareFile] {
+    private func exportItems(day: DayKey, entries: [WorkLogEntry]) -> [URL] {
         let sorted = entries.sorted { $0.date < $1.date }
         var lines = ["\(day.dateText) 工作留痕"]
         for e in sorted {
@@ -136,9 +140,13 @@ struct WorkLogView: View {
             if !text.isEmpty { line += "\n  " + text }
             lines.append(line)
         }
-        var items = [WorkLogShareFile(name: "\(day) 工作留痕.txt", text: lines.joined(separator: "\n"))]
+        var items: [URL] = []
+        let summary = FileManager.default.temporaryDirectory.appendingPathComponent("\(day) 工作留痕.txt")
+        if (try? lines.joined(separator: "\n").data(using: .utf8)?.write(to: summary, options: .atomic)) != nil {
+            items.append(summary)
+        }
         for e in sorted {
-            if let url = log.url(for: e) { items.append(WorkLogShareFile(name: url.lastPathComponent, url: url)) }
+            if let url = log.url(for: e) { items.append(url) }
         }
         return items
     }
@@ -210,6 +218,7 @@ struct WorkLogView: View {
             Button("取消", role: .cancel) { pendingDelete = [] }
         }
         .searchable(text: $query, prompt: "搜说明、录音文字、班次")
+        .sheet(item: $sharing) { ActivityView(items: $0.urls) }
         .appList()
         .navigationTitle("工作留痕")
         .navigationBarTitleDisplayMode(.inline)
@@ -637,18 +646,19 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
-/// 分享出去的一个文件：留痕里已有的文件，或者临时写出来的文字汇总
-struct WorkLogShareFile: Transferable {
-    var name: String
-    var url: URL?
-    var text: String?
+/// 要分享的一组文件
+struct ShareBundle: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+}
 
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .data) { item in
-            if let url = item.url { return SentTransferredFile(url) }
-            let temp = FileManager.default.temporaryDirectory.appendingPathComponent(item.name)
-            try (item.text ?? "").data(using: .utf8)?.write(to: temp, options: .atomic)
-            return SentTransferredFile(temp)
-        }
+/// 系统分享面板（按文件扩展名认类型：jpg、m4a、txt）
+struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
