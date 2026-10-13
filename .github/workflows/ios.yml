@@ -301,6 +301,12 @@ jobs:
           grep -q "BEGIN PRIVATE KEY" "$KEY" || { echo "::error::ASC_KEY_P8 不是 .p8 文件的内容（应以 -----BEGIN PRIVATE KEY----- 开头）"; exit 1; }
           echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
 
+      - name: 清理 CI 以前留下的开发证书（苹果限制数量，满了就打不了包）
+        if: steps.check.outputs.skip != '1'
+        run: |
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography || python3 -m pip install --quiet --user pyjwt cryptography
+          python3 .github/scripts/asc_dev_certs.py cleanup || echo "::warning::清理开发证书失败，继续打包"
+
       - name: 打包（自动签名）
         if: steps.check.outputs.skip != '1'
         shell: bash -eo pipefail {0}
@@ -347,3 +353,10 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -80
           echo "::notice::已上传 build ${{ github.run_number }}，App Store Connect 处理完（一般 5–30 分钟）后在 TestFlight 里就能装"
+
+      - name: 吊销这次新建的开发证书
+        if: always() && steps.check.outputs.skip != '1'
+        run: |
+          SERIALS=$(security find-certificate -a -c "Apple Development" -p 2>/dev/null \
+            | awk '/BEGIN CERT/{n++} {print > ("/tmp/cert" n ".pem")}' ; for f in /tmp/cert*.pem; do [ -s "$f" ] && openssl x509 -in "$f" -noout -serial | cut -d= -f2; done)
+          python3 .github/scripts/asc_dev_certs.py cleanup $SERIALS || echo "::warning::吊销开发证书失败"
