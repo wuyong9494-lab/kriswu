@@ -647,6 +647,19 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testICSExport() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let schedule = [DayKey(year: 2026, month: 12, day: 31): "遥测", DayKey(year: 2027, month: 1, day: 5): "组D",
+                        DayKey(year: 2026, month: 10, day: 1): "休息"]
+        let ics = ICSExport.make(schedule: schedule, from: DayKey(year: 2026, month: 12, day: 1), to: DayKey(year: 2027, month: 1, day: 31),
+                                 matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
+        XCTAssertTrue(ics.hasPrefix("BEGIN:VCALENDAR\r\n"))
+        XCTAssertEqual(ics.components(separatedBy: "BEGIN:VEVENT").count - 1, 2)   // 范围外的不导出
+        XCTAssertTrue(ics.contains("DTSTART;VALUE=DATE:20261231\r\nDTEND;VALUE=DATE:20270101"))
+        XCTAssertTrue(ics.contains("SUMMARY:") && ics.contains("遥测"))
+    }
+
     func testDutyLeadReminder() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!

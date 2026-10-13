@@ -1,4 +1,6 @@
+import CoreTransferable
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct CalendarView: View {
     @EnvironmentObject private var store: AppStore
@@ -53,6 +55,13 @@ struct CalendarView: View {
                     Menu {
                         ShareLink(item: store.monthReport(year: year, month: month)) {
                             Label("分享 / 复制本月统计", systemImage: "square.and.arrow.up")
+                        }
+                        // 给家人：导出成日历文件，导入后他们的日历里就有我的班
+                        ShareLink(item: ScheduleICS(text: ICSExport.make(
+                            schedule: store.schedule, from: DayKey.today.adding(days: -7), to: DayKey.today.adding(days: 120),
+                            matcher: store.matcher, calendar: .app)),
+                                  preview: SharePreview("我的排班.ics")) {
+                            Label("导出日历文件（给家人）", systemImage: "calendar.badge.plus")
                         }
                         Button {
                             Task {
@@ -349,5 +358,18 @@ struct DayEditor: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+/// 分享出去的 .ics 文件
+struct ScheduleICS: Transferable {
+    let text: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .calendarEvent) { item in
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("我的排班.ics")
+            try item.text.data(using: .utf8)?.write(to: url, options: .atomic)
+            return SentTransferredFile(url)
+        }
     }
 }
