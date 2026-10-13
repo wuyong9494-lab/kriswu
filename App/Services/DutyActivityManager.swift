@@ -39,9 +39,12 @@ enum DutyActivityManager {
         let after = rest.isEmpty
             ? "明天 \(handover.text) 下班" + (schedule[next].map { "，明天：\(matcher.displayName($0))" } ?? "")
             : "下班后休息：" + rest.map(\.dateText).joined(separator: "、")
+        // 这天的清单（交接前看一眼还差什么）
+        let tasks = AppStore.shared.liveTaskRecord(on: day)
         return Target(day: day, post: matcher.displayName(schedule[day] ?? "遥测"),
                       state: .init(start: day.date(calendar: cal, hour: handover.hour, minute: handover.minute),
-                                   end: next.date(calendar: cal, hour: handover.hour, minute: handover.minute), after: after))
+                                   end: next.date(calendar: cal, hour: handover.hour, minute: handover.minute), after: after,
+                                   tasksDone: tasks?.done.count, tasksTotal: tasks?.total, nextTask: tasks?.todo.first))
     }
 
     static func update(schedule: [DayKey: String], matcher: ShiftMatcher, enabled: Bool) {

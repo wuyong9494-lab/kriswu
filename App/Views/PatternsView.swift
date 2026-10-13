@@ -146,7 +146,7 @@ struct SchedulePatternsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if !store.settings.fixedTelemetryDays.isEmpty {
-                    Text("网站标了「固定」（手动指定）的遥测 \(store.settings.fixedTelemetryDays.count) 天，不算进猜中率。")
+                    Text("网站标了「固定」（手动指定）的遥测 \(store.settings.fixedTelemetryDays.count) 天，不算进猜对的次数。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             } header: {
@@ -177,26 +177,26 @@ struct SchedulePatternsView: View {
                     Spacer()
                     Text(pct(r.rate)).font(DS.Font.headline.monospacedDigit())
                 }
-                LabeledContent("按顺序 + 请假出差顺延", value: "猜中 \(r.matched)/\(r.slots)")
-                LabeledContent("只按顺序、不顺延", value: "猜中 \(r.strictMatched)/\(r.slots)")
+                LabeledContent("按顺序 + 请假出差顺延", value: "猜对 \(r.matched)/\(r.slots)")
+                LabeledContent("只按顺序、不顺延", value: "猜对 \(r.strictMatched)/\(r.slots)")
                 if r.lineSlots > 0 {
                     // 两条线：先看哪天该哪条线值猜没猜对，再看线里轮到谁猜没猜对，知道错在哪
                     LabeledContent("哪天轮到研发 / 生产", value: "猜对 \(r.lineHits)/\(r.lineSlots)")
                     LabeledContent("线对了，线里轮到谁", value: "猜对 \(r.inLineHits)/\(max(r.lineHits, 1))")
                     ForEach(r.perLine.keys.sorted().filter { !$0.isEmpty }, id: \.self) { l in
                         let stat = r.perLine[l] ?? [0, 0]
-                        LabeledContent("\(l)线", value: "猜中 \(stat[1])/\(stat[0])")
+                        LabeledContent("\(l)线", value: "猜对 \(stat[1])/\(stat[0])")
                     }
                 }
                 if r.weekSlots > 0 {
                     // 网站可能一周一起排：按周看猜到了谁（不管哪一天）
-                    LabeledContent("按周看：这周轮到谁", value: "猜到 \(r.weekHits)/\(r.weekSlots)")
+                    LabeledContent("按周看：这周轮到谁", value: "猜对 \(r.weekHits)/\(r.weekSlots)")
                 }
                 if r.modelScores.count > 1 {
                     // 几种猜法往回验证的结果：用的是最准的那种
-                    DisclosureGroup("试过的 \(r.modelScores.count) 种算法") {
+                    DisclosureGroup("试过的 \(r.modelScores.count) 种推法（自动用最准的）") {
                         ForEach(Array(r.modelScores.enumerated()), id: \.offset) { _, m in
-                            LabeledContent(m.name, value: "猜中 \(m.matched)/\(r.slots)")
+                            LabeledContent(m.name, value: "猜对 \(m.matched)/\(r.slots)")
                                 .font(.subheadline)
                         }
                     }
@@ -250,7 +250,7 @@ struct SchedulePatternsView: View {
             } header: {
                 Text(title)
             } footer: {
-                Text("模型：\(r.model)。那天请假、出差、休息，或者还在自己上次值班后的休息里，就跳过，回来后排在最前面。猜不中的多半是指定日期或换班。只用前一天为止的排班往下猜，不偷看当天网站上的其他岗位。")
+                Text("现在的推法：\(r.model)。那天请假、出差、休息，或者还在自己上次值班后的休息里，就跳过，回来后排在最前面。猜错的多半是指定日期或换班。只用前一天为止的排班往下猜，不偷看当天网站上的其他岗位。")
             }
         }
     }
@@ -258,7 +258,7 @@ struct SchedulePatternsView: View {
     private func deferralConclusion(_ r: SchedulePatterns.Rotation) -> String {
         let gain = r.matched - r.strictMatched
         if r.deferrals.isEmpty { return "这段时间没有因请假、出差顺延的情况。" }
-        if gain > 0 { return "请假、出差的人会自动往后顺延：考虑顺延后多猜中 \(gain) 次。" }
+        if gain > 0 { return "请假、出差的人会自动往后顺延：算上顺延多猜对 \(gain) 次。" }
         return "看不出请假、出差后是顺延还是直接跳过。"
     }
 

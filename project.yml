@@ -7,9 +7,12 @@ options:
   developmentLanguage: zh-Hans
 settings:
   base:
-    MARKETING_VERSION: "1.1"
+    MARKETING_VERSION: "1.2"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
+    # 界面文字集中到 App/Localizable.xcstrings（中文为基础语言）：在 Xcode 里编译一次就会把代码里的文字收集进去，以后翻译、改字都在那里
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 targets:
   ShiftReminder:
     type: application

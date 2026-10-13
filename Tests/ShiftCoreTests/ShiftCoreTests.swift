@@ -1220,6 +1220,24 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(TaskList.items(from: "负责数据处理。"), ["负责数据处理"])
     }
 
+    func testTaskDayRecord() {
+        let r = TaskDayRecord(shift: "组A", done: ["巡检机房", "填写日志"], todo: ["交接班"])
+        XCTAssertEqual(r.total, 3)
+        XCTAssertFalse(r.isComplete)
+        XCTAssertEqual(r.progress, "清单 2/3")
+        XCTAssertEqual(r.lines, ["已完成：巡检机房；填写日志", "未完成：交接班"])
+        let all = TaskDayRecord(done: ["巡检机房"], todo: [])
+        XCTAssertTrue(all.isComplete)
+        XCTAssertEqual(all.progress, "清单 1/1 全部做完")
+        XCTAssertEqual(all.lines, ["已完成：巡检机房"])
+        XCTAssertFalse(TaskDayRecord(done: [], todo: []).isComplete)
+        let history = ["2026-10-01": r, "2026-10-12": all, "2026-10-13": r]
+        XCTAssertEqual(Set(TaskDayRecord.pruned(history, keepingFrom: d(12)).keys), ["2026-10-12", "2026-10-13"])
+        // 旧存档能读回来
+        let data = try! JSONEncoder().encode(history)
+        XCTAssertEqual(try? JSONDecoder().decode([String: TaskDayRecord].self, from: data), history)
+    }
+
     func testRulesAndOverrides() {
         let roster: Roster = ["甲": [d(12): "组A", d(14): "休息"]]      // 10/12 周一
         let days = (12...16).map(d)
@@ -1849,7 +1867,7 @@ final class SystemLogicTests: XCTestCase {
         XCTAssertEqual(e[d(12)]?.kind, .regular)
         XCTAssertTrue(e[d(12)]?.reason.contains("组A") == true)
         XCTAssertTrue(e[d(13)]?.reason.contains("轮组别") == true, e[d(13)]?.reason ?? "")
-        XCTAssertTrue(e[d(13)]?.reason.contains("自动判断") == true)
+        XCTAssertTrue(e[d(13)]?.reason.contains("按最近排班认") == true)
         XCTAssertTrue(e[d(14)]?.reason.contains("休息") == true)
         XCTAssertTrue(e[d(17)]?.reason.contains("周末") == true)
         WorkloadCounter.overrides = ["甲": [d(13): "休息"]]
@@ -1913,5 +1931,124 @@ final class SystemLogicTests: XCTestCase {
         let history: [DayKey: String] = [d(17): "遥测", d(19): "调休"]
         XCTAssertEqual(RestBalanceAudit.expectedChange(history, from: d(12), to: d(18), rule: rule, matcher: m, calendar: cal), 1)
         XCTAssertEqual(RestBalanceAudit.expectedChange(history, from: d(12), to: d(20), rule: rule, matcher: m, calendar: cal), 0)
+    }
+}
+
+final class PolicyTests: XCTestCase {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+    let m = ShiftMatcher(types: ShiftType.defaults)
+    let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }   // 10/13 周二，10/18 周日
+    func at(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date { d(day).date(calendar: cal, hour: hour, minute: minute) }
+
+    func testRetryWait() {
+        XCTAssertEqual(SyncPolicy.retryWait(failures: 0), 0)
+        XCTAssertEqual(SyncPolicy.retryWait(failures: 1), 120)
+        XCTAssertEqual(SyncPolicy.retryWait(failures: 2), 240)
+        XCTAssertEqual(SyncPolicy.retryWait(failures: 3), 480)
+        XCTAssertEqual(SyncPolicy.retryWait(failures: 7), 7200)     // 最多 2 小时
+        XCTAssertEqual(SyncPolicy.retryWait(failures: 30), 7200)
+    }
+
+    func testShouldAutoSync() {
+        let now = at(13, 9)
+        XCTAssertFalse(SyncPolicy.shouldAutoSync(now: now, lastSync: now.addingTimeInterval(-60), lastAttempt: nil, failures: 0))
+        XCTAssertTrue(SyncPolicy.shouldAutoSync(now: now, lastSync: now.addingTimeInterval(-600), lastAttempt: nil, failures: 0))
+        XCTAssertTrue(SyncPolicy.shouldAutoSync(now: now, lastSync: nil, lastAttempt: nil, failures: 0))
+        // 失败两次：等 4 分钟
+        XCTAssertFalse(SyncPolicy.shouldAutoSync(now: now, lastSync: nil, lastAttempt: now.addingTimeInterval(-180), failures: 2))
+        XCTAssertTrue(SyncPolicy.shouldAutoSync(now: now, lastSync: nil, lastAttempt: now.addingTimeInterval(-300), failures: 2))
+    }
+
+    func testKnownDaysAndBrokenSync() {
+        let covered = Set((12...20).map(d))
+        let replaced = Set((13...19).map(d))
+        // 16、17 日网站还没正式排班、全员排班里只有请假记录：不算已经知道的
+        let known = SyncPolicy.knownDays(covered: covered, replaced: replaced, today: d(13),
+                                         published: Set((13...15).map(d)), rosterDays: Set((13...17).map(d)))
+        XCTAssertEqual(known, Set([d(13), d(14), d(15), d(18), d(19)]))
+        // 还不知道哪些日子排过班：读到的范围里今天及以后都算
+        XCTAssertEqual(SyncPolicy.knownDays(covered: covered, replaced: replaced, today: d(13), published: [], rosterDays: []),
+                       Set((13...19).map(d)))
+        XCTAssertTrue(SyncPolicy.looksBroken(known: 5, changed: 4))
+        XCTAssertFalse(SyncPolicy.looksBroken(known: 5, changed: 3))      // 正好六成：不算
+        XCTAssertFalse(SyncPolicy.looksBroken(known: 4, changed: 4))      // 太少看不出
+        XCTAssertTrue(SyncPolicy.looksBroken(known: 10, changed: 7))
+    }
+
+    func testShiftIcon() {
+        XCTAssertEqual(ShiftIcon.name(for: "遥测", matcher: m), "IconDuty")
+        XCTAssertEqual(ShiftIcon.name(for: "组B", matcher: m), "IconB")
+        XCTAssertEqual(ShiftIcon.name(for: "组 c+调度", matcher: m), "IconC")
+        XCTAssertEqual(ShiftIcon.name(for: "调度", matcher: m), "IconDispatch")
+        XCTAssertEqual(ShiftIcon.name(for: "出差", matcher: m), "IconTrip")
+        XCTAssertEqual(ShiftIcon.name(for: "休息", matcher: m), "IconRest")
+        XCTAssertEqual(ShiftIcon.name(for: "调休", matcher: m), "IconRest")
+        XCTAssertNil(ShiftIcon.name(for: nil, matcher: m))
+    }
+
+    private func due(_ now: Date, _ morning: ClockTime?, _ evening: ClockTime?,
+                     _ morningSent: DayKey?, _ eveningSent: DayKey?) -> WeChatSchedule.Daily? {
+        WeChatSchedule.dailyDue(now: now, today: d(13), morning: morning, evening: evening,
+                                morningSent: morningSent, eveningSent: eveningSent, calendar: cal)
+    }
+
+    func testDailyWeChatDue() {
+        let am = ClockTime(hour: 7, minute: 30), pm = ClockTime(hour: 20, minute: 30)
+        XCTAssertNil(due(at(13, 7), am, pm, nil, nil))
+        XCTAssertEqual(due(at(13, 8), am, pm, nil, nil), .morning)
+        XCTAssertNil(due(at(13, 8), am, pm, d(13), nil))
+        XCTAssertEqual(due(at(13, 8), am, pm, d(12), nil), .morning)
+        // 过了晚上提醒时间：发晚上那条（说明天），早上那条不再补发
+        XCTAssertEqual(due(at(13, 21), am, pm, nil, nil), .evening)
+        XCTAssertNil(due(at(13, 21), am, pm, d(13), d(13)))
+        // 晚上提醒关了：白天补发早上那条
+        XCTAssertEqual(due(at(13, 21), am, nil, nil, nil), .morning)
+        XCTAssertNil(due(at(13, 21), nil, nil, nil, nil))
+    }
+
+    func testWeekPreviewDue() {
+        let evening = ClockTime(hour: 20, minute: 30)
+        XCTAssertTrue(WeChatSchedule.weekPreviewDue(now: at(18, 21), today: d(18), evening: evening, sent: nil, calendar: cal))
+        XCTAssertFalse(WeChatSchedule.weekPreviewDue(now: at(18, 21), today: d(18), evening: evening, sent: d(18), calendar: cal))
+        XCTAssertFalse(WeChatSchedule.weekPreviewDue(now: at(18, 19), today: d(18), evening: evening, sent: nil, calendar: cal))
+        // 晚上提醒关了：按 20:00
+        XCTAssertTrue(WeChatSchedule.weekPreviewDue(now: at(18, 20, 10), today: d(18), evening: nil, sent: nil, calendar: cal))
+        // 不是周日
+        XCTAssertFalse(WeChatSchedule.weekPreviewDue(now: at(17, 21), today: d(17), evening: evening, sent: nil, calendar: cal))
+    }
+
+    func testNextWeChatReminder() {
+        let morning = ClockTime(hour: 7, minute: 30), evening = ClockTime(hour: 20, minute: 30)
+        XCTAssertEqual(WeChatSchedule.nextReminder(now: at(13, 8), today: d(13), morning: morning, evening: evening,
+                                                   weeklyPreview: true, calendar: cal), at(13, 20, 30))
+        XCTAssertEqual(WeChatSchedule.nextReminder(now: at(13, 21), today: d(13), morning: morning, evening: evening,
+                                                   weeklyPreview: false, calendar: cal), at(14, 7, 30))
+        // 周六晚上、提醒都关了：只有周日 20:00 的下周预告
+        XCTAssertEqual(WeChatSchedule.nextReminder(now: at(17, 21), today: d(17), morning: nil, evening: nil,
+                                                   weeklyPreview: true, calendar: cal), at(18, 20))
+        XCTAssertNil(WeChatSchedule.nextReminder(now: at(17, 21), today: d(17), morning: nil, evening: nil,
+                                                 weeklyPreview: false, calendar: cal))
+    }
+
+    func testWeekKeyStartsMonday() {
+        let key = WeChatSchedule.weekKey(at(13, 12), calendar: cal)
+        XCTAssertEqual(WeChatSchedule.weekKey(at(12, 1), calendar: cal), key)    // 周一
+        XCTAssertEqual(WeChatSchedule.weekKey(at(18, 23), calendar: cal), key)   // 周日还是这一周
+        XCTAssertNotEqual(WeChatSchedule.weekKey(at(19, 1), calendar: cal), key) // 下周一
+        XCTAssertTrue(key.hasPrefix("2026-W"))
+    }
+
+    func testDigestText() {
+        XCTAssertEqual(DigestText.personalWeekly(workDays: 5, dutyDays: 1, rest: 3, week: ["周一组A", "周二遥测"],
+                                                 nextDuty: "10月20日（周二）", nextDutyScheduled: false),
+                       "上周上了 5 天，其中遥测 1 次。\n还有 3 天待休。\n这周：周一组A，周二遥测。\n下次遥测（推算）：约 10月20日（周二）。")
+        XCTAssertEqual(DigestText.personalWeekly(workDays: 4, dutyDays: 0, rest: 0, week: [], nextDuty: "10月20日（周二）",
+                                                 nextDutyScheduled: true),
+                       "上周上了 4 天。\n下次遥测：10月20日（周二）。")
+        XCTAssertEqual(DigestText.noRestLines(["2026-10-11|甲|遥测", "2026-10-12|乙|组A"], from: d(12)), ["乙 10/12（组A）"])
     }
 }

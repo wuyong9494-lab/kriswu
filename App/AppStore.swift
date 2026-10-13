@@ -1,544 +1,10 @@
 import SwiftUI
 
-enum Appearance: String, Codable, CaseIterable, Identifiable {
-    case system, light, dark
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
-        }
-    }
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
-    }
-}
-
-/// 主题色：默认跟随系统（iOS 系统蓝，自动适配浅色 / 深色），也可以选一种喜欢的颜色
-enum AccentTheme: String, Codable, CaseIterable, Identifiable {
-    case system, indigo, blue, teal, green, orange, pink, purple
-    var id: String { rawValue }
-
-    /// 当前用的主题色（App 启动、改设置时写进来，设计系统从这里取）
-    static var current: AccentTheme = .system
-
-    var title: String {
-        switch self {
-        case .system: return "跟随系统"
-        case .indigo: return "靛蓝"
-        case .blue: return "海蓝"
-        case .teal: return "青碧"
-        case .green: return "松绿"
-        case .orange: return "暖橙"
-        case .pink: return "樱粉"
-        case .purple: return "葡萄紫"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .system: return Color(uiColor: .systemBlue)
-        case .indigo: return Color(light: 0x5E6AD2, dark: 0x8A93FF)
-        case .blue: return Color(light: 0x2F6FED, dark: 0x5B9BFF)
-        case .teal: return Color(light: 0x0E9AA7, dark: 0x3DD1DB)
-        case .green: return Color(light: 0x22A06B, dark: 0x4CC38A)
-        case .orange: return Color(light: 0xE5730B, dark: 0xFF9F43)
-        case .pink: return Color(light: 0xD6407A, dark: 0xFF6FA5)
-        case .purple: return Color(light: 0x8E4EC6, dark: 0xB57BEE)
-        }
-    }
-}
-
-struct AppSettings: Codable, Equatable {
-    var aliases: [String] = []
-    var morningEnabled = true
-    var morning = ClockTime(hour: 7, minute: 30)
-    var eveningEnabled = true
-    var evening = ClockTime(hour: 20, minute: 30)
-    var notifyWhenEmpty = false
-    /// 到点时用语音读出「今天，组D」（作为通知铃声）
-    var voiceEnabled = false
-    /// 播报用的声音（空 = 自动选手机上最好的中文声音）
-    var voiceIdentifier = ""
-    /// 播报语速（0.3–0.6，系统默认 0.5）
-    var voiceRate: Float = 0.47
-    var appearance: Appearance = .system
-    var accentTheme: AccentTheme = .system
-    var sourceURL = ""
-    var sourceUsername = ""
-    /// 用 App 内置浏览器同步（沿用网页登录状态）；关掉则直接下载文件
-    var syncViaWeb = true
-    /// 同步发现排班变动时推送通知
-    var notifyChanges = true
-    var loginExpiredNotified = false
-    /// 认出的网站数据接口（如 "GET http://…/api/duty"），同步时优先用它取多周数据
-    var apiSignature: String?
-    /// 微信推送（PushPlus）
-    var weChatEnabled = false
-    /// 每天的提醒也发一份到微信（App 有机会运行时补发，可能比准点晚）
-    var weChatDaily = true
-    var weChatMorningSent: DayKey?
-    var weChatEveningSent: DayKey?
-    var weChatMessage: String?
-    /// 主屏幕图标显示今天的组（A–E / 休），打开 App 时切换
-    var dynamicIcon = true
-    /// 把排班写进 iPhone「日历」App
-    var calendarSync = false
-    /// 排班变动也发到微信（关掉后只在 iPhone 上通知）
-    var weChatChanges = true
-    /// 同事的排班变动、网站公告也推到微信（会把同事姓名发给 PushPlus），默认不推
-    var weChatTeam = false
-    /// 自己给某天写的备注（yyyy-MM-dd → 文字），日历上显示小点，那天的提醒里带上
-    var dayMemos: [String: String] = [:]
-    var lastWeChatChangeDigest: String?
-    /// 各组工作内容：电脑版网页 > 自己填写的 > 其它页面顺带读到的
-    var autoGroupNotes: [String: String] = [:]
-    var manualGroupNotes: [String: String] = [:]
-    /// 全员排班的读取规则版本；规则改了以后清掉旧数据重新读
-    var rosterVersion = 0
-    /// 每周日晚上预告下周安排（iPhone 通知 + 微信）
-    var weeklyPreview = true
-    var weChatWeekSent: DayKey?
-    /// 收藏的同事，首页显示他们今天、明天在哪个组
-    var favorites: [String] = []
-    /// 只按排班算的人（除调度外另加的）：工作日网站上没排岗位不算工作量
-    var scheduleOnlyMembers: [String] = []
-    /// 换班账本
-    var swapRecords: [SwapRecord] = []
-    /// 自己录入的节假日（yyyy-MM-dd）：放假的日子、调休上班的周末
-    var customHolidayOff: [String] = []
-    var customHolidayWork: [String] = []
-    /// 每个人待休天数的变化（只在数字变了时记一笔）
-    var restHistory: [String: [RestPoint]] = [:]
-    /// 我的待休攒到几天提醒一次（0 不提醒）
-    var restAlertThreshold: Int = 5
-    /// 上次提醒时的待休天数（再涨了才再提醒）
-    var restAlertNotified: Int?
-    /// 已经提醒过的「值完遥测该休却排了岗位」（避免重复提醒）
-    var warnedRestKeys: [String] = []
-    /// 工作留痕：录音自动转文字、只在手机上识别（不联网）、打开要面容 ID
-    var workLogAutoTranscribe = true
-    var speechOnDeviceOnly = true
-    var workLogLock = false
-    /// 第一次打开的设置向导走完了没有
-    var onboardingDone = false
-    /// 网站改版自检：每种读取方式最近几次正常的结果、现在的提醒、哪天推送过
-    var syncHealth: [String: [SyncHealth.Metrics]] = [:]
-    var syncHealthWarning: String?
-    var syncHealthWarnedDay: DayKey?
-    /// 人员档案（管理员确认过的角色、来走日期）
-    var profiles: [String: PersonProfile] = [:]
-    /// 规则改动历史（某天以前按当时的规则算）
-    var ruleHistory: [RuleVersion] = []
-    /// 读到过休息、请假的读取方式（说明带休息列）
-    var leaveSources: [String] = []
-    /// 网站排出新一周排班的时间（学网站一般什么时候排班）
-    var publishTimes: [Date] = []
-    /// 待休对账：已经提醒过的那次变化
-    var restLedgerNotified: String?
-    /// 值遥测时在锁屏显示倒计时
-    var liveActivity: Bool = true
-    /// 工作量规则开关
-    var workloadRules = WorkloadRules()
-    /// 工作量手动纠正：人名 → yyyy-MM-dd → 类别（或「不算」）
-    var workloadOverrides: [String: [String: String]] = [:]
-    /// 每月 1 号把上个月的工作量发到微信
-    var monthlyReport: Bool = true
-    var lastMonthlyReport: String?
-    /// 每周一推送上周的管理摘要（只有管理者、管理员会发）
-    var weeklyDigest: Bool = true
-    var lastWeeklyDigest: String?
-    /// 每周一给自己的小结：上周上了几天、遥测几次、待休、这周的班、下次遥测
-    var personalWeekly: Bool = true
-    var lastPersonalWeekly: String?
-    /// 网站标的「该休没休」（全员，近两个月）：「日期|名字|栏目」
-    var siteNoRestFlags: [String] = []
-    /// 关注的同事排班变了也通知
-    var notifyFavorites: Bool = true
-    /// 全员排班有变动（今天及以后，谁的都算）也提醒
-    var notifyAllChanges: Bool = true
-    /// 全员换班记录
-    var teamChanges: [TeamChange] = []
-    /// 遥测下班后补觉到几点（给快捷指令的勿扰自动化用）
-    var restFocusUntil = ClockTime(hour: 14, minute: 0)
-    /// 遥测接班时间（上一班到这时下班）；接班前多少分钟提醒，0 不提醒
-    var dutyStart = ClockTime(hour: 8, minute: 30)
-    var dutyLeadMinutes = 0
-    /// 组别任务清单勾选：「yyyy-MM-dd|组A」→ 做完的事项
-    var taskChecks: [String: [String]] = [:]
-    /// 自动备份到的文件夹（「文件」App 里选的，存成书签）
-    var backupFolderBookmark: Data?
-    var backupFolderName: String?
-    var lastAutoBackup: Date?
-    var autoBackupMessage: String?
-    /// 最近的排班变动（首页显示）
-    var changeLog: [ChangeLogEntry] = []
-    /// 已经提醒过「很久没同步成功」，同步成功后恢复
-    var syncStaleNotified = false
-    /// 上次从电脑版页面读各组工作内容的时间（一天读一次）
-    var lastDesktopNotesFetch: Date?
-    var lastDesktopNotesAttempt: Date?
-    var desktopNotesMessage: String?
-    /// 电脑版「值班查看」的网址（空 = 用同步网址的 #/duty）
-    var desktopNotesURL = ""
-    var desktopRosterMessage: String?
-    /// 每个人还有几天待休（网页上人名后括号里的数字）
-    var restBalance: [String: Int] = [:]
-    var restBalanceUpdated: Date?
-    /// 网站人员表：谁参加值班、哪几天能值遥测、待休天数（排班规律用）
-    var sitePeople: [String: SiteAPI.Person] = [:]
-    /// 网站公告里写的排班规则
-    var siteNotices: [String] = []
-    /// 公告最近一次变化的时间、新出现的几条（今天页显示 7 天）
-    var siteNoticesChanged: Date?
-    var siteNoticesNew: [String] = []
-    /// 网站标了「固定」（手动指定）遥测的日子
-    var fixedTelemetryDays: [String] = []
-    /// 各组负责的星（网站组表）
-    var groupSatellites: [String: String] = [:]
-    /// 自动下载的法定节假日安排（公开数据），和上次下载时间
-    var downloadedHolidayOff: [String] = []
-    var downloadedHolidayWork: [String] = []
-    var lastHolidayFetch: Date?
-    /// 已经提醒过的「该休没休」（日期|栏目）
-    var noRestNotified: [String] = []
-    /// 网站还没排、按顺序推算快轮到我时提前说一声；上次说是什么时候（几天内不重复）
-    var dutyHeadsUp: Bool = true
-    var dutyHeadsUpSent: Date?
-    /// 排班预演：网站还没排的日子猜的遥测（日期 → 名字）；网站排出来后拿来对，结果记在 previewResults
-    var previewGuesses: [String: String] = [:]
-    var previewResults: [PreviewResult] = []
-    /// 改了「我的名字」：下一次同步当作重新开始，不提示变动、不做异常检查
-    var nextSyncIsBaseline = false
-    /// 网站排了班、但没给我排的日子也提醒（显示「未排班」）
-    var remindUnassigned = true
-    /// 还没发到微信的排班变动
-    var pendingWeChatChange: ChangeLogEntry?
-    /// 最近 30 次同步（诊断用）
-    var syncLog: [SyncLogEntry] = []
-    /// 上次系统在后台唤醒 App 的时间
-    var lastBackgroundWake: Date?
-    /// 从电脑版「值班查看」读到的各组工作内容，优先级最高
-    var desktopGroupNotes: [String: String] = [:]
-    /// 最近一次成功同步的结果（失败时 lastSyncMessage 会被覆盖，这里留着方便排查）
-    var lastSuccessMessage: String?
-    var shiftTypes: [ShiftType] = ShiftType.defaults
-    var lastSync: Date?
-    var lastSyncMessage: String?
-    /// 上次同步的结果（不再从提示文字里猜）、上次尝试的时间、连续失败几次（自动同步按这个退避）
-    var syncState: SyncState?
-    var lastSyncAttempt: Date?
-    var syncFailureCount = 0
-
-    init() {}
-
-    // 逐项读取，新版本增加字段时旧存档也能正常打开
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        let d = AppSettings()
-        aliases = (try? c.decodeIfPresent([String].self, forKey: .aliases)) ?? d.aliases
-        morningEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .morningEnabled)) ?? d.morningEnabled
-        morning = (try? c.decodeIfPresent(ClockTime.self, forKey: .morning)) ?? d.morning
-        eveningEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .eveningEnabled)) ?? d.eveningEnabled
-        evening = (try? c.decodeIfPresent(ClockTime.self, forKey: .evening)) ?? d.evening
-        notifyWhenEmpty = (try? c.decodeIfPresent(Bool.self, forKey: .notifyWhenEmpty)) ?? d.notifyWhenEmpty
-        voiceEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .voiceEnabled)) ?? d.voiceEnabled
-        voiceIdentifier = (try? c.decodeIfPresent(String.self, forKey: .voiceIdentifier)) ?? d.voiceIdentifier
-        voiceRate = (try? c.decodeIfPresent(Float.self, forKey: .voiceRate)) ?? d.voiceRate
-        appearance = (try? c.decodeIfPresent(Appearance.self, forKey: .appearance)) ?? d.appearance
-        accentTheme = (try? c.decodeIfPresent(AccentTheme.self, forKey: .accentTheme)) ?? .system
-        sourceURL = (try? c.decodeIfPresent(String.self, forKey: .sourceURL)) ?? d.sourceURL
-        sourceUsername = (try? c.decodeIfPresent(String.self, forKey: .sourceUsername)) ?? d.sourceUsername
-        syncViaWeb = (try? c.decodeIfPresent(Bool.self, forKey: .syncViaWeb)) ?? d.syncViaWeb
-        notifyChanges = (try? c.decodeIfPresent(Bool.self, forKey: .notifyChanges)) ?? d.notifyChanges
-        loginExpiredNotified = (try? c.decodeIfPresent(Bool.self, forKey: .loginExpiredNotified)) ?? d.loginExpiredNotified
-        apiSignature = try? c.decodeIfPresent(String.self, forKey: .apiSignature)
-        weChatEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .weChatEnabled)) ?? d.weChatEnabled
-        weChatDaily = (try? c.decodeIfPresent(Bool.self, forKey: .weChatDaily)) ?? d.weChatDaily
-        weChatMorningSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatMorningSent)
-        weChatEveningSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatEveningSent)
-        weChatMessage = try? c.decodeIfPresent(String.self, forKey: .weChatMessage)
-        dynamicIcon = (try? c.decodeIfPresent(Bool.self, forKey: .dynamicIcon)) ?? d.dynamicIcon
-        calendarSync = (try? c.decodeIfPresent(Bool.self, forKey: .calendarSync)) ?? d.calendarSync
-        weChatChanges = (try? c.decodeIfPresent(Bool.self, forKey: .weChatChanges)) ?? d.weChatChanges
-        weChatTeam = (try? c.decodeIfPresent(Bool.self, forKey: .weChatTeam)) ?? d.weChatTeam
-        dayMemos = (try? c.decodeIfPresent([String: String].self, forKey: .dayMemos)) ?? [:]
-        lastWeChatChangeDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
-        autoGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes)) ?? [:]
-        manualGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes)) ?? [:]
-        rosterVersion = (try? c.decodeIfPresent(Int.self, forKey: .rosterVersion)) ?? 0
-        weeklyPreview = (try? c.decodeIfPresent(Bool.self, forKey: .weeklyPreview)) ?? d.weeklyPreview
-        weChatWeekSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
-        favorites = (try? c.decodeIfPresent([String].self, forKey: .favorites)) ?? []
-        scheduleOnlyMembers = (try? c.decodeIfPresent([String].self, forKey: .scheduleOnlyMembers)) ?? []
-        swapRecords = (try? c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords)) ?? []
-        customHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .customHolidayOff)) ?? []
-        customHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .customHolidayWork)) ?? []
-        restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
-        restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
-        restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
-        warnedRestKeys = (try? c.decodeIfPresent([String].self, forKey: .warnedRestKeys)) ?? []
-        workLogAutoTranscribe = (try? c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe)) ?? d.workLogAutoTranscribe
-        speechOnDeviceOnly = (try? c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly)) ?? d.speechOnDeviceOnly
-        workLogLock = (try? c.decodeIfPresent(Bool.self, forKey: .workLogLock)) ?? d.workLogLock
-        syncHealth = (try? c.decodeIfPresent([String: [SyncHealth.Metrics]].self, forKey: .syncHealth)) ?? [:]
-        syncHealthWarning = try? c.decodeIfPresent(String.self, forKey: .syncHealthWarning)
-        syncHealthWarnedDay = try? c.decodeIfPresent(DayKey.self, forKey: .syncHealthWarnedDay)
-        profiles = (try? c.decodeIfPresent([String: PersonProfile].self, forKey: .profiles)) ?? [:]
-        ruleHistory = (try? c.decodeIfPresent([RuleVersion].self, forKey: .ruleHistory)) ?? []
-        leaveSources = (try? c.decodeIfPresent([String].self, forKey: .leaveSources)) ?? []
-        publishTimes = (try? c.decodeIfPresent([Date].self, forKey: .publishTimes)) ?? []
-        restLedgerNotified = try? c.decodeIfPresent(String.self, forKey: .restLedgerNotified)
-        // 老用户（已经填过网址）不再弹向导
-        let savedURL = (try? c.decodeIfPresent(String.self, forKey: .sourceURL)) ?? ""
-        onboardingDone = (try? c.decodeIfPresent(Bool.self, forKey: .onboardingDone)) ?? !savedURL.isEmpty
-        liveActivity = (try? c.decodeIfPresent(Bool.self, forKey: .liveActivity)) ?? true
-        workloadRules = (try? c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules)) ?? WorkloadRules()
-        workloadOverrides = (try? c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides)) ?? [:]
-        monthlyReport = (try? c.decodeIfPresent(Bool.self, forKey: .monthlyReport)) ?? true
-        lastMonthlyReport = try? c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
-        weeklyDigest = (try? c.decodeIfPresent(Bool.self, forKey: .weeklyDigest)) ?? true
-        lastWeeklyDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeeklyDigest)
-        personalWeekly = (try? c.decodeIfPresent(Bool.self, forKey: .personalWeekly)) ?? true
-        lastPersonalWeekly = try? c.decodeIfPresent(String.self, forKey: .lastPersonalWeekly)
-        siteNoRestFlags = (try? c.decodeIfPresent([String].self, forKey: .siteNoRestFlags)) ?? []
-        notifyFavorites = (try? c.decodeIfPresent(Bool.self, forKey: .notifyFavorites)) ?? true
-        notifyAllChanges = (try? c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges)) ?? true
-        teamChanges = (try? c.decodeIfPresent([TeamChange].self, forKey: .teamChanges)) ?? []
-        restFocusUntil = (try? c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil)) ?? ClockTime(hour: 14, minute: 0)
-        dutyStart = (try? c.decodeIfPresent(ClockTime.self, forKey: .dutyStart)) ?? ClockTime(hour: 8, minute: 30)
-        dutyLeadMinutes = (try? c.decodeIfPresent(Int.self, forKey: .dutyLeadMinutes)) ?? 0
-        taskChecks = (try? c.decodeIfPresent([String: [String]].self, forKey: .taskChecks)) ?? [:]
-        backupFolderBookmark = try? c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
-        backupFolderName = try? c.decodeIfPresent(String.self, forKey: .backupFolderName)
-        lastAutoBackup = try? c.decodeIfPresent(Date.self, forKey: .lastAutoBackup)
-        autoBackupMessage = try? c.decodeIfPresent(String.self, forKey: .autoBackupMessage)
-        changeLog = (try? c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog)) ?? []
-        syncStaleNotified = (try? c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified)) ?? false
-        lastDesktopNotesFetch = try? c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
-        lastDesktopNotesAttempt = try? c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
-        desktopNotesMessage = try? c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
-        desktopNotesURL = (try? c.decodeIfPresent(String.self, forKey: .desktopNotesURL)) ?? ""
-        desktopRosterMessage = try? c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
-        restBalance = (try? c.decodeIfPresent([String: Int].self, forKey: .restBalance)) ?? [:]
-        sitePeople = (try? c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople)) ?? [:]
-        siteNotices = (try? c.decodeIfPresent([String].self, forKey: .siteNotices)) ?? []
-        siteNoticesChanged = try? c.decodeIfPresent(Date.self, forKey: .siteNoticesChanged)
-        siteNoticesNew = (try? c.decodeIfPresent([String].self, forKey: .siteNoticesNew)) ?? []
-        fixedTelemetryDays = (try? c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays)) ?? []
-        groupSatellites = (try? c.decodeIfPresent([String: String].self, forKey: .groupSatellites)) ?? [:]
-        downloadedHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .downloadedHolidayOff)) ?? []
-        downloadedHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork)) ?? []
-        lastHolidayFetch = try? c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
-        noRestNotified = (try? c.decodeIfPresent([String].self, forKey: .noRestNotified)) ?? []
-        dutyHeadsUp = (try? c.decodeIfPresent(Bool.self, forKey: .dutyHeadsUp)) ?? true
-        dutyHeadsUpSent = try? c.decodeIfPresent(Date.self, forKey: .dutyHeadsUpSent)
-        previewGuesses = (try? c.decodeIfPresent([String: String].self, forKey: .previewGuesses)) ?? [:]
-        previewResults = (try? c.decodeIfPresent([PreviewResult].self, forKey: .previewResults)) ?? []
-        restBalanceUpdated = try? c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
-        nextSyncIsBaseline = (try? c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline)) ?? false
-        remindUnassigned = (try? c.decodeIfPresent(Bool.self, forKey: .remindUnassigned)) ?? true
-        pendingWeChatChange = try? c.decodeIfPresent(ChangeLogEntry.self, forKey: .pendingWeChatChange)
-        syncLog = (try? c.decodeIfPresent([SyncLogEntry].self, forKey: .syncLog)) ?? []
-        lastBackgroundWake = try? c.decodeIfPresent(Date.self, forKey: .lastBackgroundWake)
-        desktopGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes)) ?? [:]
-        lastSuccessMessage = try? c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
-        shiftTypes = (try? c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes)) ?? d.shiftTypes
-        // 1.1 以前存的班次类型：「值班交接前」被认成值班（关键字「值」），给休息加上「交接」「交班」
-        if let i = shiftTypes.firstIndex(where: { $0.id == "off" }), !shiftTypes[i].keywords.contains("交接") {
-            shiftTypes[i].keywords += ["交接", "交班"]
-        }
-        lastSync = try? c.decodeIfPresent(Date.self, forKey: .lastSync)
-        lastSyncMessage = try? c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
-        syncState = try? c.decodeIfPresent(SyncState.self, forKey: .syncState)
-        lastSyncAttempt = try? c.decodeIfPresent(Date.self, forKey: .lastSyncAttempt)
-        syncFailureCount = (try? c.decodeIfPresent(Int.self, forKey: .syncFailureCount)) ?? 0
-        // 1.1 以前只存了提示文字
-        if syncState == nil, let m = lastSyncMessage {
-            syncState = m.hasPrefix("同步成功") ? .ok : (m.hasPrefix("同步失败") ? .failed : (m.hasPrefix("同步结果异常") ? .anomaly : nil))
-        }
-    }
-}
-
-/// 一次同步的记录（诊断页「最近同步」），用来看后台到底有没有同步
-struct SyncLogEntry: Codable, Hashable {
-    var date: Date
-    /// 打开 App / 下拉刷新 / 后台刷新 / 快捷指令…
-    var source: String
-    var ok: Bool
-    var message: String
-    var seconds: Int
-}
-
-/// 某天的待休天数
-struct RestPoint: Codable, Hashable {
-    var day: DayKey
-    var value: Int
-    /// false = 从以前几周的表上读的；nil / true = 同步时当场读到的
-    var live: Bool? = nil
-
-    var point: RestBalanceHistory.Point { (day, value, live ?? true) }
-    init(day: DayKey, value: Int, live: Bool? = nil) { self.day = day; self.value = value; self.live = live }
-    init(_ p: RestBalanceHistory.Point) { self.init(day: p.day, value: p.value, live: p.live ? nil : false) }
-}
-
-struct ChangeLogEntry: Codable, Hashable {
-    var date: Date
-    var text: String
-}
-
-/// 备份文件：设置、排班、全员排班。密码和 PushPlus token 存在钥匙串里，不在备份中。
-struct BackupFile: Codable {
-    var version = 1
-    var created = Date()
-    var settings: AppSettings
-    var schedule: [String: String]
-    var covered: [String]
-    var roster: [String: [String: String]]
-}
-
-/// 上次同步的结果
-enum SyncState: String, Codable {
-    case ok, failed, needsLogin, anomaly
-    var isFailure: Bool { self == .failed || self == .needsLogin }
-}
-
-extension AppSettings {
-    /// 和 o 比，只有记账类的字段变了（同步记录、已发标记、提示文字、不影响手机提醒的开关）
-    func onlyBookkeepingChanged(from o: AppSettings) -> Bool {
-        var a = self
-        a.syncLog = o.syncLog
-        a.lastBackgroundWake = o.lastBackgroundWake
-        a.weChatMessage = o.weChatMessage
-        a.weChatMorningSent = o.weChatMorningSent
-        a.weChatEveningSent = o.weChatEveningSent
-        a.weChatWeekSent = o.weChatWeekSent
-        a.lastWeChatChangeDigest = o.lastWeChatChangeDigest
-        a.pendingWeChatChange = o.pendingWeChatChange
-        a.lastDesktopNotesAttempt = o.lastDesktopNotesAttempt
-        a.lastDesktopNotesFetch = o.lastDesktopNotesFetch
-        a.desktopNotesMessage = o.desktopNotesMessage
-        a.desktopRosterMessage = o.desktopRosterMessage
-        a.lastSyncMessage = o.lastSyncMessage
-        a.lastSuccessMessage = o.lastSuccessMessage
-        a.syncHealth = o.syncHealth
-        a.syncHealthWarning = o.syncHealthWarning
-        a.syncHealthWarnedDay = o.syncHealthWarnedDay
-        a.apiSignature = o.apiSignature
-        a.changeLog = o.changeLog
-        a.teamChanges = o.teamChanges
-        a.warnedRestKeys = o.warnedRestKeys
-        a.noRestNotified = o.noRestNotified
-        a.restAlertNotified = o.restAlertNotified
-        a.restLedgerNotified = o.restLedgerNotified
-        a.loginExpiredNotified = o.loginExpiredNotified
-        a.syncStaleNotified = o.syncStaleNotified
-        a.dutyHeadsUpSent = o.dutyHeadsUpSent
-        a.lastPersonalWeekly = o.lastPersonalWeekly
-        a.lastWeeklyDigest = o.lastWeeklyDigest
-        a.lastMonthlyReport = o.lastMonthlyReport
-        a.previewGuesses = o.previewGuesses
-        a.previewResults = o.previewResults
-        a.siteNotices = o.siteNotices
-        a.siteNoticesChanged = o.siteNoticesChanged
-        a.siteNoticesNew = o.siteNoticesNew
-        a.lastHolidayFetch = o.lastHolidayFetch
-        a.autoBackupMessage = o.autoBackupMessage
-        a.lastAutoBackup = o.lastAutoBackup
-        a.publishTimes = o.publishTimes
-        a.nextSyncIsBaseline = o.nextSyncIsBaseline
-        a.swapRecords = o.swapRecords
-        a.favorites = o.favorites
-        a.restHistory = o.restHistory
-        a.restBalanceUpdated = o.restBalanceUpdated
-        a.siteNoRestFlags = o.siteNoRestFlags
-        a.leaveSources = o.leaveSources
-        a.backupFolderBookmark = o.backupFolderBookmark
-        a.backupFolderName = o.backupFolderName
-        a.desktopNotesURL = o.desktopNotesURL
-        a.workLogAutoTranscribe = o.workLogAutoTranscribe
-        a.speechOnDeviceOnly = o.speechOnDeviceOnly
-        a.workLogLock = o.workLogLock
-        a.restAlertThreshold = o.restAlertThreshold
-        a.monthlyReport = o.monthlyReport
-        a.weeklyDigest = o.weeklyDigest
-        a.personalWeekly = o.personalWeekly
-        a.notifyChanges = o.notifyChanges
-        a.notifyFavorites = o.notifyFavorites
-        a.notifyAllChanges = o.notifyAllChanges
-        a.weChatEnabled = o.weChatEnabled
-        a.weChatDaily = o.weChatDaily
-        a.weChatChanges = o.weChatChanges
-        a.weChatTeam = o.weChatTeam
-        a.dutyHeadsUp = o.dutyHeadsUp
-        a.syncState = o.syncState
-        a.lastSyncAttempt = o.lastSyncAttempt
-        a.syncFailureCount = o.syncFailureCount
-        return a == o
-    }
-
-    /// 统计、推算用到的设置是不是一样（这些变了，工作量、遥测推算、各页统计才要重算）
-    func sameData(as o: AppSettings) -> Bool {
-        aliases == o.aliases && favorites == o.favorites && scheduleOnlyMembers == o.scheduleOnlyMembers
-            && swapRecords == o.swapRecords && customHolidayOff == o.customHolidayOff && customHolidayWork == o.customHolidayWork
-            && downloadedHolidayOff == o.downloadedHolidayOff && downloadedHolidayWork == o.downloadedHolidayWork
-            && restHistory == o.restHistory && restBalance == o.restBalance && profiles == o.profiles
-            && ruleHistory == o.ruleHistory && leaveSources == o.leaveSources && workloadRules == o.workloadRules
-            && workloadOverrides == o.workloadOverrides && teamChanges == o.teamChanges && sitePeople == o.sitePeople
-            && fixedTelemetryDays == o.fixedTelemetryDays && shiftTypes == o.shiftTypes && siteNoRestFlags == o.siteNoRestFlags
-            && groupSatellites == o.groupSatellites && publishTimes == o.publishTimes
-            && manualGroupNotes == o.manualGroupNotes && desktopGroupNotes == o.desktopGroupNotes && autoGroupNotes == o.autoGroupNotes
-    }
-}
-
 private struct PersistedState: Codable {
     var settings: AppSettings
     var schedule: [String: String]
     /// 已经取到过排班结果的日子（包括没给我排班的日子）
     var covered: [String]?
-}
-
-extension ClockTime {
-    /// 给时间选择器用的 Date（日期部分无意义）
-    var date: Date {
-        Calendar.app.date(from: DateComponents(year: 2000, month: 1, day: 1, hour: hour, minute: minute)) ?? Date()
-    }
-
-    init(date: Date) {
-        let c = Calendar.app.dateComponents([.hour, .minute], from: date)
-        self.init(hour: c.hour ?? 0, minute: c.minute ?? 0)
-    }
-}
-
-extension DayKey {
-    /// 周一…周日
-    var weekdayText: String {
-        let w = Calendar.app.component(.weekday, from: date(calendar: .app, hour: 12))
-        return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][w - 1]
-    }
-}
-
-extension Calendar {
-    /// App 内统一使用公历，避免系统设置成其它历法时日期错乱。
-    /// 只建一次（时区跟着系统自动变）：日期计算一次渲染要用成千上万次
-    static let app: Calendar = {
-        var c = Calendar(identifier: .gregorian)
-        c.timeZone = .autoupdatingCurrent
-        c.locale = Locale(identifier: "zh_CN")
-        return c
-    }()
-}
-
-extension DayKey: Identifiable {
-    public var id: String { description }
-    static var today: DayKey { DayKey(date: Date(), calendar: .app) }
-    func adding(days: Int) -> DayKey { adding(days: days, calendar: .app) }
-    var dateText: String { NotificationPlanner.dateText(self, calendar: .app) }
 }
 
 @MainActor
@@ -553,19 +19,15 @@ final class AppStore: ObservableObject {
                 workloadCache = [:]
                 dataRevision &+= 1
             }
-            // 不是管理员：排班数据改不了（同步自动更新的不受影响）
+            // 不是管理员：统计口径、班次类型这些改不了（同步自动更新的不受影响）。
+            // 界面上这些地方本来就是灰的；万一从别处改到了，换回原样并明说，不悄悄跳回去
             if !canEdit {
-                var fixed = settings
-                fixed.workloadRules = oldValue.workloadRules
-                fixed.workloadOverrides = oldValue.workloadOverrides
-                fixed.customHolidayOff = oldValue.customHolidayOff
-                fixed.customHolidayWork = oldValue.customHolidayWork
-                fixed.manualGroupNotes = oldValue.manualGroupNotes
-                fixed.scheduleOnlyMembers = oldValue.scheduleOnlyMembers
-                fixed.shiftTypes = oldValue.shiftTypes
-                fixed.profiles = oldValue.profiles
-                fixed.ruleHistory = oldValue.ruleHistory
-                if fixed != settings { settings = fixed }
+                let fixed = settings.keepingAdminFields(of: oldValue)
+                if fixed != settings {
+                    settings = fixed
+                    ToastCenter.shared.show(role == .manager ? "管理者只能查看，这项没有改" : "这项只有管理员能改，已恢复原样",
+                                            style: .error)
+                }
                 guard settings != oldValue else { return }
             }
             if settings.aliases != oldValue.aliases { settings.nextSyncIsBaseline = true }
@@ -821,7 +283,7 @@ final class AppStore: ObservableObject {
         s.swapRecords = [SwapRecord(day: today.adding(days: -6), person: "林夏", myOld: "遥测", myNew: "休息", effect: -1)]
         s.teamChanges = [TeamChange(day: today.adding(days: 2), post: "组B", from: ["周远"], to: [me])]
         s.lastSync = Date().addingTimeInterval(-600)
-        s.lastSyncMessage = "同步成功：网页接口，30 天，没有变动，这次读到 9 人有排班（全年累计 12 人）"
+        s.lastSyncMessage = "同步成功：30 天，没有变动，这次读到 9 人有排班（全年累计 12 人）"
         settings = s
         roster = r
         schedule = r[me] ?? [:]
@@ -1084,133 +546,6 @@ final class AppStore: ObservableObject {
         await task.value
     }
 
-    // MARK: - 提醒
-
-    var planner: NotificationPlanner {
-        var p = NotificationPlanner(
-            morning: settings.morningEnabled ? settings.morning : nil,
-            evening: settings.eveningEnabled ? settings.evening : nil,
-            // 还没取到数据的日子不提醒；排了班但没给我排的日子由 reminderSchedule 补「未排班」
-            notifyWhenEmpty: false,
-            matcher: matcher,
-            calendar: .app)
-        p.weekly = settings.weeklyPreview
-        p.memos = Dictionary(uniqueKeysWithValues: settings.dayMemos.compactMap { k, v in DayKey(string: k).map { ($0, v) } })
-        p.dutyStart = settings.dutyStart
-        p.dutyLeadMinutes = settings.dutyLeadMinutes
-        return p
-    }
-
-    /// 提醒用的排班：已经取到数据、但没给我排班的日子补上「未排班」，这样每天都会提醒。
-    var reminderSchedule: [DayKey: String] {
-        var s = schedule
-        let today = DayKey.today
-        // 网站还没排到的日子不提醒「未排班」
-        if settings.remindUnassigned {
-            for day in covered where day >= today && s[day] == nil && isCovered(day) { s[day] = "未排班" }
-        }
-        return s
-    }
-
-    private func performReschedule() async {
-        // 手机上的通知带上组别工作内容；微信那份不带（只发自己的分工）
-        var local = planner
-        local.notes = groupNotes
-        await NotificationService.reschedule(local.plan(schedule: reminderSchedule, now: Date()), voice: settings.voiceEnabled)
-        updateWidget()
-        updateAppIcon()
-        DutyActivityManager.update(schedule: schedule, matcher: matcher, enabled: settings.liveActivity)
-        if settings.calendarSync {
-            var predicted: [DayKey: String] = [:]
-            if let turn = myDutyTurn(), !turn.scheduled, let day = turn.day, schedule[day] == nil { predicted[day] = "遥测（预测）" }
-            CalendarSync.sync(schedule, matcher: matcher, predicted: predicted)
-        }
-        await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
-        // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
-        await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)
-    }
-
-    /// 今天该用哪个图标：遥测「遥」，组A–组E 用对应字母（一天多个组取第一个），调度「调」，出差「差」，
-    /// 无分工/休息/调休/请假「休」，其它用默认的「值」。
-    func iconName(for raw: String?) -> String? {
-        guard let raw else { return nil }
-        let posts = matcher.posts(raw).map(matcher.displayName)
-        if posts.contains(where: WorkloadCounter.isDuty) { return "IconDuty" }
-        if let r = raw.range(of: #"组\s*[A-Ea-e]"#, options: .regularExpression), let letter = raw[r].last {
-            return "Icon" + letter.uppercased()
-        }
-        if posts.contains(where: { $0.contains("调度") }) { return "IconDispatch" }
-        if posts.contains(where: WorkloadCounter.isTrip) { return "IconTrip" }
-        if posts.allSatisfy({ WorkloadCounter.isOff($0, matcher: matcher) }) || matcher.match(raw)?.id == "off" { return "IconRest" }
-        return nil
-    }
-
-    /// iPhone 只允许 App 在前台时换图标，每次换系统会弹一个「已更改图标」的提示。
-    func updateAppIcon() {
-        let app = UIApplication.shared
-        guard app.supportsAlternateIcons, app.applicationState == .active else { return }
-        let wanted = settings.dynamicIcon ? iconName(for: schedule[.today]) : nil
-        guard app.alternateIconName != wanted else { return }
-        app.setAlternateIconName(wanted) { _ in }
-    }
-
-    /// 把昨天到未来一个月的分工写给主屏幕小组件。
-    func updateWidget() {
-        let today = DayKey.today
-        let days = (-1...31).compactMap { offset -> WidgetDay? in
-            let day = today.adding(days: offset)
-            guard let raw = schedule[day] else {
-                // 取到过、但没给我排班
-                return isCovered(day) ? WidgetDay(date: day.description, title: "未排班", emoji: "", colorHex: "#8E8E93") : nil
-            }
-            let type = matcher.match(raw)
-            return WidgetDay(date: day.description, title: matcher.displayName(raw),
-                             emoji: type?.emoji ?? "📌", colorHex: type?.colorHex ?? "#8E8E93")
-        }
-        // 下次遥测：和今天页同一个结果（网站排好的，或者按顺序推算的），小组件不再自己另算
-        let turn = myDutyTurn()
-        WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today),
-                                        nextDuty: turn?.day?.description, nextDutyPredicted: turn.map { !$0.scheduled },
-                                        lastSync: settings.lastSync,
-                                        restBalance: myRosterName.flatMap { settings.restBalance[$0] },
-                                        teamDuty: teamDutyForWidget(from: today)))
-    }
-
-    /// 昨天到 7 天后，每天谁值遥测
-    private func teamDutyForWidget(from today: DayKey) -> [String: String] {
-        var result: [String: String] = [:]
-        for offset in -1...7 {
-            let day = today.adding(days: offset)
-            let names = dayRoster(day).filter { WorkloadCounter.isDuty($0.post) }.flatMap(\.names)
-            if !names.isEmpty { result[day.description] = names.joined(separator: "、") }
-        }
-        return result
-    }
-
-    /// 今天组别的任务清单（和首页「今天要做」一样）
-    func widgetTasks(for day: DayKey) -> [WidgetTask] {
-        notes(for: shift(on: day)).flatMap { g -> [WidgetTask] in
-            let items = TaskList.items(from: g.note)
-            guard items.count > 1 else { return [] }
-            return items.enumerated().map { i, item in
-                let key = TaskChecklistCard.key(i, item)
-                return WidgetTask(day: day.description, group: g.group, key: key, title: item,
-                                  done: isTaskDone(day, g.group, key))
-            }
-        }
-    }
-
-    /// 小组件上勾过的任务合并进来
-    func applyPendingTaskToggles() {
-        let pending = PendingTaskToggles.load()
-        guard !pending.isEmpty else { return }
-        PendingTaskToggles.clear()
-        for item in pending {
-            guard let day = DayKey(string: item.day), isTaskDone(day, item.group, item.key) != item.done else { continue }
-            toggleTask(day, item.group, item.key)
-        }
-    }
-
     // MARK: - 同步
 
     var canSync: Bool { !Self.isDemo && !settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -1352,51 +687,6 @@ final class AppStore: ObservableObject {
         ToastCenter.shared.show("认出你是「\(name)」，已设为使用者", style: .success)
     }
 
-    /// 遥测轮转（排班规律、下次遥测、排班预演共用）
-    /// 推算很费时（几百天 × 几十人）：同一份数据、同一天只算一次
-    private var rotationCache: [String: SchedulePatterns.Rotation?] = [:]
-
-    func dutyRotation(forecastDays: Int = 60) -> SchedulePatterns.Rotation? {
-        let key = "\(DayKey.today)-\(dataRevision)-\(forecastDays)"
-        if let cached = rotationCache[key] { return cached }
-        let value = computeRotation(forecastDays: forecastDays)
-        if rotationCache.count > 8 { rotationCache.removeAll() }
-        rotationCache[key] = value
-        return value
-    }
-
-    private func computeRotation(forecastDays: Int) -> SchedulePatterns.Rotation? {
-        let days = publishedDays.filter { $0 >= DayKey.today.adding(days: -180) }.sorted()
-        return SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: forecastDays,
-                                         calendar: .app, people: settings.sitePeople, fixedDays: fixedTelemetryDaySet)
-    }
-
-    /// 排班预演：网站还没排的 days 天
-    func rosterPreview(days: Int = 14) -> [RosterPreview.Day] {
-        guard let rotation = dutyRotation(forecastDays: days + 14) else { return [] }
-        return RosterPreview.build(rotation: rotation, roster: roster, published: publishedDays, from: .today, days: days,
-                                   matcher: matcher, calendar: .app)
-    }
-
-    /// 同步后：网站新排出来的日子，和之前预演猜的对一对；再记下这次对还没排的日子的预演
-    func scorePreview() {
-        var s = settings
-        var results = s.previewResults
-        for (key, guess) in s.previewGuesses {
-            guard let day = DayKey(string: key), publishedDays.contains(day) else { continue }
-            let actual = roster.filter { $0.value[day].map { SchedulePatterns.isDutyPost($0, matcher: matcher) } ?? false }.keys.sorted()
-            if !actual.isEmpty, !results.contains(where: { $0.day == key }) {
-                results.append(PreviewResult(day: key, guess: guess, actual: actual.joined(separator: "、"), hit: actual.contains(guess)))
-            }
-            s.previewGuesses[key] = nil
-        }
-        for d in rosterPreview() { if let name = d.telemetry { s.previewGuesses[d.day.description] = name } }
-        s.previewResults = Array(results.sorted { $0.day < $1.day }.suffix(120))
-        if s != settings { settings = s }
-    }
-
-    var fixedTelemetryDaySet: Set<DayKey> { Set(settings.fixedTelemetryDays.compactMap(DayKey.init(string:))) }
-
     /// 上次同步看到的网站数据接口字段（只在内存里，「设置 › 接口字段查看」用）
     @Published private(set) var apiFields: [APIFieldTable] = []
     @Published private(set) var apiFieldsDate: Date?
@@ -1434,17 +724,11 @@ final class AppStore: ObservableObject {
             guard settings.aliases == aliasesAtStart else { return false }
             if !userInitiated, !settings.nextSyncIsBaseline, result.range != nil {
                 // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
-                let today = DayKey.today
-                let replaced = result.replacedDays(calendar: .app)
-                // 和 apply() 同一个规则：网站还没正式排班、只有请假调休记录的以后日子不算「已经知道」，
-                // 不然网站第一次排出新一周时会被当成异常一直挡住
-                let rosterDays = Set(roster.values.flatMap(\.keys))
-                let known = covered.filter { day in
-                    guard day >= today, replaced.contains(day) else { return false }
-                    return publishedDays.isEmpty || day == today || publishedDays.contains(day) || !rosterDays.contains(day)
-                }
+                // 和 apply() 同一个规则：网站还没正式排班、只有请假调休记录的以后日子不算「已经知道」
+                let known = SyncPolicy.knownDays(covered: covered, replaced: result.replacedDays(calendar: .app), today: .today,
+                                                 published: publishedDays, rosterDays: Set(roster.values.flatMap(\.keys)))
                 let changed = known.filter { schedule[$0] != result.entries[$0] }.count
-                if known.count >= 5 && changed * 10 > known.count * 6 {
+                if SyncPolicy.looksBroken(known: known.count, changed: changed) {
                     let alreadyTold = settings.syncState == .anomaly
                     settings.syncState = .anomaly
                     settings.lastSyncMessage = "同步结果异常：\(known.count) 天里有 \(changed) 天和之前不同，可能是网站改版，已忽略。下拉刷新可确认采用"
@@ -1474,7 +758,7 @@ final class AppStore: ObservableObject {
                 if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
             }
             await notifyRestWarnings()
-        await notifyDutyHeadsUp()
+            await notifyDutyHeadsUp()
             updateRestBalance(outcome.restBalance)
             let freshNotices = applySiteInfo(outcome.site)
             await notifyNoticeChange(freshNotices)
@@ -1487,16 +771,19 @@ final class AppStore: ObservableObject {
             let changes = apply(result, publishedBefore: publishedBefore,
                                 rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
             identifyMeIfNeeded()
+            // 预演打分、「快轮到你」都要用遥测推算：先在后台算好
+            await warmRotation()
             scorePreview()
             // 同步状态一次改完：只触发一次比较、存盘和界面刷新
             var status = settings
             status.lastSync = Date()
             status.loginExpiredNotified = false
             status.syncStaleNotified = false
-            status.lastSyncMessage = "同步成功：\(result.format.rawValue)，\(result.entries.count) 天"
+            // 给人看的不提读取方式（「数据接口」「JSON」这些）；诊断页的「上次成功结果」带上
+            status.lastSyncMessage = "同步成功：\(result.entries.count) 天"
                 + (changes.isEmpty ? "，没有变动" : "，\(changes.count) 处变动")
                 + (outcome.roster.isEmpty ? "" : "，这次读到 \(outcome.roster.count) 人有排班（全年累计 \(roster.count) 人）")
-            status.lastSuccessMessage = status.lastSyncMessage
+            status.lastSuccessMessage = (status.lastSyncMessage ?? "") + "（读取方式：\(result.format.rawValue)）"
             status.syncState = .ok
             status.syncFailureCount = 0
             settings = status
@@ -1699,134 +986,6 @@ final class AppStore: ObservableObject {
         return false
     }
 
-    // MARK: 排班规律：下次遥测、排班预警
-
-    /// 按「顺序 + 请假出差顺延」推算的下次遥测
-    struct DutyTurn {
-        /// 网站已经排好的日子，或者按顺序推算的日子（推不出来为 nil）
-        var day: DayKey?
-        /// 前面还有几个人
-        var ahead: Int
-        /// 是不是网站上已经排好的
-        var scheduled: Bool
-        /// 一共几个人轮
-        var total: Int
-    }
-
-    private var dutyTurnCache: (key: String, value: DutyTurn?)?
-
-    func myDutyTurn() -> DutyTurn? {
-        guard let me = myRosterName else { return nil }
-        let today = DayKey.today
-        // 数据一变（排班、设置）版本号就变，不靠人数、天数判断
-        let key = "\(today)-\(me)-\(dataRevision)-\(schedule.count)"
-        if let cache = dutyTurnCache, cache.key == key { return cache.value }
-        let value: DutyTurn?
-        let mine = (roster[me] ?? [:]).merging(schedule) { a, _ in a }
-        if let next = mine.filter({ $0.key >= today && matcher.posts($0.value).contains { WorkloadCounter.isDuty(matcher.displayName($0)) } }).keys.min() {
-            value = DutyTurn(day: next, ahead: 0, scheduled: true, total: 0)
-        } else {
-            // 和排班规律、排班预演用同一个推算
-            if let r = dutyRotation(forecastDays: 60), let index = r.order.firstIndex(of: me) {
-                value = DutyTurn(day: r.forecast.first { $0.name == me }?.day, ahead: index, scheduled: false, total: r.order.count)
-            } else {
-                value = nil
-            }
-        }
-        dutyTurnCache = (key, value)
-        return value
-    }
-
-    /// 网站还没排、推算我 7 天内可能轮到遥测：提前说一声（5 天内只说一次，只是推算）
-    func notifyDutyHeadsUp() async {
-        guard !Self.isDemo, settings.dutyHeadsUp,
-              let turn = myDutyTurn(), !turn.scheduled, let day = turn.day else { return }
-        guard (1...7).contains(where: { DayKey.today.adding(days: $0) == day }),
-              Date().timeIntervalSince(settings.dutyHeadsUpSent ?? .distantPast) > 5 * 86_400 else { return }
-        settings.dutyHeadsUpSent = Date()
-        let ahead = turn.ahead == 0 ? "下一个就是你" : "前面还有 \(turn.ahead) 个人"
-        await NotificationService.notifyNow(id: "duty-heads-up", title: "🛰️ 快轮到你值遥测了（推算）",
-                                            body: "网站还没排。按遥测顺序\(ahead)，推算大约在 \(day.dateText)（\(day.weekdayText)）前后。只是推算，以网站为准。")
-    }
-
-    /// 我最近和以后的遥测：按规则该休的日子排了岗位、或者工作日没写休息
-    func myRestWarnings() -> [SchedulePatterns.Warning] {
-        guard let me = myRosterName else { return [] }
-        return SchedulePatterns.restWarnings(name: me, roster: roster, published: publishedDays, from: .today,
-                                             matcher: matcher, calendar: .app)
-    }
-
-    /// 同步后：新出现的「该休却排了岗位」提醒一次（没写休息的只在首页显示，不推送）
-    func notifyRestWarnings() async {
-        guard !Self.isDemo else { return }
-        let new = myRestWarnings().filter { $0.kind == .assigned && !settings.warnedRestKeys.contains($0.key) }
-        guard !new.isEmpty else { return }
-        settings.warnedRestKeys = Array((settings.warnedRestKeys + new.map(\.key)).suffix(100))
-        await NotificationService.notifyNow(id: "rest-warning-\(new[0].key)", title: "⚠️ 排班可能和规则不一致",
-                                            body: new.map(\.text).joined(separator: "\n") + "\n去网站上核对一下。")
-    }
-
-    /// 待休核对：按待休记录反推加减规则，列出对不上的人
-    /// 待休对账：全员几百天，同一份数据只算一次
-    func restBalanceAudit() -> RestBalanceAudit.Result? {
-        if let cached = auditCache, cached.revision == dataRevision { return cached.value }
-        let value = RestBalanceAudit.analyze(points: settings.restHistory.mapValues { $0.map(\.point) }, roster: roster,
-                                             matcher: matcher, calendar: .app)
-        auditCache = (dataRevision, value)
-        return value
-    }
-    private var auditCache: (revision: Int, value: RestBalanceAudit.Result?)?
-
-    /// 电脑版周表上每天的待休天数（往前翻的几周）补进待休记录，用来说明数字是怎么变的。
-    func mergeRestHistory(_ byDay: [String: [DayKey: Int]]) {
-        let today = DayKey.today
-        // 以后几周表上的数字还没发生，不记
-        let past = byDay.mapValues { $0.filter { $0.key <= today } }.filter { !$0.value.isEmpty }
-        // 每个人以前几周的数字都和现在一样：网站显示的是现在的数字，不当历史用
-        guard !past.isEmpty, !RestBalanceHistory.looksLikeSnapshot(past) else { return }
-        var s = settings
-        for (name, days) in past {
-            let old = (s.restHistory[name] ?? []).map(\.point)
-            s.restHistory[name] = RestBalanceHistory.merge(old, days, live: false).map { RestPoint($0) }
-        }
-        settings = s
-    }
-
-    /// 人名后括号里的待休天数：这次读到的人以新数字为准。
-    func updateRestBalance(_ new: [String: Int]) {
-        guard !new.isEmpty else { return }
-        var s = settings
-        let today = DayKey.today
-        for (name, value) in new {
-            let old = (s.restHistory[name] ?? []).filter { $0.day <= today }.map(\.point)
-            s.restHistory[name] = RestBalanceHistory.merge(old, [today: value], live: true).map { RestPoint($0) }
-        }
-        s.restBalance.merge(new) { _, n in n }
-        s.restBalanceUpdated = Date()
-        settings = s
-        Task {
-            await notifyRestIfNeeded()
-            await reconcileMyRestBalance()
-        }
-    }
-
-    /// 待休对账：我的待休这次变了，按反推的规律算一遍应该变多少，对不上就提醒一次
-    func reconcileMyRestBalance() async {
-        guard !Self.isDemo, let me = myRosterName, let audit = restBalanceAudit(),
-              let points = settings.restHistory[me], points.count >= 2 else { return }
-        let prev = points[points.count - 2], cur = points[points.count - 1]
-        let key = "\(cur.day)|\(cur.value)"
-        guard settings.restLedgerNotified != key else { return }
-        let expected = RestBalanceAudit.expectedChange(roster[me] ?? [:], from: prev.day, to: cur.day, rule: audit.rule,
-                                                       matcher: matcher, calendar: .app)
-        let observed = cur.value - prev.value
-        guard expected != observed else { return }
-        settings.restLedgerNotified = key
-        func signed(_ n: Int) -> String { n > 0 ? "+\(n)" : "\(n)" }
-        await NotificationService.notifyNow(id: "rest-ledger", title: "待休对不上",
-                                            body: "网站上你的待休从 \(prev.value) 变成 \(cur.value) 天（\(signed(observed))），按规律（\(audit.rule.text)）应该是 \(signed(expected))。去网站上核对一下。")
-    }
-
     /// 语音转文字的常用词：同事名字、岗位、组别、各组工作内容里的星名和编号、值班常用词
     var speechVocabulary: [String] {
         var words: [String] = ["遥测", "调度", "值班", "交接班", "交班", "接班", "值班长", "组A", "组B", "组C", "组D", "组E",
@@ -1866,47 +1025,6 @@ final class AppStore: ObservableObject {
         let start = today.date(calendar: .app, hour: settings.dutyStart.hour, minute: settings.dutyStart.minute)
         let end = today.date(calendar: .app, hour: settings.restFocusUntil.hour, minute: settings.restFocusUntil.minute)
         return now >= start && now < end
-    }
-
-    // MARK: - 组别任务清单
-
-    func taskKey(_ day: DayKey, _ group: String) -> String { "\(day.description)|\(group)" }
-
-    func isTaskDone(_ day: DayKey, _ group: String, _ item: String) -> Bool {
-        settings.taskChecks[taskKey(day, group)]?.contains(item) ?? false
-    }
-
-    func toggleTask(_ day: DayKey, _ group: String, _ item: String) {
-        var checks = settings.taskChecks
-        let key = taskKey(day, group)
-        var done = checks[key] ?? []
-        if let i = done.firstIndex(of: item) { done.remove(at: i) } else { done.append(item) }
-        checks[key] = done.isEmpty ? nil : done
-        // 只留最近两周
-        let cutoff = DayKey.today.adding(days: -14).description
-        checks = checks.filter { $0.key.prefix(10) >= cutoff }
-        settings.taskChecks = checks
-        updateWidget()
-    }
-
-    /// 这天各组清单的事项（两条以上才算清单，和今天页一样）
-    func taskItems(on day: DayKey) -> [(group: String, key: String)] {
-        notes(for: shift(on: day)).flatMap { n -> [(group: String, key: String)] in
-            let items = TaskList.items(from: n.note)
-            guard items.count > 1 else { return [] }
-            return items.enumerated().map { (n.group, TaskChecklistCard.key($0.offset, $0.element)) }
-        }
-    }
-
-    /// 通知上点了「清单全部做完」
-    func markAllTasksDone(on day: DayKey) {
-        var checks = settings.taskChecks
-        for (group, items) in Dictionary(grouping: taskItems(on: day), by: \.group) {
-            checks[taskKey(day, group)] = items.map(\.key)
-        }
-        settings.taskChecks = checks
-        updateWidget()
-        flushSave(wait: true)
     }
 
     // MARK: - 自动备份
@@ -2084,12 +1202,9 @@ final class AppStore: ObservableObject {
     /// 打开 App 时，距离上次同步超过 3 分钟就自动同步一次。
     func syncIfStale() async {
         guard canSync else { return }
-        if let last = settings.lastSync, Date().timeIntervalSince(last) < 3 * 60 { return }
-        // 连续失败：自动同步隔得越来越久（2、4、8 分钟……最多 2 小时），不每次打开都整套重跑；手动下拉不受影响
-        if settings.syncFailureCount > 0, let attempt = settings.lastSyncAttempt {
-            let wait = min(2.0 * 3600, 120 * pow(2, Double(min(settings.syncFailureCount, 10) - 1)))
-            if Date().timeIntervalSince(attempt) < wait { return }
-        }
+        // 3 分钟内成功过不再同步；连续失败时隔得越来越久（2、4、8 分钟……最多 2 小时）；手动下拉不受影响
+        guard SyncPolicy.shouldAutoSync(now: Date(), lastSync: settings.lastSync, lastAttempt: settings.lastSyncAttempt,
+                                        failures: settings.syncFailureCount) else { return }
         await sync(full: true)
     }
 
@@ -2260,18 +1375,15 @@ final class AppStore: ObservableObject {
     func invalidateWorkloadCache() { workloadCache = [:] }
 
     /// 统计用的数据（全员排班、我的排班、设置）每变一次加一，页面用它判断要不要重算
+    // 遥测推算、下次遥测、待休对账的缓存（AppStore+Duty.swift 用）
+    var rotationCache: [String: SchedulePatterns.Rotation?] = [:]
+    var rotationWarmup: (key: String, task: Task<Void, Never>)?
+    var dutyTurnCache: (key: String, value: DutyTurn?)?
+    var auditCache: (revision: Int, value: RestBalanceAudit.Result?)?
+
     @Published private(set) var dataRevision = 0
 
     // 工作量统计、表格导出在 AppStore+Stats.swift
-}
-
-
-/// 排班预演猜得对不对（网站排出来以后记下）
-struct PreviewResult: Codable, Equatable {
-    var day: String
-    var guess: String
-    var actual: String
-    var hit: Bool
 }
 
 

@@ -318,7 +318,7 @@ public enum WorkloadCounter {
             let dayRotating = forced || (isDispatcher && dayRules.dispatchScheduleOnly)
             let dayMember = role.map { $0 == .group } ?? groupMember
             let note = role.map { "（档案：\($0.rawValue)）" }
-                ?? "（自动判断：\(dayRotating ? "调度" : (dayMember ? "轮组别" : "不轮组别"))）"
+                ?? "（按最近排班认：\(dayRotating ? "调度" : (dayMember ? "轮组别" : "不轮组别"))）"
             result[day] = explain(history[day], workday: ChinaHolidays.isWorkday(day, calendar: calendar),
                                   holiday: ChinaHolidays.isHoliday(day), rotating: dayRotating, groupMember: dayMember,
                                   rules: dayRules, matcher: matcher, roleNote: note)

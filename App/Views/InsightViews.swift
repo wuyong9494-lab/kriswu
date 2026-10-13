@@ -115,13 +115,13 @@ struct WorkloadRulesView: View {
             } header: {
                 Text("改动生效时间")
             } footer: {
-                Text("单位规则变了时用：比如从下个月 1 号起换算法，以前月份的统计不受影响。关掉后所有日子都按新规则重算。")
+                Text("单位规则变了时用：比如从下个月 1 号起换计算方法，以前月份的统计不受影响。关掉后所有日子都按新规则重算。")
             }
             Section {
                 Toggle("工作日没排岗位、也没写休息算上班", isOn: rule(\.blankWorkdayIsWork))
                 Toggle("调度只算排班表上有名字的日子", isOn: rule(\.dispatchScheduleOnly))
             } footer: {
-                Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班自动判断。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
+                Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班认。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
             }
             Section {
                 Label("休息、调休、请假、「值班交接前」一律不算工作量", systemImage: "bed.double.fill")
@@ -154,11 +154,11 @@ struct WorkloadRulesView: View {
                 NavigationLink {
                     RotationMembersView()
                 } label: {
-                    LabeledContent("只按排班算的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
+                    LabeledContent("没排班不算上班的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
                 }
                 LabeledContent("手动改过的日子", value: "\(store.settings.workloadOverrides.values.map(\.count).reduce(0, +)) 天")
                 if !store.settings.workloadOverrides.isEmpty {
-                    ConfirmButton(title: "清除全部手动修改", message: "所有人、所有日子的手动修改都会删掉，改回自动判断，不能恢复。") {
+                    ConfirmButton(title: "清除全部手动修改", message: "所有人、所有日子的手动修改都会删掉，改回按规则算，不能恢复。") {
                         store.settings.workloadOverrides = [:]
                     }
                 }

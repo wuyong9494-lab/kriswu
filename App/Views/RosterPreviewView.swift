@@ -51,12 +51,12 @@ struct RosterPreviewView: View {
         let results = store.settings.previewResults
         Section {
             if results.isEmpty {
-                Text("网站排出新的一周后，App 会自动拿之前的预演对一对，在这里显示猜中了几天。")
+                Text("网站排出新的一周后，App 会自动拿之前的预演对一对，在这里显示猜对了几天。")
                     .font(.footnote).foregroundStyle(.secondary)
             } else {
                 let hits = results.filter(\.hit).count
                 HStack {
-                    Text("遥测猜中").font(DS.Font.headline)
+                    Text("遥测猜对").font(DS.Font.headline)
                     Spacer()
                     Text("\(hits)/\(results.count) 天（\(Int((Double(hits) / Double(results.count) * 100).rounded()))%）")
                         .font(DS.Font.headline.monospacedDigit())
@@ -75,7 +75,7 @@ struct RosterPreviewView: View {
                 }
             }
         } footer: {
-            Text("只推演网站还没排的日子。按：谁能值哪几天（网站人员表）、轮转顺序、请假出差顺延、值完遥测休几天。组A–E 怎么排看不出固定算法，不推演。")
+            Text("只推演网站还没排的日子。按：谁能值哪几天（网站人员表）、轮转顺序、请假出差顺延、值完遥测休几天。组A–E 怎么排看不出固定排法，不推演。")
         }
     }
 

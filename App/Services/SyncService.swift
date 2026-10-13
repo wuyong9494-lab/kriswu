@@ -9,10 +9,10 @@ enum SyncError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badURL: return "网址不正确"
-        case .http(let code): return "服务器返回错误 \(code)"
+        case .badURL: return "网址不对：到「设置 › 自动同步」检查排班页面网址"
+        case .http(let code): return "网站暂时打不开（错误 \(code)），过一会儿会自动再试"
         case .needsLogin: return "登录已过期，自动登录没成功：请检查「设置 › 自动同步」里的账号密码；网站要验证码时，在「网页登录」里手动登录一次"
-        case .undecodable: return "无法识别返回的内容"
+        case .undecodable: return "网站返回的内容认不出来，可能网站改版了，过一会儿会自动再试"
         }
     }
 }

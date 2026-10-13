@@ -71,7 +71,7 @@ struct WorkloadView: View {
                     NavigationLink {
                         RotationMembersView()
                     } label: {
-                        LabeledContent("只按排班算的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
+                        LabeledContent("没排班不算上班的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
                     }
                 } footer: {
                     Text("调度（排班表上有名字才算一天）和这里另加的人，工作日网站上没给排岗位不算工作量；其他人（包括你们轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常；写了休息、调休的算休息。")
@@ -292,7 +292,7 @@ struct WorkloadDetailView: View {
     }
 }
 
-/// 设置「只按排班算」的人（调度自动算在内）：可以直接粘贴名字，也可以在全员排班的名单里勾选。
+/// 设置「没排班不算上班」的人（调度自动算在内）：可以直接粘贴名字，也可以在全员排班的名单里勾选。
 struct RotationMembersView: View {
     @EnvironmentObject private var store: AppStore
     @State private var text = ""
@@ -308,7 +308,7 @@ struct RotationMembersView: View {
         List {
             Section {
                 TextField("粘贴名字，用空格、逗号或顿号隔开", text: $text, axis: .vertical)
-                Button("设为只按排班算") {
+                Button("设为没排班不算上班") {
                     let parsed = text.split { " ,，、;；\n\t".contains($0) }.map(String.init).filter { !$0.isEmpty }
                     var seen = Set<String>()
                     store.settings.scheduleOnlyMembers = parsed.filter { seen.insert($0).inserted }
@@ -316,14 +316,14 @@ struct RotationMembersView: View {
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if !members.isEmpty {
-                    ConfirmButton(title: "清空（只按调度）", message: "名单会清空，改成只有调度按排班算。") {
+                    ConfirmButton(title: "清空（只留调度）", message: "名单会清空，改成只有调度没排班不算上班。") {
                         store.settings.scheduleOnlyMembers = []
                     }
                 }
             } footer: {
                 Text(members.isEmpty
-                     ? "现在只有排过调度的人按排班算（排班表上有名字才算一天）。其他人没排岗位、没写休息的工作日都算正常上班。一般不用加人。"
-                     : "另加了 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也按排班算。")
+                     ? "现在只有排过调度的人没排班不算上班（排班表上有名字才算一天）。其他人没排岗位、没写休息的工作日都算正常上班。一般不用加人。"
+                     : "另加了 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也一样。")
             }
             Section("全员排班里的人（点一下勾选）") {
                 ForEach(names, id: \.self) { name in
@@ -349,7 +349,7 @@ struct RotationMembersView: View {
         }
         .appList()
         .adminOnly()
-        .navigationTitle("只按排班算的人")
+        .navigationTitle("没排班不算上班的人")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

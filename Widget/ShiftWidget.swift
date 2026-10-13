@@ -216,6 +216,9 @@ struct DutyLiveActivity: Widget {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(context.attributes.post)值班中").font(.headline)
                     Text(context.state.after).font(.caption).foregroundStyle(.secondary)
+                    if let tasks = context.state.tasksLine {
+                        Text(tasks).font(.caption).lineLimit(1)
+                    }
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
@@ -232,6 +235,8 @@ struct DutyLiveActivity: Widget {
             }
             .padding()
             .activityBackgroundTint(Color(hex: "#17A2B8").opacity(0.25))
+            // 点一下打开值班那天（清单在那里勾）
+            .widgetURL(URL(string: "shiftreminder://day/\(context.attributes.day)"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -244,7 +249,12 @@ struct DutyLiveActivity: Widget {
                         .frame(maxWidth: 90, alignment: .trailing)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.state.after).font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(context.state.after).font(.caption).foregroundStyle(.secondary)
+                        if let tasks = context.state.tasksLine {
+                            Text(tasks).font(.caption).lineLimit(1)
+                        }
+                    }
                 }
             } compactLeading: {
                 Text("📡")
@@ -255,6 +265,7 @@ struct DutyLiveActivity: Widget {
             } minimal: {
                 Text("📡")
             }
+            .widgetURL(URL(string: "shiftreminder://day/\(context.attributes.day)"))
         }
     }
 }

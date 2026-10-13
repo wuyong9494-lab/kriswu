@@ -102,10 +102,11 @@ struct WorkLogView: View {
         }
     }
 
-    /// 一天的记录：左滑删除先确认；标题右边一次分享这天的全部照片、录音和一份文字汇总（交材料用）
-    private func daySection(_ day: DayKey, entries: [WorkLogEntry]) -> some View {
-        let title = day.dateText + (entries.compactMap(\.shift).first.map { " · \($0)" } ?? "")
+    /// 一天的记录：这天的清单做了哪些，加上留痕；左滑删除先确认；标题右边一次分享这天的全部照片、录音和一份文字汇总（交材料用）
+    private func daySection(_ day: DayKey, entries: [WorkLogEntry], tasks: TaskDayRecord?) -> some View {
+        let title = day.dateText + ((entries.compactMap(\.shift).first ?? tasks?.shift).map { " · \($0)" } ?? "")
         return Section {
+            if let tasks { TaskRecordRow(record: tasks) }
             ForEach(entries) { entry in
                 NavigationLink { WorkLogDetailView(entry: entry) } label: { WorkLogRow(entry: entry) }
             }
@@ -119,7 +120,7 @@ struct WorkLogView: View {
                 Spacer()
                 // 点了才写文字汇总；照片、录音按原来的文件类型分享（微信、文件 App 都认得）
                 Button {
-                    sharing = ShareBundle(urls: exportItems(day: day, entries: entries))
+                    sharing = ShareBundle(urls: exportItems(day: day, entries: entries, tasks: tasks))
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
@@ -129,9 +130,10 @@ struct WorkLogView: View {
     }
 
     /// 这天的文件 + 一份文字汇总
-    private func exportItems(day: DayKey, entries: [WorkLogEntry]) -> [URL] {
+    private func exportItems(day: DayKey, entries: [WorkLogEntry], tasks: TaskDayRecord?) -> [URL] {
         let sorted = entries.sorted { $0.date < $1.date }
         var lines = ["\(day.dateText) 工作留痕"]
+        if let tasks { lines += [tasks.progress] + tasks.lines }
         for e in sorted {
             var line = e.date.formatted(date: .omitted, time: .shortened) + " " + e.kind.title
             if let shift = e.shift { line += "（\(shift)）" }
@@ -154,6 +156,12 @@ struct WorkLogView: View {
     private var content: some View {
         let shown = log.entries.filter { (filter == nil || $0.kind == filter) && $0.matches(query) }
         let groups = Dictionary(grouping: shown) { DayKey(date: $0.date, calendar: .app) }
+        // 勾过清单的日子：没有留痕也列出来（按类型筛选时不列；搜索时清单事项也能搜到）
+        let history = store.settings.taskHistory
+        let taskDays: [DayKey] = filter != nil ? [] : history.compactMap { key, record -> DayKey? in
+            query.isEmpty || record.matches(query) ? DayKey(string: key) : nil
+        }
+        let days = Set(groups.keys).union(taskDays).sorted(by: >)
         return List {
             Section {
                 HStack(spacing: DS.Space.s) {
@@ -180,17 +188,17 @@ struct WorkLogView: View {
                     Label("通话录音怎么存进来", systemImage: "phone.badge.waveform")
                 }
             }
-            if shown.isEmpty {
+            if days.isEmpty {
                 Section {
                     if query.isEmpty {
                         EmptyState(icon: "tray", title: "还没有记录", message: "拍照、录音、记一笔，都会按日期和当天的班次存好。")
                     } else {
-                        EmptyState(icon: "magnifyingglass", title: "没找到「\(query)」", message: "说明、录音转出的文字、班次都会搜。")
+                        EmptyState(icon: "magnifyingglass", title: "没找到「\(query)」", message: "说明、录音转出的文字、班次、清单都会搜。")
                     }
                 }
             }
-            ForEach(groups.keys.sorted(by: >), id: \.self) { day in
-                daySection(day, entries: groups[day] ?? [])
+            ForEach(days, id: \.self) { day in
+                daySection(day, entries: groups[day] ?? [], tasks: history[day.description])
             }
             Section {
                 Toggle("录音自动转成文字", isOn: $store.settings.workLogAutoTranscribe)
@@ -217,7 +225,7 @@ struct WorkLogView: View {
             }
             Button("取消", role: .cancel) { pendingDelete = [] }
         }
-        .searchable(text: $query, prompt: "搜说明、录音文字、班次")
+        .searchable(text: $query, prompt: "搜说明、录音文字、班次、清单")
         .sheet(item: $sharing) { ActivityView(items: $0.urls) }
         .appList()
         .navigationTitle("工作留痕")
@@ -285,6 +293,32 @@ struct WorkLogView: View {
             .card(padding: 0)
         }
         .buttonStyle(PressableStyle())
+    }
+}
+
+/// 留痕里这天的清单：做了几件，点开看哪些做了、哪些没做
+private struct TaskRecordRow: View {
+    let record: TaskDayRecord
+
+    var body: some View {
+        DisclosureGroup {
+            ForEach(Array(record.done.enumerated()), id: \.offset) { _, item in
+                Label(item, systemImage: "checkmark.circle.fill").foregroundStyle(.secondary)
+            }
+            ForEach(Array(record.todo.enumerated()), id: \.offset) { _, item in
+                Label(item, systemImage: "circle")
+            }
+        } label: {
+            Label(record.progress, systemImage: record.isComplete ? "checkmark.seal.fill" : "checklist")
+                .foregroundStyle(record.isComplete ? Color.green : Color.primary)
+        }
+        .font(DS.Font.body)
+    }
+}
+
+extension TaskDayRecord {
+    func matches(_ query: String) -> Bool {
+        (done + todo + [shift ?? ""]).contains { $0.localizedCaseInsensitiveContains(query) }
     }
 }
 

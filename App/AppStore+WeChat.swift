@@ -108,7 +108,7 @@ extension AppStore {
         var cal = Calendar.app
         cal.firstWeekday = 2
         let now = Date()
-        let key = "\(cal.component(.yearForWeekOfYear, from: now))-W\(cal.component(.weekOfYear, from: now))"
+        let key = WeChatSchedule.weekKey(now, calendar: .app)
         // 第一次（刚打开开关）不补发，从下周一开始
         guard let last = settings.lastWeeklyDigest else { settings.lastWeeklyDigest = key; return }
         guard last != key, let thisMonday = cal.dateInterval(of: .weekOfYear, for: now)?.start else { return }
@@ -132,12 +132,7 @@ extension AppStore {
         let rest = settings.restBalance.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(5).map { "\($0.key) \($0.value) 天" }
         if !rest.isEmpty { lines.append("【待休最多】" + rest.joined(separator: "，")) }
         // 网站标了该休没休（上周一以后）
-        let from = monday.description
-        let noRest = settings.siteNoRestFlags.filter { $0 >= from }.map { flag -> String in
-            let parts = flag.split(separator: "|").map(String.init)
-            guard parts.count == 3, let d = DayKey(string: parts[0]) else { return flag }
-            return "\(parts[1]) \(short(d))（\(parts[2])）"
-        }
+        let noRest = DigestText.noRestLines(settings.siteNoRestFlags, from: monday)
         if !noRest.isEmpty { lines.append("【该休没休】" + noRest.joined(separator: "，")) }
         let sent = await pushToWeChat(title: "📋 上周值班摘要（\(short(days[0]))–\(short(days[6]))）", content: lines.joined(separator: "\n"))
         if !sent { settings.lastWeeklyDigest = last }
@@ -149,7 +144,7 @@ extension AppStore {
         var cal = Calendar.app
         cal.firstWeekday = 2
         let now = Date()
-        let key = "\(cal.component(.yearForWeekOfYear, from: now))-W\(cal.component(.weekOfYear, from: now))"
+        let key = WeChatSchedule.weekKey(now, calendar: .app)
         guard let last = settings.lastPersonalWeekly else { settings.lastPersonalWeekly = key; return }
         guard last != key, let thisMonday = cal.dateInterval(of: .weekOfYear, for: now)?.start else { return }
         let monday = DayKey(date: thisMonday, calendar: cal)
@@ -157,18 +152,15 @@ extension AppStore {
         guard let mine = WorkloadCounter.count(roster: roster, days: lastWeek, matcher: matcher,
                                                members: rotationMembers, calendar: .app).first(where: { $0.name == me }) else { return }
         settings.lastPersonalWeekly = key
-        var lines = ["上周上了 \(mine.workDays) 天" + (mine.dutyDays > 0 ? "，其中遥测 \(mine.dutyDays) 次" : "") + "。"]
-        if let rest = settings.restBalance[me], rest > 0 { lines.append("还有 \(rest) 天待休。") }
         let week = (0..<7).map { monday.adding(days: $0) }.compactMap { d -> String? in
             guard let raw = shift(on: d) else { return nil }
             return "\(d.weekdayText)\(matcher.displayName(raw))"
         }
-        if !week.isEmpty { lines.append("这周：" + week.joined(separator: "，") + "。") }
-        if let turn = myDutyTurn(), let day = turn.day, day >= monday {
-            lines.append((turn.scheduled ? "下次遥测：" : "下次遥测（推算）：约 ") + "\(day.dateText)（\(day.weekdayText)）。")
-        }
+        let turn = myDutyTurn()
+        let next = turn?.day.flatMap { $0 >= monday ? "\($0.dateText)（\($0.weekdayText)）" : nil }
         let title = "🗓️ 你的一周小结"
-        let body = lines.joined(separator: "\n")
+        let body = DigestText.personalWeekly(workDays: mine.workDays, dutyDays: mine.dutyDays, rest: settings.restBalance[me],
+                                             week: week, nextDuty: next, nextDutyScheduled: turn?.scheduled ?? true)
         await NotificationService.notifyNow(id: "personal-weekly", title: title, body: body)
         if settings.weChatEnabled { _ = await pushToWeChat(title: title, content: body) }
     }
@@ -182,11 +174,14 @@ extension AppStore {
         let now = Date()
         let today = DayKey.today
         let p = planner
-        func time(_ t: ClockTime) -> Date { today.date(calendar: .app, hour: t.hour, minute: t.minute) }
-
+        let due = WeChatSchedule.dailyDue(now: now, today: today,
+                                          morning: settings.morningEnabled ? settings.morning : nil,
+                                          evening: settings.eveningEnabled ? settings.evening : nil,
+                                          morningSent: settings.weChatMorningSent, eveningSent: settings.weChatEveningSent,
+                                          calendar: .app)
         // 还没有这天的数据就先不记「已发」，同步拿到数据后再发；
         // 有内容时先记下「已发」防止重复，发送失败再改回去，下次 App 运行时重发
-        if settings.eveningEnabled, now >= time(settings.evening), settings.weChatEveningSent != today {
+        if due == .evening {
             if let m = p.message(morning: false, on: today, schedule: reminderSchedule) {
                 let before = (settings.weChatEveningSent, settings.weChatMorningSent)
                 settings.weChatEveningSent = today
@@ -195,7 +190,7 @@ extension AppStore {
                     (settings.weChatEveningSent, settings.weChatMorningSent) = before
                 }
             }
-        } else if settings.morningEnabled, now >= time(settings.morning), settings.weChatMorningSent != today {
+        } else if due == .morning {
             if let m = p.message(morning: true, on: today, schedule: reminderSchedule) {
                 let before = settings.weChatMorningSent
                 settings.weChatMorningSent = today
@@ -205,8 +200,9 @@ extension AppStore {
             }
         }
         // 周日晚上：下周安排
-        if settings.weeklyPreview, now >= time(settings.eveningEnabled ? settings.evening : ClockTime(hour: 20, minute: 0)),
-           Calendar.app.component(.weekday, from: now) == 1, settings.weChatWeekSent != today,
+        if settings.weeklyPreview,
+           WeChatSchedule.weekPreviewDue(now: now, today: today, evening: settings.eveningEnabled ? settings.evening : nil,
+                                         sent: settings.weChatWeekSent, calendar: .app),
            let w = p.weekMessage(on: today, schedule: reminderSchedule) {
             let before = settings.weChatWeekSent
             settings.weChatWeekSent = today
@@ -278,19 +274,11 @@ extension AppStore {
     /// 下一次该发微信提醒的时间，用来请求系统在那之后尽快唤醒 App。
     var nextWeChatReminder: Date? {
         guard settings.weChatEnabled, settings.weChatDaily else { return nil }
-        let now = Date()
-        let times = [settings.morningEnabled ? settings.morning : nil, settings.eveningEnabled ? settings.evening : nil].compactMap { $0 }
-        var candidates = [DayKey.today, DayKey.today.adding(days: 1)]
-            .flatMap { day in times.map { day.date(calendar: .app, hour: $0.hour, minute: $0.minute) } }
-        // 周日的下周预告（晚上提醒关掉时按 20:00）
-        if settings.weeklyPreview {
-            let t = settings.eveningEnabled ? settings.evening : ClockTime(hour: 20, minute: 0)
-            for day in [DayKey.today, DayKey.today.adding(days: 1)]
-            where Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12)) == 1 {
-                candidates.append(day.date(calendar: .app, hour: t.hour, minute: t.minute))
-            }
-        }
-        return candidates.filter { $0 > now }.min()
+        // 周日的下周预告也算（晚上提醒关掉时按 20:00）
+        return WeChatSchedule.nextReminder(now: Date(), today: .today,
+                                           morning: settings.morningEnabled ? settings.morning : nil,
+                                           evening: settings.eveningEnabled ? settings.evening : nil,
+                                           weeklyPreview: settings.weeklyPreview, calendar: .app)
     }
 
 }

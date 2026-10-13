@@ -108,6 +108,42 @@ public enum TaskList {
     }
 }
 
+/// 一天的清单做了哪些。按当时的清单存档：以后组别工作内容改了，旧记录不变。
+public struct TaskDayRecord: Codable, Equatable, Hashable {
+    /// 那天的班（显示用）
+    public var shift: String?
+    public var done: [String]
+    public var todo: [String]
+
+    public init(shift: String? = nil, done: [String], todo: [String]) {
+        self.shift = shift
+        self.done = done
+        self.todo = todo
+    }
+
+    public var total: Int { done.count + todo.count }
+    public var isComplete: Bool { todo.isEmpty && !done.isEmpty }
+
+    /// 「清单 5/6」「清单 6/6 全部做完」
+    public var progress: String {
+        "清单 \(done.count)/\(total)" + (isComplete ? " 全部做完" : "")
+    }
+
+    /// 交接、汇总用的两行：已完成……；未完成……
+    public var lines: [String] {
+        var lines: [String] = []
+        if !done.isEmpty { lines.append("已完成：" + done.joined(separator: "；")) }
+        if !todo.isEmpty { lines.append("未完成：" + todo.joined(separator: "；")) }
+        return lines
+    }
+
+    /// 只留 cutoff 那天及以后的（key 是 yyyy-MM-dd）
+    public static func pruned(_ history: [String: TaskDayRecord], keepingFrom cutoff: DayKey) -> [String: TaskDayRecord] {
+        let first = cutoff.description
+        return history.filter { $0.key >= first }
+    }
+}
+
 /// 数据核对：找出可能读漏、读错的地方
 public struct DataIssue: Hashable {
     public enum Kind: String { case noRestAfterDuty = "遥测后没写休息", unknownPost = "认不出的岗位", thinDay = "这天人数偏少" }

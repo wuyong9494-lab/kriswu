@@ -17,7 +17,7 @@ struct PeopleProfilesView: View {
         List {
             Section {
                 LabeledContent("已建档案", value: "\(store.settings.profiles.count) 人")
-                LabeledContent("还在自动判断", value: "\(unconfirmed) 人")
+                LabeledContent("还没确认（按排班认的）", value: "\(unconfirmed) 人")
                 if store.canEdit && unconfirmed > 0 {
                     Button {
                         var all = store.settings.profiles
@@ -25,9 +25,9 @@ struct PeopleProfilesView: View {
                             all[name] = PersonProfile(name: name, spans: [RoleSpan(from: nil, role: store.suggestedRole(name))])
                         }
                         store.settings.profiles = all
-                        ToastCenter.shared.show("已按自动判断建好 \(unconfirmed) 人的档案", style: .success)
+                        ToastCenter.shared.show("已按排班认出的角色建好 \(unconfirmed) 人的档案", style: .success)
                     } label: {
-                        Label("按自动判断给没建档的人建档", systemImage: "person.crop.rectangle.stack")
+                        Label("按排班认出的角色给没建档的人建档", systemImage: "person.crop.rectangle.stack")
                     }
                 }
                 ReadOnlyNotice()
@@ -79,12 +79,12 @@ struct PersonProfileView: View {
                         LabeledContent(span.from.map { "\($0.dateText) 起" } ?? "一直", value: span.role.rawValue)
                     }
                 } else {
-                    LabeledContent("还没建档案", value: "自动判断：\(suggested.rawValue)")
+                    LabeledContent("还没建档案", value: "按排班认：\(suggested.rawValue)")
                 }
             } header: {
                 Text("角色")
             } footer: {
-                Text("自动判断看最近三个月：调度占一半以上是调度，组A–E 占一半以上是轮组别，其它是不轮组别。")
+                Text("按排班认：看最近三个月，调度占一半以上是调度，组A–E 占一半以上是轮组别，其它是不轮组别。")
             }
             if store.canEdit {
                 Section {
@@ -110,11 +110,11 @@ struct PersonProfileView: View {
                 } header: {
                     Text("在岗时间")
                 } footer: {
-                    Text("没填就按网站上出现的时间自动判断：第一次出现前两周、最后一次出现后两个月以外不统计。")
+                    Text("没填就看网站上出现的时间：第一次出现前两周、最后一次出现后两个月以外不统计。")
                 }
                 if profile != nil {
                     Section {
-                        ConfirmButton(title: "删除档案，改回自动判断", message: "\(name)的角色、来走日期会删掉，改回按排班自动判断。") {
+                        ConfirmButton(title: "删除档案，改回按排班认", message: "\(name)的角色、来走日期会删掉，改回按排班认。") {
                             store.settings.profiles[name] = nil
                         }
                     }

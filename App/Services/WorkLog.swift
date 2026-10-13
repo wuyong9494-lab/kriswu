@@ -354,16 +354,9 @@ final class WorkLogStore: ObservableObject {
     func handoverSummary(for day: DayKey, store: AppStore) -> String {
         var lines = ["【交接班】\(day.month)月\(day.day)日（\(day.weekdayText)）"
                      + (store.shift(on: day).map { " " + store.matcher.displayName($0) } ?? "")]
-        let groups = store.notes(for: store.shift(on: day)).map { (group: $0.group, items: TaskList.items(from: $0.note)) }
-            .filter { $0.items.count > 1 }
-        var done: [String] = [], todo: [String] = []
-        for g in groups {
-            for (i, item) in g.items.enumerated() {
-                if store.isTaskDone(day, g.group, TaskChecklistCard.key(i, item)) { done.append(item) } else { todo.append(item) }
-            }
-        }
-        if !done.isEmpty { lines.append("已完成：" + done.joined(separator: "；")) }
-        if !todo.isEmpty { lines.append("未完成：" + todo.joined(separator: "；")) }
+        // 清单：勾过的用当时存档的，没勾过的按现在的清单
+        let tasks = store.taskRecord(on: day)
+        lines += tasks?.lines ?? []
         let today = entries.filter { DayKey(date: $0.date, calendar: .app) == day }.sorted { $0.date < $1.date }
         if !today.isEmpty {
             if store.settings.workLogLock && !unlocked {
@@ -379,7 +372,7 @@ final class WorkLogStore: ObservableObject {
                 }
             }
         }
-        if groups.isEmpty && today.isEmpty { lines.append("今天没有清单和留痕记录。") }
+        if tasks == nil && today.isEmpty { lines.append("今天没有清单和留痕记录。") }
         lines.append("其他需要交代的：")
         return lines.joined(separator: "\n")
     }

@@ -105,6 +105,8 @@ struct TodayView: View {
             }
             .sheet(item: $editing) { DayEditor(day: $0) }
             .sheet(isPresented: $searching) { MemberSearchView() }
+            // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
+            .task(id: "\(store.dataRevision)-\(DayKey.today)") { await store.warmRotation() }
         }
     }
 }
@@ -649,7 +651,8 @@ private struct DutyInsightCard: View {
     let today: DayKey
 
     var body: some View {
-        let turn = store.myDutyTurn()
+        // 推算在后台算（TodayView 出现时开始），算好前先不显示「下次遥测」
+        let turn = store.myDutyTurn(computeIfNeeded: false)
         let warnings = store.myRestWarnings()
         if turn != nil || !warnings.isEmpty {
             NavigationLink { SchedulePatternsView() } label: {
