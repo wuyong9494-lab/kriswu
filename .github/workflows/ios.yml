@@ -1,0 +1,215 @@
+name: iOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 核心逻辑单元测试
+        shell: bash -eo pipefail {0}
+        run: |
+          swift test 2>&1 | tee swift-test.log || {
+            # 失败的断言也作为注释显示在检查结果里，方便查看
+            grep -E "error:" swift-test.log | head -20 | sed 's/^/::error::/'
+            exit 1
+          }
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 编译 App（未签名）
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild build \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee build.log
+          # 这类警告意味着调用了不返回结果的旧接口，功能会悄悄失效，当作错误处理
+          if grep -E "always fails|no 'async' operations occur within 'await'" build.log; then
+            echo "::error::发现可疑警告（见上），请修复"; exit 1
+          fi
+
+      - name: 检查 App 名称（侧载工具注册 App ID 时只接受英文）
+        run: |
+          APP=build/Build/Products/Release-iphoneos/ShiftReminder.app
+          for plist in "$APP/Info.plist" "$APP/PlugIns/ShiftWidget.appex/Info.plist"; do
+            for k in CFBundleDisplayName CFBundleName; do
+              v=$(/usr/libexec/PlistBuddy -c "Print :$k" "$plist")
+              echo "$plist $k=$v"
+              echo "$v" | LC_ALL=C grep -q '^[ -~]*$' || { echo "::error::$plist 的 $k 必须是英文"; exit 1; }
+            done
+          done
+          cat "$APP/zh-Hans.lproj/InfoPlist.strings"
+          # 图标要编进 App，否则主屏幕上是空白图标
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" "$APP/Info.plist"
+          for x in A B C D E Rest; do
+            /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons:Icon$x" "$APP/Info.plist" >/dev/null \
+              || { echo "::error::缺少备用图标 Icon$x"; exit 1; }
+          done
+          ls "$APP"/AppIcon*.png "$APP/Assets.car"
+
+      # 未签名的程序里没有 entitlements，SideStore 就不知道要开 App Group（小组件读不到数据）。
+      # 用临时签名（ad-hoc）把 entitlements 写进去，SideStore 安装时会换成你自己的签名。
+      - name: 写入 entitlements（ad-hoc 签名）
+        run: |
+          APP=build/Build/Products/Release-iphoneos/ShiftReminder.app
+          codesign -f -s - --entitlements Widget/ShiftWidget.entitlements "$APP/PlugIns/ShiftWidget.appex"
+          codesign -f -s - --entitlements App/ShiftReminder.entitlements "$APP"
+          codesign -d --entitlements - "$APP"
+          codesign -d --entitlements - "$APP/PlugIns/ShiftWidget.appex"
+
+      - name: 打包未签名 IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/ShiftReminder.app Payload/
+          zip -qr ShiftReminder.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ShiftReminder-ipa
+          path: ShiftReminder.ipa
+
+      # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
+      - name: 发布到 Releases（最新版）
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="值班提醒 最新版（build ${{ github.run_number }}）"
+          notes="未签名安装包，用 SideStore / AltStore / Sideloadly 安装。提交：${GITHUB_SHA::7}"
+          if gh release view app >/dev/null 2>&1; then
+            # 原地替换安装包，不删发布：避免下载链接中途失效、下载到损坏的文件
+            gh release upload app ShiftReminder.ipa --clobber
+            git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/app" || true
+            gh release edit app --title "$title" --notes "$notes" --latest
+          else
+            gh release create app ShiftReminder.ipa --target "$GITHUB_SHA" --title "$title" --notes "$notes" --latest
+          fi
+
+  # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
+  site-tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 启动仿值班网站
+        run: |
+          nohup python3 Tests/MockSite/server.py 8765 > mock.log 2>&1 &
+          sleep 2
+          curl -sf "http://127.0.0.1:8765/api/expected?date=2026-01-01"
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 模拟器里测试同步流程
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          echo "模拟器：$DEVICE"
+          set +e
+          xcodebuild test \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -destination "id=$DEVICE" \
+            -only-testing:SiteTests \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO > test.log 2>&1
+          status=$?
+          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log
+          if [ $status -ne 0 ]; then
+            tail -80 test.log
+            grep -E "error:" test.log | head -20 | sed 's/^/::error::/'
+          fi
+          exit $status
+
+      - name: 网站访问记录
+        if: always()
+        run: tail -150 mock.log
+
+  # 用虚构的演示数据（启动参数 -demo）在模拟器里打开各个页面截图，浅色、深色各一套，推到 screenshots 分支方便查看界面
+  screenshots:
+    runs-on: macos-15
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 编译模拟器版本
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro') or x['name'].startswith('iPhone')))")
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcodebuild build \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Debug \
+            -destination "id=$DEVICE" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
+
+      - name: 截图
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
+          ID=com.kriswu.shiftreminder
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          # 中文界面
+          xcrun simctl spawn "$DEVICE" defaults write -g AppleLanguages -array zh-Hans
+          xcrun simctl spawn "$DEVICE" defaults write -g AppleLocale zh_CN
+          xcrun simctl shutdown "$DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          mkdir -p shots
+          SCREENS="today calendar stats settings fairness week swap ledger year summary check rest forecast holidays patterns worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          for mode in light dark; do
+            xcrun simctl ui "$DEVICE" appearance $mode
+            for s in $SCREENS; do
+              xcrun simctl launch "$DEVICE" $ID -demo -screen $s > /dev/null
+              sleep 4
+              xcrun simctl io "$DEVICE" screenshot "shots/$mode-$s.png" > /dev/null 2>&1
+              xcrun simctl terminate "$DEVICE" $ID || true
+              sips -s format jpeg -s formatOptions 70 -Z 1100 "shots/$mode-$s.png" --out "shots/$mode-$s.jpg" > /dev/null
+              rm "shots/$mode-$s.png"
+            done
+          done
+          ls -la shots
+
+      - name: 推到 screenshots 分支
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd shots
+          git init -q
+          git checkout -q -b screenshots
+          git -c user.name=ci -c user.email=ci@example.com add .
+          git -c user.name=ci -c user.email=ci@example.com commit -qm "Screenshots for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" screenshots

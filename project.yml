@@ -1,0 +1,78 @@
+# 用 XcodeGen 生成 Xcode 工程：brew install xcodegen && xcodegen
+name: ShiftReminder
+options:
+  bundleIdPrefix: com.kriswu
+  deploymentTarget:
+    iOS: "16.2"
+  developmentLanguage: zh-Hans
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+targets:
+  ShiftReminder:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+      - path: Sources/ShiftCore
+      - path: Shared
+    dependencies:
+      - target: ShiftWidget
+    entitlements:
+      path: App/ShiftReminder.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.kriswu.shiftreminder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # 把 IconA…IconE、IconRest 也编进去，供每天切换图标
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES
+    scheme:
+      testTargets:
+        - SiteTests
+
+  # 模拟器里对着仿值班网站（Tests/MockSite）跑同步流程，只在 CI 用
+  SiteTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/SiteTests
+    dependencies:
+      - target: ShiftReminder
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder.sitetests
+        TARGETED_DEVICE_FAMILY: "1"
+
+  # 主屏幕 / 锁屏小组件：显示今天、明天的分工
+  ShiftWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+        excludes:
+          - Info.plist
+      - path: Shared
+    entitlements:
+      path: Widget/ShiftWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.kriswu.shiftreminder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder.widget
+        INFOPLIST_FILE: Widget/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
