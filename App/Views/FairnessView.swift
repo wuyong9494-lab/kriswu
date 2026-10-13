@@ -81,8 +81,8 @@ struct FairnessView: View {
                 (WorkloadBalance.analyze(roster: roster, days: week, matcher: matcher, tolerance: 2, members: members, calendar: .app),
                  WorkloadBalance.analyze(roster: roster, days: monthKnown, matcher: matcher, tolerance: 3, members: members, calendar: .app))
             }.value
-            weekReport = w
-            monthReport = m
+            self.weekReport = w
+            self.monthReport = m
             csvURL = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",
                                    text: WorkloadCSV.balance(w, title: "本周（\(rangeText(week) ?? "")）") + "\n"
                                        + WorkloadCSV.balance(m, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）"))
