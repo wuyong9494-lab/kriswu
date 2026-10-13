@@ -100,17 +100,46 @@ struct WorkLogView: View {
         }
     }
 
+    /// 一天的记录：左滑删除先确认；标题右边一次分享这天的全部照片、录音和一份文字汇总（交材料用）
+    private func daySection(_ day: DayKey, entries: [WorkLogEntry]) -> some View {
+        let title = day.dateText + (entries.compactMap(\.shift).first.map { " · \($0)" } ?? "")
+        return Section {
+            ForEach(entries) { entry in
+                NavigationLink { WorkLogDetailView(entry: entry) } label: { WorkLogRow(entry: entry) }
+            }
+            .onDelete { offsets in
+                // 左滑删除也先确认（照片、录音删了就没了）
+                pendingDelete = offsets.map { entries[$0] }
+            }
+        } header: {
+            HStack {
+                Text(title)
+                Spacer()
+                ShareLink(items: exportItems(day: day, entries: entries)) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("分享这天的全部留痕")
+            }
+        }
+    }
+
     /// 这天的文件 + 一份文字汇总
     private func exportItems(day: DayKey, entries: [WorkLogEntry]) -> [WorkLogShareFile] {
         let sorted = entries.sorted { $0.date < $1.date }
-        let lines = ["\(day.dateText) 工作留痕"] + sorted.map { e in
-            let time = e.date.formatted(date: .omitted, time: .shortened)
+        var lines = ["\(day.dateText) 工作留痕"]
+        for e in sorted {
+            var line = e.date.formatted(date: .omitted, time: .shortened) + " " + e.kind.title
+            if let shift = e.shift { line += "（\(shift)）" }
+            if let file = e.file { line += " [\(file)]" }
             let text = [e.note, e.transcript ?? ""].filter { !$0.isEmpty }.joined(separator: "\n  ")
-            return "\(time) \(e.kind.title)" + (e.shift.map { "（\($0)）" } ?? "") + (e.file.map { " [\($0)]" } ?? "")
-                + (text.isEmpty ? "" : "\n  " + text)
+            if !text.isEmpty { line += "\n  " + text }
+            lines.append(line)
         }
-        return [WorkLogShareFile(name: "\(day) 工作留痕.txt", text: lines.joined(separator: "\n"))]
-            + sorted.compactMap { log.url(for: $0) }.map { WorkLogShareFile(name: $0.lastPathComponent, url: $0) }
+        var items = [WorkLogShareFile(name: "\(day) 工作留痕.txt", text: lines.joined(separator: "\n"))]
+        for e in sorted {
+            if let url = log.url(for: e) { items.append(WorkLogShareFile(name: url.lastPathComponent, url: url)) }
+        }
+        return items
     }
 
     private var content: some View {
@@ -152,26 +181,7 @@ struct WorkLogView: View {
                 }
             }
             ForEach(groups.keys.sorted(by: >), id: \.self) { day in
-                Section {
-                    ForEach(groups[day] ?? []) { entry in
-                        NavigationLink { WorkLogDetailView(entry: entry) } label: { WorkLogRow(entry: entry) }
-                    }
-                    .onDelete { offsets in
-                        // 左滑删除也先确认（照片、录音删了就没了）
-                        let list = groups[day] ?? []
-                        pendingDelete = offsets.map { list[$0] }
-                    }
-                } header: {
-                    HStack {
-                        Text(day.dateText + ((groups[day]?.compactMap(\.shift).first).map { " · \($0)" } ?? ""))
-                        Spacer()
-                        // 一次分享这天的全部照片、录音和一份文字汇总（交材料用）
-                        ShareLink(items: exportItems(day: day, entries: groups[day] ?? [])) {
-                            Image(systemName: "square.and.arrow.up")
-                        }
-                        .accessibilityLabel("分享这天的全部留痕")
-                    }
-                }
+                daySection(day, entries: groups[day] ?? [])
             }
             Section {
                 Toggle("录音自动转成文字", isOn: $store.settings.workLogAutoTranscribe)
