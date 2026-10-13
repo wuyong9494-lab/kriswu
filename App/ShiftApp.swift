@@ -86,6 +86,7 @@ struct RootView: View {
     @State private var rootSheet: RootSheet?
     @State private var camera = false
     @State private var tabBarTop: CGFloat = .infinity
+    @State private var inReviewDemo = UserDefaults.standard.bool(forKey: AppStore.demoKey)
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
@@ -141,6 +142,26 @@ struct RootView: View {
         .tint(DS.Palette.accent)
         .fontDesign(.rounded)
         .overlay { ToastOverlay() }
+        // 点了「先看演示」：顶上一直提示，随时可以退出回到自己的数据
+        .overlay(alignment: .top) {
+            if inReviewDemo {
+                Button {
+                    store.exitDemo()
+                    inReviewDemo = false
+                } label: {
+                    Label("演示模式（虚构数据）· 点这里退出", systemImage: "play.rectangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .background(Capsule().fill(Color.orange))
+                        .foregroundStyle(.white)
+                }
+                .padding(.top, 2)
+            }
+        }
+        .onReceive(store.objectWillChange) { _ in
+            let flag = UserDefaults.standard.bool(forKey: AppStore.demoKey)
+            if flag != inReviewDemo { DispatchQueue.main.async { inReviewDemo = flag } }
+        }
         // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕；
         // shiftreminder://capture/photo|record|note：小组件上的按钮
         .onOpenURL { url in

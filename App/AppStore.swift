@@ -583,7 +583,36 @@ final class AppStore: ObservableObject {
     }
 
     /// 截图用的演示模式（启动参数 -demo）：全是虚构数据，不读写手机上的文件、不联网
-    static let isDemo = ProcessInfo.processInfo.arguments.contains("-demo")
+    /// 演示模式：截图用的启动参数 -demo，或者首次打开时点了「先看演示」（给 App 审核员等不能登录值班网站的人看）
+    static let launchDemo = ProcessInfo.processInfo.arguments.contains("-demo")
+    static var isDemo: Bool { launchDemo || UserDefaults.standard.bool(forKey: demoKey) }
+    static let demoKey = "reviewDemo"
+
+    /// 进入演示：全是虚构数据，不读写手机上的文件、不联网（真实数据原样留着，退出后回来）
+    func enterDemo() {
+        UserDefaults.standard.set(true, forKey: Self.demoKey)
+        role = .admin
+        loadDemoData()
+    }
+
+    /// 退出演示：从手机上重新读回真实数据
+    func exitDemo() {
+        // 读回的过程中还算演示（不往手机上写），全部换回真实数据后才关掉，免得把虚构数据存进去
+        let state = (try? Data(contentsOf: Self.fileURL)).flatMap { try? JSONDecoder().decode(PersistedState.self, from: $0) }
+        settings = state?.settings ?? AppSettings()
+        var restored: [DayKey: String] = [:]
+        for (k, v) in state?.schedule ?? [:] { if let day = DayKey(string: k) { restored[day] = v } }
+        schedule = restored
+        covered = Set((state?.covered ?? []).compactMap(DayKey.init(string:)))
+        roster = Self.loadRoster()
+        rosterSources = Self.loadSources()
+        rosterLog = Self.loadLog()
+        publishedDays = Self.published(in: roster, matcher: matcher)
+        role = UserRole(rawValue: UserDefaults.standard.string(forKey: "userRole") ?? "") ?? .user
+        applyCustomHolidays()
+        UserDefaults.standard.set(false, forKey: Self.demoKey)
+        requestReschedule()
+    }
 
     private func loadDemoData() {
         let me = "陈晨"
@@ -844,6 +873,8 @@ final class AppStore: ObservableObject {
     /// 马上重新登记（等它做完）。一次接一次排队做，绝不同时进行：
     /// 每次开始时读的都是当时最新的排班，不会有慢的旧任务最后完成、把新提醒盖掉。
     func rescheduleNotifications() async {
+        // 演示数据不排提醒（手机上原来排好的真实提醒原样留着）
+        guard !Self.isDemo else { return }
         // 这一次会读最新的状态，排着的「0.3 秒后再做一次」不需要了（后台时间到了也不会多做一半）
         debounceTask?.cancel()
         debounceTask = nil
@@ -1558,7 +1589,7 @@ final class AppStore: ObservableObject {
 
     /// 每天最多一次，存「值班提醒备份-日期.json」，只留最近 8 份
     func autoBackupIfNeeded(force: Bool = false) {
-        guard let bookmark = settings.backupFolderBookmark else { return }
+        guard !Self.isDemo, let bookmark = settings.backupFolderBookmark else { return }
         if !force, let last = settings.lastAutoBackup, Date().timeIntervalSince(last) < 20 * 3600 { return }
         var stale = false
         guard let folder = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &stale) else {
@@ -1684,6 +1715,7 @@ final class AppStore: ObservableObject {
 
     /// 系统在后台唤醒 App 时调用（时间由 iOS 决定，不保证准时）。
     func backgroundRefresh() async {
+        guard !Self.isDemo else { return }
         BackgroundRefresh.schedule(notBefore: nextBackgroundSync)   // 先约好下一次，万一这次被系统打断
         settings.lastBackgroundWake = Date()
         await withTaskCancellationHandler {
@@ -1710,7 +1742,7 @@ final class AppStore: ObservableObject {
     /// 发到微信；失败只记录原因，不影响其它功能。
     @discardableResult
     func pushToWeChat(title: String, content: String, force: Bool = false) async -> Bool {
-        guard settings.weChatEnabled || force else { return false }
+        guard !Self.isDemo, settings.weChatEnabled || force else { return false }
         do {
             try await WeChatPush.send(title: title, content: content, token: Keychain.get(.pushPlusToken) ?? "")
             settings.weChatMessage = "上次微信推送成功：\(Date().formatted(date: .omitted, time: .shortened))"

@@ -123,7 +123,7 @@ final class WorkLogStore: ObservableObject {
     private static var indexURL: URL { folder.appendingPathComponent("记录.json") }
 
     private init() {
-        if AppStore.isDemo {
+        if AppStore.launchDemo {   // 截图用的演示数据；「先看演示」时照常读自己的记录
             let now = Date()
             entries = [
                 WorkLogEntry(date: now.addingTimeInterval(-1800), kind: .note, note: "08:30 交班：一号星数传正常，二号星遥测帧计数偶有跳变，已通知值班长。", shift: "遥测"),
@@ -178,7 +178,7 @@ final class WorkLogStore: ObservableObject {
     private var unlockObserver: NSObjectProtocol?
 
     private func save() {
-        guard !AppStore.isDemo, !loadFailed, let data = try? JSONEncoder().encode(entries) else { return }
+        guard !AppStore.launchDemo, !loadFailed, let data = try? JSONEncoder().encode(entries) else { return }
         do {
             try data.write(to: Self.indexURL, options: [.atomic, .completeFileProtection])
             pendingSave = false

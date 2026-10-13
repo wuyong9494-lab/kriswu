@@ -58,6 +58,16 @@ struct OnboardingView: View {
             feature("bell.badge", "到点提醒", "早上提醒今天的班，晚上提醒明天的班")
             feature("chart.bar", "工作量和均衡", "每人工作量、上班天数、遥测次数一目了然")
             feature("camera", "工作留痕", "拍照、录音、记一笔，按日期和班次存好")
+            // 没有值班网站账号（比如 App 审核员）：用虚构数据看看所有功能
+            Button {
+                Haptics.tap()
+                store.enterDemo()
+            } label: {
+                Label("先看演示（不用登录，全是虚构数据）", systemImage: "play.rectangle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(DSButtonStyle(kind: .secondary, fullWidth: true))
+            .padding(.top, DS.Space.s)
         }
     }
 
