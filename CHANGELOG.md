@@ -2,7 +2,7 @@
 
 版本号对应 App 里的「版本」（MARKETING_VERSION）；每次上传 TestFlight 的 build 号是 GitHub Actions 的运行序号。
 
-## 1.1（开发中）
+## 1.1（2026-10-13）
 
 ### 新功能
 - 早上的提醒长按有「清单全部做完」，不用打开 App 就能勾掉当天清单。
