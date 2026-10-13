@@ -1965,6 +1965,8 @@ final class AppStore: ObservableObject {
         // 网站排出了新的一周：记下时间，学网站一般什么时候排班
         if let before = lastPublished, let after = publishedDays.max(), after > before.adding(days: 3) {
             s.publishTimes = Array((s.publishTimes + [Date()]).suffix(40))
+            let fresh = publishedDays.filter { $0 > before }.sorted()
+            Task { [weak self] in await self?.notifyNewWeek(fresh) }
         }
         if s != settings { settings = s }
         saveRoster()
@@ -1972,6 +1974,25 @@ final class AppStore: ObservableObject {
         // 已排班的日子变了，「未排班」提醒也要跟着变
         requestReschedule()
         return result.edits
+    }
+
+    /// 网站排出了新的一周：告诉我这几天我是什么班（有遥测的特别标出来）
+    func notifyNewWeek(_ days: [DayKey]) async {
+        guard !Self.isDemo, settings.notifyChanges, let first = days.first, let last = days.last else { return }
+        let me = myRosterName
+        var lines: [String] = []
+        var duty: [DayKey] = []
+        for d in days {
+            guard let raw = (me.flatMap { roster[$0]?[d] }) ?? schedule[d] else { continue }
+            let name = matcher.displayName(raw)
+            if WorkloadCounter.isDuty(name) { duty.append(d) }
+            lines.append("\(d.month)/\(d.day) \(d.weekdayText) \(name)")
+        }
+        let title = duty.isEmpty ? "📅 新排班出来了（\(first.month)/\(first.day)–\(last.month)/\(last.day)）"
+            : "📅 新排班出来了：你 \(duty.map { "\($0.month)/\($0.day)" }.joined(separator: "、")) 值遥测"
+        let body = lines.isEmpty ? "这几天没有给你排班。" : lines.joined(separator: "\n")
+        await NotificationService.notifyNow(id: "new-week-\(first)", title: title, body: body)
+        if settings.weChatEnabled && settings.weChatChanges { _ = await pushToWeChat(title: title, content: body) }
     }
 
     /// 保存从电脑版页面读到的各组说明。
