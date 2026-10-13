@@ -127,6 +127,11 @@ public enum SchedulePatterns {
         func holds(_ name: String, _ day: DayKey) -> Bool {
             posts(roster[name]?[day], matcher: matcher).contains { matches($0, post) }
         }
+        // 每天谁值这个岗位：先算好，几种推算、各处统计共用（以前每种推算每天都把全员扫一遍）
+        var holdersByDay: [DayKey: [String]] = [:]
+        for (name, history) in roster {
+            for (day, _) in history where holds(name, day) { holdersByDay[day, default: []].append(name) }
+        }
         // 轮转的人：统计范围里至少值过两次
         var counts: [String: Int] = [:]
         var firstSeen: [String: DayKey] = [:]
@@ -233,7 +238,7 @@ public enum SchedulePatterns {
             let members = pool.filter { line($0) == l }
             var sequence: [String] = []
             for day in sorted {
-                sequence += roster.keys.filter { members.contains($0) && holds($0, day) }.sorted()
+                sequence += (holdersByDay[day] ?? []).filter { members.contains($0) }.sorted()
             }
             var successors: [String: [String: Int]] = [:]
             for (a, b) in zip(sequence, sequence.dropFirst()) where a != b { successors[a, default: [:]][b, default: 0] += 1 }
@@ -342,7 +347,7 @@ public enum SchedulePatterns {
             var run = Run(state: freshState())
             var deferredYesterday: Set<String> = []
             for day in sorted {
-                let holders = roster.keys.filter { holds($0, day) }
+                let holders = holdersByDay[day] ?? []
                 guard !holders.isEmpty else { continue }
                 var predicted: [String] = []
                 var deferredToday: Set<String> = []
@@ -412,7 +417,7 @@ public enum SchedulePatterns {
             forecast.append(ForecastDay(day: day, name: next))
             observe(&state, [next], day)
         }
-        let perDay = Double(run.slots) / Double(max(1, sorted.filter { d in roster.keys.contains { holds($0, d) } }.count))
+        let perDay = Double(run.slots) / Double(max(1, sorted.filter { !(holdersByDay[$0] ?? []).isEmpty }.count))
         let nextDay = end.adding(days: 1, calendar: calendar)
         return Rotation(post: post, order: priority(run.state, model, nextDay), slots: run.slots, matched: run.matched,
                         strictMatched: strict.matched, deferrals: Array(run.deferrals.reversed()),
