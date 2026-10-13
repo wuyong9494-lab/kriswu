@@ -117,6 +117,12 @@ public struct ScheduleParser {
                     if beforeOK && afterOK { return true }
                     continue
                 }
+                // 前面紧挨着单独一个汉字（「张李明」）：是三个字的另一个人，不是「李明」。
+                // 前面是两个字以上（「张三李明」两个名字连在一起）或班次名（「夜班李明」）照样算
+                if start > 0, !spaceAfter[start - 1], Self.isHan(chars[start - 1]) {
+                    let runStart = start - 1 == 0 || spaceAfter[start - 2] || !Self.isHan(chars[start - 2])
+                    if runStart && !Self.shiftWords.contains(where: { $0.count == 1 && $0.first == chars[start - 1] }) { continue }
+                }
                 // 名字在最后、后面有空格、或者后面不是汉字：是我
                 if end == chars.count || spaceAfter[end - 1] || !Self.isHan(chars[end]) { return true }
                 // 后面紧跟着汉字：紧接着就是班次名（「张伟夜班」）才是我，否则是更长的名字（「张伟东」「张伟东 夜班」）

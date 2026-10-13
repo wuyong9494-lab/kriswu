@@ -649,6 +649,16 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testIsMeLeftBoundary() {
+        let p = ScheduleParser(aliases: ["李明"], reference: DayKey(year: 2026, month: 10, day: 1))
+        XCTAssertFalse(p.isMe("张李明"))          // 三个字的另一个人
+        XCTAssertFalse(p.isMe("张李明 夜班"))
+        XCTAssertTrue(p.isMe("张三李明"))         // 两个名字连在一起
+        XCTAssertTrue(p.isMe("张三 李明"))
+        XCTAssertTrue(p.isMe("李明"))
+        XCTAssertTrue(p.isMe("李明夜班"))
+    }
+
     func testFullwidthInput() {
         XCTAssertEqual("２０２６年１０月９日 组Ａ".halfwidthAlnum, "2026年10月9日 组A")
         XCTAssertEqual(DateTokenParser(reference: DayKey(year: 2026, month: 10, day: 1)).parse("２０２６年１０月９日"),
