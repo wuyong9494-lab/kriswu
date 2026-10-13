@@ -21,14 +21,16 @@ struct TodayView: View {
                     VStack(spacing: DS.Space.m) {
                         // 问候小字 → 超大的日号 → 月份星期：三级层级，一眼看到重点
                         DateHeader(date: context.date).staggered(0)
-                        if let days = SigningInfo.daysLeft, days <= 2 {
+                        if !SigningInfo.isTestFlight, let days = SigningInfo.daysLeft, days <= 2 {
                             Label("签名还有 \(days) 天到期：打开 LocalDevVPN，再到 SideStore 点「Refresh All」续签",
                                   systemImage: "exclamationmark.triangle.fill")
                                 .font(DS.Font.body)
                                 .card(tint: DS.Palette.warning)
                         }
-                        if store.syncIsStale {
-                            StaleSyncBanner()
+                        if store.syncLooksBroken {
+                            // 点一下到诊断页看原因
+                            NavigationLink { DiagnosticsView() } label: { StaleSyncBanner() }
+                                .buttonStyle(PressableStyle())
                         }
                         if let warning = store.settings.syncHealthWarning {
                             VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -61,6 +63,7 @@ struct TodayView: View {
                         TodayHero(day: today, now: context.date) { Haptics.tap(); editing = today.adding(days: 1) }
                             .onTapGesture { Haptics.tap(); editing = today }
                             .staggered(1)
+                        TodayDutyLine(today: today).staggered(1)
                         WeekStrip(from: today) { Haptics.tap(); editing = $0 }.staggered(2)
                         WorkLogCard(day: today).staggered(2)
                         DutyInsightCard(today: today).staggered(3)
@@ -427,7 +430,7 @@ private struct StaleSyncBanner: View {
             Label(store.settings.lastSync.map { "从 \($0.formatted(date: .abbreviated, time: .shortened)) 起一直没同步成功" }
                   ?? "还没有同步成功过", systemImage: "exclamationmark.octagon.fill")
                 .font(.headline)
-            Text((store.settings.lastSyncMessage ?? "同步失败") + "\n现在显示的可能不是最新排班。下拉刷新重试；一直失败到「设置 › 诊断」看原因。")
+            Text((store.settings.lastSyncMessage ?? "同步失败") + "\n现在显示的可能不是最新排班。下拉刷新重试；点这里看原因。")
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -435,6 +438,34 @@ private struct StaleSyncBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Theme.gradient(.red), in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+    }
+}
+
+/// 今天、明天谁值遥测（全员排班里有就显示）
+private struct TodayDutyLine: View {
+    @EnvironmentObject private var store: AppStore
+    let today: DayKey
+
+    private func duty(_ day: DayKey) -> String? {
+        let names = store.dayRoster(day).filter { WorkloadCounter.isDuty($0.post) }.flatMap(\.names)
+        return names.isEmpty ? nil : names.joined(separator: "、")
+    }
+
+    var body: some View {
+        let t = duty(today), m = duty(today.adding(days: 1))
+        if t != nil || m != nil {
+            HStack(spacing: DS.Space.s) {
+                Image(systemName: "antenna.radiowaves.left.and.right").foregroundStyle(DS.Palette.accent)
+                Text("今天遥测 ").foregroundColor(.secondary) + Text(t ?? "—").fontWeight(.semibold)
+                Spacer(minLength: DS.Space.s)
+                Text("明天 ").foregroundColor(.secondary) + Text(m ?? "—").fontWeight(.semibold)
+            }
+            .font(.subheadline)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, DS.Space.s)
+            .accessibilityElement(children: .combine)
+        }
     }
 }
 
@@ -447,7 +478,9 @@ private struct RecentChanges: View {
         if !recent.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 CardTitle(title: "最近排班变动", icon: "arrow.left.arrow.right", color: .orange) {
-                    Button("清除") { store.settings.changeLog = [] }
+                    ConfirmButton(title: "清除", message: "最近的排班变动记录会从首页清掉（全员变动历史不受影响）。") {
+                        store.settings.changeLog = []
+                    }
                         .font(.footnote)
                 }
                 ForEach(recent, id: \.self) { entry in

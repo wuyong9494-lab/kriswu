@@ -491,7 +491,9 @@ struct ShiftTypesView: View {
                 Button("添加班次类型") {
                     store.settings.shiftTypes.append(ShiftType(name: "新班次", emoji: "📌", colorHex: "#8E8E93"))
                 }
-                Button("恢复默认") { store.settings.shiftTypes = ShiftType.defaults }
+                ConfirmButton(title: "恢复默认", message: "自己加的、改过的班次类型都会改回默认。", role: nil) {
+                    store.settings.shiftTypes = ShiftType.defaults
+                }
             }
         }
         .appList()

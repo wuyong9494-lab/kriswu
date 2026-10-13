@@ -127,15 +127,12 @@ struct NextDutyIntent: AppIntent {
         let store = AppStore.shared
         let today = DayKey.today
         let text: String
-        if let next = store.schedule.filter({ $0.key > today && WorkloadCounter.isDuty(store.matcher.displayName($0.value)) }).keys.min() {
-            text = "你下次遥测是\(next.dateText)。"
-        } else if let turn = store.myDutyTurn(), !turn.scheduled {
+        // 和今天页、小组件同一个结果
+        if let turn = store.myDutyTurn(), turn.scheduled, let next = turn.day {
+            text = next == today ? "你今天值遥测。" : "你下次遥测是\(next.dateText)。"
+        } else if let turn = store.myDutyTurn() {
             let ahead = turn.ahead == 0 ? "下一个就轮到你" : "前面还有\(turn.ahead)个人"
             text = "网站还没排。按顺序\(ahead)" + (turn.day.map { "，大约是\($0.dateText)。" } ?? "。")
-        } else if let me = store.myRosterName,
-                  let f = DutyForecaster.forecast(roster: store.roster, today: today, matcher: store.matcher, calendar: .app)
-                    .first(where: { $0.name == me }), let p = f.predicted {
-            text = "网站还没排，按过去的间隔估计大约是\(p.dateText)。"
         } else {
             text = "还看不出你下次遥测是哪天。"
         }

@@ -24,6 +24,11 @@ struct WidgetSnapshot: Codable {
     var updated: Date
     /// 今天的任务清单（旧版本写的没有这一项）
     var tasks: [WidgetTask]? = nil
+    /// 下次遥测（yyyy-MM-dd），和 App 今天页同一个结果；是不是推算的（网站还没排）
+    var nextDuty: String? = nil
+    var nextDutyPredicted: Bool? = nil
+    /// 最后一次同步成功的时间
+    var lastSync: Date? = nil
 }
 
 enum WidgetStore {

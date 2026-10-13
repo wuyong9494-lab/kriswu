@@ -295,6 +295,8 @@ struct NextDutyEntry: TimelineEntry {
     let date: Date
     /// 下一次遥测那天（yyyy-MM-dd）和离今天几天；nil 表示一个月内没有
     let next: (key: String, days: Int)?
+    /// 网站还没排，是按顺序推算的
+    var predicted = false
 }
 
 struct NextDutyProvider: TimelineProvider {
@@ -317,6 +319,11 @@ struct NextDutyProvider: TimelineProvider {
     func entry(for date: Date, snapshot: WidgetSnapshot?) -> NextDutyEntry {
         let calendar = Calendar(identifier: .gregorian)
         let today = WidgetStore.key(for: date)
+        // App 算好的下次遥测（网站排好的或按顺序推算的），和今天页一致
+        if let key = snapshot?.nextDuty, key >= today, let nextDate = DateFormatterCache.day.date(from: key) {
+            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: nextDate)).day ?? 0
+            return NextDutyEntry(date: date, next: (key, days), predicted: snapshot?.nextDutyPredicted == true)
+        }
         let next = (snapshot?.days ?? []).filter { $0.date >= today && ($0.title.contains("遥测") || ($0.title.contains("值班") && !$0.title.contains("交班") && !$0.title.contains("交接"))) }.map(\.date).min()
         guard let next, let nextDate = DateFormatterCache.day.date(from: next) else { return NextDutyEntry(date: date, next: nil) }
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: nextDate)).day ?? 0
@@ -355,7 +362,8 @@ struct NextDutyView: View {
     }
     private var dateText: String {
         guard let key = entry.next?.key, key.count == 10 else { return "一个月内没有" }
-        return "\(Int(key.dropFirst(5).prefix(2)) ?? 0)月\(Int(key.suffix(2)) ?? 0)日"
+        return (entry.predicted ? "约 " : "") + "\(Int(key.dropFirst(5).prefix(2)) ?? 0)月\(Int(key.suffix(2)) ?? 0)日"
+            + (entry.predicted ? "（推算）" : "")
     }
 
     var body: some View {

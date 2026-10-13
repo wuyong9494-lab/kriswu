@@ -114,7 +114,7 @@ struct PersonProfileView: View {
                 }
                 if profile != nil {
                     Section {
-                        Button("删除档案，改回自动判断", role: .destructive) {
+                        ConfirmButton(title: "删除档案，改回自动判断", message: "\(name)的角色、来走日期会删掉，改回按排班自动判断。") {
                             store.settings.profiles[name] = nil
                         }
                     }

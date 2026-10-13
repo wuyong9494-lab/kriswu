@@ -43,10 +43,32 @@ public struct ShiftType: Identifiable, Hashable, Codable {
 }
 
 public struct ShiftMatcher {
-    public var types: [ShiftType]
+    public var types: [ShiftType] { didSet { index = Self.buildIndex(types) } }
+
+    /// 预先整理好的名称、代码、关键字（match 每次调用不用再整理一遍）
+    private struct Entry {
+        let type: ShiftType
+        let exact: Set<String>
+        let keywords: [String]
+    }
+    private var index: [Entry]
 
     public init(types: [ShiftType]) {
         self.types = types
+        self.index = Self.buildIndex(types)
+    }
+
+    private static func buildIndex(_ types: [ShiftType]) -> [Entry] {
+        types.map { t in
+            Entry(type: t, exact: Set([normalize(t.name)] + t.codes.map(normalize)),
+                  keywords: t.keywords.map(normalize).filter { !$0.isEmpty })
+        }
+    }
+
+    /// 一天的几个岗位（「组A+组E」「组A、组E」……统一拆开），去掉空白
+    public func posts(_ raw: String) -> [String] {
+        raw.split(whereSeparator: Self.isSeparator).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     /// 根据原文找到对应的班次类型；找不到返回 nil（界面上仍显示原文）。
@@ -59,16 +81,11 @@ public struct ShiftMatcher {
         let text = Self.normalize(raw)
         guard !text.isEmpty else { return nil }
 
-        if let t = types.first(where: { Self.normalize($0.name) == text || $0.codes.contains { Self.normalize($0) == text } }) {
-            return t
-        }
+        if let e = index.first(where: { $0.exact.contains(text) }) { return e.type }
         var best: (type: ShiftType, length: Int)?
-        for t in types {
-            for k in t.keywords {
-                let nk = Self.normalize(k)
-                if !nk.isEmpty, text.contains(nk), nk.count > (best?.length ?? 0) {
-                    best = (t, nk.count)
-                }
+        for e in index {
+            for nk in e.keywords where text.contains(nk) && nk.count > (best?.length ?? 0) {
+                best = (e.type, nk.count)
             }
         }
         return best?.type

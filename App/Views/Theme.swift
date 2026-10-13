@@ -864,3 +864,21 @@ struct AvoidTabBar: ViewModifier {
             })
     }
 }
+
+/// 会删掉、清空东西的按钮：先弹确认，写清楚会发生什么，防止手滑
+struct ConfirmButton: View {
+    let title: String
+    /// 确认框里的说明
+    let message: String
+    var role: ButtonRole? = .destructive
+    let action: () -> Void
+    @State private var asking = false
+
+    var body: some View {
+        Button(title, role: role) { asking = true }
+            .confirmationDialog(message, isPresented: $asking, titleVisibility: .visible) {
+                Button(title, role: .destructive, action: action)
+                Button("取消", role: .cancel) {}
+            }
+    }
+}

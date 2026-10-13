@@ -431,6 +431,7 @@ final class AppStore: ObservableObject {
             }
             if settings.aliases != oldValue.aliases { settings.nextSyncIsBaseline = true }
             if settings.shiftTypes != oldValue.shiftTypes {
+                matcher = ShiftMatcher(types: settings.shiftTypes)
                 publishedDays = Self.published(in: roster, matcher: matcher)
             }
             if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
@@ -472,7 +473,7 @@ final class AppStore: ObservableObject {
         var result = Set<DayKey>()
         for days in roster.values {
             for (day, raw) in days where !result.contains(day) {
-                let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+                let posts = matcher.posts(raw).map(matcher.displayName)
                 if posts.contains(where: { WorkloadBalance.isGroup($0) || WorkloadCounter.isDuty($0) }) { result.insert(day) }
             }
         }
@@ -585,7 +586,8 @@ final class AppStore: ObservableObject {
             save()
         }
         // init 里赋值不会触发 didSet，手动算一次
-        publishedDays = Self.published(in: roster, matcher: ShiftMatcher(types: settings.shiftTypes))
+        matcher = ShiftMatcher(types: settings.shiftTypes)
+        publishedDays = Self.published(in: roster, matcher: matcher)
         applyCustomHolidays()
         // 打包时内置的值班网站地址（只在 TestFlight 版里有，不在公开的代码和安装包里）：还没填网址的直接用上
         if settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty, let builtIn = Self.builtInSiteURL {
@@ -722,7 +724,8 @@ final class AppStore: ObservableObject {
 
     // MARK: - 排班
 
-    var matcher: ShiftMatcher { ShiftMatcher(types: settings.shiftTypes) }
+    /// 班次识别：只在班次类型变了时重建（以前每次用都重建一个）
+    private(set) var matcher = ShiftMatcher(types: ShiftType.defaults)
 
     var parser: ScheduleParser {
         ScheduleParser(aliases: settings.aliases, reference: .today, timeZone: .current)
@@ -949,7 +952,7 @@ final class AppStore: ObservableObject {
     /// 无分工/休息/调休/请假「休」，其它用默认的「值」。
     func iconName(for raw: String?) -> String? {
         guard let raw else { return nil }
-        let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
+        let posts = matcher.posts(raw).map(matcher.displayName)
         if posts.contains(where: WorkloadCounter.isDuty) { return "IconDuty" }
         if let r = raw.range(of: #"组\s*[A-Ea-e]"#, options: .regularExpression), let letter = raw[r].last {
             return "Icon" + letter.uppercased()
@@ -982,7 +985,11 @@ final class AppStore: ObservableObject {
             return WidgetDay(date: day.description, title: matcher.displayName(raw),
                              emoji: type?.emoji ?? "📌", colorHex: type?.colorHex ?? "#8E8E93")
         }
-        WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today)))
+        // 下次遥测：和今天页同一个结果（网站排好的，或者按顺序推算的），小组件不再自己另算
+        let turn = myDutyTurn()
+        WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today),
+                                        nextDuty: turn?.day?.description, nextDutyPredicted: turn.map { !$0.scheduled },
+                                        lastSync: settings.lastSync))
     }
 
     /// 今天组别的任务清单（和首页「今天要做」一样）
@@ -1440,17 +1447,16 @@ final class AppStore: ObservableObject {
     func myDutyTurn() -> DutyTurn? {
         guard let me = myRosterName else { return nil }
         let today = DayKey.today
-        let key = "\(today)-\(me)-\(roster.count)-\(publishedDays.count)-\(roster[me]?.count ?? 0)-\(schedule.count)"
+        // 数据一变（排班、设置）版本号就变，不靠人数、天数判断
+        let key = "\(today)-\(me)-\(dataRevision)-\(schedule.count)"
         if let cache = dutyTurnCache, cache.key == key { return cache.value }
         let value: DutyTurn?
         let mine = (roster[me] ?? [:]).merging(schedule) { a, _ in a }
-        if let next = mine.filter({ $0.key >= today && $0.value.split(separator: "+").contains { WorkloadCounter.isDuty(matcher.displayName(String($0))) } }).keys.min() {
+        if let next = mine.filter({ $0.key >= today && matcher.posts($0.value).contains { WorkloadCounter.isDuty(matcher.displayName($0)) } }).keys.min() {
             value = DutyTurn(day: next, ahead: 0, scheduled: true, total: 0)
         } else {
-            let days = publishedDays.filter { $0 >= today.adding(days: -180) }.sorted()
-            if let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: 60, calendar: .app,
-                                                 people: settings.sitePeople, fixedDays: fixedTelemetryDaySet),
-               let index = r.order.firstIndex(of: me) {
+            // 和排班规律、排班预演用同一个推算
+            if let r = dutyRotation(forecastDays: 60), let index = r.order.firstIndex(of: me) {
                 value = DutyTurn(day: r.forecast.first { $0.name == me }?.day, ahead: index, scheduled: false, total: r.order.count)
             } else {
                 value = nil
@@ -1706,6 +1712,14 @@ final class AppStore: ObservableObject {
     }
 
     /// 超过一天没有同步成功（密码改了、网站换了地址或改版）。
+    /// 今天页显示红色横幅：上次同步失败、而且超过 6 小时没成功过（以前要等 24 小时）
+    var syncLooksBroken: Bool {
+        guard canSync else { return false }
+        if syncIsStale { return true }
+        guard let last = settings.lastSync, settings.lastSyncMessage?.hasPrefix("同步失败") == true else { return false }
+        return Date().timeIntervalSince(last) > 6 * 3600
+    }
+
     var syncIsStale: Bool {
         guard canSync else { return false }
         guard let last = settings.lastSync else { return settings.lastSyncMessage?.hasPrefix("同步失败") ?? false }

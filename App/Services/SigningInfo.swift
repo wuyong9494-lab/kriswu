@@ -3,6 +3,9 @@ import Foundation
 /// 读取 App 自带的签名描述文件（SideStore / AltStore / Xcode 安装时会放进 App 里），得到签名到期时间。
 /// 免费 Apple ID 签名 7 天到期，到期后 App 打不开，要在 SideStore 里点「Refresh All」续签。
 enum SigningInfo {
+    /// 从 TestFlight 装的（没有续签的事，签名到期提示不显示）
+    static let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+
     static let expirationDate: Date? = {
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
               let data = try? Data(contentsOf: url),

@@ -331,7 +331,9 @@ struct RotationMembersView: View {
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if !members.isEmpty {
-                    Button("清空（只按调度）", role: .destructive) { store.settings.scheduleOnlyMembers = [] }
+                    ConfirmButton(title: "清空（只按调度）", message: "名单会清空，改成只有调度按排班算。") {
+                        store.settings.scheduleOnlyMembers = []
+                    }
                 }
             } footer: {
                 Text(members.isEmpty

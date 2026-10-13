@@ -68,6 +68,7 @@ struct WorkLogView: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showGuide = false
     @State private var filter: WorkLogEntry.Kind?
+    @State private var pendingDelete: [WorkLogEntry] = []
 
     var body: some View {
         if store.settings.workLogLock && !log.unlocked {
@@ -131,8 +132,9 @@ struct WorkLogView: View {
                         NavigationLink { WorkLogDetailView(entry: entry) } label: { WorkLogRow(entry: entry) }
                     }
                     .onDelete { offsets in
+                        // 左滑删除也先确认（照片、录音删了就没了）
                         let list = groups[day] ?? []
-                        for i in offsets { log.delete(list[i]) }
+                        pendingDelete = offsets.map { list[$0] }
                     }
                 } header: {
                     Text(day.dateText + ((groups[day]?.compactMap(\.shift).first).map { " · \($0)" } ?? ""))
@@ -153,6 +155,15 @@ struct WorkLogView: View {
                      ? "已上锁：文件挪到了 App 内部，「文件」App 里看不到，只能在这里看。所有文件都加密存储，手机锁屏时无法读取。"
                      : "文件只存在手机上并加密存储：「文件」App › 我的 iPhone › 值班提醒 › 工作留痕 也能看到，可以整个文件夹拷走备份。打开面容 ID 锁后会挪到 App 内部。")
             }
+        }
+        .confirmationDialog("删除这 \(pendingDelete.count) 条记录？照片、录音会一起删掉，不能恢复。",
+                            isPresented: Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = [] } }),
+                            titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                pendingDelete.forEach(log.delete)
+                pendingDelete = []
+            }
+            Button("取消", role: .cancel) { pendingDelete = [] }
         }
         .searchable(text: $query, prompt: "搜说明、录音文字、班次")
         .appList()

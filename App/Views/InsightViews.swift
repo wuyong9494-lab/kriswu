@@ -133,7 +133,9 @@ struct WorkloadRulesView: View {
                             Text(describe(v.rules)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Button("清除历史，所有日子都按现在的规则", role: .destructive) { store.settings.ruleHistory = [] }
+                    ConfirmButton(title: "清除历史，所有日子都按现在的规则", message: "以前的日子也会按现在的规则重新算工作量，不能恢复。") {
+                        store.settings.ruleHistory = []
+                    }
                 } header: {
                     Text("以前的规则")
                 }
@@ -151,13 +153,15 @@ struct WorkloadRulesView: View {
                 }
                 LabeledContent("手动改过的日子", value: "\(store.settings.workloadOverrides.values.map(\.count).reduce(0, +)) 天")
                 if !store.settings.workloadOverrides.isEmpty {
-                    Button("清除全部手动修改", role: .destructive) { store.settings.workloadOverrides = [:] }
+                    ConfirmButton(title: "清除全部手动修改", message: "所有人、所有日子的手动修改都会删掉，改回自动判断，不能恢复。") {
+                        store.settings.workloadOverrides = [:]
+                    }
                 }
             } footer: {
                 Text("在每个人的每日明细里长按某一天可以手动改。")
             }
             Section {
-                Button("恢复默认规则") { apply(WorkloadRules()) }
+                ConfirmButton(title: "恢复默认规则", message: "现在的规则设置会改回默认。", role: nil) { apply(WorkloadRules()) }
             }
         }
         .disabled(!store.canEdit)
@@ -203,7 +207,7 @@ struct TeamChangesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("清空") { store.settings.teamChanges = [] }
+                ConfirmButton(title: "清空", message: "全员换班记录会全部删掉，不能恢复。") { store.settings.teamChanges = [] }
                     .disabled(store.settings.teamChanges.isEmpty || !store.canEdit)
             }
         }

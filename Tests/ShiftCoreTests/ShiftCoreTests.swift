@@ -1475,6 +1475,16 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(plan?.others.first?.servedLastHoliday, true)
     }
 
+    func testMatcherPostsAndIndex() {
+        var matcher = ShiftMatcher(types: ShiftType.defaults)
+        XCTAssertEqual(matcher.posts("组A+遥测"), ["组A", "遥测"])
+        XCTAssertEqual(matcher.posts("组A、组E / 调度"), ["组A", "组E", "调度"])
+        XCTAssertEqual(matcher.match("遥测")?.id, "telemetry")
+        // 改了班次类型后，预先整理的关键词跟着更新
+        matcher.types.append(ShiftType(id: "x", name: "测控", emoji: "🛰️", colorHex: "#000000", keywords: ["测控"]))
+        XCTAssertEqual(matcher.match("测控岗")?.id, "x")
+    }
+
     func testScriptScanner() {
         let app = "var a=1;function next(){/* 遥测按顺序轮，请假顺延 */return list.sort((x,y)=>x.lastDuty-y.lastDuty)[0]};" + String(repeating: "x", count: 2000) + "var shift=1;"
         let vendor = "function sort(){/* 排班 */}"

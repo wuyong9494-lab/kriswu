@@ -77,7 +77,7 @@ struct SwapLedgerView: View {
                         Spacer()
                         Text(value > 0 ? "欠你 \(value) 天" : "你欠 \(-value) 天")
                             .foregroundStyle(value > 0 ? Color.green : Color.orange)
-                        Button("还清") { settle(name) }
+                        ConfirmButton(title: "还清", message: "和\(name)之间的换班记录都标成已还清。", role: nil) { settle(name) }
                             .buttonStyle(.bordered)
                     }
                 }
@@ -258,7 +258,6 @@ struct DutyForecastView: View {
     var body: some View {
         let today = DayKey.today
         let list = DutyForecaster.forecast(roster: store.roster, today: today, matcher: store.matcher, calendar: .app)
-        let mine = list.first { store.isMe($0.name) }
         List {
             if let turn = store.myDutyTurn() {
                 Section {
@@ -272,11 +271,8 @@ struct DutyForecastView: View {
                 } header: {
                     Text("按顺序推算（请假出差自动顺延）")
                 } footer: {
-                    Text("按排班规律里推出的遥测顺序：轮到最久没值的人，请假、出差、休息的跳过、回来后排最前。比下面按间隔估的准。")
+                    Text("和今天页、小组件是同一个结果：网站排好的优先，没排的按排班规律推出的顺序推算（请假、出差、休息的跳过，回来后优先）。")
                 }
-            }
-            if let mine {
-                Section("我（按间隔估）") { row(mine, today: today) }
             }
             Section {
                 ForEach(list.filter { !store.isMe($0.name) }, id: \.name) { row($0, today: today) }
@@ -424,7 +420,7 @@ struct HolidaysView: View {
                 Section("已补充") {
                     if !off.isEmpty { Text("放假：" + off.joined(separator: "、")).font(.footnote) }
                     if !work.isEmpty { Text("上班：" + work.joined(separator: "、")).font(.footnote) }
-                    Button("全部清除", role: .destructive) {
+                    ConfirmButton(title: "全部清除", message: "自己补充的放假、上班日子都会删掉。") {
                         store.settings.customHolidayOff = []
                         store.settings.customHolidayWork = []
                     }
