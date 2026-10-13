@@ -91,15 +91,18 @@ struct SettingsView: View {
                     } label: {
                         row("诊断", icon: "stethoscope", detail: "出问题时看这里")
                     }
-                    NavigationLink {
-                        APIFieldsView()
-                    } label: {
-                        row("接口字段查看", icon: "tablecells", detail: store.apiFields.isEmpty ? "同步后可看" : "\(store.apiFields.count) 张表")
-                    }
-                    NavigationLink {
-                        SiteCodeFinderView()
-                    } label: {
-                        row("查找网页排班代码", icon: "doc.text.magnifyingglass", detail: "只在手机上找")
+                    // 排查网站用的工具：只给管理员
+                    if store.canEdit {
+                        NavigationLink {
+                            APIFieldsView()
+                        } label: {
+                            row("接口字段查看", icon: "tablecells", detail: store.apiFields.isEmpty ? "同步后可看" : "\(store.apiFields.count) 张表")
+                        }
+                        NavigationLink {
+                            SiteCodeFinderView()
+                        } label: {
+                            row("查找网页排班代码", icon: "doc.text.magnifyingglass", detail: "只在手机上找")
+                        }
                     }
                     if store.canEdit {
                         Button("清空所有排班", role: .destructive) { confirmClear = true }
