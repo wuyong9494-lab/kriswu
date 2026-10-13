@@ -169,8 +169,10 @@ struct WorkloadView: View {
 
     /// 「值班 2 · 日常 8 · 休息 3 · 节假日 7」，出差、节假日上班有才显示
     private func summary(_ p: PersonWorkload) -> String {
-        var parts = ["值班 \(p.dutyDays)", "值班调休 \(p.dutyRestDays)", "日常 \(p.regularDays)",
-                     "出差 \(p.tripDays)"]
+        var parts = ["值班 \(p.dutyDays)"]
+        // 值班调休只在管理员手动改过时才有
+        if p.dutyRestDays > 0 { parts.append("值班调休 \(p.dutyRestDays)") }
+        parts += ["日常 \(p.regularDays)", "出差 \(p.tripDays)"]
         if p.attendanceDays > 0 { parts.append("上班没排岗位 \(p.attendanceDays)（不算工作量）") }
         parts += ["休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
         if p.unassignedDays > 0 { parts.append("没排班 \(p.unassignedDays)") }

@@ -765,11 +765,11 @@ final class WorkloadTests: XCTestCase {
         XCTAssertEqual(result["甲"]?.dutyRestDays, 0)
         XCTAssertEqual(result["甲"]?.offDays, 4)
         XCTAssertEqual(result["甲"]?.dutyDays, 2)
-        // 别人：国庆 5 日遥测，6 日网站上没写（值班后休息），7 日也没写（普通假期）
+        // 别人：国庆 5 日遥测，6 日网站上没写（值班后休息），7 日也没写（普通假期）：休息一律不算工作量
         let other = count(["乙": [d(5): "遥测", d(8): "组B"]], (5...8).map(d))["乙"]
-        XCTAssertEqual(other?.dutyRestDays, 1)
-        XCTAssertEqual(other?.holidayDays, 1)
-        XCTAssertEqual(other?.workDays, 3)
+        XCTAssertEqual(other?.dutyRestDays, 0)
+        XCTAssertEqual(other?.holidayDays, 2)
+        XCTAssertEqual(other?.workDays, 2)
         XCTAssertEqual(count(roster, (2...3).map(d))["甲"]?.dutyRestDays, 0)
         // 打开「写了休息也算」：统计范围从 2 日开始，1 日遥测，2、3 日的休息算值班调休
         WorkloadCounter.rules.holidayDutyRestCounts = true
@@ -1135,7 +1135,11 @@ final class UpgradeTests: XCTestCase {
         // 旧版本存的「值班后休息算工作量」打开：升级后关掉（写了休息就不算）；新版本存的照原样
         let old = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"holidayDutyRestCounts":true}"#.utf8))
         XCTAssertEqual(old?.holidayDutyRestCounts, false)
-        let new = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"holidayDutyRestCounts":true,"version":2}"#.utf8))
+        // 版本 3 起节假日值班后没写的那天也不算：旧设置里打开的都关掉
+        let v2 = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"holidayDutyRestCounts":true,"blankHolidayAfterDutyIsRest":true,"version":2}"#.utf8))
+        XCTAssertEqual(v2?.holidayDutyRestCounts, false)
+        XCTAssertEqual(v2?.blankHolidayAfterDutyIsRest, false)
+        let new = try? JSONDecoder().decode(WorkloadRules.self, from: Data(#"{"holidayDutyRestCounts":true,"version":3}"#.utf8))
         XCTAssertEqual(new?.holidayDutyRestCounts, true)
         let saved = try? JSONDecoder().decode(WorkloadRules.self, from: JSONEncoder().encode(WorkloadRules()))
         XCTAssertEqual(saved, WorkloadRules())

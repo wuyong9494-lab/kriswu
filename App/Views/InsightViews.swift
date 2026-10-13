@@ -119,12 +119,11 @@ struct WorkloadRulesView: View {
                 Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班自动判断。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
             }
             Section {
-                Toggle("节假日值完遥测的第二天没写休息算工作量", isOn: rule(\.blankHolidayAfterDutyIsRest))
-                Toggle("节假日值完遥测后写了休息也算工作量", isOn: rule(\.holidayDutyRestCounts))
+                Label("休息、调休、请假、「值班交接前」一律不算工作量", systemImage: "bed.double.fill")
             } header: {
                 Text("休息")
             } footer: {
-                Text("默认：网站上写了休息、调休、请假的，不管节假日还是平时都不算工作量；出差算工作量。「值班交接前」一列的人是前一天值了遥测，那天算休息。")
+                Text("统一规则：网站上写了休息、调休、请假的，以及「值班交接前」一列的人（前一天值了遥测），不管节假日还是平时都算休息，不算工作量；节假日值完遥测后的休息也一样。出差算工作量。")
             }
             if !store.settings.ruleHistory.isEmpty {
                 Section {
@@ -170,8 +169,7 @@ struct WorkloadRulesView: View {
     private func describe(_ r: WorkloadRules) -> String {
         [r.blankWorkdayIsWork ? "没排岗位算上班" : "没排岗位不算上班",
          r.dispatchScheduleOnly ? "调度只按排班" : "调度也按上一条",
-         r.blankHolidayAfterDutyIsRest ? "节假日值班第二天没写算工作量" : "节假日值班第二天没写不算",
-         r.holidayDutyRestCounts ? "节假日值班后写了休息也算" : "写了休息不算"].joined(separator: "，")
+         "休息一律不算工作量"].joined(separator: "，")
     }
 }
 

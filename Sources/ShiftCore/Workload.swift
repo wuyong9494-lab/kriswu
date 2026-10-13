@@ -2,7 +2,7 @@ import Foundation
 
 /// 每个人一段时间（一般是一个月到今天）的工作量，每一天归到一类：
 /// - 值班：遥测（工作到第二天 8:30）
-/// - 值班调休：法定节假日值完遥测的第二天，网站上没写休息（还在上班），算工作量
+/// - 值班调休：只有管理员手动改成「值班调休」的日子（规则版本 3 起，休息一律不算工作量）
 ///   （网站上写了休息、调休、请假的，不管节假日还是平时，都算休息，不算工作量）
 /// - 日常：各组、调度等其它岗位；不轮组别的人工作日没排岗位、也没写休息的日子（在做别的日常工作）
 /// - 上班（没排岗位）：轮组别（组A–E）的人工作日网站上没给排岗位、也没写休息的日子。正常上班，算上班天数，但不算工作量
@@ -45,15 +45,17 @@ public struct WorkloadRules: Codable, Equatable {
     /// 法定节假日值完遥测后，网站上写了休息、调休的也算工作量（值班调休）。
     /// 默认关：写了休息、调休、请假的，不管节假日还是平时都不算工作量
     public var holidayDutyRestCounts = false
-    /// 节假日值完遥测的第二天，网站上没写也算值班调休
-    public var blankHolidayAfterDutyIsRest = true
+    /// 节假日值完遥测的第二天，网站上没写也算值班调休。
+    /// 默认关（规则版本 3 起统一）：休息的日子不管节假日还是平时、怎么写的，都不算工作量
+    public var blankHolidayAfterDutyIsRest = false
     /// 工作日没排岗位、也没写休息的算正常上班（算上班天数，不算工作量）
     public var blankWorkdayIsWork = true
     /// 调度只算排班表上有名字的日子
     public var dispatchScheduleOnly = true
-    /// 规则版本：2 起「写了休息就不算工作量」，旧设置里打开的值班调休开关要关掉
+    /// 规则版本：2 起「写了休息就不算工作量」，旧设置里打开的值班调休开关要关掉；
+    /// 3 起节假日值班后没写的那天也不算（休息一律不算工作量）
     public var version = WorkloadRules.currentVersion
-    public static let currentVersion = 2
+    public static let currentVersion = 3
 
     public init() {}
 
@@ -66,6 +68,7 @@ public struct WorkloadRules: Codable, Equatable {
         dispatchScheduleOnly = try c.decodeIfPresent(Bool.self, forKey: .dispatchScheduleOnly) ?? d.dispatchScheduleOnly
         let stored = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         if stored < 2 { holidayDutyRestCounts = false }
+        if stored < 3 { holidayDutyRestCounts = false; blankHolidayAfterDutyIsRest = false }
         version = WorkloadRules.currentVersion
     }
 }
