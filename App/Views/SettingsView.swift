@@ -318,6 +318,7 @@ struct SettingsView: View {
             }
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
+            Toggle("网站没排、推算快轮到我值遥测时提前说", isOn: $store.settings.dutyHeadsUp)
             Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
             Toggle("收藏的同事排班变了也通知我", isOn: $store.settings.notifyFavorites)
             Toggle("全员排班有变动也提醒我", isOn: $store.settings.notifyAllChanges)

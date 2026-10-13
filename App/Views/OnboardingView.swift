@@ -8,6 +8,8 @@ struct OnboardingView: View {
     @State private var showingWebLogin = false
     @State private var query = ""
     @State private var notificationsAllowed: Bool?
+    @State private var checking = false
+    @State private var showURL = AppStore.builtInSiteURL == nil
     private let steps = 5
 
     var body: some View {
@@ -74,16 +76,25 @@ struct OnboardingView: View {
     private var connect: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             title("连接值班网站", "用你自己的值班网站账号。账号密码只存在这台手机上。")
-            Button {
-                showingWebLogin = true
-            } label: {
-                Label("① 登录值班网站，打开排班页面", systemImage: "globe")
-                    .frame(maxWidth: .infinity)
+            if showURL {
+                Button {
+                    showingWebLogin = true
+                } label: {
+                    Label("① 登录值班网站，打开排班页面", systemImage: "globe")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(DSButtonStyle(kind: .secondary, fullWidth: true))
+                Text("进到「我的分工」那一页后，点右上角「设为同步地址」，网址会自动填到下面。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                field("② 排班页面网址", text: $store.settings.sourceURL, keyboard: .URL)
+            } else {
+                // 网址已经内置：只填账号密码
+                Button { withAnimation { showURL = true } } label: {
+                    Label("值班网站地址已内置（点这里可以改）", systemImage: "checkmark.circle")
+                        .font(.footnote)
+                }
+                .foregroundStyle(DS.Palette.success)
             }
-            .buttonStyle(DSButtonStyle(kind: .secondary, fullWidth: true))
-            Text("进到「我的分工」那一页后，点右上角「设为同步地址」，网址会自动填到下面。")
-                .font(.footnote).foregroundStyle(.secondary)
-            field("② 排班页面网址", text: $store.settings.sourceURL, keyboard: .URL)
             field("值班网站账号", text: $store.settings.sourceUsername)
             VStack(alignment: .leading, spacing: 4) {
                 Text("值班网站密码").font(DS.Font.caption).foregroundStyle(.secondary)
@@ -205,20 +216,42 @@ struct OnboardingView: View {
                 Button("跳过") { withAnimation(DS.Motion.spring) { step += 1 } }
                     .buttonStyle(DSButtonStyle(kind: .ghost))
             }
-            Button(step == 0 ? "开始设置" : (step == steps - 1 ? "开始使用" : "下一步")) {
+            Button(nextTitle) {
                 Haptics.tap()
                 if step == steps - 1 {
                     store.settings.onboardingDone = true
                 } else {
-                    withAnimation(DS.Motion.spring) { step += 1 }
+                    Task { await next() }
                 }
             }
             .buttonStyle(DSButtonStyle(kind: .primary, fullWidth: true))
-            .disabled(step == 1 && !store.canSync)
+            .disabled((step == 1 && !store.canSync) || checking || store.isSyncing)
         }
         .padding(.horizontal, DS.Space.l)
         .padding(.vertical, DS.Space.m)
         .background(.bar)
+    }
+
+    private var nextTitle: String {
+        if step == 0 { return "开始设置" }
+        if step == steps - 1 { return "开始使用" }
+        if step == 1 && !synced { return checking ? "正在连接…" : "连接并下一步" }
+        return "下一步"
+    }
+
+    /// 下一步之前先把这一步做实：连接这一步先同步成功；提醒这一步没点过允许就问一次
+    private func next() async {
+        if step == 1 && !synced {
+            checking = true
+            _ = await store.sync(userInitiated: true, source: "设置向导")
+            checking = false
+            // 没连上：留在这一步，下面会显示原因（实在连不上可以点「跳过」）
+            guard synced else { Haptics.warning(); return }
+        }
+        if step == 3 && notificationsAllowed == nil {
+            notificationsAllowed = await NotificationService.requestAuthorization()
+        }
+        withAnimation(DS.Motion.spring) { step += 1 }
     }
 
     // MARK: 小部件

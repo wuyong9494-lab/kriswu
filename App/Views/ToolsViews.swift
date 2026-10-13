@@ -103,7 +103,6 @@ struct SwapLedgerView: View {
                 }
             }
         }
-        .adminOnly()
         .appList()
         .navigationTitle("换班账本")
         .navigationBarTitleDisplayMode(.inline)
@@ -112,8 +111,6 @@ struct SwapLedgerView: View {
                 Button { adding = true } label: { Label("手动记一笔", systemImage: "plus") }
             }
         }
-        // 工具栏按钮也只有管理员能用
-        .disabled(!store.canEdit)
         .sheet(isPresented: $adding) { AddSwapView() }
     }
 

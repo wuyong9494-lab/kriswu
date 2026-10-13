@@ -836,6 +836,17 @@ struct AdminOnlyModifier: ViewModifier {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                         .background(.bar)
+                } else {
+                    // 管理员改的东西只在这台手机上：不会改值班网站，也不会传给同事
+                    Label("这里的修改只在你这台手机上生效，不改值班网站，也不会同步给同事", systemImage: "iphone")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, DS.Space.m)
+                        .padding(.vertical, 4)
+                        .background(.bar)
                 }
             }
     }

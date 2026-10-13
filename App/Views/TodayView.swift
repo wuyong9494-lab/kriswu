@@ -64,6 +64,7 @@ struct TodayView: View {
                             .onTapGesture { Haptics.tap(); editing = today }
                             .staggered(1)
                         TodayDutyLine(today: today).staggered(1)
+                        NoticeChangeCard().staggered(2)
                         WeekStrip(from: today) { Haptics.tap(); editing = $0 }.staggered(2)
                         WorkLogCard(day: today).staggered(2)
                         DutyInsightCard(today: today).staggered(3)
@@ -465,6 +466,33 @@ private struct TodayDutyLine: View {
             .minimumScaleFactor(0.8)
             .padding(.horizontal, DS.Space.s)
             .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// 网站公告 7 天内有新内容：今天页提一句，点开看全部
+private struct NoticeChangeCard: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        if let changed = store.settings.siteNoticesChanged, Date().timeIntervalSince(changed) < 7 * 86_400,
+           let first = store.settings.siteNoticesNew.first {
+            NavigationLink { SiteNoticesView() } label: {
+                HStack(alignment: .top, spacing: DS.Space.s) {
+                    Image(systemName: "pin.fill").foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("网站公告有更新 · \(changed.formatted(.relative(presentation: .named)))")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                        Text(first).font(.subheadline).foregroundStyle(.primary).lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .card(tint: .orange)
+            }
+            .buttonStyle(PressableStyle())
         }
     }
 }

@@ -7,6 +7,13 @@ struct ShiftEntry: TimelineEntry {
     let today: WidgetDay?
     let tomorrow: WidgetDay?
     let hasData: Bool
+    var lastSync: Date? = nil
+
+    /// 超过一天没同步：小组件变灰并写上几天没同步，免得照着旧排班去上班
+    var staleDays: Int? {
+        guard let lastSync, date.timeIntervalSince(lastSync) > 24 * 3600 else { return nil }
+        return max(1, Int(date.timeIntervalSince(lastSync) / 86400))
+    }
 }
 
 struct ShiftProvider: TimelineProvider {
@@ -42,7 +49,8 @@ struct ShiftProvider: TimelineProvider {
         return ShiftEntry(date: date,
                           today: byDate[WidgetStore.key(for: date)],
                           tomorrow: byDate[WidgetStore.key(for: tomorrow)],
-                          hasData: snapshot != nil)
+                          hasData: snapshot != nil,
+                          lastSync: snapshot?.lastSync)
     }
 }
 
@@ -53,7 +61,8 @@ struct ShiftWidgetView: View {
     // App 会把「取到了但没排班」的日子写成「未排班」；这里查不到的是还没取到数据的日子
     private var todayTitle: String { entry.today?.title ?? (entry.hasData ? "暂无数据" : "打开 App") }
     private var tomorrowTitle: String { entry.tomorrow?.title ?? "—" }
-    private var color: Color { entry.today.map { Color(hex: $0.colorHex) } ?? .gray }
+    private var color: Color { entry.staleDays != nil ? .gray : (entry.today.map { Color(hex: $0.colorHex) } ?? .gray) }
+    private var staleText: String? { entry.staleDays.map { "⚠︎ \($0) 天没同步" } }
 
     private var weekday: String {
         let names = ["日", "一", "二", "三", "四", "五", "六"]
@@ -78,24 +87,29 @@ struct ShiftWidgetView: View {
             .widgetBackground(Color.clear)
         case .accessoryRectangular:
             VStack(alignment: .leading, spacing: 2) {
-                Text("今天 \(weekday)").font(.caption2)
+                Text(staleText ?? "今天 \(weekday)").font(.caption2)
                 Text(todayTitle).font(.headline).lineLimit(1).minimumScaleFactor(0.5)
                 Text("明天：\(tomorrowTitle)").font(.caption2).lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .widgetBackground(Color.clear)
         case .systemMedium:
-            HStack(spacing: 12) {
-                dayBlock(label: "今天", title: todayTitle, big: true)
-                Divider().overlay(Color.white.opacity(0.5))
-                dayBlock(label: "明天", title: tomorrowTitle, big: false)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    dayBlock(label: "今天", title: todayTitle, big: true)
+                    Divider().overlay(Color.white.opacity(0.5))
+                    dayBlock(label: "明天", title: tomorrowTitle, big: false)
+                }
+                syncFooter
             }
             .padding()
             .widgetBackground(color.gradient)
         default:
             VStack(alignment: .leading, spacing: 4) {
-                Text("今天 · \(weekday)")
+                Text(staleText ?? "今天 · \(weekday)")
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .opacity(0.9)
                 Spacer(minLength: 0)
                 Text(todayTitle)
@@ -113,6 +127,16 @@ struct ShiftWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .padding()
             .widgetBackground(color.gradient)
+        }
+    }
+
+    /// 中号小组件底部：上次同步是多久以前
+    @ViewBuilder private var syncFooter: some View {
+        if let staleText {
+            Text(staleText).font(.caption2.weight(.semibold)).foregroundStyle(.white)
+        } else if let last = entry.lastSync {
+            (Text("同步于 ") + Text(last, style: .relative) + Text("前"))
+                .font(.caption2).foregroundColor(.white.opacity(0.8)).lineLimit(1)
         }
     }
 

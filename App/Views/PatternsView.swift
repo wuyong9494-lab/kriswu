@@ -403,3 +403,37 @@ struct SchedulePatternsView: View {
 
     private func signed(_ n: Int) -> String { n > 0 ? "+\(n)" : (n < 0 ? "−\(abs(n))" : "0") }
 }
+
+/// 值班网站上的公告：新出现的标出来
+struct SiteNoticesView: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        let fresh = Set(store.settings.siteNoticesNew)
+        List {
+            if store.settings.siteNotices.isEmpty {
+                Text("还没读到网站公告。同步一次后再看。").foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach(Array(store.settings.siteNotices.enumerated()), id: \.offset) { _, text in
+                    VStack(alignment: .leading, spacing: 4) {
+                        if fresh.contains(text) {
+                            Text("新").font(.caption2.weight(.bold)).foregroundStyle(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(Color.orange, in: Capsule())
+                        }
+                        Text(text).font(.subheadline).textSelection(.enabled)
+                    }
+                    .padding(.vertical, 2)
+                }
+            } footer: {
+                if let changed = store.settings.siteNoticesChanged {
+                    Text("上次发现公告变化：\(changed.formatted(date: .abbreviated, time: .shortened))。每次同步都会对比，有新内容会通知你。")
+                }
+            }
+        }
+        .appList()
+        .navigationTitle("网站公告")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}

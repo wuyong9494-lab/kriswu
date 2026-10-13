@@ -184,6 +184,9 @@ struct AppSettings: Codable, Equatable {
     var sitePeople: [String: SiteAPI.Person] = [:]
     /// 网站公告里写的排班规则
     var siteNotices: [String] = []
+    /// 公告最近一次变化的时间、新出现的几条（今天页显示 7 天）
+    var siteNoticesChanged: Date?
+    var siteNoticesNew: [String] = []
     /// 网站标了「固定」（手动指定）遥测的日子
     var fixedTelemetryDays: [String] = []
     /// 各组负责的星（网站组表）
@@ -194,6 +197,9 @@ struct AppSettings: Codable, Equatable {
     var lastHolidayFetch: Date?
     /// 已经提醒过的「该休没休」（日期|栏目）
     var noRestNotified: [String] = []
+    /// 网站还没排、按顺序推算快轮到我时提前说一声；上次说是什么时候（几天内不重复）
+    var dutyHeadsUp: Bool = true
+    var dutyHeadsUpSent: Date?
     /// 排班预演：网站还没排的日子猜的遥测（日期 → 名字）；网站排出来后拿来对，结果记在 previewResults
     var previewGuesses: [String: String] = [:]
     var previewResults: [PreviewResult] = []
@@ -302,12 +308,16 @@ struct AppSettings: Codable, Equatable {
         restBalance = try c.decodeIfPresent([String: Int].self, forKey: .restBalance) ?? [:]
         sitePeople = try c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople) ?? [:]
         siteNotices = try c.decodeIfPresent([String].self, forKey: .siteNotices) ?? []
+        siteNoticesChanged = try c.decodeIfPresent(Date.self, forKey: .siteNoticesChanged)
+        siteNoticesNew = try c.decodeIfPresent([String].self, forKey: .siteNoticesNew) ?? []
         fixedTelemetryDays = try c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays) ?? []
         groupSatellites = try c.decodeIfPresent([String: String].self, forKey: .groupSatellites) ?? [:]
         downloadedHolidayOff = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayOff) ?? []
         downloadedHolidayWork = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork) ?? []
         lastHolidayFetch = try c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
         noRestNotified = try c.decodeIfPresent([String].self, forKey: .noRestNotified) ?? []
+        dutyHeadsUp = try c.decodeIfPresent(Bool.self, forKey: .dutyHeadsUp) ?? true
+        dutyHeadsUpSent = try c.decodeIfPresent(Date.self, forKey: .dutyHeadsUpSent)
         previewGuesses = try c.decodeIfPresent([String: String].self, forKey: .previewGuesses) ?? [:]
         previewResults = try c.decodeIfPresent([PreviewResult].self, forKey: .previewResults) ?? []
         restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
@@ -1076,10 +1086,23 @@ final class AppStore: ObservableObject {
     }
 
     /// 网站接口里的人员设置、公告、固定遥测日子：存下来给排班规律用
-    func applySiteInfo(_ site: SiteAPI.Result) {
+    @discardableResult
+    func applySiteInfo(_ site: SiteAPI.Result) -> [String] {
         var s = settings
         if !site.people.isEmpty { s.sitePeople = site.people }
-        if !site.notices.isEmpty { s.siteNotices = site.notices }
+        // 公告变了：记下新出现的几条（第一次读到不算变化）
+        var newNotices: [String] = []
+        if !site.notices.isEmpty, site.notices != s.siteNotices {
+            if !s.siteNotices.isEmpty {
+                let old = Set(s.siteNotices.map(Self.noticeKey))
+                newNotices = site.notices.filter { !old.contains(Self.noticeKey($0)) }
+                if !newNotices.isEmpty {
+                    s.siteNoticesChanged = Date()
+                    s.siteNoticesNew = newNotices
+                }
+            }
+            s.siteNotices = site.notices
+        }
         if !site.groupSatellites.isEmpty { s.groupSatellites = site.groupSatellites }
         if !site.noRest.isEmpty {
             let cutoff = DayKey.today.adding(days: -60).description
@@ -1095,6 +1118,21 @@ final class AppStore: ObservableObject {
         // 待休天数：网站人员表里直接有（unrestDays），比从人名后的括号里读更准
         let balances = site.people.compactMapValues(\.unrestDays)
         if !balances.isEmpty { updateRestBalance(balances) }
+        return newNotices
+    }
+
+    /// 比较公告时不管空白：网站只是换了换行、空格不算新公告
+    private static func noticeKey(_ text: String) -> String {
+        text.filter { !$0.isWhitespace }
+    }
+
+    /// 网站公告出现了新内容：通知一次，点开看全部公告
+    func notifyNoticeChange(_ fresh: [String]) async {
+        guard !Self.isDemo, !fresh.isEmpty else { return }
+        let title = "📌 值班网站公告有更新"
+        let body = fresh.map { $0.count > 120 ? String($0.prefix(120)) + "…" : $0 }.joined(separator: "\n")
+        await NotificationService.notifyNow(id: "site-notice", title: title, body: body, route: "notices")
+        if settings.weChatEnabled { _ = await pushToWeChat(title: title, content: fresh.joined(separator: "\n\n")) }
     }
 
     /// 网站标了我「该休没休」（今天及以后）：每处提醒一次
@@ -1244,8 +1282,10 @@ final class AppStore: ObservableObject {
                 if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
             }
             await notifyRestWarnings()
+        await notifyDutyHeadsUp()
             updateRestBalance(outcome.restBalance)
-            applySiteInfo(outcome.site)
+            let freshNotices = applySiteInfo(outcome.site)
+            await notifyNoticeChange(freshNotices)
             await notifySiteNoRest(outcome.site.noRest)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
@@ -1387,6 +1427,7 @@ final class AppStore: ObservableObject {
         }
         mergeRestHistory(result.restByDay)
         await notifyRestWarnings()
+        await notifyDutyHeadsUp()
         updateRestBalance(result.restBalance)
         let days = Set(result.roster.values.flatMap(\.keys))
         if let lo = days.min(), let hi = days.max() {
@@ -1483,6 +1524,18 @@ final class AppStore: ObservableObject {
         }
         dutyTurnCache = (key, value)
         return value
+    }
+
+    /// 网站还没排、推算我 7 天内可能轮到遥测：提前说一声（5 天内只说一次，只是推算）
+    func notifyDutyHeadsUp() async {
+        guard !Self.isDemo, settings.dutyHeadsUp,
+              let turn = myDutyTurn(), !turn.scheduled, let day = turn.day else { return }
+        guard (1...7).contains(where: { DayKey.today.adding(days: $0) == day }),
+              Date().timeIntervalSince(settings.dutyHeadsUpSent ?? .distantPast) > 5 * 86_400 else { return }
+        settings.dutyHeadsUpSent = Date()
+        let ahead = turn.ahead == 0 ? "下一个就是你" : "前面还有 \(turn.ahead) 个人"
+        await NotificationService.notifyNow(id: "duty-heads-up", title: "🛰️ 快轮到你值遥测了（推算）",
+                                            body: "网站还没排。按遥测顺序\(ahead)，推算大约在 \(day.dateText)（\(day.weekdayText)）前后。只是推算，以网站为准。")
     }
 
     /// 我最近和以后的遥测：按规则该休的日子排了岗位、或者工作日没写休息

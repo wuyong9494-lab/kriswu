@@ -91,7 +91,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
-        case workLog, record, note, rosterLog, teamChanges, whatsNew
+        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices
         var id: String { rawValue }
     }
 
@@ -215,6 +215,11 @@ struct RootView: View {
             case .record: RecorderSheet(autoStart: true)
             case .note: NoteSheet()
             case .whatsNew: WhatsNewView()
+            case .notices:
+                NavigationStack {
+                    SiteNoticesView()
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
+                }
             case .rosterLog, .teamChanges:
                 NavigationStack {
                     Group {
