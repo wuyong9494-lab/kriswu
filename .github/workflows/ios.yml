@@ -213,3 +213,89 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.com add .
           git -c user.name=ci -c user.email=ci@example.com commit -qm "Screenshots for ${GITHUB_SHA::7}"
           git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" screenshots
+
+  # 签名后上传到 TestFlight（同事用 TestFlight App 安装）。
+  # 需要在仓库 Settings › Secrets and variables › Actions 里配好：
+  # APPLE_TEAM_ID、ASC_KEY_ID、ASC_ISSUER_ID、ASC_KEY_P8（.p8 文件的全部内容）。没配就跳过。
+  testflight:
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - name: 检查密钥
+        id: check
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ]; then
+            echo "::notice::还没配置 TestFlight 用的密钥，跳过上传"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != '1'
+
+      - name: 生成 Xcode 工程
+        if: steps.check.outputs.skip != '1'
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 写入 App Store Connect 密钥
+        if: steps.check.outputs.skip != '1'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          KEY="$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          grep -q "BEGIN PRIVATE KEY" "$KEY" || { echo "::error::ASC_KEY_P8 不是 .p8 文件的内容（应以 -----BEGIN PRIVATE KEY----- 开头）"; exit 1; }
+          echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
+
+      - name: 打包（自动签名）
+        if: steps.check.outputs.skip != '1'
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild archive \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ShiftReminder.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} 2>&1 | tail -80
+
+      - name: 上传到 TestFlight
+        if: steps.check.outputs.skip != '1'
+        shell: bash -eo pipefail {0}
+        run: |
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/ShiftReminder.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -80
+          echo "::notice::已上传 build ${{ github.run_number }}，App Store Connect 处理完（一般 5–30 分钟）后在 TestFlight 里就能装"
