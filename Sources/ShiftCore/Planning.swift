@@ -27,10 +27,21 @@ public enum HolidayDutyStats {
                     if value == WorkloadCounter.Kind.duty.rawValue || value == WorkloadCounter.Kind.regular.rawValue { work += 1 }
                     continue
                 }
-                guard let raw = history[day] else { continue }
-                let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
-                if posts.contains(where: WorkloadCounter.isDuty) { duty.append(day) }
-                if posts.contains(where: { !WorkloadCounter.isOff($0, matcher: matcher) && !WorkloadCounter.isTrip($0) }) { work += 1 }
+                func posts(_ d: DayKey) -> [String] {
+                    (WorkloadCounter.effective(history[d], matcher: matcher) ?? "").split(separator: "+").map { matcher.displayName(String($0)) }
+                }
+                let today = posts(day)
+                // 假期里值完遥测的第二天（还在假期里）休息：也算节假日上班（不算工作量，见 WorkloadCounter.autoKinds）
+                let previous = day.adding(days: -1, calendar: .current)
+                if ChinaHolidays.isHoliday(previous), posts(previous).contains(where: WorkloadCounter.isDuty),
+                   today.allSatisfy({ WorkloadCounter.isOff($0, matcher: matcher) }),
+                   today.isEmpty || today.contains(where: WorkloadCounter.isRest) {
+                    work += 1
+                    continue
+                }
+                guard !today.isEmpty else { continue }
+                if today.contains(where: WorkloadCounter.isDuty) { duty.append(day) }
+                if today.contains(where: { !WorkloadCounter.isOff($0, matcher: matcher) && !WorkloadCounter.isTrip($0) }) { work += 1 }
             }
             if work > 0 { result.append(HolidayDuty(name: name, dutyDays: duty.count, workDays: work, dutyDates: duty.sorted())) }
         }

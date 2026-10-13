@@ -332,7 +332,14 @@ public enum WorkloadCounter {
             if isDutyDay(day) {
                 var next = day.adding(days: 1, calendar: calendar)
                 let r = rules(on: next)
-                // 节假日值完遥测的第二天：网站上没写岗位（没排班）也是值班后的休息，算工作量
+                // 假期里（不是假期最后一天）值了遥测，第二天还在假期里、是值班后的休息（写了休息、值班交接前，或没写）：
+                // 不算工作量，但算上班天数，也算进节假日上班
+                if ChinaHolidays.isHoliday(day), ChinaHolidays.isHoliday(next), result[next] != nil,
+                   history[next] == nil || restPosts(next) {
+                    result[next] = DayExplanation(kind: .attendance,
+                                                  reason: "假期里值完遥测的第二天休息：不算工作量，算上班天数和节假日上班")
+                }
+                // 旧规则（默认关）：节假日值完遥测第二天没写岗位算值班调休
                 if r.blankHolidayAfterDutyIsRest, history[next] == nil, result[next] != nil, ChinaHolidays.isHoliday(next) {
                     result[next] = DayExplanation(kind: .dutyRest, reason: "节假日值完遥测的第二天，网站上没写休息：算值班调休（工作量）")
                 }
@@ -377,7 +384,8 @@ public enum WorkloadCounter {
                 case .holiday: p.holidayDays += 1
                 case .off: p.offDays += 1
                 case .unassigned: p.unassignedDays += 1
-                case .attendance: p.attendanceDays += 1
+                // 节假日里的「上班」只有值班后那天休息（见 autoKinds），也算节假日上班
+                case .attendance: p.attendanceDays += 1; if holiday { p.holidayWorkedDays += 1 }
                 }
             }
             return p
