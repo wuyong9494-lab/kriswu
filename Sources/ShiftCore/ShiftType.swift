@@ -43,7 +43,9 @@ public struct ShiftType: Identifiable, Hashable, Codable {
 }
 
 public struct ShiftMatcher {
-    public var types: [ShiftType] { didSet { index = Self.buildIndex(types) } }
+    public var types: [ShiftType] { didSet { index = Self.buildIndex(types); cache = MatchCache() } }
+    /// 识别结果缓存：排班里的写法就那么几十种，统计、推算却要问几十万次。可以多线程用
+    private var cache = MatchCache()
 
     /// 预先整理好的名称、代码、关键字（match 每次调用不用再整理一遍）
     private struct Entry {
@@ -74,6 +76,14 @@ public struct ShiftMatcher {
     /// 根据原文找到对应的班次类型；找不到返回 nil（界面上仍显示原文）。
     /// 先比完全相同的名称/代码，再比关键字，关键字越长优先级越高（"日班" 优于 "日"）。
     public func match(_ raw: String) -> ShiftType? {
+        if let hit = cache.matches.object(forKey: raw as NSString) { return hit.index < 0 ? nil : index[hit.index].type }
+        let found = uncachedMatch(raw)
+        let i = found.flatMap { t in index.firstIndex { $0.type.id == t.id } } ?? -1
+        cache.matches.setObject(MatchCache.Hit(i), forKey: raw as NSString)
+        return found
+    }
+
+    private func uncachedMatch(_ raw: String) -> ShiftType? {
         // 一天多个岗位（"组A+组E"、"组A、组E"）时按第一个着色
         if let first = raw.split(whereSeparator: Self.isSeparator).first, first.count < raw.count {
             return match(String(first))
@@ -94,6 +104,13 @@ public struct ShiftMatcher {
     /// 显示用名称：比类型名短的简写（"白"、"N"、"休"）显示成类型名（"白班"、"夜班"、"休息"）；
     /// 其它情况（"组A"、"值班交班前"、"调休"、"年假"）照原文显示，不丢信息。
     public func displayName(_ raw: String) -> String {
+        if let hit = cache.names.object(forKey: raw as NSString) { return hit as String }
+        let name = uncachedDisplayName(raw)
+        cache.names.setObject(name as NSString, forKey: raw as NSString)
+        return name
+    }
+
+    private func uncachedDisplayName(_ raw: String) -> String {
         let parts = raw.split(whereSeparator: Self.isSeparator).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         if parts.count > 1 { return parts.map(displayName).joined(separator: "+") }
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -122,4 +139,14 @@ public struct ShiftMatcher {
     static func normalize(_ s: String) -> String {
         s.halfwidthAlnum.lowercased().filter { !$0.isWhitespace }
     }
+}
+
+/// ShiftMatcher 的识别缓存（NSCache 自己加锁，多线程安全）
+final class MatchCache {
+    final class Hit {
+        let index: Int
+        init(_ index: Int) { self.index = index }
+    }
+    let matches = NSCache<NSString, Hit>()
+    let names = NSCache<NSString, NSString>()
 }
