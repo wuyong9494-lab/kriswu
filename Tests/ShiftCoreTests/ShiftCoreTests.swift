@@ -649,6 +649,13 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testSpacedNamesInCell() {
+        let m = ShiftMatcher(types: ShiftType.defaults)
+        XCTAssertEqual(RosterExtractor.names(inCell: "欧 阳 娜", matcher: m), ["欧阳娜"])
+        XCTAssertEqual(RosterExtractor.names(inCell: "王 五", matcher: m), ["王五"])
+        XCTAssertEqual(RosterExtractor.names(inCell: "王 五 李 四", matcher: m), ["王五", "李四"])
+    }
+
     func testIsMeLeftBoundary() {
         let p = ScheduleParser(aliases: ["李明"], reference: DayKey(year: 2026, month: 10, day: 1))
         XCTAssertFalse(p.isMe("张李明"))          // 三个字的另一个人

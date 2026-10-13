@@ -48,14 +48,20 @@ public enum RosterExtractor {
             .union(.whitespacesAndNewlines))
             .map(cleanName)
             .filter { !$0.isEmpty }
-        // 两个字的名字常被排版成「王　五」：相邻两个单字合回一个名字
+        // 名字常被排版成「王　五」「欧 阳 娜」：一串连着的单字合回名字。
+        // 3 个单字是一个三字名；2、4、6 个两两一组；5 个按 2 + 3
         var merged: [String] = []
         var i = 0
         while i < tokens.count {
-            if tokens[i].count == 1, i + 1 < tokens.count, tokens[i + 1].count == 1 {
-                merged.append(tokens[i] + tokens[i + 1]); i += 2
-            } else {
-                merged.append(tokens[i]); i += 1
+            guard tokens[i].count == 1 else { merged.append(tokens[i]); i += 1; continue }
+            var run: [String] = []
+            while i < tokens.count, tokens[i].count == 1 { run.append(tokens[i]); i += 1 }
+            var k = 0
+            while k < run.count {
+                let left = run.count - k
+                let size = left == 1 ? 1 : (left == 3 ? 3 : 2)
+                merged.append(run[k..<(k + size)].joined())
+                k += size
             }
         }
         tokens = merged
