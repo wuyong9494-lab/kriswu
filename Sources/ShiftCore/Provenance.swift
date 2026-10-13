@@ -132,12 +132,13 @@ public enum PublishPattern {
     public static func nextHot(after now: Date, times: [Date], calendar: Calendar = .current) -> Date? {
         let slots = hotSlots(times, calendar: calendar).map(\.slot)
         guard !slots.isEmpty else { return nil }
-        var t = calendar.date(bySetting: .minute, value: 0, of: now) ?? now
-        for _ in 0..<(24 * 8) {
-            t = t.addingTimeInterval(3600)
+        // 从这个小时的整点开始找（这个小时本身也算，不能跳过）
+        var t = calendar.dateInterval(of: .hour, for: now)?.start ?? now
+        for i in 0..<(24 * 8) {
+            if i > 0 { t = t.addingTimeInterval(3600) }
             let c = calendar.dateComponents([.weekday, .hour], from: t)
             if slots.contains(where: { $0.weekday == c.weekday && $0.hour == c.hour }) {
-                return t.addingTimeInterval(-1800)   // 提前半小时
+                return max(now, t.addingTimeInterval(-1800))   // 提前半小时（已经过了就从现在起）
             }
         }
         return nil

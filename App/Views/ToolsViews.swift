@@ -242,7 +242,7 @@ struct YearStatsView: View {
         .navigationTitle("全年统计")
         .navigationBarTitleDisplayMode(.inline)
         // 全年数据量大：换年份或全员排班更新时算一次，不在每次刷新界面时重算
-        .task(id: "\(year)-\(store.roster.count)-\(store.publishedDays.count)-\(store.settings.scheduleOnlyMembers.hashValue)-\(store.settings.customHolidayOff.count)-\(store.settings.customHolidayWork.count)-\(store.settings.lastSync?.timeIntervalSince1970 ?? 0)") {
+        .task(id: "\(year)-\(store.dataRevision)") {
             let r = store.workload(year: year, month: nil)
             self.report = r
             file = store.workloadCSVFile(year: year, month: nil, report: r)

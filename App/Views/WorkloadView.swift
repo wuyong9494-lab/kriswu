@@ -219,7 +219,9 @@ struct WorkloadDetailView: View {
 
     var body: some View {
         let explained = WorkloadCounter.explained(of: store.roster[name] ?? [:], days: days, matcher: store.matcher,
-                                                  rotating: store.isRotating(name, asOf: days.max()), name: name, calendar: .app)
+                                                  rotating: WorkloadCounter.isDispatchPerson(name: name, history: store.roster[name] ?? [:],
+                                                                                             matcher: store.matcher, asOf: days.max()),
+                                                  name: name, forced: store.rotationMembers?.contains(name) == true, calendar: .app)
         List(days.reversed()) { day in
             let raw = store.roster[name]?[day]
             let holiday = ChinaHolidays.isHoliday(day)

@@ -375,6 +375,7 @@ final class AppStore: ObservableObject {
         didSet {
             guard settings != oldValue else { return }
             workloadCache = [:]
+            dataRevision &+= 1
             // 不是管理员：排班数据改不了（同步自动更新的不受影响）
             if !canEdit {
                 var fixed = settings
@@ -409,6 +410,7 @@ final class AppStore: ObservableObject {
         didSet {
             dutyTurnCache = nil
             workloadCache = [:]
+            dataRevision &+= 1
         }
     }
     /// 已经取到过结果的日子：有排班的显示班次，没排班的显示「未排班」；不在这里的日子还没有数据
@@ -419,6 +421,7 @@ final class AppStore: ObservableObject {
             publishedDays = Self.published(in: roster, matcher: matcher)
             dutyTurnCache = nil
             workloadCache = [:]
+            dataRevision &+= 1
         }
     }
     /// 网站上已经正式排了班的日子：这一天有人排了组别（组A–E）或遥测。
@@ -1111,7 +1114,10 @@ final class AppStore: ObservableObject {
                                                      matcher: matcher, weeksBack: weeksBack)
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
-        await checkSyncHealth(result.roster, source: weeksBack > 9 ? "desktop-long" : "desktop", title: "电脑版页面")
+        // 页面打不开、没登录上（不是改版）不比；翻的周数不同读到的天数也不同，分开比
+        if !(result.roster.isEmpty && result.reason != nil) {
+            await checkSyncHealth(result.roster, source: "desktop-\(weeksBack)", title: "电脑版页面")
+        }
         mergeRoster(result.roster, source: "desktop")
         mergeRestHistory(result.restByDay)
         await notifyRestWarnings()
@@ -1419,7 +1425,8 @@ final class AppStore: ObservableObject {
         guard !new.isEmpty else { return }
         // 这种读取方式带不带休息列：读到过休息、请假就记住
         var s = settings
-        let carries = s.leaveSources.contains(source) || RosterMerger.hasLeave(new, matcher: matcher)
+        // 每次读的范围、方式可能不同（后台快速同步不翻页），所以按这次读到的有没有休息判断
+        let carries = RosterMerger.hasLeave(new, matcher: matcher)
         if carries && !s.leaveSources.contains(source) { s.leaveSources.append(source) }
         let lastPublished = publishedDays.max()
         // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
@@ -1828,6 +1835,9 @@ final class AppStore: ObservableObject {
     private var workloadCache: [String: Workload] = [:]
 
     func invalidateWorkloadCache() { workloadCache = [:] }
+
+    /// 统计用的数据（全员排班、我的排班、设置）每变一次加一，页面用它判断要不要重算
+    @Published private(set) var dataRevision = 0
 
     func workload(year: Int, month: Int?) -> Workload {
         let key = "\(year)-\(month ?? 0)-\(DayKey.today)"
