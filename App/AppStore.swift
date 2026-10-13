@@ -1200,7 +1200,19 @@ final class AppStore: ObservableObject {
     }
 
     /// 遥测轮转（排班规律、下次遥测、排班预演共用）
+    /// 推算很费时（几百天 × 几十人）：同一份数据、同一天只算一次
+    private var rotationCache: [String: SchedulePatterns.Rotation?] = [:]
+
     func dutyRotation(forecastDays: Int = 60) -> SchedulePatterns.Rotation? {
+        let key = "\(DayKey.today)-\(dataRevision)-\(forecastDays)"
+        if let cached = rotationCache[key] { return cached }
+        let value = computeRotation(forecastDays: forecastDays)
+        if rotationCache.count > 8 { rotationCache.removeAll() }
+        rotationCache[key] = value
+        return value
+    }
+
+    private func computeRotation(forecastDays: Int) -> SchedulePatterns.Rotation? {
         let days = publishedDays.filter { $0 >= DayKey.today.adding(days: -180) }.sorted()
         return SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: forecastDays,
                                          calendar: .app, people: settings.sitePeople, fixedDays: fixedTelemetryDaySet)
