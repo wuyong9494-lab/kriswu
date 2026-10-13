@@ -146,6 +146,11 @@ struct AppSettings: Codable, Equatable {
     /// 每月 1 号把上个月的工作量发到微信
     var monthlyReport: Bool = true
     var lastMonthlyReport: String?
+    /// 每周一推送上周的管理摘要（只有管理者、管理员会发）
+    var weeklyDigest: Bool = true
+    var lastWeeklyDigest: String?
+    /// 网站标的「该休没休」（全员，近两个月）：「日期|名字|栏目」
+    var siteNoRestFlags: [String] = []
     /// 关注的同事排班变了也通知
     var notifyFavorites: Bool = true
     /// 全员排班有变动（今天及以后，谁的都算）也提醒
@@ -275,6 +280,9 @@ struct AppSettings: Codable, Equatable {
         workloadOverrides = try c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides) ?? [:]
         monthlyReport = try c.decodeIfPresent(Bool.self, forKey: .monthlyReport) ?? true
         lastMonthlyReport = try c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
+        weeklyDigest = try c.decodeIfPresent(Bool.self, forKey: .weeklyDigest) ?? true
+        lastWeeklyDigest = try c.decodeIfPresent(String.self, forKey: .lastWeeklyDigest)
+        siteNoRestFlags = try c.decodeIfPresent([String].self, forKey: .siteNoRestFlags) ?? []
         notifyFavorites = try c.decodeIfPresent(Bool.self, forKey: .notifyFavorites) ?? true
         notifyAllChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges) ?? true
         teamChanges = try c.decodeIfPresent([TeamChange].self, forKey: .teamChanges) ?? []
@@ -1050,6 +1058,11 @@ final class AppStore: ObservableObject {
         if !site.people.isEmpty { s.sitePeople = site.people }
         if !site.notices.isEmpty { s.siteNotices = site.notices }
         if !site.groupSatellites.isEmpty { s.groupSatellites = site.groupSatellites }
+        if !site.noRest.isEmpty {
+            let cutoff = DayKey.today.adding(days: -60).description
+            let flags = Set(s.siteNoRestFlags + site.noRest.map { "\($0.day)|\($0.name)|\($0.column)" })
+            s.siteNoRestFlags = flags.filter { $0 >= cutoff }.sorted()
+        }
         if !site.fixedTelemetryDays.isEmpty {
             let cutoff = DayKey.today.adding(days: -400)
             let all = Set(s.fixedTelemetryDays.compactMap(DayKey.init(string:))).union(site.fixedTelemetryDays).filter { $0 >= cutoff }
@@ -1849,9 +1862,51 @@ final class AppStore: ObservableObject {
         if !sent { settings.lastMonthlyReport = last }
     }
 
+    /// 每周一（这周第一次运行时）把上周的管理摘要发到微信：遥测、工作量最多、待休最多、该休没休
+    func sendWeeklyDigestIfDue() async {
+        guard settings.weeklyDigest, settings.weChatEnabled, role != .user, !Self.isDemo else { return }
+        var cal = Calendar.app
+        cal.firstWeekday = 2
+        let now = Date()
+        let key = "\(cal.component(.yearForWeekOfYear, from: now))-W\(cal.component(.weekOfYear, from: now))"
+        // 第一次（刚打开开关）不补发，从下周一开始
+        guard let last = settings.lastWeeklyDigest else { settings.lastWeeklyDigest = key; return }
+        guard last != key, let thisMonday = cal.dateInterval(of: .weekOfYear, for: now)?.start else { return }
+        settings.lastWeeklyDigest = key
+        let monday = DayKey(date: thisMonday, calendar: cal).adding(days: -7)
+        let days = (0..<7).map { monday.adding(days: $0) }
+        let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, members: rotationMembers, calendar: .app)
+        guard !people.isEmpty else { settings.lastWeeklyDigest = last; return }
+        func short(_ d: DayKey) -> String { "\(d.month)/\(d.day)" }
+        var lines: [String] = []
+        // 遥测
+        let duty = days.compactMap { d -> String? in
+            let names = roster.filter { $0.value[d].map { SchedulePatterns.isDutyPost($0, matcher: matcher) } ?? false }.keys.sorted()
+            return names.isEmpty ? nil : "\(short(d)) \(names.joined(separator: "、"))"
+        }
+        if !duty.isEmpty { lines.append("【遥测】" + duty.joined(separator: "；")) }
+        // 工作量最多
+        let top = people.sorted { $0.workDays > $1.workDays }.prefix(5).map { "\($0.name) \($0.workDays) 天" }
+        lines.append("【工作量最多】" + top.joined(separator: "，"))
+        // 待休最多
+        let rest = settings.restBalance.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(5).map { "\($0.key) \($0.value) 天" }
+        if !rest.isEmpty { lines.append("【待休最多】" + rest.joined(separator: "，")) }
+        // 网站标了该休没休（上周一以后）
+        let from = monday.description
+        let noRest = settings.siteNoRestFlags.filter { $0 >= from }.map { flag -> String in
+            let parts = flag.split(separator: "|").map(String.init)
+            guard parts.count == 3, let d = DayKey(string: parts[0]) else { return flag }
+            return "\(parts[1]) \(short(d))（\(parts[2])）"
+        }
+        if !noRest.isEmpty { lines.append("【该休没休】" + noRest.joined(separator: "，")) }
+        let sent = await pushToWeChat(title: "📋 上周值班摘要（\(short(days[0]))–\(short(days[6]))）", content: lines.joined(separator: "\n"))
+        if !sent { settings.lastWeeklyDigest = last }
+    }
+
     func sendDueWeChatReminders() async {
         await sendPendingWeChatChange()
         await sendMonthlyReportIfDue()
+        await sendWeeklyDigestIfDue()
         guard settings.weChatEnabled, settings.weChatDaily else { return }
         let now = Date()
         let today = DayKey.today

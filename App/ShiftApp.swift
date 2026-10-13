@@ -90,8 +90,19 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
-        case workLog, record, note, rosterLog, teamChanges
+        case workLog, record, note, rosterLog, teamChanges, whatsNew
         var id: String { rawValue }
+    }
+
+    /// 更新后第一次打开：弹出「这次更新了什么」（新装的人不弹，向导走完就记成看过了）
+    private func showWhatsNewIfNeeded() {
+        guard !AppStore.isDemo else { return }
+        let seen = UserDefaults.standard.string(forKey: WhatsNew.seenKey)
+        if !store.settings.onboardingDone {
+            UserDefaults.standard.set(WhatsNew.id, forKey: WhatsNew.seenKey)
+        } else if seen != WhatsNew.id, rootSheet == nil, AppDelegate.pendingRoute == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { if rootSheet == nil { rootSheet = .whatsNew } }
+        }
     }
 
     /// 点通知进来：打开对应的详情页
@@ -183,7 +194,10 @@ struct RootView: View {
             if let action = PendingCapture.take() { startCapture(action) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openRoute)) { _ in openPendingRoute() }
-        .onAppear { openPendingRoute() }
+        .onAppear {
+            openPendingRoute()
+            showWhatsNewIfNeeded()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .pendingTaskToggles)) { _ in
             store.applyPendingTaskToggles()
         }
@@ -199,6 +213,7 @@ struct RootView: View {
                 }
             case .record: RecorderSheet(autoStart: true)
             case .note: NoteSheet()
+            case .whatsNew: WhatsNewView()
             case .rosterLog, .teamChanges:
                 NavigationStack {
                     Group {

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var aliasText = ""
+    @State private var showWhatsNew = false
     @State private var password = ""
     @State private var pushToken = ""
     @State private var sendingWeChatTest = false
@@ -86,6 +87,11 @@ struct SettingsView: View {
                     }
                 }
                 Section {
+                    Button { showWhatsNew = true } label: {
+                        row("这次更新了什么", icon: "sparkles", detail: WhatsNew.id)
+                    }
+                    .foregroundStyle(.primary)
+                    .sheet(isPresented: $showWhatsNew) { WhatsNewView() }
                     NavigationLink {
                         DiagnosticsView()
                     } label: {
@@ -354,6 +360,9 @@ struct SettingsView: View {
                 Toggle("每天的提醒也发到微信", isOn: $store.settings.weChatDaily)
                 Toggle("排班变动也发到微信", isOn: $store.settings.weChatChanges)
                 Toggle("每月 1 号发上个月的工作量月报", isOn: $store.settings.monthlyReport)
+                if store.role != .user {
+                    Toggle("每周一发上周的管理摘要", isOn: $store.settings.weeklyDigest)
+                }
                 Button {
                     sendingWeChatTest = true
                     Task {
