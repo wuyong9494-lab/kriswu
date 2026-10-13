@@ -1319,6 +1319,20 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.forecast.first?.day, e(33))
     }
 
+    func testScriptScanner() {
+        let app = "var a=1;function next(){/* 遥测按顺序轮，请假顺延 */return list.sort((x,y)=>x.lastDuty-y.lastDuty)[0]};" + String(repeating: "x", count: 2000) + "var shift=1;"
+        let vendor = "function sort(){/* 排班 */}"
+        let snippets = ScriptScanner.scan([ScriptScanner.Script(source: "https://example.com/js/app.123.js", text: app),
+                                           ScriptScanner.Script(source: "https://example.com/js/chunk-vendors.js", text: vendor)])
+        XCTAssertEqual(snippets.count, 1)                      // 第三方库跳过；单独一个 shift 不算
+        XCTAssertTrue(snippets[0].keywords.contains("遥测"))
+        XCTAssertTrue(snippets[0].keywords.contains("顺延"))
+        XCTAssertTrue(snippets[0].text.contains("lastDuty"))
+        XCTAssertEqual(ScriptScanner.readable("a=1;if(b){c=\"x;y\"}"), "a=1;\nif(b){\nc=\"x;y\"}")
+        let parsed = ScriptScanner.scripts(fromJSON: #"[{"s":"a.js","t":"var x=1"}]"#)
+        XCTAssertEqual(parsed, [ScriptScanner.Script(source: "a.js", text: "var x=1")])
+    }
+
     func testAPIFieldInspector() {
         let body = """
         {"code":0,"data":{"list":[

@@ -96,6 +96,11 @@ struct SettingsView: View {
                     } label: {
                         row("接口字段查看", icon: "tablecells", detail: store.apiFields.isEmpty ? "同步后可看" : "\(store.apiFields.count) 张表")
                     }
+                    NavigationLink {
+                        SiteCodeFinderView()
+                    } label: {
+                        row("查找网页排班代码", icon: "doc.text.magnifyingglass", detail: "只在手机上找")
+                    }
                     if store.canEdit {
                         Button("清空所有排班", role: .destructive) { confirmClear = true }
                     }
