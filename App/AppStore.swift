@@ -1767,10 +1767,15 @@ final class AppStore: ObservableObject {
     }
 
     /// 待休核对：按待休记录反推加减规则，列出对不上的人
+    /// 待休对账：全员几百天，同一份数据只算一次
     func restBalanceAudit() -> RestBalanceAudit.Result? {
-        RestBalanceAudit.analyze(points: settings.restHistory.mapValues { $0.map(\.point) }, roster: roster,
-                                 matcher: matcher, calendar: .app)
+        if let cached = auditCache, cached.revision == dataRevision { return cached.value }
+        let value = RestBalanceAudit.analyze(points: settings.restHistory.mapValues { $0.map(\.point) }, roster: roster,
+                                             matcher: matcher, calendar: .app)
+        auditCache = (dataRevision, value)
+        return value
     }
+    private var auditCache: (revision: Int, value: RestBalanceAudit.Result?)?
 
     /// 电脑版周表上每天的待休天数（往前翻的几周）补进待休记录，用来说明数字是怎么变的。
     func mergeRestHistory(_ byDay: [String: [DayKey: Int]]) {
@@ -2266,9 +2271,30 @@ final class AppStore: ObservableObject {
     }
 
     private func computeWorkload(year: Int, month: Int?) -> Workload {
+        Self.buildWorkload(year: year, month: month, today: .today, published: publishedDays, roster: roster,
+                           matcher: matcher, members: rotationMembers, restBalance: settings.restBalance)
+    }
+
+    /// 全年这种大统计：在后台算，算好放进缓存（数据在算的时候变了就不放）
+    func workloadInBackground(year: Int, month: Int?) async -> Workload {
+        let key = "\(year)-\(month ?? 0)-\(DayKey.today)"
+        if let cached = workloadCache[key] { return cached }
+        let revision = dataRevision
+        let (today, published, roster, matcher, members, rest) = (DayKey.today, publishedDays, roster, matcher,
+                                                                rotationMembers, settings.restBalance)
+        let value = await Task.detached(priority: .userInitiated) {
+            AppStore.buildWorkload(year: year, month: month, today: today, published: published, roster: roster,
+                                   matcher: matcher, members: members, restBalance: rest)
+        }.value
+        if revision == dataRevision { workloadCache[key] = value }
+        return value
+    }
+
+    /// 只用传进来的数据，可以在后台线程算
+    nonisolated static func buildWorkload(year: Int, month: Int?, today: DayKey, published: Set<DayKey>, roster: Roster,
+                                          matcher: ShiftMatcher, members: Set<String>?, restBalance: [String: Int]) -> Workload {
         // 只统计到今天：网站上提前排好的以后的日子还没上，不算
-        let today = DayKey.today
-        let days = publishedDays.filter { $0.year == year && (month == nil || $0.month == month) && $0 <= today }.sorted()
+        let days = published.filter { $0.year == year && (month == nil || $0.month == month) && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
         let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, members: rotationMembers,
                                            calendar: .app).sorted { a, b in
@@ -2282,7 +2308,7 @@ final class AppStore: ObservableObject {
             text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)\(p.dutyRestDays > 0 ? "，值班调休 \(p.dutyRestDays)" : "")，日常 \(p.regularDays)，出差 \(p.tripDays)），上班 \(p.presentDays) 天"
                 + (p.attendanceDays > 0 ? "（其中没排岗位 \(p.attendanceDays) 天，不算工作量）" : "")
                 + "，休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天" + (p.unassignedDays > 0 ? "，没排班 \(p.unassignedDays) 天" : "")
-                + (settings.restBalance[p.name].map { "，待休 \($0) 天" } ?? "")
+                + (restBalance[p.name].map { "，待休 \($0) 天" } ?? "")
                 + (p.holidayWorkedDays > 0 ? "，节假日上班 \(p.holidayWorkedDays) 天" : "") + "；"
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
         }
@@ -2306,7 +2332,7 @@ final class AppStore: ObservableObject {
         return (try? data.write(to: url, options: .atomic)) != nil ? url : nil
     }
 
-    static func sortedPosts(_ p: PersonWorkload) -> [(post: String, count: Int)] {
+    nonisolated static func sortedPosts(_ p: PersonWorkload) -> [(post: String, count: Int)] {
         p.posts.map { (post: $0.key, count: $0.value) }.sorted { ($0.count, $1.post) > ($1.count, $0.post) }
     }
 }
