@@ -643,7 +643,9 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertEqual(week?.body.components(separatedBy: "\n").count, 7)
         let now = cal.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 8))!
         let plan = planner.plan(schedule: schedule, now: now)
-        XCTAssertEqual(plan.filter { $0.id.hasPrefix("shift-week-") }.map(\.day), [sunday])
+        // 周日晚上有「明天」的提醒：下周安排并在里面，不单独再发一条
+        XCTAssertTrue(plan.filter { $0.id.hasPrefix("shift-week-") }.isEmpty)
+        XCTAssertTrue(plan.first { $0.id == "shift-evening-\(sunday)" }?.body.contains("下周安排") == true)
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 

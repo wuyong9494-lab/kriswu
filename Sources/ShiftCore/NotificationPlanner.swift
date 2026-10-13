@@ -70,7 +70,12 @@ public struct NotificationPlanner {
             if let n = dutyLeadMessage(for: day, schedule: schedule) { result.append(n) }
             if weekly, calendar.component(.weekday, from: day.date(calendar: calendar, hour: 12)) == 1,
                let w = weekMessage(on: day, schedule: schedule) {
-                result.append(w)
+                // 周日晚上已经有「明天」的提醒：下周安排并进去，同一分钟不响两次
+                if let i = result.firstIndex(where: { $0.id == "shift-evening-\(day)" }) {
+                    result[i].body += "\n\n" + w.title + "\n" + w.body
+                } else {
+                    result.append(w)
+                }
             }
         }
         return result
