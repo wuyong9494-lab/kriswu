@@ -228,16 +228,24 @@ struct SettingsView: View {
         }
     }
 
+    private static func names(in text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: ",，、/;；\n"))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     private var nameSection: some View {
         Section {
             TextField("例如：张三, zhangsan", text: $aliasText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .onChange(of: aliasText) { text in
-                    store.settings.aliases = text
-                        .components(separatedBy: CharacterSet(charactersIn: ",，、/;；\n"))
-                        .map { $0.trimmingCharacters(in: .whitespaces) }
-                        .filter { !$0.isEmpty }
+                    let names = Self.names(in: text)
+                    if names != store.settings.aliases { store.settings.aliases = names }
+                }
+                // 在别处（首次设置、今天页「我是谁」）换了人：这里跟着显示新名字，不把旧名字写回去
+                .onChange(of: store.settings.aliases) { names in
+                    if Self.names(in: aliasText) != names { aliasText = names.joined(separator: ", ") }
                 }
             NavigationLink {
                 WhoAmIView { aliasText = $0 }

@@ -44,9 +44,9 @@ public enum WorkloadBalance {
         func groupDays(_ history: [DayKey: String]) -> Int { days.filter { hasGroup(history[$0]) }.count }
         /// 算在「日常」里的组别天数（同一天还有遥测的算值班，不在这里）
         func regularGroupDays(_ name: String, _ history: [DayKey: String]) -> Int {
-            let dispatcher = WorkloadCounter.isDispatchPerson(name: name, history: history, matcher: matcher, asOf: days.max())
-            let kinds = WorkloadCounter.kinds(of: history, days: days, matcher: matcher, rotating: dispatcher, name: name,
-                                              forced: members?.contains(name) == true, calendar: calendar)
+            let kinds = WorkloadCounter.explainedByMonth(name: name, history: history, days: days, matcher: matcher,
+                                                         forced: members?.contains(name) == true, calendar: calendar)
+                .mapValues(\.kind)
             return days.filter { kinds[$0] == .regular && hasGroup(history[$0]) }.count
         }
         // 只比较这段时间有组别排班的人

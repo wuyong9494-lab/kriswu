@@ -539,6 +539,10 @@ final class AppStore: ObservableObject {
         if settings.rosterVersion < Self.rosterVersion {
             roster = [:]
             saveRoster()
+            rosterSources = [:]
+            rosterLog = []
+            saveSourcesAndLog()
+            settings.leaveSources = []
             settings.rosterVersion = Self.rosterVersion
             settings.lastSync = nil   // 打开 App 后马上重新同步
             save()
@@ -771,7 +775,16 @@ final class AppStore: ObservableObject {
         covered = []
         roster = [:]
         saveRoster()
+        resetRosterTracking()
         scheduleChanged()
+    }
+
+    /// 全员排班清空后，来源、变动历史、「哪种读取带休息列」也一起清掉，下次读到的当作第一次（不提醒）
+    private func resetRosterTracking() {
+        rosterSources = [:]
+        rosterLog = []
+        saveSourcesAndLog()
+        settings.leaveSources = []
     }
 
     private func scheduleChanged() {
@@ -925,10 +938,13 @@ final class AppStore: ObservableObject {
         // 正在同步：等它做完，用它的结果（快捷指令不会因为撞上自动同步而说「没有数据」）
         if let running = syncTask {
             let runningWasUser = syncTaskUserInitiated
+            let runningAliases = syncTaskAliases
             let ok = await running.value
+            // 等的时候换了人、改了名字：那次是按旧名字读的，要重新来一次
+            let renamed = settings.aliases != runningAliases
             // 自动同步不会重试登录、不采用异常结果；手动下拉要自己再来一次
             // 只有那次自动同步失败（没登录上、结果异常被忽略）时才再来一次
-            guard userInitiated, !runningWasUser, !ok else { return ok }
+            guard renamed || (userInitiated && !runningWasUser && !ok) else { return ok }
             // 等待期间别人已经开始了新的一次：用那一次
             if let next = syncTask { return await next.value }
         }
@@ -948,11 +964,13 @@ final class AppStore: ObservableObject {
         }
         syncTask = task
         syncTaskUserInitiated = userInitiated
+        syncTaskAliases = settings.aliases
         return await task.value
     }
 
     private var syncTask: Task<Bool, Never>?
     private var syncTaskUserInitiated = false
+    private var syncTaskAliases: [String] = []
 
     private func performSync(full: Bool, userInitiated: Bool) async -> Bool {
         guard canSync, !isSyncing else { return false }
@@ -973,6 +991,8 @@ final class AppStore: ObservableObject {
                                                               matcher: matcher,
                                                               preferredAPI: settings.apiSignature)
             let result = outcome.result
+            // 同步途中换了人、改了名字：这次是按旧名字读的，不能当成现在这个人的班。交给下一次同步
+            guard settings.aliases == aliasesAtStart else { return false }
             if !userInitiated, !settings.nextSyncIsBaseline, result.range != nil {
                 // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
                 let today = DayKey.today
@@ -1001,10 +1021,14 @@ final class AppStore: ObservableObject {
             let publishedBefore = publishedDays
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
-            await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步")
-            let edits = mergeRoster(outcome.roster, source: "sync")
-            if !baselineRun { await notifyRosterEdits(edits) }
-            if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
+            // 读到的全员排班明显不对（读了一半、网站改版）：自动同步先不合并，免得冲掉数据、乱提醒；手动下拉照常采用
+            let healthy = await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步",
+                                                accept: userInitiated)
+            if healthy || userInitiated {
+                let edits = mergeRoster(outcome.roster, source: "sync")
+                if !baselineRun { await notifyRosterEdits(edits, published: publishedBefore) }
+                if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
+            }
             await notifyRestWarnings()
             updateRestBalance(outcome.restBalance)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
@@ -1108,7 +1132,8 @@ final class AppStore: ObservableObject {
 
     @discardableResult
     private func readDesktopNotesNow(mayLogin: Bool, weeksBack: Int = 9) async -> Bool {
-        settings.lastDesktopNotesAttempt = Date()
+        let readStarted = Date()
+        settings.lastDesktopNotesAttempt = readStarted
         let result = await Task {
             await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
                                                      overrideURL: settings.desktopNotesURL,
@@ -1118,11 +1143,27 @@ final class AppStore: ObservableObject {
                                                      matcher: matcher, weeksBack: weeksBack)
         }.value
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
+        // 读的这半分钟里如果开始了同步，等它做完再合并
+        while isSyncing { try? await Task.sleep(nanoseconds: 500_000_000) }
+        var healthy = true
         // 页面打不开、没登录上（不是改版）不比；翻的周数不同读到的天数也不同，分开比
         if !(result.roster.isEmpty && result.reason != nil) {
-            await checkSyncHealth(result.roster, source: "desktop-\(weeksBack)", title: "电脑版页面")
+            healthy = await checkSyncHealth(result.roster, source: "desktop-\(weeksBack)", title: "电脑版页面")
         }
-        await notifyRosterEdits(mergeRoster(result.roster, source: "desktop"))
+        if healthy {
+            let rosterBefore = roster
+            let publishedBefore = publishedDays
+            // 之前还没有哪种读取带过休息列（刚装、刚重置、刚恢复后第一次读电脑版）：读到的请假、休息都会像「新变动」，不提醒
+            let baseline = settings.nextSyncIsBaseline || rosterBefore.isEmpty || settings.leaveSources.isEmpty
+            // 读的途中同步过：电脑版数据比同步的旧，只合并不提醒（变动由同步提醒过了）
+            let stale = (settings.lastSync ?? .distantPast) > readStarted
+            let edits = mergeRoster(result.roster, source: "desktop")
+            if !baseline && !stale {
+                await notifyRosterEdits(edits, published: publishedBefore)
+                let days = Set(result.roster.values.flatMap(\.keys))
+                await recordTeamChanges(before: rosterBefore, days: days.intersection(publishedBefore))
+            }
+        }
         mergeRestHistory(result.restByDay)
         await notifyRestWarnings()
         updateRestBalance(result.restBalance)
@@ -1160,26 +1201,29 @@ final class AppStore: ObservableObject {
 
     /// 这次读到的全员排班和平时比：人数、天数、休息条数、组别条数突然少很多就提醒（一天最多推送一次）。
     /// 不正常的结果不记进「平时」，免得把错的当成正常。
-    func checkSyncHealth(_ roster: Roster, source: String, title: String) async {
-        guard !Self.isDemo else { return }
+    /// 返回读到的是否正常。accept：用户手动确认采用的，这次也记进「平时」，网站真改版了以后就不再一直报
+    @discardableResult
+    func checkSyncHealth(_ roster: Roster, source: String, title: String, accept: Bool = false) async -> Bool {
+        guard !Self.isDemo else { return true }
         let metrics = SyncHealth.metrics(roster, matcher: matcher)
         var all = settings.syncHealth
         let history = all[source] ?? []
         let problems = SyncHealth.problems(metrics, history: history)
-        if problems.isEmpty {
+        if problems.isEmpty || accept {
             all[source] = Array((history + [metrics]).suffix(10))
             var s = settings
             s.syncHealth = all
             s.syncHealthWarning = nil
             settings = s
-            return
+            return true
         }
         let text = "\(title)读到的全员排班和平时不一样：" + problems.joined(separator: "；")
             + "。可能是网站改版了，工作量统计、休息核对可能不准。"
         settings.syncHealthWarning = text
-        guard settings.syncHealthWarnedDay != .today else { return }
+        guard settings.syncHealthWarnedDay != .today else { return false }
         settings.syncHealthWarnedDay = .today
         await NotificationService.notifyNow(id: "sync-health", title: "⚠️ 值班网站可能改版了", body: text)
+        return false
     }
 
     // MARK: 排班规律：下次遥测、排班预警
@@ -1572,10 +1616,15 @@ final class AppStore: ObservableObject {
     }
 
     /// 全员排班有变动（今天及以后的日子，别人的；自己的另有提醒）：一次同步发一条通知，开了微信推送也发微信
-    func notifyRosterEdits(_ edits: [RosterEdit]) async {
+    /// published：合并前已经正式排班的日子。网站新排出的一周（之前只有请假记录）不算变动，不然每周都会来一大串
+    func notifyRosterEdits(_ edits: [RosterEdit], published: Set<DayKey>) async {
         guard !Self.isDemo, settings.notifyAllChanges else { return }
         let today = DayKey.today
-        let upcoming = edits.filter { $0.day >= today && !isMe($0.name) }.sorted { ($0.day, $0.name) < ($1.day, $1.name) }
+        // 关注的同事另有「⭐」提醒，这里不再重复
+        let upcoming = edits.filter { e in
+            e.day >= today && published.contains(e.day) && !isMe(e.name)
+                && !(settings.notifyFavorites && isFavorite(e.name))
+        }.sorted { ($0.day, $0.name) < ($1.day, $1.name) }
         guard !upcoming.isEmpty else { return }
         func show(_ raw: String?) -> String { raw.map(matcher.displayName) ?? "没排" }
         var lines = upcoming.prefix(8).map { "\($0.day.month)/\($0.day.day) \($0.name)：\(show($0.old)) → \(show($0.new))" }
@@ -1831,9 +1880,15 @@ final class AppStore: ObservableObject {
         newSettings.loginExpiredNotified = false
         newSettings.syncStaleNotified = false
         newSettings.nextSyncIsBaseline = true
+        newSettings.leaveSources = []
+        rosterSources = [:]
+        rosterLog = []
+        saveSourcesAndLog()
         // 重装后日历权限要重新给，没给就先关掉
         if newSettings.calendarSync && !CalendarSync.authorized { newSettings.calendarSync = false }
         // 自动备份的文件夹是这台手机上选的，不用备份里的
+        // 工作留痕的面容 ID 锁跟着这台手机上的文件放在哪，不用备份里的（否则文件夹对不上，记录全显示丢失）
+        newSettings.workLogLock = settings.workLogLock
         newSettings.backupFolderBookmark = settings.backupFolderBookmark
         newSettings.backupFolderName = settings.backupFolderName
         newSettings.lastAutoBackup = settings.lastAutoBackup

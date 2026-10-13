@@ -269,6 +269,20 @@ public enum WorkloadCounter {
         return result
     }
 
+    /// 同 explained，但一个月一个月地判断这个人是调度、轮组别还是不轮组别（各自按那个月往前三个月）。
+    /// 全年统计和每个月的统计因此对得上：年初轮组别、后来改做调度的人，1 月份照样按轮组别算。
+    public static func explainedByMonth(name: String, history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher,
+                                        forced: Bool = false, calendar: Calendar = .current) -> [DayKey: DayExplanation] {
+        let months = Dictionary(grouping: days) { $0.year * 100 + $0.month }
+        var result: [DayKey: DayExplanation] = [:]
+        for chunk in months.values {
+            let dispatcher = isDispatchPerson(name: name, history: history, matcher: matcher, asOf: chunk.max())
+            result.merge(explained(of: history, days: chunk, matcher: matcher, rotating: dispatcher, name: name,
+                                   forced: forced, calendar: calendar)) { _, new in new }
+        }
+        return result
+    }
+
     /// fixed：手动纠正（改成值班 / 不是值班的日子，影响后面一天算不算值班调休）
     /// profile：人员档案（每天的角色、来走日期）；没有档案时用 rotating、groupMember
     static func autoKinds(of history: [DayKey: String], days: [DayKey], matcher: ShiftMatcher, rotating: Bool,
@@ -341,17 +355,17 @@ public enum WorkloadCounter {
         return roster.filter { $0.value.keys.contains(where: window.contains) }.compactMap { name, history -> PersonWorkload? in
             var p = PersonWorkload(name: name, dutyDays: 0, dutyRestDays: 0, regularDays: 0, offDays: 0, holidayDays: 0,
                                    tripDays: 0, holidayWorkedDays: 0, posts: [:])
-            let dispatcher = isDispatchPerson(name: name, history: history, matcher: matcher, asOf: last)
-            let dayKinds = kinds(of: history, days: days, matcher: matcher, rotating: dispatcher, name: name,
-                                 forced: members?.contains(name) == true, calendar: calendar)
+            let dayKinds = explainedByMonth(name: name, history: history, days: days, matcher: matcher,
+                                            forced: members?.contains(name) == true, calendar: calendar).mapValues(\.kind)
             // 这段时间一天都不统计（领导、已经走了、还没来）：不列出来
             if dayKinds.isEmpty { return nil }
             for day in days {
+                let holiday = ChinaHolidays.isHoliday(day)
+                // 不统计的日子（手动改成不算、已经调走）岗位也不计
+                guard let kind = dayKinds[day] else { continue }
                 for post in effective(history[day], matcher: matcher)?.split(separator: "+") ?? [] {
                     p.posts[matcher.displayName(String(post)), default: 0] += 1
                 }
-                let holiday = ChinaHolidays.isHoliday(day)
-                guard let kind = dayKinds[day] else { continue }
                 switch kind {
                 case .duty: p.dutyDays += 1; if holiday { p.holidayWorkedDays += 1 }
                 case .dutyRest: p.dutyRestDays += 1

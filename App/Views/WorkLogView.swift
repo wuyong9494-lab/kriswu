@@ -426,8 +426,12 @@ struct RecorderSheet: View {
                 Button {
                     Haptics.tap()
                     if recorder.isRecording {
-                        if let r = recorder.stop(), WorkLogStore.shared.addRecording(from: r.url, duration: r.duration, note: note) != nil {
-                            ToastCenter.shared.show("录音已保存", style: .success)
+                        if let r = recorder.stop() {
+                            if WorkLogStore.shared.addRecording(from: r.url, duration: r.duration, note: note) != nil {
+                                ToastCenter.shared.show("录音已保存", style: .success)
+                            } else {
+                                ToastCenter.shared.show("录音没存进去，解锁手机后再试一次", style: .error)
+                            }
                             dismiss()
                         }
                     } else {
@@ -462,6 +466,14 @@ struct RecorderSheet: View {
         }
         .interactiveDismissDisabled(recorder.isRecording)
         .presentationDetents([.medium, .large])
+        // 录着的时候页面被关掉（锁屏上锁、又按了一次快捷录音）：把录到的存下来，不丢
+        .onDisappear {
+            if recorder.isRecording, let r = recorder.stop() {
+                if WorkLogStore.shared.addRecording(from: r.url, duration: r.duration, note: note) != nil {
+                    ToastCenter.shared.show("录音已保存", style: .success)
+                }
+            }
+        }
         .task {
             recorder.onInterrupted = { url, duration in
                 if WorkLogStore.shared.addRecording(from: url, duration: duration, note: note) != nil {
@@ -492,12 +504,13 @@ struct NoteSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
+                        // 没存进去就留着这页和写好的字，不丢
                         if WorkLogStore.shared.addNote(text) {
                             ToastCenter.shared.show("已记下", style: .success)
+                            dismiss()
                         } else {
                             ToastCenter.shared.show("没存进去，解锁手机后再试一次", style: .error)
                         }
-                        dismiss()
                     }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

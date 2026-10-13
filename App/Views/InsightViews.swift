@@ -206,7 +206,7 @@ struct TeamChangesView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("清空") { store.settings.teamChanges = [] }
-                    .disabled(store.settings.teamChanges.isEmpty)
+                    .disabled(store.settings.teamChanges.isEmpty || !store.canEdit)
             }
         }
     }

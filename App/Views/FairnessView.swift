@@ -7,7 +7,7 @@ struct FairnessView: View {
     @State private var year = DayKey.today.year
     @State private var month = DayKey.today.month
     /// 只算到今天（关掉则包括已经排好的以后几天）
-    @State private var untilToday = false
+    @State private var untilToday = true
     /// 导出的表格（换周、换月、同步后重新生成，不在每次刷新界面时写文件）
     @State private var csvURL: URL?
 

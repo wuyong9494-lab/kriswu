@@ -173,9 +173,28 @@ final class WorkLogStore: ObservableObject {
         return !loadFailed
     }
 
+    /// 锁屏时写不进去（文件加密）：记下来，解锁后再写
+    private var pendingSave = false
+    private var unlockObserver: NSObjectProtocol?
+
     private func save() {
         guard !AppStore.isDemo, !loadFailed, let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: Self.indexURL, options: [.atomic, .completeFileProtection])
+        do {
+            try data.write(to: Self.indexURL, options: [.atomic, .completeFileProtection])
+            pendingSave = false
+        } catch {
+            pendingSave = true
+            guard unlockObserver == nil else { return }
+            unlockObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in
+                    let store = WorkLogStore.shared
+                    if let o = store.unlockObserver { NotificationCenter.default.removeObserver(o) }
+                    store.unlockObserver = nil
+                    if store.pendingSave { store.save() }
+                }
+            }
+        }
     }
 
     func url(for entry: WorkLogEntry) -> URL? {
