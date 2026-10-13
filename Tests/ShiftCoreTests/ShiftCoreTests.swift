@@ -1269,7 +1269,7 @@ final class PatternTests: XCTestCase {
         XCTAssertTrue(WorkloadCounter.isDuty("值班"))
         XCTAssertFalse(WorkloadCounter.isDuty("值班交班前"))
         XCTAssertFalse(WorkloadCounter.isDuty("值班交接前"))
-        XCTAssertNil(WorkloadCounter.effective("值班交接前", matcher: m))
+        XCTAssertEqual(WorkloadCounter.effective("值班交接前", matcher: m), WorkloadCounter.handoverRest)
         XCTAssertTrue(WorkloadCounter.isDuty(m.displayName("值")))
         // 网站上有的写遥测、有的写值班：都在同一个轮转里
         var roster: Roster = [:]
@@ -1280,9 +1280,16 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.slots, 6)
         XCTAssertEqual(r?.matched, 6)
 
-        // 「值班交班前」不参与统计：当作这天没写
-        XCTAssertNil(WorkloadCounter.effective("值班交班前", matcher: m))
-        XCTAssertEqual(WorkloadCounter.effective("组A+值班交班前", matcher: m), "组A")
+        // 「值班交接前」这一列的人前一天值了遥测，今天算休息
+        XCTAssertEqual(WorkloadCounter.effective("值班交班前", matcher: m), WorkloadCounter.handoverRest)
+        XCTAssertEqual(WorkloadCounter.effective("组A+值班交班前", matcher: m), "组A+" + WorkloadCounter.handoverRest)
+        XCTAssertTrue(RosterExtractor.isLeave("值班交接前", matcher: m))
+        // 周二在交接前一列：休息，不算工作量也不算上班
+        let handover = WorkloadCounter.count(roster: ["丁": [d(1): "遥测", d(2): "值班交接前", d(3): "休息"]],
+                                             days: (1...5).map(d), matcher: m, calendar: cal).first
+        XCTAssertEqual(handover?.dutyDays, 1)
+        XCTAssertEqual(handover?.offDays, 2)
+        XCTAssertEqual(handover?.presentDays, 3)     // 周一遥测 + 周四、周五没排（不轮组别：日常）
         let w = WorkloadCounter.count(roster: ["乙": [d(1): "组A", d(6): "值班交班前"]], days: (1...7).map(d), matcher: m, calendar: cal).first
         XCTAssertEqual(w?.regularDays, 1)
         XCTAssertEqual(w?.attendanceDays, 4)   // 周六只有值班交班前：不算上班

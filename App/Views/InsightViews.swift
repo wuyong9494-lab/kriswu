@@ -124,7 +124,7 @@ struct WorkloadRulesView: View {
             } header: {
                 Text("休息")
             } footer: {
-                Text("默认：网站上写了休息、调休、请假的，不管节假日还是平时都不算工作量；出差算工作量。")
+                Text("默认：网站上写了休息、调休、请假的，不管节假日还是平时都不算工作量；出差算工作量。「值班交接前」一列的人是前一天值了遥测，那天算休息。")
             }
             if !store.settings.ruleHistory.isEmpty {
                 Section {

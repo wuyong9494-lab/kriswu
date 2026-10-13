@@ -94,13 +94,19 @@ public enum WorkloadCounter {
     public static func isTrip(_ post: String) -> Bool { post.contains("出差") }
 
     /// 值班只有遥测
-    /// 不参与统计和分析的岗位：「值班交接前」（也有写成「值班交班前」的，网站上单独一列，当作这天没写）
+    /// 「值班交接前」（也有写成「值班交班前」的）：网站上单独一列，这一列的人前一天值了遥测，今天是休息
     public static func isIgnored(_ post: String) -> Bool { post.contains("交班") || post.contains("交接") }
 
-    /// 去掉不参与统计的岗位；剩下的为空就当这天网站上没写（nil）
+    /// 统计时「值班交接前」统一换成这个：算休息（值完遥测后的第一天休息）
+    public static let handoverRest = "交接休息"
+
+    /// 统计用的岗位：「值班交接前」换成「交接休息」（休息），其它不变
     public static func effective(_ raw: String?, matcher: ShiftMatcher) -> String? {
         guard let raw else { return nil }
-        let kept = raw.split(separator: "+").map(String.init).filter { !isIgnored(matcher.displayName($0)) }
+        let parts = raw.split(separator: "+").map(String.init)
+            .map { isIgnored(matcher.displayName($0)) ? handoverRest : $0 }
+        var seen = Set<String>()
+        let kept = parts.filter { seen.insert($0).inserted }
         return kept.isEmpty ? nil : kept.joined(separator: "+")
     }
 
@@ -216,6 +222,9 @@ public enum WorkloadCounter {
             return DayExplanation(kind: .regular, reason: "网站上排了\(post)")
         }
         if posts.contains(where: isTrip) { return DayExplanation(kind: .trip, reason: "网站上写了出差（算工作量）") }
+        if posts.contains(handoverRest) {
+            return DayExplanation(kind: .off, reason: "在「值班交接前」一列：前一天值了遥测，今天休息，不算工作量")
+        }
         return DayExplanation(kind: .off, reason: "网站上写了\(posts.joined(separator: "+"))：休息，不算工作量")
     }
 

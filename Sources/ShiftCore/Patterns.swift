@@ -6,9 +6,9 @@ import Foundation
 /// - 组A–E 是怎么轮的、哪些日子是手动调整的
 /// 都是按已有数据统计出来的，不是网站真正的程序。
 public enum SchedulePatterns {
-    /// 这天的岗位（「值班交班前」不算）
+    /// 这天的岗位（「值班交接前」算成「交接休息」）
     static func posts(_ raw: String?, matcher: ShiftMatcher) -> [String] {
-        raw?.split(separator: "+").map { matcher.displayName(String($0)) }.filter { !WorkloadCounter.isIgnored($0) } ?? []
+        WorkloadCounter.effective(raw, matcher: matcher)?.split(separator: "+").map { matcher.displayName(String($0)) } ?? []
     }
 
     static func weekdayIndex(_ day: DayKey, calendar: Calendar) -> Int {
