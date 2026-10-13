@@ -222,8 +222,12 @@ public enum HolidayDutyPlanner {
     /// pool：参加遥测轮转的人（不传就用近一年值过遥测的人）
     public static func plan(roster: Roster, today: DayKey, matcher: ShiftMatcher, pool: Set<String>? = nil,
                             people: [String: SiteAPI.Person] = [:], calendar: Calendar = .current) -> Plan? {
-        // 正在放假：看这个假期；否则看下一个
-        let next = holidayRun(from: today, back: false, calendar: calendar)
+        // 正在放假：看这个假期（从假期第一天算起）；否则看下一个
+        var start = today
+        while ChinaHolidays.isHoliday(start), ChinaHolidays.isHoliday(start.adding(days: -1, calendar: calendar)) {
+            start = start.adding(days: -1, calendar: calendar)
+        }
+        let next = holidayRun(from: start, back: false, calendar: calendar)
         guard let first = next.first else { return nil }
         let last = holidayRun(from: first.adding(days: -1, calendar: calendar), back: true, calendar: calendar)
         let since = today.adding(days: -365, calendar: calendar)

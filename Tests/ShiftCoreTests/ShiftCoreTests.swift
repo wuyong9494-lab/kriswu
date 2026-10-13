@@ -647,6 +647,19 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testHolidayPlanMidHoliday() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let oct1 = DayKey(year: 2026, month: 10, day: 1)
+        guard ChinaHolidays.isHoliday(oct1), ChinaHolidays.isHoliday(DayKey(year: 2026, month: 10, day: 3)) else { return }
+        let roster: Roster = ["甲": [DayKey(year: 2026, month: 9, day: 1): "遥测"], "乙": [DayKey(year: 2026, month: 9, day: 2): "遥测"]]
+        // 假期第三天打开：还是这个假期，上一个假期在它之前
+        let plan = HolidayDutyPlanner.plan(roster: roster, today: DayKey(year: 2026, month: 10, day: 3),
+                                           matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
+        XCTAssertEqual(plan?.days.first, oct1)
+        XCTAssertTrue((plan?.lastHoliday.last).map { $0 < oct1 } ?? true)
+    }
+
     func testICSExport() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
