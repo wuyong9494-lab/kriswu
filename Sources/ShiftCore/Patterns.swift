@@ -57,6 +57,8 @@ public enum SchedulePatterns {
         public var forecast: [ForecastDay]
         /// 平均每人隔几天轮一次
         public var cycleDays: Double
+        /// 用的哪种模型（说明文字）
+        public var model: String = ""
 
         public var rate: Double { slots == 0 ? 0 : Double(matched) / Double(slots) }
         public var strictRate: Double { slots == 0 ? 0 : Double(strictMatched) / Double(slots) }
@@ -98,7 +100,9 @@ public enum SchedulePatterns {
                 if firstSeen[name] == nil { firstSeen[name] = day }
             }
         }
-        let pool = Set(counts.filter { $0.value >= 2 }.keys)
+        // 还在轮的人：值过至少两次，而且最近一个半月网站上还有他（调走的不再排进顺序里）
+        let recent = end.adding(days: -45, calendar: calendar)
+        let pool = Set(counts.filter { name, n in n >= 2 && (roster[name]?.keys.contains { $0 >= recent } ?? false) }.keys)
         guard pool.count >= 2 else { return nil }
 
         // 统计开始前最后一次值班（往前最多看 90 天）
@@ -108,6 +112,7 @@ public enum SchedulePatterns {
             initial[name] = roster[name]?.filter { $0.key < start && $0.key >= lookback && holds(name, $0.key) }.keys.max()
         }
 
+        /// 按上次值班先后：最久没值的在前
         func queue(_ last: [String: DayKey]) -> [String] {
             pool.sorted { a, b in
                 switch (last[a], last[b]) {
@@ -121,20 +126,64 @@ public enum SchedulePatterns {
             }
         }
 
-        struct Run { var matched = 0; var slots = 0; var deferrals: [Deferral] = []; var exceptions: [Exception] = []
-                     var last: [String: DayKey] = [:] }
+        // 固定顺序：谁后面最常接着谁（请假顺延、换班只是偶尔打乱）
+        var sequence: [String] = []
+        for day in sorted {
+            sequence += roster.keys.filter { pool.contains($0) && holds($0, day) }.sorted()
+        }
+        var successors: [String: [String: Int]] = [:]
+        for (a, b) in zip(sequence, sequence.dropFirst()) where a != b { successors[a, default: [:]][b, default: 0] += 1 }
+        var cycle: [String] = []
+        if var current = sequence.first {
+            cycle = [current]
+            while cycle.count < pool.count {
+                let next = successors[current, default: [:]].filter { !cycle.contains($0.key) }
+                    .max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+                    ?? queue(initial).first { !cycle.contains($0) }!
+                cycle.append(next)
+                current = next
+            }
+        }
 
-        func simulate(leaveAware: Bool) -> Run {
-            var run = Run(last: initial)
+        /// 两种模型：recency = 轮到最久没值的人；cycle = 按固定顺序一轮一轮来，这一轮值过的（指定日期提前值了的也算）等下一轮
+        enum Model { case recency, cycle }
+        struct State { var last: [String: DayKey]; var served: Set<String> = [] }
+
+        func priority(_ s: State, _ model: Model) -> [String] {
+            let byRecency = queue(s.last)
+            guard model == .cycle, !cycle.isEmpty else { return byRecency }
+            return cycle.filter { !s.served.contains($0) } + byRecency.filter { s.served.contains($0) }
+        }
+        func observe(_ s: inout State, _ holders: [String], _ day: DayKey) {
+            for h in holders where pool.contains(h) {
+                s.last[h] = day
+                s.served.insert(h)
+            }
+            if s.served.count >= pool.count { s.served = [] }
+        }
+        /// 这天排不了：请假、出差、休息（leave），或者还在自己上次值班后的休息里
+        func blocked(_ name: String, _ day: DayKey, _ s: State, leaveAware: Bool) -> (reason: String, leave: Bool)? {
+            if leaveAware, let why = unavailable(roster[name]?[day], post: post, matcher: matcher), why.leave { return why }
+            if let last = s.last[name], last < day, expectedRest(after: last, calendar: calendar).contains(day) {
+                return ("值班后休息", false)
+            }
+            return nil
+        }
+
+        struct Run { var matched = 0; var slots = 0; var deferrals: [Deferral] = []; var exceptions: [Exception] = []
+                     var state: State }
+
+        // 一天天往下猜：只用那天以前的排班和那天的请假出差（网站上别的岗位不看，不然等于偷看了答案）
+        func simulate(_ model: Model, leaveAware: Bool) -> Run {
+            var run = Run(state: State(last: initial))
             var deferredYesterday: Set<String> = []
             for day in sorted {
                 let holders = roster.keys.filter { holds($0, day) }
                 guard !holders.isEmpty else { continue }
-                let q = queue(run.last)
                 var predicted: [String] = []
                 var deferredToday: Set<String> = []
-                for name in q where predicted.count < holders.count {
-                    if leaveAware, let why = unavailable(roster[name]?[day], post: post, matcher: matcher) {
+                for name in priority(run.state, model) where predicted.count < holders.count {
+                    if let why = blocked(name, day, run.state, leaveAware: leaveAware) {
                         if why.leave {
                             deferredToday.insert(name)
                             if !deferredYesterday.contains(name) {
@@ -152,30 +201,37 @@ public enum SchedulePatterns {
                 for (i, actual) in holders.filter({ !predicted.contains($0) }).sorted().enumerated() {
                     run.exceptions.append(Exception(day: day, actual: actual, expected: i < missed.count ? missed[i] : "—"))
                 }
-                for name in holders where pool.contains(name) { run.last[name] = day }
+                observe(&run.state, holders, day)
             }
             return run
         }
 
-        let run = simulate(leaveAware: true)
-        let strict = simulate(leaveAware: false)
+        // 两种都算一遍，用猜得准的那种（一样准就用「最久没值」）
+        let byRecency = simulate(.recency, leaveAware: true)
+        let byCycle = simulate(.cycle, leaveAware: true)
+        let model: Model = byCycle.matched > byRecency.matched ? .cycle : .recency
+        let run = model == .cycle ? byCycle : byRecency
+        let strict = simulate(model, leaveAware: false)
 
-        // 网站还没排的日子：按现在的顺序一天一个推下去（已知的请假出差跳过）
-        var last = run.last
+        // 网站还没排的日子：按选中的模型一天一个推下去（已知的请假出差、值班后的休息跳过）
+        var state = run.state
         var forecast: [ForecastDay] = []
         var day = end
         for _ in 0..<forecastDays {
             day = day.adding(days: 1, calendar: calendar)
-            guard let next = queue(last).first(where: { unavailable(roster[$0]?[day], post: post, matcher: matcher) == nil })
+            guard let next = priority(state, model).first(where: { blocked($0, day, state, leaveAware: true) == nil })
             else { continue }
             forecast.append(ForecastDay(day: day, name: next))
-            last[next] = day
+            observe(&state, [next], day)
         }
         let perDay = Double(run.slots) / Double(max(1, sorted.filter { d in roster.keys.contains { holds($0, d) } }.count))
-        return Rotation(post: post, order: queue(run.last), slots: run.slots, matched: run.matched,
+        return Rotation(post: post, order: priority(run.state, model), slots: run.slots, matched: run.matched,
                         strictMatched: strict.matched, deferrals: Array(run.deferrals.reversed()),
                         exceptions: Array(run.exceptions.reversed()), forecast: forecast,
-                        cycleDays: Double(pool.count) / max(perDay, 1))
+                        cycleDays: Double(pool.count) / max(perDay, 1),
+                        model: model == .cycle
+                            ? "按固定顺序一轮一轮来：\(cycle.joined(separator: "→"))；指定日期提前值了的，这一轮不再轮到"
+                            : "轮到最久没值的人；指定日期、换班值了的，从值的那天重新排队")
     }
 
     // MARK: - 值完遥测休几天

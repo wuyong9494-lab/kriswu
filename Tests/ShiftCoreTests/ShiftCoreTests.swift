@@ -1299,6 +1299,26 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.forecast.first?.day, d(13))
     }
 
+    func testDutyRotationFixedOrder() {
+        // 8 人按固定顺序一轮一轮值；第二轮辛指定日期提前值了，这一轮后面就不再轮到他，下一轮照原来的顺序
+        let base = DayKey(year: 2026, month: 11, day: 2)
+        let e = { (i: Int) in base.adding(days: i - 1, calendar: self.cal) }
+        let people = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛"]
+        let round2 = ["甲", "乙", "辛", "丙", "丁", "戊", "己", "庚"]
+        let order = people + round2 + people + people
+        var roster: Roster = [:]
+        for (i, name) in order.enumerated() { roster[name, default: [:]][e(i + 1)] = "遥测" }
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...32).map(e), matcher: m,
+                                          forecastDays: 3, calendar: cal)
+        XCTAssertEqual(r?.slots, 32)
+        XCTAssertEqual(r?.matched, 31)                    // 只猜错辛提前的那天
+        XCTAssertTrue(r?.model.contains("固定顺序") == true)
+        XCTAssertEqual(r?.exceptions, [SchedulePatterns.Exception(day: e(11), actual: "辛", expected: "丙")])
+        XCTAssertEqual(r?.order, people)
+        XCTAssertEqual(r?.forecast.map(\.name), ["甲", "乙", "丙"])
+        XCTAssertEqual(r?.forecast.first?.day, e(33))
+    }
+
     func testRestAfterDutyRule() {
         // 规则：周一值休二三，周五值休六日一，周六值休日一二，周日值休一二三
         XCTAssertEqual(SchedulePatterns.expectedRest(after: d(1), calendar: cal), [d(2), d(3)])
