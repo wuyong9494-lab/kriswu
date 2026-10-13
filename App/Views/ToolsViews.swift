@@ -281,7 +281,7 @@ struct DutyForecastView: View {
 
     var body: some View {
         let today = DayKey.today
-        let list = DutyForecaster.forecast(roster: store.roster, today: today, matcher: store.matcher, calendar: .app)
+        let list = combined(today: today)
         List {
             if let turn = store.myDutyTurn() {
                 Section {
@@ -303,12 +303,26 @@ struct DutyForecastView: View {
             } header: {
                 Text("接下来大概轮到谁")
             } footer: {
-                Text("按每个人过去值遥测的间隔（取中间值）推算：已经排好的显示排好的日子，没排的 = 上次 + 间隔。只是估计，换班、请假、出差都会打乱。")
+                Text("和上面是同一个推算：网站排好的显示排好的日子，没排的按排班规律推出的顺序往下推（请假出差跳过）。只是估计，换班、指定日期都会打乱。")
             }
         }
         .appList()
         .navigationTitle("遥测轮转预测")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// 次数、上次值班用历史统计；下一次用和今天页一样的轮转推算（不再用「上次 + 间隔」另一套）
+    private func combined(today: DayKey) -> [DutyForecast] {
+        var next: [String: DayKey] = [:]
+        for f in store.dutyRotation(forecastDays: 60)?.forecast ?? [] where next[f.name] == nil { next[f.name] = f.day }
+        let list = DutyForecaster.forecast(roster: store.roster, today: today, matcher: store.matcher, calendar: .app)
+            .map { f -> DutyForecast in
+                var f = f
+                f.predicted = f.scheduled ?? next[f.name]
+                return f
+            }
+        let never = DayKey(year: 9999, month: 12, day: 31)
+        return list.sorted { ($0.predicted ?? never, $0.name) < ($1.predicted ?? never, $1.name) }
     }
 
     private func row(_ f: DutyForecast, today: DayKey) -> some View {
