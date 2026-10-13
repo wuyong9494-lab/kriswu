@@ -347,6 +347,7 @@ struct SettingsView: View {
             }
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
+            Toggle("每周一发一条我的一周小结", isOn: $store.settings.personalWeekly)
             Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {

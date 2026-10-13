@@ -149,6 +149,9 @@ struct AppSettings: Codable, Equatable {
     /// 每周一推送上周的管理摘要（只有管理者、管理员会发）
     var weeklyDigest: Bool = true
     var lastWeeklyDigest: String?
+    /// 每周一给自己的小结：上周上了几天、遥测几次、待休、这周的班、下次遥测
+    var personalWeekly: Bool = true
+    var lastPersonalWeekly: String?
     /// 网站标的「该休没休」（全员，近两个月）：「日期|名字|栏目」
     var siteNoRestFlags: [String] = []
     /// 关注的同事排班变了也通知
@@ -288,6 +291,8 @@ struct AppSettings: Codable, Equatable {
         lastMonthlyReport = try c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
         weeklyDigest = try c.decodeIfPresent(Bool.self, forKey: .weeklyDigest) ?? true
         lastWeeklyDigest = try c.decodeIfPresent(String.self, forKey: .lastWeeklyDigest)
+        personalWeekly = try c.decodeIfPresent(Bool.self, forKey: .personalWeekly) ?? true
+        lastPersonalWeekly = try c.decodeIfPresent(String.self, forKey: .lastPersonalWeekly)
         siteNoRestFlags = try c.decodeIfPresent([String].self, forKey: .siteNoRestFlags) ?? []
         notifyFavorites = try c.decodeIfPresent(Bool.self, forKey: .notifyFavorites) ?? true
         notifyAllChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges) ?? true
@@ -1015,7 +1020,8 @@ final class AppStore: ObservableObject {
         let turn = myDutyTurn()
         WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today),
                                         nextDuty: turn?.day?.description, nextDutyPredicted: turn.map { !$0.scheduled },
-                                        lastSync: settings.lastSync))
+                                        lastSync: settings.lastSync,
+                                        restBalance: myRosterName.flatMap { settings.restBalance[$0] }))
     }
 
     /// 今天组别的任务清单（和首页「今天要做」一样）
@@ -1990,8 +1996,39 @@ final class AppStore: ObservableObject {
         if !sent { settings.lastWeeklyDigest = last }
     }
 
+    /// 每周第一次运行时（周一起）给自己发一条小结通知；开了微信推送也发到微信
+    func sendPersonalWeeklyIfDue() async {
+        guard settings.personalWeekly, !Self.isDemo, let me = myRosterName else { return }
+        var cal = Calendar.app
+        cal.firstWeekday = 2
+        let now = Date()
+        let key = "\(cal.component(.yearForWeekOfYear, from: now))-W\(cal.component(.weekOfYear, from: now))"
+        guard let last = settings.lastPersonalWeekly else { settings.lastPersonalWeekly = key; return }
+        guard last != key, let thisMonday = cal.dateInterval(of: .weekOfYear, for: now)?.start else { return }
+        let monday = DayKey(date: thisMonday, calendar: cal)
+        let lastWeek = (0..<7).map { monday.adding(days: $0 - 7) }
+        guard let mine = WorkloadCounter.count(roster: roster, days: lastWeek, matcher: matcher,
+                                               members: rotationMembers, calendar: .app).first(where: { $0.name == me }) else { return }
+        settings.lastPersonalWeekly = key
+        var lines = ["上周上了 \(mine.workDays) 天" + (mine.dutyDays > 0 ? "，其中遥测 \(mine.dutyDays) 次" : "") + "。"]
+        if let rest = settings.restBalance[me], rest > 0 { lines.append("还有 \(rest) 天待休。") }
+        let week = (0..<7).map { monday.adding(days: $0) }.compactMap { d -> String? in
+            guard let raw = shift(on: d) else { return nil }
+            return "\(d.weekdayText)\(matcher.displayName(raw))"
+        }
+        if !week.isEmpty { lines.append("这周：" + week.joined(separator: "，") + "。") }
+        if let turn = myDutyTurn(), let day = turn.day, day >= monday {
+            lines.append((turn.scheduled ? "下次遥测：" : "下次遥测（推算）：约 ") + "\(day.dateText)（\(day.weekdayText)）。")
+        }
+        let title = "🗓️ 你的一周小结"
+        let body = lines.joined(separator: "\n")
+        await NotificationService.notifyNow(id: "personal-weekly", title: title, body: body)
+        if settings.weChatEnabled { _ = await pushToWeChat(title: title, content: body) }
+    }
+
     func sendDueWeChatReminders() async {
         await sendPendingWeChatChange()
+        await sendPersonalWeeklyIfDue()
         await sendMonthlyReportIfDue()
         await sendWeeklyDigestIfDue()
         guard settings.weChatEnabled, settings.weChatDaily else { return }

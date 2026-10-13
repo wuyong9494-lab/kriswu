@@ -321,6 +321,8 @@ struct NextDutyEntry: TimelineEntry {
     let next: (key: String, days: Int)?
     /// 网站还没排，是按顺序推算的
     var predicted = false
+    /// 待休天数
+    var rest: Int? = nil
 }
 
 struct NextDutyProvider: TimelineProvider {
@@ -346,12 +348,15 @@ struct NextDutyProvider: TimelineProvider {
         // App 算好的下次遥测（网站排好的或按顺序推算的），和今天页一致
         if let key = snapshot?.nextDuty, key >= today, let nextDate = DateFormatterCache.day.date(from: key) {
             let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: nextDate)).day ?? 0
-            return NextDutyEntry(date: date, next: (key, days), predicted: snapshot?.nextDutyPredicted == true)
+            return NextDutyEntry(date: date, next: (key, days), predicted: snapshot?.nextDutyPredicted == true,
+                                 rest: snapshot?.restBalance)
         }
         let next = (snapshot?.days ?? []).filter { $0.date >= today && ($0.title.contains("遥测") || ($0.title.contains("值班") && !$0.title.contains("交班") && !$0.title.contains("交接"))) }.map(\.date).min()
-        guard let next, let nextDate = DateFormatterCache.day.date(from: next) else { return NextDutyEntry(date: date, next: nil) }
+        guard let next, let nextDate = DateFormatterCache.day.date(from: next) else {
+            return NextDutyEntry(date: date, next: nil, rest: snapshot?.restBalance)
+        }
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: nextDate)).day ?? 0
-        return NextDutyEntry(date: date, next: (next, days))
+        return NextDutyEntry(date: date, next: (next, days), rest: snapshot?.restBalance)
     }
 }
 
@@ -418,7 +423,10 @@ struct NextDutyView: View {
                     if let n = entry.next, n.days > 0 { Text("天后").font(.caption) }
                 }
                 Spacer(minLength: 0)
-                Text(dateText).font(.caption)
+                Text(dateText).font(.caption).lineLimit(1).minimumScaleFactor(0.7)
+                if let rest = entry.rest, rest > 0 {
+                    Text("待休 \(rest) 天").font(.caption2.weight(.semibold)).opacity(0.85)
+                }
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

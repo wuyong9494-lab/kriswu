@@ -29,6 +29,8 @@ struct WidgetSnapshot: Codable {
     var nextDutyPredicted: Bool? = nil
     /// 最后一次同步成功的时间
     var lastSync: Date? = nil
+    /// 我还有几天待休
+    var restBalance: Int? = nil
 }
 
 enum WidgetStore {

@@ -139,6 +139,7 @@ private struct DayCell: View {
         // 取到过结果但没给我排班：淡淡一个点；还没取到数据的日子：留空
         let unassigned = display == nil && store.isCovered(day)
         let holiday = ChinaHolidays.isHoliday(day)
+        let mineIsDuty = display.map { WorkloadCounter.isDuty($0.name) } ?? false
         VStack(spacing: DS.Space.xxs) {
             Text("\(day.day)")
                 .font(.system(size: 15, weight: isToday ? .heavy : .medium, design: .rounded))
@@ -161,8 +162,16 @@ private struct DayCell: View {
             } else {
                 Spacer(minLength: 0)
             }
+            // 这天谁值遥测（全员排班里有、又不是我自己）
+            if !mineIsDuty, let duty = dutyNames {
+                Text(duty)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66)
+        .frame(maxWidth: .infinity, minHeight: 76, maxHeight: 76)
         .padding(.vertical, DS.Space.xxs)
         .background {
             // 只有遥测这种重要的日子才给一层很淡的底
@@ -171,6 +180,12 @@ private struct DayCell: View {
             }
         }
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var dutyNames: String? {
+        let names = store.dayRoster(day).filter { WorkloadCounter.isDuty($0.post) }.flatMap(\.names)
+        return names.isEmpty ? nil : names.joined(separator: "·")
     }
 }
 
