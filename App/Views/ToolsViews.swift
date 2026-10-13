@@ -44,6 +44,18 @@ struct SwapHelperView: View {
                             .joined(separator: "、"))
                             .font(.caption).foregroundStyle(.secondary)
                     }
+                    let request = requestText(to: c.name, myPost: myPost, returnDays: c.returnDays)
+                    HStack(spacing: DS.Space.s) {
+                        Button {
+                            UIPasteboard.general.string = request
+                            Haptics.success()
+                            ToastCenter.shared.show("已复制，去微信粘贴发给\(c.name)", style: .success)
+                        } label: { Label("复制请求", systemImage: "doc.on.doc") }
+                        ShareLink(item: request) { Label("发给他", systemImage: "square.and.arrow.up") }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .padding(.top, 2)
                 }
                 .padding(.vertical, 2)
             }
@@ -51,6 +63,20 @@ struct SwapHelperView: View {
         .appList()
         .navigationTitle("找人换班")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// 发给同事的换班请求：哪天、什么班，能换回来就写上哪天
+    private func requestText(to name: String, myPost: String, returnDays: [DayKey]) -> String {
+        let post = store.matcher.displayName(myPost)
+        let what = "我 \(day.month)月\(day.day)日（\(day.weekdayText)）" + (post.isEmpty ? "有班" : "排了「\(post)」")
+        let back: String
+        if let r = returnDays.first {
+            let theirs = store.roster[name]?[r].map(store.matcher.displayName) ?? ""
+            back = "我可以 \(r.month)月\(r.day)日（\(r.weekdayText)）替你" + (theirs.isEmpty ? "" : "的「\(theirs)」") + "换回来"
+        } else {
+            back = "以后你想换班我来补"
+        }
+        return "\(name)你好，\(what)，想请你帮忙替一下，\(back)。方便的话回我一下，谢谢！"
     }
 }
 
