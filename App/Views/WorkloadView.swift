@@ -80,14 +80,17 @@ struct WorkloadView: View {
                     ShareLink(item: monthFile) { Label("导出本月表格（Excel 能打开）", systemImage: "tablecells") }
                 }
             }
-            Section {
-                NavigationLink {
-                    RotationMembersView()
-                } label: {
-                    LabeledContent("只按排班算的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
+            // 统计口径只有管理员能改：普通用户不显示
+            if store.canEdit {
+                Section {
+                    NavigationLink {
+                        RotationMembersView()
+                    } label: {
+                        LabeledContent("只按排班算的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
+                    }
+                } footer: {
+                    Text("调度（排班表上有名字才算一天）和这里另加的人，工作日网站上没给排岗位不算工作量；其他人（包括你们轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常；写了休息、调休的算休息。")
                 }
-            } footer: {
-                Text("调度（排班表上有名字才算一天）和这里另加的人，工作日网站上没给排岗位不算工作量；其他人（包括你们轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常；写了休息、调休的算休息。")
             }
             Section {
                 Button {

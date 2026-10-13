@@ -78,16 +78,19 @@ struct SettingsView: View {
                     } label: {
                         row("换班账本", icon: "book.closed", detail: ledgerSummary)
                     }
-                    NavigationLink {
-                        HolidaysView()
-                    } label: {
-                        row("法定节假日", icon: "calendar.badge.exclamationmark",
-                            detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
-                    }
-                    NavigationLink {
-                        ImportView()
-                    } label: {
-                        row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
+                    // 节假日自动下载、排班自动同步：手动补录只有管理员需要，普通用户不显示
+                    if store.canEdit {
+                        NavigationLink {
+                            HolidaysView()
+                        } label: {
+                            row("法定节假日", icon: "calendar.badge.exclamationmark",
+                                detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
+                        }
+                        NavigationLink {
+                            ImportView()
+                        } label: {
+                            row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
+                        }
                     }
                     NavigationLink {
                         BackupView()
@@ -185,10 +188,12 @@ struct SettingsView: View {
 
     private var displaySection: some View {
         Section {
-            NavigationLink {
-                ShiftTypesView()
-            } label: {
-                Label("班次类型与颜色", systemImage: "paintpalette")
+            if store.canEdit {
+                NavigationLink {
+                    ShiftTypesView()
+                } label: {
+                    Label("班次类型与颜色", systemImage: "paintpalette")
+                }
             }
             Toggle("图标显示今天的班（遥、A–E、调、差、休）", isOn: $store.settings.dynamicIcon)
                 .onChange(of: store.settings.dynamicIcon) { _ in store.updateAppIcon() }
