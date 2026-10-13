@@ -235,6 +235,7 @@ enum ScreenCatalog {
         let today = DayKey.today
         switch name {
         case "fairness": FairnessView()
+        case "preview": RosterPreviewView()
         case "week": WeekRosterView()
         case "swap": SwapHelperView(day: today.adding(days: 1))
         case "ledger": SwapLedgerView()

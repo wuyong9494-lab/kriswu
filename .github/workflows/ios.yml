@@ -223,7 +223,7 @@ jobs:
           xcrun simctl install "$DEVICE" "$APP"
           xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
           mkdir -p shots
-          SCREENS="today calendar stats settings fairness week swap ledger year summary check rest forecast holidays patterns worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          SCREENS="today calendar stats settings fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
           for mode in light dark; do
             xcrun simctl ui "$DEVICE" appearance $mode
             for s in $SCREENS; do

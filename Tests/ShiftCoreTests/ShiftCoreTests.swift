@@ -1388,6 +1388,27 @@ final class PatternTests: XCTestCase {
         XCTAssertNil(RosterExtractor.identify(mine: [d(1): "组A"], roster: roster, matcher: m))   // 太少，不认
     }
 
+    func testRosterPreview() {
+        // 5 人轮流值了 10 天；网站排到第 10 天。预演第 11 天起：甲值，前一天戊值完在休息；丙已经申请了请假
+        let base = DayKey(year: 2026, month: 11, day: 2)      // 周一
+        let e = { (i: Int) in base.adding(days: i - 1, calendar: self.cal) }
+        var roster: Roster = [:]
+        for (i, name) in ["甲", "乙", "丙", "丁", "戊", "甲", "乙", "丙", "丁", "戊"].enumerated() {
+            roster[name, default: [:]][e(i + 1)] = "遥测"
+        }
+        roster["丙"]?[e(12)] = "请假"
+        let published = Set((1...10).map(e))
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: published.sorted(), matcher: m,
+                                          forecastDays: 5, calendar: cal)!
+        let preview = RosterPreview.build(rotation: r, roster: roster, published: published, from: e(1), days: 3,
+                                          matcher: m, calendar: cal)
+        XCTAssertEqual(preview.map(\.day), [e(11), e(12), e(13)])
+        XCTAssertEqual(preview[0].telemetry, "甲")
+        XCTAssertTrue(preview[0].resting.contains("戊"))           // 10 号（周三）值完，11、12 号休
+        XCTAssertEqual(preview[1].away, ["丙（请假）"])
+        XCTAssertNotEqual(preview[1].telemetry, "丙")               // 请假的跳过
+    }
+
     func testRotationRespectsSiteWeekdays() {
         // 5 人轮流值；网站人员表里甲只能周一、周六值遥测：下一个本该是甲的周四，跳过甲
         let base = DayKey(year: 2026, month: 11, day: 2)      // 周一

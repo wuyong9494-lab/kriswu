@@ -17,6 +17,7 @@ struct WorkloadView: View {
             .init(title: "人员档案", icon: "person.text.rectangle", color: .blue, destination: AnyView(PeopleProfilesView())),
             .init(title: "变动历史", icon: "clock.arrow.circlepath", color: .orange, destination: AnyView(RosterLogView())),
             .init(title: "排班规律", icon: "wand.and.stars", color: .pink, destination: AnyView(SchedulePatternsView())),
+            .init(title: "排班预演", icon: "sparkles.rectangle.stack", color: .mint, destination: AnyView(RosterPreviewView())),
             .init(title: "遥测预测", icon: "antenna.radiowaves.left.and.right", color: .teal, destination: AnyView(DutyForecastView())),
             .init(title: "数据核对", icon: "checkmark.shield.fill", color: .green, destination: AnyView(DataCheckView())),
             .init(title: "规则", icon: "slider.horizontal.3", color: .gray, destination: AnyView(WorkloadRulesView())),

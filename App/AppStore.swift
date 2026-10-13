@@ -189,6 +189,9 @@ struct AppSettings: Codable, Equatable {
     var lastHolidayFetch: Date?
     /// 已经提醒过的「该休没休」（日期|栏目）
     var noRestNotified: [String] = []
+    /// 排班预演：网站还没排的日子猜的遥测（日期 → 名字）；网站排出来后拿来对，结果记在 previewResults
+    var previewGuesses: [String: String] = [:]
+    var previewResults: [PreviewResult] = []
     /// 改了「我的名字」：下一次同步当作重新开始，不提示变动、不做异常检查
     var nextSyncIsBaseline = false
     /// 网站排了班、但没给我排的日子也提醒（显示「未排班」）
@@ -297,6 +300,8 @@ struct AppSettings: Codable, Equatable {
         downloadedHolidayWork = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork) ?? []
         lastHolidayFetch = try c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
         noRestNotified = try c.decodeIfPresent([String].self, forKey: .noRestNotified) ?? []
+        previewGuesses = try c.decodeIfPresent([String: String].self, forKey: .previewGuesses) ?? [:]
+        previewResults = try c.decodeIfPresent([PreviewResult].self, forKey: .previewResults) ?? []
         restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
         nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
         remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
@@ -1061,6 +1066,37 @@ final class AppStore: ObservableObject {
         ToastCenter.shared.show("认出你是「\(name)」，已设为使用者", style: .success)
     }
 
+    /// 遥测轮转（排班规律、下次遥测、排班预演共用）
+    func dutyRotation(forecastDays: Int = 60) -> SchedulePatterns.Rotation? {
+        let days = publishedDays.filter { $0 >= DayKey.today.adding(days: -180) }.sorted()
+        return SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: forecastDays,
+                                         calendar: .app, people: settings.sitePeople, fixedDays: fixedTelemetryDaySet)
+    }
+
+    /// 排班预演：网站还没排的 days 天
+    func rosterPreview(days: Int = 14) -> [RosterPreview.Day] {
+        guard let rotation = dutyRotation(forecastDays: days + 14) else { return [] }
+        return RosterPreview.build(rotation: rotation, roster: roster, published: publishedDays, from: .today, days: days,
+                                   matcher: matcher, calendar: .app)
+    }
+
+    /// 同步后：网站新排出来的日子，和之前预演猜的对一对；再记下这次对还没排的日子的预演
+    func scorePreview() {
+        var s = settings
+        var results = s.previewResults
+        for (key, guess) in s.previewGuesses {
+            guard let day = DayKey(string: key), publishedDays.contains(day) else { continue }
+            let actual = roster.filter { $0.value[day].map { SchedulePatterns.isDutyPost($0, matcher: matcher) } ?? false }.keys.sorted()
+            if !actual.isEmpty, !results.contains(where: { $0.day == key }) {
+                results.append(PreviewResult(day: key, guess: guess, actual: actual.joined(separator: "、"), hit: actual.contains(guess)))
+            }
+            s.previewGuesses[key] = nil
+        }
+        for d in rosterPreview() { if let name = d.telemetry { s.previewGuesses[d.day.description] = name } }
+        s.previewResults = Array(results.sorted { $0.day < $1.day }.suffix(120))
+        if s != settings { settings = s }
+    }
+
     var fixedTelemetryDaySet: Set<DayKey> { Set(settings.fixedTelemetryDays.compactMap(DayKey.init(string:))) }
 
     /// 上次同步看到的网站数据接口字段（只在内存里，「设置 › 接口字段查看」用）
@@ -1141,6 +1177,7 @@ final class AppStore: ObservableObject {
             let changes = apply(result, publishedBefore: publishedBefore,
                                 rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
             identifyMeIfNeeded()
+            scorePreview()
             settings.lastSync = Date()
             settings.loginExpiredNotified = false
             settings.syncStaleNotified = false
@@ -2077,4 +2114,13 @@ final class AppStore: ObservableObject {
     static func sortedPosts(_ p: PersonWorkload) -> [(post: String, count: Int)] {
         p.posts.map { (post: $0.key, count: $0.value) }.sorted { ($0.count, $1.post) > ($1.count, $0.post) }
     }
+}
+
+
+/// 排班预演猜得对不对（网站排出来以后记下）
+struct PreviewResult: Codable, Equatable {
+    var day: String
+    var guess: String
+    var actual: String
+    var hit: Bool
 }

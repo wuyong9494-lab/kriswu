@@ -11,6 +11,11 @@ public enum SchedulePatterns {
         WorkloadCounter.effective(raw, matcher: matcher)?.split(separator: "+").map { matcher.displayName(String($0)) } ?? []
     }
 
+    /// 这天的岗位里有没有遥测（值班）
+    public static func isDutyPost(_ raw: String, matcher: ShiftMatcher) -> Bool {
+        posts(raw, matcher: matcher).contains(where: WorkloadCounter.isDuty)
+    }
+
     static func weekdayIndex(_ day: DayKey, calendar: Calendar) -> Int {
         calendar.component(.weekday, from: day.date(calendar: calendar, hour: 12))   // 1 = 周日
     }
@@ -645,5 +650,52 @@ public enum RestBalanceAudit {
                 expected: zip(rule.coefficients, s.features).reduce(0) { $0 + $1.0 * $1.1 })
         }.sorted { abs($0.diff) != abs($1.diff) ? abs($0.diff) > abs($1.diff) : $0.name < $1.name }
         return Result(rule: rule, rows: rows)
+    }
+}
+
+// MARK: - 排班预演
+
+/// 网站还没排的日子：按反推的规律把遥测、值完遥测的休息、已经申请的请假出差先推演出来。
+public enum RosterPreview {
+    public struct Day: Equatable {
+        public var day: DayKey
+        /// 推测的遥测
+        public var telemetry: String?
+        /// 按「值完遥测休几天」推测在休息的人
+        public var resting: [String]
+        /// 网站上已经有的请假、出差、调休等（提前申请的）：「张三（请假）」
+        public var away: [String]
+    }
+
+    /// rotation：遥测轮转（forecast 里是网站还没排的日子谁值）；published：网站已经排了的日子；from：从哪天开始（一般是今天）
+    public static func build(rotation: SchedulePatterns.Rotation, roster: Roster, published: Set<DayKey>, from: DayKey,
+                             days: Int, matcher: ShiftMatcher, calendar: Calendar = .current) -> [Day] {
+        let start = max(from, (published.max() ?? from.adding(days: -1, calendar: calendar)).adding(days: 1, calendar: calendar))
+        let range = (0..<days).map { start.adding(days: $0, calendar: calendar) }
+        let rangeSet = Set(range)
+        let predicted = Dictionary(rotation.forecast.map { ($0.day, $0.name) }, uniquingKeysWith: { a, _ in a })
+        var resting: [DayKey: [String]] = [:]
+        // 网站最后几天真排了的遥测，加上推测的遥测：值完按规则休息
+        var duties: [(DayKey, String)] = predicted.map { ($0.key, $0.value) }
+        let lookback = start.adding(days: -4, calendar: calendar)
+        for (name, history) in roster {
+            for (day, raw) in history where day >= lookback && day < start
+                && SchedulePatterns.posts(raw, matcher: matcher).contains(where: WorkloadCounter.isDuty) {
+                duties.append((day, name))
+            }
+        }
+        for (day, name) in duties {
+            for r in SchedulePatterns.expectedRest(after: day, calendar: calendar) where rangeSet.contains(r) {
+                if !(resting[r] ?? []).contains(name) { resting[r, default: []].append(name) }
+            }
+        }
+        return range.map { day in
+            var away: [String] = []
+            for (name, history) in roster {
+                guard let raw = history[day], RosterExtractor.isLeave(raw, matcher: matcher) else { continue }
+                away.append("\(name)（\(SchedulePatterns.posts(raw, matcher: matcher).joined(separator: "+"))）")
+            }
+            return Day(day: day, telemetry: predicted[day], resting: (resting[day] ?? []).sorted(), away: away.sorted())
+        }
     }
 }
