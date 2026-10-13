@@ -285,6 +285,10 @@ struct SettingsView: View {
                     let names = Self.names(in: aliasText)
                     if names != store.settings.aliases { store.settings.aliases = names }
                 }
+                .onDisappear {
+                    let names = Self.names(in: aliasText)
+                    if names != store.settings.aliases { store.settings.aliases = names }
+                }
                 // 在别处（首次设置、今天页「我是谁」）换了人：这里跟着显示新名字，不把旧名字写回去
                 .onChange(of: store.settings.aliases) { names in
                     if Self.names(in: aliasText) != names { aliasText = names.joined(separator: ", ") }
@@ -463,6 +467,12 @@ struct SettingsView: View {
                     guard !Task.isCancelled, password != (Keychain.get(.sourcePassword) ?? "") else { return }
                     Keychain.set(password, for: .sourcePassword)
                     store.settings.loginExpiredNotified = false   // 改了密码，允许重新自动登录
+                }
+                .onDisappear {
+                    // 打完马上离开页面：也要存上
+                    guard password != (Keychain.get(.sourcePassword) ?? "") else { return }
+                    Keychain.set(password, for: .sourcePassword)
+                    store.settings.loginExpiredNotified = false
                 }
             Toggle("用内置浏览器同步（沿用登录状态）", isOn: $store.settings.syncViaWeb)
             Button {
