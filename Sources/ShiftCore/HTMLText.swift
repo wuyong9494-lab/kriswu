@@ -57,14 +57,50 @@ public enum HTMLText {
         return captures(#"(<table\b[^>]*>[\s\S]*?</table\s*>)"#, in: s).map(tableText).filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
+    /// 表格转成一行一行、用制表符隔开的文字。合并单元格展开成普通格子，后面的列才不会错位：
+    /// rowspan（比如一个日期占好几行）往下几行都填同样的文字；表头的 colspan 每一列都填，内容格的 colspan 只填第一列
     static func tableText(_ table: String) -> String {
         var lines: [String] = []
+        // 上面的行用 rowspan 占到这一行的格子：列号 → (文字, 还要占几行)
+        var carried: [Int: (text: String, rows: Int)] = [:]
         for row in captures(#"<tr\b[^>]*>([\s\S]*?)</tr\s*>"#, in: table) {
-            var cells = captures(#"<t[dh]\b[^>]*>([\s\S]*?)</t[dh]\s*>"#, in: row).map(cellText)
+            var cells: [String] = []
+            func fillCarried() {
+                while let c = carried[cells.count] {
+                    cells.append(c.text)
+                    carried[cells.count - 1] = c.rows > 1 ? (c.text, c.rows - 1) : nil
+                }
+            }
+            for cell in cellMatches(in: row) {
+                fillCarried()
+                let text = cellText(cell.body)
+                let colspan = max(1, min(50, spanValue("colspan", in: cell.attributes)))
+                let rowspan = max(1, min(400, spanValue("rowspan", in: cell.attributes)))
+                for k in 0..<colspan {
+                    let value = k == 0 || cell.header ? text : ""
+                    if rowspan > 1 { carried[cells.count] = (value, rowspan - 1) }
+                    cells.append(value)
+                }
+            }
+            fillCarried()
             while let last = cells.last, last.isEmpty { cells.removeLast() }
             if !cells.isEmpty { lines.append(cells.joined(separator: "\t")) }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// 一行里的格子：是不是表头、属性、内容
+    static func cellMatches(in row: String) -> [(header: Bool, attributes: String, body: String)] {
+        let re = regex(#"<t([dh])\b([^>]*)>([\s\S]*?)</t[dh]\s*>"#)
+        let ns = row as NSString
+        return re.matches(in: row, range: NSRange(location: 0, length: ns.length)).map { m in
+            (ns.substring(with: m.range(at: 1)).lowercased() == "h", ns.substring(with: m.range(at: 2)), ns.substring(with: m.range(at: 3)))
+        }
+    }
+
+    /// rowspan="3" / colspan=2 → 数字；没写是 1
+    static func spanValue(_ name: String, in attributes: String) -> Int {
+        captures(name + #"\s*=\s*["']?(\d+)"#, in: attributes).first.flatMap { Int($0) } ?? 1
     }
 
     static func cellText(_ html: String) -> String {

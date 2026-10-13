@@ -649,6 +649,18 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testTableSpans() {
+        let html = """
+        <table>
+        <tr><th>日期</th><th colspan="2">遥测</th><th>调度</th></tr>
+        <tr><td rowspan="2">10/1</td><td>张三</td><td>李四</td><td>王五</td></tr>
+        <tr><td colspan="2">赵六</td><td>孙七</td></tr>
+        </table>
+        """
+        XCTAssertEqual(HTMLText.tableText(html).components(separatedBy: "\n"),
+                       ["日期\t遥测\t遥测\t调度", "10/1\t张三\t李四\t王五", "10/1\t赵六\t\t孙七"])
+    }
+
     func testSpacedNamesInCell() {
         let m = ShiftMatcher(types: ShiftType.defaults)
         XCTAssertEqual(RosterExtractor.names(inCell: "欧 阳 娜", matcher: m), ["欧阳娜"])
