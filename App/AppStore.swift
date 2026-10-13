@@ -162,6 +162,9 @@ struct AppSettings: Codable, Equatable {
     var teamChanges: [TeamChange] = []
     /// 遥测下班后补觉到几点（给快捷指令的勿扰自动化用）
     var restFocusUntil = ClockTime(hour: 14, minute: 0)
+    /// 遥测接班时间（上一班到这时下班）；接班前多少分钟提醒，0 不提醒
+    var dutyStart = ClockTime(hour: 8, minute: 30)
+    var dutyLeadMinutes = 0
     /// 组别任务清单勾选：「yyyy-MM-dd|组A」→ 做完的事项
     var taskChecks: [String: [String]] = [:]
     /// 自动备份到的文件夹（「文件」App 里选的，存成书签）
@@ -298,6 +301,8 @@ struct AppSettings: Codable, Equatable {
         notifyAllChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges) ?? true
         teamChanges = try c.decodeIfPresent([TeamChange].self, forKey: .teamChanges) ?? []
         restFocusUntil = try c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil) ?? ClockTime(hour: 14, minute: 0)
+        dutyStart = try c.decodeIfPresent(ClockTime.self, forKey: .dutyStart) ?? ClockTime(hour: 8, minute: 30)
+        dutyLeadMinutes = try c.decodeIfPresent(Int.self, forKey: .dutyLeadMinutes) ?? 0
         taskChecks = try c.decodeIfPresent([String: [String]].self, forKey: .taskChecks) ?? [:]
         backupFolderBookmark = try c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
         backupFolderName = try c.decodeIfPresent(String.self, forKey: .backupFolderName)
@@ -951,6 +956,8 @@ final class AppStore: ObservableObject {
             matcher: matcher,
             calendar: .app)
         p.weekly = settings.weeklyPreview
+        p.dutyStart = settings.dutyStart
+        p.dutyLeadMinutes = settings.dutyLeadMinutes
         return p
     }
 
@@ -1649,11 +1656,11 @@ final class AppStore: ObservableObject {
         return [nextWeChatReminder, hot].compactMap { $0 }.min()
     }
 
-    /// 昨天值了遥测、现在是今天 8:30 到设定的补觉结束时间之间
+    /// 昨天值了遥测、现在是今天接班时间（默认 8:30）到设定的补觉结束时间之间
     func isRestingAfterDuty(now: Date = Date()) -> Bool {
         let today = DayKey(date: now, calendar: .app)
         guard let raw = schedule[today.adding(days: -1)], WorkloadCounter.isDuty(matcher.displayName(raw)) else { return false }
-        let start = today.date(calendar: .app, hour: 8, minute: 30)
+        let start = today.date(calendar: .app, hour: settings.dutyStart.hour, minute: settings.dutyStart.minute)
         let end = today.date(calendar: .app, hour: settings.restFocusUntil.hour, minute: settings.restFocusUntil.minute)
         return now >= start && now < end
     }

@@ -172,7 +172,7 @@ struct TodayHero: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                 if isDuty {
-                    Text("值班到明天 08:30").font(DS.Font.callout).opacity(0.9)
+                    Text("值班到明天 \(store.settings.dutyStart.text)").font(DS.Font.callout).opacity(0.9)
                 }
             }
             // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）

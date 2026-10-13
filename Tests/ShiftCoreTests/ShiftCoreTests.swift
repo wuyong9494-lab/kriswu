@@ -647,6 +647,29 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertNil(planner.weekMessage(on: sunday, schedule: [:]))
     }
 
+    func testDutyLeadReminder() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        var planner = NotificationPlanner(morning: nil, evening: nil, notifyWhenEmpty: false,
+                                          matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
+        let day = DayKey(year: 2026, month: 10, day: 14)
+        let schedule = [day: "遥测", DayKey(year: 2026, month: 10, day: 15): "组D"]
+        XCTAssertNil(planner.dutyLeadMessage(for: day, schedule: schedule))   // 默认不提醒
+        planner.dutyLeadMinutes = 60
+        let n = planner.dutyLeadMessage(for: day, schedule: schedule)
+        XCTAssertEqual(n?.day, day)
+        XCTAssertEqual(n?.time, ClockTime(hour: 7, minute: 30))
+        XCTAssertEqual(n?.title, "📡 1 小时后接遥测")
+        XCTAssertNil(planner.dutyLeadMessage(for: DayKey(year: 2026, month: 10, day: 15), schedule: schedule))
+        // 提前 12 小时：前一天 20:30
+        planner.dutyLeadMinutes = 12 * 60
+        let eve = planner.dutyLeadMessage(for: day, schedule: schedule)
+        XCTAssertEqual(eve?.day, DayKey(year: 2026, month: 10, day: 13))
+        XCTAssertEqual(eve?.time, ClockTime(hour: 20, minute: 30))
+        let now = cal.date(from: DateComponents(year: 2026, month: 10, day: 12, hour: 8))!
+        XCTAssertEqual(planner.plan(schedule: schedule, now: now).filter { $0.id.hasPrefix("shift-lead-") }.count, 1)
+    }
+
     func testCapAndEmptyDays() {
         let planner = NotificationPlanner(morning: ClockTime(hour: 7, minute: 30), evening: ClockTime(hour: 20, minute: 30),
                                           notifyWhenEmpty: true, matcher: ShiftMatcher(types: []))

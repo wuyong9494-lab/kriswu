@@ -38,6 +38,10 @@ public struct NotificationPlanner {
     /// 每周日晚上预告下周一到周日的安排
     public var weekly = false
 
+    /// 遥测接班时间和提前多少分钟提醒（0 不提醒）
+    public var dutyStart = ClockTime(hour: 8, minute: 30)
+    public var dutyLeadMinutes = 0
+
     /// iOS 最多保留 64 条待发通知；还要给签名到期、很久没同步、排班变动等几条留位置。
     public static let maxPending = 56
 
@@ -63,6 +67,7 @@ public struct NotificationPlanner {
                                              aboutDay: day.adding(days: 1, calendar: calendar), time: t, schedule: schedule) {
                 result.append(n)
             }
+            if let n = dutyLeadMessage(for: day, schedule: schedule) { result.append(n) }
             if weekly, calendar.component(.weekday, from: day.date(calendar: calendar, hour: 12)) == 1,
                let w = weekMessage(on: day, schedule: schedule) {
                 result.append(w)
@@ -81,6 +86,24 @@ public struct NotificationPlanner {
             ? make(kind: "morning", label: "今天", fireDay: day, aboutDay: day, time: morning ?? ClockTime(hour: 0, minute: 0), schedule: schedule)
             : make(kind: "evening", label: "明天", fireDay: day, aboutDay: day.adding(days: 1, calendar: calendar),
                    time: evening ?? ClockTime(hour: 0, minute: 0), schedule: schedule)
+    }
+
+    /// 值遥测那天，接班前 dutyLeadMinutes 分钟提醒（提前到前一天也行）
+    public func dutyLeadMessage(for day: DayKey, schedule: [DayKey: String]) -> PlannedNotification? {
+        guard dutyLeadMinutes > 0, let raw = schedule[day],
+              matcher.posts(raw).contains(where: { WorkloadCounter.isDuty(matcher.displayName($0)) }) else { return nil }
+        var minutes = dutyStart.hour * 60 + dutyStart.minute - dutyLeadMinutes
+        var fireDay = day
+        while minutes < 0 { minutes += 24 * 60; fireDay = fireDay.adding(days: -1, calendar: calendar) }
+        let lead = dutyLeadMinutes % 60 == 0 ? "\(dutyLeadMinutes / 60) 小时" : "\(dutyLeadMinutes) 分钟"
+        return PlannedNotification(
+            id: "shift-lead-\(day)",
+            day: fireDay,
+            time: ClockTime(hour: minutes / 60, minute: minutes % 60),
+            title: "📡 \(lead)后接遥测",
+            body: "\(Self.dateText(day, calendar: calendar)) \(dutyStart.text) 接班。",
+            speech: "\(lead)后接遥测"
+        )
     }
 
     /// 下周预告：fireDay 当天（一般是周日）晚上发，列出之后 7 天的分工。一天都没有数据时返回 nil。

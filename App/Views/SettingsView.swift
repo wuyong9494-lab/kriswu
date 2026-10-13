@@ -345,6 +345,14 @@ struct SettingsView: View {
             if store.settings.eveningEnabled {
                 DatePicker("提醒时间", selection: time(\.evening), displayedComponents: .hourAndMinute)
             }
+            DatePicker("遥测接班时间", selection: time(\.dutyStart), displayedComponents: .hourAndMinute)
+            Picker("接遥测前提醒", selection: $store.settings.dutyLeadMinutes) {
+                Text("不提醒").tag(0)
+                Text("提前 30 分钟").tag(30)
+                Text("提前 1 小时").tag(60)
+                Text("提前 2 小时").tag(120)
+                Text("前一天晚上").tag(12 * 60)
+            }
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("每周一发一条我的一周小结", isOn: $store.settings.personalWeekly)
