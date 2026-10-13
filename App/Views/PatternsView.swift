@@ -192,6 +192,15 @@ struct SchedulePatternsView: View {
                     // 网站可能一周一起排：按周看猜到了谁（不管哪一天）
                     LabeledContent("按周看：这周轮到谁", value: "猜到 \(r.weekHits)/\(r.weekSlots)")
                 }
+                if r.modelScores.count > 1 {
+                    // 几种猜法往回验证的结果：用的是最准的那种
+                    DisclosureGroup("试过的 \(r.modelScores.count) 种算法") {
+                        ForEach(Array(r.modelScores.enumerated()), id: \.offset) { _, m in
+                            LabeledContent(m.name, value: "猜中 \(m.matched)/\(r.slots)")
+                                .font(.subheadline)
+                        }
+                    }
+                }
                 Text(deferralConclusion(r)).font(.footnote).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text("现在的顺序（下一个在最前）").font(.caption).foregroundStyle(.secondary)
