@@ -233,114 +233,114 @@ struct AppSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = AppSettings()
-        aliases = try c.decodeIfPresent([String].self, forKey: .aliases) ?? d.aliases
-        morningEnabled = try c.decodeIfPresent(Bool.self, forKey: .morningEnabled) ?? d.morningEnabled
-        morning = try c.decodeIfPresent(ClockTime.self, forKey: .morning) ?? d.morning
-        eveningEnabled = try c.decodeIfPresent(Bool.self, forKey: .eveningEnabled) ?? d.eveningEnabled
-        evening = try c.decodeIfPresent(ClockTime.self, forKey: .evening) ?? d.evening
-        notifyWhenEmpty = try c.decodeIfPresent(Bool.self, forKey: .notifyWhenEmpty) ?? d.notifyWhenEmpty
-        voiceEnabled = try c.decodeIfPresent(Bool.self, forKey: .voiceEnabled) ?? d.voiceEnabled
-        voiceIdentifier = try c.decodeIfPresent(String.self, forKey: .voiceIdentifier) ?? d.voiceIdentifier
-        voiceRate = try c.decodeIfPresent(Float.self, forKey: .voiceRate) ?? d.voiceRate
-        appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? d.appearance
-        accentTheme = try c.decodeIfPresent(AccentTheme.self, forKey: .accentTheme) ?? .system
-        sourceURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? d.sourceURL
-        sourceUsername = try c.decodeIfPresent(String.self, forKey: .sourceUsername) ?? d.sourceUsername
-        syncViaWeb = try c.decodeIfPresent(Bool.self, forKey: .syncViaWeb) ?? d.syncViaWeb
-        notifyChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyChanges) ?? d.notifyChanges
-        loginExpiredNotified = try c.decodeIfPresent(Bool.self, forKey: .loginExpiredNotified) ?? d.loginExpiredNotified
-        apiSignature = try c.decodeIfPresent(String.self, forKey: .apiSignature)
-        weChatEnabled = try c.decodeIfPresent(Bool.self, forKey: .weChatEnabled) ?? d.weChatEnabled
-        weChatDaily = try c.decodeIfPresent(Bool.self, forKey: .weChatDaily) ?? d.weChatDaily
-        weChatMorningSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatMorningSent)
-        weChatEveningSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatEveningSent)
-        weChatMessage = try c.decodeIfPresent(String.self, forKey: .weChatMessage)
-        dynamicIcon = try c.decodeIfPresent(Bool.self, forKey: .dynamicIcon) ?? d.dynamicIcon
-        calendarSync = try c.decodeIfPresent(Bool.self, forKey: .calendarSync) ?? d.calendarSync
-        weChatChanges = try c.decodeIfPresent(Bool.self, forKey: .weChatChanges) ?? d.weChatChanges
-        lastWeChatChangeDigest = try c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
-        autoGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes) ?? [:]
-        manualGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes) ?? [:]
-        rosterVersion = try c.decodeIfPresent(Int.self, forKey: .rosterVersion) ?? 0
-        weeklyPreview = try c.decodeIfPresent(Bool.self, forKey: .weeklyPreview) ?? d.weeklyPreview
-        weChatWeekSent = try c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
-        favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
-        scheduleOnlyMembers = try c.decodeIfPresent([String].self, forKey: .scheduleOnlyMembers) ?? []
-        swapRecords = try c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords) ?? []
-        customHolidayOff = try c.decodeIfPresent([String].self, forKey: .customHolidayOff) ?? []
-        customHolidayWork = try c.decodeIfPresent([String].self, forKey: .customHolidayWork) ?? []
-        restHistory = try c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory) ?? [:]
-        restAlertThreshold = try c.decodeIfPresent(Int.self, forKey: .restAlertThreshold) ?? 5
-        restAlertNotified = try c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
-        warnedRestKeys = try c.decodeIfPresent([String].self, forKey: .warnedRestKeys) ?? []
-        workLogAutoTranscribe = try c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe) ?? d.workLogAutoTranscribe
-        speechOnDeviceOnly = try c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly) ?? d.speechOnDeviceOnly
-        workLogLock = try c.decodeIfPresent(Bool.self, forKey: .workLogLock) ?? d.workLogLock
-        syncHealth = try c.decodeIfPresent([String: [SyncHealth.Metrics]].self, forKey: .syncHealth) ?? [:]
-        syncHealthWarning = try c.decodeIfPresent(String.self, forKey: .syncHealthWarning)
-        syncHealthWarnedDay = try c.decodeIfPresent(DayKey.self, forKey: .syncHealthWarnedDay)
-        profiles = try c.decodeIfPresent([String: PersonProfile].self, forKey: .profiles) ?? [:]
-        ruleHistory = try c.decodeIfPresent([RuleVersion].self, forKey: .ruleHistory) ?? []
-        leaveSources = try c.decodeIfPresent([String].self, forKey: .leaveSources) ?? []
-        publishTimes = try c.decodeIfPresent([Date].self, forKey: .publishTimes) ?? []
-        restLedgerNotified = try c.decodeIfPresent(String.self, forKey: .restLedgerNotified)
+        aliases = (try? c.decodeIfPresent([String].self, forKey: .aliases)) ?? d.aliases
+        morningEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .morningEnabled)) ?? d.morningEnabled
+        morning = (try? c.decodeIfPresent(ClockTime.self, forKey: .morning)) ?? d.morning
+        eveningEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .eveningEnabled)) ?? d.eveningEnabled
+        evening = (try? c.decodeIfPresent(ClockTime.self, forKey: .evening)) ?? d.evening
+        notifyWhenEmpty = (try? c.decodeIfPresent(Bool.self, forKey: .notifyWhenEmpty)) ?? d.notifyWhenEmpty
+        voiceEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .voiceEnabled)) ?? d.voiceEnabled
+        voiceIdentifier = (try? c.decodeIfPresent(String.self, forKey: .voiceIdentifier)) ?? d.voiceIdentifier
+        voiceRate = (try? c.decodeIfPresent(Float.self, forKey: .voiceRate)) ?? d.voiceRate
+        appearance = (try? c.decodeIfPresent(Appearance.self, forKey: .appearance)) ?? d.appearance
+        accentTheme = (try? c.decodeIfPresent(AccentTheme.self, forKey: .accentTheme)) ?? .system
+        sourceURL = (try? c.decodeIfPresent(String.self, forKey: .sourceURL)) ?? d.sourceURL
+        sourceUsername = (try? c.decodeIfPresent(String.self, forKey: .sourceUsername)) ?? d.sourceUsername
+        syncViaWeb = (try? c.decodeIfPresent(Bool.self, forKey: .syncViaWeb)) ?? d.syncViaWeb
+        notifyChanges = (try? c.decodeIfPresent(Bool.self, forKey: .notifyChanges)) ?? d.notifyChanges
+        loginExpiredNotified = (try? c.decodeIfPresent(Bool.self, forKey: .loginExpiredNotified)) ?? d.loginExpiredNotified
+        apiSignature = try? c.decodeIfPresent(String.self, forKey: .apiSignature)
+        weChatEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .weChatEnabled)) ?? d.weChatEnabled
+        weChatDaily = (try? c.decodeIfPresent(Bool.self, forKey: .weChatDaily)) ?? d.weChatDaily
+        weChatMorningSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatMorningSent)
+        weChatEveningSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatEveningSent)
+        weChatMessage = try? c.decodeIfPresent(String.self, forKey: .weChatMessage)
+        dynamicIcon = (try? c.decodeIfPresent(Bool.self, forKey: .dynamicIcon)) ?? d.dynamicIcon
+        calendarSync = (try? c.decodeIfPresent(Bool.self, forKey: .calendarSync)) ?? d.calendarSync
+        weChatChanges = (try? c.decodeIfPresent(Bool.self, forKey: .weChatChanges)) ?? d.weChatChanges
+        lastWeChatChangeDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
+        autoGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes)) ?? [:]
+        manualGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes)) ?? [:]
+        rosterVersion = (try? c.decodeIfPresent(Int.self, forKey: .rosterVersion)) ?? 0
+        weeklyPreview = (try? c.decodeIfPresent(Bool.self, forKey: .weeklyPreview)) ?? d.weeklyPreview
+        weChatWeekSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
+        favorites = (try? c.decodeIfPresent([String].self, forKey: .favorites)) ?? []
+        scheduleOnlyMembers = (try? c.decodeIfPresent([String].self, forKey: .scheduleOnlyMembers)) ?? []
+        swapRecords = (try? c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords)) ?? []
+        customHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .customHolidayOff)) ?? []
+        customHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .customHolidayWork)) ?? []
+        restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
+        restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
+        restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
+        warnedRestKeys = (try? c.decodeIfPresent([String].self, forKey: .warnedRestKeys)) ?? []
+        workLogAutoTranscribe = (try? c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe)) ?? d.workLogAutoTranscribe
+        speechOnDeviceOnly = (try? c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly)) ?? d.speechOnDeviceOnly
+        workLogLock = (try? c.decodeIfPresent(Bool.self, forKey: .workLogLock)) ?? d.workLogLock
+        syncHealth = (try? c.decodeIfPresent([String: [SyncHealth.Metrics]].self, forKey: .syncHealth)) ?? [:]
+        syncHealthWarning = try? c.decodeIfPresent(String.self, forKey: .syncHealthWarning)
+        syncHealthWarnedDay = try? c.decodeIfPresent(DayKey.self, forKey: .syncHealthWarnedDay)
+        profiles = (try? c.decodeIfPresent([String: PersonProfile].self, forKey: .profiles)) ?? [:]
+        ruleHistory = (try? c.decodeIfPresent([RuleVersion].self, forKey: .ruleHistory)) ?? []
+        leaveSources = (try? c.decodeIfPresent([String].self, forKey: .leaveSources)) ?? []
+        publishTimes = (try? c.decodeIfPresent([Date].self, forKey: .publishTimes)) ?? []
+        restLedgerNotified = try? c.decodeIfPresent(String.self, forKey: .restLedgerNotified)
         // 老用户（已经填过网址）不再弹向导
-        let savedURL = try c.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
-        onboardingDone = try c.decodeIfPresent(Bool.self, forKey: .onboardingDone) ?? !savedURL.isEmpty
-        liveActivity = try c.decodeIfPresent(Bool.self, forKey: .liveActivity) ?? true
-        workloadRules = try c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules) ?? WorkloadRules()
-        workloadOverrides = try c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides) ?? [:]
-        monthlyReport = try c.decodeIfPresent(Bool.self, forKey: .monthlyReport) ?? true
-        lastMonthlyReport = try c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
-        weeklyDigest = try c.decodeIfPresent(Bool.self, forKey: .weeklyDigest) ?? true
-        lastWeeklyDigest = try c.decodeIfPresent(String.self, forKey: .lastWeeklyDigest)
-        personalWeekly = try c.decodeIfPresent(Bool.self, forKey: .personalWeekly) ?? true
-        lastPersonalWeekly = try c.decodeIfPresent(String.self, forKey: .lastPersonalWeekly)
-        siteNoRestFlags = try c.decodeIfPresent([String].self, forKey: .siteNoRestFlags) ?? []
-        notifyFavorites = try c.decodeIfPresent(Bool.self, forKey: .notifyFavorites) ?? true
-        notifyAllChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges) ?? true
-        teamChanges = try c.decodeIfPresent([TeamChange].self, forKey: .teamChanges) ?? []
-        restFocusUntil = try c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil) ?? ClockTime(hour: 14, minute: 0)
-        dutyStart = try c.decodeIfPresent(ClockTime.self, forKey: .dutyStart) ?? ClockTime(hour: 8, minute: 30)
-        dutyLeadMinutes = try c.decodeIfPresent(Int.self, forKey: .dutyLeadMinutes) ?? 0
-        taskChecks = try c.decodeIfPresent([String: [String]].self, forKey: .taskChecks) ?? [:]
-        backupFolderBookmark = try c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
-        backupFolderName = try c.decodeIfPresent(String.self, forKey: .backupFolderName)
-        lastAutoBackup = try c.decodeIfPresent(Date.self, forKey: .lastAutoBackup)
-        autoBackupMessage = try c.decodeIfPresent(String.self, forKey: .autoBackupMessage)
-        changeLog = try c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog) ?? []
-        syncStaleNotified = try c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified) ?? false
-        lastDesktopNotesFetch = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
-        lastDesktopNotesAttempt = try c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
-        desktopNotesMessage = try c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
-        desktopNotesURL = try c.decodeIfPresent(String.self, forKey: .desktopNotesURL) ?? ""
-        desktopRosterMessage = try c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
-        restBalance = try c.decodeIfPresent([String: Int].self, forKey: .restBalance) ?? [:]
-        sitePeople = try c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople) ?? [:]
-        siteNotices = try c.decodeIfPresent([String].self, forKey: .siteNotices) ?? []
-        siteNoticesChanged = try c.decodeIfPresent(Date.self, forKey: .siteNoticesChanged)
-        siteNoticesNew = try c.decodeIfPresent([String].self, forKey: .siteNoticesNew) ?? []
-        fixedTelemetryDays = try c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays) ?? []
-        groupSatellites = try c.decodeIfPresent([String: String].self, forKey: .groupSatellites) ?? [:]
-        downloadedHolidayOff = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayOff) ?? []
-        downloadedHolidayWork = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork) ?? []
-        lastHolidayFetch = try c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
-        noRestNotified = try c.decodeIfPresent([String].self, forKey: .noRestNotified) ?? []
-        dutyHeadsUp = try c.decodeIfPresent(Bool.self, forKey: .dutyHeadsUp) ?? true
-        dutyHeadsUpSent = try c.decodeIfPresent(Date.self, forKey: .dutyHeadsUpSent)
-        previewGuesses = try c.decodeIfPresent([String: String].self, forKey: .previewGuesses) ?? [:]
-        previewResults = try c.decodeIfPresent([PreviewResult].self, forKey: .previewResults) ?? []
-        restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
-        nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
-        remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
-        pendingWeChatChange = try c.decodeIfPresent(ChangeLogEntry.self, forKey: .pendingWeChatChange)
-        syncLog = try c.decodeIfPresent([SyncLogEntry].self, forKey: .syncLog) ?? []
-        lastBackgroundWake = try c.decodeIfPresent(Date.self, forKey: .lastBackgroundWake)
-        desktopGroupNotes = try c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes) ?? [:]
-        lastSuccessMessage = try c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
-        shiftTypes = try c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes) ?? d.shiftTypes
-        lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
-        lastSyncMessage = try c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
+        let savedURL = (try? c.decodeIfPresent(String.self, forKey: .sourceURL)) ?? ""
+        onboardingDone = (try? c.decodeIfPresent(Bool.self, forKey: .onboardingDone)) ?? !savedURL.isEmpty
+        liveActivity = (try? c.decodeIfPresent(Bool.self, forKey: .liveActivity)) ?? true
+        workloadRules = (try? c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules)) ?? WorkloadRules()
+        workloadOverrides = (try? c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides)) ?? [:]
+        monthlyReport = (try? c.decodeIfPresent(Bool.self, forKey: .monthlyReport)) ?? true
+        lastMonthlyReport = try? c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
+        weeklyDigest = (try? c.decodeIfPresent(Bool.self, forKey: .weeklyDigest)) ?? true
+        lastWeeklyDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeeklyDigest)
+        personalWeekly = (try? c.decodeIfPresent(Bool.self, forKey: .personalWeekly)) ?? true
+        lastPersonalWeekly = try? c.decodeIfPresent(String.self, forKey: .lastPersonalWeekly)
+        siteNoRestFlags = (try? c.decodeIfPresent([String].self, forKey: .siteNoRestFlags)) ?? []
+        notifyFavorites = (try? c.decodeIfPresent(Bool.self, forKey: .notifyFavorites)) ?? true
+        notifyAllChanges = (try? c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges)) ?? true
+        teamChanges = (try? c.decodeIfPresent([TeamChange].self, forKey: .teamChanges)) ?? []
+        restFocusUntil = (try? c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil)) ?? ClockTime(hour: 14, minute: 0)
+        dutyStart = (try? c.decodeIfPresent(ClockTime.self, forKey: .dutyStart)) ?? ClockTime(hour: 8, minute: 30)
+        dutyLeadMinutes = (try? c.decodeIfPresent(Int.self, forKey: .dutyLeadMinutes)) ?? 0
+        taskChecks = (try? c.decodeIfPresent([String: [String]].self, forKey: .taskChecks)) ?? [:]
+        backupFolderBookmark = try? c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
+        backupFolderName = try? c.decodeIfPresent(String.self, forKey: .backupFolderName)
+        lastAutoBackup = try? c.decodeIfPresent(Date.self, forKey: .lastAutoBackup)
+        autoBackupMessage = try? c.decodeIfPresent(String.self, forKey: .autoBackupMessage)
+        changeLog = (try? c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog)) ?? []
+        syncStaleNotified = (try? c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified)) ?? false
+        lastDesktopNotesFetch = try? c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
+        lastDesktopNotesAttempt = try? c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
+        desktopNotesMessage = try? c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
+        desktopNotesURL = (try? c.decodeIfPresent(String.self, forKey: .desktopNotesURL)) ?? ""
+        desktopRosterMessage = try? c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
+        restBalance = (try? c.decodeIfPresent([String: Int].self, forKey: .restBalance)) ?? [:]
+        sitePeople = (try? c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople)) ?? [:]
+        siteNotices = (try? c.decodeIfPresent([String].self, forKey: .siteNotices)) ?? []
+        siteNoticesChanged = try? c.decodeIfPresent(Date.self, forKey: .siteNoticesChanged)
+        siteNoticesNew = (try? c.decodeIfPresent([String].self, forKey: .siteNoticesNew)) ?? []
+        fixedTelemetryDays = (try? c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays)) ?? []
+        groupSatellites = (try? c.decodeIfPresent([String: String].self, forKey: .groupSatellites)) ?? [:]
+        downloadedHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .downloadedHolidayOff)) ?? []
+        downloadedHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork)) ?? []
+        lastHolidayFetch = try? c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
+        noRestNotified = (try? c.decodeIfPresent([String].self, forKey: .noRestNotified)) ?? []
+        dutyHeadsUp = (try? c.decodeIfPresent(Bool.self, forKey: .dutyHeadsUp)) ?? true
+        dutyHeadsUpSent = try? c.decodeIfPresent(Date.self, forKey: .dutyHeadsUpSent)
+        previewGuesses = (try? c.decodeIfPresent([String: String].self, forKey: .previewGuesses)) ?? [:]
+        previewResults = (try? c.decodeIfPresent([PreviewResult].self, forKey: .previewResults)) ?? []
+        restBalanceUpdated = try? c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
+        nextSyncIsBaseline = (try? c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline)) ?? false
+        remindUnassigned = (try? c.decodeIfPresent(Bool.self, forKey: .remindUnassigned)) ?? true
+        pendingWeChatChange = try? c.decodeIfPresent(ChangeLogEntry.self, forKey: .pendingWeChatChange)
+        syncLog = (try? c.decodeIfPresent([SyncLogEntry].self, forKey: .syncLog)) ?? []
+        lastBackgroundWake = try? c.decodeIfPresent(Date.self, forKey: .lastBackgroundWake)
+        desktopGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes)) ?? [:]
+        lastSuccessMessage = try? c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
+        shiftTypes = (try? c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes)) ?? d.shiftTypes
+        lastSync = try? c.decodeIfPresent(Date.self, forKey: .lastSync)
+        lastSyncMessage = try? c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
     }
 }
 
@@ -381,6 +381,21 @@ struct BackupFile: Codable {
     var roster: [String: [String: String]]
 }
 
+extension AppSettings {
+    /// 统计、推算用到的设置是不是一样（这些变了，工作量、遥测推算、各页统计才要重算）
+    func sameData(as o: AppSettings) -> Bool {
+        aliases == o.aliases && favorites == o.favorites && scheduleOnlyMembers == o.scheduleOnlyMembers
+            && swapRecords == o.swapRecords && customHolidayOff == o.customHolidayOff && customHolidayWork == o.customHolidayWork
+            && downloadedHolidayOff == o.downloadedHolidayOff && downloadedHolidayWork == o.downloadedHolidayWork
+            && restHistory == o.restHistory && restBalance == o.restBalance && profiles == o.profiles
+            && ruleHistory == o.ruleHistory && leaveSources == o.leaveSources && workloadRules == o.workloadRules
+            && workloadOverrides == o.workloadOverrides && teamChanges == o.teamChanges && sitePeople == o.sitePeople
+            && fixedTelemetryDays == o.fixedTelemetryDays && shiftTypes == o.shiftTypes && siteNoRestFlags == o.siteNoRestFlags
+            && groupSatellites == o.groupSatellites && publishTimes == o.publishTimes
+            && manualGroupNotes == o.manualGroupNotes && desktopGroupNotes == o.desktopGroupNotes && autoGroupNotes == o.autoGroupNotes
+    }
+}
+
 private struct PersistedState: Codable {
     var settings: AppSettings
     var schedule: [String: String]
@@ -410,12 +425,13 @@ extension DayKey {
 
 extension Calendar {
     /// App 内统一使用公历，避免系统设置成其它历法时日期错乱。
-    static var app: Calendar {
+    /// 只建一次（时区跟着系统自动变）：日期计算一次渲染要用成千上万次
+    static let app: Calendar = {
         var c = Calendar(identifier: .gregorian)
         c.timeZone = .autoupdatingCurrent
         c.locale = Locale(identifier: "zh_CN")
         return c
-    }
+    }()
 }
 
 extension DayKey: Identifiable {
@@ -432,8 +448,11 @@ final class AppStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             guard settings != oldValue else { return }
-            workloadCache = [:]
-            dataRevision &+= 1
+            // 只有影响统计、推算的设置变了才清缓存：勾清单、同步记录、提醒开关这些不用重算
+            if !settings.sameData(as: oldValue) {
+                workloadCache = [:]
+                dataRevision &+= 1
+            }
             // 不是管理员：排班数据改不了（同步自动更新的不受影响）
             if !canEdit {
                 var fixed = settings
@@ -536,14 +555,15 @@ final class AppStore: ObservableObject {
     }
 
     private func saveSourcesAndLog() {
-        if Self.isDemo { return }
-        let raw = rosterSources.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) }
-        if let data = try? JSONEncoder().encode(raw) {
-            try? data.write(to: Self.sourcesURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        if Self.isDemo || persistenceBlocked { return }
+        let sources = rosterSources, log = rosterLog
+        // 几百天 × 几十人：编码、写盘都放到后台
+        StateWriter.shared.write(to: Self.sourcesURL) {
+            try? JSONEncoder().encode(sources.mapValues { days in
+                Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) })
+            })
         }
-        if let data = try? JSONEncoder().encode(rosterLog) {
-            try? data.write(to: Self.logURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        }
+        StateWriter.shared.write(to: Self.logURL) { try? JSONEncoder().encode(log) }
     }
 
     private static func loadRoster() -> Roster {
@@ -555,10 +575,12 @@ final class AppStore: ObservableObject {
     }
 
     private func saveRoster() {
-        if Self.isDemo { return }
-        let raw = roster.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) }
-        if let data = try? JSONEncoder().encode(raw) {
-            try? data.write(to: Self.rosterURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        if Self.isDemo || persistenceBlocked { return }
+        let roster = roster
+        StateWriter.shared.write(to: Self.rosterURL) {
+            try? JSONEncoder().encode(roster.mapValues { days in
+                Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) })
+            })
         }
     }
 
@@ -571,9 +593,12 @@ final class AppStore: ObservableObject {
     private init() {
         let data = try? Data(contentsOf: Self.fileURL)
         let state = data.flatMap { try? JSONDecoder().decode(PersistedState.self, from: $0) }
-        // 读不出来（比如新版本改了格式）：先把原文件另存一份，别让下次保存把它覆盖掉
+        // 文件在、却读不出来（手机重启后还没解锁过，文件受保护）：这次不存盘，免得用空数据把真数据盖掉
+        persistenceBlocked = data == nil && FileManager.default.fileExists(atPath: Self.fileURL.path)
+        // 读出来了但解析不了：带时间另存一份（不覆盖以前存的），别让下次保存把它覆盖掉
         if let data, state == nil {
-            try? data.write(to: Self.fileURL.deletingLastPathComponent().appendingPathComponent("state.bad.json"))
+            let stamp = Int(Date().timeIntervalSince1970)
+            try? data.write(to: Self.fileURL.deletingLastPathComponent().appendingPathComponent("state.bad-\(stamp).json"))
         }
         settings = state?.settings ?? AppSettings()
         var schedule: [DayKey: String] = [:]
@@ -735,6 +760,8 @@ final class AppStore: ObservableObject {
 
     /// 存盘：同一时间连续改好几处（一次同步要改十几处）只写一次，而且在后台线程写，不卡界面
     private var saveTask: Task<Void, Never>?
+    /// 启动时存档文件读不出来（受保护）：不存盘，下次正常启动再说
+    private var persistenceBlocked = false
 
     private func save() {
         if Self.isDemo { return }
@@ -750,7 +777,7 @@ final class AppStore: ObservableObject {
     func flushSave(wait: Bool = false) {
         saveTask?.cancel()
         saveTask = nil
-        if Self.isDemo { return }
+        if Self.isDemo || persistenceBlocked { return }
         let state = PersistedState(settings: settings,
                                    schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }),
                                    covered: covered.map(\.description).sorted())
@@ -828,7 +855,18 @@ final class AppStore: ObservableObject {
     }
 
     /// 某一天所有岗位各是谁（来自全员排班），按网页上的习惯排序：遥测、调度、组A–E、其它、休息、调休。
+    /// 日历每个格子、今天页都要问「这天谁值什么」：同一份数据只算一次
+    private var dayRosterCache: (revision: Int, days: [DayKey: [(post: String, names: [String])]]) = (-1, [:])
+
     func dayRoster(_ day: DayKey) -> [(post: String, names: [String])] {
+        if dayRosterCache.revision != dataRevision { dayRosterCache = (dataRevision, [:]) }
+        if let cached = dayRosterCache.days[day] { return cached }
+        let value = computeDayRoster(day)
+        dayRosterCache.days[day] = value
+        return value
+    }
+
+    private func computeDayRoster(_ day: DayKey) -> [(post: String, names: [String])] {
         var byPost: [String: [String]] = [:]
         for (name, days) in roster {
             guard let posts = days[day] else { continue }
@@ -1754,7 +1792,15 @@ final class AppStore: ObservableObject {
     }
 
     /// 我在网站上的名字（全员排班里认出是我的那个）
-    var myRosterName: String? { roster.keys.first(where: isMe) ?? settings.restBalance.keys.first(where: isMe) }
+    /// 全员排班里哪个名字是我（很多页面每行都要问，按数据版本缓存）
+    var myRosterName: String? {
+        let key = "\(dataRevision)-\(role.rawValue)"
+        if let cached = myNameCache, cached.key == key { return cached.value }
+        let value = roster.keys.first(where: isMe) ?? settings.restBalance.keys.first(where: isMe)
+        myNameCache = (key, value)
+        return value
+    }
+    private var myNameCache: (key: String, value: String?)?
 
     /// 我的待休攒到设定的天数时提醒一次，之后再涨才再提醒；休掉了就重新计
     func notifyRestIfNeeded() async {
@@ -2384,6 +2430,18 @@ final class StateWriter {
             } catch {
                 // 写不进去（比如锁屏时文件受保护）：记一笔，下次改动时会再写
                 NSLog("state.json 写入失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// 别的文件（全员排班、来源、变动历史）：在后台编码再写
+    func write(to url: URL, encode: @escaping () -> Data?) {
+        queue.async {
+            guard let data = encode() else { return }
+            do {
+                try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            } catch {
+                NSLog("\(url.lastPathComponent) 写入失败：\(error.localizedDescription)")
             }
         }
     }

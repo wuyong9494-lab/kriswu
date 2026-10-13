@@ -87,6 +87,8 @@ struct RootView: View {
     @State private var rootSheet: RootSheet?
     @State private var camera = false
     @State private var tabBarTop: CGFloat = .infinity
+    /// 打开过的页：没打开过的不建（网站页不会一启动就去登录网站，也少画几页）
+    @State private var visited: Set<Tab> = []
     @State private var inReviewDemo = UserDefaults.standard.bool(forKey: AppStore.demoKey)
     @Environment(\.scenePhase) private var scenePhase
 
@@ -261,6 +263,13 @@ struct RootView: View {
     @ViewBuilder
     private func page<V: View>(_ t: Tab, @ViewBuilder content: () -> V) -> some View {
         let selected = tab == t
+        if selected || visited.contains(t) {
+            pageBody(selected, content: content)
+                .onAppear { visited.insert(t) }
+        }
+    }
+
+    private func pageBody<V: View>(_ selected: Bool, @ViewBuilder content: () -> V) -> some View {
         content()
             .opacity(selected ? 1 : 0)
             .scaleEffect(selected ? 1 : 0.985)

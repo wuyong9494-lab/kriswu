@@ -53,6 +53,9 @@ struct SiteView: View {
                 model.load(store.settings.sourceURL)
                 loaded = true
             }
+            .onChange(of: store.settings.sourceUsername) { user in
+                model.credentials = (user, Keychain.get(.sourcePassword) ?? "")
+            }
         }
     }
 }

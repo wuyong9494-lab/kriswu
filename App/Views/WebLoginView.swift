@@ -111,7 +111,12 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     @Published var canGoBack = false
     private var observers: [NSKeyValueObservation] = []
     /// 设置里的账号密码；打开登录页时自动填好并点「登录」
-    var credentials: (user: String, password: String)?
+    var credentials: (user: String, password: String)? {
+        didSet {
+            // 换了账号密码：允许再自动登录一次
+            if credentials?.user != oldValue?.user || credentials?.password != oldValue?.password { autoLoginTried = false }
+        }
+    }
     private var autoLoginTried = false
 
     /// userAgent：传入电脑浏览器标识时，网站显示电脑版页面
@@ -164,13 +169,14 @@ final class WebModel: NSObject, ObservableObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
         // 只在登录页、而且只自动填一次：密码错了不会每次刷新都再提交，免得账号被锁
-        if let c = credentials, !c.user.isEmpty, !c.password.isEmpty, !autoLoginTried {
+        if let c = credentials, !c.user.isEmpty, !c.password.isEmpty {
             Task {
                 // 等前端把登录表单画出来
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
-                guard !autoLoginTried,
-                      let html = try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String,
-                      HTMLText.looksLikeLoginPage(html) else { return }
+                guard let html = try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String else { return }
+                // 登进去了：以后登录过期还能再自动登录一次
+                guard HTMLText.looksLikeLoginPage(html) else { autoLoginTried = false; return }
+                guard !autoLoginTried else { return }
                 autoLoginTried = true
                 _ = try? await webView.callAsyncJavaScript(
                     WebPageLoader.autoLoginScript, arguments: ["u": c.user, "p": c.password], in: nil, contentWorld: .page)
