@@ -24,8 +24,13 @@ public struct DayKey: Hashable, Comparable, Codable, CustomStringConvertible {
         self.init(year: parts[0], month: parts[1], day: parts[2])
     }
 
+    /// 「2026-10-09」。到处都在用（字典键、节假日查表），不用 String(format:)（慢得多）
     public var description: String {
-        String(format: "%04d-%02d-%02d", year, month, day)
+        func pad(_ n: Int, _ width: Int) -> String {
+            let s = String(n)
+            return s.count >= width ? s : String(repeating: "0", count: width - s.count) + s
+        }
+        return pad(year, 4) + "-" + pad(month, 2) + "-" + pad(day, 2)
     }
 
     public func date(calendar: Calendar = .current, hour: Int = 0, minute: Int = 0) -> Date {
