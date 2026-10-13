@@ -226,6 +226,10 @@ struct AppSettings: Codable, Equatable {
     var shiftTypes: [ShiftType] = ShiftType.defaults
     var lastSync: Date?
     var lastSyncMessage: String?
+    /// 上次同步的结果（不再从提示文字里猜）、上次尝试的时间、连续失败几次（自动同步按这个退避）
+    var syncState: SyncState?
+    var lastSyncAttempt: Date?
+    var syncFailureCount = 0
 
     init() {}
 
@@ -345,6 +349,13 @@ struct AppSettings: Codable, Equatable {
         }
         lastSync = try? c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try? c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
+        syncState = try? c.decodeIfPresent(SyncState.self, forKey: .syncState)
+        lastSyncAttempt = try? c.decodeIfPresent(Date.self, forKey: .lastSyncAttempt)
+        syncFailureCount = (try? c.decodeIfPresent(Int.self, forKey: .syncFailureCount)) ?? 0
+        // 1.1 以前只存了提示文字
+        if syncState == nil, let m = lastSyncMessage {
+            syncState = m.hasPrefix("同步成功") ? .ok : (m.hasPrefix("同步失败") ? .failed : (m.hasPrefix("同步结果异常") ? .anomaly : nil))
+        }
     }
 }
 
@@ -383,6 +394,12 @@ struct BackupFile: Codable {
     var schedule: [String: String]
     var covered: [String]
     var roster: [String: [String: String]]
+}
+
+/// 上次同步的结果
+enum SyncState: String, Codable {
+    case ok, failed, needsLogin, anomaly
+    var isFailure: Bool { self == .failed || self == .needsLogin }
 }
 
 extension AppSettings {
@@ -452,6 +469,9 @@ extension AppSettings {
         a.weChatDaily = o.weChatDaily
         a.weChatChanges = o.weChatChanges
         a.dutyHeadsUp = o.dutyHeadsUp
+        a.syncState = o.syncState
+        a.lastSyncAttempt = o.lastSyncAttempt
+        a.syncFailureCount = o.syncFailureCount
         return a == o
     }
 
@@ -1369,6 +1389,7 @@ final class AppStore: ObservableObject {
         guard canSync, !isSyncing else { return false }
         isSyncing = true
         defer { isSyncing = false }
+        settings.lastSyncAttempt = Date()
         // 正在读电脑版页面：让它停下，等它的浏览器关掉再开始（最多等 15 秒）
         if let cancel = desktopFetch {
             cancel()
@@ -1404,7 +1425,8 @@ final class AppStore: ObservableObject {
                 }
                 let changed = known.filter { schedule[$0] != result.entries[$0] }.count
                 if known.count >= 5 && changed * 10 > known.count * 6 {
-                    let alreadyTold = settings.lastSyncMessage?.hasPrefix("同步结果异常") == true
+                    let alreadyTold = settings.syncState == .anomaly
+                    settings.syncState = .anomaly
                     settings.lastSyncMessage = "同步结果异常：\(known.count) 天里有 \(changed) 天和之前不同，可能是网站改版，已忽略。下拉刷新可确认采用"
                     if !alreadyTold {
                         await NotificationService.notifyNow(id: "sync-anomaly",
@@ -1455,6 +1477,8 @@ final class AppStore: ObservableObject {
                 + (changes.isEmpty ? "，没有变动" : "，\(changes.count) 处变动")
                 + (outcome.roster.isEmpty ? "" : "，这次读到 \(outcome.roster.count) 人有排班（全年累计 \(roster.count) 人）")
             status.lastSuccessMessage = status.lastSyncMessage
+            status.syncState = .ok
+            status.syncFailureCount = 0
             settings = status
             // 第一次导入不算“变动”，之后每次同步发现不同就提醒
             if hadData && !changes.isEmpty {
@@ -1505,7 +1529,11 @@ final class AppStore: ObservableObject {
         } catch {
             // 系统收回后台时间、用户离开页面：不是同步失败，不改状态、不报警
             if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled { return false }
-            settings.lastSyncMessage = "同步失败：\(error.localizedDescription)"
+            var failed = settings
+            failed.lastSyncMessage = "同步失败：\(error.localizedDescription)"
+            if case SyncError.needsLogin = error { failed.syncState = .needsLogin } else { failed.syncState = .failed }
+            failed.syncFailureCount += 1
+            settings = failed
             // 登录过期只提醒一次，重新登录同步成功后恢复
             if case SyncError.needsLogin = error, !settings.loginExpiredNotified {
                 settings.loginExpiredNotified = true
@@ -1959,13 +1987,13 @@ final class AppStore: ObservableObject {
     var syncLooksBroken: Bool {
         guard canSync else { return false }
         if syncIsStale { return true }
-        guard let last = settings.lastSync, settings.lastSyncMessage?.hasPrefix("同步失败") == true else { return false }
+        guard let last = settings.lastSync, settings.syncState?.isFailure == true else { return false }
         return Date().timeIntervalSince(last) > 6 * 3600
     }
 
     var syncIsStale: Bool {
         guard canSync else { return false }
-        guard let last = settings.lastSync else { return settings.lastSyncMessage?.hasPrefix("同步失败") ?? false }
+        guard let last = settings.lastSync else { return settings.syncState?.isFailure ?? false }
         return Date().timeIntervalSince(last) > 24 * 3600
     }
 
@@ -1991,6 +2019,11 @@ final class AppStore: ObservableObject {
     func syncIfStale() async {
         guard canSync else { return }
         if let last = settings.lastSync, Date().timeIntervalSince(last) < 3 * 60 { return }
+        // 连续失败：自动同步隔得越来越久（2、4、8 分钟……最多 2 小时），不每次打开都整套重跑；手动下拉不受影响
+        if settings.syncFailureCount > 0, let attempt = settings.lastSyncAttempt {
+            let wait = min(2.0 * 3600, 120 * pow(2, Double(min(settings.syncFailureCount, 10) - 1)))
+            if Date().timeIntervalSince(attempt) < wait { return }
+        }
         await sync(full: true)
     }
 
@@ -2409,6 +2442,8 @@ final class AppStore: ObservableObject {
         // 备份时的同步状态已经过时：清掉，马上重新同步（也会重新尝试登录）
         newSettings.lastSync = nil
         newSettings.lastSyncMessage = nil
+        newSettings.syncState = nil
+        newSettings.syncFailureCount = 0
         newSettings.loginExpiredNotified = false
         newSettings.syncStaleNotified = false
         newSettings.nextSyncIsBaseline = true

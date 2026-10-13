@@ -28,9 +28,7 @@ struct TodayView: View {
                                 .card(tint: DS.Palette.warning)
                         }
                         if store.syncLooksBroken {
-                            // 点一下到诊断页看原因
-                            NavigationLink { DiagnosticsView() } label: { StaleSyncBanner() }
-                                .buttonStyle(PressableStyle())
+                            StaleSyncBanner()
                         }
                         if let warning = store.settings.syncHealthWarning {
                             VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -425,16 +423,38 @@ private struct UpcomingList: View {
 /// 超过一天没同步成功：红色提示，避免照着旧排班上班。
 private struct StaleSyncBanner: View {
     @EnvironmentObject private var store: AppStore
+    @State private var loggingIn = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(store.settings.lastSync.map { "从 \($0.formatted(date: .abbreviated, time: .shortened)) 起一直没同步成功" }
                   ?? "还没有同步成功过", systemImage: "exclamationmark.octagon.fill")
                 .font(.headline)
-            Text((store.settings.lastSyncMessage ?? "同步失败") + "\n现在显示的可能不是最新排班。下拉刷新重试；点这里看原因。")
+            Text((store.settings.lastSyncMessage ?? "同步失败") + "\n现在显示的可能不是最新排班。")
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
+            // 直接给办法：登录过期就重新登录，其它先重试，再不行看原因
+            HStack(spacing: DS.Space.s) {
+                if store.settings.syncState == .needsLogin {
+                    Button { loggingIn = true } label: { Label("重新登录", systemImage: "person.badge.key") }
+                }
+                Button {
+                    Task {
+                        let ok = await store.sync(userInitiated: true, source: "失败横幅")
+                        ToastCenter.shared.show(ok ? "同步成功" : (store.settings.lastSyncMessage ?? "还是没成功"),
+                                                style: ok ? .success : .error)
+                    }
+                } label: {
+                    Label(store.isSyncing ? "正在同步…" : "重试", systemImage: "arrow.clockwise")
+                }
+                .disabled(store.isSyncing)
+                NavigationLink { DiagnosticsView() } label: { Label("看原因", systemImage: "stethoscope") }
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.bordered)
+            .tint(.white)
         }
+        .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
