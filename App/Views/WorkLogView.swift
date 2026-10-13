@@ -1,3 +1,4 @@
+import ImageIO
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -278,12 +279,37 @@ struct WorkLogView: View {
     }
 }
 
+/// 列表里的小图：在后台按 44 点解码，解一次缓存起来（不整张解码相机原图）
+enum WorkLogThumbnails {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func cached(_ url: URL) -> UIImage? { cache.object(forKey: url.path as NSString) }
+
+    static func load(_ url: URL) async -> UIImage? {
+        if let image = cached(url) { return image }
+        let scale = await MainActor.run { UIScreen.main.scale }
+        let image = await Task.detached(priority: .utility) { () -> UIImage? in
+            let side = 44 * scale
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                      kCGImageSourceCreateThumbnailFromImageAlways: true,
+                      kCGImageSourceCreateThumbnailWithTransform: true,
+                      kCGImageSourceThumbnailMaxPixelSize: side * 2,
+                  ] as CFDictionary) else { return nil }
+            return UIImage(cgImage: cg)
+        }.value
+        if let image { cache.setObject(image, forKey: url.path as NSString) }
+        return image
+    }
+}
+
 struct WorkLogRow: View {
     let entry: WorkLogEntry
+    @State private var thumbnail: UIImage?
 
     var body: some View {
         HStack(spacing: DS.Space.s) {
-            if entry.kind == .photo, let url = WorkLogStore.shared.url(for: entry), let image = UIImage(contentsOfFile: url.path) {
+            if entry.kind == .photo, let image = thumbnail ?? WorkLogStore.shared.url(for: entry).flatMap(WorkLogThumbnails.cached) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -291,6 +317,10 @@ struct WorkLogRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             } else {
                 IconBadge(icon: entry.kind.symbol, size: 44)
+                    .task(id: entry.id) {
+                        guard entry.kind == .photo, let url = WorkLogStore.shared.url(for: entry) else { return }
+                        thumbnail = await WorkLogThumbnails.load(url)
+                    }
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.note.isEmpty ? (entry.transcript ?? entry.kind.title) : entry.note)
