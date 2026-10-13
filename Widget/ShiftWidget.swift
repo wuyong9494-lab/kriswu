@@ -61,7 +61,7 @@ struct ShiftWidgetView: View {
     // App 会把「取到了但没排班」的日子写成「未排班」；这里查不到的是还没取到数据的日子
     private var todayTitle: String { entry.today?.title ?? (entry.hasData ? "暂无数据" : "打开 App") }
     private var tomorrowTitle: String { entry.tomorrow?.title ?? "—" }
-    private var color: Color { entry.staleDays != nil ? .gray : (entry.today.map { Color(hex: $0.colorHex) } ?? .gray) }
+    private var color: Color { entry.staleDays != nil ? .gray : (entry.today.map { Color(hex: $0.colorHex).forWhiteText } ?? .gray) }
     private var staleText: String? { entry.staleDays.map { "⚠︎ \($0) 天没同步" } }
 
     private var weekday: String {
@@ -102,7 +102,7 @@ struct ShiftWidgetView: View {
                 }
                 syncFooter
             }
-            .padding()
+            .widgetPadding()
             .widgetBackground(color.gradient)
         default:
             VStack(alignment: .leading, spacing: 4) {
@@ -125,7 +125,7 @@ struct ShiftWidgetView: View {
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding()
+            .widgetPadding()
             .widgetBackground(color.gradient)
         }
     }
@@ -158,6 +158,18 @@ struct ShiftWidgetView: View {
 extension View {
     /// iOS 17 起小组件要用 containerBackground 设置背景，iOS 16 用普通背景。
     @ViewBuilder
+    /// iOS 17 起系统自己留边距，再加一层会显得字小、挤；iOS 16 自己加
+    @ViewBuilder
+    func widgetPadding(_ length: CGFloat? = nil) -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            self
+        } else if let length {
+            padding(length)
+        } else {
+            padding()
+        }
+    }
+
     func widgetBackground<S: ShapeStyle>(_ style: S) -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
             containerBackground(style, for: .widget)
@@ -304,7 +316,7 @@ struct WeekWidget: Widget {
                                 in: RoundedRectangle(cornerRadius: 8))
                 }
             }
-            .padding(10)
+            .widgetPadding(10)
             .widgetBackground(Color(.systemBackground))
         }
         .configurationDisplayName("本周排班")
@@ -430,7 +442,7 @@ struct NextDutyView: View {
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding()
+            .widgetPadding()
             .widgetBackground(Color(hex: "#17A2B8").gradient)
         }
     }
@@ -570,5 +582,18 @@ struct PhotoControl: ControlWidget {
         }
         .displayName("拍照留痕")
         .description("打开值班提醒的相机，拍完存进工作留痕。")
+    }
+}
+
+extension Color {
+    /// 用户选的浅色（黄、浅绿）上白字看不清：太亮的压暗一些
+    var forWhiteText: Color {
+        let ui = UIColor(self)
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard ui.getHue(&h, saturation: &sat, brightness: &b, alpha: &a) else { return self }
+        // 亮度高、饱和度不高的颜色白字最难看清
+        let luminance = b * (1 - sat * 0.5)
+        guard luminance > 0.62 else { return self }
+        return Color(hue: Double(h), saturation: Double(min(1, sat + 0.1)), brightness: Double(b * 0.62 / luminance), opacity: Double(a))
     }
 }
