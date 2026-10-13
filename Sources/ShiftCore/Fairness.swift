@@ -24,6 +24,9 @@ public struct BalanceReport: Equatable {
     public var verdict: String
     /// 一句句的结论
     public var findings: [String]
+
+    /// 还没算出来时显示用
+    public static let empty = BalanceReport(rows: [], average: 0, spread: 0, verdict: "", findings: [])
 }
 
 public enum WorkloadBalance {

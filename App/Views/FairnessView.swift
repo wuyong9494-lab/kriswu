@@ -10,6 +10,9 @@ struct FairnessView: View {
     @State private var untilToday = true
     /// 导出的表格（换周、换月、同步后重新生成，不在每次刷新界面时写文件）
     @State private var csvURL: URL?
+    /// 在后台算好的结果（全员几百天，放在界面线程算会卡）
+    @State private var weekReport: BalanceReport?
+    @State private var monthReport: BalanceReport?
 
     private var weekDays: [DayKey] {
         let cal = Calendar.app
@@ -34,10 +37,8 @@ struct FairnessView: View {
         let known = store.publishedDays
         let week = usable(weekDays, known: known)
         let monthKnown = usable(monthDays, known: known)
-        let weekReport = WorkloadBalance.analyze(roster: store.roster, days: week, matcher: store.matcher,
-                                                 tolerance: 2, members: store.rotationMembers, calendar: .app)
-        let monthReport = WorkloadBalance.analyze(roster: store.roster, days: monthKnown, matcher: store.matcher,
-                                                  tolerance: 3, members: store.rotationMembers, calendar: .app)
+        let weekReport = self.weekReport ?? BalanceReport.empty
+        let monthReport = self.monthReport ?? BalanceReport.empty
         List {
             if !ChinaHolidays.knownYears.contains(year) {
                 Label("App 里还没有 \(year) 年的法定节假日，假期会被当成工作日算，请更新 App", systemImage: "exclamationmark.triangle")
@@ -52,7 +53,7 @@ struct FairnessView: View {
             Section {
                 switcher(title: "\(weekDays[0].month)/\(weekDays[0].day) – \(weekDays[6].month)/\(weekDays[6].day)",
                          back: { weekOffset -= 1 }, forward: { weekOffset += 1 })
-                Summary(report: weekReport, empty: week.isEmpty ? "这一周还没有全员排班数据" : nil, range: rangeText(week))
+                Summary(report: weekReport, empty: week.isEmpty ? "这一周还没有全员排班数据" : (self.weekReport == nil ? "正在计算…" : nil), range: rangeText(week))
             } header: {
                 Text("本周工作量")
             } footer: {
@@ -64,7 +65,7 @@ struct FairnessView: View {
 
             Section {
                 switcher(title: "\(year)年\(month)月", back: { moveMonth(-1) }, forward: { moveMonth(1) })
-                Summary(report: monthReport, empty: monthKnown.isEmpty ? "这个月还没有全员排班数据" : nil, range: rangeText(monthKnown))
+                Summary(report: monthReport, empty: monthKnown.isEmpty ? "这个月还没有全员排班数据" : (self.monthReport == nil ? "正在计算…" : nil), range: rangeText(monthKnown))
             } header: {
                 Text("本月工作量")
             } footer: {
@@ -75,9 +76,16 @@ struct FairnessView: View {
             }
         }
         .task(id: "\(weekOffset)-\(year)-\(month)-\(untilToday)-\(store.dataRevision)") {
+            let roster = store.roster, matcher = store.matcher, members = store.rotationMembers
+            let (w, m) = await Task.detached(priority: .userInitiated) {
+                (WorkloadBalance.analyze(roster: roster, days: week, matcher: matcher, tolerance: 2, members: members, calendar: .app),
+                 WorkloadBalance.analyze(roster: roster, days: monthKnown, matcher: matcher, tolerance: 3, members: members, calendar: .app))
+            }.value
+            weekReport = w
+            monthReport = m
             csvURL = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",
-                                   text: WorkloadCSV.balance(weekReport, title: "本周（\(rangeText(week) ?? "")）") + "\n"
-                                       + WorkloadCSV.balance(monthReport, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）"))
+                                   text: WorkloadCSV.balance(w, title: "本周（\(rangeText(week) ?? "")）") + "\n"
+                                       + WorkloadCSV.balance(m, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）"))
         }
         .appList()
         .navigationTitle("工作量均衡")
