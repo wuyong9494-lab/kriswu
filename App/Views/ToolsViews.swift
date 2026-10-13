@@ -215,15 +215,8 @@ struct YearStatsView: View {
         let report = self.report ?? AppStore.Workload(days: [], people: [], text: "")
         List {
             Section {
-                HStack {
-                    Button { year -= 1 } label: { Image(systemName: "chevron.left").accessibilityLabel("上一个") }
-                    Spacer()
-                    Text(verbatim: "\(year)年全年").font(.headline)
-                    Spacer()
-                    Button { year += 1 } label: { Image(systemName: "chevron.right").accessibilityLabel("下一个") }
-                        .disabled(year >= DayKey.today.year)
-                }
-                .buttonStyle(.borderless)
+                PeriodPager(title: "\(String(year))年全年", canGoForward: year < DayKey.today.year,
+                            back: { year -= 1 }, forward: { year += 1 })
                 if let file {
                     ShareLink(item: file) { Label("导出表格（Excel 能打开）", systemImage: "tablecells") }
                 }

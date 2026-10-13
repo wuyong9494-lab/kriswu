@@ -60,36 +60,17 @@ struct WeekRosterView: View {
     @State private var weekOffset = 0
     @State private var image: Image?
 
-    private var days: [DayKey] {
-        let cal = Calendar.app
-        let today = DayKey.today
-        let weekday = cal.component(.weekday, from: today.date(calendar: cal, hour: 12))
-        let monday = today.adding(days: -((weekday + 5) % 7) + weekOffset * 7)
-        return (0..<7).map { monday.adding(days: $0) }
-    }
+    private var days: [DayKey] { Period.week(of: .today, offset: weekOffset) }
 
     var body: some View {
         let days = self.days
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: DS.Space.m) {
-                HStack(spacing: DS.Space.s) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(weekOffset == 0 ? "本周" : (weekOffset == 1 ? "下周" : (weekOffset == -1 ? "上周" : "第 \(weekOffset) 周")))
-                            .font(DS.Font.caption).foregroundStyle(.secondary)
-                        Text("\(days[0].month)/\(days[0].day) – \(days[6].month)/\(days[6].day)").font(DS.Font.title)
-                    }
-                    Spacer()
-                    Button { Haptics.tap(); withAnimation(DS.Motion.spring) { weekOffset -= 1 } } label: {
-                        Image(systemName: "chevron.left").font(.headline).frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    Button { Haptics.tap(); withAnimation(DS.Motion.spring) { weekOffset += 1 } } label: {
-                        Image(systemName: "chevron.right").font(.headline).frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, DS.Space.m)
+                PeriodPager(caption: weekOffset == 0 ? "本周" : (weekOffset == 1 ? "下周" : (weekOffset == -1 ? "上周" : "第 \(weekOffset) 周")),
+                            title: "\(days[0].month)/\(days[0].day) – \(days[6].month)/\(days[6].day)",
+                            back: { withAnimation(DS.Motion.spring) { weekOffset -= 1 } },
+                            forward: { withAnimation(DS.Motion.spring) { weekOffset += 1 } })
+                    .padding(.horizontal, DS.Space.m)
                 ScrollView(.horizontal, showsIndicators: false) {
                     WeekTable(days: days)
                         .padding(DS.Space.s)

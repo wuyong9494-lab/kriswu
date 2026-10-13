@@ -36,22 +36,7 @@ struct WorkloadView: View {
                     .foregroundStyle(.orange)
             }
             Section {
-                HStack(spacing: DS.Space.s) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(verbatim: "\(year)年").font(DS.Font.caption).foregroundStyle(.secondary)
-                        Text(verbatim: "\(month)月").font(DS.Font.title)
-                    }
-                    Spacer()
-                    Button { Haptics.tap(); move(-1) } label: {
-                        Image(systemName: "chevron.left").font(.headline).frame(width: 36, height: 36)
-                            .background(DS.Palette.surfaceSunken, in: Circle())
-                    }
-                    Button { Haptics.tap(); move(1) } label: {
-                        Image(systemName: "chevron.right").font(.headline).frame(width: 36, height: 36)
-                            .background(DS.Palette.surfaceSunken, in: Circle())
-                    }
-                }
-                .buttonStyle(.plain)
+                PeriodPager(caption: "\(year)年", title: "\(month)月", back: { move(-1) }, forward: { move(1) })
                 if let first = report.days.first, let last = report.days.last {
                     HStack(spacing: DS.Space.xs) {
                         Chip(text: "\(report.days.count) 天", color: .secondary, icon: "calendar")
@@ -185,10 +170,7 @@ struct WorkloadView: View {
     }
 
     private func move(_ delta: Int) {
-        var m = month + delta, y = year
-        if m < 1 { m = 12; y -= 1 }
-        if m > 12 { m = 1; y += 1 }
-        month = m; year = y
+        (year, month) = Period.shiftMonth(year: year, month: month, by: delta)
     }
 }
 

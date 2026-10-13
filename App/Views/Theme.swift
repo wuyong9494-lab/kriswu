@@ -922,3 +922,53 @@ struct ConfirmButton: View {
             }
     }
 }
+
+// MARK: - 翻月 / 翻周 / 翻年
+
+/// 翻页的统一头部：小字说明 + 大字标题，右边两个圆形箭头（统计、均衡、全年、本周全员共用）
+struct PeriodPager: View {
+    var caption: String?
+    let title: String
+    var canGoBack = true
+    var canGoForward = true
+    let back: () -> Void
+    let forward: () -> Void
+
+    var body: some View {
+        HStack(spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: 0) {
+                if let caption { Text(caption).font(DS.Font.caption).foregroundStyle(.secondary) }
+                Text(title).font(DS.Font.title)
+            }
+            Spacer()
+            arrow("chevron.left", "上一个", enabled: canGoBack, action: back)
+            arrow("chevron.right", "下一个", enabled: canGoForward, action: forward)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func arrow(_ icon: String, _ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button { Haptics.tap(); action() } label: {
+            Image(systemName: icon).font(.headline).frame(width: 36, height: 36)
+                .background(DS.Palette.surfaceSunken, in: Circle())
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(label)
+    }
+}
+
+enum Period {
+    /// 往前 / 往后翻几个月
+    static func shiftMonth(year: Int, month: Int, by delta: Int) -> (year: Int, month: Int) {
+        let index = year * 12 + (month - 1) + delta
+        return (index / 12, index % 12 + 1)
+    }
+
+    /// 某天所在那一周（周一开始）往前 / 往后翻 offset 周的七天
+    static func week(of day: DayKey, offset: Int) -> [DayKey] {
+        let weekday = Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12))   // 1 = 周日
+        let monday = day.adding(days: -((weekday + 5) % 7) + 7 * offset)
+        return (0..<7).map { monday.adding(days: $0) }
+    }
+}

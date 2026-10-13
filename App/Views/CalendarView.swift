@@ -154,11 +154,9 @@ struct CalendarView: View {
     }
 
     private func move(_ delta: Int) {
-        var m = month + delta, y = year
-        if m < 1 { m = 12; y -= 1 }
-        if m > 12 { m = 1; y += 1 }
+        let next = Period.shiftMonth(year: year, month: month, by: delta)
         flipForward = delta > 0
-        withAnimation(DS.Motion.spring) { month = m; year = y }
+        withAnimation(DS.Motion.spring) { month = next.month; year = next.year }
     }
 
     private var firstDay: DayKey { DayKey(year: year, month: month, day: 1) }

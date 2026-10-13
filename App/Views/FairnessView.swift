@@ -14,13 +14,7 @@ struct FairnessView: View {
     @State private var weekReport: BalanceReport?
     @State private var monthReport: BalanceReport?
 
-    private var weekDays: [DayKey] {
-        let cal = Calendar.app
-        let today = DayKey.today
-        let weekday = cal.component(.weekday, from: today.date(calendar: cal, hour: 12))   // 1 = 周日
-        let monday = today.adding(days: -((weekday + 5) % 7) + 7 * weekOffset)
-        return (0..<7).map { monday.adding(days: $0) }
-    }
+    private var weekDays: [DayKey] { Period.week(of: .today, offset: weekOffset) }
 
     private var monthDays: [DayKey] {
         let cal = Calendar.app
@@ -112,21 +106,11 @@ struct FairnessView: View {
     }
 
     private func switcher(title: String, back: @escaping () -> Void, forward: @escaping () -> Void) -> some View {
-        HStack {
-            Button(action: back) { Image(systemName: "chevron.left").accessibilityLabel("上一个") }
-            Spacer()
-            Text(title).font(.headline)
-            Spacer()
-            Button(action: forward) { Image(systemName: "chevron.right").accessibilityLabel("下一个") }
-        }
-        .buttonStyle(.borderless)
+        PeriodPager(title: title, back: back, forward: forward)
     }
 
     private func moveMonth(_ delta: Int) {
-        var m = month + delta, y = year
-        if m < 1 { m = 12; y -= 1 }
-        if m > 12 { m = 1; y += 1 }
-        month = m; year = y
+        (year, month) = Period.shiftMonth(year: year, month: month, by: delta)
     }
 
     private func shareText(_ week: BalanceReport, _ month: BalanceReport) -> String {
