@@ -1577,6 +1577,12 @@ final class PatternTests: XCTestCase {
         XCTAssertTrue(WorkloadCounter.isDuty("值班"))
         XCTAssertFalse(WorkloadCounter.isDuty("值班交班前"))
         XCTAssertFalse(WorkloadCounter.isDuty("值班交接前"))
+        // 值完班后的休息、请假不算值班；「值班交接前」认成休息
+        XCTAssertFalse(WorkloadCounter.isDuty("值班调休"))
+        XCTAssertFalse(WorkloadCounter.isDuty("值班请假"))
+        XCTAssertTrue(WorkloadCounter.isDuty("节假日值班"))
+        XCTAssertEqual(m.match("值班交接前")?.id, "off")
+        XCTAssertEqual(m.match("值班")?.id, "duty")
         XCTAssertEqual(WorkloadCounter.effective("值班交接前", matcher: m), WorkloadCounter.handoverRest)
         XCTAssertTrue(WorkloadCounter.isDuty(m.displayName("值")))
         // 网站上有的写遥测、有的写值班：都在同一个轮转里

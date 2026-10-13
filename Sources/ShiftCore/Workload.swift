@@ -114,8 +114,11 @@ public enum WorkloadCounter {
     }
 
     /// 值班就是遥测：网站上写「遥测」或「值班」都算；「值班交接前」是网站上单独的一列，不算
+    /// 「值班调休」「值班休息」「值班请假」是值完班后的休息、请假，不算值班
     public static func isDuty(_ post: String) -> Bool {
-        post.contains("遥测") || (post.contains("值班") && !isIgnored(post))
+        if post.contains("遥测") { return true }
+        guard post.contains("值班"), !isIgnored(post) else { return false }
+        return !["调休", "休息", "请假", "休假"].contains { post.contains($0) }
     }
 
     /// 值班换来的休息：休息、调休（请假不算）

@@ -135,8 +135,11 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         self.webView = webView
         defer { self.webView = nil }
 
-        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+        // 被取消（系统收回后台时间、同步要用网站）：马上结束，不再干等网页加载
+        try await withTaskCancellationHandler {
+          try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             continuation = c
+            if Task.isCancelled { finish(CancellationError()); return }
             webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30))
             // 网页一直不结束加载时也要能返回
             Task { @MainActor [weak self] in
@@ -145,6 +148,9 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
                 try? await Task.sleep(nanoseconds: wait * 1_000_000_000)
                 self?.finish(URLError(.timedOut))
             }
+          }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.finish(CancellationError()) }
         }
 
         var html = try await settledHTML(webView)
@@ -169,6 +175,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         // 再点开其它标签页（如「值班查看」），拿全员排班和各组说明
         var extraHTML: [String] = []
         for tab in extraTabs {
+            try Task.checkCancellation()
             // 空标签 = 就在当前页面翻页
             if !tab.isEmpty {
                 let clicked = (try? await webView.callAsyncJavaScript(
@@ -178,7 +185,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
             var last = try await settledHTML(webView)
             if !tab.isEmpty { extraHTML.append(last) }
             for (label, steps) in pager {
-                for _ in 0..<steps where !outOfTime {
+                for _ in 0..<steps where !outOfTime && !Task.isCancelled {
                     let pressed = (try? await webView.callAsyncJavaScript(
                         Self.clickTabScript, arguments: ["label": label], in: nil, contentWorld: .page)) as? Bool ?? false
                     guard pressed, let html = try await changedHTML(webView, from: last) else { break }
@@ -199,7 +206,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
     private func send(_ requests: [CapturedRequest], in webView: WKWebView) async -> [(request: CapturedRequest, reply: String)] {
         var replies: [(request: CapturedRequest, reply: String)] = []
         var index = 0
-        while index < requests.count && !outOfRequestTime {
+        while index < requests.count && !outOfRequestTime && !Task.isCancelled {
             let chunk = Array(requests[index..<min(index + 4, requests.count)])
             index += chunk.count
             var results = [String?](repeating: nil, count: chunk.count)

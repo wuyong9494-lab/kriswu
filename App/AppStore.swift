@@ -339,6 +339,10 @@ struct AppSettings: Codable, Equatable {
         desktopGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes)) ?? [:]
         lastSuccessMessage = try? c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
         shiftTypes = (try? c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes)) ?? d.shiftTypes
+        // 1.1 以前存的班次类型：「值班交接前」被认成值班（关键字「值」），给休息加上「交接」「交班」
+        if let i = shiftTypes.firstIndex(where: { $0.id == "off" }), !shiftTypes[i].keywords.contains("交接") {
+            shiftTypes[i].keywords += ["交接", "交班"]
+        }
         lastSync = try? c.decodeIfPresent(Date.self, forKey: .lastSync)
         lastSyncMessage = try? c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
     }
@@ -382,6 +386,75 @@ struct BackupFile: Codable {
 }
 
 extension AppSettings {
+    /// 和 o 比，只有记账类的字段变了（同步记录、已发标记、提示文字、不影响手机提醒的开关）
+    func onlyBookkeepingChanged(from o: AppSettings) -> Bool {
+        var a = self
+        a.syncLog = o.syncLog
+        a.lastBackgroundWake = o.lastBackgroundWake
+        a.weChatMessage = o.weChatMessage
+        a.weChatMorningSent = o.weChatMorningSent
+        a.weChatEveningSent = o.weChatEveningSent
+        a.weChatWeekSent = o.weChatWeekSent
+        a.lastWeChatChangeDigest = o.lastWeChatChangeDigest
+        a.pendingWeChatChange = o.pendingWeChatChange
+        a.lastDesktopNotesAttempt = o.lastDesktopNotesAttempt
+        a.lastDesktopNotesFetch = o.lastDesktopNotesFetch
+        a.desktopNotesMessage = o.desktopNotesMessage
+        a.desktopRosterMessage = o.desktopRosterMessage
+        a.lastSyncMessage = o.lastSyncMessage
+        a.lastSuccessMessage = o.lastSuccessMessage
+        a.syncHealth = o.syncHealth
+        a.syncHealthWarning = o.syncHealthWarning
+        a.syncHealthWarnedDay = o.syncHealthWarnedDay
+        a.apiSignature = o.apiSignature
+        a.changeLog = o.changeLog
+        a.teamChanges = o.teamChanges
+        a.warnedRestKeys = o.warnedRestKeys
+        a.noRestNotified = o.noRestNotified
+        a.restAlertNotified = o.restAlertNotified
+        a.restLedgerNotified = o.restLedgerNotified
+        a.loginExpiredNotified = o.loginExpiredNotified
+        a.syncStaleNotified = o.syncStaleNotified
+        a.dutyHeadsUpSent = o.dutyHeadsUpSent
+        a.lastPersonalWeekly = o.lastPersonalWeekly
+        a.lastWeeklyDigest = o.lastWeeklyDigest
+        a.lastMonthlyReport = o.lastMonthlyReport
+        a.previewGuesses = o.previewGuesses
+        a.previewResults = o.previewResults
+        a.siteNotices = o.siteNotices
+        a.siteNoticesChanged = o.siteNoticesChanged
+        a.siteNoticesNew = o.siteNoticesNew
+        a.lastHolidayFetch = o.lastHolidayFetch
+        a.autoBackupMessage = o.autoBackupMessage
+        a.lastAutoBackup = o.lastAutoBackup
+        a.publishTimes = o.publishTimes
+        a.nextSyncIsBaseline = o.nextSyncIsBaseline
+        a.swapRecords = o.swapRecords
+        a.favorites = o.favorites
+        a.restHistory = o.restHistory
+        a.restBalanceUpdated = o.restBalanceUpdated
+        a.siteNoRestFlags = o.siteNoRestFlags
+        a.leaveSources = o.leaveSources
+        a.backupFolderBookmark = o.backupFolderBookmark
+        a.backupFolderName = o.backupFolderName
+        a.desktopNotesURL = o.desktopNotesURL
+        a.workLogAutoTranscribe = o.workLogAutoTranscribe
+        a.speechOnDeviceOnly = o.speechOnDeviceOnly
+        a.workLogLock = o.workLogLock
+        a.restAlertThreshold = o.restAlertThreshold
+        a.monthlyReport = o.monthlyReport
+        a.weeklyDigest = o.weeklyDigest
+        a.personalWeekly = o.personalWeekly
+        a.notifyChanges = o.notifyChanges
+        a.notifyFavorites = o.notifyFavorites
+        a.notifyAllChanges = o.notifyAllChanges
+        a.weChatEnabled = o.weChatEnabled
+        a.weChatDaily = o.weChatDaily
+        a.weChatChanges = o.weChatChanges
+        a.dutyHeadsUp = o.dutyHeadsUp
+        return a == o
+    }
+
     /// 统计、推算用到的设置是不是一样（这些变了，工作量、遥测推算、各页统计才要重算）
     func sameData(as o: AppSettings) -> Bool {
         aliases == o.aliases && favorites == o.favorites && scheduleOnlyMembers == o.scheduleOnlyMembers
@@ -483,7 +556,8 @@ final class AppStore: ObservableObject {
                 applyCustomHolidays()
             }
             save()
-            requestReschedule()
+            // 只是记账（同步记录、已发标记、提示文字）：不用重排提醒、刷新小组件（小组件每天刷新次数有限）
+            if !settings.onlyBookkeepingChanged(from: oldValue) { requestReschedule() }
         }
     }
     @Published private(set) var schedule: [DayKey: String] {
@@ -1125,7 +1199,8 @@ final class AppStore: ObservableObject {
         let task = Task { () -> Bool in
             let start = Date()
             let ok = await self.performSync(full: full, userInitiated: userInitiated)
-            if self.canSync {
+            // 被系统中途收回的不记（不是失败）
+            if self.canSync, !Task.isCancelled {
                 let entry = SyncLogEntry(date: start, source: source, ok: ok,
                                          message: self.settings.lastSyncMessage ?? "", seconds: Int(Date().timeIntervalSince(start)))
                 self.settings.syncLog = Array(([entry] + self.settings.syncLog).prefix(30))
@@ -1294,6 +1369,11 @@ final class AppStore: ObservableObject {
         guard canSync, !isSyncing else { return false }
         isSyncing = true
         defer { isSyncing = false }
+        // 正在读电脑版页面：让它停下，等它的浏览器关掉再开始（最多等 15 秒）
+        if let cancel = desktopFetch {
+            cancel()
+            for _ in 0..<50 where desktopFetch != nil { try? await Task.sleep(nanoseconds: 300_000_000) }
+        }
         let aliasesAtStart = settings.aliases
         do {
             let mayLogin = userInitiated || !settings.loginExpiredNotified
@@ -1341,8 +1421,11 @@ final class AppStore: ObservableObject {
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
             // 读到的全员排班明显不对（读了一半、网站改版）：自动同步先不合并，免得冲掉数据、乱提醒；手动下拉照常采用
-            let healthy = await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步",
-                                                accept: userInitiated)
+            // 什么都没读到（网络慢、后台时间不够）：这次不合并，也不当成网站改版；
+            // 后台快速同步只读到一部分时不报警（时间有限，读不全很正常），只是不合并
+            let healthy = outcome.roster.isEmpty ? false
+                : await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步",
+                                        accept: userInitiated, quiet: !full && !userInitiated)
             if healthy || userInitiated {
                 let edits = mergeRoster(outcome.roster, source: "sync")
                 if !baselineRun { await notifyRosterEdits(edits, published: publishedBefore) }
@@ -1420,6 +1503,8 @@ final class AppStore: ObservableObject {
             }
             return true
         } catch {
+            // 系统收回后台时间、用户离开页面：不是同步失败，不改状态、不报警
+            if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled { return false }
             settings.lastSyncMessage = "同步失败：\(error.localizedDescription)"
             // 登录过期只提醒一次，重新登录同步成功后恢复
             if case SyncError.needsLogin = error, !settings.loginExpiredNotified {
@@ -1457,19 +1542,29 @@ final class AppStore: ObservableObject {
     }
 
     @Published private(set) var isReadingDesktop = false
+    /// 正在读电脑版页面时，取消它（同步优先：两个隐藏浏览器同时登录网站会互相挤下线）
+    private var desktopFetch: (() -> Void)?
 
     @discardableResult
     private func readDesktopNotesNow(mayLogin: Bool, weeksBack: Int = 9) async -> Bool {
         let readStarted = Date()
         settings.lastDesktopNotesAttempt = readStarted
-        let result = await Task {
+        let fetch = Task {
             await SyncService.fetchDesktopGroupNotes(urlString: settings.sourceURL,
                                                      overrideURL: settings.desktopNotesURL,
                                                      username: settings.sourceUsername,
                                                      password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
                                                      reference: .today,
                                                      matcher: matcher, weeksBack: weeksBack)
-        }.value
+        }
+        desktopFetch = { fetch.cancel() }
+        let result = await fetch.value
+        desktopFetch = nil
+        // 同步要用网站，把这次读取让掉了：不合并读了一半的数据，过一会儿再读
+        if fetch.isCancelled {
+            settings.lastDesktopNotesAttempt = nil
+            return false
+        }
         desktopPageText = "网址：\(result.url)\n\n" + (result.pageText.isEmpty ? "（没有内容）" : result.pageText)
         // 读的这半分钟里如果开始了同步，等它做完再合并
         while isSyncing { try? await Task.sleep(nanoseconds: 500_000_000) }
@@ -1532,7 +1627,7 @@ final class AppStore: ObservableObject {
     /// 不正常的结果不记进「平时」，免得把错的当成正常。
     /// 返回读到的是否正常。accept：用户手动确认采用的，这次也记进「平时」，网站真改版了以后就不再一直报
     @discardableResult
-    func checkSyncHealth(_ roster: Roster, source: String, title: String, accept: Bool = false) async -> Bool {
+    func checkSyncHealth(_ roster: Roster, source: String, title: String, accept: Bool = false, quiet: Bool = false) async -> Bool {
         guard !Self.isDemo else { return true }
         let metrics = SyncHealth.metrics(roster, matcher: matcher)
         var all = settings.syncHealth
@@ -1546,6 +1641,7 @@ final class AppStore: ObservableObject {
             settings = s
             return true
         }
+        if quiet { return false }
         let text = "\(title)读到的全员排班和平时不一样：" + problems.joined(separator: "；")
             + "。可能是网站改版了，工作量统计、休息核对可能不准。"
         settings.syncHealthWarning = text
