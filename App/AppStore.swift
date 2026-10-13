@@ -1884,6 +1884,26 @@ final class AppStore: ObservableObject {
         updateWidget()
     }
 
+    /// 这天各组清单的事项（两条以上才算清单，和今天页一样）
+    func taskItems(on day: DayKey) -> [(group: String, key: String)] {
+        notes(for: shift(on: day)).flatMap { n -> [(group: String, key: String)] in
+            let items = TaskList.items(from: n.note)
+            guard items.count > 1 else { return [] }
+            return items.enumerated().map { (n.group, TaskChecklistCard.key($0.offset, $0.element)) }
+        }
+    }
+
+    /// 通知上点了「清单全部做完」
+    func markAllTasksDone(on day: DayKey) {
+        var checks = settings.taskChecks
+        for (group, items) in Dictionary(grouping: taskItems(on: day), by: \.group) {
+            checks[taskKey(day, group)] = items.map(\.key)
+        }
+        settings.taskChecks = checks
+        updateWidget()
+        flushSave(wait: true)
+    }
+
     // MARK: - 自动备份
 
     /// 在「文件」App 里选一个文件夹（建议 iCloud 云盘），以后每天自动存一份备份；删掉 App 也还在。

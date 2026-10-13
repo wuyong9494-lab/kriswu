@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        NotificationService.registerCategories()
         return true
     }
 
@@ -77,6 +78,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        // 点了「清单全部做完」：在后台勾掉，不打开 App
+        if response.actionIdentifier == NotificationService.tasksDoneAction,
+           let route = response.notification.request.content.userInfo["route"] as? String,
+           route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
+            Task { @MainActor in
+                AppStore.shared.markAllTasksDone(on: day)
+                completionHandler()
+            }
+            return
+        }
         if let route = response.notification.request.content.userInfo["route"] as? String {
             DispatchQueue.main.async {
                 AppDelegate.pendingRoute = route

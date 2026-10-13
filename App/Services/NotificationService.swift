@@ -38,6 +38,10 @@ enum NotificationService {
             // 点提醒直接打开说的那一天（晚上的提醒说的是明天）
             let about = n.id.hasPrefix("shift-evening") ? n.day.adding(days: 1) : n.day
             content.userInfo = ["route": "day:\(about)"]
+            // 早上的提醒：这天有清单就带一个「清单全部做完」按钮（长按通知就能点）
+            if n.id.hasPrefix("shift-morning"), !AppStore.shared.taskItems(on: about).isEmpty {
+                content.categoryIdentifier = Self.tasksCategory
+            }
             // 指定公历：手机设成日本、佛历等日历时也能按时提醒
             let when = DateComponents(calendar: Calendar(identifier: .gregorian), year: n.day.year, month: n.day.month,
                                       day: n.day.day, hour: n.time.hour, minute: n.time.minute)
@@ -95,6 +99,16 @@ enum NotificationService {
             .compactMap { r in (r.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate().map { ($0, r.content.title) } }
             .min { $0.0 < $1.0 }
             .map { (date: $0.0, title: $0.1) }
+    }
+
+    static let tasksCategory = "shift-tasks"
+    static let tasksDoneAction = "tasks-done"
+
+    /// 启动时登记通知上的按钮
+    static func registerCategories() {
+        let done = UNNotificationAction(identifier: tasksDoneAction, title: "清单全部做完", options: [])
+        center.setNotificationCategories([UNNotificationCategory(identifier: tasksCategory, actions: [done],
+                                                                 intentIdentifiers: [], options: [])])
     }
 
     /// 立即推送一条通知（排班变动、登录过期）。同一个 id 会替换上一条。
