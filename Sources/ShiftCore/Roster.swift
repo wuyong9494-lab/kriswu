@@ -245,6 +245,25 @@ public enum RosterExtractor {
         return splitJoinedNames(roster)
     }
 
+    /// 「我是谁」：网站上「我的分工」（mine）和全员排班里谁的班对得上。至少 5 天对上、八成以上一致，而且明显比别人像才算。
+    public static func identify(mine: [DayKey: String], roster: Roster, matcher: ShiftMatcher) -> String? {
+        func posts(_ raw: String) -> Set<String> {
+            Set((WorkloadCounter.effective(raw, matcher: matcher) ?? "").split(separator: "+").map { matcher.displayName(String($0)) })
+        }
+        let scored = roster.map { name, days -> (name: String, hits: Int, overlap: Int) in
+            var hits = 0, overlap = 0
+            for (day, raw) in mine {
+                guard let theirs = days[day] else { continue }
+                overlap += 1
+                if posts(theirs) == posts(raw) { hits += 1 }
+            }
+            return (name, hits, overlap)
+        }.sorted { $0.hits > $1.hits }
+        guard let best = scored.first, best.hits >= 5, Double(best.hits) >= Double(best.overlap) * 0.8 else { return nil }
+        if scored.count > 1, Double(scored[1].hits) >= Double(best.hits) * 0.7 { return nil }
+        return best.name
+    }
+
     /// 几个名字挨在一起没隔开（「张三李四」「张三李四王五」）会被当成一个人：
     /// 能唯一地拆成这次读到（或以前读到过）的几个人，就拆开；拆不开、又太长不像名字的丢掉（多半是一句话）。
     /// known：另外认识的人（合并时加上以前读到过的）

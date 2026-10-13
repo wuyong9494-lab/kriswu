@@ -22,13 +22,25 @@ public enum SiteAPI {
         }
     }
 
+    /// 网站标的「该休没休」：这天这个人本该休息（或在值班交接前那列），但还在上班
+    public struct NoRest: Equatable, Hashable {
+        public var day: DayKey
+        public var name: String
+        /// 「休息」或「值班交接前」
+        public var column: String
+    }
+
     public struct Result: Equatable {
         public var roster: Roster = [:]
+        public var noRest: [NoRest] = []
+        /// 各组负责的星（组A → 「高分03D01、高分03D02」）
+        public var groupSatellites: [String: String] = [:]
         /// 手动指定（固定）遥测的日子
         public var fixedTelemetryDays: Set<DayKey> = []
         public var people: [String: Person] = [:]
         public var notices: [String] = []
         public var isEmpty: Bool { roster.isEmpty && people.isEmpty && notices.isEmpty }
+        public init() {}
     }
 
     /// 列名 → 岗位（最后一段字段名）
@@ -49,6 +61,7 @@ public enum SiteAPI {
 
     public static func parse(_ bodies: [String], reference: DayKey, matcher: ShiftMatcher) -> Result {
         var result = Result()
+        var satelliteNames: [String: String] = [:]
         let dates = DateTokenParser(reference: reference)
         for body in bodies {
             let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -58,7 +71,12 @@ public enum SiteAPI {
                 parseWeekly(rows, dates: dates, matcher: matcher, into: &result)
                 parsePeople(rows, into: &result)
                 parseNotices(rows, into: &result)
+                parseGroups(rows, into: &result, satellites: &satelliteNames)
             }
+        }
+        // 卫星编号换成名字（有卫星表的话）
+        result.groupSatellites = result.groupSatellites.mapValues { list in
+            list.components(separatedBy: "、").map { satelliteNames[$0] ?? $0 }.joined(separator: "、")
         }
         return result
     }
@@ -79,6 +97,18 @@ public enum SiteAPI {
             }
             if let fixed = row.first(where: { $0.key.lowercased() == "fixedassignments.telemetry" })?.value, fixed == "1" || fixed == "true" {
                 result.fixedTelemetryDays.insert(day)
+            }
+            // noRestFlags.rest.active = 1，noRestFlags.rest.persons = 「张三、李四」
+            for (flag, column) in [("rest", "休息"), ("beforehandover", "值班交接前")] {
+                let prefix = "norestflags.\(flag)."
+                let fields = row.filter { $0.key.lowercased().hasPrefix(prefix) }
+                guard fields.contains(where: { $0.key.lowercased() == prefix + "active" && ($0.value == "1" || $0.value == "true") })
+                else { continue }
+                let names = fields.filter { $0.key.lowercased().hasSuffix("person") || $0.key.lowercased().hasSuffix("persons") }
+                    .flatMap { RosterExtractor.names(inCell: $0.value, matcher: matcher) }
+                for name in Set(names) where !result.noRest.contains(NoRest(day: day, name: name, column: column)) {
+                    result.noRest.append(NoRest(day: day, name: name, column: column))
+                }
             }
         }
     }
@@ -112,6 +142,16 @@ public enum SiteAPI {
             guard let raw = row["text"] ?? row["richText"].map(HTMLText.toText) else { continue }
             let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.count >= 12, row["hidden"] != "1", !result.notices.contains(text) { result.notices.append(text) }
+        }
+    }
+
+    /// 组表（groupName + satellites）和卫星表（satelliteId + satelliteName）
+    static func parseGroups(_ rows: [[String: String]], into result: inout Result, satellites: inout [String: String]) {
+        for row in rows {
+            if let id = row["satelliteId"], let name = row["satelliteName"], !id.isEmpty, !name.isEmpty { satellites[id] = name }
+            if let group = row["groupName"], GroupNotes.isGroup(group), let list = row["satellites"], !list.isEmpty {
+                result.groupSatellites[GroupNotes.normalizeGroup(group)] = list
+            }
         }
     }
 

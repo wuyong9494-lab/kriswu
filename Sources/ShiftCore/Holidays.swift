@@ -23,20 +23,26 @@ public enum ChinaHolidays {
         "2026-01-04", "2026-02-14", "2026-02-28", "2026-05-09", "2026-09-20", "2026-10-10",
     ]
 
+    /// 每年自动下载的安排（公开的节假日数据），优先级在自己录入的之后、App 自带的之前
+    public static var downloadedOff: Set<String> = []
+    public static var downloadedWork: Set<String> = []
+
     /// 用户在 App 里补充的安排（新的一年公布后自己录入，或者纠正）：优先于上面的表
     public static var customOff: Set<String> = []
     public static var customWork: Set<String> = []
 
     /// 已经录入节假日安排的年份（App 自带的加上自己录入的）
     public static var knownYears: Set<Int> {
-        Set([2025, 2026]).union(customOff.union(customWork).compactMap { Int($0.prefix(4)) })
+        Set([2025, 2026]).union(customOff.union(customWork).union(downloadedOff).union(downloadedWork).compactMap { Int($0.prefix(4)) })
     }
 
     /// 法定节假日（放假的日子，含调休连休）
     public static func isHoliday(_ day: DayKey) -> Bool {
         let key = day.description
         if customWork.contains(key) { return false }
-        return customOff.contains(key) || off.contains(key)
+        if customOff.contains(key) { return true }
+        if downloadedWork.contains(key) { return false }
+        return downloadedOff.contains(key) || off.contains(key)
     }
 
     /// 是否工作日：调休上班的周末算，法定假日不算，其余按周一到周五。
@@ -44,10 +50,31 @@ public enum ChinaHolidays {
         let key = day.description
         if customWork.contains(key) { return true }
         if customOff.contains(key) { return false }
+        if downloadedWork.contains(key) { return true }
+        if downloadedOff.contains(key) { return false }
         if workingWeekends.contains(key) { return true }
         if off.contains(key) { return false }
         let w = calendar.component(.weekday, from: day.date(calendar: calendar, hour: 12))
         return w != 1 && w != 7
+    }
+}
+
+/// 公开的节假日数据（holiday-cn 的格式）：{"year":2027,"days":[{"name":"元旦","date":"2027-01-01","isOffDay":true},…]}
+public enum HolidayFeed {
+    public static func url(year: Int) -> URL {
+        URL(string: "https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master/\(year).json")!
+    }
+
+    /// 放假的日子、调休上班的日子（「2027-01-01」这样的字符串）；格式不对返回 nil
+    public static func parse(_ data: Data) -> (off: [String], work: [String])? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let days = json["days"] as? [[String: Any]] else { return nil }
+        var off: [String] = [], work: [String] = []
+        for d in days {
+            guard let date = d["date"] as? String, DayKey(string: date) != nil, let isOff = d["isOffDay"] as? Bool else { continue }
+            if isOff { off.append(date) } else { work.append(date) }
+        }
+        return off.isEmpty && work.isEmpty ? nil : (off.sorted(), work.sorted())
     }
 }
 

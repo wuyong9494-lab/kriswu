@@ -1351,6 +1351,43 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(APIFieldInspector.mask("王小明、李四"), "王**、李*")
     }
 
+    func testSiteAPIExtras() {
+        // 该休没休的标记、各组负责的星（编号换成名字）
+        let weekly = """
+        [{"date":"2026-11-02","telemetry":"张甲","rest":"李乙","noRestFlags":{"rest":{"active":1,"persons":["王丙","赵丁"]},
+          "beforeHandover":{"active":0,"person":""}}},
+         {"date":"2026-11-03","telemetry":"李乙","rest":"张甲","noRestFlags":{"rest":{"active":0}}}]
+        """
+        let groups = #"[{"groupName":"组A","order":1,"satellites":["S1","S2"]},{"groupName":"组B","order":2,"satellites":["S3"]}]"#
+        let sats = #"[{"satelliteId":"S1","satelliteName":"一号星"},{"satelliteId":"S2","satelliteName":"二号星"}]"#
+        let r = SiteAPI.parse([weekly, groups, sats], reference: d(1), matcher: m)
+        XCTAssertEqual(Set(r.noRest), [SiteAPI.NoRest(day: d(1), name: "王丙", column: "休息"),
+                                       SiteAPI.NoRest(day: d(1), name: "赵丁", column: "休息")])
+        XCTAssertEqual(r.groupSatellites["组A"], "一号星、二号星")
+        XCTAssertEqual(r.groupSatellites["组B"], "S3")
+        // 节假日公开数据
+        let feed = #"{"year":2027,"days":[{"name":"元旦","date":"2027-01-01","isOffDay":true},{"name":"春节","date":"2027-02-07","isOffDay":false}]}"#
+        let parsed = HolidayFeed.parse(Data(feed.utf8))
+        XCTAssertEqual(parsed?.off, ["2027-01-01"])
+        XCTAssertEqual(parsed?.work, ["2027-02-07"])
+        defer { ChinaHolidays.downloadedOff = []; ChinaHolidays.downloadedWork = [] }
+        ChinaHolidays.downloadedOff = Set(parsed?.off ?? [])
+        ChinaHolidays.downloadedWork = Set(parsed?.work ?? [])
+        XCTAssertTrue(ChinaHolidays.isHoliday(DayKey(year: 2027, month: 1, day: 1)))
+        XCTAssertTrue(ChinaHolidays.isWorkday(DayKey(year: 2027, month: 2, day: 7), calendar: cal))   // 周日调休上班
+        XCTAssertTrue(ChinaHolidays.knownYears.contains(2027))
+        // 认出「我是谁」：我的分工和全员排班里张甲的一致
+        var mine: [DayKey: String] = [:]
+        var roster: Roster = ["李乙": [:]]
+        for i in 1...6 {
+            mine[d(i)] = i % 2 == 0 ? "遥测" : "组A"
+            roster["张甲", default: [:]][d(i)] = mine[d(i)]
+            roster["李乙"]?[d(i)] = "组B"
+        }
+        XCTAssertEqual(RosterExtractor.identify(mine: mine, roster: roster, matcher: m), "张甲")
+        XCTAssertNil(RosterExtractor.identify(mine: [d(1): "组A"], roster: roster, matcher: m))   // 太少，不认
+    }
+
     func testRotationRespectsSiteWeekdays() {
         // 5 人轮流值；网站人员表里甲只能周一、周六值遥测：下一个本该是甲的周四，跳过甲
         let base = DayKey(year: 2026, month: 11, day: 2)      // 周一

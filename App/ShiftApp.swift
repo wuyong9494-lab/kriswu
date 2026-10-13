@@ -25,6 +25,7 @@ struct ShiftApp: App {
                 store.applyPendingTaskToggles()
                 WorkLogStore.shared.reloadIfNeeded()
                 Task {
+                    await store.refreshHolidaysIfNeeded()
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()
                     await store.rescheduleNotifications()

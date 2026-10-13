@@ -181,6 +181,14 @@ struct AppSettings: Codable, Equatable {
     var siteNotices: [String] = []
     /// 网站标了「固定」（手动指定）遥测的日子
     var fixedTelemetryDays: [String] = []
+    /// 各组负责的星（网站组表）
+    var groupSatellites: [String: String] = [:]
+    /// 自动下载的法定节假日安排（公开数据），和上次下载时间
+    var downloadedHolidayOff: [String] = []
+    var downloadedHolidayWork: [String] = []
+    var lastHolidayFetch: Date?
+    /// 已经提醒过的「该休没休」（日期|栏目）
+    var noRestNotified: [String] = []
     /// 改了「我的名字」：下一次同步当作重新开始，不提示变动、不做异常检查
     var nextSyncIsBaseline = false
     /// 网站排了班、但没给我排的日子也提醒（显示「未排班」）
@@ -284,6 +292,11 @@ struct AppSettings: Codable, Equatable {
         sitePeople = try c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople) ?? [:]
         siteNotices = try c.decodeIfPresent([String].self, forKey: .siteNotices) ?? []
         fixedTelemetryDays = try c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays) ?? []
+        groupSatellites = try c.decodeIfPresent([String: String].self, forKey: .groupSatellites) ?? [:]
+        downloadedHolidayOff = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayOff) ?? []
+        downloadedHolidayWork = try c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork) ?? []
+        lastHolidayFetch = try c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
+        noRestNotified = try c.decodeIfPresent([String].self, forKey: .noRestNotified) ?? []
         restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
         nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
         remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
@@ -408,6 +421,8 @@ final class AppStore: ObservableObject {
                 publishedDays = Self.published(in: roster, matcher: matcher)
             }
             if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
+                || settings.downloadedHolidayOff != oldValue.downloadedHolidayOff
+                || settings.downloadedHolidayWork != oldValue.downloadedHolidayWork
                 || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides
                 || settings.accentTheme != oldValue.accentTheme
                 || settings.voiceIdentifier != oldValue.voiceIdentifier || settings.voiceRate != oldValue.voiceRate
@@ -618,6 +633,8 @@ final class AppStore: ObservableObject {
         VoiceSound.rate = min(max(settings.voiceRate, 0.3), 0.6)
         ChinaHolidays.customOff = Set(settings.customHolidayOff)
         ChinaHolidays.customWork = Set(settings.customHolidayWork)
+        ChinaHolidays.downloadedOff = Set(settings.downloadedHolidayOff)
+        ChinaHolidays.downloadedWork = Set(settings.downloadedHolidayWork)
         WorkloadCounter.rules = settings.workloadRules
         WorkloadCounter.ruleHistory = settings.ruleHistory
         WorkloadCounter.profiles = settings.profiles
@@ -711,7 +728,10 @@ final class AppStore: ObservableObject {
         let notes = groupNotes
         return matcher.displayName(raw).split(separator: "+").compactMap { part in
             let key = String(part).filter { !$0.isWhitespace }.uppercased()
-            return notes[key].map { (group: String(part), note: $0) }
+            // 网站组表里这组负责的星，放在说明最前面
+            let satellites = settings.groupSatellites[key].map { "负责的星：\($0)" }
+            let text = [satellites, notes[key]].compactMap { $0 }.joined(separator: "\n")
+            return text.isEmpty ? nil : (group: String(part), note: text)
         }
     }
 
@@ -982,12 +1002,63 @@ final class AppStore: ObservableObject {
         var s = settings
         if !site.people.isEmpty { s.sitePeople = site.people }
         if !site.notices.isEmpty { s.siteNotices = site.notices }
+        if !site.groupSatellites.isEmpty { s.groupSatellites = site.groupSatellites }
         if !site.fixedTelemetryDays.isEmpty {
             let cutoff = DayKey.today.adding(days: -400)
             let all = Set(s.fixedTelemetryDays.compactMap(DayKey.init(string:))).union(site.fixedTelemetryDays).filter { $0 >= cutoff }
             s.fixedTelemetryDays = all.sorted().map(\.description)
         }
         if s != settings { settings = s }
+        // 待休天数：网站人员表里直接有（unrestDays），比从人名后的括号里读更准
+        let balances = site.people.compactMapValues(\.unrestDays)
+        if !balances.isEmpty { updateRestBalance(balances) }
+    }
+
+    /// 网站标了我「该休没休」（今天及以后）：每处提醒一次
+    func notifySiteNoRest(_ flags: [SiteAPI.NoRest]) async {
+        guard !Self.isDemo else { return }
+        let today = DayKey.today
+        let mine = flags.filter { $0.day >= today && isMe($0.name) }
+            .filter { !settings.noRestNotified.contains("\($0.day)|\($0.column)") }
+        guard !mine.isEmpty else { return }
+        let lines = mine.sorted { $0.day < $1.day }.map { "\($0.day.month)月\($0.day.day)日 本该在「\($0.column)」，网站标了没休" }
+        settings.noRestNotified = Array((settings.noRestNotified + mine.map { "\($0.day)|\($0.column)" }).suffix(100))
+        let title = "⚠️ 网站标了你该休没休"
+        let body = lines.joined(separator: "\n") + "\n记得找时间补休，或者和排班的同事确认。"
+        await NotificationService.notifyNow(id: "site-norest-\(UUID().uuidString)", title: title, body: body)
+        if settings.weChatEnabled { _ = await pushToWeChat(title: title, content: body) }
+    }
+
+    /// 每周一次：下载今年、明年的法定节假日安排（国家公布后自动有，不用手动录入）
+    func refreshHolidaysIfNeeded() async {
+        guard !Self.isDemo, Date().timeIntervalSince(settings.lastHolidayFetch ?? .distantPast) > 7 * 86400 else { return }
+        let year = DayKey.today.year
+        var off = Set(settings.downloadedHolidayOff), work = Set(settings.downloadedHolidayWork)
+        var gotAny = false
+        for y in [year, year + 1] {
+            var request = URLRequest(url: HolidayFeed.url(year: y), timeoutInterval: 20)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            guard let (data, response) = try? await URLSession.shared.data(for: request),
+                  (response as? HTTPURLResponse)?.statusCode == 200, let parsed = HolidayFeed.parse(data) else { continue }
+            // 这一年的整套替换（国家调整过安排时跟着变）
+            off = off.filter { !$0.hasPrefix("\(y)-") }.union(parsed.off)
+            work = work.filter { !$0.hasPrefix("\(y)-") }.union(parsed.work)
+            gotAny = true
+        }
+        guard gotAny else { return }
+        var s = settings
+        s.downloadedHolidayOff = off.sorted()
+        s.downloadedHolidayWork = work.sorted()
+        s.lastHolidayFetch = Date()
+        if s != settings { settings = s }
+    }
+
+    /// 还没设「我是谁」时：拿网站上「我的分工」和全员排班比，对得上的那个人就是我
+    func identifyMeIfNeeded() {
+        guard settings.aliases.isEmpty, !Self.isDemo else { return }
+        guard let name = RosterExtractor.identify(mine: schedule, roster: roster, matcher: matcher) else { return }
+        setMe(name)
+        ToastCenter.shared.show("认出你是「\(name)」，已设为使用者", style: .success)
     }
 
     var fixedTelemetryDaySet: Set<DayKey> { Set(settings.fixedTelemetryDays.compactMap(DayKey.init(string:))) }
@@ -1061,6 +1132,7 @@ final class AppStore: ObservableObject {
             await notifyRestWarnings()
             updateRestBalance(outcome.restBalance)
             applySiteInfo(outcome.site)
+            await notifySiteNoRest(outcome.site.noRest)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
@@ -1068,6 +1140,7 @@ final class AppStore: ObservableObject {
             if settings.aliases == aliasesAtStart { settings.nextSyncIsBaseline = false }
             let changes = apply(result, publishedBefore: publishedBefore,
                                 rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
+            identifyMeIfNeeded()
             settings.lastSync = Date()
             settings.loginExpiredNotified = false
             settings.syncStaleNotified = false
