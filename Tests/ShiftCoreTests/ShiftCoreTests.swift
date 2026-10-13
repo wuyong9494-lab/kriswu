@@ -1018,6 +1018,7 @@ final class RegressionTests: XCTestCase {
 
     func testHTMLEntitiesDecodedOnce() {
         XCTAssertEqual(HTMLText.decodeEntities("&amp;lt;b&amp;gt; &#X4E00; &#x4e00;"), "&lt;b&gt; 一 一")
+        XCTAssertEqual(HTMLText.decodeEntities("&amp;#60; &#60; &NBSP;x"), "&#60; <  x")
     }
 
     func testWorkloadSkipsPeopleNotAround() {

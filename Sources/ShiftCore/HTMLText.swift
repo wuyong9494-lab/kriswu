@@ -75,14 +75,24 @@ public enum HTMLText {
     }
 
     /// 返回每个匹配的第 1 个捕获组。
-    static func captures(_ pattern: String, in s: String) -> [String] {
+    /// 编译好的正则（解析一页网页要用几百次，每次都编译很慢）。NSCache 可以多线程用
+    private static let regexCache = NSCache<NSString, NSRegularExpression>()
+
+    static func regex(_ pattern: String) -> NSRegularExpression {
+        if let re = regexCache.object(forKey: pattern as NSString) { return re }
         let re = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        regexCache.setObject(re, forKey: pattern as NSString)
+        return re
+    }
+
+    static func captures(_ pattern: String, in s: String) -> [String] {
+        let re = regex(pattern)
         let ns = s as NSString
         return re.matches(in: s, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range(at: 1)) }
     }
 
     static func replaceMatches(_ pattern: String, in s: String, with transform: (String) -> String) -> String {
-        let re = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        let re = regex(pattern)
         let ns = s as NSString
         var result = ""
         var last = 0
@@ -94,21 +104,29 @@ public enum HTMLText {
         return result + ns.substring(from: last)
     }
 
-    static func decodeEntities(_ s: String) -> String {
-        var out = s
-        // &amp; 最后换，「&amp;lt;」才会变成「&lt;」而不是「<」
-        let named = [("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&amp;", "&")]
-        for (k, v) in named { out = out.replacingOccurrences(of: k, with: v, options: .caseInsensitive) }
+    private static let entity = try! NSRegularExpression(pattern: #"&(#[xX][0-9a-fA-F]+|#[0-9]+|nbsp|lt|gt|quot|apos|amp);"#,
+                                                          options: [.caseInsensitive])
+    private static let named: [String: String] = ["nbsp": " ", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "amp": "&"]
 
-        let re = try! NSRegularExpression(pattern: #"&#([xX]?)([0-9a-fA-F]+);"#)
-        let ns = out as NSString
+    /// 一遍换完：「&amp;lt;」变成「&lt;」、「&amp;#60;」变成「&#60;」，不会被换两次
+    static func decodeEntities(_ s: String) -> String {
+        guard s.contains("&") else { return s }
+        let ns = s as NSString
         var result = ""
         var last = 0
-        for m in re.matches(in: out, range: NSRange(location: 0, length: ns.length)) {
+        for m in entity.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
             result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
-            let hex = !ns.substring(with: m.range(at: 1)).isEmpty
-            let num = UInt32(ns.substring(with: m.range(at: 2)), radix: hex ? 16 : 10)
-            result += num.flatMap(Unicode.Scalar.init).map { String(Character($0)) } ?? ns.substring(with: m.range)
+            let body = ns.substring(with: m.range(at: 1))
+            var decoded: String?
+            if body.hasPrefix("#") {
+                let digits = body.dropFirst()
+                let hex = digits.first == "x" || digits.first == "X"
+                let num = UInt32(hex ? String(digits.dropFirst()) : String(digits), radix: hex ? 16 : 10)
+                decoded = num.flatMap(Unicode.Scalar.init).map { String(Character($0)) }
+            } else {
+                decoded = named[body.lowercased()]
+            }
+            result += decoded ?? ns.substring(with: m.range)
             last = m.range.location + m.range.length
         }
         result += ns.substring(from: last)
