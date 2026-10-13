@@ -28,8 +28,8 @@ struct DesktopNotesBrowser: View {
                     Button("关闭") { dismiss() }
                 }
                 ToolbarItemGroup(placement: .bottomBar) {
-                    Button { model.webView.goBack() } label: { Image(systemName: "chevron.left") }
-                    Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise") }
+                    Button { model.webView.goBack() } label: { Image(systemName: "chevron.left").accessibilityLabel("后退") }
+                    Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise").accessibilityLabel("刷新") }
                     Spacer()
                     Button("读取本页") {
                         Task {

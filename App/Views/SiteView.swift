@@ -38,12 +38,12 @@ struct SiteView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { model.webView.goBack() } label: { Image(systemName: "chevron.left") }
+                    Button { model.webView.goBack() } label: { Image(systemName: "chevron.left").accessibilityLabel("后退") }
                         .disabled(!model.canGoBack)
                 }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button { model.load(store.settings.sourceURL) } label: { Image(systemName: "house") }
-                    Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise") }
+                    Button { model.load(store.settings.sourceURL) } label: { Image(systemName: "house").accessibilityLabel("回到排班页") }
+                    Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise").accessibilityLabel("刷新") }
                 }
             }
             .onAppear {

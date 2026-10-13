@@ -105,11 +105,11 @@ struct FairnessView: View {
 
     private func switcher(title: String, back: @escaping () -> Void, forward: @escaping () -> Void) -> some View {
         HStack {
-            Button(action: back) { Image(systemName: "chevron.left") }
+            Button(action: back) { Image(systemName: "chevron.left").accessibilityLabel("上一个") }
             Spacer()
             Text(title).font(.headline)
             Spacer()
-            Button(action: forward) { Image(systemName: "chevron.right") }
+            Button(action: forward) { Image(systemName: "chevron.right").accessibilityLabel("下一个") }
         }
         .buttonStyle(.borderless)
     }

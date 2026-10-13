@@ -142,10 +142,12 @@ struct CalendarView: View {
                 Image(systemName: "chevron.left").font(.headline).frame(width: 40, height: 40)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel("上个月")
             Button { Haptics.tap(); move(1) } label: {
                 Image(systemName: "chevron.right").font(.headline).frame(width: 40, height: 40)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel("下个月")
         }
         .padding(.horizontal, 4)
     }

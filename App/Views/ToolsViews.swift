@@ -203,11 +203,11 @@ struct YearStatsView: View {
         List {
             Section {
                 HStack {
-                    Button { year -= 1 } label: { Image(systemName: "chevron.left") }
+                    Button { year -= 1 } label: { Image(systemName: "chevron.left").accessibilityLabel("上一个") }
                     Spacer()
                     Text(verbatim: "\(year)年全年").font(.headline)
                     Spacer()
-                    Button { year += 1 } label: { Image(systemName: "chevron.right") }
+                    Button { year += 1 } label: { Image(systemName: "chevron.right").accessibilityLabel("下一个") }
                         .disabled(year >= DayKey.today.year)
                 }
                 .buttonStyle(.borderless)
