@@ -25,11 +25,24 @@ struct ShiftApp: App {
                 store.applyPendingTaskToggles()
                 WorkLogStore.shared.reloadIfNeeded()
                 Task {
+                    // 打开就离开也能做完：向系统多要一点后台时间（到时间就停下同步，保存好）
+                    var assertion = UIBackgroundTaskIdentifier.invalid
+                    assertion = UIApplication.shared.beginBackgroundTask(withName: "foreground-sync") {
+                        store.cancelRunningSync()
+                        UIApplication.shared.endBackgroundTask(assertion)
+                        assertion = .invalid
+                    }
+                    defer {
+                        if assertion != .invalid { UIApplication.shared.endBackgroundTask(assertion) }
+                    }
+                    // 到点的微信先发（几秒钟），再做费时的同步：和后台刷新一样，同步慢也不耽误微信
+                    await store.sendDueWeChatReminders()
                     await store.refreshHolidaysIfNeeded()
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()
                     await store.rescheduleNotifications()
                     store.autoBackupIfNeeded()
+                    store.flushSave(wait: true)
                 }
             case .background:
                 store.flushSave(wait: true)
