@@ -38,7 +38,7 @@ struct SettingsView: View {
                         row("账号与同步", icon: "arrow.triangle.2.circlepath", detail: syncSummary)
                     }
                     NavigationLink {
-                        Form { reminderSection; calendarSection }.appList().navigationTitle("提醒")
+                        Form { reminderSection; changesSection; calendarSection }.appList().navigationTitle("提醒")
                     } label: {
                         row("提醒", icon: "bell", detail: reminderSummary)
                     }
@@ -48,15 +48,30 @@ struct SettingsView: View {
                         row("微信推送", icon: "message", detail: store.settings.weChatEnabled ? "已开启" : "未开启")
                     }
                     NavigationLink {
+                        AutomationGuideView()
+                    } label: {
+                        row("自动同步设置向导", icon: "wand.and.stars",
+                            detail: store.automationLooksMissing ? "还没设置" : "已在运行")
+                    }
+                    NavigationLink {
+                        Form { displaySection }.appList().navigationTitle("显示")
+                    } label: {
+                        row("显示", icon: "paintpalette", detail: store.settings.appearance == .system && store.settings.accentTheme == .system
+                            ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")
+                    }
+                } header: {
+                    Text("同步与提醒")
+                }
+                Section {
+                    NavigationLink {
                         GroupNotesView()
                     } label: {
                         row("各组工作内容", icon: "list.bullet.rectangle", detail: groupNotesSummary)
                     }
                     NavigationLink {
-                        AutomationGuideView()
+                        SiteNoticesView()
                     } label: {
-                        row("自动同步设置向导", icon: "wand.and.stars",
-                            detail: store.automationLooksMissing ? "还没设置" : "已在运行")
+                        row("网站公告", icon: "pin", detail: store.settings.siteNotices.isEmpty ? "未读到" : "\(store.settings.siteNotices.count) 条")
                     }
                     NavigationLink {
                         SwapLedgerView()
@@ -70,12 +85,6 @@ struct SettingsView: View {
                             detail: ChinaHolidays.knownYears.sorted().map(String.init).joined(separator: "、"))
                     }
                     NavigationLink {
-                        Form { displaySection }.appList().navigationTitle("显示")
-                    } label: {
-                        row("显示", icon: "paintpalette", detail: store.settings.appearance == .system && store.settings.accentTheme == .system
-                            ? "跟随系统" : "\(store.settings.appearance.title) · \(store.settings.accentTheme.title)")
-                    }
-                    NavigationLink {
                         ImportView()
                     } label: {
                         row("导入排班表", icon: "square.and.arrow.down", detail: "粘贴 / 文件")
@@ -85,6 +94,8 @@ struct SettingsView: View {
                     } label: {
                         row("备份与恢复", icon: "externaldrive", detail: "换手机 / 重装用")
                     }
+                } header: {
+                    Text("数据")
                 }
                 Section {
                     Button { showWhatsNew = true } label: {
@@ -97,8 +108,12 @@ struct SettingsView: View {
                     } label: {
                         row("诊断", icon: "stethoscope", detail: "出问题时看这里")
                     }
-                    // 排查网站用的工具：只给管理员
-                    if store.canEdit {
+                } header: {
+                    Text("帮助")
+                }
+                // 排查网站用的工具、清空数据：只给管理员，收在最下面
+                if store.canEdit {
+                    Section {
                         NavigationLink {
                             APIFieldsView()
                         } label: {
@@ -109,9 +124,9 @@ struct SettingsView: View {
                         } label: {
                             row("查找网页排班代码", icon: "doc.text.magnifyingglass", detail: "只在手机上找")
                         }
-                    }
-                    if store.canEdit {
                         Button("清空所有排班", role: .destructive) { confirmClear = true }
+                    } header: {
+                        Text("高级（管理员）")
                     }
                 }
             }
@@ -298,6 +313,20 @@ struct SettingsView: View {
         }
     }
 
+    /// 排班变了、公告变了、快轮到我：所有「有变化就告诉我」的开关放在一起
+    private var changesSection: some View {
+        Section {
+            Toggle("我的排班有变动时通知我", isOn: $store.settings.notifyChanges)
+            Toggle("收藏的同事排班变了也通知我", isOn: $store.settings.notifyFavorites)
+            Toggle("全员排班有变动也提醒我", isOn: $store.settings.notifyAllChanges)
+            Toggle("网站没排、推算快轮到我值遥测时提前说", isOn: $store.settings.dutyHeadsUp)
+        } header: {
+            Text("有变化时通知")
+        } footer: {
+            Text("网站公告出现新内容、网站标了你该休没休，都会直接通知你。")
+        }
+    }
+
     private var reminderSection: some View {
         Section {
             if authStatus == .denied {
@@ -318,10 +347,7 @@ struct SettingsView: View {
             }
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
-            Toggle("网站没排、推算快轮到我值遥测时提前说", isOn: $store.settings.dutyHeadsUp)
             Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
-            Toggle("收藏的同事排班变了也通知我", isOn: $store.settings.notifyFavorites)
-            Toggle("全员排班有变动也提醒我", isOn: $store.settings.notifyAllChanges)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
                 NavigationLink {
@@ -418,7 +444,6 @@ struct SettingsView: View {
                     store.settings.loginExpiredNotified = false   // 改了密码，允许重新自动登录
                 }
             Toggle("用内置浏览器同步（沿用登录状态）", isOn: $store.settings.syncViaWeb)
-            Toggle("排班有变动时通知我", isOn: $store.settings.notifyChanges)
             Button {
                 Task { await store.sync(userInitiated: true) }
             } label: {
