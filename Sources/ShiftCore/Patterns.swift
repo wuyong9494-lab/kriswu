@@ -473,8 +473,10 @@ public enum SchedulePatterns {
 
     /// 规则：值完遥测休两天；值班那天或第二天不上班（周五、周六、周日、节假日）的多休一天。
     /// 周一值 → 休二三；周五值 → 休六日一；周六值 → 休日一二；周日值 → 休一二三。
+    /// 节假日里值的（不是假期最后一天）：只休第二天，后面的假期照常排岗位。
     public static func expectedRest(after day: DayKey, calendar: Calendar) -> [DayKey] {
         let next = day.adding(days: 1, calendar: calendar)
+        if ChinaHolidays.isHoliday(day) && ChinaHolidays.isHoliday(next) { return [next] }
         let extra = !ChinaHolidays.isWorkday(day, calendar: calendar) || !ChinaHolidays.isWorkday(next, calendar: calendar)
         return (1...(extra ? 3 : 2)).map { day.adding(days: $0, calendar: calendar) }
     }
@@ -491,11 +493,9 @@ public enum SchedulePatterns {
         for (name, history) in roster {
             for day in days.sorted() where posts(history[day], matcher: matcher).contains(where: WorkloadCounter.isDuty) {
                 let rest = expectedRest(after: day, calendar: calendar)
-                // 规则上哪天回来上班：休完后的第一个工作日
-                var back = rest.last!.adding(days: 1, calendar: calendar)
-                while !ChinaHolidays.isWorkday(back, calendar: calendar) { back = back.adding(days: 1, calendar: calendar) }
-                // 实际：第一天有岗位（不是休息请假），或者工作日网站上没写（正常上班）
-                var actualBack: DayKey?
+                // 实际：从第二天起连着几天不上班（写了休息、请假，或者周末、节假日没排）。
+                // 第一天有岗位、或者工作日网站上没写（正常上班）就是回来上班了
+                var cameBack = false
                 var off: [DayKey] = []
                 var d = day.adding(days: 1, calendar: calendar)
                 for _ in 0..<10 {
@@ -503,11 +503,14 @@ public enum SchedulePatterns {
                     let raw = WorkloadCounter.effective(history[d], matcher: matcher)
                     let works = raw.map { !RosterExtractor.isLeave($0, matcher: matcher) }
                         ?? ChinaHolidays.isWorkday(d, calendar: calendar)
-                    if works { actualBack = d; break }
+                    if works { cameBack = true; break }
                     off.append(d)
                     d = d.adding(days: 1, calendar: calendar)
                 }
-                guard let actualBack else { continue }
+                // 该休的日子都休了就符合：多休几天（周末、请假）、休完在周末或节假日排了岗位都不算违反
+                let restedAll = off.count >= rest.count
+                // 网站还没排到休完：先不算
+                guard restedAll || cameBack else { continue }
                 let weekday = weekdayIndex(day, calendar: calendar)
                 let expectedText = describe(rest, calendar: calendar)
                 let actualText = describe(off, calendar: calendar)
@@ -515,7 +518,7 @@ public enum SchedulePatterns {
                 row.duties += 1
                 row.expected[expectedText, default: 0] += 1
                 row.actual[actualText, default: 0] += 1
-                if actualBack == back {
+                if restedAll {
                     row.matched += 1
                 } else {
                     exceptions.append(RestException(day: day, name: name, expected: expectedText, actual: actualText))

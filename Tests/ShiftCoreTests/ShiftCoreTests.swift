@@ -1631,6 +1631,27 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(friday?.expected, "六日一")
         XCTAssertEqual(friday?.typical, "六日一")
         XCTAssertEqual(rule.exceptions, [SchedulePatterns.RestException(day: d(1), name: "乙", expected: "二三", actual: "二")])
+        // 休够了，周六又排了岗位：符合（看该休的日子休没休，不看哪天回来）
+        let saturday: Roster = ["丙": [d(3): "遥测", d(4): "休息", d(5): "休息", d(6): "组B"]]
+        XCTAssertEqual(SchedulePatterns.restRule(roster: saturday, days: (1...12).map(d), published: Set((1...14).map(d)),
+                                                 matcher: m, calendar: cal).matched, 1)
+    }
+
+    func testRestRuleDuringHoliday() {
+        // 2026 国庆 10/1–10/7：假期里值的只休第二天；最后一天值的照常（多休一天）
+        guard ChinaHolidays.isHoliday(DayKey(year: 2026, month: 10, day: 2)),
+              ChinaHolidays.isHoliday(DayKey(year: 2026, month: 10, day: 7)),
+              !ChinaHolidays.isHoliday(DayKey(year: 2026, month: 10, day: 8)) else { return }
+        let day = { (n: Int) in DayKey(year: 2026, month: 10, day: n) }
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: day(2), calendar: cal), [day(3)])
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: day(7), calendar: cal).first, day(8))
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: day(7), calendar: cal).count, 3)
+        // 10/2 值，10/3 休，10/4 假期里排了岗位：符合
+        let roster: Roster = ["甲": [day(2): "遥测", day(3): "休息", day(4): "组A"]]
+        let rule = SchedulePatterns.restRule(roster: roster, days: (1...7).map(day), published: Set((1...9).map(day)),
+                                             matcher: m, calendar: cal)
+        XCTAssertEqual(rule.matched, 1)
+        XCTAssertTrue(rule.exceptions.isEmpty)
     }
 
     func testDutyAndTelemetryAreTheSame() {
