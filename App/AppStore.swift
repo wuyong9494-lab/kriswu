@@ -1619,7 +1619,8 @@ final class AppStore: ObservableObject {
         let watched = found.filter { c in c.day >= today && settings.favorites.contains(where: c.involves) }
         if settings.notifyFavorites, !watched.isEmpty {
             let body = watched.map { "\($0.day.dateText) \($0.summary)" }.joined(separator: "\n")
-            await NotificationService.notifyNow(id: "favorites-\(UUID().uuidString)", title: "⭐ 关注的同事排班有变", body: body)
+            await NotificationService.notifyNow(id: "favorites-\(UUID().uuidString)", title: "⭐ 关注的同事排班有变", body: body,
+                                                route: "teamChanges")
         }
     }
 
@@ -1639,7 +1640,7 @@ final class AppStore: ObservableObject {
         if upcoming.count > 8 { lines.append("等 \(upcoming.count) 处，打开 App 看「变动历史」") }
         let title = "📋 全员排班有 \(upcoming.count) 处变动"
         let body = lines.joined(separator: "\n")
-        await NotificationService.notifyNow(id: "roster-edits-\(UUID().uuidString)", title: title, body: body)
+        await NotificationService.notifyNow(id: "roster-edits-\(UUID().uuidString)", title: title, body: body, route: "rosterLog")
         if settings.weChatEnabled && settings.weChatChanges {
             _ = await pushToWeChat(title: title, content: body)
         }

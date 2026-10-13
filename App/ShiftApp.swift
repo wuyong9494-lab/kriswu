@@ -56,6 +56,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .list, .sound])
     }
+
+    /// 点了通知：要打开的页面先记下（App 刚启动时界面可能还没出来），再通知界面去打开
+    static var pendingRoute: String?
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        if let route = response.notification.request.content.userInfo["route"] as? String {
+            DispatchQueue.main.async {
+                AppDelegate.pendingRoute = route
+                NotificationCenter.default.post(name: .openRoute, object: nil)
+            }
+        }
+        completionHandler()
+    }
+}
+
+extension Notification.Name {
+    /// 点了带「route」的通知
+    static let openRoute = Notification.Name("openRoute")
 }
 
 struct RootView: View {
@@ -69,8 +88,17 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
-        case workLog, record, note
+        case workLog, record, note, rosterLog, teamChanges
         var id: String { rawValue }
+    }
+
+    /// 点通知进来：打开对应的详情页
+    private func openPendingRoute() {
+        guard let route = AppDelegate.pendingRoute, let sheet = RootSheet(rawValue: route) else { return }
+        AppDelegate.pendingRoute = nil
+        rootSheet = nil
+        camera = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = sheet }
     }
 
     init() {
@@ -132,6 +160,8 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .pendingCapture)) { _ in
             if let action = PendingCapture.take() { startCapture(action) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openRoute)) { _ in openPendingRoute() }
+        .onAppear { openPendingRoute() }
         .onReceive(NotificationCenter.default.publisher(for: .pendingTaskToggles)) { _ in
             store.applyPendingTaskToggles()
         }
@@ -147,6 +177,13 @@ struct RootView: View {
                 }
             case .record: RecorderSheet(autoStart: true)
             case .note: NoteSheet()
+            case .rosterLog, .teamChanges:
+                NavigationStack {
+                    Group {
+                        if sheet == .rosterLog { RosterLogView() } else { TeamChangesView() }
+                    }
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
+                }
             }
         }
         // 第一次打开：设置向导

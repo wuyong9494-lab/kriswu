@@ -95,10 +95,12 @@ enum NotificationService {
     }
 
     /// 立即推送一条通知（排班变动、登录过期）。同一个 id 会替换上一条。
-    static func notifyNow(id: String, title: String, body: String) async {
+    /// route：点通知后打开哪一页（见 RootView.openRoute），比如「rosterLog」变动历史、「teamChanges」全员换班记录
+    static func notifyNow(id: String, title: String, body: String, route: String? = nil) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+        if let route { content.userInfo = ["route": route] }
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
