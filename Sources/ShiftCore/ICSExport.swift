@@ -11,7 +11,7 @@ public enum ICSExport {
         f.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
         func day(_ d: DayKey) -> String { String(format: "%04d%02d%02d", d.year, d.month, d.day) }
         func escape(_ s: String) -> String {
-            s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: ";", with: "\;")
+            s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: ";", with: "\\;")
                 .replacingOccurrences(of: ",", with: "\\,").replacingOccurrences(of: "\n", with: "\\n")
         }
         var lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ShiftReminder//CN", "CALSCALE:GREGORIAN",
