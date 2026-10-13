@@ -1370,6 +1370,24 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.forecast.first?.name, "乙")
     }
 
+    func testHolidayDutyPlanner() {
+        // 端午 6/19–21 甲值过遥测；下一个节假日是中秋 9/25–27（3 天）。乙丙丁端午没值；丙平时值得最少
+        let d = { (m: Int, day: Int) in DayKey(year: 2026, month: m, day: day) }
+        let roster: Roster = [
+            "甲": [d(6, 20): "遥测", d(7, 5): "遥测"],
+            "乙": [d(7, 12): "遥测", d(7, 20): "遥测", d(8, 1): "遥测"],
+            "丙": [d(7, 13): "遥测"],
+            "丁": [d(7, 14): "遥测", d(8, 2): "遥测"],
+        ]
+        let plan = HolidayDutyPlanner.plan(roster: roster, today: d(9, 1), matcher: m, calendar: cal)
+        XCTAssertEqual(plan?.days, [d(9, 25), d(9, 26), d(9, 27)])
+        XCTAssertEqual(plan?.lastHoliday, [d(6, 19), d(6, 20), d(6, 21)])
+        XCTAssertEqual(plan?.listDate, d(9, 11))
+        XCTAssertEqual(plan?.reserve.map(\.name), ["丙", "丁", "乙"])     // 没值端午的、值得少的先
+        XCTAssertEqual(plan?.others.map(\.name), ["甲"])
+        XCTAssertEqual(plan?.others.first?.servedLastHoliday, true)
+    }
+
     func testScriptScanner() {
         let app = "var a=1;function next(){/* 遥测按顺序轮，请假顺延 */return list.sort((x,y)=>x.lastDuty-y.lastDuty)[0]};" + String(repeating: "x", count: 2000) + "var shift=1;"
         let vendor = "function sort(){/* 排班 */}"

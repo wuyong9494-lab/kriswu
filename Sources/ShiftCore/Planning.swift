@@ -175,3 +175,78 @@ public enum DataCheck {
         return result.sorted { ($0.day ?? today) > ($1.day ?? today) }
     }
 }
+
+/// 节假日值班预测：网站公告的规则——「预先两周排出前一次（节假日）未值班的和值班次数少的人员名单（预留人员）；
+/// 然后询问是否有自愿报名的同事顶替（无人报名就按名单执行）」。
+/// 这里按这条规则排出下一个节假日的预留名单（不知道谁会自愿报名，所以只是参考）。
+public enum HolidayDutyPlanner {
+    public struct Candidate: Equatable {
+        public var name: String
+        /// 上一个节假日值没值遥测
+        public var servedLastHoliday: Bool
+        /// 近一年节假日值遥测的次数
+        public var holidayDuties: Int
+        /// 近一年值遥测的总次数
+        public var duties: Int
+    }
+
+    public struct Plan: Equatable {
+        /// 下一个节假日（连续放假的日子）
+        public var days: [DayKey]
+        /// 上一个节假日
+        public var lastHoliday: [DayKey]
+        /// 预留名单：按规则排在前面的，人数 = 假期天数
+        public var reserve: [Candidate]
+        /// 其余人，按同样的顺序
+        public var others: [Candidate]
+        /// 名单大约哪天排出（假期前两周）
+        public var listDate: DayKey
+    }
+
+    /// 从 from 往后（back = true 时往前）找第一段连续的法定节假日
+    static func holidayRun(from: DayKey, back: Bool, calendar: Calendar) -> [DayKey] {
+        var day = from
+        let step = back ? -1 : 1
+        for _ in 0..<400 {
+            if ChinaHolidays.isHoliday(day) {
+                var run = [day]
+                var d = day.adding(days: step, calendar: calendar)
+                while ChinaHolidays.isHoliday(d) { run.append(d); d = d.adding(days: step, calendar: calendar) }
+                return run.sorted()
+            }
+            day = day.adding(days: step, calendar: calendar)
+        }
+        return []
+    }
+
+    /// pool：参加遥测轮转的人（不传就用近一年值过遥测的人）
+    public static func plan(roster: Roster, today: DayKey, matcher: ShiftMatcher, pool: Set<String>? = nil,
+                            people: [String: SiteAPI.Person] = [:], calendar: Calendar = .current) -> Plan? {
+        // 正在放假：看这个假期；否则看下一个
+        let next = holidayRun(from: today, back: false, calendar: calendar)
+        guard let first = next.first else { return nil }
+        let last = holidayRun(from: first.adding(days: -1, calendar: calendar), back: true, calendar: calendar)
+        let since = today.adding(days: -365, calendar: calendar)
+        func isDuty(_ raw: String?) -> Bool {
+            (WorkloadCounter.effective(raw, matcher: matcher) ?? "").split(separator: "+")
+                .contains { WorkloadCounter.isDuty(matcher.displayName(String($0))) }
+        }
+        let names = pool ?? Set(roster.filter { _, h in h.contains { $0.key >= since && isDuty($0.value) } }.keys)
+        let candidates = names.filter { people[$0]?.onDuty != false }.map { name -> Candidate in
+            let history = roster[name] ?? [:]
+            let duties = history.filter { $0.key >= since && $0.key < first && isDuty($0.value) }.keys
+            return Candidate(name: name,
+                             servedLastHoliday: last.contains { isDuty(history[$0]) },
+                             holidayDuties: duties.filter(ChinaHolidays.isHoliday).count,
+                             duties: duties.count)
+        }
+        // 上次没值的在前；节假日值得少的在前；总共值得少的在前
+        let sorted = candidates.sorted {
+            ($0.servedLastHoliday ? 1 : 0, $0.holidayDuties, $0.duties, $0.name)
+                < ($1.servedLastHoliday ? 1 : 0, $1.holidayDuties, $1.duties, $1.name)
+        }
+        let n = min(next.count, sorted.count)
+        return Plan(days: next, lastHoliday: last, reserve: Array(sorted.prefix(n)), others: Array(sorted.dropFirst(n)),
+                    listDate: first.adding(days: -14, calendar: calendar))
+    }
+}

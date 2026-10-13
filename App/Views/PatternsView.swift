@@ -12,6 +12,7 @@ struct SchedulePatternsView: View {
         var rest: SchedulePatterns.RestRule
         var groups: SchedulePatterns.GroupPattern?
         var audit: RestBalanceAudit.Result?
+        var holiday: HolidayDutyPlanner.Plan?
         var days: Int
     }
 
@@ -34,6 +35,7 @@ struct SchedulePatternsView: View {
                     warningSection
                     siteRulesSection
                     dutySection(result.duty, title: "遥测轮转", icon: "antenna.radiowaves.left.and.right")
+                    holidaySection(result.holiday)
                     restSection(result.rest)
                     groupSection(result.groups)
                     dutySection(result.dispatch, title: "调度轮转", icon: "dial.medium")
@@ -59,14 +61,17 @@ struct SchedulePatternsView: View {
         let points = store.settings.restHistory.mapValues { $0.map(\.point) }
         let people = store.settings.sitePeople
         let fixed = store.fixedTelemetryDaySet
-        let computed = await Task.detached(priority: .userInitiated) {
-            Result(
-                duty: SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: m, calendar: .app,
-                                                people: people, fixedDays: fixed),
+        let computed = await Task.detached(priority: .userInitiated) { () -> Result in
+            let duty = SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: m, calendar: .app,
+                                                 people: people, fixedDays: fixed)
+            return Result(
+                duty: duty,
                 dispatch: SchedulePatterns.rotation(post: "调度", roster: roster, days: days, matcher: m, calendar: .app),
                 rest: SchedulePatterns.restRule(roster: roster, days: days, published: published, matcher: m, calendar: .app),
                 groups: SchedulePatterns.groupPattern(roster: roster, days: days, matcher: m, calendar: .app),
                 audit: RestBalanceAudit.analyze(points: points, roster: roster, matcher: m, calendar: .app),
+                holiday: HolidayDutyPlanner.plan(roster: roster, today: .today, matcher: m,
+                                                 pool: duty.map { Set($0.order) }, people: people, calendar: .app),
                 days: days.count)
         }.value
         result = computed
@@ -89,6 +94,35 @@ struct SchedulePatternsView: View {
 
     private func name(_ n: String) -> some View {
         Text(n).fontWeight(store.isMe(n) ? .bold : .regular).foregroundStyle(store.isMe(n) ? DS.Palette.accent : Color.primary)
+    }
+
+    // MARK: 节假日值班预测
+
+    @ViewBuilder
+    private func holidaySection(_ plan: HolidayDutyPlanner.Plan?) -> some View {
+        Section {
+            if let plan, let first = plan.days.first, let last = plan.days.last {
+                Text("下一个节假日：\(short(first)) – \(short(last))，共 \(plan.days.count) 天。网站大约 \(short(plan.listDate)) 前后排出预留名单。")
+                    .font(.subheadline)
+                ForEach(Array((plan.reserve + plan.others).enumerated()), id: \.offset) { i, c in
+                    HStack {
+                        Text(Self.circled(i + 1)).foregroundStyle(i < plan.reserve.count ? DS.Palette.accent : Color.secondary)
+                        name(c.name)
+                        Spacer()
+                        Text((c.servedLastHoliday ? "上次值了" : "上次没值") + " · 节假日 \(c.holidayDuties) 次 · 共 \(c.duties) 次")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .opacity(i < plan.reserve.count ? 1 : 0.6)
+                }
+            } else {
+                Text("App 里还没有下一个节假日的安排（明年的放假安排公布后，在「设置 › 法定节假日」里补上）。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("节假日值班预测")
+        } footer: {
+            Text("按网站公告的规则：预先两周排出上一次节假日没值班、值班次数少的人（预留名单，前 \(plan?.reserve.count ?? 0) 位）；有人自愿报名会顶替名单里不想值的。不知道谁会报名，所以只是参考。")
+        }
     }
 
     // MARK: 网站上写的规则
