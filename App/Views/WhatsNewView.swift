@@ -3,7 +3,7 @@ import SwiftUI
 /// 「这次更新了什么」：更新后第一次打开弹出来，设置里也能再看。新版本加了功能就改 id 和 items。
 enum WhatsNew {
     /// 换成新的 id，所有人下次打开都会再弹一次
-    static let id = "2026-10-13c"
+    static let id = "1.1"
     static let seenKey = "whatsNewSeen"
 
     struct Item: Identifiable {
@@ -14,6 +14,10 @@ enum WhatsNew {
     }
 
     static let items: [Item] = [
+        Item(icon: "calendar.badge.plus", title: "新排班出来会通知",
+             detail: "网站排出新一周时马上告诉你这几天的班，有遥测的直接写在标题里。"),
+        Item(icon: "checkmark.shield", title: "更稳、更省电",
+             detail: "同步失败可以直接重新登录或重试；后台不会再误报失败；数据存得更安全，页面更流畅。"),
         Item(icon: "alarm", title: "接遥测前提醒",
              detail: "设置 › 提醒 里可以设遥测接班时间，接班前 30 分钟、1 小时、2 小时或前一天晚上提醒你。"),
         Item(icon: "calendar", title: "日历里看谁值遥测",
@@ -30,10 +34,6 @@ enum WhatsNew {
              detail: "网站还没排、按顺序推算一周内轮到你时，提前通知一次（只是推算，可在 设置 › 提醒 关掉）。"),
         Item(icon: "arrow.left.arrow.right", title: "换班一键发请求",
              detail: "找人换班里，每个候选人都能直接复制或发送换班请求，能换回来的日子也写好了。"),
-        Item(icon: "book.closed", title: "换班账本人人可用",
-             detail: "谁替你上过班、你替谁上过，自动记账，不用管理员登录。"),
-        Item(icon: "square.grid.2x2", title: "小组件显示同步时间",
-             detail: "超过一天没同步，小组件会变灰并写上几天没同步，免得照着旧排班上班。"),
     ]
 }
 
