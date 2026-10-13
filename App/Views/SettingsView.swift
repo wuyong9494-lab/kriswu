@@ -6,6 +6,9 @@ struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var aliasText = ""
+    /// 用户在这页真的改过名字 / 密码才存（页面里的值可能是旧的，别写回去）
+    @State private var aliasEdited = false
+    @State private var passwordEdited = false
     @State private var showWhatsNew = false
     @State private var password = ""
     @State private var pushToken = ""
@@ -150,6 +153,22 @@ struct SettingsView: View {
         }
     }
 
+    /// 名字：用户改过才存
+    private func commitAliases() {
+        guard aliasEdited else { return }
+        let names = Self.names(in: aliasText)
+        if names != store.settings.aliases { store.settings.aliases = names }
+        aliasEdited = false
+    }
+
+    /// 密码：用户改过才写钥匙串；改了密码，允许重新自动登录
+    private func commitPassword() {
+        guard passwordEdited, password != (Keychain.get(.sourcePassword) ?? "") else { return }
+        Keychain.set(password, for: .sourcePassword)
+        store.settings.loginExpiredNotified = false
+        passwordEdited = false
+    }
+
     /// 统一的单色玻璃图标 + 标题 + 右边的状态
     private func row(_ title: String, icon: String, detail: String) -> some View {
         HStack(spacing: DS.Space.s) {
@@ -278,17 +297,21 @@ struct SettingsView: View {
             TextField("例如：张三, zhangsan", text: $aliasText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                // 每次进来显示最新的名字（可能在今天页、同步时换过）
+                .onAppear {
+                    aliasText = store.settings.aliases.joined(separator: ", ")
+                    aliasEdited = false
+                }
+                .onChange(of: aliasText) { text in
+                    if Self.names(in: text) != store.settings.aliases { aliasEdited = true }
+                }
                 // 停手一秒再存（不是每打一个字就存一次、重排一次提醒）
                 .task(id: aliasText) {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     guard !Task.isCancelled else { return }
-                    let names = Self.names(in: aliasText)
-                    if names != store.settings.aliases { store.settings.aliases = names }
+                    commitAliases()
                 }
-                .onDisappear {
-                    let names = Self.names(in: aliasText)
-                    if names != store.settings.aliases { store.settings.aliases = names }
-                }
+                .onDisappear { commitAliases() }
                 // 在别处（首次设置、今天页「我是谁」）换了人：这里跟着显示新名字，不把旧名字写回去
                 .onChange(of: store.settings.aliases) { names in
                     if Self.names(in: aliasText) != names { aliasText = names.joined(separator: ", ") }
@@ -461,19 +484,20 @@ struct SettingsView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             SecureField("值班网站密码（保存在钥匙串）", text: $password)
-                // 停手后再写钥匙串；真的改了才算（打开设置页读出来的不算）
+                .onAppear {
+                    password = Keychain.get(.sourcePassword) ?? ""
+                    passwordEdited = false
+                }
+                .onChange(of: password) { value in
+                    if value != (Keychain.get(.sourcePassword) ?? "") { passwordEdited = true }
+                }
+                // 停手后再写钥匙串；打完马上离开页面也要存上
                 .task(id: password) {
                     try? await Task.sleep(nanoseconds: 600_000_000)
-                    guard !Task.isCancelled, password != (Keychain.get(.sourcePassword) ?? "") else { return }
-                    Keychain.set(password, for: .sourcePassword)
-                    store.settings.loginExpiredNotified = false   // 改了密码，允许重新自动登录
+                    guard !Task.isCancelled else { return }
+                    commitPassword()
                 }
-                .onDisappear {
-                    // 打完马上离开页面：也要存上
-                    guard password != (Keychain.get(.sourcePassword) ?? "") else { return }
-                    Keychain.set(password, for: .sourcePassword)
-                    store.settings.loginExpiredNotified = false
-                }
+                .onDisappear { commitPassword() }
             Toggle("用内置浏览器同步（沿用登录状态）", isOn: $store.settings.syncViaWeb)
             Button {
                 Task { await store.sync(userInitiated: true) }

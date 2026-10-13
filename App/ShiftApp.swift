@@ -26,15 +26,9 @@ struct ShiftApp: App {
                 WorkLogStore.shared.reloadIfNeeded()
                 Task {
                     // 打开就离开也能做完：向系统多要一点后台时间（到时间就停下同步，保存好）
-                    var assertion = UIBackgroundTaskIdentifier.invalid
-                    assertion = UIApplication.shared.beginBackgroundTask(withName: "foreground-sync") {
-                        store.cancelRunningSync()
-                        UIApplication.shared.endBackgroundTask(assertion)
-                        assertion = .invalid
-                    }
-                    defer {
-                        if assertion != .invalid { UIApplication.shared.endBackgroundTask(assertion) }
-                    }
+                    let assertion = BackgroundAssertion()
+                    assertion.begin { store.cancelRunningSync() }
+                    defer { assertion.end() }
                     // 到点的微信先发（几秒钟），再做费时的同步：和后台刷新一样，同步慢也不耽误微信
                     await store.sendDueWeChatReminders()
                     await store.refreshHolidaysIfNeeded()
@@ -360,5 +354,26 @@ enum ScreenCatalog {
         case "holidayduty": HolidayDutyView()
         default: TodayView()
         }
+    }
+}
+
+/// 向系统要一点后台时间（打开 App 马上离开时把同步做完）；时间到了先做 onExpire 再交还
+@MainActor
+final class BackgroundAssertion {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    func begin(onExpire: @escaping @MainActor () -> Void) {
+        id = UIApplication.shared.beginBackgroundTask(withName: "foreground-sync") { [weak self] in
+            MainActor.assumeIsolated {
+                onExpire()
+                self?.end()
+            }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

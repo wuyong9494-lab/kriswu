@@ -36,7 +36,9 @@ enum NotificationService {
             }
             content.threadIdentifier = "shift"
             // 点提醒直接打开说的那一天（晚上的提醒说的是明天）
-            let about = n.id.hasPrefix("shift-evening") ? n.day.adding(days: 1) : n.day
+            // 接班前提醒（「前一天晚上」那种是在前一天响）：id 里就是要值班的那天
+            var about = n.id.hasPrefix("shift-evening") ? n.day.adding(days: 1) : n.day
+            if n.id.hasPrefix("shift-lead-"), let d = DayKey(string: String(n.id.dropFirst("shift-lead-".count))) { about = d }
             content.userInfo = ["route": "day:\(about)"]
             // 早上的提醒：这天有清单就带一个「清单全部做完」按钮（长按通知就能点）
             if n.id.hasPrefix("shift-morning"), !AppStore.shared.taskItems(on: about).isEmpty {
