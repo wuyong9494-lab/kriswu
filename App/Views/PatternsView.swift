@@ -180,6 +180,14 @@ struct SchedulePatternsView: View {
                     // 两条线：先看哪天该哪条线值猜没猜对，再看线里轮到谁猜没猜对，知道错在哪
                     LabeledContent("哪天轮到研发 / 生产", value: "猜对 \(r.lineHits)/\(r.lineSlots)")
                     LabeledContent("线对了，线里轮到谁", value: "猜对 \(r.inLineHits)/\(max(r.lineHits, 1))")
+                    ForEach(r.perLine.keys.sorted().filter { !$0.isEmpty }, id: \.self) { l in
+                        let stat = r.perLine[l] ?? [0, 0]
+                        LabeledContent("\(l)线", value: "猜中 \(stat[1])/\(stat[0])")
+                    }
+                }
+                if r.weekSlots > 0 {
+                    // 网站可能一周一起排：按周看猜到了谁（不管哪一天）
+                    LabeledContent("按周看：这周轮到谁", value: "猜到 \(r.weekHits)/\(r.weekSlots)")
                 }
                 Text(deferralConclusion(r)).font(.footnote).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: DS.Space.xs) {

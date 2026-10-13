@@ -76,6 +76,11 @@ public enum SchedulePatterns {
         public var lineOrders: [String: [String]] = [:]
         /// 平均每天几个人值这个岗位（调度常常是几个人同时在）
         public var holdersPerDay: Double = 1
+        /// 按周：实际值班的人次、其中这一周里猜到了的人次（日子可能不对）
+        public var weekSlots = 0
+        public var weekHits = 0
+        /// 每条线：[人次, 猜中]
+        public var perLine: [String: [Int]] = [:]
 
         public var rate: Double { slots == 0 ? 0 : Double(matched) / Double(slots) }
         public var strictRate: Double { slots == 0 ? 0 : Double(strictMatched) / Double(slots) }
@@ -245,7 +250,16 @@ public enum SchedulePatterns {
 
         struct Run { var matched = 0; var slots = 0; var fixed = 0; var deferrals: [Deferral] = []; var exceptions: [Exception] = []
                      var lineSlots = 0; var lineHits = 0; var inLineHits = 0
+                     var perLine: [String: [Int]] = [:]
+                     var predictedWeek: [Int: Set<String>] = [:]; var actualWeek: [Int: [String]] = [:]
                      var state: State }
+
+        var weekCal = calendar
+        weekCal.firstWeekday = 2
+        func weekKey(_ d: DayKey) -> Int {
+            let date = d.date(calendar: weekCal, hour: 12)
+            return weekCal.component(.yearForWeekOfYear, from: date) * 100 + weekCal.component(.weekOfYear, from: date)
+        }
 
         // 一天天往下猜：只用那天以前的排班和那天的请假出差（网站上别的岗位不看，不然等于偷看了答案）
         func simulate(_ model: Model, leaveAware: Bool) -> Run {
@@ -277,6 +291,16 @@ public enum SchedulePatterns {
                 }
                 run.slots += holders.count
                 run.matched += holders.filter { predicted.contains($0) }.count
+                // 按周看：这一周会轮到哪些人（网站可能是一周一起排的，同一周里谁哪天不一定按顺序）
+                let wk = weekKey(day)
+                run.predictedWeek[wk, default: []].formUnion(predicted)
+                run.actualWeek[wk, default: []] += holders.filter { pool.contains($0) }
+                for h in holders where pool.contains(h) {
+                    var stat = run.perLine[line(h)] ?? [0, 0]
+                    stat[0] += 1
+                    if predicted.contains(h) { stat[1] += 1 }
+                    run.perLine[line(h)] = stat
+                }
                 // 分两条线时：哪条线猜对了没有；线猜对了的，线里的人猜对了没有
                 if split, let l = lineFor(day) {
                     for h in holders where pool.contains(h) {
@@ -328,7 +352,12 @@ public enum SchedulePatterns {
                         lineOrders: split ? Dictionary(uniqueKeysWithValues: lines.map { l in
                             (l, priority(run.state, model).filter { line($0) == l })
                         }) : [:],
-                        holdersPerDay: perDay)
+                        holdersPerDay: perDay,
+                        weekSlots: run.actualWeek.values.reduce(0) { $0 + $1.count },
+                        weekHits: run.actualWeek.reduce(0) { sum, kv in
+                            sum + kv.value.filter { (run.predictedWeek[kv.key] ?? []).contains($0) }.count
+                        },
+                        perLine: run.perLine)
     }
 
     // MARK: - 值完遥测休几天
