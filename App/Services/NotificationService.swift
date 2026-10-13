@@ -96,15 +96,23 @@ enum NotificationService {
 
     /// 立即推送一条通知（排班变动、登录过期）。同一个 id 会替换上一条。
     /// route：点通知后打开哪一页（见 RootView.openRoute），比如「rosterLog」变动历史、「teamChanges」全员换班记录
+    @MainActor
     static func notifyNow(id: String, title: String, body: String, route: String? = nil) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         if let route { content.userInfo = ["route": route] }
-        content.sound = .default
+        // 一次同步可能发好几条（变动、公告、预警……）：归到一组，只有第一条响铃
+        content.threadIdentifier = "updates"
+        let now = Date()
+        content.sound = now.timeIntervalSince(lastSound) > 30 ? .default : nil
+        lastSound = now
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
     }
+
+    /// 上一条即时通知响铃的时间
+    @MainActor private static var lastSound = Date.distantPast
 
     static func sendTest(title: String, body: String) async {
         let content = UNMutableNotificationContent()
