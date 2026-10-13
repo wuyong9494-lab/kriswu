@@ -611,6 +611,7 @@ final class AppStore: ObservableObject {
 
     /// 进入演示：全是虚构数据，不读写手机上的文件、不联网（真实数据原样留着，退出后回来）
     func enterDemo() {
+        flushSave(wait: true)   // 先把还没写的真实数据存好，进了演示就不再写
         UserDefaults.standard.set(true, forKey: Self.demoKey)
         role = .admin
         loadDemoData()
@@ -712,14 +713,29 @@ final class AppStore: ObservableObject {
 
     private static let rosterVersion = 3
 
+    /// 存盘：同一时间连续改好几处（一次同步要改十几处）只写一次，而且在后台线程写，不卡界面
+    private var saveTask: Task<Void, Never>?
+
     private func save() {
+        if Self.isDemo { return }
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            self?.flushSave()
+        }
+    }
+
+    /// 马上把还没写的存下来（退到后台、后台任务结束时调用，免得被系统结束时丢改动）
+    func flushSave(wait: Bool = false) {
+        saveTask?.cancel()
+        saveTask = nil
         if Self.isDemo { return }
         let state = PersistedState(settings: settings,
                                    schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }),
                                    covered: covered.map(\.description).sorted())
-        if let data = try? JSONEncoder().encode(state) {
-            try? data.write(to: Self.fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        }
+        StateWriter.shared.write(state, to: Self.fileURL)
+        if wait { StateWriter.shared.waitUntilDone() }
     }
 
     // MARK: - 排班
@@ -1240,13 +1256,16 @@ final class AppStore: ObservableObject {
                                 rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
             identifyMeIfNeeded()
             scorePreview()
-            settings.lastSync = Date()
-            settings.loginExpiredNotified = false
-            settings.syncStaleNotified = false
-            settings.lastSyncMessage = "同步成功：\(result.format.rawValue)，\(result.entries.count) 天"
+            // 同步状态一次改完：只触发一次比较、存盘和界面刷新
+            var status = settings
+            status.lastSync = Date()
+            status.loginExpiredNotified = false
+            status.syncStaleNotified = false
+            status.lastSyncMessage = "同步成功：\(result.format.rawValue)，\(result.entries.count) 天"
                 + (changes.isEmpty ? "，没有变动" : "，\(changes.count) 处变动")
                 + (outcome.roster.isEmpty ? "" : "，这次读到 \(outcome.roster.count) 人有排班（全年累计 \(roster.count) 人）")
-            settings.lastSuccessMessage = settings.lastSyncMessage
+            status.lastSuccessMessage = status.lastSyncMessage
+            settings = status
             // 第一次导入不算“变动”，之后每次同步发现不同就提醒
             if hadData && !changes.isEmpty {
                 let title = "📢 排班有更新（\(changes.count) 处）"
@@ -1771,6 +1790,7 @@ final class AppStore: ObservableObject {
             Task { @MainActor in AppStore.shared.cancelRunningSync() }
         }
         BackgroundRefresh.schedule(notBefore: nextBackgroundSync)
+        flushSave(wait: true)   // 后台时间随时会被收回，写完再交还
     }
 
     func cancelRunningSync() { syncTask?.cancel() }
@@ -2235,4 +2255,26 @@ struct PreviewResult: Codable, Equatable {
     var guess: String
     var actual: String
     var hit: Bool
+}
+
+
+/// 在后台串行写 state.json：按先后顺序写，后面的覆盖前面的
+final class StateWriter {
+    static let shared = StateWriter()
+    private let queue = DispatchQueue(label: "state-writer", qos: .utility)
+
+    fileprivate func write(_ state: PersistedState, to url: URL) {
+        queue.async {
+            do {
+                let data = try JSONEncoder().encode(state)
+                try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            } catch {
+                // 写不进去（比如锁屏时文件受保护）：记一笔，下次改动时会再写
+                NSLog("state.json 写入失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// 等前面排着的都写完
+    func waitUntilDone() { queue.sync {} }
 }
