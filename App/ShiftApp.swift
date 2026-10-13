@@ -99,6 +99,8 @@ struct RootView: View {
     /// 从「备忘录」等分享进来的录音存好后打开工作留痕；控制中心、操作按钮、小组件来的拍照 / 录音 / 记一笔
     @State private var rootSheet: RootSheet?
     @State private var camera = false
+    /// 点小组件打开某一天
+    @State private var openDay: DayKey?
     @State private var tabBarTop: CGFloat = .infinity
     /// 打开过的页：没打开过的不建（网站页不会一启动就去登录网站，也少画几页）
     @State private var visited: Set<Tab> = []
@@ -203,6 +205,11 @@ struct RootView: View {
             } else if url.scheme == "shiftreminder", url.host == "capture",
                       let action = CaptureAction(rawValue: url.lastPathComponent) {
                 startCapture(action)
+            } else if url.scheme == "shiftreminder", url.host == "day", let day = DayKey(string: url.lastPathComponent) {
+                // 小组件：打开那一天（我的班、全员分工、留痕）
+                tab = .today
+                rootSheet = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { openDay = day }
             }
         }
         // 控制中心、操作按钮、快捷指令：动作写在 App Group 里，App 打开后接着做
@@ -225,6 +232,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active, let action = PendingCapture.take() { startCapture(action) }
         }
+        .sheet(item: $openDay) { DayEditor(day: $0) }
         .sheet(item: $rootSheet) { sheet in
             switch sheet {
             case .workLog:

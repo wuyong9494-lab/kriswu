@@ -1168,7 +1168,19 @@ final class AppStore: ObservableObject {
         WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today),
                                         nextDuty: turn?.day?.description, nextDutyPredicted: turn.map { !$0.scheduled },
                                         lastSync: settings.lastSync,
-                                        restBalance: myRosterName.flatMap { settings.restBalance[$0] }))
+                                        restBalance: myRosterName.flatMap { settings.restBalance[$0] },
+                                        teamDuty: teamDutyForWidget(from: today)))
+    }
+
+    /// 昨天到 7 天后，每天谁值遥测
+    private func teamDutyForWidget(from today: DayKey) -> [String: String] {
+        var result: [String: String] = [:]
+        for offset in -1...7 {
+            let day = today.adding(days: offset)
+            let names = dayRoster(day).filter { WorkloadCounter.isDuty($0.post) }.flatMap(\.names)
+            if !names.isEmpty { result[day.description] = names.joined(separator: "、") }
+        }
+        return result
     }
 
     /// 今天组别的任务清单（和首页「今天要做」一样）

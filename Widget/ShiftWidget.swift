@@ -183,6 +183,7 @@ struct ShiftWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetStore.kind, provider: ShiftProvider()) { entry in
             ShiftWidgetView(entry: entry)
+                .widgetURL(URL(string: "shiftreminder://day/\(WidgetStore.key(for: entry.date))"))
         }
         .configurationDisplayName("今日班组")
         .description("显示今天和明天的分工，每天 0 点自动更新。")
@@ -196,6 +197,7 @@ struct ShiftWidgetBundle: WidgetBundle {
         ShiftWidget()
         WeekWidget()
         NextDutyWidget()
+        TeamDutyWidget()
         DutyLiveActivity()
         CaptureWidget()
         if #available(iOSApplicationExtension 18.0, *) {
@@ -595,5 +597,92 @@ extension Color {
         let luminance = b * (1 - sat * 0.5)
         guard luminance > 0.62 else { return self }
         return Color(hue: Double(h), saturation: Double(min(1, sat + 0.1)), brightness: Double(b * 0.62 / luminance), opacity: Double(a))
+    }
+}
+
+// MARK: - 谁值遥测
+
+struct TeamDutyEntry: TimelineEntry {
+    let date: Date
+    let today: String?
+    let tomorrow: String?
+    let hasData: Bool
+}
+
+struct TeamDutyProvider: TimelineProvider {
+    func placeholder(in context: Context) -> TeamDutyEntry {
+        TeamDutyEntry(date: Date(), today: "张三", tomorrow: "李四", hasData: true)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (TeamDutyEntry) -> Void) {
+        completion(context.isPreview ? placeholder(in: context) : entry(for: Date(), snapshot: WidgetStore.load()))
+    }
+
+    /// 今天和接下来 7 天每个 0 点换一次
+    func getTimeline(in context: Context, completion: @escaping (Timeline<TeamDutyEntry>) -> Void) {
+        let snapshot = WidgetStore.load()
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.startOfDay(for: Date())
+        let entries = [entry(for: Date(), snapshot: snapshot)] + (1...7).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: start).map { entry(for: $0, snapshot: snapshot) }
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
+    }
+
+    func entry(for date: Date, snapshot: WidgetSnapshot?) -> TeamDutyEntry {
+        let tomorrow = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: date) ?? date
+        let duty = snapshot?.teamDuty ?? [:]
+        return TeamDutyEntry(date: date, today: duty[WidgetStore.key(for: date)], tomorrow: duty[WidgetStore.key(for: tomorrow)],
+                             hasData: snapshot?.teamDuty != nil)
+    }
+}
+
+struct TeamDutyView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: TeamDutyEntry
+
+    private var todayText: String { entry.today ?? (entry.hasData ? "还没排" : "打开 App") }
+    private var tomorrowText: String { entry.tomorrow ?? "还没排" }
+
+    var body: some View {
+        switch family {
+        case .accessoryInline:
+            Text("📡 今天 \(todayText)")
+                .widgetBackground(Color.clear)
+        case .accessoryRectangular:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("📡 谁值遥测").font(.caption2)
+                Text("今天 \(todayText)").font(.headline).lineLimit(1).minimumScaleFactor(0.6)
+                Text("明天 \(tomorrowText)").font(.caption2).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .widgetBackground(Color.clear)
+        default:
+            VStack(alignment: .leading, spacing: 6) {
+                Text("📡 谁值遥测").font(.caption.weight(.semibold)).opacity(0.9)
+                Spacer(minLength: 0)
+                Text("今天").font(.caption2).opacity(0.85)
+                Text(todayText).font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .lineLimit(2).minimumScaleFactor(0.5)
+                Spacer(minLength: 0)
+                Text("明天 \(tomorrowText)").font(.caption).lineLimit(1).minimumScaleFactor(0.6).opacity(0.9)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .widgetPadding()
+            .widgetBackground(Color(hex: "#17A2B8").forWhiteText.gradient)
+        }
+    }
+}
+
+struct TeamDutyWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "TeamDutyWidget", provider: TeamDutyProvider()) { entry in
+            TeamDutyView(entry: entry)
+                .widgetURL(URL(string: "shiftreminder://day/\(WidgetStore.key(for: entry.date))"))
+        }
+        .configurationDisplayName("谁值遥测")
+        .description("今天、明天值遥测的同事。")
+        .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryInline])
     }
 }

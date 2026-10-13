@@ -31,6 +31,8 @@ struct WidgetSnapshot: Codable {
     var lastSync: Date? = nil
     /// 我还有几天待休
     var restBalance: Int? = nil
+    /// 每天谁值遥测（yyyy-MM-dd → 「张三、李四」），给「谁值遥测」小组件用
+    var teamDuty: [String: String]? = nil
 }
 
 enum WidgetStore {
