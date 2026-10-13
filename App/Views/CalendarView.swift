@@ -57,9 +57,7 @@ struct CalendarView: View {
                             Label("分享 / 复制本月统计", systemImage: "square.and.arrow.up")
                         }
                         // 给家人：导出成日历文件，导入后他们的日历里就有我的班
-                        ShareLink(item: ScheduleICS(text: ICSExport.make(
-                            schedule: store.schedule, from: DayKey.today.adding(days: -7), to: DayKey.today.adding(days: 120),
-                            matcher: store.matcher, calendar: .app)),
+                        ShareLink(item: ScheduleICS(schedule: store.schedule, matcher: store.matcher),
                                   preview: SharePreview("我的排班.ics")) {
                             Label("导出日历文件（给家人）", systemImage: "calendar.badge.plus")
                         }
@@ -365,12 +363,17 @@ struct DayEditor: View {
 
 /// 分享出去的 .ics 文件
 struct ScheduleICS: Transferable {
-    let text: String
+    let schedule: [DayKey: String]
+    let matcher: ShiftMatcher
 
     static var transferRepresentation: some TransferRepresentation {
+        // 点了分享才生成（不在每次刷新界面时拼一百多天的文件）
         FileRepresentation(exportedContentType: .calendarEvent) { item in
+            let today = DayKey.today
+            let text = ICSExport.make(schedule: item.schedule, from: today.adding(days: -7), to: today.adding(days: 120),
+                                      matcher: item.matcher, calendar: .app)
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("我的排班.ics")
-            try item.text.data(using: .utf8)?.write(to: url, options: .atomic)
+            try text.data(using: .utf8)?.write(to: url, options: .atomic)
             return SentTransferredFile(url)
         }
     }
