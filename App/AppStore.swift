@@ -91,6 +91,8 @@ struct AppSettings: Codable, Equatable {
     var calendarSync = false
     /// 排班变动也发到微信（关掉后只在 iPhone 上通知）
     var weChatChanges = true
+    /// 同事的排班变动、网站公告也推到微信（会把同事姓名发给 PushPlus），默认不推
+    var weChatTeam = false
     var lastWeChatChangeDigest: String?
     /// 各组工作内容：电脑版网页 > 自己填写的 > 其它页面顺带读到的
     var autoGroupNotes: [String: String] = [:]
@@ -262,6 +264,7 @@ struct AppSettings: Codable, Equatable {
         dynamicIcon = (try? c.decodeIfPresent(Bool.self, forKey: .dynamicIcon)) ?? d.dynamicIcon
         calendarSync = (try? c.decodeIfPresent(Bool.self, forKey: .calendarSync)) ?? d.calendarSync
         weChatChanges = (try? c.decodeIfPresent(Bool.self, forKey: .weChatChanges)) ?? d.weChatChanges
+        weChatTeam = (try? c.decodeIfPresent(Bool.self, forKey: .weChatTeam)) ?? d.weChatTeam
         lastWeChatChangeDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
         autoGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes)) ?? [:]
         manualGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes)) ?? [:]
@@ -468,6 +471,7 @@ extension AppSettings {
         a.weChatEnabled = o.weChatEnabled
         a.weChatDaily = o.weChatDaily
         a.weChatChanges = o.weChatChanges
+        a.weChatTeam = o.weChatTeam
         a.dutyHeadsUp = o.dutyHeadsUp
         a.syncState = o.syncState
         a.lastSyncAttempt = o.lastSyncAttempt
@@ -1282,7 +1286,7 @@ final class AppStore: ObservableObject {
         let title = "📌 值班网站公告有更新"
         let body = fresh.map { $0.count > 120 ? String($0.prefix(120)) + "…" : $0 }.joined(separator: "\n")
         await NotificationService.notifyNow(id: "site-notice", title: title, body: body, route: "notices")
-        if settings.weChatEnabled { _ = await pushToWeChat(title: title, content: fresh.joined(separator: "\n\n")) }
+        if settings.weChatEnabled && settings.weChatTeam { _ = await pushToWeChat(title: title, content: fresh.joined(separator: "\n\n")) }
     }
 
     /// 网站标了我「该休没休」（今天及以后）：每处提醒一次
@@ -2145,7 +2149,7 @@ final class AppStore: ObservableObject {
         let title = "📋 全员排班有 \(upcoming.count) 处变动"
         let body = lines.joined(separator: "\n")
         await NotificationService.notifyNow(id: "roster-edits-\(UUID().uuidString)", title: title, body: body, route: "rosterLog")
-        if settings.weChatEnabled && settings.weChatChanges {
+        if settings.weChatEnabled && settings.weChatChanges && settings.weChatTeam {
             _ = await pushToWeChat(title: title, content: body)
         }
     }

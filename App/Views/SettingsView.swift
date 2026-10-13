@@ -395,6 +395,7 @@ struct SettingsView: View {
                     .onChange(of: pushToken) { Keychain.set($0.trimmingCharacters(in: .whitespacesAndNewlines), for: .pushPlusToken) }
                 Toggle("每天的提醒也发到微信", isOn: $store.settings.weChatDaily)
                 Toggle("排班变动也发到微信", isOn: $store.settings.weChatChanges)
+                Toggle("同事的排班变动、网站公告也发到微信", isOn: $store.settings.weChatTeam)
                 Toggle("每月 1 号发上个月的工作量月报", isOn: $store.settings.monthlyReport)
                 if store.role != .user {
                     Toggle("每周一发上周的管理摘要", isOn: $store.settings.weeklyDigest)
