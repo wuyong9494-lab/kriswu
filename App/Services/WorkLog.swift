@@ -347,6 +347,42 @@ final class WorkLogStore: ObservableObject {
     func count(on day: DayKey) -> Int {
         entries.filter { DayKey(date: $0.date, calendar: .app) == day }.count
     }
+
+    /// 交接班小结草稿：当天的班、清单做完没做完、留痕按时间列出来，复制给接班的人
+    /// 加了面容 ID 锁又没解锁时，只写条数不写内容
+    @MainActor
+    func handoverSummary(for day: DayKey, store: AppStore) -> String {
+        var lines = ["【交接班】\(day.month)月\(day.day)日（\(day.weekdayText)）"
+                     + (store.shift(on: day).map { " " + store.matcher.displayName($0) } ?? "")]
+        let groups = store.notes(for: store.shift(on: day)).map { (group: $0.group, items: TaskList.items(from: $0.note)) }
+            .filter { $0.items.count > 1 }
+        var done: [String] = [], todo: [String] = []
+        for g in groups {
+            for (i, item) in g.items.enumerated() {
+                if store.isTaskDone(day, g.group, TaskChecklistCard.key(i, item)) { done.append(item) } else { todo.append(item) }
+            }
+        }
+        if !done.isEmpty { lines.append("已完成：" + done.joined(separator: "；")) }
+        if !todo.isEmpty { lines.append("未完成：" + todo.joined(separator: "；")) }
+        let today = entries.filter { DayKey(date: $0.date, calendar: .app) == day }.sorted { $0.date < $1.date }
+        if !today.isEmpty {
+            if store.settings.workLogLock && !unlocked {
+                lines.append("留痕 \(today.count) 条（已加锁，解锁后可带上内容）")
+            } else {
+                lines.append("情况记录：")
+                for e in today {
+                    let time = e.date.formatted(date: .omitted, time: .shortened)
+                    var text = [e.note, e.transcript ?? ""].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .first { !$0.isEmpty } ?? ""
+                    if text.count > 80 { text = String(text.prefix(80)) + "…" }
+                    lines.append("· \(time) \(e.kind.title)" + (text.isEmpty ? "" : "：\(text)"))
+                }
+            }
+        }
+        if groups.isEmpty && today.isEmpty { lines.append("今天没有清单和留痕记录。") }
+        lines.append("其他需要交代的：")
+        return lines.joined(separator: "\n")
+    }
 }
 
 /// App 里的录音机（打电话时 iPhone 不让别的 App 录音，通话请用系统自带的通话录音）

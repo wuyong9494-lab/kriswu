@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 /// 首页的「工作留痕」：拍照、录音、记一笔，一点就开始
 struct WorkLogCard: View {
+    @EnvironmentObject private var store: AppStore
     @ObservedObject private var log = WorkLogStore.shared
     let day: DayKey
     @State private var camera = false
@@ -27,6 +28,17 @@ struct WorkLogCard: View {
                 action("录音", "mic") { recording = true }
                 action("记一笔", "square.and.pencil") { writing = true }
             }
+            // 交接班：把今天的清单、留痕整理成一段话，复制给接班的人
+            Button {
+                UIPasteboard.general.string = log.handoverSummary(for: day, store: store)
+                Haptics.success()
+                ToastCenter.shared.show("交接小结已复制，粘贴后补充几句就能发", style: .success)
+            } label: {
+                Label("生成交接小结", systemImage: "arrow.left.arrow.right.square")
+                    .font(DS.Font.caption)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
         }
         .card()
         .fullScreenCover(isPresented: $camera) {
