@@ -10,7 +10,7 @@ struct OnboardingView: View {
     @State private var notificationsAllowed: Bool?
     @State private var checking = false
     /// 从设置里重新打开的（已经同步过）
-    private let reopened = AppStore.shared.settings.lastSync != nil
+    private var reopened: Bool { store.settings.lastSync != nil }
     @State private var showURL = AppStore.builtInSiteURL == nil
     private let steps = 5
 
