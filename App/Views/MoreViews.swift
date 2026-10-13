@@ -335,6 +335,25 @@ struct LeavePlannerView: View {
         .appList()
         .navigationTitle("请假规划")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                ShareLink(item: summary(plan: plan, from: from, to: to, rest: rest)) {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+
+    /// 发给领导或同事的一段话：哪几天、要请几天、遥测怎么安排
+    private func summary(plan: LeavePlan, from: DayKey, to: DayKey, rest: Int?) -> String {
+        func list(_ days: [DayKey]) -> String { days.map { "\($0.month)/\($0.day)" }.joined(separator: "、") }
+        var lines = ["想请假：\(from.dateText)（\(from.weekdayText)）至 \(to.dateText)（\(to.weekdayText)）"]
+        lines.append("实际要请 \(plan.needDays.count) 天" + (plan.needDays.isEmpty ? "" : "（\(list(plan.needDays))）")
+                     + (plan.freeDays.isEmpty ? "" : "，其余 \(plan.freeDays.count) 天本来不用上班"))
+        if let rest { lines.append("目前待休 \(rest) 天" + (plan.needDays.count > rest ? "，不够 \(plan.needDays.count - rest) 天" : "，够用")) }
+        if !plan.dutyDays.isEmpty { lines.append("其中 \(list(plan.dutyDays)) 有遥测，我会先找人换好") }
+        if !plan.unknownDays.isEmpty { lines.append("\(list(plan.unknownDays)) 网站还没排班") }
+        return lines.joined(separator: "\n")
     }
 
     private func dayList(from: DayKey, to: DayKey) -> [DayKey] {
