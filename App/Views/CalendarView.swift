@@ -286,15 +286,39 @@ struct DayEditor: View {
         NavigationStack {
             List {
                 if let current {
-                    Section("当前") {
-                        Text(current)
+                    Section("我的班") {
+                        Text(store.matcher.displayName(current)).font(DS.Font.headline)
+                        // 这个组这天要做什么
+                        ForEach(store.notes(for: current), id: \.group) { n in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(n.group).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                Text(n.note).font(.subheadline)
+                            }
+                        }
+                    }
+                }
+                // 这一天全员分工直接看（不用再点进去）
+                let roster = store.dayRoster(day)
+                if !roster.isEmpty {
+                    Section("这天的分工") {
+                        ForEach(Array(roster.prefix(8)), id: \.post) { item in
+                            LabeledContent(item.post, value: item.names.joined(separator: "、"))
+                        }
+                    }
+                }
+                let logs = WorkLogStore.shared.entries.filter { DayKey(date: $0.date, calendar: .app) == day }
+                if !logs.isEmpty && !(store.settings.workLogLock && !WorkLogStore.shared.unlocked) {
+                    Section("这天的工作留痕") {
+                        ForEach(Array(logs.prefix(5))) { entry in
+                            NavigationLink { WorkLogDetailView(entry: entry) } label: { WorkLogRow(entry: entry) }
+                        }
                     }
                 }
                 Section {
                     NavigationLink {
                         DayRosterView(day: day)
                     } label: {
-                        Label("查看这一天全部组别", systemImage: "tablecells")
+                        Label("这天全部分工", systemImage: "tablecells")
                     }
                     if let current, !SwapLedger.posts(current, matcher: store.matcher).isEmpty {
                         NavigationLink {
@@ -309,10 +333,8 @@ struct DayEditor: View {
                         Label("换班账本", systemImage: "book.closed")
                     }
                 }
-                if !store.canEdit {
-                    Section { ReadOnlyNotice() }
-                } else {
-                Section("选择班次") {
+                if store.canEdit {
+                Section("改成（管理员）") {
                     ForEach(store.settings.shiftTypes) { type in
                         Button {
                             store.setShift(type.name, on: day)
@@ -356,7 +378,7 @@ struct DayEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(store.canEdit ? "取消" : "完成") { dismiss() }
                 }
             }
         }
