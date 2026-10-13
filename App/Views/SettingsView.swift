@@ -278,8 +278,11 @@ struct SettingsView: View {
             TextField("例如：张三, zhangsan", text: $aliasText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .onChange(of: aliasText) { text in
-                    let names = Self.names(in: text)
+                // 停手一秒再存（不是每打一个字就存一次、重排一次提醒）
+                .task(id: aliasText) {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    let names = Self.names(in: aliasText)
                     if names != store.settings.aliases { store.settings.aliases = names }
                 }
                 // 在别处（首次设置、今天页「我是谁」）换了人：这里跟着显示新名字，不把旧名字写回去
@@ -454,8 +457,11 @@ struct SettingsView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             SecureField("值班网站密码（保存在钥匙串）", text: $password)
-                .onChange(of: password) {
-                    Keychain.set($0, for: .sourcePassword)
+                // 停手后再写钥匙串；真的改了才算（打开设置页读出来的不算）
+                .task(id: password) {
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    guard !Task.isCancelled, password != (Keychain.get(.sourcePassword) ?? "") else { return }
+                    Keychain.set(password, for: .sourcePassword)
                     store.settings.loginExpiredNotified = false   // 改了密码，允许重新自动登录
                 }
             Toggle("用内置浏览器同步（沿用登录状态）", isOn: $store.settings.syncViaWeb)
