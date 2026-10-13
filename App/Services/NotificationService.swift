@@ -35,6 +35,9 @@ enum NotificationService {
                 voiceFiles.insert(file)
             }
             content.threadIdentifier = "shift"
+            // 点提醒直接打开说的那一天（晚上的提醒说的是明天）
+            let about = n.id.hasPrefix("shift-evening") ? n.day.adding(days: 1) : n.day
+            content.userInfo = ["route": "day:\(about)"]
             // 指定公历：手机设成日本、佛历等日历时也能按时提醒
             let when = DateComponents(calendar: Calendar(identifier: .gregorian), year: n.day.year, month: n.day.month,
                                       day: n.day.day, hour: n.time.hour, minute: n.time.minute)

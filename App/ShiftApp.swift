@@ -125,6 +125,14 @@ struct RootView: View {
 
     /// 点通知进来：打开对应的详情页
     private func openPendingRoute() {
+        if let route = AppDelegate.pendingRoute, route.hasPrefix("day:"), let day = DayKey(string: String(route.dropFirst(4))) {
+            AppDelegate.pendingRoute = nil
+            rootSheet = nil
+            camera = false
+            tab = .today
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { openDay = day }
+            return
+        }
         guard let route = AppDelegate.pendingRoute, let sheet = RootSheet(rawValue: route) else { return }
         AppDelegate.pendingRoute = nil
         rootSheet = nil
