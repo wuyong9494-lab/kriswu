@@ -115,7 +115,7 @@ struct WorkLogView: View {
             HStack {
                 Text(title)
                 Spacer()
-                ShareLink(items: exportItems(day: day, entries: entries)) {
+                ShareLink(items: exportItems(day: day, entries: entries), preview: { SharePreview($0.name) }) {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .accessibilityLabel("分享这天的全部留痕")
