@@ -37,7 +37,7 @@ extension AppStore {
         // 只统计到今天：网站上提前排好的以后的日子还没上，不算
         let days = published.filter { $0.year == year && (month == nil || $0.month == month) && $0 <= today }.sorted()
         let zh = Locale(identifier: "zh_CN")
-        let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, members: rotationMembers,
+        let people = WorkloadCounter.count(roster: roster, days: days, matcher: matcher, members: members,
                                            calendar: .app).sorted { a, b in
             a.workDays != b.workDays ? a.workDays > b.workDays : a.name.compare(b.name, locale: zh) == .orderedAscending
         }
