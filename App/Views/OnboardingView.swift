@@ -9,6 +9,8 @@ struct OnboardingView: View {
     @State private var query = ""
     @State private var notificationsAllowed: Bool?
     @State private var checking = false
+    /// 从设置里重新打开的（已经同步过）
+    private let reopened = AppStore.shared.settings.lastSync != nil
     @State private var showURL = AppStore.builtInSiteURL == nil
     private let steps = 5
 
@@ -24,6 +26,15 @@ struct OnboardingView: View {
             }
             .animation(DS.Motion.spring, value: step)
             .padding(.top, DS.Space.l)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) {
+                // 以前设置好过、又从设置里重新打开的：随时可以关掉
+                if reopened {
+                    Button("关闭") { store.settings.onboardingDone = true }
+                        .padding(.top, DS.Space.l)
+                        .padding(.trailing, DS.Space.l)
+                }
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Space.l) {
