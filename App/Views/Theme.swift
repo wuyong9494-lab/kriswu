@@ -75,16 +75,18 @@ enum DS {
 
     /// 字体层级（全部圆体）
     enum Font {
-        static let display = SwiftUI.Font.system(size: 34, weight: .bold, design: .rounded)
+        // 用系统文字样式：默认大小和以前一样，用户在「设置 › 显示 › 文字大小」调大时跟着变大
+        static let display = SwiftUI.Font.system(.largeTitle, design: .rounded).weight(.bold)
+        // 首页的大字本来就很大，不跟着放大（放大会挤出屏幕）
         static let hero = SwiftUI.Font.system(size: 56, weight: .heavy, design: .rounded)
         static let giant = SwiftUI.Font.system(size: 72, weight: .heavy, design: .rounded)
-        static let title = SwiftUI.Font.system(size: 22, weight: .semibold, design: .rounded)
-        static let headline = SwiftUI.Font.system(size: 17, weight: .semibold, design: .rounded)
-        static let body = SwiftUI.Font.system(size: 15, weight: .regular, design: .rounded)
-        static let callout = SwiftUI.Font.system(size: 15, weight: .medium, design: .rounded)
-        static let caption = SwiftUI.Font.system(size: 12, weight: .medium, design: .rounded)
-        static let overline = SwiftUI.Font.system(size: 11, weight: .semibold, design: .rounded)
-        static let number = SwiftUI.Font.system(size: 28, weight: .bold, design: .rounded).monospacedDigit()
+        static let title = SwiftUI.Font.system(.title2, design: .rounded).weight(.semibold)
+        static let headline = SwiftUI.Font.system(.headline, design: .rounded).weight(.semibold)
+        static let body = SwiftUI.Font.system(.subheadline, design: .rounded)
+        static let callout = SwiftUI.Font.system(.subheadline, design: .rounded).weight(.medium)
+        static let caption = SwiftUI.Font.system(.caption, design: .rounded).weight(.medium)
+        static let overline = SwiftUI.Font.system(.caption2, design: .rounded).weight(.semibold)
+        static let number = SwiftUI.Font.system(.title, design: .rounded).weight(.bold).monospacedDigit()
     }
 
     enum Motion {
