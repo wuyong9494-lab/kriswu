@@ -257,6 +257,8 @@ jobs:
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译
     runs-on: macos-26
     env:
+      # 值班网站地址：只在 TestFlight 版里内置（仓库是公开的，地址不写进代码，也不进公开的安装包）
+      SITE_URL: ${{ secrets.SITE_URL }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -315,6 +317,7 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
+            DEFAULT_SITE_URL="$SITE_URL" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} 2>&1 | tail -80
 
       - name: 上传到 TestFlight

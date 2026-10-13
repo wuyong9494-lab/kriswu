@@ -579,6 +579,11 @@ final class AppStore: ObservableObject {
         // init 里赋值不会触发 didSet，手动算一次
         publishedDays = Self.published(in: roster, matcher: ShiftMatcher(types: settings.shiftTypes))
         applyCustomHolidays()
+        // 打包时内置的值班网站地址（只在 TestFlight 版里有，不在公开的代码和安装包里）：还没填网址的直接用上
+        if settings.sourceURL.trimmingCharacters(in: .whitespaces).isEmpty, let builtIn = Self.builtInSiteURL {
+            settings.sourceURL = builtIn
+            settings.syncViaWeb = true
+        }
         if Self.isDemo { loadDemoData() }
     }
 
@@ -587,6 +592,12 @@ final class AppStore: ObservableObject {
     static let launchDemo = ProcessInfo.processInfo.arguments.contains("-demo")
     static var isDemo: Bool { launchDemo || UserDefaults.standard.bool(forKey: demoKey) }
     static let demoKey = "reviewDemo"
+
+    /// 打包时写进去的值班网站地址（GitHub 机密 SITE_URL → Info.plist 的 DefaultSiteURL）；没写就是 nil
+    static var builtInSiteURL: String? {
+        let raw = (Bundle.main.object(forInfoDictionaryKey: "DefaultSiteURL") as? String ?? "").trimmingCharacters(in: .whitespaces)
+        return raw.isEmpty || raw.hasPrefix("$(") ? nil : raw
+    }
 
     /// 进入演示：全是虚构数据，不读写手机上的文件、不联网（真实数据原样留着，退出后回来）
     func enterDemo() {
