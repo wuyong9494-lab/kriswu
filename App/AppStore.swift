@@ -591,7 +591,7 @@ final class AppStore: ObservableObject {
         s.swapRecords = [SwapRecord(day: today.adding(days: -6), person: "林夏", myOld: "遥测", myNew: "休息", effect: -1)]
         s.teamChanges = [TeamChange(day: today.adding(days: 2), post: "组B", from: ["周远"], to: [me])]
         s.lastSync = Date().addingTimeInterval(-600)
-        s.lastSyncMessage = "同步成功：网页接口，30 天，没有变动，全员 9 人"
+        s.lastSyncMessage = "同步成功：网页接口，30 天，没有变动，这次读到 9 人有排班（全年累计 12 人）"
         settings = s
         roster = r
         schedule = r[me] ?? [:]
@@ -1019,7 +1019,7 @@ final class AppStore: ObservableObject {
             settings.syncStaleNotified = false
             settings.lastSyncMessage = "同步成功：\(result.format.rawValue)，\(result.entries.count) 天"
                 + (changes.isEmpty ? "，没有变动" : "，\(changes.count) 处变动")
-                + (outcome.roster.isEmpty ? "" : "，全员 \(outcome.roster.count) 人")
+                + (outcome.roster.isEmpty ? "" : "，这次读到 \(outcome.roster.count) 人有排班（全年累计 \(roster.count) 人）")
             settings.lastSuccessMessage = settings.lastSyncMessage
             // 第一次导入不算“变动”，之后每次同步发现不同就提醒
             if hadData && !changes.isEmpty {
