@@ -30,6 +30,8 @@ enum SyncService {
         var restBalance: [String: Int] = [:]
         /// 网站数据接口有哪些字段（「接口字段查看」）
         var apiFields: [APIFieldTable] = []
+        /// 网站接口里的人员设置、公告、固定遥测日子
+        var site = SiteAPI.Result()
     }
 
     /// 全员排班接口：再取上一周和后面三周，「值班表」里可以前后切换日期。
@@ -123,6 +125,10 @@ enum SyncService {
             let (roster, notes, rest) = collect(texts: texts, json: bodies,
                                                 reference: reference, matcher: matcher)
             let fields = APIFieldInspector.summarize(page.captured)
+            // 接口里的每周排班表（一格里几个人都读），比网页文字准：盖过网页读到的
+            let site = SiteAPI.parse(bodies, reference: reference, matcher: matcher)
+            var fullRoster = roster
+            RosterExtractor.merge(site.roster, into: &fullRoster)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries
                 // 每一段（本周、后面各周）各自的日期范围；没取到的那一周不算，原来的排班保留
@@ -150,11 +156,11 @@ enum SyncService {
                 }
                 return Outcome(result: ParseResult(entries: entries, format: .api, coveredDays: covered),
                                apiSignature: f.request.signature,
-                               roster: roster, groupNotes: notes, restBalance: rest, apiFields: fields)
+                               roster: fullRoster, groupNotes: notes, restBalance: rest, apiFields: fields, site: site)
             }
             if HTMLText.looksLikeLoginPage(page.html) { throw SyncError.needsLogin }
-            return Outcome(result: try parser.parse(texts[0]), apiSignature: nil, roster: roster, groupNotes: notes,
-                           restBalance: rest, apiFields: fields)
+            return Outcome(result: try parser.parse(texts[0]), apiSignature: nil, roster: fullRoster, groupNotes: notes,
+                           restBalance: rest, apiFields: fields, site: site)
         }
         let text = try await fetchText(urlString: urlString, username: username, password: password)
         let (roster, notes, rest) = collect(texts: [text], json: [text], reference: parser.reference, matcher: matcher)

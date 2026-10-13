@@ -175,6 +175,12 @@ struct AppSettings: Codable, Equatable {
     /// 每个人还有几天待休（网页上人名后括号里的数字）
     var restBalance: [String: Int] = [:]
     var restBalanceUpdated: Date?
+    /// 网站人员表：谁参加值班、哪几天能值遥测、待休天数（排班规律用）
+    var sitePeople: [String: SiteAPI.Person] = [:]
+    /// 网站公告里写的排班规则
+    var siteNotices: [String] = []
+    /// 网站标了「固定」（手动指定）遥测的日子
+    var fixedTelemetryDays: [String] = []
     /// 改了「我的名字」：下一次同步当作重新开始，不提示变动、不做异常检查
     var nextSyncIsBaseline = false
     /// 网站排了班、但没给我排的日子也提醒（显示「未排班」）
@@ -275,6 +281,9 @@ struct AppSettings: Codable, Equatable {
         desktopNotesURL = try c.decodeIfPresent(String.self, forKey: .desktopNotesURL) ?? ""
         desktopRosterMessage = try c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
         restBalance = try c.decodeIfPresent([String: Int].self, forKey: .restBalance) ?? [:]
+        sitePeople = try c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople) ?? [:]
+        siteNotices = try c.decodeIfPresent([String].self, forKey: .siteNotices) ?? []
+        fixedTelemetryDays = try c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays) ?? []
         restBalanceUpdated = try c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
         nextSyncIsBaseline = try c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline) ?? false
         remindUnassigned = try c.decodeIfPresent(Bool.self, forKey: .remindUnassigned) ?? true
@@ -968,6 +977,21 @@ final class AppStore: ObservableObject {
         return await task.value
     }
 
+    /// 网站接口里的人员设置、公告、固定遥测日子：存下来给排班规律用
+    func applySiteInfo(_ site: SiteAPI.Result) {
+        var s = settings
+        if !site.people.isEmpty { s.sitePeople = site.people }
+        if !site.notices.isEmpty { s.siteNotices = site.notices }
+        if !site.fixedTelemetryDays.isEmpty {
+            let cutoff = DayKey.today.adding(days: -400)
+            let all = Set(s.fixedTelemetryDays.compactMap(DayKey.init(string:))).union(site.fixedTelemetryDays).filter { $0 >= cutoff }
+            s.fixedTelemetryDays = all.sorted().map(\.description)
+        }
+        if s != settings { settings = s }
+    }
+
+    var fixedTelemetryDaySet: Set<DayKey> { Set(settings.fixedTelemetryDays.compactMap(DayKey.init(string:))) }
+
     /// 上次同步看到的网站数据接口字段（只在内存里，「设置 › 接口字段查看」用）
     @Published private(set) var apiFields: [APIFieldTable] = []
     @Published private(set) var apiFieldsDate: Date?
@@ -1036,6 +1060,7 @@ final class AppStore: ObservableObject {
             }
             await notifyRestWarnings()
             updateRestBalance(outcome.restBalance)
+            applySiteInfo(outcome.site)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
@@ -1258,7 +1283,8 @@ final class AppStore: ObservableObject {
             value = DutyTurn(day: next, ahead: 0, scheduled: true, total: 0)
         } else {
             let days = publishedDays.filter { $0 >= today.adding(days: -180) }.sorted()
-            if let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: 60, calendar: .app),
+            if let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: matcher, forecastDays: 60, calendar: .app,
+                                                 people: settings.sitePeople, fixedDays: fixedTelemetryDaySet),
                let index = r.order.firstIndex(of: me) {
                 value = DutyTurn(day: r.forecast.first { $0.name == me }?.day, ahead: index, scheduled: false, total: r.order.count)
             } else {

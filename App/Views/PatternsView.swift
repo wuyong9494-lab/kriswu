@@ -32,6 +32,7 @@ struct SchedulePatternsView: View {
                     Section { Text("还没有全员排班数据。").foregroundStyle(.secondary) }
                 } else {
                     warningSection
+                    siteRulesSection
                     dutySection(result.duty, title: "遥测轮转", icon: "antenna.radiowaves.left.and.right")
                     restSection(result.rest)
                     groupSection(result.groups)
@@ -56,9 +57,12 @@ struct SchedulePatternsView: View {
         let m = store.matcher
         let published = store.publishedDays
         let points = store.settings.restHistory.mapValues { $0.map(\.point) }
+        let people = store.settings.sitePeople
+        let fixed = store.fixedTelemetryDaySet
         let computed = await Task.detached(priority: .userInitiated) {
             Result(
-                duty: SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: m, calendar: .app),
+                duty: SchedulePatterns.rotation(post: "遥测", roster: roster, days: days, matcher: m, calendar: .app,
+                                                people: people, fixedDays: fixed),
                 dispatch: SchedulePatterns.rotation(post: "调度", roster: roster, days: days, matcher: m, calendar: .app),
                 rest: SchedulePatterns.restRule(roster: roster, days: days, published: published, matcher: m, calendar: .app),
                 groups: SchedulePatterns.groupPattern(roster: roster, days: days, matcher: m, calendar: .app),
@@ -85,6 +89,33 @@ struct SchedulePatternsView: View {
 
     private func name(_ n: String) -> some View {
         Text(n).fontWeight(store.isMe(n) ? .bold : .regular).foregroundStyle(store.isMe(n) ? DS.Palette.accent : Color.primary)
+    }
+
+    // MARK: 网站上写的规则
+
+    @ViewBuilder
+    private var siteRulesSection: some View {
+        let notices = store.settings.siteNotices
+        let people = store.settings.sitePeople
+        if !notices.isEmpty || !people.isEmpty {
+            Section {
+                ForEach(Array(notices.enumerated()), id: \.offset) { _, text in
+                    Text(text).font(.footnote).textSelection(.enabled)
+                }
+                if !people.isEmpty {
+                    let onDuty = people.values.filter { $0.onDuty == true }.count
+                    let limited = people.values.filter { ($0.telemetryWeekdays?.count ?? 7) < 7 }.count
+                    Text("网站人员表：\(people.count) 人，\(onDuty) 人参加值班；\(limited) 人只在指定的星期几值遥测。推算下次遥测时已经按这些设置跳过不排的日子。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                if !store.settings.fixedTelemetryDays.isEmpty {
+                    Text("网站标了「固定」（手动指定）的遥测 \(store.settings.fixedTelemetryDays.count) 天，不算进猜中率。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("网站上的排班规则")
+            }
+        }
     }
 
     // MARK: 轮转

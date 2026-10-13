@@ -59,6 +59,10 @@ public enum SchedulePatterns {
         public var cycleDays: Double
         /// 用的哪种模型（说明文字）
         public var model: String = ""
+        /// 网站标了「固定」（手动指定）、没算进猜中率的天数
+        public var fixedDays: Int = 0
+        /// 用上了网站人员表里的设置（谁参加值班、哪几天能值遥测）
+        public var usesSiteSettings = false
 
         public var rate: Double { slots == 0 ? 0 : Double(matched) / Double(slots) }
         public var strictRate: Double { slots == 0 ? 0 : Double(strictMatched) / Double(slots) }
@@ -84,8 +88,10 @@ public enum SchedulePatterns {
     }
 
     /// post：「遥测」或「调度」；days：网站上有数据的日子（统计范围，可以包括以后已经排好的）。
+    /// people：网站人员表里的设置（谁参加值班、哪几天能值遥测）；fixedDays：网站标了「固定」（手动指定）的日子，不算猜错
     public static func rotation(post: String, roster: Roster, days: [DayKey], matcher: ShiftMatcher,
-                                forecastDays: Int = 14, calendar: Calendar = .current) -> Rotation? {
+                                forecastDays: Int = 14, calendar: Calendar = .current,
+                                people: [String: SiteAPI.Person] = [:], fixedDays: Set<DayKey> = []) -> Rotation? {
         let sorted = days.sorted()
         guard let start = sorted.first, let end = sorted.last else { return nil }
         func holds(_ name: String, _ day: DayKey) -> Bool {
@@ -102,7 +108,25 @@ public enum SchedulePatterns {
         }
         // 还在轮的人：值过至少两次，而且最近一个半月网站上还有他（调走的不再排进顺序里）
         let recent = end.adding(days: -45, calendar: calendar)
-        let pool = Set(counts.filter { name, n in n >= 2 && (roster[name]?.keys.contains { $0 >= recent } ?? false) }.keys)
+        // 网站人员表里写了不参加值班（onDuty = 0）的不算
+        let pool = Set(counts.filter { name, n in
+            n >= 2 && (roster[name]?.keys.contains { $0 >= recent } ?? false) && people[name]?.onDuty != false
+        }.keys)
+
+        // 网站上「哪几天能值遥测」的星期编号：按实际值班的日子判断是周一 = 1 还是周日 = 1
+        func weekdayMon(_ d: DayKey) -> Int { SiteAPI.siteWeekday(d, calendar: calendar) }
+        func weekdaySun(_ d: DayKey) -> Int { weekdayIndex(d, calendar: calendar) }
+        var monHits = 0, sunHits = 0
+        if post == "遥测" {
+            for (name, p) in people {
+                guard let allowed = p.telemetryWeekdays, !allowed.isEmpty, let history = roster[name] else { continue }
+                for (day, _) in history where holds(name, day) {
+                    if allowed.contains(weekdayMon(day)) { monHits += 1 }
+                    if allowed.contains(weekdaySun(day)) { sunHits += 1 }
+                }
+            }
+        }
+        let siteWeekday: (DayKey) -> Int = sunHits > monHits ? weekdaySun : weekdayMon
         guard pool.count >= 2 else { return nil }
 
         // 统计开始前最后一次值班（往前最多看 90 天）
@@ -164,13 +188,17 @@ public enum SchedulePatterns {
         /// 这天排不了：请假、出差、休息（leave），或者还在自己上次值班后的休息里
         func blocked(_ name: String, _ day: DayKey, _ s: State, leaveAware: Bool) -> (reason: String, leave: Bool)? {
             if leaveAware, let why = unavailable(roster[name]?[day], post: post, matcher: matcher), why.leave { return why }
+            // 网站人员表里这天（星期几）不排他值遥测
+            if post == "遥测", let allowed = people[name]?.telemetryWeekdays, !allowed.isEmpty, !allowed.contains(siteWeekday(day)) {
+                return ("这天不排他", false)
+            }
             if let last = s.last[name], last < day, expectedRest(after: last, calendar: calendar).contains(day) {
                 return ("值班后休息", false)
             }
             return nil
         }
 
-        struct Run { var matched = 0; var slots = 0; var deferrals: [Deferral] = []; var exceptions: [Exception] = []
+        struct Run { var matched = 0; var slots = 0; var fixed = 0; var deferrals: [Deferral] = []; var exceptions: [Exception] = []
                      var state: State }
 
         // 一天天往下猜：只用那天以前的排班和那天的请假出差（网站上别的岗位不看，不然等于偷看了答案）
@@ -195,6 +223,12 @@ public enum SchedulePatterns {
                     predicted.append(name)
                 }
                 deferredYesterday = deferredToday
+                // 网站标了「固定」的日子是手动指定的：照常记下谁值了，但不算猜对猜错
+                if fixedDays.contains(day) {
+                    run.fixed += 1
+                    observe(&run.state, holders, day)
+                    continue
+                }
                 run.slots += holders.count
                 run.matched += holders.filter { predicted.contains($0) }.count
                 let missed = predicted.filter { !holders.contains($0) }
@@ -231,7 +265,9 @@ public enum SchedulePatterns {
                         cycleDays: Double(pool.count) / max(perDay, 1),
                         model: model == .cycle
                             ? "按固定顺序一轮一轮来：\(cycle.joined(separator: "→"))；指定日期提前值了的，这一轮不再轮到"
-                            : "轮到最久没值的人；指定日期、换班值了的，从值的那天重新排队")
+                            : "轮到最久没值的人；指定日期、换班值了的，从值的那天重新排队",
+                        fixedDays: run.fixed,
+                        usesSiteSettings: post == "遥测" && people.values.contains { $0.telemetryWeekdays?.isEmpty == false || $0.onDuty != nil })
     }
 
     // MARK: - 值完遥测休几天

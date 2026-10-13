@@ -1319,6 +1319,57 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.forecast.first?.day, e(33))
     }
 
+    func testSiteAPIWeekly() {
+        // 仿网站接口：每周排班（一格几个人）、人员表、公告（名字都是编的）
+        let weekly = """
+        {"data":[
+          {"date":"2026-11-02","weekday":"周一","telemetry":"张甲","rest":"李乙、王丙","beforeHandover":"赵丁","timeOff":"钱戊",
+           "assignments":{"组A":"孙己","组B":"-"},"fixedAssignments":{"telemetry":0},"noRestFlags":{"rest":{"active":0}}},
+          {"date":"2026-11-03","weekday":"周二","telemetry":"李乙","rest":"-","beforeHandover":"张甲","leave":"周庚","businessTrip":"吴辛",
+           "assignments":{"组A":"王丙","组B":"赵丁"},"fixedAssignments":{"telemetry":1}}
+        ]}
+        """
+        let persons = """
+        [{"name":"张甲","onDuty":1,"telemetryWeekdays":"1、3、5","unrestDays":2},{"name":"李乙","onDuty":0,"telemetryWeekdays":"2"}]
+        """
+        let notice = #"{"rows":[{"text":"未来如有请假、出差、调休的同事，请在值班系统提前申请日期","hidden":0}]}"#
+        let r = SiteAPI.parse([weekly, persons, notice], reference: d(1), matcher: m)
+        XCTAssertEqual(r.roster["张甲"]?[d(1)], "遥测")
+        XCTAssertEqual(r.roster["李乙"]?[d(1)], "休息")
+        XCTAssertEqual(r.roster["王丙"]?[d(1)], "休息")                 // 一格两个人都读到
+        XCTAssertEqual(r.roster["赵丁"]?[d(1)], "值班交接前")
+        XCTAssertEqual(r.roster["钱戊"]?[d(1)], "调休")
+        XCTAssertEqual(r.roster["孙己"]?[d(1)], "组A")
+        XCTAssertEqual(r.roster["周庚"]?[d(2)], "请假")
+        XCTAssertEqual(r.roster["吴辛"]?[d(2)], "出差")
+        XCTAssertEqual(r.fixedTelemetryDays, [d(2)])
+        XCTAssertEqual(r.people["张甲"]?.telemetryWeekdays, [1, 3, 5])
+        XCTAssertEqual(r.people["张甲"]?.unrestDays, 2)
+        XCTAssertEqual(r.people["李乙"]?.onDuty, false)
+        XCTAssertEqual(r.notices.count, 1)
+        // 打码：一格几个人每个都打码
+        XCTAssertEqual(APIFieldInspector.mask("王小明、李四"), "王**、李*")
+    }
+
+    func testRotationRespectsSiteWeekdays() {
+        // 5 人轮流值；网站人员表里甲只能周一、周六值遥测：下一个本该是甲的周四，跳过甲
+        let base = DayKey(year: 2026, month: 11, day: 2)      // 周一
+        let e = { (i: Int) in base.adding(days: i - 1, calendar: self.cal) }
+        var roster: Roster = [:]
+        let order = ["甲", "乙", "丙", "丁", "戊", "甲", "乙", "丙", "丁", "戊"]
+        for (i, name) in order.enumerated() { roster[name, default: [:]][e(i + 1)] = "遥测" }
+        let plain = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...10).map(e), matcher: m,
+                                              forecastDays: 1, calendar: cal)
+        XCTAssertEqual(plain?.forecast.first?.name, "甲")
+        let people = ["甲": SiteAPI.Person(onDuty: true, telemetryWeekdays: [1, 6])]
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (1...10).map(e), matcher: m,
+                                          forecastDays: 1, calendar: cal, people: people)
+        XCTAssertEqual(r?.usesSiteSettings, true)
+        XCTAssertEqual(r?.slots, 10)
+        XCTAssertEqual(r?.forecast.first?.day, e(11))          // 周四
+        XCTAssertEqual(r?.forecast.first?.name, "乙")
+    }
+
     func testScriptScanner() {
         let app = "var a=1;function next(){/* 遥测按顺序轮，请假顺延 */return list.sort((x,y)=>x.lastDuty-y.lastDuty)[0]};" + String(repeating: "x", count: 2000) + "var shift=1;"
         let vendor = "function sort(){/* 排班 */}"

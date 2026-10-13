@@ -34,11 +34,26 @@ public enum APIFieldInspector {
 
     /// 人名只留姓（张**），7 位以上的数字（手机号、工号、证件号）只留前 3 位，太长的截断
     public static func mask(_ value: String) -> String {
-        let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleaned = RosterExtractor.cleanName(v)
-        if RosterExtractor.looksLikeName(cleaned), let first = cleaned.first, cleaned.unicodeScalars.first.map({ $0.value >= 0x4e00 }) == true {
-            return String(first) + String(repeating: "*", count: max(1, cleaned.count - 1))
+        var v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 一格里好几个人（「张三、李四」）：每个名字都打码
+        let separators = CharacterSet(charactersIn: "、,，;；/| ").union(.whitespacesAndNewlines)
+        var masked = ""
+        var token = ""
+        func flush() {
+            let cleaned = RosterExtractor.cleanName(token)
+            if RosterExtractor.looksLikeName(cleaned), let first = cleaned.first,
+               cleaned.unicodeScalars.first.map({ $0.value >= 0x4e00 }) == true {
+                masked += String(first) + String(repeating: "*", count: max(1, cleaned.count - 1))
+            } else {
+                masked += token
+            }
+            token = ""
         }
+        for ch in v {
+            if ch.unicodeScalars.allSatisfy({ separators.contains($0) }) { flush(); masked.append(ch) } else { token.append(ch) }
+        }
+        flush()
+        v = masked
         let ns = v as NSString
         var out = ""
         var last = 0
