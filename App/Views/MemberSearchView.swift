@@ -70,6 +70,19 @@ struct MemberScheduleView: View {
         (store.roster[name] ?? [:]).map { (day: $0.key, post: $0.value) }.sorted { $0.day < $1.day }
     }
 
+    /// 两个人都不上班的日子（网站已经排了班的）
+    private func commonOffDays(from today: DayKey) -> [DayKey] {
+        guard let me = store.myRosterName else { return [] }
+        func off(_ person: String, _ day: DayKey) -> Bool {
+            guard let raw = store.roster[person]?[day] ?? (person == me ? store.shift(on: day) : nil) else {
+                return !ChinaHolidays.isWorkday(day, calendar: .app)
+            }
+            return RosterExtractor.isLeave(raw, matcher: store.matcher) && !raw.contains("出差")
+        }
+        return (0..<30).map { today.adding(days: $0) }
+            .filter { store.publishedDays.contains($0) && off(me, $0) && off(name, $0) }
+    }
+
     var body: some View {
         let today = DayKey.today
         let upcoming = days.filter { $0.day >= today }
@@ -83,6 +96,18 @@ struct MemberScheduleView: View {
                     ForEach(upcoming, id: \.day) { item in
                         NavigationLink { DayRosterView(day: item.day) } label: { row(item.day, item.post, isToday: item.day == today) }
                     }
+                }
+            }
+            // 和他一起休息的日子（约饭、换班都用得上）
+            let together = commonOffDays(from: today)
+            if !store.isMe(name), store.myRosterName != nil, !together.isEmpty {
+                Section {
+                    Text(together.map { "\($0.month)/\($0.day) \($0.weekdayText)" }.joined(separator: "、"))
+                        .font(.subheadline)
+                } header: {
+                    Text("接下来 30 天你们都休息的日子")
+                } footer: {
+                    Text("只算网站已经排了班的日子：两个人都写了休息、调休、请假，或者都是没排岗位的周末、节假日。")
                 }
             }
             if !past.isEmpty {
