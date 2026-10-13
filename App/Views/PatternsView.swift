@@ -156,7 +156,17 @@ struct SchedulePatternsView: View {
 
     @ViewBuilder
     private func dutySection(_ r: SchedulePatterns.Rotation?, title: String, icon: String) -> some View {
-        if let r {
+        if let r, r.holdersPerDay >= 1.5 {
+            // 调度这类每天好几个人同时在的岗位，不是一天一个人轮
+            Section {
+                Label("每天约 \(String(format: "%.1f", r.holdersPerDay)) 人同时在岗，是固定的几个人，不是一天轮一个，所以不按轮转去猜",
+                      systemImage: icon)
+                    .font(.subheadline)
+                Text("在岗的人：" + r.order.joined(separator: "、")).font(.footnote).foregroundStyle(.secondary)
+            } header: {
+                Text(title)
+            }
+        } else if let r {
             let v = verdict(r.rate)
             Section {
                 HStack {
@@ -166,11 +176,24 @@ struct SchedulePatternsView: View {
                 }
                 LabeledContent("按顺序 + 请假出差顺延", value: "猜中 \(r.matched)/\(r.slots)")
                 LabeledContent("只按顺序、不顺延", value: "猜中 \(r.strictMatched)/\(r.slots)")
+                if r.lineSlots > 0 {
+                    // 两条线：先看哪天该哪条线值猜没猜对，再看线里轮到谁猜没猜对，知道错在哪
+                    LabeledContent("哪天轮到研发 / 生产", value: "猜对 \(r.lineHits)/\(r.lineSlots)")
+                    LabeledContent("线对了，线里轮到谁", value: "猜对 \(r.inLineHits)/\(max(r.lineHits, 1))")
+                }
                 Text(deferralConclusion(r)).font(.footnote).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text("现在的顺序（下一个在最前）").font(.caption).foregroundStyle(.secondary)
-                    Text(r.order.enumerated().map { Self.circled($0.offset + 1) + $0.element }.joined(separator: "  "))
-                        .font(.subheadline)
+                    if r.lineOrders.isEmpty {
+                        Text(r.order.enumerated().map { Self.circled($0.offset + 1) + $0.element }.joined(separator: "  "))
+                            .font(.subheadline)
+                    } else {
+                        ForEach(r.lineOrders.keys.sorted(), id: \.self) { l in
+                            Text("\(l)：" + (r.lineOrders[l] ?? []).enumerated().map { Self.circled($0.offset + 1) + $0.element }
+                                .joined(separator: "  "))
+                                .font(.subheadline)
+                        }
+                    }
                     Text("\(r.order.count) 人轮，平均每人约 \(Int(r.cycleDays.rounded())) 天一次").font(.caption).foregroundStyle(.secondary)
                 }
                 if !r.forecast.isEmpty {

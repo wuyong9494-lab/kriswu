@@ -68,6 +68,14 @@ public enum SchedulePatterns {
         public var fixedDays: Int = 0
         /// 用上了网站人员表里的设置（谁参加值班、哪几天能值遥测）
         public var usesSiteSettings = false
+        /// 分两条线时：猜对哪条线值的人次、线也对人也对的人次
+        public var lineSlots = 0
+        public var lineHits = 0
+        public var inLineHits = 0
+        /// 每条线现在的顺序（下一个在最前）
+        public var lineOrders: [String: [String]] = [:]
+        /// 平均每天几个人值这个岗位（调度常常是几个人同时在）
+        public var holdersPerDay: Double = 1
 
         public var rate: Double { slots == 0 ? 0 : Double(matched) / Double(slots) }
         public var strictRate: Double { slots == 0 ? 0 : Double(strictMatched) / Double(slots) }
@@ -236,6 +244,7 @@ public enum SchedulePatterns {
         }
 
         struct Run { var matched = 0; var slots = 0; var fixed = 0; var deferrals: [Deferral] = []; var exceptions: [Exception] = []
+                     var lineSlots = 0; var lineHits = 0; var inLineHits = 0
                      var state: State }
 
         // 一天天往下猜：只用那天以前的排班和那天的请假出差（网站上别的岗位不看，不然等于偷看了答案）
@@ -268,6 +277,16 @@ public enum SchedulePatterns {
                 }
                 run.slots += holders.count
                 run.matched += holders.filter { predicted.contains($0) }.count
+                // 分两条线时：哪条线猜对了没有；线猜对了的，线里的人猜对了没有
+                if split, let l = lineFor(day) {
+                    for h in holders where pool.contains(h) {
+                        run.lineSlots += 1
+                        if line(h) == l {
+                            run.lineHits += 1
+                            if predicted.contains(h) { run.inLineHits += 1 }
+                        }
+                    }
+                }
                 let missed = predicted.filter { !holders.contains($0) }
                 for (i, actual) in holders.filter({ !predicted.contains($0) }).sorted().enumerated() {
                     run.exceptions.append(Exception(day: day, actual: actual, expected: i < missed.count ? missed[i] : "—"))
@@ -304,7 +323,12 @@ public enum SchedulePatterns {
                             ? "按固定顺序一轮一轮来：\(cycle.joined(separator: "→"))；指定日期提前值了的，这一轮不再轮到"
                             : "轮到最久没值的人；指定日期、换班值了的，从值的那天重新排队"),
                         fixedDays: run.fixed,
-                        usesSiteSettings: post == "遥测" && people.values.contains { $0.telemetryWeekdays?.isEmpty == false || $0.onDuty != nil })
+                        usesSiteSettings: post == "遥测" && people.values.contains { $0.telemetryWeekdays?.isEmpty == false || $0.onDuty != nil },
+                        lineSlots: run.lineSlots, lineHits: run.lineHits, inLineHits: run.inLineHits,
+                        lineOrders: split ? Dictionary(uniqueKeysWithValues: lines.map { l in
+                            (l, priority(run.state, model).filter { line($0) == l })
+                        }) : [:],
+                        holdersPerDay: perDay)
     }
 
     // MARK: - 值完遥测休几天
@@ -495,6 +519,29 @@ public enum SchedulePatterns {
             }
         }
         models.append(GroupModel(title: "和上周同一天同一组", hits: weeklyHits, total: weeklyTotal))
+
+        // 网站自动排班是按「均衡分」排组的（看这个人这一组历史上值了几次）：每人优先排他最近八周值得最少的组，
+        // 同一组最多连续 3 次
+        var groupsOnDay: [DayKey: Set<String>] = [:]
+        for seq in seqs.values { for e in seq { groupsOnDay[e.day, default: []].insert(e.group) } }
+        var balanceHits = 0, balanceTotal = 0
+        for seq in seqs.values where seq.count >= 2 {
+            for i in 1..<seq.count {
+                let cur = seq[i]
+                let options = groupsOnDay[cur.day] ?? []
+                guard options.count >= 2 else { continue }
+                let since = cur.day.adding(days: -56, calendar: calendar)
+                var counts: [String: Int] = [:]
+                for e in seq[..<i] where e.day >= since { counts[e.group, default: 0] += 1 }
+                let lastThree = seq[max(0, i - 3)..<i].map { $0.group }
+                let tooMany = lastThree.count == 3 && Set(lastThree).count == 1 ? lastThree.first : nil
+                let predicted = options.filter { $0 != tooMany }
+                    .min { (counts[$0] ?? 0, index[$0] ?? 0) < (counts[$1] ?? 0, index[$1] ?? 0) }
+                balanceTotal += 1
+                if predicted == cur.group { balanceHits += 1 }
+            }
+        }
+        models.append(GroupModel(title: "按均衡：每人优先排最近值得最少的组", hits: balanceHits, total: balanceTotal))
 
         let order = models.indices.sorted { models[$0].rate > models[$1].rate }
         let bestIndex = order[0]
