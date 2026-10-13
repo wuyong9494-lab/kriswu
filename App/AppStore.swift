@@ -148,6 +148,8 @@ struct AppSettings: Codable, Equatable {
     var lastMonthlyReport: String?
     /// 关注的同事排班变了也通知
     var notifyFavorites: Bool = true
+    /// 全员排班有变动（今天及以后，谁的都算）也提醒
+    var notifyAllChanges: Bool = true
     /// 全员换班记录
     var teamChanges: [TeamChange] = []
     /// 遥测下班后补觉到几点（给快捷指令的勿扰自动化用）
@@ -257,6 +259,7 @@ struct AppSettings: Codable, Equatable {
         monthlyReport = try c.decodeIfPresent(Bool.self, forKey: .monthlyReport) ?? true
         lastMonthlyReport = try c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
         notifyFavorites = try c.decodeIfPresent(Bool.self, forKey: .notifyFavorites) ?? true
+        notifyAllChanges = try c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges) ?? true
         teamChanges = try c.decodeIfPresent([TeamChange].self, forKey: .teamChanges) ?? []
         restFocusUntil = try c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil) ?? ClockTime(hour: 14, minute: 0)
         taskChecks = try c.decodeIfPresent([String: [String]].self, forKey: .taskChecks) ?? [:]
@@ -999,7 +1002,8 @@ final class AppStore: ObservableObject {
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))
             let baselineRun = settings.nextSyncIsBaseline || rosterBefore.isEmpty
             await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步")
-            mergeRoster(outcome.roster, source: "sync")
+            let edits = mergeRoster(outcome.roster, source: "sync")
+            if !baselineRun { await notifyRosterEdits(edits) }
             if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
             await notifyRestWarnings()
             updateRestBalance(outcome.restBalance)
@@ -1118,7 +1122,7 @@ final class AppStore: ObservableObject {
         if !(result.roster.isEmpty && result.reason != nil) {
             await checkSyncHealth(result.roster, source: "desktop-\(weeksBack)", title: "电脑版页面")
         }
-        mergeRoster(result.roster, source: "desktop")
+        await notifyRosterEdits(mergeRoster(result.roster, source: "desktop"))
         mergeRestHistory(result.restByDay)
         await notifyRestWarnings()
         updateRestBalance(result.restBalance)
@@ -1421,8 +1425,9 @@ final class AppStore: ObservableObject {
     /// 合并全员排班：这次读到的日子整天替换（换人、取消的都以新数据为准），
     /// 但不带休息列的读取不会冲掉之前读到的休息、请假（见 RosterExtractor.replacingDays）。
     /// source：「sync」同步、「desktop」电脑版周表。每条记下来源；不带休息列的读取方式不会冲掉以前读到的休息、请假。
-    func mergeRoster(_ new: Roster, source: String = "sync") {
-        guard !new.isEmpty else { return }
+    @discardableResult
+    func mergeRoster(_ new: Roster, source: String = "sync") -> [RosterEdit] {
+        guard !new.isEmpty else { return [] }
         // 这种读取方式带不带休息列：读到过休息、请假就记住
         var s = settings
         // 每次读的范围、方式可能不同（后台快速同步不翻页），所以按这次读到的有没有休息判断
@@ -1446,6 +1451,7 @@ final class AppStore: ObservableObject {
         saveSourcesAndLog()
         // 已排班的日子变了，「未排班」提醒也要跟着变
         requestReschedule()
+        return result.edits
     }
 
     /// 保存从电脑版页面读到的各组说明。
@@ -1562,6 +1568,23 @@ final class AppStore: ObservableObject {
         if settings.notifyFavorites, !watched.isEmpty {
             let body = watched.map { "\($0.day.dateText) \($0.summary)" }.joined(separator: "\n")
             await NotificationService.notifyNow(id: "favorites-\(UUID().uuidString)", title: "⭐ 关注的同事排班有变", body: body)
+        }
+    }
+
+    /// 全员排班有变动（今天及以后的日子，别人的；自己的另有提醒）：一次同步发一条通知，开了微信推送也发微信
+    func notifyRosterEdits(_ edits: [RosterEdit]) async {
+        guard !Self.isDemo, settings.notifyAllChanges else { return }
+        let today = DayKey.today
+        let upcoming = edits.filter { $0.day >= today && !isMe($0.name) }.sorted { ($0.day, $0.name) < ($1.day, $1.name) }
+        guard !upcoming.isEmpty else { return }
+        func show(_ raw: String?) -> String { raw.map(matcher.displayName) ?? "没排" }
+        var lines = upcoming.prefix(8).map { "\($0.day.month)/\($0.day.day) \($0.name)：\(show($0.old)) → \(show($0.new))" }
+        if upcoming.count > 8 { lines.append("等 \(upcoming.count) 处，打开 App 看「变动历史」") }
+        let title = "📋 全员排班有 \(upcoming.count) 处变动"
+        let body = lines.joined(separator: "\n")
+        await NotificationService.notifyNow(id: "roster-edits-\(UUID().uuidString)", title: title, body: body)
+        if settings.weChatEnabled && settings.weChatChanges {
+            _ = await pushToWeChat(title: title, content: body)
         }
     }
 

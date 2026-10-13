@@ -293,6 +293,7 @@ struct SettingsView: View {
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
             Toggle("收藏的同事排班变了也通知我", isOn: $store.settings.notifyFavorites)
+            Toggle("全员排班有变动也提醒我", isOn: $store.settings.notifyAllChanges)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
                 NavigationLink {
