@@ -980,7 +980,11 @@ final class AppStore: ObservableObject {
         updateWidget()
         updateAppIcon()
         DutyActivityManager.update(schedule: schedule, matcher: matcher, enabled: settings.liveActivity)
-        if settings.calendarSync { CalendarSync.sync(schedule, matcher: matcher) }
+        if settings.calendarSync {
+            var predicted: [DayKey: String] = [:]
+            if let turn = myDutyTurn(), !turn.scheduled, let day = turn.day, schedule[day] == nil { predicted[day] = "遥测（预测）" }
+            CalendarSync.sync(schedule, matcher: matcher, predicted: predicted)
+        }
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
         // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
         await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)

@@ -58,7 +58,8 @@ enum CalendarSync {
     }
 
     /// 让日历和排班一致：过去 2 周到未来约 2 个月，有排班的日子一个全天事件，没有的删掉。
-    static func sync(_ schedule: [DayKey: String], matcher: ShiftMatcher) {
+    /// predicted：网站还没排、推算出来的日子（标题自己带「预测」），网站排出来后自动换成正式的
+    static func sync(_ schedule: [DayKey: String], matcher: ShiftMatcher, predicted: [DayKey: String] = [:]) {
         guard authorized, let cal = calendar(create: true) else { return }
         let today = DayKey.today
         let first = today.adding(days: -14), last = today.adding(days: 62)
@@ -76,7 +77,7 @@ enum CalendarSync {
 
         var day = first
         while day <= last {
-            let wanted = schedule[day].map(matcher.displayName)
+            let wanted = schedule[day].map(matcher.displayName) ?? predicted[day]
             switch (wanted, existing[day]) {
             case (nil, let event?):
                 try? store.remove(event, span: .thisEvent, commit: false)
