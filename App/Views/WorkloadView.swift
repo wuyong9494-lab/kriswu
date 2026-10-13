@@ -147,7 +147,7 @@ struct WorkloadView: View {
                 }
             }
         }
-        .task(id: "\(year)-\(month)-\(store.roster.count)") { monthFile = store.workloadCSVFile(year: year, month: month) }
+        .task(id: "\(year)-\(month)-\(store.dataRevision)") { monthFile = store.workloadCSVFile(year: year, month: month) }
         .appList()
         .navigationDestination(isPresented: Binding(get: { toolIndex != nil }, set: { if !$0 { toolIndex = nil } })) {
             if let i = toolIndex { tools[i].destination }

@@ -41,7 +41,7 @@ struct RosterPreviewView: View {
         .appList()
         .navigationTitle("排班预演")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: "\(store.roster.count)-\(store.publishedDays.count)") {
+        .task(id: store.dataRevision) {
             days = store.rosterPreview()
         }
     }

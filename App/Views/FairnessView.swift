@@ -74,7 +74,7 @@ struct FairnessView: View {
                 Section { ForEach(monthReport.rows, id: \.name) { RowView(row: $0) } }
             }
         }
-        .task(id: "\(weekOffset)-\(year)-\(month)-\(untilToday)-\(store.settings.lastSync?.timeIntervalSince1970 ?? 0)-\(store.settings.workloadOverrides.count)") {
+        .task(id: "\(weekOffset)-\(year)-\(month)-\(untilToday)-\(store.dataRevision)") {
             csvURL = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",
                                    text: WorkloadCSV.balance(weekReport, title: "本周（\(rangeText(week) ?? "")）") + "\n"
                                        + WorkloadCSV.balance(monthReport, title: "\(year)年\(month)月（\(rangeText(monthKnown) ?? "")）"))

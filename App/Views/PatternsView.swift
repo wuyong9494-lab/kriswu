@@ -51,7 +51,7 @@ struct SchedulePatternsView: View {
         .appList()
         .navigationTitle("排班规律")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: "\(months)-\(store.roster.count)-\(store.publishedDays.count)") { await compute() }
+        .task(id: "\(months)-\(store.dataRevision)") { await compute() }
     }
 
     /// 在后台算（全年数据多时不卡界面）

@@ -112,7 +112,7 @@ struct WeekRosterView: View {
                 }
             }
         }
-        .task(id: "\(weekOffset)-\(store.roster.count)") { render(days) }
+        .task(id: "\(weekOffset)-\(store.dataRevision)") { render(days) }
     }
 
     @MainActor

@@ -33,9 +33,14 @@ struct DataCheckView: View {
         .appList()
         .navigationTitle("数据核对")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: "\(store.roster.count)-\(store.publishedDays.count)-\(store.settings.workloadOverrides.count)-\(store.settings.lastSync?.timeIntervalSince1970 ?? 0)-\(store.settings.workloadRules.blankWorkdayIsWork)") {
-            issues = DataCheck.issues(roster: store.roster, published: store.publishedDays, matcher: store.matcher,
-                                      members: store.rotationMembers, today: .today, calendar: .app)
+        // 数据一变（同步、改规则）就重查；在后台查，不卡界面
+        .task(id: store.dataRevision) {
+            let roster = store.roster, published = store.publishedDays, matcher = store.matcher
+            let members = store.rotationMembers, today = DayKey.today
+            issues = await Task.detached(priority: .userInitiated) {
+                DataCheck.issues(roster: roster, published: published, matcher: matcher,
+                                 members: members, today: today, calendar: .app)
+            }.value
         }
     }
 
