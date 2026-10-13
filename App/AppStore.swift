@@ -968,6 +968,10 @@ final class AppStore: ObservableObject {
         return await task.value
     }
 
+    /// 上次同步看到的网站数据接口字段（只在内存里，「设置 › 接口字段查看」用）
+    @Published private(set) var apiFields: [APIFieldTable] = []
+    @Published private(set) var apiFieldsDate: Date?
+
     private var syncTask: Task<Bool, Never>?
     private var syncTaskUserInitiated = false
     private var syncTaskAliases: [String] = []
@@ -1017,6 +1021,7 @@ final class AppStore: ObservableObject {
                 }
             }
             if let signature = outcome.apiSignature { settings.apiSignature = signature }
+            if !outcome.apiFields.isEmpty { apiFields = outcome.apiFields; apiFieldsDate = Date() }
             let rosterBefore = roster
             let publishedBefore = publishedDays
             let freshDays = Set(outcome.roster.values.flatMap(\.keys))

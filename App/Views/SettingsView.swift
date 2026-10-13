@@ -91,6 +91,11 @@ struct SettingsView: View {
                     } label: {
                         row("诊断", icon: "stethoscope", detail: "出问题时看这里")
                     }
+                    NavigationLink {
+                        APIFieldsView()
+                    } label: {
+                        row("接口字段查看", icon: "tablecells", detail: store.apiFields.isEmpty ? "同步后可看" : "\(store.apiFields.count) 张表")
+                    }
                     if store.canEdit {
                         Button("清空所有排班", role: .destructive) { confirmClear = true }
                     }

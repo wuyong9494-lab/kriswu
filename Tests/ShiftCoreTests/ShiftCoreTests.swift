@@ -1319,6 +1319,25 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.forecast.first?.day, e(33))
     }
 
+    func testAPIFieldInspector() {
+        let body = """
+        {"code":0,"data":{"list":[
+          {"dutyDate":"2026-11-02","userName":"张伟","postName":"遥测","sortNo":3,"phone":"13812345678"},
+          {"dutyDate":"2026-11-03","userName":"刘洋","postName":"遥测","sortNo":4,"phone":"13987654321"}
+        ]}}
+        """
+        let tables = APIFieldInspector.summarize([CapturedRequest(url: "https://example.com/api/duty/list?d=1", method: "GET", body: body)])
+        XCTAssertEqual(tables.count, 1)
+        XCTAssertEqual(tables.first?.path, "/api/duty/list")
+        XCTAssertEqual(tables.first?.rows, 2)
+        let fields = Dictionary(uniqueKeysWithValues: (tables.first?.fields ?? []).map { ($0.name, $0) })
+        XCTAssertEqual(fields["userName"]?.samples, ["张*", "刘*"])          // 人名只留姓
+        XCTAssertEqual(fields["phone"]?.samples.first, "138********")       // 长数字只留前三位
+        XCTAssertEqual(fields["sortNo"]?.looksLikeOrder, true)
+        XCTAssertEqual(fields["postName"]?.looksLikeOrder, false)
+        XCTAssertTrue(APIFieldInspector.text(tables).contains("★ sortNo"))
+    }
+
     func testRestAfterDutyRule() {
         // 规则：周一值休二三，周五值休六日一，周六值休日一二，周日值休一二三
         XCTAssertEqual(SchedulePatterns.expectedRest(after: d(1), calendar: cal), [d(2), d(3)])

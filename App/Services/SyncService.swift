@@ -28,6 +28,8 @@ enum SyncService {
         var groupNotes: [String: String] = [:]
         /// 人名后括号里的数字：还有几天待休
         var restBalance: [String: Int] = [:]
+        /// 网站数据接口有哪些字段（「接口字段查看」）
+        var apiFields: [APIFieldTable] = []
     }
 
     /// 全员排班接口：再取上一周和后面三周，「值班表」里可以前后切换日期。
@@ -120,6 +122,7 @@ enum SyncService {
             let bodies: [String] = page.captured.map { $0.body } + page.replies + page.extraReplies
             let (roster, notes, rest) = collect(texts: texts, json: bodies,
                                                 reference: reference, matcher: matcher)
+            let fields = APIFieldInspector.summarize(page.captured)
             if let f = found, !f.entries.isEmpty {
                 var entries = f.entries
                 // 每一段（本周、后面各周）各自的日期范围；没取到的那一周不算，原来的排班保留
@@ -147,11 +150,11 @@ enum SyncService {
                 }
                 return Outcome(result: ParseResult(entries: entries, format: .api, coveredDays: covered),
                                apiSignature: f.request.signature,
-                               roster: roster, groupNotes: notes, restBalance: rest)
+                               roster: roster, groupNotes: notes, restBalance: rest, apiFields: fields)
             }
             if HTMLText.looksLikeLoginPage(page.html) { throw SyncError.needsLogin }
             return Outcome(result: try parser.parse(texts[0]), apiSignature: nil, roster: roster, groupNotes: notes,
-                           restBalance: rest)
+                           restBalance: rest, apiFields: fields)
         }
         let text = try await fetchText(urlString: urlString, username: username, password: password)
         let (roster, notes, rest) = collect(texts: [text], json: [text], reference: parser.reference, matcher: matcher)
