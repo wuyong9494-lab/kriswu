@@ -100,6 +100,19 @@ struct WorkLogView: View {
         }
     }
 
+    /// 这天的文件 + 一份文字汇总
+    private func exportItems(day: DayKey, entries: [WorkLogEntry]) -> [WorkLogShareFile] {
+        let sorted = entries.sorted { $0.date < $1.date }
+        let lines = ["\(day.dateText) 工作留痕"] + sorted.map { e in
+            let time = e.date.formatted(date: .omitted, time: .shortened)
+            let text = [e.note, e.transcript ?? ""].filter { !$0.isEmpty }.joined(separator: "\n  ")
+            return "\(time) \(e.kind.title)" + (e.shift.map { "（\($0)）" } ?? "") + (e.file.map { " [\($0)]" } ?? "")
+                + (text.isEmpty ? "" : "\n  " + text)
+        }
+        return [WorkLogShareFile(name: "\(day) 工作留痕.txt", text: lines.joined(separator: "\n"))]
+            + sorted.compactMap { log.url(for: $0) }.map { WorkLogShareFile(name: $0.lastPathComponent, url: $0) }
+    }
+
     private var content: some View {
         let shown = log.entries.filter { (filter == nil || $0.kind == filter) && $0.matches(query) }
         let groups = Dictionary(grouping: shown) { DayKey(date: $0.date, calendar: .app) }
@@ -149,7 +162,15 @@ struct WorkLogView: View {
                         pendingDelete = offsets.map { list[$0] }
                     }
                 } header: {
-                    Text(day.dateText + ((groups[day]?.compactMap(\.shift).first).map { " · \($0)" } ?? ""))
+                    HStack {
+                        Text(day.dateText + ((groups[day]?.compactMap(\.shift).first).map { " · \($0)" } ?? ""))
+                        Spacer()
+                        // 一次分享这天的全部照片、录音和一份文字汇总（交材料用）
+                        ShareLink(items: exportItems(day: day, entries: groups[day] ?? [])) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("分享这天的全部留痕")
+                    }
                 }
             }
             Section {
@@ -572,6 +593,22 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
+        }
+    }
+}
+
+/// 分享出去的一个文件：留痕里已有的文件，或者临时写出来的文字汇总
+struct WorkLogShareFile: Transferable {
+    var name: String
+    var url: URL?
+    var text: String?
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .data) { item in
+            if let url = item.url { return SentTransferredFile(url) }
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent(item.name)
+            try (item.text ?? "").data(using: .utf8)?.write(to: temp, options: .atomic)
+            return SentTransferredFile(temp)
         }
     }
 }
