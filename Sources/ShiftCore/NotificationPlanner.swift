@@ -38,6 +38,9 @@ public struct NotificationPlanner {
     /// 每周日晚上预告下周一到周日的安排
     public var weekly = false
 
+    /// 自己给某天写的备注，那天的提醒里带上
+    public var memos: [DayKey: String] = [:]
+
     /// 遥测接班时间和提前多少分钟提醒（0 不提醒）
     public var dutyStart = ClockTime(hour: 8, minute: 30)
     public var dutyLeadMinutes = 0
@@ -141,6 +144,7 @@ public struct NotificationPlanner {
         for part in name.split(separator: "+") {
             if let note = notes[String(part).filter { !$0.isWhitespace }.uppercased()] { detail += "\n\(part)：\(note)" }
         }
+        if let memo = memos[aboutDay], !memo.isEmpty { detail += "\n📝 \(memo)" }
         return PlannedNotification(
             id: "shift-\(kind)-\(fireDay)",
             day: fireDay,

@@ -190,6 +190,12 @@ private struct DayCell: View {
         VStack(spacing: DS.Space.xxs) {
             Text("\(day.day)")
                 .font(.system(size: 15, weight: isToday ? .heavy : .medium, design: .rounded))
+                // 写了备注的日子：右上角一个小点
+                .overlay(alignment: .topTrailing) {
+                    if store.settings.dayMemos[day.description] != nil {
+                        Circle().fill(DS.Palette.warning).frame(width: 6, height: 6).offset(x: 3, y: -1)
+                    }
+                }
                 .foregroundStyle(isToday ? Color.white : (holiday ? DS.Palette.danger : Color.primary))
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(isToday ? DS.Palette.accent : Color.clear))
@@ -296,6 +302,14 @@ struct DayEditor: View {
                             }
                         }
                     }
+                }
+                Section("我的备注") {
+                    TextField("比如：带资料、换班已说好", text: Binding(
+                        get: { store.settings.dayMemos[day.description] ?? "" },
+                        set: { text in
+                            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            store.settings.dayMemos[day.description] = t.isEmpty ? nil : text
+                        }), axis: .vertical)
                 }
                 // 这一天全员分工直接看（不用再点进去）
                 let roster = store.dayRoster(day)

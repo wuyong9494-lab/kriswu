@@ -693,6 +693,16 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertTrue(ics.contains("SUMMARY:") && ics.contains("遥测"))
     }
 
+    func testMemoInReminder() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        var planner = NotificationPlanner(morning: ClockTime(hour: 7, minute: 30), evening: nil, notifyWhenEmpty: false,
+                                          matcher: ShiftMatcher(types: ShiftType.defaults), calendar: cal)
+        let day = DayKey(year: 2026, month: 10, day: 14)
+        planner.memos = [day: "带资料"]
+        XCTAssertTrue(planner.message(morning: true, on: day, schedule: [day: "组D"])?.body.contains("📝 带资料") == true)
+    }
+
     func testDutyLeadReminder() {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!

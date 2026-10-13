@@ -93,6 +93,8 @@ struct AppSettings: Codable, Equatable {
     var weChatChanges = true
     /// 同事的排班变动、网站公告也推到微信（会把同事姓名发给 PushPlus），默认不推
     var weChatTeam = false
+    /// 自己给某天写的备注（yyyy-MM-dd → 文字），日历上显示小点，那天的提醒里带上
+    var dayMemos: [String: String] = [:]
     var lastWeChatChangeDigest: String?
     /// 各组工作内容：电脑版网页 > 自己填写的 > 其它页面顺带读到的
     var autoGroupNotes: [String: String] = [:]
@@ -265,6 +267,7 @@ struct AppSettings: Codable, Equatable {
         calendarSync = (try? c.decodeIfPresent(Bool.self, forKey: .calendarSync)) ?? d.calendarSync
         weChatChanges = (try? c.decodeIfPresent(Bool.self, forKey: .weChatChanges)) ?? d.weChatChanges
         weChatTeam = (try? c.decodeIfPresent(Bool.self, forKey: .weChatTeam)) ?? d.weChatTeam
+        dayMemos = (try? c.decodeIfPresent([String: String].self, forKey: .dayMemos)) ?? [:]
         lastWeChatChangeDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
         autoGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes)) ?? [:]
         manualGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes)) ?? [:]
@@ -1092,6 +1095,7 @@ final class AppStore: ObservableObject {
             matcher: matcher,
             calendar: .app)
         p.weekly = settings.weeklyPreview
+        p.memos = Dictionary(uniqueKeysWithValues: settings.dayMemos.compactMap { k, v in DayKey(string: k).map { ($0, v) } })
         p.dutyStart = settings.dutyStart
         p.dutyLeadMinutes = settings.dutyLeadMinutes
         return p
