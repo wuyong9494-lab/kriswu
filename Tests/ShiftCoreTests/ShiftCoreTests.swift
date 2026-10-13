@@ -1218,6 +1218,15 @@ final class UpgradeTests: XCTestCase {
         XCTAssertNil(split["张三李四"])
         XCTAssertEqual(split["张三"], [d(7): "休息", d(8): "组A"])
         XCTAssertEqual(split["李四"], [d(7): "休息", d(8): "组B"])
+        // 三四个人挨在一起也能拆开；拆不开的一长串（一句话）不当成人
+        XCTAssertEqual(RosterExtractor.names(inCell: "张三李四王小五", matcher: m), ["张三李四王小五"])
+        let many: Roster = ["张三李四王小五赵六": [d(7): "休息"], "张三": [d(8): "组A"], "李四": [d(8): "组B"],
+                            "王小五": [d(8): "组C"], "赵六": [d(8): "组D"], "负责数据传输监控": [d(7): "组A"]]
+        let parts = RosterExtractor.splitJoinedNames(many)
+        XCTAssertEqual(Set(parts.keys), ["张三", "李四", "王小五", "赵六"])
+        for name in ["张三", "李四", "王小五", "赵六"] { XCTAssertEqual(parts[name]?[d(7)], "休息", name) }
+        // 表格一格里四个人，用什么隔开都行
+        XCTAssertEqual(RosterExtractor.names(inCell: "张三(5) 李四(3)\n王小五、赵六", matcher: m), ["张三", "李四", "王小五", "赵六"])
         // 真的四个字的名字不拆
         XCTAssertEqual(RosterExtractor.splitJoinedNames(["欧阳建国": [d(7): "组A"], "张三": [d(8): "组B"]]).count, 2)
     }

@@ -9,6 +9,7 @@ public enum RosterExtractor {
     /// 2–5 个汉字，或者带间隔号的少数民族名字（阿依古丽·买买提）
     private static let chineseName = try! NSRegularExpression(
         pattern: #"^(?:[\x{4e00}-\x{9fa5}]{2,5}|[\x{4e00}-\x{9fa5}]{1,8}(?:[·・•][\x{4e00}-\x{9fa5}]{1,10})+)$"#)
+    private static let gluedNames = try! NSRegularExpression(pattern: #"^[\x{4e00}-\x{9fa5}]{6,40}$"#)
     private static let latinName = try! NSRegularExpression(pattern: #"^[A-Za-z][A-Za-z .'-]{1,24}$"#)
 
     /// 「张伟(1)」→「张伟」
@@ -58,7 +59,9 @@ public enum RosterExtractor {
             }
         }
         tokens = merged
-        return tokens.filter { looksLikeName($0) && !isPost($0, matcher: matcher) }
+        // 6 个字以上的一串汉字可能是几个名字挨在一起：先留着，读完整页后能拆成认识的人就拆开（见 splitJoinedNames）
+        return tokens.filter { (looksLikeName($0) || gluedNames.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil)
+            && !isPost($0, matcher: matcher) }
     }
 
     /// 像岗位的词：遥测、调度、组A、值班交班前、休息、调休……（人名不算）
@@ -242,27 +245,57 @@ public enum RosterExtractor {
         return splitJoinedNames(roster)
     }
 
-    /// 两个名字挨在一起没隔开（「张三李四」）会被当成一个四个字的人：
-    /// 前后两半都是这次读到的别人，就拆成两个人。
-    /// known：认识的人（默认这次读到的；合并时加上以前读到过的）
+    /// 几个名字挨在一起没隔开（「张三李四」「张三李四王五」）会被当成一个人：
+    /// 能唯一地拆成这次读到（或以前读到过）的几个人，就拆开；拆不开、又太长不像名字的丢掉（多半是一句话）。
+    /// known：另外认识的人（合并时加上以前读到过的）
     public static func splitJoinedNames(_ roster: Roster, known extra: Set<String> = []) -> Roster {
-        let known = Set(roster.keys).union(extra)
+        // 单个的人：自己拆不成别人的（从短到长看）
+        var base = Set<String>()
+        for name in Set(roster.keys).union(extra).filter(looksLikeName).sorted(by: { ($0.count, $0) < ($1.count, $1) }) {
+            if segmentations(of: name, using: base) == 0 { base.insert(name) }
+        }
         var result = roster
-        for (name, days) in roster where name.count >= 4 && name.count <= 8 {
-            let chars = Array(name)
-            let splits = (2...(chars.count - 2)).compactMap { i -> (String, String)? in
-                let a = String(chars[..<i]), b = String(chars[i...])
-                return known.contains(a) && known.contains(b) && a != name && b != name ? (a, b) : nil
-            }
-            guard splits.count == 1, let pair = splits.first else { continue }
-            result[name] = nil
-            for (day, post) in days {
-                for person in [pair.0, pair.1] {
-                    for part in post.split(separator: "+") { add(String(part), for: person, on: day, to: &result) }
+        for (name, days) in roster where !base.contains(name) {
+            var parts: [String] = []
+            if segmentations(of: name, using: base, first: &parts) == 1 {
+                result[name] = nil
+                for (day, post) in days {
+                    for person in parts {
+                        for part in post.split(separator: "+") { add(String(part), for: person, on: day, to: &result) }
+                    }
                 }
+            } else if !looksLikeName(name) {
+                result[name] = nil
             }
         }
         return result
+    }
+
+    /// 能拆成至少两个 base 里的名字的方法有几种（最多数到 2）
+    static func segmentations(of name: String, using base: Set<String>) -> Int {
+        var ignored: [String] = []
+        return segmentations(of: name, using: base, first: &ignored)
+    }
+
+    static func segmentations(of name: String, using base: Set<String>, first: inout [String]) -> Int {
+        let chars = Array(name)
+        guard chars.count >= 4, !base.isEmpty else { return 0 }
+        var found = 0
+        var firstPath: [String] = []
+        func walk(_ start: Int, _ path: [String]) {
+            guard found < 2 else { return }
+            if start == chars.count {
+                if path.count >= 2 { found += 1; if found == 1 { firstPath = path } }
+                return
+            }
+            for end in stride(from: start + 2, through: min(chars.count, start + 12), by: 1) {
+                let piece = String(chars[start..<end])
+                if base.contains(piece) && piece != name { walk(end, path + [piece]) }
+            }
+        }
+        walk(0, [])
+        first = firstPath
+        return found
     }
 }
 
