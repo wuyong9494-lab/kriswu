@@ -197,6 +197,11 @@ struct RootView: View {
             if let action = PendingCapture.take() { startCapture(action) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openRoute)) { _ in openPendingRoute() }
+        // 过了零点（或换了时区）：所有页面按新的一天重画，图标、小组件、提醒跟着换
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            store.objectWillChange.send()
+            store.requestReschedule()
+        }
         .onAppear {
             openPendingRoute()
             showWhatsNewIfNeeded()
