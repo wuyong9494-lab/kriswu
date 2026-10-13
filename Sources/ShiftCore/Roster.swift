@@ -42,7 +42,9 @@ public enum RosterExtractor {
     static func names(inCell cell: String, matcher: ShiftMatcher) -> [String] {
         // 「张三(5)李四(3)」挨在一起：在右括号后面断开
         let spaced = cell.replacingOccurrences(of: ")", with: ") ").replacingOccurrences(of: "）", with: "） ")
-        var tokens = spaced.components(separatedBy: CharacterSet(charactersIn: " \u{3000}、,，;；/\t"))
+        // 空格、换行、各种标点都可能隔开两个人（「休息：张三 李四」「张三|李四」）
+        var tokens = spaced.components(separatedBy: CharacterSet(charactersIn: "、,，;；/：:|｜．。")
+            .union(.whitespacesAndNewlines))
             .map(cleanName)
             .filter { !$0.isEmpty }
         // 两个字的名字常被排版成「王　五」：相邻两个单字合回一个名字
@@ -158,7 +160,7 @@ public enum RosterExtractor {
                 for name in names(inCell: cell, matcher: matcher) { add(post, for: name, on: day, to: &roster) }
             }
         }
-        return roster
+        return splitJoinedNames(roster)
     }
 
     /// 电脑版「值班查看」：一周一张表，表头「日期 星期 遥测 调度 组A … 休息 调休 加班」，格子里「张三(5)」。
@@ -204,7 +206,7 @@ public enum RosterExtractor {
                 pendingPost = nil
             }
         }
-        return roster
+        return splitJoinedNames(roster)
     }
 
     /// 接口数据：每条记录有日期、人名、岗位三个字段（字段名不限）。
@@ -231,12 +233,36 @@ public enum RosterExtractor {
             guard let postKey else { continue }
             for row in rows {
                 guard let day = row[dateKey].flatMap({ JSONScheduleExtractor.day(from: $0, dates: dates) }),
-                      let name = row[personKey].map(cleanName), looksLikeName(name), !isPost(name, matcher: matcher),
+                      let cell = row[personKey],
                       let post = row[postKey], isPost(post, matcher: matcher) else { continue }
-                add(post, for: name, on: day, to: &roster)
+                // 一条记录里可能有好几个人（休息「张三,李四」）：每个人都记上
+                for name in names(inCell: cell, matcher: matcher) { add(post, for: name, on: day, to: &roster) }
             }
         }
-        return roster
+        return splitJoinedNames(roster)
+    }
+
+    /// 两个名字挨在一起没隔开（「张三李四」）会被当成一个四个字的人：
+    /// 前后两半都是这次读到的别人，就拆成两个人。
+    /// known：认识的人（默认这次读到的；合并时加上以前读到过的）
+    public static func splitJoinedNames(_ roster: Roster, known extra: Set<String> = []) -> Roster {
+        let known = Set(roster.keys).union(extra)
+        var result = roster
+        for (name, days) in roster where name.count >= 4 && name.count <= 8 {
+            let chars = Array(name)
+            let splits = (2...(chars.count - 2)).compactMap { i -> (String, String)? in
+                let a = String(chars[..<i]), b = String(chars[i...])
+                return known.contains(a) && known.contains(b) && a != name && b != name ? (a, b) : nil
+            }
+            guard splits.count == 1, let pair = splits.first else { continue }
+            result[name] = nil
+            for (day, post) in days {
+                for person in [pair.0, pair.1] {
+                    for part in post.split(separator: "+") { add(String(part), for: person, on: day, to: &result) }
+                }
+            }
+        }
+        return result
     }
 }
 

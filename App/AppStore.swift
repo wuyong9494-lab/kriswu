@@ -1470,8 +1470,10 @@ final class AppStore: ObservableObject {
     /// 但不带休息列的读取不会冲掉之前读到的休息、请假（见 RosterExtractor.replacingDays）。
     /// source：「sync」同步、「desktop」电脑版周表。每条记下来源；不带休息列的读取方式不会冲掉以前读到的休息、请假。
     @discardableResult
-    func mergeRoster(_ new: Roster, source: String = "sync") -> [RosterEdit] {
-        guard !new.isEmpty else { return [] }
+    func mergeRoster(_ incoming: Roster, source: String = "sync") -> [RosterEdit] {
+        guard !incoming.isEmpty else { return [] }
+        // 一页里两个名字挨在一起（「张三李四」）、两半是别的页或以前读到过的人：拆开
+        let new = RosterExtractor.splitJoinedNames(incoming, known: Set(roster.keys))
         // 这种读取方式带不带休息列：读到过休息、请假就记住
         var s = settings
         // 每次读的范围、方式可能不同（后台快速同步不翻页），所以按这次读到的有没有休息判断
@@ -1483,7 +1485,8 @@ final class AppStore: ObservableObject {
                                         carriesLeave: carries, matcher: matcher)
         // 留一年多，全年统计用
         let cutoff = DayKey.today.adding(days: -400)
-        roster = result.roster.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
+        // 以前没拆开存下的「张三李四」也一起拆开
+        roster = RosterExtractor.splitJoinedNames(result.roster).mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
         rosterSources = result.sources.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
         if !result.edits.isEmpty { rosterLog = Array((rosterLog + result.edits).suffix(3000)) }
         // 网站排出了新的一周：记下时间，学网站一般什么时候排班

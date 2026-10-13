@@ -1194,6 +1194,34 @@ final class UpgradeTests: XCTestCase {
         XCTAssertEqual(RosterExtractor.names(inCell: "张三(5)李四(3)王小五（2）", matcher: m), ["张三", "李四", "王小五"])
     }
 
+    func testRestColumnWithTwoPeople() {
+        // 休息一格里两个人：换行、竖线、冒号隔开都要读到
+        XCTAssertEqual(RosterExtractor.names(inCell: "张三(5)\n李四(3)", matcher: m), ["张三", "李四"])
+        XCTAssertEqual(RosterExtractor.names(inCell: "休息：张三|李四", matcher: m), ["张三", "李四"])
+        XCTAssertEqual(RosterExtractor.names(inCell: "张三\u{00A0}李四", matcher: m), ["张三", "李四"])
+        // 接口里一条记录两个人
+        let json = """
+        {"data":[
+          {"dutyDate":"2026-10-07","userName":"张伟","postName":"组D"},
+          {"dutyDate":"2026-10-07","userName":"刘洋","postName":"组A"},
+          {"dutyDate":"2026-10-07","userName":"杨帆、王芳","postName":"休息"},
+          {"dutyDate":"2026-10-08","userName":"杨帆","postName":"组B"},
+          {"dutyDate":"2026-10-08","userName":"王芳","postName":"组C"}
+        ]}
+        """
+        let roster = RosterExtractor.fromJSON(json, reference: DayKey(year: 2026, month: 10, day: 9), matcher: m)
+        XCTAssertEqual(roster["杨帆"]?[d(7)], "休息")
+        XCTAssertEqual(roster["王芳"]?[d(7)], "休息")
+        // 两个名字挨在一起没隔开：两半都是认识的人就拆开
+        let glued: Roster = ["张三李四": [d(7): "休息"], "张三": [d(8): "组A"], "李四": [d(8): "组B"]]
+        let split = RosterExtractor.splitJoinedNames(glued)
+        XCTAssertNil(split["张三李四"])
+        XCTAssertEqual(split["张三"], [d(7): "休息", d(8): "组A"])
+        XCTAssertEqual(split["李四"], [d(7): "休息", d(8): "组B"])
+        // 真的四个字的名字不拆
+        XCTAssertEqual(RosterExtractor.splitJoinedNames(["欧阳建国": [d(7): "组A"], "张三": [d(8): "组B"]]).count, 2)
+    }
+
     func testTeamChanges() {
         let before: Roster = ["甲": [d(15): "组A"], "乙": [d(15): "组B"], "丙": [d(15): "休息"], "丁": [d(16): "休息"]]
         let after: Roster = ["甲": [d(15): "组B"], "乙": [d(15): "组A"], "丙": [d(15): "休息"],
