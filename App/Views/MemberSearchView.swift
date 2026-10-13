@@ -23,8 +23,9 @@ struct MemberSearchView: View {
             List {
                 if store.roster.isEmpty {
                     Section {
-                        Text("还没有全员排班数据。同步时 App 会打开网站的「值班查看」页面读取全员排班；先在「今天」页下拉刷新一次，再回来搜索。")
+                        Text("还没有全员排班数据。同步时 App 会打开网站的「值班查看」页面读取全员排班；同步一次再回来搜索。")
                             .foregroundStyle(.secondary)
+                        SyncNowButton(source: "搜索成员")
                     }
                 } else {
                     ForEach(names, id: \.self) { name in

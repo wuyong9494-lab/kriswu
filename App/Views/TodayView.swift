@@ -577,9 +577,11 @@ private struct EmptyScheduleHint: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("还没有排班数据", systemImage: "tray")
                 .font(.headline)
-            Text("到「设置」里填写排班网址自动同步，或者导入/粘贴排班表；也可以在「日历」里逐天点选。")
+            Text("连上值班网站自动同步，或者在「设置 › 导入排班表」粘贴；也可以在「日历」里逐天点选。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            SyncNowButton(source: "今天页")
+                .font(.subheadline.weight(.semibold))
         }
         .card(tint: Theme.accent)
     }

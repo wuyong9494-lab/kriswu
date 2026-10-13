@@ -313,6 +313,32 @@ struct EmptyState: View {
     }
 }
 
+/// 没数据时的下一步：能同步就「立即同步」，还没设置好就去设置向导
+struct SyncNowButton: View {
+    @EnvironmentObject private var store: AppStore
+    var source = "空页面"
+
+    var body: some View {
+        if store.canSync {
+            Button {
+                Task { _ = await store.sync(userInitiated: true, source: source) }
+            } label: {
+                HStack(spacing: DS.Space.xs) {
+                    if store.isSyncing { DSSpinner(size: 14) } else { Image(systemName: "arrow.triangle.2.circlepath") }
+                    Text(store.isSyncing ? "正在同步…" : "立即同步")
+                }
+            }
+            .disabled(store.isSyncing)
+        } else {
+            Button {
+                store.settings.onboardingDone = false
+            } label: {
+                Label("还没连上值班网站，去设置", systemImage: "wand.and.rays")
+            }
+        }
+    }
+}
+
 // MARK: - 按钮
 
 /// 主按钮 / 次按钮 / 轻按钮，按下时缩小、变暗

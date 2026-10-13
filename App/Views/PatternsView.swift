@@ -30,7 +30,10 @@ struct SchedulePatternsView: View {
             }
             if let result {
                 if result.days == 0 {
-                    Section { Text("还没有全员排班数据。").foregroundStyle(.secondary) }
+                    Section {
+                        Text("还没有全员排班数据。").foregroundStyle(.secondary)
+                        SyncNowButton(source: "排班规律")
+                    }
                 } else {
                     warningSection
                     siteRulesSection
@@ -413,6 +416,7 @@ struct SiteNoticesView: View {
         List {
             if store.settings.siteNotices.isEmpty {
                 Text("还没读到网站公告。同步一次后再看。").foregroundStyle(.secondary)
+                SyncNowButton(source: "网站公告")
             }
             Section {
                 ForEach(Array(store.settings.siteNotices.enumerated()), id: \.offset) { _, text in

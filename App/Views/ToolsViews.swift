@@ -22,7 +22,8 @@ struct SwapHelperView: View {
                      + "欠你班的、和你换过的、以后有班正好能换回来的排在前面。")
             }
             if store.roster.isEmpty {
-                Text("还没有全员排班数据，先下拉刷新同步一次。").foregroundStyle(.secondary)
+                Text("还没有全员排班数据，先同步一次。").foregroundStyle(.secondary)
+                SyncNowButton(source: "找人换班")
             } else if list.isEmpty {
                 Text("那天没找到合适的人。").foregroundStyle(.secondary)
             }
