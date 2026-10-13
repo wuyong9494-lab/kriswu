@@ -1022,10 +1022,8 @@ final class RegressionTests: XCTestCase {
         var roster: Roster = [:]
         RosterExtractor.add("组A,组E", for: "张三", on: ref, to: &roster)
         XCTAssertEqual(roster["张三"]?[ref], "组A+组E")
-        // UTC 时间换算成本地日期（测试时区按系统）
-        let local = JSONScheduleExtractor.zonedDay("2026-10-04T16:00:00.000+0000")
-        let expected = DayKey(date: Date(timeIntervalSince1970: 1_791_129_600), calendar: Calendar(identifier: .gregorian))
-        XCTAssertEqual(local, expected)
+        // UTC 时间按北京时间换算成日期：北京时间 10 月 5 日 0 点（不管手机在哪个时区）
+        XCTAssertEqual(JSONScheduleExtractor.zonedDay("2026-10-04T16:00:00.000+0000"), DayKey(year: 2026, month: 10, day: 5))
     }
 
     func testHTMLEntitiesDecodedOnce() {

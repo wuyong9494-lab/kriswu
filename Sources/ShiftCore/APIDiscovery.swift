@@ -203,6 +203,13 @@ public enum JSONScheduleExtractor {
 
     /// 「2026-10-04T16:00:00.000+0000」这种带时区的时间：换算成手机所在时区的日期
     /// （Java 后端常按 UTC 输出，北京时间 10 月 5 日 0 点会写成 10 月 4 日 16 点）
+    /// 值班网站在北京时间：带时区的时间、时间戳都按北京时间换算成日期（人在外地时区也不会错一天）
+    static let siteCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }()
+
     static func zonedDay(_ value: String) -> DayKey? {
         let s = value.trimmingCharacters(in: .whitespaces)
         let ns = s as NSString
@@ -220,7 +227,7 @@ public enum JSONScheduleExtractor {
         utc.timeZone = TimeZone(secondsFromGMT: 0)!
         guard let local = utc.date(from: DateComponents(year: y, month: mo, day: d, hour: h, minute: mi, second: int(6) ?? 0))
         else { return nil }
-        return DayKey(date: local.addingTimeInterval(TimeInterval(-offset)), calendar: Calendar(identifier: .gregorian))
+        return DayKey(date: local.addingTimeInterval(TimeInterval(-offset)), calendar: siteCalendar)
     }
 
     static func day(from value: String, dates: DateTokenParser) -> DayKey? {
@@ -229,7 +236,7 @@ public enum JSONScheduleExtractor {
         // 毫秒 / 秒时间戳
         if value.count == 13 || value.count == 10, let n = Double(value), n > 1_400_000_000 {
             let date = Date(timeIntervalSince1970: value.count == 13 ? n / 1000 : n)
-            return DayKey(date: date, calendar: Calendar(identifier: .gregorian))
+            return DayKey(date: date, calendar: siteCalendar)
         }
         return nil
     }
