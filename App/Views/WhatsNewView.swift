@@ -3,7 +3,7 @@ import SwiftUI
 /// 「这次更新了什么」：更新后第一次打开弹出来，设置里也能再看。新版本加了功能就改 id 和 items。
 enum WhatsNew {
     /// 换成新的 id，所有人下次打开都会再弹一次
-    static let id = "2026-10-13"
+    static let id = "2026-10-13b"
     static let seenKey = "whatsNewSeen"
 
     struct Item: Identifiable {
@@ -14,6 +14,16 @@ enum WhatsNew {
     }
 
     static let items: [Item] = [
+        Item(icon: "pin", title: "网站公告有更新会通知",
+             detail: "公告出现新内容马上通知，今天页也会显示；设置 › 网站公告 可以看全部。"),
+        Item(icon: "antenna.radiowaves.left.and.right", title: "快轮到你值遥测会提前说",
+             detail: "网站还没排、按顺序推算一周内轮到你时，提前通知一次（只是推算，可在 设置 › 提醒 关掉）。"),
+        Item(icon: "arrow.left.arrow.right", title: "换班一键发请求",
+             detail: "找人换班里，每个候选人都能直接复制或发送换班请求，能换回来的日子也写好了。"),
+        Item(icon: "book.closed", title: "换班账本人人可用",
+             detail: "谁替你上过班、你替谁上过，自动记账，不用管理员登录。"),
+        Item(icon: "square.grid.2x2", title: "小组件显示同步时间",
+             detail: "超过一天没同步，小组件会变灰并写上几天没同步，免得照着旧排班上班。"),
         Item(icon: "sparkles.rectangle.stack", title: "排班预演",
              detail: "网站还没排的日子，先推演谁值遥测、谁在休息；网站排出来后自动对比猜中了多少。在「统计 › 排班预演」。"),
         Item(icon: "antenna.radiowaves.left.and.right", title: "遥测推算更准",
