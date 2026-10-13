@@ -7,6 +7,8 @@ struct CalendarView: View {
     @State private var editing: DayKey?
     /// 翻月方向，决定日历从哪边滑进来
     @State private var flipForward = true
+    @State private var jumping = false
+    @State private var jumpDate = Date()
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
     private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
@@ -80,9 +82,42 @@ struct CalendarView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(verbatim: "\(year)年").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                Text(verbatim: "\(month)月").font(DS.Font.display)
+            // 点年月：选一个日期直接跳过去，不用一个月一个月翻
+            Button {
+                jumpDate = DayKey(year: year, month: month, day: 1).date(calendar: .app, hour: 12)
+                jumping = true
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(verbatim: "\(year)年").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text(verbatim: "\(month)月").font(DS.Font.display)
+                        Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(year)年\(month)月，点按选择日期")
+            .sheet(isPresented: $jumping) {
+                NavigationStack {
+                    DatePicker("日期", selection: $jumpDate, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .environment(\.calendar, .app)
+                        .padding()
+                        .navigationTitle("跳到")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) { Button("取消") { jumping = false } }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("查看这天") {
+                                    let day = DayKey(date: jumpDate, calendar: .app)
+                                    jumping = false
+                                    withAnimation(DS.Motion.spring) { year = day.year; month = day.month }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { editing = day }
+                                }
+                            }
+                        }
+                }
+                .presentationDetents([.medium, .large])
             }
             Spacer()
             if year != DayKey.today.year || month != DayKey.today.month {
