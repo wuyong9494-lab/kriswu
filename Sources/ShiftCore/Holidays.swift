@@ -24,12 +24,12 @@ public enum ChinaHolidays {
     ]
 
     /// 每年自动下载的安排（公开的节假日数据），优先级在自己录入的之后、App 自带的之前
-    public static var downloadedOff: Set<String> = []
-    public static var downloadedWork: Set<String> = []
+    @Locked public static var downloadedOff: Set<String> = []
+    @Locked public static var downloadedWork: Set<String> = []
 
     /// 用户在 App 里补充的安排（新的一年公布后自己录入，或者纠正）：优先于上面的表
-    public static var customOff: Set<String> = []
-    public static var customWork: Set<String> = []
+    @Locked public static var customOff: Set<String> = []
+    @Locked public static var customWork: Set<String> = []
 
     /// 已经录入节假日安排的年份（App 自带的加上自己录入的）
     public static var knownYears: Set<Int> {

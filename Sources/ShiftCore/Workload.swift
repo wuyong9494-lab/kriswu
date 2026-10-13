@@ -75,18 +75,18 @@ public struct WorkloadRules: Codable, Equatable {
 
 public enum WorkloadCounter {
     /// 当前规则（App 启动和改设置时写进来）
-    public static var rules = WorkloadRules()
+    @Locked public static var rules = WorkloadRules()
     /// 规则改动历史：某天以前按当时的规则算
-    public static var ruleHistory: [RuleVersion] = []
+    @Locked public static var ruleHistory: [RuleVersion] = []
     /// 人员档案（管理员确认过的角色、来走日期）
-    public static var profiles: [String: PersonProfile] = [:]
+    @Locked public static var profiles: [String: PersonProfile] = [:]
 
     /// 某天用哪套规则
     public static func rules(on day: DayKey) -> WorkloadRules {
         RuleVersion.rules(on: day, versions: ruleHistory, current: rules)
     }
     /// 手动纠正：人名 → 日期 → 类别（Kind 的中文名，或「不算」表示这天不统计）
-    public static var overrides: [String: [DayKey: String]] = [:]
+    @Locked public static var overrides: [String: [DayKey: String]] = [:]
     public static let excluded = "不算"
 
     /// 休息、调休、请假、无分工都不算上班。
