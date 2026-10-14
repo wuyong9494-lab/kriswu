@@ -25,6 +25,8 @@ struct ShiftApp: App {
                 store.applyPendingTaskToggles()
                 WorkLogStore.shared.reloadIfNeeded()
                 Task {
+                    // 图标先换成今天的：iPhone 只许 App 在屏幕上时换图标，等同步完再换，打开一下就离开就换不上了
+                    store.updateAppIcon()
                     // 打开就离开也能做完：向系统多要一点后台时间（到时间就停下同步，保存好）
                     let assertion = BackgroundAssertion()
                     assertion.begin { store.cancelRunningSync() }
