@@ -1375,6 +1375,9 @@ final class AppStore: ObservableObject {
     func invalidateWorkloadCache() { workloadCache = [:] }
 
     /// 统计用的数据（全员排班、我的排班、设置）每变一次加一，页面用它判断要不要重算
+    /// 上次换主屏幕图标没成功的原因（诊断页显示）
+    var appIconError: String?
+
     // 遥测推算、下次遥测、待休对账的缓存（AppStore+Duty.swift 用）
     var rotationCache: [String: SchedulePatterns.Rotation?] = [:]
     var rotationWarmup: (key: String, task: Task<Void, Never>)?

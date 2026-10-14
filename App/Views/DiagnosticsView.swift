@@ -88,6 +88,12 @@ struct DiagnosticsView: View {
             }
         }()
         appRows.append(Row(label: "后台 App 刷新", value: refresh.0, ok: refresh.1))
+        // 主屏幕图标：现在是哪个、今天应该是哪个（只有 App 打开着时能换）
+        let wantedIcon = store.wantedAppIcon
+        appRows.append(Row(label: "主屏幕图标",
+                           value: "现在「\(AppStore.iconTitle(app.alternateIconName))」，今天应该「\(AppStore.iconTitle(wantedIcon))」"
+                               + (store.appIconError.map { "；上次没换成：\($0)" } ?? ""),
+                           ok: app.alternateIconName == wantedIcon))
 
         let syncRows = [
             Row(label: "排班网址", value: s.sourceURL.isEmpty ? "未设置" : "已设置", ok: !s.sourceURL.isEmpty),

@@ -55,13 +55,37 @@ extension AppStore {
     /// 无分工/休息/调休/请假「休」，其它用默认的「值」。
     func iconName(for raw: String?) -> String? { ShiftIcon.name(for: raw, matcher: matcher) }
 
+    /// 今天该用的图标（nil = 默认的「值」）
+    var wantedAppIcon: String? { settings.dynamicIcon ? iconName(for: schedule[.today]) : nil }
+
     /// iPhone 只允许 App 在前台时换图标，每次换系统会弹一个「已更改图标」的提示。
-    func updateAppIcon() {
+    /// 刚回到前台的一瞬间换，系统偶尔会报「暂时不可用」：隔一秒再试，最多再试两次
+    func updateAppIcon(retries: Int = 2) {
         let app = UIApplication.shared
         guard app.supportsAlternateIcons, app.applicationState == .active else { return }
-        let wanted = settings.dynamicIcon ? iconName(for: schedule[.today]) : nil
-        guard app.alternateIconName != wanted else { return }
-        app.setAlternateIconName(wanted) { _ in }
+        let wanted = wantedAppIcon
+        guard app.alternateIconName != wanted else { appIconError = nil; return }
+        app.setAlternateIconName(wanted) { error in
+            Task { @MainActor in
+                let store = AppStore.shared
+                store.appIconError = error?.localizedDescription
+                guard error != nil, retries > 0 else { return }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                store.updateAppIcon(retries: retries - 1)
+            }
+        }
+    }
+
+    /// 诊断页用：图标名换成看得懂的字
+    static func iconTitle(_ name: String?) -> String {
+        guard let name else { return "值（默认）" }
+        switch name {
+        case "IconDuty": return "遥"
+        case "IconDispatch": return "调"
+        case "IconTrip": return "差"
+        case "IconRest": return "休"
+        default: return name.hasPrefix("Icon") ? String(name.dropFirst(4)) : name
+        }
     }
 
     /// 把昨天到未来一个月的分工写给主屏幕小组件。
