@@ -1414,6 +1414,60 @@ final class PatternTests: XCTestCase {
         XCTAssertEqual(r?.forecast.first?.day, d(13))
     }
 
+    func testWeeklyPlanLongestWaitingGetsLatestDay() {
+        // 网站一周排一次：等得最久的排这周三、周五里靠后的周五，第二久的排周三
+        let base = DayKey(year: 2026, month: 11, day: 2)   // 周一
+        let e = { (i: Int) in base.adding(days: i, calendar: self.cal) }
+        var roster: Roster = [:]
+        var last: [String: DayKey] = [:]
+        for (i, name) in ["甲", "乙", "丙", "丁"].enumerated() {
+            let day = DayKey(year: 2026, month: 10, day: 19 + i)
+            roster[name, default: [:]][day] = "遥测"
+            last[name] = day
+        }
+        for week in 0..<8 {
+            let order = last.sorted { $0.value < $1.value }.map(\.key)
+            let wed = e(week * 7 + 2), fri = e(week * 7 + 4)
+            roster[order[0], default: [:]][fri] = "遥测"
+            roster[order[1], default: [:]][wed] = "遥测"
+            last[order[0]] = fri
+            last[order[1]] = wed
+        }
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (0..<56).map(e), matcher: m, calendar: cal)
+        XCTAssertEqual(r?.slots, 16)
+        XCTAssertEqual(r?.modelScores.first { $0.name.hasPrefix("一周一起排") }?.matched, 16)
+        XCTAssertEqual(r?.matched, 16)
+        XCTAssertLessThan(r?.modelScores.first { $0.name == "轮到最久没值的人" }?.matched ?? 99, 16)
+    }
+
+    func testHolidaysUseTheirOwnLine() {
+        // 研发岗周一、二、四，生产岗周三、五；中秋假期（9/25–27）都是生产岗：推算国庆假期也排生产岗
+        let rd = ["甲", "乙", "丙", "丁"], sc = ["子", "丑", "寅", "卯"]
+        let start = DayKey(year: 2026, month: 8, day: 3)    // 周一
+        var roster: Roster = [:]
+        var ri = 0, si = 0
+        for i in 0...58 {
+            let day = start.adding(days: i, calendar: cal)
+            let w = SiteAPI.siteWeekday(day, calendar: cal)
+            if ChinaHolidays.isHoliday(day) || w == 3 || w == 5 {
+                roster[sc[si % sc.count], default: [:]][day] = "遥测"
+                si += 1
+            } else if [1, 2, 4].contains(w) {
+                roster[rd[ri % rd.count], default: [:]][day] = "遥测"
+                ri += 1
+            }
+        }
+        var people: [String: SiteAPI.Person] = [:]
+        for n in rd { people[n] = SiteAPI.Person(onDuty: true, category: "研发岗") }
+        for n in sc { people[n] = SiteAPI.Person(onDuty: true, category: "生产岗") }
+        let r = SchedulePatterns.rotation(post: "遥测", roster: roster, days: (0...58).map { start.adding(days: $0, calendar: cal) },
+                                          matcher: m, forecastDays: 10, calendar: cal, people: people)
+        XCTAssertEqual(r?.forecast.first?.day, DayKey(year: 2026, month: 10, day: 1))
+        let holidays = r?.forecast.filter { ChinaHolidays.isHoliday($0.day) } ?? []
+        XCTAssertEqual(holidays.count, 7)
+        XCTAssertTrue(holidays.allSatisfy { sc.contains($0.name) }, "\(holidays)")
+    }
+
     func testDutyRotationFixedOrder() {
         // 8 人按固定顺序一轮一轮值；第二轮辛指定日期提前值了，这一轮后面就不再轮到他，下一轮照原来的顺序
         let base = DayKey(year: 2026, month: 11, day: 2)

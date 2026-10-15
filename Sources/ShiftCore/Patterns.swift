@@ -214,17 +214,26 @@ public enum SchedulePatterns {
         }
         let lines = Set(pool.map(line))
         let split = lines.count >= 2 && !lines.contains("")
-        // 每个星期几一般是哪条线值（研发岗只在自己能值的星期几值）
+        // 每个星期几一般是哪条线值（研发岗只在自己能值的星期几值）；法定节假日单独算（一般都是生产岗值）
         var lineByWeekday: [Int: [String: Int]] = [:]
+        var lineOnHolidays: [String: Int] = [:]
         if split {
             for day in sorted {
-                for h in roster.keys where pool.contains(h) && holds(h, day) {
-                    lineByWeekday[siteWeekday(day), default: [:]][line(h), default: 0] += 1
+                for h in holdersByDay[day] ?? [] where pool.contains(h) {
+                    if ChinaHolidays.isHoliday(day) {
+                        lineOnHolidays[line(h), default: 0] += 1
+                    } else {
+                        lineByWeekday[siteWeekday(day), default: [:]][line(h), default: 0] += 1
+                    }
                 }
             }
         }
+        func majority(_ counts: [String: Int]?) -> String? {
+            counts?.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+        }
         func lineFor(_ day: DayKey) -> String? {
-            lineByWeekday[siteWeekday(day)]?.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+            if ChinaHolidays.isHoliday(day), let l = majority(lineOnHolidays) { return l }
+            return majority(lineByWeekday[siteWeekday(day)])
         }
         /// 这天该哪条线值：那条线的人排前面
         func ordered(_ list: [String], _ day: DayKey) -> [String] {
@@ -258,9 +267,10 @@ public enum SchedulePatterns {
         /// recency = 轮到最久没值的人；cycle = 按固定顺序一轮一轮来，这一轮值过的（指定日期提前值了的也算）等下一轮；
         /// fewest = 值得最少的先值（请假出差欠下的会补回来）；dayType = 工作日、周末节假日各轮各的；
         /// fewestDayType = 工作日、周末节假日各自值得最少的先值
-        enum Model: CaseIterable { case recency, cycle, fewest, dayType, fewestDayType
+        enum Model: CaseIterable { case recency, cycle, fewest, dayType, fewestDayType, weekly
             var title: String {
                 switch self {
+                case .weekly: return "一周一起排：等得最久的排到这周他能值的最后一天"
                 case .recency: return "轮到最久没值的人"
                 case .cycle: return "按固定顺序一轮一轮来"
                 case .fewest: return "值得最少的先值（欠的补上）"
@@ -283,7 +293,7 @@ public enum SchedulePatterns {
         func priority(_ s: State, _ model: Model, _ day: DayKey) -> [String] {
             let byRecency = queue(s.last)
             switch model {
-            case .recency:
+            case .recency, .weekly:
                 return byRecency
             case .cycle:
                 guard !cycle.isEmpty else { return byRecency }
@@ -343,9 +353,50 @@ public enum SchedulePatterns {
         }
 
         // 一天天往下猜：只用那天以前的排班和那天的请假出差（网站上别的岗位不看，不然等于偷看了答案）
+        /// 一周一起排（网站很可能是一周排一次）：按等得最久的先后，每人排到这周他能值的最后一天
+        /// （分两条线时只排自己那条线的日子；研发岗只排自己能值的星期几；请假出差、值班后的休息跳过），一周每人最多一次。
+        /// 没人能排上的日子，再按一天一天的办法补上。
+        func weekPlan(_ s: State, _ need: [(day: DayKey, count: Int)], leaveAware: Bool) -> [DayKey: [String]] {
+            var open = Dictionary(need.map { ($0.day, $0.count) }, uniquingKeysWith: +)
+            var plan: [DayKey: [String]] = [:]
+            var used: Set<String> = []
+            let byRecency = queue(s.last)
+            for name in byRecency {
+                guard open.values.contains(where: { $0 > 0 }) else { break }
+                let options = open.filter { day, left in
+                    left > 0 && (!split || lineFor(day).map { $0 == line(name) } ?? true)
+                        && blocked(name, day, s, leaveAware: leaveAware) == nil
+                }
+                guard let day = options.keys.max() else { continue }
+                plan[day, default: []].append(name)
+                open[day, default: 0] -= 1
+                used.insert(name)
+            }
+            // 还空着的日子（这条线的人都排过了、请假的多，或者节假日天天要人）：先找这周还没排的，再找隔得开的
+            func near(_ name: String, _ day: DayKey) -> Bool {
+                plan.contains { d, names in names.contains(name) && abs(d.date(calendar: calendar).timeIntervalSince(day.date(calendar: calendar))) < 3 * 86_400 }
+            }
+            for day in open.keys.sorted() {
+                var left = open[day] ?? 0
+                func ownLine(_ name: String) -> Bool { !split || lineFor(day).map { $0 == line(name) } ?? true }
+                // 先这条线、这周还没排的；再这条线排过的；最后才是别的线
+                for (sameLine, reuse) in [(true, false), (true, true), (false, false), (false, true)] {
+                    for name in byRecency where left > 0 && ownLine(name) == sameLine && (reuse || !used.contains(name))
+                        && !near(name, day) && blocked(name, day, s, leaveAware: leaveAware) == nil {
+                        plan[day, default: []].append(name)
+                        used.insert(name)
+                        left -= 1
+                    }
+                }
+            }
+            return plan
+        }
+
         func simulate(_ model: Model, leaveAware: Bool) -> Run {
             var run = Run(state: freshState())
             var deferredYesterday: Set<String> = []
+            // 一周一起排：每周第一个有人值的日子，用那时的情况把这周排好
+            var plans: [Int: [DayKey: [String]]] = [:]
             for day in sorted {
                 let holders = holdersByDay[day] ?? []
                 guard !holders.isEmpty else { continue }
@@ -364,6 +415,17 @@ public enum SchedulePatterns {
                     predicted.append(name)
                 }
                 deferredYesterday = deferredToday
+                if model == .weekly {
+                    let wk = weekKey(day)
+                    if plans[wk] == nil {
+                        let need = sorted.filter { $0 >= day && weekKey($0) == wk }.compactMap { d -> (day: DayKey, count: Int)? in
+                            let n = holdersByDay[d]?.count ?? 0
+                            return n > 0 ? (day: d, count: n) : nil
+                        }
+                        plans[wk] = weekPlan(run.state, need, leaveAware: leaveAware)
+                    }
+                    predicted = plans[wk]?[day] ?? []
+                }
                 // 网站标了「固定」的日子是手动指定的：照常记下谁值了，但不算猜对猜错
                 if fixedDays.contains(day) {
                     run.fixed += 1
@@ -409,13 +471,33 @@ public enum SchedulePatterns {
         // 网站还没排的日子：按选中的模型一天一个推下去（已知的请假出差、值班后的休息跳过）
         var state = run.state
         var forecast: [ForecastDay] = []
-        var day = end
-        for _ in 0..<forecastDays {
-            day = day.adding(days: 1, calendar: calendar)
-            guard let next = ordered(priority(state, model, day), day).first(where: { blocked($0, day, state, leaveAware: true) == nil })
-            else { continue }
-            forecast.append(ForecastDay(day: day, name: next))
-            observe(&state, [next], day)
+        if model == .weekly {
+            // 一周一周地排：每天一个人
+            let lastDay = end.adding(days: forecastDays, calendar: calendar)
+            var day = end.adding(days: 1, calendar: calendar)
+            while day <= lastDay {
+                let wk = weekKey(day)
+                var week: [DayKey] = []
+                while day <= lastDay && weekKey(day) == wk {
+                    week.append(day)
+                    day = day.adding(days: 1, calendar: calendar)
+                }
+                let plan = weekPlan(state, week.map { (day: $0, count: 1) }, leaveAware: true)
+                for d in week {
+                    guard let next = plan[d]?.first else { continue }
+                    forecast.append(ForecastDay(day: d, name: next))
+                    observe(&state, [next], d)
+                }
+            }
+        } else {
+            var day = end
+            for _ in 0..<forecastDays {
+                day = day.adding(days: 1, calendar: calendar)
+                guard let next = ordered(priority(state, model, day), day).first(where: { blocked($0, day, state, leaveAware: true) == nil })
+                else { continue }
+                forecast.append(ForecastDay(day: day, name: next))
+                observe(&state, [next], day)
+            }
         }
         let perDay = Double(run.slots) / Double(max(1, sorted.filter { !(holdersByDay[$0] ?? []).isEmpty }.count))
         let nextDay = end.adding(days: 1, calendar: calendar)
