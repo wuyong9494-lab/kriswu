@@ -408,12 +408,12 @@ final class AppStore: ObservableObject {
     func notes(for raw: String?) -> [(group: String, note: String)] {
         guard let raw else { return [] }
         let notes = groupNotes
+        // 只放网站「值班查看」上写的内容（和自己填的）。网站后台组表里的「负责的星」网页上不显示，
+        // 以前放在最前面，既和网站对不上，还会被当成清单的一项，所以不再加进来（数据仍照常读取保存）
         return matcher.displayName(raw).split(separator: "+").compactMap { part in
             let key = String(part).filter { !$0.isWhitespace }.uppercased()
-            // 网站组表里这组负责的星，放在说明最前面
-            let satellites = settings.groupSatellites[key].map { "负责的星：\($0)" }
-            let text = [satellites, notes[key]].compactMap { $0 }.joined(separator: "\n")
-            return text.isEmpty ? nil : (group: String(part), note: text)
+            guard let text = notes[key], !text.isEmpty else { return nil }
+            return (group: String(part), note: text)
         }
     }
 
