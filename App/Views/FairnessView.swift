@@ -42,7 +42,7 @@ struct FairnessView: View {
             Section {
                 Toggle("只算到今天", isOn: $untilToday)
             } footer: {
-                ExpandableText(text: "比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 日常（各组、调度等岗位）+ 出差，休息、调休、请假、值班交接前一律不算；这里比较的都是轮组别的人，他们没排岗位、没写休息的工作日算上班，不算工作量。关掉「只算到今天」时，网站上已经排好组别、遥测的以后几天也算进去，看排班本身是否均衡；只有提前申请的请假、调休的日子不算。")
+                ExpandableText(text: "比较的是这段时间有组别（组A–E）排班的人。工作量 = 值班（遥测）+ 日常（各组、调度等岗位）+ 出差，休息、调休、请假、值班交接前一律不算；没排岗位、没写休息的工作日是正常上班，算工作量（调度除外）。关掉「只算到今天」时，网站上已经排好组别、遥测的以后几天也算进去，看排班本身是否均衡；只有提前申请的请假、调休的日子不算。")
             }
             Section {
                 switcher(title: "\(weekDays[0].month)/\(weekDays[0].day) – \(weekDays[6].month)/\(weekDays[6].day)",
@@ -201,8 +201,8 @@ private struct RowView: View {
                 }
                 WorkPresentPair(work: w.workDays, present: w.presentDays)
             }
-            Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它岗位 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays)"
-                 + (w.attendanceDays > 0 ? " · 上班没排岗位 \(w.attendanceDays)（不算工作量）" : "")
+            Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它日常 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays)"
+                 + (w.attendanceDays > 0 ? " · 上班 \(w.attendanceDays)（不算工作量）" : "")
                  + " · 休息 \(w.offDays)"
                  + (w.holidayDays > 0 ? " · 节假日放假 \(w.holidayDays)" : "")
                  + (w.unassignedDays > 0 ? " · 没排班 \(w.unassignedDays)" : ""))

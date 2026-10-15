@@ -83,7 +83,7 @@ struct WorkloadView: View {
                 if report.days.isEmpty {
                     Text("这个月还没有全员排班数据。")
                 } else {
-                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」= 值班（遥测）+ 节假日值完遥测的第二天 + 日常（各组、调度等岗位）+ 出差。工作日网站上没排岗位、也没写休息的日子：不轮组别的人在做别的日常工作，算日常、算工作量；轮组别（组A–E）的人算正常上班，计入「上班」但不算工作量。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日放假」是法定假日里网站上没排任何岗位的天数；「节假日上班」是法定假日里上了班（值班、各组、调度）的天数，两个数分开算；调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」= 值班（遥测）+ 日常（各组、调度等岗位）+ 出差；假期里值完遥测的第二天休息算上班、算节假日上班，不算工作量。工作日网站上没排岗位、也没写休息的日子：除了调度，不管轮不轮组别都是正常上班，算日常、算工作量。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日放假」是法定假日里网站上没排任何岗位的天数；「节假日上班」是法定假日里上了班（值班、各组、调度）的天数，两个数分开算；调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
                 }
             }
             Section {
@@ -102,7 +102,7 @@ struct WorkloadView: View {
                         LabeledContent("没排班不算上班的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
                     }
                 } footer: {
-                    Text("调度（排班表上有名字才算一天）和这里另加的人，工作日网站上没给排岗位不算工作量；其他人（包括你们轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常；写了休息、调休的算休息。")
+                    Text("调度（排班表上有名字才算一天）和这里另加的人，工作日网站上没给排岗位不算工作量；其他人（包括轮组别、遥测的人）没排岗位、没写休息的工作日是正常上班，算日常、算工作量；写了休息、调休的算休息。")
                 }
             }
             Section {
@@ -196,7 +196,7 @@ struct WorkloadView: View {
     private func summary(_ p: PersonWorkload) -> String {
         let parts: [(label: String, value: Int, note: String)] = [
             ("值班", p.dutyDays, ""), ("值班调休", p.dutyRestDays, ""), ("日常", p.regularDays, ""), ("出差", p.tripDays, ""),
-            ("上班没排岗位", p.attendanceDays, "（不算工作量）"), ("休息", p.offDays, ""), ("节假日放假", p.holidayDays, ""),
+            ("上班", p.attendanceDays, "（不算工作量）"), ("休息", p.offDays, ""), ("节假日放假", p.holidayDays, ""),
             ("没排班", p.unassignedDays, ""), ("节假日上班", p.holidayWorkedDays, ""),
         ]
         let shown = parts.filter { $0.value > 0 }.map { "\($0.label) \($0.value)\($0.note)" }

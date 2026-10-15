@@ -4,8 +4,8 @@ import Foundation
 /// - 值班：遥测（工作到第二天 8:30）
 /// - 值班调休：只有管理员手动改成「值班调休」的日子（规则版本 3 起，休息一律不算工作量）
 ///   （网站上写了休息、调休、请假的，不管节假日还是平时，都算休息，不算工作量）
-/// - 日常：各组、调度等其它岗位；不轮组别的人工作日没排岗位、也没写休息的日子（在做别的日常工作）
-/// - 上班（没排岗位）：轮组别（组A–E）的人工作日网站上没给排岗位、也没写休息的日子。正常上班，算上班天数，但不算工作量
+/// - 日常：各组、调度等其它岗位；除了调度，不管轮不轮组别，工作日没排岗位、也没写休息的日子（正常上班）
+/// - 上班（不算工作量）：假期里值完遥测的第二天休息（算上班天数、节假日上班，不算工作量）
 /// - 未排班：调度（最近三个月一半以上排的是调度的人，以及设置里「只按排班算」的人）工作日网站上没给他排岗位的日子（不算工作量，也不算休息）
 /// - 出差（算工作量）
 /// - 节假日：中秋、国庆、春节、清明、五一等法定假日，网站上没排任何岗位的日子
@@ -31,7 +31,7 @@ public struct PersonWorkload: Equatable {
     public var posts: [String: Int]
     /// 调度（只按排班算的人）工作日没排岗位的天数（不算工作量，也不算上班）
     public var unassignedDays: Int = 0
-    /// 工作日没排岗位、也没写休息：正常上班，但不算工作量
+    /// 上班但不算工作量的天数（假期里值完遥测的第二天休息、手动改成「上班」的日子）
     public var attendanceDays: Int = 0
 
     /// 工作量 = 值班 + 值班调休 + 日常 + 出差
@@ -48,7 +48,7 @@ public struct WorkloadRules: Codable, Equatable {
     /// 节假日值完遥测的第二天，网站上没写也算值班调休。
     /// 默认关（规则版本 3 起统一）：休息的日子不管节假日还是平时、怎么写的，都不算工作量
     public var blankHolidayAfterDutyIsRest = false
-    /// 工作日没排岗位、也没写休息的算正常上班（算上班天数，不算工作量）
+    /// 工作日没排岗位、也没写休息的算正常上班、算工作量（调度除外）
     public var blankWorkdayIsWork = true
     /// 调度只算排班表上有名字的日子
     public var dispatchScheduleOnly = true
@@ -223,10 +223,8 @@ public enum WorkloadCounter {
             if rotating {
                 return DayExplanation(kind: .unassigned, reason: "调度只按排班表算：这天网站上没排他" + roleNote)
             }
-            // 轮组别的人：没排岗位是正常上班，不算工作量；不轮组别的人：在做别的日常工作，算工作量
-            return groupMember
-                ? DayExplanation(kind: .attendance, reason: "轮组别的人工作日没排岗位、没写休息：正常上班，不算工作量" + roleNote)
-                : DayExplanation(kind: .regular, reason: "不轮组别的人工作日没排岗位、没写休息：在做别的日常工作，算工作量" + roleNote)
+            // 除了调度，不管轮不轮组别：没排岗位、没写休息就是正常上班，算工作量
+            return DayExplanation(kind: .regular, reason: "工作日没排岗位、没写休息：正常上班，算工作量" + roleNote)
         }
         let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
         if posts.contains(where: isDuty) { return DayExplanation(kind: .duty, reason: "网站上排了遥测（值班）") }

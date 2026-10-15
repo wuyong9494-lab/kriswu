@@ -32,7 +32,7 @@ struct PeopleProfilesView: View {
                 }
                 ReadOnlyNotice()
             } footer: {
-                Text("角色决定没排岗位的工作日怎么算：轮组别 = 上班不算工作量；不轮组别 = 日常工作算工作量；调度 = 不算；领导 = 不统计。建了档案就按档案算，不再按排班猜。")
+                Text("角色决定没排岗位的工作日怎么算：轮组别、不轮组别 = 正常上班，算工作量；调度 = 不算；领导 = 不统计。建了档案就按档案算，不再按排班猜。")
             }
             Section {
                 ForEach(names, id: \.self) { name in

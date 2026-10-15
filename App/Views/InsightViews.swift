@@ -58,7 +58,7 @@ struct DataCheckView: View {
                 } else if store.canEdit {
                     HStack {
                         Button("这天其实休息") { store.setOverride(name, day, WorkloadCounter.Kind.off.rawValue) }
-                        Button("确实上班了") { store.setOverride(name, day, WorkloadCounter.Kind.attendance.rawValue) }
+                        Button("确实上班了") { store.setOverride(name, day, WorkloadCounter.Kind.regular.rawValue) }
                     }
                     .buttonStyle(.bordered)
                     .font(.caption)
@@ -126,7 +126,7 @@ struct WorkloadRulesView: View {
                     Toggle("工作日没排岗位、也没写休息算上班", isOn: rule(\.blankWorkdayIsWork))
                     Toggle("调度只算排班表上有名字的日子", isOn: rule(\.dispatchScheduleOnly))
                 } footer: {
-                    Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班认。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
+                    Text("工作日没排岗位、也没写休息的日子：除了调度，不管轮不轮组别都是正常上班，算工作量；调度只算排班表上有名字的日子。谁是调度看「人员档案」，没建档案的按最近三个月的排班认。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
                 }
                 Section {
                     Label("休息、调休、请假、「值班交接前」一律不算工作量", systemImage: "bed.double.fill")

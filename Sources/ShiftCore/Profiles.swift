@@ -3,9 +3,9 @@ import Foundation
 /// 人员档案：每个人是什么角色（可以从某天起改），什么时候来、什么时候走。
 /// 有档案的按档案算；没有的按排班自动判断（见 PersonDirectory.suggest）。
 public enum PersonRole: String, Codable, CaseIterable, Identifiable {
-    /// 轮组别（组A–E）：没排岗位、没写休息的工作日是正常上班，不算工作量
+    /// 轮组别（组A–E）：没排岗位、没写休息的工作日是正常上班，算工作量
     case group = "轮组别"
-    /// 不轮组别：没排岗位、没写休息的工作日在做别的日常工作，算工作量
+    /// 不轮组别：没排岗位、没写休息的工作日也是正常上班，算工作量
     case daily = "不轮组别"
     /// 调度：排班表上有名字才算一天
     case dispatch = "调度"

@@ -78,7 +78,7 @@ public enum WorkloadBalance {
             var why: [String] = []
             if row.workload.offDays > 0 { why.append("休息 \(row.workload.offDays) 天") }
             if row.workload.holidayDays > 0 { why.append("节假日 \(row.workload.holidayDays) 天") }
-            if row.workload.attendanceDays > 0 { why.append("上班没排岗位 \(row.workload.attendanceDays) 天（不算工作量）") }
+            if row.workload.attendanceDays > 0 { why.append("上班但不算工作量 \(row.workload.attendanceDays) 天") }
             findings.append("\(row.name)干得少：\(row.workload.workDays) 天，比平均少 \(String(format: "%.1f", -row.diff)) 天"
                             + (why.isEmpty ? "" : "（\(why.joined(separator: "，"))）"))
         }
