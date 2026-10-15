@@ -1281,8 +1281,8 @@ final class UpgradeTests: XCTestCase {
         let days = (12...16).map(d)
         func c() -> PersonWorkload? { WorkloadCounter.count(roster: roster, days: days, matcher: m, calendar: cal).first }
         defer { WorkloadCounter.rules = WorkloadRules(); WorkloadCounter.overrides = [:] }
-        XCTAssertEqual(c()?.workDays, 1)
-        XCTAssertEqual(c()?.presentDays, 4)        // 13、15、16 日没排：上班，不算工作量
+        XCTAssertEqual(c()?.workDays, 4)           // 13、15、16 日没排、没写休息：正常上班，算工作量
+        XCTAssertEqual(c()?.presentDays, 4)
         // 关掉「没排没写休息算上班」
         WorkloadCounter.rules.blankWorkdayIsWork = false
         XCTAssertEqual(c()?.workDays, 1)
@@ -1290,7 +1290,7 @@ final class UpgradeTests: XCTestCase {
         WorkloadCounter.rules = WorkloadRules()
         // 手动纠正：13 日其实休息，15 日不算
         WorkloadCounter.overrides = ["甲": [d(13): "休息", d(15): WorkloadCounter.excluded]]
-        XCTAssertEqual(c()?.workDays, 1)
+        XCTAssertEqual(c()?.workDays, 2)           // 12 日组A + 16 日没排
         XCTAssertEqual(c()?.presentDays, 2)
         XCTAssertEqual(c()?.offDays, 2)
         // 规则从 JSON 读：缺的字段用默认
