@@ -271,16 +271,19 @@ public enum JSONScheduleExtractor {
         guard let dateKey = dateKey(in: rows, dates: dates) else { return [:] }
 
         // 2. 多人数据：找出包含自己名字的字段，只保留自己的行
-        let personKey = keys.filter { $0 != dateKey && !$0.lowercased().contains("flag") }
-            .map { k in (k, rows.filter { $0[k].map(parser.isMe) ?? false }.count) }
-            .filter { $0.1 > 0 }
-            .max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
+        // 我的名字出现在最多行里的那个字段；一样多时按字段名取，每次都选同一个
+        var personKey: String?
+        var personRows = 0
+        for k in keys.sorted() where k != dateKey && !k.lowercased().contains("flag") {
+            let n = rows.filter { row in row[k].map(parser.isMe) ?? false }.count
+            if n > personRows { personKey = k; personRows = n }
+        }
         // 我的名字出现在「组A」「telemetry」这种岗位列里：这是全员排班表（每个岗位一列、格子里是人名），不是「我的班」。
         // 从这里读会把同一行别的岗位上的同事名字当成我的班（全员排班另有地方读）
         if let personKey, isPostColumn(personKey, matcher: matcher) { return [:] }
         // 没认出我、却有好几个岗位列（组A、组B、遥测……）：也是全员排班表
         if personKey == nil, keys.filter({ isPostColumn($0, matcher: matcher) }).count >= 2 { return [:] }
-        let mine = personKey.map { k in rows.filter { $0[k].map(parser.isMe) ?? false } } ?? rows
+        let mine: [[String: String]] = personKey.map { k in rows.filter { row in row[k].map(parser.isMe) ?? false } } ?? rows
 
         // 没认出自己、又是每天好几条的多人数据：认不准，放弃
         if personKey == nil {
