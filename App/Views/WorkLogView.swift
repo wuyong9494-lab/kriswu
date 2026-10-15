@@ -22,6 +22,7 @@ struct WorkLogCard: View {
                     Text(n == 0 ? "今天还没有记录" : "今天 \(n) 条").font(DS.Font.caption).foregroundStyle(.secondary)
                     Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             HStack(spacing: DS.Space.s) {
@@ -205,9 +206,12 @@ struct WorkLogView: View {
                 Toggle("只在手机上识别（不联网）", isOn: $store.settings.speechOnDeviceOnly)
                 Toggle("打开工作留痕要面容 ID", isOn: $store.settings.workLogLock)
                     .onChange(of: store.settings.workLogLock) { locked in
+                        guard !AppStore.isDemo else { return }
                         log.relocate(hidden: locked)
                         log.unlocked = true
                     }
+                    // 演示时设置不保存，开关锁会把真实文件挪走：演示里不能改
+                    .disabled(AppStore.isDemo)
             } header: {
                 Text("设置")
             } footer: {

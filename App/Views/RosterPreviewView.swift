@@ -41,7 +41,7 @@ struct RosterPreviewView: View {
         .appList()
         .navigationTitle("排班预演")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: store.dataRevision) {
+        .task(id: "\(store.dataRevision)-\(DayKey.today)") {
             days = store.rosterPreview()
         }
     }

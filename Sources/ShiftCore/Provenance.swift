@@ -54,27 +54,52 @@ public enum RosterMerger {
         roster.values.contains { $0.values.contains { RosterExtractor.isLeave($0, matcher: matcher) } }
     }
 
+    /// 一条休息、请假记录是哪几类：休息（含值班交接前）、调休、请假、出差；具体岗位返回空
+    public static func leaveKinds(of raw: String, matcher: ShiftMatcher) -> Set<String> {
+        guard RosterExtractor.isLeave(raw, matcher: matcher) else { return [] }
+        let parts = (WorkloadCounter.effective(raw, matcher: matcher) ?? "").split(separator: "+").map { matcher.displayName(String($0)) }
+        return Set(parts.map { part -> String in
+            if WorkloadCounter.isTrip(part) { return "出差" }
+            if part.contains("调休") { return "调休" }
+            if part.contains("假") { return "请假" }
+            return "休息"
+        })
+    }
+
+    /// 这次读到的有哪几类休息、请假（电脑版周表有休息、调休列，但不一定有请假、出差）
+    public static func leaveKinds(_ roster: Roster, matcher: ShiftMatcher) -> Set<String> {
+        roster.values.reduce(into: Set<String>()) { kinds, days in
+            for raw in days.values { kinds.formUnion(leaveKinds(of: raw, matcher: matcher)) }
+        }
+    }
+
     /// 是不是同一回事、只是写法或读取方式不同（不记成变动、不提醒）：
     /// 电脑版写「值班交班前」、数据接口是「值班交接前」；有的页面把值完遥测后那天放在「休息」、有的放在「值班交接前」；
     /// 一天几个岗位只是先后顺序不同（「组A+组E」和「组E+组A」）
     public static func sameMeaning(_ a: String?, _ b: String?, matcher: ShiftMatcher) -> Bool {
         guard let a, let b else { return a == b }
         func key(_ raw: String) -> String {
-            (WorkloadCounter.effective(raw, matcher: matcher) ?? raw).split(separator: "+")
-                .map { part -> String in
-                    let name = matcher.displayName(String(part).trimmingCharacters(in: .whitespaces))
-                    return name == WorkloadCounter.handoverRest ? "休息" : name
-                }
-                .sorted().joined(separator: "+")
+            // 「组A+组E」「组A、组E」「组E+组A」是一回事
+            matcher.posts(raw).map { part -> String in
+                let name = matcher.displayName(part)
+                return WorkloadCounter.isIgnored(name) || name == WorkloadCounter.handoverRest ? "休息" : name
+            }
+            .sorted().joined(separator: "+")
         }
         return key(a) == key(b)
     }
 
     /// 把这次读到的合并进已保存的：读到的日子整天以新的为准；
     /// 但这种读取方式不带休息列（carriesLeave = false）时，保留之前读到的休息、请假（来源也保留）。
+    /// carriedKinds：这次读到的有哪几类（见 leaveKinds）；只带休息、调休列的读取不会冲掉以前读到的请假、出差。
     public static func merge(old: Roster, oldSources: RosterSources, new: Roster, source: String, at: Date,
-                             carriesLeave: Bool, matcher: ShiftMatcher) -> Result {
+                             carriesLeave: Bool, carriedKinds: Set<String>? = nil, matcher: ShiftMatcher) -> Result {
         guard !new.isEmpty else { return Result(roster: old, sources: oldSources, edits: []) }
+        // 这次读取带哪几列：读到了请假或出差的，是什么都带的读取方式（同步的数据接口、手机版）；
+        // 只读到休息、调休的（电脑版周表）只带这两列，以前读到的请假、出差不能当成取消了
+        let all: Set<String> = ["休息", "调休", "请假", "出差"]
+        let carried: Set<String> = !carriesLeave ? []
+            : carriedKinds.map { $0.contains("请假") || $0.contains("出差") ? all : ["休息", "调休"] } ?? all
         let days = Set(new.values.flatMap(\.keys))
         let knownDays = Set(old.values.flatMap(\.keys))
         var roster = old
@@ -89,7 +114,8 @@ public enum RosterMerger {
                 if let newValue {
                     final = newValue
                     sources[name, default: [:]][day] = Provenance(source: source, at: at)
-                } else if !carriesLeave, let oldValue, RosterExtractor.isLeave(oldValue, matcher: matcher) {
+                } else if let oldValue, case let kinds = leaveKinds(of: oldValue, matcher: matcher),
+                          !kinds.isEmpty, !kinds.isSubset(of: carried) {
                     final = oldValue   // 来源不变
                 } else {
                     final = nil

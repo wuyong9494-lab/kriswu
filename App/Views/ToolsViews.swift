@@ -227,7 +227,7 @@ struct YearStatsView: View {
                     Task { await store.readHistory(since: year) }
                 } label: {
                     HStack {
-                        Text("从电脑版网页读取 \(String(year)) 年 1 月以来的全员排班")
+                        Text("从电脑版网页读取 \(store.historyLabel(since: year))的全员排班")
                         if store.isReadingDesktop { Spacer(); DSSpinner() }
                     }
                 }
@@ -274,6 +274,7 @@ struct YearStatsView: View {
         // 全年数据量大：换年份或全员排班更新时算一次，不在每次刷新界面时重算
         .task(id: "\(year)-\(store.dataRevision)") {
             let r = await store.workloadInBackground(year: year, month: nil)
+            guard !Task.isCancelled else { return }
             self.report = r
             file = store.workloadCSVFile(year: year, month: nil, report: r)
         }
@@ -366,7 +367,9 @@ struct RestTrendView: View {
         let names = store.settings.restBalance.keys.sorted { a, b in
             a == me ? true : (b == me ? false : a.compare(b, locale: zh) == .orderedAscending)
         }
-        let selected = name ?? me ?? names.first
+        // 我的名字后面还没读到待休：先看列表里第一个人（选择框里没有我，不能选中我）
+        let mine: String? = me.flatMap { names.contains($0) ? $0 : nil }
+        let selected = name ?? mine ?? names.first
         let points = selected.flatMap { store.settings.restHistory[$0] } ?? []
         List {
             if let selected {
@@ -374,7 +377,7 @@ struct RestTrendView: View {
                     Picker("看谁", selection: Binding(get: { selected }, set: { name = $0 })) {
                         ForEach(names, id: \.self) { Text($0).tag($0) }
                     }
-                    LabeledContent("现在待休", value: "\(store.settings.restBalance[selected] ?? 0) 天")
+                    LabeledContent("现在待休", value: store.settings.restBalance[selected].map { "\($0) 天" } ?? "—")
                     if points.count >= 2 {
                         Chart(points, id: \.day) { p in
                             AreaMark(x: .value("日期", p.day.date(calendar: .app, hour: 12)), y: .value("待休", p.value))
@@ -433,43 +436,47 @@ struct HolidaysView: View {
     var body: some View {
         let years = ChinaHolidays.knownYears.sorted()
         List {
-            Section {
-                LabeledContent("已有安排的年份", value: years.map(String.init).joined(separator: "、"))
-                if !ChinaHolidays.knownYears.contains(DayKey.today.year + 1) {
-                    Text("还没有 \(DayKey.today.year + 1) 年的安排。国务院一般在年底公布，公布后在下面粘贴，或者等 App 更新。")
-                        .font(.footnote).foregroundStyle(.orange)
+            Group {
+                Section {
+                    LabeledContent("已有安排的年份", value: years.map(String.init).joined(separator: "、"))
+                    if !ChinaHolidays.knownYears.contains(DayKey.today.year + 1) {
+                        Text("还没有 \(DayKey.today.year + 1) 年的安排。国务院一般在年底公布，公布后在下面粘贴，或者等 App 更新。")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
+                } footer: {
+                    Text("统计工作量时：法定假日里没排岗位的算「节假日」，调休上班的周末算工作日。")
                 }
-            } footer: {
-                Text("统计工作量时：法定假日里没排岗位的算「节假日」，调休上班的周末算工作日。")
-            }
-            Section {
-                Stepper(value: $year, in: 2024...2040) { Text(verbatim: "年份：\(year)") }
-                TextField("""
-                每行一条，例如：
-                1月1日至1月3日 放假
-                2月6日至12日 春节放假
-                2月14日 上班
-                """, text: $text, axis: .vertical)
-                .lineLimit(5...12)
-                Button("加入") { add() }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-            } header: {
-                Text("自己补充")
-            } footer: {
-                Text("可以直接粘贴通知里的句子，每个假期一行；写了「上班」「补班」的是调休上班的日子，其余算放假。没写年份的按上面的年份。")
-            }
-            let off = store.settings.customHolidayOff.sorted(), work = store.settings.customHolidayWork.sorted()
-            if !off.isEmpty || !work.isEmpty {
-                Section("已补充") {
-                    if !off.isEmpty { Text("放假：" + off.joined(separator: "、")).font(.footnote) }
-                    if !work.isEmpty { Text("上班：" + work.joined(separator: "、")).font(.footnote) }
-                    ConfirmButton(title: "全部清除", message: "自己补充的放假、上班日子都会删掉。") {
-                        store.settings.customHolidayOff = []
-                        store.settings.customHolidayWork = []
+                Section {
+                    Stepper(value: $year, in: 2024...2040) { Text(verbatim: "年份：\(year)") }
+                    TextField("""
+                    每行一条，例如：
+                    1月1日至1月3日 放假
+                    2月6日至12日 春节放假
+                    2月14日 上班
+                    """, text: $text, axis: .vertical)
+                    .lineLimit(5...12)
+                    Button("加入") { add() }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                } header: {
+                    Text("自己补充")
+                } footer: {
+                    Text("可以直接粘贴通知里的句子，每个假期一行；写了「上班」「补班」的是调休上班的日子，其余算放假。没写年份的按上面的年份。")
+                }
+                let off = store.settings.customHolidayOff.sorted(), work = store.settings.customHolidayWork.sorted()
+                if !off.isEmpty || !work.isEmpty {
+                    Section("已补充") {
+                        if !off.isEmpty { Text("放假：" + off.joined(separator: "、")).font(.footnote) }
+                        if !work.isEmpty { Text("上班：" + work.joined(separator: "、")).font(.footnote) }
+                        ConfirmButton(title: "全部清除", message: "自己补充的放假、上班日子都会删掉。") {
+                            store.settings.customHolidayOff = []
+                            store.settings.customHolidayWork = []
+                        }
                     }
                 }
             }
+            // 只读时按钮、输入框不能用，但页面照样能滚动（整个列表 disabled 会连滚动都禁掉）
+            .disabled(!store.canEdit)
         }
         .appList()
         .adminOnly()

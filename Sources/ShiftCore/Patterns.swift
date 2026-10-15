@@ -11,6 +11,12 @@ public enum SchedulePatterns {
         WorkloadCounter.effective(raw, matcher: matcher)?.split(separator: "+").map { matcher.displayName(String($0)) } ?? []
     }
 
+    /// 这天是休息（休息、调休、请假、值班交接前）；出差算上班，不算休息
+    static func isRestDay(_ raw: String, matcher: ShiftMatcher) -> Bool {
+        let list = posts(raw, matcher: matcher)
+        return !list.isEmpty && list.allSatisfy { WorkloadCounter.isOff($0, matcher: matcher) }
+    }
+
     /// 这天的岗位里有没有遥测（值班）
     public static func isDutyPost(_ raw: String, matcher: ShiftMatcher) -> Bool {
         posts(raw, matcher: matcher).contains(where: WorkloadCounter.isDuty)
@@ -213,7 +219,8 @@ public enum SchedulePatterns {
             return c.contains("研") ? "研发" : (c.contains("生") ? "生产" : "")
         }
         let lines = Set(pool.map(line))
-        let split = lines.count >= 2 && !lines.contains("")
+        // 有一两个人没填研发 / 生产也照样分两条线（没填的人哪条线缺人都能排）
+        let split = lines.subtracting([""]).count >= 2
         // 每个星期几一般是哪条线值（研发岗只在自己能值的星期几值）；法定节假日单独算（一般都是生产岗值）
         var lineByWeekday: [Int: [String: Int]] = [:]
         var lineOnHolidays: [String: Int] = [:]
@@ -232,7 +239,10 @@ public enum SchedulePatterns {
             counts?.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
         }
         func lineFor(_ day: DayKey) -> String? {
-            if ChinaHolidays.isHoliday(day), let l = majority(lineOnHolidays) { return l }
+            // 节假日：这段时间里没有节假日可学时，按网站惯例由生产岗值
+            if ChinaHolidays.isHoliday(day), split {
+                return majority(lineOnHolidays) ?? (lines.contains("生产") ? "生产" : nil)
+            }
             return majority(lineByWeekday[siteWeekday(day)])
         }
         /// 这天该哪条线值：那条线的人排前面
@@ -559,7 +569,11 @@ public enum SchedulePatterns {
     public static func expectedRest(after day: DayKey, calendar: Calendar) -> [DayKey] {
         let next = day.adding(days: 1, calendar: calendar)
         if ChinaHolidays.isHoliday(day) && ChinaHolidays.isHoliday(next) { return [next] }
-        let extra = !ChinaHolidays.isWorkday(day, calendar: calendar) || !ChinaHolidays.isWorkday(next, calendar: calendar)
+        // 按星期几：周五、周六、周日值的多休一天，调休上班的周六周日也一样（网站上就是这么排的）；
+        // 值班那天或第二天是法定假日的也多休一天
+        let weekday = weekdayIndex(day, calendar: calendar)   // 1 = 周日 … 7 = 周六
+        let extra = weekday == 6 || weekday == 7 || weekday == 1
+            || ChinaHolidays.isHoliday(day) || ChinaHolidays.isHoliday(next)
         return (1...(extra ? 3 : 2)).map { day.adding(days: $0, calendar: calendar) }
     }
 
@@ -583,7 +597,7 @@ public enum SchedulePatterns {
                 for _ in 0..<10 {
                     guard published.contains(d) else { break }
                     let raw = WorkloadCounter.effective(history[d], matcher: matcher)
-                    let works = raw.map { !RosterExtractor.isLeave($0, matcher: matcher) }
+                    let works = raw.map { !isRestDay($0, matcher: matcher) }
                         ?? ChinaHolidays.isWorkday(d, calendar: calendar)
                     if works { cameBack = true; break }
                     off.append(d)
@@ -612,11 +626,11 @@ public enum SchedulePatterns {
         let rows = [2, 3, 4, 5, 6, 7, 1].compactMap { w -> RestRow? in
             guard let r = byWeekday[w] else { return nil }
             let typical = r.actual.max { a, b in a.value != b.value ? a.value < b.value : a.key > b.key }!
-            let expected = r.expected.max { a, b in a.value < b.value }!.key
+            let expected = r.expected.max { a, b in a.value != b.value ? a.value < b.value : a.key > b.key }!.key
             return RestRow(weekday: w, duties: r.duties, matched: r.matched, expected: expected,
                            typical: typical.key, typicalCount: typical.value)
         }
-        return RestRule(rows: rows, exceptions: exceptions.sorted { $0.day > $1.day })
+        return RestRule(rows: rows, exceptions: exceptions.sorted { ($0.day, $0.name) > ($1.day, $1.name) })
     }
 
     // MARK: - 组A–E
@@ -783,7 +797,7 @@ public enum SchedulePatterns {
         }
         return GroupPattern(groups: list, people: seqs.count, models: order.map { models[$0] },
                             resumeHits: resumeHits, calendarHits: calendarHits, resumeTotal: resumeTotal,
-                            adjustments: Array(adjustments.sorted { $0.day > $1.day }.prefix(40)))
+                            adjustments: Array(adjustments.sorted { ($0.day, $1.name) > ($1.day, $0.name) }.prefix(40)))
     }
 }
 
@@ -816,7 +830,7 @@ extension SchedulePatterns {
             for day in rest where day >= from && published.contains(day) {
                 let head = "\(monthDay(duty, calendar: calendar))遥测，按规则应休\(restText)，"
                 if let raw = WorkloadCounter.effective(history[day], matcher: matcher) {
-                    guard !RosterExtractor.isLeave(raw, matcher: matcher) else { continue }
+                    guard !isRestDay(raw, matcher: matcher) else { continue }
                     let what = posts(raw, matcher: matcher).joined(separator: "+")
                     result.append(Warning(duty: duty, day: day, kind: .assigned,
                                           text: head + "但\(monthDay(day, calendar: calendar))排了\(what)"))
@@ -826,7 +840,7 @@ extension SchedulePatterns {
                 }
             }
         }
-        return result.sorted { $0.day < $1.day }
+        return result.sorted { ($0.day, $0.duty) < ($1.day, $1.duty) }
     }
 }
 
@@ -878,12 +892,13 @@ public enum RestBalanceAudit {
         for (day, raw) in history where day > from && day <= to {
             let posts = SchedulePatterns.posts(raw, matcher: matcher)
             if posts.contains(where: WorkloadCounter.isDuty) {
-                if SchedulePatterns.expectedRest(after: day, calendar: calendar).count == 3 { f[0] += 1 } else { f[1] += 1 }
+                // 平时值的休两天；周五到周日、节假日值的（休三天，或者假期里只休第二天）算另一类
+                if SchedulePatterns.expectedRest(after: day, calendar: calendar).count != 2 { f[0] += 1 } else { f[1] += 1 }
             }
             if posts.contains(where: { $0.contains("加班") }) { f[2] += 1 }
             if posts.contains(where: { $0.contains("调休") }) { f[3] += 1 }
             else if posts.contains(where: { $0.contains("休息") }) { f[4] += 1 }
-            if posts.contains(where: { $0.contains("请假") || ($0.contains("假") && !$0.contains("休")) }) { f[5] += 1 }
+            if posts.contains(where: { $0.contains("请假") || ($0.contains("假") && !$0.contains("休") && !WorkloadCounter.isDuty($0)) }) { f[5] += 1 }
         }
         return f
     }

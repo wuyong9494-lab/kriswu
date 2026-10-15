@@ -32,8 +32,11 @@ public enum HolidayDutyStats {
                 }
                 let today = posts(day)
                 // 假期里值完遥测的第二天（还在假期里）休息：也算节假日上班（不算工作量，见 WorkloadCounter.autoKinds）
-                let previous = day.adding(days: -1, calendar: .current)
-                if ChinaHolidays.isHoliday(previous), posts(previous).contains(where: WorkloadCounter.isDuty),
+                // 前一天手动纠正过的按纠正的算
+                let previous = day.adding(days: -1, calendar: .dayMath)
+                let previousDuty = fixed[previous].map { $0 == WorkloadCounter.Kind.duty.rawValue }
+                    ?? posts(previous).contains(where: WorkloadCounter.isDuty)
+                if ChinaHolidays.isHoliday(previous), previousDuty,
                    today.allSatisfy({ WorkloadCounter.isOff($0, matcher: matcher) }),
                    today.isEmpty || today.contains(where: WorkloadCounter.isRest) {
                     work += 1
@@ -166,10 +169,10 @@ public enum DataCheck {
             && !WorkloadCounter.isRotating(name: name, history: history, members: members, matcher: matcher) {
             for (day, raw) in history where day >= start && day <= today
                 && raw.split(separator: "+").contains(where: { WorkloadCounter.isDuty(matcher.displayName(String($0))) }) {
-                for offset in 1...3 {
-                    let d = day.adding(days: offset, calendar: calendar)
+                // 只看按规则该休的那几天（假期里值的只休第二天，之后的工作日本来就该上班）
+                for d in SchedulePatterns.expectedRest(after: day, calendar: calendar) {
                     guard d <= today, recent.contains(d) else { break }
-                    if history[d] != nil { break }
+                    if history[d] != nil { continue }
                     if ChinaHolidays.isWorkday(d, calendar: calendar) {
                         result.append(DataIssue(kind: .noRestAfterDuty, day: d, name: name,
                                                 text: "\(name) \(day.month)月\(day.day)日遥测，\(d.month)月\(d.day)日网站上什么都没写，现在按上班算"))
@@ -192,7 +195,7 @@ public enum DataCheck {
                 }
             }
         }
-        for (post, n) in unknown.sorted(by: { $0.value > $1.value }) {
+        for (post, n) in unknown.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }) {
             result.append(DataIssue(kind: .unknownPost, day: nil, name: nil, text: "岗位「\(post)」出现 \(n) 次，App 不认识，按日常班算"))
         }
 
@@ -208,7 +211,7 @@ public enum DataCheck {
                 result.append(DataIssue(kind: .thinDay, day: d, name: nil, text: "\(d.month)月\(d.day)日只读到 \(n) 人（平时约 \(median) 人），可能没读全"))
             }
         }
-        return result.sorted { ($0.day ?? today) > ($1.day ?? today) }
+        return result.sorted { ($0.day ?? today, $1.text) > ($1.day ?? today, $0.text) }
     }
 }
 
@@ -272,7 +275,25 @@ public enum HolidayDutyPlanner {
                 .contains { WorkloadCounter.isDuty(matcher.displayName(String($0))) }
         }
         let names = pool ?? Set(roster.filter { _, h in h.contains { $0.key >= since && isDuty($0.value) } }.keys)
-        let candidates = names.filter { people[$0]?.onDuty != false }.map { name -> Candidate in
+        // 分研发岗、生产岗时，节假日只由一条线值（近一年节假日谁值得多就是哪条线；没记录时用生产岗）
+        func line(_ name: String) -> String {
+            let c = people[name]?.category ?? ""
+            return c.contains("研") ? "研发" : (c.contains("生") ? "生产" : "")
+        }
+        let lines = Set(names.map(line)).subtracting([""])
+        var holidayLine: String?
+        if lines.count >= 2 {
+            var counts: [String: Int] = [:]
+            for name in names where !line(name).isEmpty {
+                counts[line(name), default: 0] += (roster[name] ?? [:])
+                    .filter { $0.key >= since && ChinaHolidays.isHoliday($0.key) && isDuty($0.value) }.count
+            }
+            holidayLine = counts.filter { $0.value > 0 }
+                .max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+                ?? (lines.contains("生产") ? "生产" : nil)
+        }
+        let candidates = names.filter { people[$0]?.onDuty != false && (holidayLine == nil || line($0) != (holidayLine == "生产" ? "研发" : "生产")) }
+            .map { name -> Candidate in
             let history = roster[name] ?? [:]
             let duties = history.filter { $0.key >= since && $0.key < first && isDuty($0.value) }.keys
             return Candidate(name: name,

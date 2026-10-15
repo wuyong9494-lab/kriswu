@@ -184,6 +184,8 @@ final class AppStore: ObservableObject {
             covered = []
         }
         roster = Self.loadRoster()
+        // 存档读不出来（损坏、手机还没解锁过）时设置是默认的，版本号看不出新旧：不能因此把全员排班清掉
+        if state == nil { settings.rosterVersion = Self.rosterVersion }
         // 旧版本把手机版「值班查看」读错了（人名当成岗位），清掉重新读
         if settings.rosterVersion < Self.rosterVersion {
             roster = [:]
@@ -274,6 +276,8 @@ final class AppStore: ObservableObject {
             if offset == 3 { r["钱程", default: [:]][day] = "出差" }
         }
         var s = AppSettings()
+        // 工作留痕是真实记录（演示时照常能看）：面容 ID 锁照旧，文件也不挪地方
+        s.workLogLock = settings.workLogLock
         s.aliases = [me]
         s.favorites = ["林夏", "周远"]
         s.restBalance = ["陈晨": 3, "林夏": 5, "周远": 1, "孙悦": 2, "赵一凡": 4, "钱程": 0, "苏桐": 6, "郑宁": 2]
@@ -297,18 +301,42 @@ final class AppStore: ObservableObject {
     /// 因此记下的假变动、换班账一起去掉
     func repairNameShifts() {
         guard !Self.isDemo else { return }
-        let colleagues = Set(roster.keys).filter { !isMe($0) }
-        let bad = schedule.filter { _, raw in matcher.posts(raw).contains(where: colleagues.contains) }
-        guard !bad.isEmpty else { return }
-        let wrongNames = Set(bad.values.flatMap { matcher.posts($0) }.filter(colleagues.contains))
-        var fixed = schedule
-        for day in bad.keys { fixed[day] = nil }
-        schedule = fixed
+        let colleagues = colleagueNames()
         var s = settings
-        s.nextSyncIsBaseline = true
-        s.changeLog = s.changeLog.filter { e in !wrongNames.contains { e.text.contains("→ \($0)") || e.text.contains("\($0) →") } }
-        s.swapRecords = s.swapRecords.filter { !wrongNames.contains($0.myOld) && !wrongNames.contains($0.myNew) }
-        settings = s
+        // 以前把「值班查看」里一行人名当成了组别说明
+        s.autoGroupNotes = s.autoGroupNotes.filter { !GroupNotes.isNameList($0.value, matcher: matcher) }
+        let bad = schedule.compactMapValues { colleagueName(in: $0, colleagues: colleagues) }
+        if !bad.isEmpty {
+            let wrongNames = Set(bad.values)
+            var fixed = schedule
+            for day in bad.keys { fixed[day] = nil }
+            schedule = fixed
+            covered.subtract(bad.keys)
+            s.nextSyncIsBaseline = true
+            // 当时多半是卡在了读错的那个数据接口上：重新认
+            s.apiSignature = nil
+            // 只删假变动那几行，同一条里真的变动留着
+            func isFake(_ line: Substring) -> Bool { wrongNames.contains { line.contains("→ \($0)") || line.contains("\($0) →") } }
+            s.changeLog = s.changeLog.compactMap { e in
+                let lines = e.text.split(separator: "\n").filter { !isFake($0) }
+                return lines.isEmpty ? nil : ChangeLogEntry(date: e.date, text: lines.joined(separator: "\n"))
+            }
+            s.swapRecords = s.swapRecords.filter { !wrongNames.contains($0.myOld) && !wrongNames.contains($0.myNew) }
+        }
+        if s != settings { settings = s }
+    }
+
+    /// 同事的名字：网站人员表里的人（没有人员表时用全员排班里排过至少 3 天的人），不算我，也不算像岗位的词
+    func colleagueNames(extra: Set<String> = []) -> Set<String> {
+        let site = Set(settings.sitePeople.keys).union(extra)
+        let known = site.isEmpty ? Set(roster.filter { $0.value.count >= 3 }.keys) : site
+        return known.filter { !isMe($0) && !matcher.isStrictMatch($0) && !GroupNotes.isGroup($0) }
+    }
+
+    /// 这条「我的班」里出现的同事名字（「焦洋」「焦洋(5)」「焦洋 王健」都认得出）；没有返回 nil
+    func colleagueName(in raw: String, colleagues: Set<String>) -> String? {
+        let cleaned = raw.replacingOccurrences(of: #"[（(]\s*-?\d+\s*[)）]"#, with: " ", options: .regularExpression)
+        return cleaned.split(whereSeparator: { "+、,，;；/ \t\n".contains($0) }).map(String.init).first(where: colleagues.contains)
     }
 
     /// 把自己录入的节假日交给统计用的节假日表
@@ -414,8 +442,10 @@ final class AppStore: ObservableObject {
         schedule = new
         scheduleChanged()
         // 之前就取到过的日子改了才算变动；新一周第一次取到不算
+        // 只是写法不同（「组A、组E」和「组A+组E」、两种休息）不算变动
         return ScheduleDiff.changes(old: old, new: new, from: .today)
             .filter { knownBefore.contains($0.day) || $0.old != nil }
+            .filter { !RosterMerger.sameMeaning($0.old, $0.new, matcher: matcher) }
     }
 
     /// 组别的工作内容（自己填写的优先）。key 如「组D」。
@@ -630,14 +660,19 @@ final class AppStore: ObservableObject {
             s.siteNotices = site.notices
         }
         if !site.groupSatellites.isEmpty { s.groupSatellites = site.groupSatellites }
-        if !site.noRest.isEmpty {
+        // 这次接口里读到的日子：「该休没休」「固定」以网站这次为准（网站取消了的要去掉），别的日子保留以前的
+        let freshDays = Set(site.roster.values.flatMap(\.keys)).map(\.description)
+        let fresh = Set(freshDays)
+        if !site.noRest.isEmpty || !fresh.isEmpty {
             let cutoff = DayKey.today.adding(days: -60).description
-            let flags = Set(s.siteNoRestFlags + site.noRest.map { "\($0.day)|\($0.name)|\($0.column)" })
+            let kept = s.siteNoRestFlags.filter { !fresh.contains(String($0.prefix(10))) }
+            let flags = Set(kept + site.noRest.map { "\($0.day)|\($0.name)|\($0.column)" })
             s.siteNoRestFlags = flags.filter { $0 >= cutoff }.sorted()
         }
-        if !site.fixedTelemetryDays.isEmpty {
+        if !site.fixedTelemetryDays.isEmpty || !fresh.isEmpty {
             let cutoff = DayKey.today.adding(days: -400)
-            let all = Set(s.fixedTelemetryDays.compactMap(DayKey.init(string:))).union(site.fixedTelemetryDays).filter { $0 >= cutoff }
+            let kept = Set(s.fixedTelemetryDays.compactMap(DayKey.init(string:))).filter { !fresh.contains($0.description) }
+            let all = kept.union(site.fixedTelemetryDays).filter { $0 >= cutoff }
             s.fixedTelemetryDays = all.sorted().map(\.description)
         }
         if s != settings { settings = s }
@@ -743,14 +778,12 @@ final class AppStore: ObservableObject {
             let result = outcome.result
             // 同步途中换了人、改了名字：这次是按旧名字读的，不能当成现在这个人的班。交给下一次同步
             guard settings.aliases == aliasesAtStart else { return false }
-            // 读到的「我的班」里是同事的名字（读错了网页上的表，比如全员排班表）：不采用，也不提醒变动
-            let colleagues = Set(roster.keys).union(outcome.roster.keys).filter { !isMe($0) }
-            if let wrong = result.entries.values.flatMap({ matcher.posts($0) }).first(where: colleagues.contains) {
-                settings.syncState = .anomaly
-                settings.lastSyncMessage = "同步结果异常：读到的「我的班」里是同事的名字（\(wrong)），可能读错了网页上的表，这次没有采用"
-                return false
-            }
-            if !userInitiated, !settings.nextSyncIsBaseline, result.range != nil {
+            // 读到的「我的班」里一半以上是同事的名字（读错了网页上的表，比如全员排班表）：这次不改我的班、不提醒变动，
+            // 全员排班、公告这些照常更新
+            let colleagues = colleagueNames(extra: Set(outcome.site.people.keys))
+            let named = result.entries.values.compactMap { colleagueName(in: $0, colleagues: colleagues) }
+            let wrongName = !named.isEmpty && named.count * 2 >= result.entries.count ? named.first : nil
+            if wrongName == nil, !userInitiated, !settings.nextSyncIsBaseline, result.range != nil {
                 // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
                 // 和 apply() 同一个规则：网站还没正式排班、只有请假调休记录的以后日子不算「已经知道」
                 let known = SyncPolicy.knownDays(covered: covered, replaced: result.replacedDays(calendar: .app), today: .today,
@@ -793,6 +826,17 @@ final class AppStore: ObservableObject {
             await notifySiteNoRest(outcome.site.noRest)
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
+            if let wrongName {
+                var failed = settings
+                failed.syncState = .anomaly
+                failed.lastSyncMessage = "同步结果异常：读到的「我的班」里是同事的名字（\(wrongName)），可能读错了网页上的表，这次没有改你的班"
+                failed.syncFailureCount += 1
+                // 下次重新找「我的班」的数据接口
+                failed.apiSignature = nil
+                settings = failed
+                await notifyIfSyncStale()
+                return false
+            }
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
             // 同步途中又改了名字：这次用的是旧名字，下次还要当作重新开始
             if settings.aliases == aliasesAtStart { settings.nextSyncIsBaseline = false }
@@ -894,6 +938,14 @@ final class AppStore: ObservableObject {
         defer { isReadingDesktop = false }
         while isSyncing { try? await Task.sleep(nanoseconds: 500_000_000) }
         return await readDesktopNotesNow(mayLogin: mayLogin, weeksBack: weeksBack)
+    }
+
+    /// 「读取以前的全员排班」最早能读到哪天：最多往前 60 周，全员排班也只留 400 天
+    func historyLabel(since year: Int) -> String {
+        let jan1 = DayKey(year: year, month: 1, day: 1)
+        let earliest = DayKey.today.adding(days: -399)
+        guard earliest > jan1 else { return "\(String(year)) 年 1 月以来全部" }
+        return "\(String(earliest.year)) 年 \(earliest.month) 月 \(earliest.day) 日以来（最多一年多）"
     }
 
     /// 从电脑版页面一周周往前翻，读到某年 1 月 1 日为止（App 只留一年多的全员排班）
@@ -1146,7 +1198,8 @@ final class AppStore: ObservableObject {
         let lastPublished = publishedDays.max()
         // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
         let result = RosterMerger.merge(old: roster, oldSources: rosterSources, new: new, source: source, at: Date(),
-                                        carriesLeave: carries, matcher: matcher)
+                                        carriesLeave: carries, carriedKinds: RosterMerger.leaveKinds(new, matcher: matcher),
+                                        matcher: matcher)
         // 留一年多，全年统计用
         let cutoff = DayKey.today.adding(days: -400)
         // 以前没拆开存下的「张三李四」也一起拆开
@@ -1154,7 +1207,8 @@ final class AppStore: ObservableObject {
         rosterSources = result.sources.mapValues { $0.filter { $0.key >= cutoff } }.filter { !$0.value.isEmpty }
         if !result.edits.isEmpty { rosterLog = Array((rosterLog + result.edits).suffix(3000)) }
         // 网站排出了新的一周：记下时间，学网站一般什么时候排班
-        if let before = lastPublished, let after = publishedDays.max(), after > before.adding(days: 3) {
+        // 重新开始的那次同步（刚恢复备份、改了名字）不算：恢复的旧数据后面接上新读到的，不是网站刚排出来的
+        if !settings.nextSyncIsBaseline, let before = lastPublished, let after = publishedDays.max(), after > before.adding(days: 3) {
             s.publishTimes = Array((s.publishTimes + [Date()]).suffix(40))
             let fresh = publishedDays.filter { $0 > before }.sorted()
             Task { [weak self] in await self?.notifyNewWeek(fresh) }
@@ -1381,6 +1435,16 @@ final class AppStore: ObservableObject {
         newSettings.backupFolderName = settings.backupFolderName
         newSettings.lastAutoBackup = settings.lastAutoBackup
         newSettings.autoBackupMessage = settings.autoBackupMessage
+        // 「今天的微信发过没有」这些是这台手机上的记号：用备份里的旧记号会把今天已经发过的再发一遍
+        newSettings.weChatMorningSent = settings.weChatMorningSent
+        newSettings.weChatEveningSent = settings.weChatEveningSent
+        newSettings.weChatWeekSent = settings.weChatWeekSent
+        newSettings.lastPersonalWeekly = settings.lastPersonalWeekly
+        newSettings.lastWeeklyDigest = settings.lastWeeklyDigest
+        newSettings.lastMonthlyReport = settings.lastMonthlyReport
+        newSettings.dutyHeadsUpSent = settings.dutyHeadsUpSent
+        // 备份里没发出去的变动早就过时了，不再发
+        newSettings.pendingWeChatChange = nil
         settings = newSettings
         scheduleChanged()
         Task { [weak self] in await self?.sync(userInitiated: true) }

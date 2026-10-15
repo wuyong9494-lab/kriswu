@@ -90,8 +90,10 @@ public enum WorkloadCounter {
     public static let excluded = "不算"
 
     /// 休息、调休、请假、无分工都不算上班。
+    /// 「节假日值班」「假期加班」这类带「假」字的仍是上班：值班、出差、加班（不是「加班调休」）先排除
     public static func isOff(_ post: String, matcher: ShiftMatcher) -> Bool {
-        matcher.match(post)?.id == "off" || post.contains("休") || post.contains("假") || post == "无分工"
+        if isDuty(post) || isTrip(post) || (post.contains("加班") && !post.contains("休")) { return false }
+        return matcher.match(post)?.id == "off" || post.contains("休") || post.contains("假") || post == "无分工"
     }
 
     public static func isTrip(_ post: String) -> Bool { post.contains("出差") }
@@ -157,7 +159,7 @@ public enum WorkloadCounter {
     /// 只是偶尔顶一次调度的人（组别、遥测的人）不算。
     public static func autoIsDispatch(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
         guard let end = asOf ?? history.keys.max() else { return false }
-        let start = end.adding(days: -90, calendar: .current)
+        let start = end.adding(days: -90, calendar: .dayMath)
         // 组A、组B… 分开数的话，轮组别的人可能调度反而最多，所以和其它岗位的总数比
         var dispatch = 0, total = 0
         for (day, raw) in history where day >= start && day <= end {
@@ -182,7 +184,7 @@ public enum WorkloadCounter {
     /// 自动判断是不是轮组别的人：asOf 前三个月里，组别占他所有岗位（不含休息、出差）的一半以上。
     public static func autoIsGroupMember(history: [DayKey: String], matcher: ShiftMatcher, asOf: DayKey? = nil) -> Bool {
         guard let end = asOf ?? history.keys.max() else { return false }
-        let start = end.adding(days: -90, calendar: .current)
+        let start = end.adding(days: -90, calendar: .dayMath)
         var group = 0, total = 0
         for (day, raw) in history where day >= start && day <= end {
             for part in effective(raw, matcher: matcher)?.split(separator: "+") ?? [] {
@@ -399,5 +401,7 @@ public enum WorkloadCounter {
             }
             return p
         }
+        // 按名字排好（字典顺序每次启动都不一样，同样多的人先后会乱跳）
+        .sorted { $0.name < $1.name }
     }
 }

@@ -85,7 +85,8 @@ public enum SiteAPI {
     static func parseWeekly(_ rows: [[String: String]], dates: DateTokenParser, matcher: ShiftMatcher, into result: inout Result) {
         guard let dateKey = JSONScheduleExtractor.dateKey(in: rows, dates: dates) else { return }
         let keys = Set(rows.flatMap(\.keys)).subtracting([dateKey])
-        let columns = keys.compactMap { k in post(forColumn: k, matcher: matcher).map { (k, $0) } }
+        // 按字段名排好：同一天几个岗位拼起来的先后每次一样
+        let columns = keys.sorted().compactMap { k in post(forColumn: k, matcher: matcher).map { (k, $0) } }
         guard columns.count >= 2 else { return }
         for row in rows {
             guard let day = row[dateKey].flatMap({ JSONScheduleExtractor.day(from: $0, dates: dates) }) else { continue }

@@ -126,7 +126,7 @@ struct WorkloadView: View {
                         reading = false
                     }
                 } label: {
-                    Text("读取 \(String(year)) 年 1 月以来全部（1–2 分钟）")
+                    Text("读取 \(store.historyLabel(since: year))（1–2 分钟）")
                 }
                 .disabled(reading || store.isReadingDesktop || !store.canSync)
                 if let message = store.settings.desktopRosterMessage {
@@ -340,46 +340,50 @@ struct RotationMembersView: View {
             return ma != mb ? ma : a.compare(b, locale: zh) == .orderedAscending
         }
         List {
-            Section {
-                TextField("粘贴名字，用空格、逗号或顿号隔开", text: $text, axis: .vertical)
-                Button("设为没排班不算上班") {
-                    let parsed = text.split { " ,，、;；\n\t".contains($0) }.map(String.init).filter { !$0.isEmpty }
-                    var seen = Set<String>()
-                    store.settings.scheduleOnlyMembers = parsed.filter { seen.insert($0).inserted }
-                    text = ""
-                }
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                if !members.isEmpty {
-                    ConfirmButton(title: "清空（只留调度）", message: "名单会清空，改成只有调度没排班不算上班。") {
-                        store.settings.scheduleOnlyMembers = []
+            Group {
+                Section {
+                    TextField("粘贴名字，用空格、逗号或顿号隔开", text: $text, axis: .vertical)
+                    Button("设为没排班不算上班") {
+                        let parsed = text.split { " ,，、;；\n\t".contains($0) }.map(String.init).filter { !$0.isEmpty }
+                        var seen = Set<String>()
+                        store.settings.scheduleOnlyMembers = parsed.filter { seen.insert($0).inserted }
+                        text = ""
                     }
-                }
-            } footer: {
-                Text(members.isEmpty
-                     ? "现在只有排过调度的人没排班不算上班（排班表上有名字才算一天）。其他人没排岗位、没写休息的工作日都算正常上班。一般不用加人。"
-                     : "另加了 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也一样。")
-            }
-            Section("全员排班里的人（点一下勾选）") {
-                ForEach(names, id: \.self) { name in
-                    Button {
-                        if let i = store.settings.scheduleOnlyMembers.firstIndex(of: name) {
-                            store.settings.scheduleOnlyMembers.remove(at: i)
-                        } else {
-                            store.settings.scheduleOnlyMembers.append(name)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if !members.isEmpty {
+                        ConfirmButton(title: "清空（只留调度）", message: "名单会清空，改成只有调度没排班不算上班。") {
+                            store.settings.scheduleOnlyMembers = []
                         }
-                    } label: {
-                        HStack {
-                            Text(name).foregroundStyle(Color.primary)
-                            Spacer()
-                            if members.contains(name) {
-                                Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
-                            } else if store.isRotating(name) {
-                                Text("调度").font(.caption).foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text(members.isEmpty
+                         ? "现在只有排过调度的人没排班不算上班（排班表上有名字才算一天）。其他人没排岗位、没写休息的工作日都算正常上班。一般不用加人。"
+                         : "另加了 \(members.count) 人：" + members.joined(separator: "、") + "。排过调度的人也一样。")
+                }
+                Section("全员排班里的人（点一下勾选）") {
+                    ForEach(names, id: \.self) { name in
+                        Button {
+                            if let i = store.settings.scheduleOnlyMembers.firstIndex(of: name) {
+                                store.settings.scheduleOnlyMembers.remove(at: i)
+                            } else {
+                                store.settings.scheduleOnlyMembers.append(name)
+                            }
+                        } label: {
+                            HStack {
+                                Text(name).foregroundStyle(Color.primary)
+                                Spacer()
+                                if members.contains(name) {
+                                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                                } else if store.isRotating(name) {
+                                    Text("调度").font(.caption).foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
                 }
             }
+            // 只读时按钮、输入框不能用，但页面照样能滚动（整个列表 disabled 会连滚动都禁掉）
+            .disabled(!store.canEdit)
         }
         .appList()
         .adminOnly()

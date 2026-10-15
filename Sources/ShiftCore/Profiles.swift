@@ -87,7 +87,7 @@ public struct RuleVersion: Codable, Equatable {
 
     /// 从 from 起换成新规则：from 以前保持原来（按 old 历史和 current 算出的）规则
     public static func adding(_ versions: [RuleVersion], current: WorkloadRules, changeFrom from: DayKey) -> [RuleVersion] {
-        let before = rules(on: from.adding(days: -1, calendar: .current), versions: versions, current: current)
+        let before = rules(on: from.adding(days: -1, calendar: .dayMath), versions: versions, current: current)
         // from 以后原来的分段作废；最后一段之后到 from 之间按改之前的规则算
         var kept = versions.filter { $0.until < from }
         kept.append(RuleVersion(until: from, rules: before))

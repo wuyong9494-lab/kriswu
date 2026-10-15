@@ -126,7 +126,8 @@ public enum RosterExtractor {
     /// 只要这次读到的有休息列（哪天有人休息），就整天以新的为准（取消的请假也会去掉）。
     public static func replacingDays(of old: Roster, with new: Roster, matcher: ShiftMatcher) -> Roster {
         RosterMerger.merge(old: old, oldSources: [:], new: new, source: "", at: Date(),
-                           carriesLeave: RosterMerger.hasLeave(new, matcher: matcher), matcher: matcher).roster
+                           carriesLeave: RosterMerger.hasLeave(new, matcher: matcher),
+                           carriedKinds: RosterMerger.leaveKinds(new, matcher: matcher), matcher: matcher).roster
     }
 
     public static func merge(_ new: Roster, into roster: inout Roster) {
@@ -232,13 +233,13 @@ public enum RosterExtractor {
                 let values = rows.compactMap { $0[k] }.map(cleanName)
                 let names = values.filter(looksLikeName)
                 return (k, names.count * 2 >= max(values.count, 1) && Set(names).count >= 3 ? names.count : 0)
-            }.filter { $0.1 > 0 }.max { $0.1 < $1.1 }?.0
+            }.filter { $0.1 > 0 }.max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
             guard let personKey else { continue }
             // 岗位字段：值最像班次的
             let postKey = keys.subtracting([personKey]).map { k -> (String, Int) in
                 let values = rows.compactMap { $0[k] }.filter { !$0.isEmpty }
                 return (k, values.filter { matcher.match($0) != nil }.count)
-            }.filter { $0.1 > 0 }.max { $0.1 < $1.1 }?.0
+            }.filter { $0.1 > 0 }.max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
             guard let postKey else { continue }
             for row in rows {
                 guard let day = row[dateKey].flatMap({ JSONScheduleExtractor.day(from: $0, dates: dates) }),
@@ -331,6 +332,16 @@ public enum GroupNotes {
     /// 电脑版表格右边那列（注意事项）存在这一行后面，和要做的事分开
     public static let cautionMarker = "【注意事项】"
 
+    /// 只是一串人名（「何强(4)、郭峰(2)」「组A 何强 郭峰」）：手机版「值班查看」里组别后面跟的是谁，不是这个组干什么
+    public static func isNameList(_ text: String, matcher: ShiftMatcher) -> Bool {
+        let names = RosterExtractor.names(inCell: text, matcher: matcher)
+        guard !names.isEmpty else { return false }
+        var rest = text.replacingOccurrences(of: #"[（(]\s*-?\d+\s*[)）]"#, with: "", options: .regularExpression)
+        for n in names.sorted(by: { $0.count > $1.count }) { rest = rest.replacingOccurrences(of: n, with: "") }
+        rest = rest.replacingOccurrences(of: #"组\s*[A-Ea-e]|[\s、,，;；:：|｜/.。·]"#, with: "", options: .regularExpression)
+        return rest.count < 4
+    }
+
     /// 要做的事、注意事项分开（没有注意事项时 caution 为 nil）
     public static func split(_ note: String) -> (work: String, caution: String?) {
         guard let r = note.range(of: cautionMarker) else { return (note, nil) }
@@ -361,12 +372,14 @@ public enum GroupNotes {
     }
 
     /// 表格文字：一行开头是「组E」，后面的格子是说明；或者「组E」单独一行，下一行是说明。
-    public static func fromText(_ text: String, reference: DayKey) -> [String: String] {
+    public static func fromText(_ text: String, reference: DayKey,
+                                matcher: ShiftMatcher = ShiftMatcher(types: ShiftType.defaults)) -> [String: String] {
         let rows = ScheduleParser.splitRows(text)
         let dates = DateTokenParser(reference: reference)
         var notes: [String: String] = [:]
+        // 一串人名（手机版「值班查看」里这组是谁）不是说明
         func isNote(_ s: String) -> Bool {
-            s.count >= minLength && dates.parse(s) == nil && !isGroup(s)
+            s.count >= minLength && dates.parse(s) == nil && !isGroup(s) && !isNameList(s, matcher: matcher)
         }
         for (i, row) in rows.enumerated() {
             guard let first = row.first, isGroup(first) else { continue }

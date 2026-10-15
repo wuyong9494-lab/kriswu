@@ -99,6 +99,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 extension Notification.Name {
     /// 点了带「route」的通知
     static let openRoute = Notification.Name("openRoute")
+    /// 钥匙串里的账号密码、token 改了
+    static let keychainChanged = Notification.Name("keychainChanged")
 }
 
 struct RootView: View {

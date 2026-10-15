@@ -1,5 +1,14 @@
 import Foundation
 
+extension Calendar {
+    /// 只算「日子」加减用的公历（手机设成佛历、日本历时也不会算错）
+    public static let dayMath: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+        return c
+    }()
+}
+
 /// 一个不带时区的“日历日”，例如 2026-10-09。
 public struct DayKey: Hashable, Comparable, Codable, CustomStringConvertible {
     public let year: Int

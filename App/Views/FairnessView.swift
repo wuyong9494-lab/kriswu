@@ -75,6 +75,8 @@ struct FairnessView: View {
                 (WorkloadBalance.analyze(roster: roster, days: week, matcher: matcher, tolerance: 2, members: members, calendar: .app),
                  WorkloadBalance.analyze(roster: roster, days: monthKnown, matcher: matcher, tolerance: 3, members: members, calendar: .app))
             }.value
+            // 算的途中换了周、月份：这次的结果已经过时，用后来那次的
+            guard !Task.isCancelled else { return }
             self.weekReport = w
             self.monthReport = m
             csvURL = store.csvFile(named: "工作量均衡\(year)年\(month)月.csv",

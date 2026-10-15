@@ -32,12 +32,14 @@ enum DutyActivityManager {
         // 下班后接着的休息、调休
         var rest: [DayKey] = []
         var d = next
-        while rest.count < 3, let raw = schedule[d], matcher.match(raw)?.id == "off" {
+        // 「值班交接前」「调休」也算休息；出差不算
+        while rest.count < 3, let raw = schedule[d], SchedulePatterns.isRestDay(raw, matcher: matcher) {
             rest.append(d)
             d = d.adding(days: 1, calendar: cal)
         }
+        // 锁屏上的字不会每分钟更新：用「次日」（值班那天的下一天），过了零点也不会错说成「明天」
         let after = rest.isEmpty
-            ? "明天 \(handover.text) 下班" + (schedule[next].map { "，明天：\(matcher.displayName($0))" } ?? "")
+            ? "次日 \(handover.text) 下班" + (schedule[next].map { "，次日：\(matcher.displayName($0))" } ?? "")
             : "下班后休息：" + rest.map(\.dateText).joined(separator: "、")
         // 这天的清单（交接前看一眼还差什么）
         let tasks = AppStore.shared.liveTaskRecord(on: day)

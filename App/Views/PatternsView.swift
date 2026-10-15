@@ -54,7 +54,7 @@ struct SchedulePatternsView: View {
         .appList()
         .navigationTitle("排班规律")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: "\(months)-\(store.dataRevision)") { await compute() }
+        .task(id: "\(months)-\(store.dataRevision)-\(DayKey.today)") { await compute() }
     }
 
     /// 在后台算（全年数据多时不卡界面）
@@ -80,6 +80,8 @@ struct SchedulePatternsView: View {
                                                  pool: duty.map { Set($0.order) }, people: people, calendar: .app),
                 days: days.count)
         }.value
+        // 算的途中换了月数、数据变了：这次的结果已经过时
+        guard !Task.isCancelled else { return }
         result = computed
     }
 

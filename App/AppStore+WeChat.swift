@@ -29,10 +29,12 @@ extension AppStore {
         isSendingWeChatChange = true
         defer { isSendingWeChatChange = false }
         let parts = pending.text.split(separator: "\n", maxSplits: 1).map(String.init)
-        if await pushToWeChat(title: parts[0], content: parts.count > 1 ? parts[1] : ""),
-           settings.pendingWeChatChange == pending {
-            // 发送途中又来了新的变动就留着，下次再发
+        guard await pushToWeChat(title: parts[0], content: parts.count > 1 ? parts[1] : "") else { return }
+        if settings.pendingWeChatChange == pending {
             settings.pendingWeChatChange = nil
+        } else if let current = settings.pendingWeChatChange, parts.count > 1, current.text.hasSuffix("\n" + parts[1]) {
+            // 发送途中又来了新的变动、和这条合在了一起：这条已经发出去了，只留新的
+            settings.pendingWeChatChange = ChangeLogEntry(date: current.date, text: String(current.text.dropLast(parts[1].count + 1)))
         }
     }
 
@@ -90,7 +92,8 @@ extension AppStore {
 
     /// 每月 1 号起第一次运行时，把上个月全员工作量发到微信
     func sendMonthlyReportIfDue() async {
-        guard settings.monthlyReport, settings.weChatEnabled else { return }
+        // 月报里是全员的名字：开了「同事的…也发到微信」才发
+        guard settings.monthlyReport, settings.weChatEnabled, settings.weChatTeam, !Self.isDemo else { return }
         let today = DayKey.today
         let key = String(format: "%04d-%02d", today.year, today.month)
         // 第一次（刚升级、刚打开）不补发上个月的，从下个月 1 号开始
@@ -114,7 +117,7 @@ extension AppStore {
 
     /// 每周一（这周第一次运行时）把上周的管理摘要发到微信：遥测、工作量最多、待休最多、该休没休
     func sendWeeklyDigestIfDue() async {
-        guard settings.weeklyDigest, settings.weChatEnabled, role != .user, !Self.isDemo else { return }
+        guard settings.weeklyDigest, settings.weChatEnabled, settings.weChatTeam, role != .user, !Self.isDemo else { return }
         var cal = Calendar.app
         cal.firstWeekday = 2
         let now = Date()
@@ -228,6 +231,8 @@ extension AppStore {
             return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
         }
         let today = DayKey.today
+        // App 今天已经自己发过下周安排：不重复发
+        guard settings.weChatWeekSent != today else { return "今天已经发过下周安排了" }
         let before = settings.weChatWeekSent
         settings.weChatWeekSent = today
         if canSync { await syncWithin(seconds: 15, source: "快捷指令（下周）") }
@@ -250,6 +255,14 @@ extension AppStore {
         }
         let today = DayKey.today
         let label = morning ? "今天" : "明天"
+        // App 到点已经自己补发过同一条：不重复发
+        if morning ? settings.weChatMorningSent == today : settings.weChatEveningSent == today {
+            return "\(label)的分工今天已经发过微信了"
+        }
+        // 先记上「已发」：下面同步的十几秒里 App 到点自己补发时不会再发一遍；没发成再改回去
+        let before = (settings.weChatMorningSent, settings.weChatEveningSent)
+        settings.weChatMorningSent = today
+        if !morning { settings.weChatEveningSent = today }
         // 先同步再发，但最多等 15 秒：快捷指令有时间限制，同步太慢就用手上的数据先发，别让提醒丢了
         if canSync { await syncWithin(seconds: 15, source: "快捷指令（微信）") }
         let m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
@@ -257,11 +270,8 @@ extension AppStore {
         let title = m?.title ?? "\(label)：暂无排班数据"
         let body = m?.body ?? "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"
         let ok = await pushToWeChat(title: title, content: body, force: true)
-        // 发出去了才记「已发」，App 之后运行时就不会再补发同一条
-        if ok {
-            settings.weChatMorningSent = today
-            if !morning { settings.weChatEveningSent = today }
-        }
+        // 发出去了、而且有排班才算「已发」；没发出去或暂无数据就改回去，App 之后拿到数据再补发
+        if !ok || m == nil { (settings.weChatMorningSent, settings.weChatEveningSent) = before }
         return ok ? "已发送到微信：\(title)" : (settings.weChatMessage ?? "微信推送失败")
     }
 

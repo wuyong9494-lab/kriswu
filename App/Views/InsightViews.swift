@@ -34,13 +34,17 @@ struct DataCheckView: View {
         .navigationTitle("数据核对")
         .navigationBarTitleDisplayMode(.inline)
         // 数据一变（同步、改规则）就重查；在后台查，不卡界面
-        .task(id: store.dataRevision) {
+        // 过了零点也重查（「今天」变了）
+        .task(id: "\(store.dataRevision)-\(DayKey.today)") {
             let roster = store.roster, published = store.publishedDays, matcher = store.matcher
             let members = store.rotationMembers, today = DayKey.today
-            issues = await Task.detached(priority: .userInitiated) {
+            let found = await Task.detached(priority: .userInitiated) {
                 DataCheck.issues(roster: roster, published: published, matcher: matcher,
                                  members: members, today: today, calendar: .app)
             }.value
+            // 查的途中数据又变了：用后来那次的结果
+            guard !Task.isCancelled else { return }
+            issues = found
         }
     }
 
@@ -106,70 +110,73 @@ struct WorkloadRulesView: View {
 
     var body: some View {
         Form {
-            if !store.canEdit { Section { ReadOnlyNotice() } }
-            Section {
-                Toggle("只改以后，以前的日子还按原来的规则", isOn: $onlyFuture)
-                if onlyFuture {
-                    DatePicker("从这天起生效", selection: $effective, displayedComponents: .date)
-                }
-            } header: {
-                Text("改动生效时间")
-            } footer: {
-                Text("单位规则变了时用：比如从下个月 1 号起换计算方法，以前月份的统计不受影响。关掉后所有日子都按新规则重算。")
-            }
-            Section {
-                Toggle("工作日没排岗位、也没写休息算上班", isOn: rule(\.blankWorkdayIsWork))
-                Toggle("调度只算排班表上有名字的日子", isOn: rule(\.dispatchScheduleOnly))
-            } footer: {
-                Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班认。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
-            }
-            Section {
-                Label("休息、调休、请假、「值班交接前」一律不算工作量", systemImage: "bed.double.fill")
-            } header: {
-                Text("休息")
-            } footer: {
-                Text("统一规则：网站上写了休息、调休、请假的，以及「值班交接前」一列的人（前一天值了遥测），不管节假日还是平时都算休息，不算工作量。只有一种例外：假期里（不是假期最后一天）值了遥测，第二天还在假期里休息的那一天，不算工作量，但算上班天数，也算进节假日上班。出差算工作量。")
-            }
-            if !store.settings.ruleHistory.isEmpty {
+            Group {
+                if !store.canEdit { Section { ReadOnlyNotice() } }
                 Section {
-                    ForEach(Array(store.settings.ruleHistory.enumerated()), id: \.offset) { _, v in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(v.until.dateText) 以前").font(.subheadline.weight(.semibold))
-                            Text(describe(v.rules)).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    ConfirmButton(title: "清除历史，所有日子都按现在的规则", message: "以前的日子也会按现在的规则重新算工作量，不能恢复。") {
-                        store.settings.ruleHistory = []
+                    Toggle("只改以后，以前的日子还按原来的规则", isOn: $onlyFuture)
+                    if onlyFuture {
+                        DatePicker("从这天起生效", selection: $effective, displayedComponents: .date)
                     }
                 } header: {
-                    Text("以前的规则")
+                    Text("改动生效时间")
+                } footer: {
+                    Text("单位规则变了时用：比如从下个月 1 号起换计算方法，以前月份的统计不受影响。关掉后所有日子都按新规则重算。")
                 }
-            }
-            Section {
-                NavigationLink {
-                    PeopleProfilesView()
-                } label: {
-                    LabeledContent("人员档案", value: "\(store.settings.profiles.count) 人已建")
+                Section {
+                    Toggle("工作日没排岗位、也没写休息算上班", isOn: rule(\.blankWorkdayIsWork))
+                    Toggle("调度只算排班表上有名字的日子", isOn: rule(\.dispatchScheduleOnly))
+                } footer: {
+                    Text("工作日没排岗位、也没写休息的日子：轮组别（组A–E）的人是正常上班，算「上班天数」，不算工作量；不轮组别的人是在做别的日常工作，算工作量。谁轮组别、谁是调度看「人员档案」，没建档案的按最近三个月的排班认。第一项关掉后，这些日子都显示「没排班」，不算上班也不算工作量。")
                 }
-                NavigationLink {
-                    RotationMembersView()
-                } label: {
-                    LabeledContent("没排班不算上班的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
+                Section {
+                    Label("休息、调休、请假、「值班交接前」一律不算工作量", systemImage: "bed.double.fill")
+                } header: {
+                    Text("休息")
+                } footer: {
+                    Text("统一规则：网站上写了休息、调休、请假的，以及「值班交接前」一列的人（前一天值了遥测），不管节假日还是平时都算休息，不算工作量。只有一种例外：假期里（不是假期最后一天）值了遥测，第二天还在假期里休息的那一天，不算工作量，但算上班天数，也算进节假日上班。出差算工作量。")
                 }
-                LabeledContent("手动改过的日子", value: "\(store.settings.workloadOverrides.values.map(\.count).reduce(0, +)) 天")
-                if !store.settings.workloadOverrides.isEmpty {
-                    ConfirmButton(title: "清除全部手动修改", message: "所有人、所有日子的手动修改都会删掉，改回按规则算，不能恢复。") {
-                        store.settings.workloadOverrides = [:]
+                if !store.settings.ruleHistory.isEmpty {
+                    Section {
+                        ForEach(Array(store.settings.ruleHistory.enumerated()), id: \.offset) { _, v in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(v.until.dateText) 以前").font(.subheadline.weight(.semibold))
+                                Text(describe(v.rules)).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        ConfirmButton(title: "清除历史，所有日子都按现在的规则", message: "以前的日子也会按现在的规则重新算工作量，不能恢复。") {
+                            store.settings.ruleHistory = []
+                        }
+                    } header: {
+                        Text("以前的规则")
                     }
                 }
-            } footer: {
-                Text("在每个人的每日明细里长按某一天可以手动改。")
+                Section {
+                    NavigationLink {
+                        PeopleProfilesView()
+                    } label: {
+                        LabeledContent("人员档案", value: "\(store.settings.profiles.count) 人已建")
+                    }
+                    NavigationLink {
+                        RotationMembersView()
+                    } label: {
+                        LabeledContent("没排班不算上班的人", value: store.settings.scheduleOnlyMembers.isEmpty ? "调度" : "调度 + \(store.settings.scheduleOnlyMembers.count) 人")
+                    }
+                    LabeledContent("手动改过的日子", value: "\(store.settings.workloadOverrides.values.map(\.count).reduce(0, +)) 天")
+                    if !store.settings.workloadOverrides.isEmpty {
+                        ConfirmButton(title: "清除全部手动修改", message: "所有人、所有日子的手动修改都会删掉，改回按规则算，不能恢复。") {
+                            store.settings.workloadOverrides = [:]
+                        }
+                    }
+                } footer: {
+                    Text("在每个人的每日明细里长按某一天可以手动改。")
+                }
+                Section {
+                    ConfirmButton(title: "恢复默认规则", message: "现在的规则设置会改回默认。", role: nil) { apply(WorkloadRules()) }
+                }
             }
-            Section {
-                ConfirmButton(title: "恢复默认规则", message: "现在的规则设置会改回默认。", role: nil) { apply(WorkloadRules()) }
-            }
+            // 只读时按钮、输入框不能用，但页面照样能滚动（整个列表 disabled 会连滚动都禁掉）
+            .disabled(!store.canEdit)
         }
-        .disabled(!store.canEdit)
         .appList()
         .navigationTitle("工作量规则")
         .navigationBarTitleDisplayMode(.inline)

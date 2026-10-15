@@ -41,7 +41,7 @@ enum SyncService {
         var bestCount = 0
         var bestDays = Set<DayKey>()
         for request in captured where (200..<300).contains(request.status) {
-            let roster = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher)
+            let roster = teamRoster(request.body, reference: reference, matcher: matcher)
             let count = roster.values.reduce(0) { $0 + $1.count }
             if count > bestCount {
                 best = request
@@ -60,6 +60,13 @@ enum SyncService {
         // 按周的：以「这一条是哪一周」为准换算到本周，再取前一周、后三周
         let base = weekOffset(of: bestDays)
         return [-7, 0, 7, 14, 21].map { base + $0 }.filter { $0 != 0 }.map { best.shifted(days: $0) }
+    }
+
+    /// 一条接口回复里的全员排班：一人一条的、一天一行各岗位一列的（网站的周表）都认，
+    /// 不然周表接口选不上，后台同步就不会去取前后几周
+    private static func teamRoster(_ body: String, reference: DayKey, matcher: ShiftMatcher) -> Roster {
+        let rows = RosterExtractor.fromJSON(body, reference: reference, matcher: matcher)
+        return rows.isEmpty ? SiteAPI.parse([body], reference: reference, matcher: matcher).roster : rows
     }
 
     /// 这批日子所在的周离本周有几天（本周 = 0；上一周的数据 = 7，要往后推 7 天才是本周）。
@@ -232,6 +239,11 @@ enum SyncService {
         for body in page.captured.map(\.body) + page.extraReplies {
             RosterExtractor.merge(RosterExtractor.fromJSON(body, reference: reference, matcher: matcher), into: &roster)
         }
+        // 周表每天一行，人名后的数字是那天的：现在的待休取今天及以前最近一天的，
+        // 不取页面上第一个出现的（那是周一的旧数字，会把同步刚读到的新数字盖掉）
+        for (name, days) in restByDay {
+            if let latest = days.filter({ $0.key <= reference }).max(by: { $0.key < $1.key }) { rest[name] = latest.value }
+        }
         let text = HTMLText.toText(page.html)
         var reason: String?
         if notes.isEmpty {
@@ -250,7 +262,7 @@ enum SyncService {
         var bestCount = 0
         var bestDays = Set<DayKey>()
         for request in captured where (200..<300).contains(request.status) {
-            let roster = RosterExtractor.fromJSON(request.body, reference: reference, matcher: matcher)
+            let roster = teamRoster(request.body, reference: reference, matcher: matcher)
             let count = roster.values.reduce(0) { $0 + $1.count }
             if count > bestCount {
                 best = request

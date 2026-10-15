@@ -2195,3 +2195,81 @@ final class RotationExportTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(RotationExport.File.self, from: XCTUnwrap(RotationExport.encode(file))), file)
     }
 }
+
+final class AuditFixTests: XCTestCase {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+    let m = ShiftMatcher(types: ShiftType.defaults)
+    func d(_ month: Int, _ day: Int) -> DayKey { DayKey(year: 2026, month: month, day: day) }
+
+    func testHolidayWordsAreNotRest() {
+        XCTAssertFalse(WorkloadCounter.isOff("节假日值班", matcher: m))
+        XCTAssertFalse(WorkloadCounter.isOff("节假日加班", matcher: m))
+        XCTAssertFalse(WorkloadCounter.isOff("出差", matcher: m))
+        XCTAssertTrue(WorkloadCounter.isOff("加班调休", matcher: m))
+        XCTAssertTrue(WorkloadCounter.isOff("值班交接前", matcher: m))
+        XCTAssertTrue(WorkloadCounter.isOff("值班调休", matcher: m))
+        XCTAssertTrue(WorkloadCounter.isOff("请假", matcher: m))
+    }
+
+    func testRestCountsByWeekdayEvenOnMakeUpWorkdays() {
+        // 网站上：周五 10/9 值（第二天 10/10 是调休上班的周六）休 10/10、10/11、10/12
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(10, 9), calendar: cal), [d(10, 10), d(10, 11), d(10, 12)])
+        // 调休上班的周六、周日值的也多休一天
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(10, 10), calendar: cal).count, 3)
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(9, 20), calendar: cal).count, 3)
+        // 平时周三：两天
+        XCTAssertEqual(SchedulePatterns.expectedRest(after: d(10, 14), calendar: cal), [d(10, 15), d(10, 16)])
+    }
+
+    func testTripAfterDutyIsNotRest() {
+        // 周一值遥测，周二、周三出差：按规则该休没休
+        let roster: Roster = ["甲": [d(10, 12): "遥测", d(10, 13): "出差", d(10, 14): "出差"]]
+        let w = SchedulePatterns.restWarnings(name: "甲", roster: roster, published: Set([d(10, 13), d(10, 14)]),
+                                              from: d(10, 13), matcher: m, calendar: cal)
+        XCTAssertEqual(w.map(\.day), [d(10, 13), d(10, 14)])
+    }
+
+    func testHolidayReserveOnlyFromHolidayLine() {
+        // 研发岗平时值，生产岗节假日值：中秋（9/25–27）的预留名单里不该有研发岗的人
+        var roster: Roster = [:]
+        for (i, n) in ["甲", "乙", "丙"].enumerated() { roster[n, default: [:]][d(9, 1 + i)] = "遥测" }
+        for (i, n) in ["子", "丑", "寅", "卯"].enumerated() { roster[n, default: [:]][d(6, 19 + (i % 3))] = "遥测" }
+        var people: [String: SiteAPI.Person] = [:]
+        for n in ["甲", "乙", "丙"] { people[n] = SiteAPI.Person(onDuty: true, category: "研发岗") }
+        for n in ["子", "丑", "寅", "卯"] { people[n] = SiteAPI.Person(onDuty: true, category: "生产岗") }
+        let plan = HolidayDutyPlanner.plan(roster: roster, today: d(9, 20), matcher: m,
+                                           pool: Set(people.keys), people: people, calendar: cal)
+        XCTAssertEqual(plan?.days.first, d(9, 25))
+        XCTAssertEqual(plan?.reserve.count, 3)
+        XCTAssertTrue(plan?.reserve.allSatisfy { ["子", "丑", "寅", "卯"].contains($0.name) } == true, "\(plan?.reserve.map(\.name) ?? [])")
+    }
+
+    func testDataCheckIgnoresWorkdayAfterMidHolidayDuty() {
+        // 10/6 假期里值遥测只休 10/7；10/8 是工作日，网站上空着本来就是上班，不报
+        let roster: Roster = ["甲": [d(10, 6): "遥测", d(10, 5): "组A"]]
+        let issues = DataCheck.issues(roster: roster, published: Set((5...9).map { d(10, $0) }), matcher: m, members: nil,
+                                      today: d(10, 9), lookback: 10, calendar: cal)
+        XCTAssertFalse(issues.contains { $0.kind == .noRestAfterDuty })
+    }
+
+    func testDesktopReadWithoutLeaveColumnKeepsLeaveAndTrips() {
+        let t0 = Date(timeIntervalSince1970: 1_000), t1 = Date(timeIntervalSince1970: 2_000)
+        let day = d(10, 15)
+        let synced: Roster = ["甲": [day: "请假"], "乙": [day: "出差"], "丙": [day: "休息"], "丁": [day: "组A"]]
+        let first = RosterMerger.merge(old: [:], oldSources: [:], new: synced, source: "sync", at: t0, carriesLeave: true, matcher: m)
+        // 电脑版周表：有休息列，没有请假、出差；丙的休息取消了
+        let desktop: Roster = ["丁": [day: "组A"], "戊": [day: "休息"]]
+        let second = RosterMerger.merge(old: first.roster, oldSources: first.sources, new: desktop, source: "desktop", at: t1,
+                                        carriesLeave: true, carriedKinds: RosterMerger.leaveKinds(desktop, matcher: m), matcher: m)
+        XCTAssertEqual(second.roster["甲"]?[day], "请假")
+        XCTAssertEqual(second.roster["乙"]?[day], "出差")
+        XCTAssertNil(second.roster["丙"]?[day])
+        XCTAssertEqual(second.edits.map(\.name), ["丙"])
+        XCTAssertEqual(RosterMerger.leaveKinds(of: "值班交接前", matcher: m), ["休息"])
+        XCTAssertEqual(RosterMerger.leaveKinds(of: "组A", matcher: m), [])
+    }
+}

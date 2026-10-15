@@ -147,7 +147,9 @@ public enum JSONScheduleExtractor {
         var best: [DayKey: String] = [:]
         for table in tables(in: json) {
             let entries = extract(table, parser: parser, dates: dates, matcher: matcher)
-            if entries.count > best.count { best = entries }
+            if entries.count > best.count
+                || (entries.count == best.count && !entries.isEmpty && entries.sorted { $0.key < $1.key }.description
+                    < best.sorted { $0.key < $1.key }.description) { best = entries }
         }
         return best
     }
@@ -269,10 +271,15 @@ public enum JSONScheduleExtractor {
         guard let dateKey = dateKey(in: rows, dates: dates) else { return [:] }
 
         // 2. 多人数据：找出包含自己名字的字段，只保留自己的行
-        let personKey = keys.filter { $0 != dateKey }.sorted().first { k in rows.contains { $0[k].map(parser.isMe) ?? false } }
+        let personKey = keys.filter { $0 != dateKey && !$0.lowercased().contains("flag") }
+            .map { k in (k, rows.filter { $0[k].map(parser.isMe) ?? false }.count) }
+            .filter { $0.1 > 0 }
+            .max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
         // 我的名字出现在「组A」「telemetry」这种岗位列里：这是全员排班表（每个岗位一列、格子里是人名），不是「我的班」。
         // 从这里读会把同一行别的岗位上的同事名字当成我的班（全员排班另有地方读）
         if let personKey, isPostColumn(personKey, matcher: matcher) { return [:] }
+        // 没认出我、却有好几个岗位列（组A、组B、遥测……）：也是全员排班表
+        if personKey == nil, keys.filter({ isPostColumn($0, matcher: matcher) }).count >= 2 { return [:] }
         let mine = personKey.map { k in rows.filter { $0[k].map(parser.isMe) ?? false } } ?? rows
 
         // 没认出自己、又是每天好几条的多人数据：认不准，放弃
@@ -339,15 +346,16 @@ public enum APIDiscovery {
     public static func find(in captured: [CapturedRequest], preferred: String?, aliases: [String],
                             matcher: ShiftMatcher, reference: DayKey) -> Found? {
         let ok = captured.filter { (200..<300).contains($0.status) }
-        let candidates = preferred.flatMap { sig in
-            let same = ok.filter { $0.signature == sig }
-            return same.isEmpty ? nil : same
-        } ?? ok
-        var best: Found?
-        for request in candidates {
-            let entries = JSONScheduleExtractor.extract(request.body, aliases: aliases, matcher: matcher, reference: reference)
-            if entries.count > (best?.entries.count ?? 0) { best = Found(request: request, entries: entries) }
+        func best(_ candidates: [CapturedRequest]) -> Found? {
+            var best: Found?
+            for request in candidates {
+                let entries = JSONScheduleExtractor.extract(request.body, aliases: aliases, matcher: matcher, reference: reference)
+                if entries.count > (best?.entries.count ?? 0) { best = Found(request: request, entries: entries) }
+            }
+            return best
         }
-        return best
+        // 上次认出的接口这次读不出我的班（网站改了、或者上次认错了）：在所有请求里重新找
+        if let sig = preferred, let found = best(ok.filter { $0.signature == sig }) { return found }
+        return best(ok)
     }
 }

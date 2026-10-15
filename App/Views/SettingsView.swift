@@ -260,6 +260,8 @@ struct SettingsView: View {
             Toggle("同步到 iPhone 日历", isOn: Binding(
                 get: { store.settings.calendarSync },
                 set: { on in
+                    // 演示的虚构排班不写进手机日历
+                    guard !AppStore.isDemo else { store.settings.calendarSync = on; return }
                     Task {
                         if on {
                             guard await CalendarSync.requestAccess() else {
@@ -431,9 +433,12 @@ struct SettingsView: View {
                 Toggle("每天的提醒也发到微信", isOn: $store.settings.weChatDaily)
                 Toggle("排班变动也发到微信", isOn: $store.settings.weChatChanges)
                 Toggle("同事的排班变动、网站公告也发到微信", isOn: $store.settings.weChatTeam)
-                Toggle("每月 1 号发上个月的工作量月报", isOn: $store.settings.monthlyReport)
-                if store.role != .user {
-                    Toggle("每周一发上周的管理摘要", isOn: $store.settings.weeklyDigest)
+                // 月报、管理摘要里都是同事的名字：跟着上面这个开关
+                if store.settings.weChatTeam {
+                    Toggle("每月 1 号发上个月的工作量月报", isOn: $store.settings.monthlyReport)
+                    if store.role != .user {
+                        Toggle("每周一发上周的管理摘要", isOn: $store.settings.weeklyDigest)
+                    }
                 }
                 Button {
                     sendingWeChatTest = true
@@ -476,11 +481,15 @@ struct SettingsView: View {
             } label: {
                 Label("① 登录值班网站，打开排班页面", systemImage: "globe")
             }
-            TextField("② 排班页面网址（在网页里点「设为同步地址」自动填入）", text: $store.settings.sourceURL)
+            DraftTextField("② 排班页面网址（在网页里点「设为同步地址」自动填入）", value: store.settings.sourceURL) {
+                store.settings.sourceURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            TextField("值班网站账号", text: $store.settings.sourceUsername)
+            DraftTextField("值班网站账号", value: store.settings.sourceUsername) {
+                store.settings.sourceUsername = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             SecureField("值班网站密码（保存在钥匙串）", text: $password)
@@ -546,72 +555,71 @@ struct ShiftTypesView: View {
 
     var body: some View {
         List {
-            Section {
-                ForEach($store.settings.shiftTypes) { $type in
-                    NavigationLink {
-                        ShiftTypeEditor(type: $type)
-                    } label: {
-                        HStack {
-                            Image(systemName: type.symbol).font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color(hex: type.colorHex)).frame(width: 20)
-                            Text(type.name)
-                            Spacer()
-                            Text((type.keywords + type.codes).joined(separator: " "))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+            Group {
+                Section {
+                    ForEach($store.settings.shiftTypes) { $type in
+                        NavigationLink {
+                            ShiftTypeEditor(type: $type)
+                        } label: {
+                            HStack {
+                                Image(systemName: type.symbol).font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Color(hex: type.colorHex)).frame(width: 20)
+                                Text(type.name)
+                                Spacer()
+                                Text((type.keywords + type.codes).joined(separator: " "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                     }
+                    .onDelete { store.settings.shiftTypes.remove(atOffsets: $0) }
+                    .onMove { store.settings.shiftTypes.move(fromOffsets: $0, toOffset: $1) }
+                } footer: {
+                    Text("排班表里的文字只要包含「关键字」（或完全等于「代码」）就会显示成对应的班次和颜色。")
                 }
-                .onDelete { store.settings.shiftTypes.remove(atOffsets: $0) }
-                .onMove { store.settings.shiftTypes.move(fromOffsets: $0, toOffset: $1) }
-            } footer: {
-                Text("排班表里的文字只要包含「关键字」（或完全等于「代码」）就会显示成对应的班次和颜色。")
+                Section {
+                    Button("添加班次类型") {
+                        store.settings.shiftTypes.append(ShiftType(name: "新班次", emoji: "📌", colorHex: "#8E8E93"))
+                    }
+                    ConfirmButton(title: "恢复默认", message: "自己加的、改过的班次类型都会改回默认。", role: nil) {
+                        store.settings.shiftTypes = ShiftType.defaults
+                    }
+                }
             }
-            Section {
-                Button("添加班次类型") {
-                    store.settings.shiftTypes.append(ShiftType(name: "新班次", emoji: "📌", colorHex: "#8E8E93"))
-                }
-                ConfirmButton(title: "恢复默认", message: "自己加的、改过的班次类型都会改回默认。", role: nil) {
-                    store.settings.shiftTypes = ShiftType.defaults
-                }
-            }
+            // 只读时按钮、输入框不能用，但页面照样能滚动（整个列表 disabled 会连滚动都禁掉）
+            .disabled(!store.canEdit)
         }
         .appList()
         .adminOnly()
         .navigationTitle("班次类型")
-        .toolbar { EditButton() }
         // 工具栏按钮也只有管理员能用
-        .disabled(!store.canEdit)
+        .toolbar { EditButton().disabled(!store.canEdit) }
     }
 }
 
 private struct ShiftTypeEditor: View {
     @Binding var type: ShiftType
-    @State private var keywords = ""
-    @State private var codes = ""
 
     var body: some View {
         Form {
             Section("名称") {
-                TextField("名称", text: $type.name)
-                TextField("图标（emoji）", text: $type.emoji)
+                DraftTextField("名称", value: type.name) { type.name = $0 }
+                DraftTextField("图标（emoji）", value: type.emoji) { type.emoji = $0 }
                 ColorPicker("颜色", selection: Binding(get: { Color(hex: type.colorHex) },
                                                      set: { type.colorHex = $0.hexString }),
                             supportsOpacity: false)
             }
             Section {
-                TextField("例如：白, 早, day", text: $keywords)
-                    .onChange(of: keywords) { type.keywords = Self.split($0) }
+                DraftTextField("例如：白, 早, day", value: type.keywords.joined(separator: ", ")) { type.keywords = Self.split($0) }
             } header: {
                 Text("关键字")
             } footer: {
                 Text("排班文字包含任意一个就算这个班次。")
             }
             Section {
-                TextField("例如：D, A", text: $codes)
+                DraftTextField("例如：D, A", value: type.codes.joined(separator: ", ")) { type.codes = Self.split($0) }
                     .textInputAutocapitalization(.characters)
-                    .onChange(of: codes) { type.codes = Self.split($0) }
             } header: {
                 Text("代码")
             } footer: {
@@ -620,10 +628,6 @@ private struct ShiftTypeEditor: View {
         }
         .appList()
         .navigationTitle(type.name)
-        .onAppear {
-            keywords = type.keywords.joined(separator: ", ")
-            codes = type.codes.joined(separator: ", ")
-        }
     }
 
     static func split(_ s: String) -> [String] {
@@ -653,82 +657,88 @@ struct GroupNotesView: View {
 
     var body: some View {
         Form {
-            Section {
-                LabeledContent("上次读到", value: store.settings.lastDesktopNotesFetch
-                    .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "还没有")
-                if let message = store.settings.desktopNotesMessage {
-                    LabeledContent("最近结果", value: message)
-                }
-                if let message = store.settings.desktopRosterMessage {
-                    LabeledContent("全员排班", value: message)
-                }
-                Button {
-                    reading = true
-                    Task {
-                        await store.readDesktopNotes()
-                        reading = false
-                    }
-                } label: {
-                    HStack {
-                        Text("现在从电脑版网页读取")
-                        if reading || store.isReadingDesktop { Spacer(); DSSpinner() }
-                    }
-                }
-                .disabled(reading || store.isReadingDesktop || !store.canSync)
-                Button("自己打开电脑版网页读取") { browsing = true }
-                    .disabled(!store.canSync)
-                TextField(SyncService.desktopDutyURL(from: store.settings.sourceURL)?.absoluteString ?? "电脑版「值班查看」网址",
-                          text: $store.settings.desktopNotesURL)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.footnote)
-                if let text = store.desktopPageText {
-                    NavigationLink("查看 App 读到的页面内容") {
-                        ScrollView {
-                            Text(text)
-                                .font(.footnote.monospaced())
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                        }
-                        .appList()
-                        .navigationTitle("读到的页面")
-                    }
-                }
-            } header: {
-                Text("电脑版网页（优先）")
-            } footer: {
-                Text("每天第一次打开 App 同步时，自动用电脑版打开网站「值班查看」，读上面每组该干什么。读到的内容优先显示；网页上没有的组，才用下面自己填写的。\n自动读不到时，点「自己打开电脑版网页读取」，在网页里打开「值班查看」后点「读取本页」，App 会记住这个网址，以后每天自动从这里读。网址框留空就用同步网址的 #/duty。")
-            }
-            ForEach(groups, id: \.self) { group in
-                let desktop = store.settings.desktopGroupNotes[group]
+            Group {
                 Section {
-                    if let desktop {
-                        Text(desktop)
-                            .font(.subheadline)
-                            .textSelection(.enabled)
+                    LabeledContent("上次读到", value: store.settings.lastDesktopNotesFetch
+                        .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "还没有")
+                    if let message = store.settings.desktopNotesMessage {
+                        LabeledContent("最近结果", value: message)
                     }
-                    TextField(desktop == nil ? (store.settings.autoGroupNotes[group] ?? "例如：负责设备巡检和日志记录")
-                                             : "备用：电脑版读不到时显示",
-                              text: Binding(
-                                get: { store.settings.manualGroupNotes[group] ?? "" },
-                                set: { store.settings.manualGroupNotes[group] = $0.isEmpty ? nil : $0 }),
-                              axis: .vertical)
-                        .lineLimit(2...6)
-                        .foregroundStyle(desktop == nil ? Color.primary : Color.secondary)
+                    if let message = store.settings.desktopRosterMessage {
+                        LabeledContent("全员排班", value: message)
+                    }
+                    Button {
+                        reading = true
+                        Task {
+                            await store.readDesktopNotes()
+                            reading = false
+                        }
+                    } label: {
+                        HStack {
+                            Text("现在从电脑版网页读取")
+                            if reading || store.isReadingDesktop { Spacer(); DSSpinner() }
+                        }
+                    }
+                    .disabled(reading || store.isReadingDesktop || !store.canSync)
+                    Button("自己打开电脑版网页读取") { browsing = true }
+                        .disabled(!store.canSync)
+                    DraftTextField(SyncService.desktopDutyURL(from: store.settings.sourceURL)?.absoluteString ?? "电脑版「值班查看」网址",
+                                   value: store.settings.desktopNotesURL) {
+                        store.settings.desktopNotesURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.footnote)
+                    if let text = store.desktopPageText {
+                        NavigationLink("查看 App 读到的页面内容") {
+                            ScrollView {
+                                Text(text)
+                                    .font(.footnote.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding()
+                            }
+                            .appList()
+                            .navigationTitle("读到的页面")
+                        }
+                    }
                 } header: {
-                    Text(group)
+                    Text("电脑版网页（优先）")
                 } footer: {
-                    if desktop != nil {
-                        Text("来自电脑版网页")
-                    } else if store.settings.manualGroupNotes[group] != nil {
-                        Text("自己填写（电脑版网页上没读到这个组）")
-                    } else if store.settings.autoGroupNotes[group] != nil {
-                        Text("从其它页面读到")
+                    Text("每天第一次打开 App 同步时，自动用电脑版打开网站「值班查看」，读上面每组该干什么。读到的内容优先显示；网页上没有的组，才用下面自己填写的。\n自动读不到时，点「自己打开电脑版网页读取」，在网页里打开「值班查看」后点「读取本页」，App 会记住这个网址，以后每天自动从这里读。网址框留空就用同步网址的 #/duty。")
+                }
+                ForEach(groups, id: \.self) { group in
+                    let desktop = store.settings.desktopGroupNotes[group]
+                    Section {
+                        if let desktop {
+                            Text(desktop)
+                                .font(.subheadline)
+                                .textSelection(.enabled)
+                        }
+                        DraftTextField(desktop == nil ? (store.settings.autoGroupNotes[group] ?? "例如：负责设备巡检和日志记录")
+                                                      : "备用：电脑版读不到时显示",
+                                       value: store.settings.manualGroupNotes[group] ?? "", axis: .vertical) {
+                            let t = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                            store.settings.manualGroupNotes[group] = t.isEmpty ? nil : t
+                        }
+                            .lineLimit(2...6)
+                            .foregroundStyle(desktop == nil ? Color.primary : Color.secondary)
+                    } header: {
+                        Text(group)
+                    } footer: {
+                        if desktop != nil {
+                            Text("来自电脑版网页")
+                        } else if store.settings.manualGroupNotes[group] != nil {
+                            Text("自己填写（电脑版网页上没读到这个组）")
+                        } else if store.settings.autoGroupNotes[group] != nil {
+                            Text("从其它页面读到")
+                        }
                     }
                 }
             }
+            // 只读时按钮、输入框不能用，但页面照样能滚动（整个列表 disabled 会连滚动都禁掉）
+            .disabled(!store.canEdit)
         }
         .appList()
         .adminOnly()
@@ -739,10 +749,10 @@ struct GroupNotesView: View {
                     pasteText = UIPasteboard.general.string ?? ""
                     pasting = true
                 }
+                // 工具栏按钮也只有管理员能用
+                .disabled(!store.canEdit)
             }
         }
-        // 工具栏按钮也只有管理员能用
-        .disabled(!store.canEdit)
         .fullScreenCover(isPresented: $browsing) { DesktopNotesBrowser() }
         .sheet(isPresented: $pasting) {
             NavigationStack {

@@ -47,7 +47,7 @@ public enum RestBalanceHistory {
     public static func looksLikeSnapshot(_ byDay: [String: [DayKey: Int]]) -> Bool {
         let people = byDay.values.filter { days in
             guard let lo = days.keys.min(), let hi = days.keys.max() else { return false }
-            return hi.adding(days: -14, calendar: .current) >= lo
+            return hi.adding(days: -14, calendar: .dayMath) >= lo
         }
         guard people.count >= 3 else { return false }
         return people.allSatisfy { Set($0.values).count == 1 }

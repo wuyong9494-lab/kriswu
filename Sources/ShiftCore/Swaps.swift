@@ -127,8 +127,11 @@ public enum SwapFinder {
             let raw = history[day]
             // 那天要有空：没排岗位，也不是请假、出差
             guard free(raw), !(raw ?? "").contains("出差") else { continue }
-            // 前一天值了遥测的在调休，不打扰
-            guard !isDutyDay(history[day.adding(days: -1, calendar: calendar)]) else { continue }
+            // 还在值完遥测后的休息里（休两三天），不打扰
+            guard !(1...3).contains(where: { back in
+                let d = day.adding(days: -back, calendar: calendar)
+                return isDutyDay(history[d]) && SchedulePatterns.expectedRest(after: d, calendar: calendar).contains(day)
+            }) else { continue }
             let all = history.values.map { matcher.displayName($0) }
             // 遥测找值过遥测的人，组别找轮过组别的人
             if wantDuty && !all.contains(where: WorkloadCounter.isDuty) { continue }

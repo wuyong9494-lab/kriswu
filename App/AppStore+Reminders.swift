@@ -90,6 +90,10 @@ extension AppStore {
 
     /// 把昨天到未来一个月的分工写给主屏幕小组件。
     func updateWidget() {
+        // 演示的虚构数据不写给小组件（手机上原来的小组件内容留着）
+        guard !Self.isDemo else { return }
+        // 小组件上勾过、App 还没合并的先合并，免得后台刷新时用旧的勾选把小组件上的勾冲掉
+        applyPendingTaskToggles()
         let today = DayKey.today
         let days = (-1...31).compactMap { offset -> WidgetDay? in
             let day = today.adding(days: offset)
@@ -103,7 +107,9 @@ extension AppStore {
         }
         // 下次遥测：和今天页同一个结果（网站排好的，或者按顺序推算的），小组件不再自己另算
         let turn = myDutyTurn()
-        WidgetStore.save(WidgetSnapshot(days: days, updated: Date(), tasks: widgetTasks(for: today),
+        // 明天的清单也写上：过了零点 App 还没打开时，小组件直接显示新一天的清单
+        WidgetStore.save(WidgetSnapshot(days: days, updated: Date(),
+                                        tasks: widgetTasks(for: today) + widgetTasks(for: today.adding(days: 1)),
                                         nextDuty: turn?.day?.description, nextDutyPredicted: turn.map { !$0.scheduled },
                                         lastSync: settings.lastSync,
                                         restBalance: myRosterName.flatMap { settings.restBalance[$0] },

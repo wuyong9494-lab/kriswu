@@ -4,6 +4,8 @@ struct TodayView: View {
     @EnvironmentObject private var store: AppStore
     @State private var editing: DayKey?
     @State private var searching = false
+    /// 红色横幅上点了「重新登录」：登录页挂在这一页上，同步成功、横幅消失时登录页不会跟着被关掉
+    @State private var loggingIn = false
 
     var body: some View {
         if store.role == .manager {
@@ -28,7 +30,7 @@ struct TodayView: View {
                                 .card(tint: DS.Palette.warning)
                         }
                         if store.syncLooksBroken {
-                            StaleSyncBanner()
+                            StaleSyncBanner { loggingIn = true }
                         }
                         if let warning = store.settings.syncHealthWarning {
                             VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -105,6 +107,7 @@ struct TodayView: View {
             }
             .sheet(item: $editing) { DayEditor(day: $0) }
             .sheet(isPresented: $searching) { MemberSearchView() }
+            .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
             .task(id: "\(store.dataRevision)-\(DayKey.today)") { await store.warmRotation() }
         }
@@ -326,8 +329,13 @@ private struct MonthStatCard: View {
                         Text("遥测").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 0) {
-                        CountUpText(value: rest ?? 0, font: DS.Font.title)
-                            .foregroundStyle(DS.Palette.vivid[4])
+                        // 网站上还没读到我的待休：显示「—」，不显示成 0 天
+                        if let rest {
+                            CountUpText(value: rest, font: DS.Font.title)
+                                .foregroundStyle(DS.Palette.vivid[4])
+                        } else {
+                            Text("—").font(DS.Font.title).foregroundStyle(.tertiary)
+                        }
                         Text("待休").font(DS.Font.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -414,6 +422,8 @@ private struct UpcomingList: View {
                         }
                     }
                     .padding(.vertical, 8)
+                    // 点一行中间空白处也算
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 if i < count - 1 { Divider() }
@@ -426,7 +436,7 @@ private struct UpcomingList: View {
 /// 超过一天没同步成功：红色提示，避免照着旧排班上班。
 private struct StaleSyncBanner: View {
     @EnvironmentObject private var store: AppStore
-    @State private var loggingIn = false
+    let onLogin: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -439,7 +449,7 @@ private struct StaleSyncBanner: View {
             // 直接给办法：登录过期就重新登录，其它先重试，再不行看原因
             HStack(spacing: DS.Space.s) {
                 if store.settings.syncState == .needsLogin {
-                    Button { loggingIn = true } label: { Label("重新登录", systemImage: "person.badge.key") }
+                    Button(action: onLogin) { Label("重新登录", systemImage: "person.badge.key") }
                 }
                 Button {
                     Task {
@@ -457,7 +467,6 @@ private struct StaleSyncBanner: View {
             .buttonStyle(.bordered)
             .tint(.white)
         }
-        .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -573,6 +582,7 @@ private struct FavoritesCard: View {
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
                         .padding(.vertical, 8)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     if i < store.settings.favorites.count - 1 { Divider() }

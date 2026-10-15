@@ -282,6 +282,8 @@ private struct MonthSummary: View {
 struct DayEditor: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    /// 工作留痕解锁、新加了记录时这页跟着刷新
+    @ObservedObject private var log = WorkLogStore.shared
     let day: DayKey
     @State private var custom = ""
 
@@ -299,12 +301,11 @@ struct DayEditor: View {
                     }
                 }
                 Section("我的备注") {
-                    TextField("比如：带资料、换班已说好", text: Binding(
-                        get: { store.settings.dayMemos[day.description] ?? "" },
-                        set: { text in
-                            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                            store.settings.dayMemos[day.description] = t.isEmpty ? nil : text
-                        }), axis: .vertical)
+                    DraftTextField("比如：带资料、换班已说好", value: store.settings.dayMemos[day.description] ?? "",
+                                   axis: .vertical) { text in
+                        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        store.settings.dayMemos[day.description] = t.isEmpty ? nil : t
+                    }
                 }
                 // 这一天全员分工直接看（不用再点进去）
                 let roster = store.dayRoster(day)
@@ -315,8 +316,8 @@ struct DayEditor: View {
                         }
                     }
                 }
-                let logs = WorkLogStore.shared.entries.filter { DayKey(date: $0.date, calendar: .app) == day }
-                if !logs.isEmpty && !(store.settings.workLogLock && !WorkLogStore.shared.unlocked) {
+                let logs = log.entries.filter { DayKey(date: $0.date, calendar: .app) == day }
+                if !logs.isEmpty && !(store.settings.workLogLock && !log.unlocked) {
                     Section("这天的工作留痕") {
                         ForEach(Array(logs.prefix(5))) { entry in
                             NavigationLink { WorkLogDetailView(entry: entry) } label: { WorkLogRow(entry: entry) }

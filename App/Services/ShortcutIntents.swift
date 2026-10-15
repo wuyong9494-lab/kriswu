@@ -27,6 +27,8 @@ struct SyncScheduleIntent: AppIntent {
         await store.sync(full: false, source: "快捷指令")
         await store.rescheduleNotifications()
         store.autoBackupIfNeeded()
+        // 快捷指令跑完 App 可能马上被系统收起：同步结果当场存好，不等延迟保存
+        store.flushSave(wait: true)
         return .result(dialog: "\(store.settings.lastSyncMessage ?? "已同步")")
     }
 }
@@ -50,6 +52,8 @@ struct SendWeChatReminderIntent: AppIntent {
         } else {
             text = await AppStore.shared.sendWeChatReminder(morning: day == .today)
         }
+        // 「已发」记号当场存好，App 之后运行时不会再补发同一条
+        AppStore.shared.flushSave(wait: true)
         return .result(dialog: "\(text)")
     }
 }

@@ -20,6 +20,8 @@ enum Keychain {
 
     static func set(_ value: String, for key: Key) {
         SecItemDelete(query(key) as CFDictionary)
+        // 「网站」页一直开着：改了密码要告诉它，自动登录才不会还用旧密码
+        defer { NotificationCenter.default.post(name: .keychainChanged, object: nil) }
         guard !value.isEmpty else { return }
         var item = query(key)
         item[kSecValueData as String] = Data(value.utf8)

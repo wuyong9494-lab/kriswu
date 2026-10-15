@@ -56,6 +56,10 @@ struct SiteView: View {
             .onChange(of: store.settings.sourceUsername) { user in
                 model.credentials = (user, Keychain.get(.sourcePassword) ?? "")
             }
+            // 这一页切走后也一直留着（onAppear 不会再来）：设置里改了密码马上换上
+            .onReceive(NotificationCenter.default.publisher(for: .keychainChanged)) { _ in
+                model.credentials = (store.settings.sourceUsername, Keychain.get(.sourcePassword) ?? "")
+            }
         }
     }
 }

@@ -22,66 +22,70 @@ struct ImportView: View {
 
     var body: some View {
         Form {
-            Section {
-                TextEditor(text: $text)
-                    .font(.system(.footnote, design: .monospaced))
-                    .frame(minHeight: 160)
-                HStack {
-                    Button {
-                        if let s = UIPasteboard.general.string { text = s }
-                    } label: { Label("粘贴", systemImage: "doc.on.clipboard") }
-                    Spacer()
-                    Button { showingFilePicker = true } label: { Label("选择文件", systemImage: "folder") }
+            Group {
+                Section {
+                    TextEditor(text: $text)
+                        .font(.system(.footnote, design: .monospaced))
+                        .frame(minHeight: 160)
+                    HStack {
+                        Button {
+                            if let s = UIPasteboard.general.string { text = s }
+                        } label: { Label("粘贴", systemImage: "doc.on.clipboard") }
+                        Spacer()
+                        Button { showingFilePicker = true } label: { Label("选择文件", systemImage: "folder") }
+                    }
+                    .buttonStyle(.borderless)
+                    if let fileError {
+                        Text(fileError).foregroundStyle(.red).font(.footnote)
+                    }
+                } header: {
+                    Text("排班内容")
+                } footer: {
+                    Text("""
+                    支持：从 Excel/WPS 复制的表格、CSV、日历 .ics、JSON，或者直接手打，例如：
+                    10/9 白班
+                    10/10 夜班
+                    多人排班表会自动找出「\(store.settings.aliases.joined(separator: " / "))」那一行或那一列。
+                    """)
                 }
-                .buttonStyle(.borderless)
-                if let fileError {
-                    Text(fileError).foregroundStyle(.red).font(.footnote)
-                }
-            } header: {
-                Text("排班内容")
-            } footer: {
-                Text("""
-                支持：从 Excel/WPS 复制的表格、CSV、日历 .ics、JSON，或者直接手打，例如：
-                10/9 白班
-                10/10 夜班
-                多人排班表会自动找出「\(store.settings.aliases.joined(separator: " / "))」那一行或那一列。
-                """)
-            }
 
-            if let preview {
-                switch preview {
-                case .success(let result):
-                    Section {
-                        ForEach(result.entries.sorted { $0.key < $1.key }.prefix(62), id: \.key) { entry in
-                            HStack {
-                                Text(entry.key.dateText).foregroundStyle(.secondary)
-                                Spacer()
-                                let display = ShiftDisplay(raw: entry.value, matcher: store.matcher)
-                                ShiftLabel(display: display, fallback: entry.value)
+                if let preview {
+                    switch preview {
+                    case .success(let result):
+                        Section {
+                            ForEach(result.entries.sorted { $0.key < $1.key }.prefix(62), id: \.key) { entry in
+                                HStack {
+                                    Text(entry.key.dateText).foregroundStyle(.secondary)
+                                    Spacer()
+                                    let display = ShiftDisplay(raw: entry.value, matcher: store.matcher)
+                                    ShiftLabel(display: display, fallback: entry.value)
+                                }
+                            }
+                        } header: {
+                            Text("识别为「\(result.format.rawValue)」，共 \(result.entries.count) 天")
+                        } footer: {
+                            if let range = result.range {
+                                Text("导入后 \(range.lowerBound.dateText) 至 \(range.upperBound.dateText) 之间的旧排班会被替换。")
                             }
                         }
-                    } header: {
-                        Text("识别为「\(result.format.rawValue)」，共 \(result.entries.count) 天")
-                    } footer: {
-                        if let range = result.range {
-                            Text("导入后 \(range.lowerBound.dateText) 至 \(range.upperBound.dateText) 之间的旧排班会被替换。")
+                        Section {
+                            Button("导入") {
+                                store.apply(result)
+                                onImported?()
+                                dismiss()
+                            }
+                            .bold()
                         }
-                    }
-                    Section {
-                        Button("导入") {
-                            store.apply(result)
-                            onImported?()
-                            dismiss()
+                    case .failure(let error):
+                        Section("识别结果") {
+                            Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
                         }
-                        .bold()
-                    }
-                case .failure(let error):
-                    Section("识别结果") {
-                        Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
                     }
                 }
             }
+            // 只读时按钮、输入框不能用，但页面照样能滚动（整个列表 disabled 会连滚动都禁掉）
+            .disabled(!store.canEdit)
         }
         .appList()
         .adminOnly()

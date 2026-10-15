@@ -66,6 +66,7 @@ extension AppStore {
 
     /// 勾选变了：提醒不用重排，只刷新小组件和锁屏上的值班倒计时
     private func tasksChanged() {
+        guard !Self.isDemo else { return }
         updateWidget()
         DutyActivityManager.update(schedule: schedule, matcher: matcher, enabled: settings.liveActivity)
     }

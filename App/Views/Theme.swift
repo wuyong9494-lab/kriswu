@@ -852,13 +852,13 @@ struct ReadOnlyNotice: View {
 }
 
 
-/// 只有管理员能操作的页面：其他人看得到内容，但按钮、输入框都不能用，顶部提示只读
+/// 只有管理员能操作的页面：顶部提示只读。
+/// 按钮、输入框由各页在列表里面自己 disabled（整个列表 disabled 会连滚动都禁掉，长页面看不到下面）
 struct AdminOnlyModifier: ViewModifier {
     @EnvironmentObject private var store: AppStore
 
     func body(content: Content) -> some View {
         content
-            .disabled(!store.canEdit)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !store.canEdit {
                     ReadOnlyNotice()
@@ -970,5 +970,40 @@ enum Period {
         let weekday = Calendar.app.component(.weekday, from: day.date(calendar: .app, hour: 12))   // 1 = 周日
         let monday = day.adding(days: -((weekday + 5) % 7) + 7 * offset)
         return (0..<7).map { monday.adding(days: $0) }
+    }
+}
+
+
+/// 输入框先改草稿，按回车、离开输入框、离开页面或 App 退到后台时才写回去：
+/// 写回设置会重排提醒、刷新小组件（班次类型还要重算整张排班），不能每打一个字就做一遍
+struct DraftTextField: View {
+    let title: String
+    let value: String
+    var axis: Axis = .horizontal
+    let commit: (String) -> Void
+    @State private var draft: String?
+    @FocusState private var focused: Bool
+    @Environment(\.scenePhase) private var scenePhase
+
+    init(_ title: String, value: String, axis: Axis = .horizontal, commit: @escaping (String) -> Void) {
+        self.title = title
+        self.value = value
+        self.axis = axis
+        self.commit = commit
+    }
+
+    var body: some View {
+        TextField(title, text: Binding(get: { draft ?? value }, set: { draft = $0 }), axis: axis)
+            .focused($focused)
+            .onSubmit(save)
+            .onChange(of: focused) { if !$0 { save() } }
+            .onChange(of: scenePhase) { if $0 != .active { save() } }
+            .onDisappear(perform: save)
+    }
+
+    private func save() {
+        guard let text = draft else { return }
+        draft = nil
+        if text != value { commit(text) }
     }
 }
