@@ -114,7 +114,10 @@ final class AppStore: ObservableObject {
 
     private static func loadLog() -> [RosterEdit] {
         guard let data = try? Data(contentsOf: logURL) else { return [] }
-        return (try? JSONDecoder().decode([RosterEdit].self, from: data)) ?? []
+        let log = (try? JSONDecoder().decode([RosterEdit].self, from: data)) ?? []
+        // 以前把只是写法不同的（「值班交班前」→「值班交接前」）也记成了变动：读出来时去掉
+        let matcher = ShiftMatcher(types: ShiftType.defaults)
+        return log.filter { !RosterMerger.sameMeaning($0.old, $0.new, matcher: matcher) }
     }
 
     private func saveSourcesAndLog() {

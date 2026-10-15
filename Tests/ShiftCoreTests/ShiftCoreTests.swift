@@ -1909,6 +1909,22 @@ final class SystemLogicTests: XCTestCase {
         XCTAssertEqual(third.edits.map(\.name), ["甲"])
     }
 
+    func testMergerIgnoresWordingOnlyChanges() {
+        let t0 = Date(timeIntervalSince1970: 1_000), t1 = Date(timeIntervalSince1970: 2_000)
+        let old: Roster = ["甲": [d(15): "值班交班前"], "乙": [d(15): "休息"], "丙": [d(15): "组A+组E"], "丁": [d(15): "休息"]]
+        let first = RosterMerger.merge(old: [:], oldSources: [:], new: old, source: "desktop", at: t0, carriesLeave: true, matcher: m)
+        let new: Roster = ["甲": [d(15): "值班交接前"], "乙": [d(15): "值班交接前"], "丙": [d(15): "组E+组A"], "丁": [d(15): "调休"]]
+        let second = RosterMerger.merge(old: first.roster, oldSources: first.sources, new: new, source: "sync", at: t1,
+                                        carriesLeave: true, matcher: m)
+        // 写法不同、两种休息、先后顺序不同：存新的，不算变动；休息改调休是真的变了
+        XCTAssertEqual(second.roster["甲"]?[d(15)], "值班交接前")
+        XCTAssertEqual(second.edits.map(\.name), ["丁"])
+        XCTAssertTrue(RosterMerger.sameMeaning("值班交班前", "值班交接前", matcher: m))
+        XCTAssertTrue(RosterMerger.sameMeaning(nil, nil, matcher: m))
+        XCTAssertFalse(RosterMerger.sameMeaning("休息", nil, matcher: m))
+        XCTAssertFalse(RosterMerger.sameMeaning("遥测", "值班交接前", matcher: m))
+    }
+
     func testPublishPattern() {
         // 网站一般周五 15 点前后排下周（2026-10-16、10-23 是周五）
         let f = DateFormatter()

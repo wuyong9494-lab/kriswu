@@ -54,6 +54,22 @@ public enum RosterMerger {
         roster.values.contains { $0.values.contains { RosterExtractor.isLeave($0, matcher: matcher) } }
     }
 
+    /// 是不是同一回事、只是写法或读取方式不同（不记成变动、不提醒）：
+    /// 电脑版写「值班交班前」、数据接口是「值班交接前」；有的页面把值完遥测后那天放在「休息」、有的放在「值班交接前」；
+    /// 一天几个岗位只是先后顺序不同（「组A+组E」和「组E+组A」）
+    public static func sameMeaning(_ a: String?, _ b: String?, matcher: ShiftMatcher) -> Bool {
+        guard let a, let b else { return a == b }
+        func key(_ raw: String) -> String {
+            (WorkloadCounter.effective(raw, matcher: matcher) ?? raw).split(separator: "+")
+                .map { part -> String in
+                    let name = matcher.displayName(String(part).trimmingCharacters(in: .whitespaces))
+                    return name == WorkloadCounter.handoverRest ? "休息" : name
+                }
+                .sorted().joined(separator: "+")
+        }
+        return key(a) == key(b)
+    }
+
     /// 把这次读到的合并进已保存的：读到的日子整天以新的为准；
     /// 但这种读取方式不带休息列（carriesLeave = false）时，保留之前读到的休息、请假（来源也保留）。
     public static func merge(old: Roster, oldSources: RosterSources, new: Roster, source: String, at: Date,
@@ -81,7 +97,8 @@ public enum RosterMerger {
                 }
                 if final != oldValue {
                     if let final { roster[name, default: [:]][day] = final } else { roster[name]?[day] = nil }
-                    if knownDays.contains(day) {
+                    // 只是写法不同（「值班交班前」和「值班交接前」、两种休息）：存新的，不算变动
+                    if knownDays.contains(day), !sameMeaning(oldValue, final, matcher: matcher) {
                         edits.append(RosterEdit(at: at, day: day, name: name, old: oldValue, new: final, source: source))
                     }
                 }
