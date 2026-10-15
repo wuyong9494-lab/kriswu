@@ -2052,3 +2052,40 @@ final class PolicyTests: XCTestCase {
         XCTAssertEqual(DigestText.noRestLines(["2026-10-11|甲|遥测", "2026-10-12|乙|组A"], from: d(12)), ["乙 10/12（组A）"])
     }
 }
+
+final class RotationExportTests: XCTestCase {
+    let m = ShiftMatcher(types: ShiftType.defaults)
+    let d = { (day: Int) in DayKey(year: 2026, month: 10, day: day) }   // 10/12 周一
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }
+
+    func testNamesBecomeCodes() throws {
+        let roster: Roster = ["张三": [d(12): "遥测", d(13): "休息"],
+                              "张三丰": [d(12): "组A", d(14): "组B（替张三）"],
+                              "李四": [d(13): "遥测"]]
+        let file = RotationExport.make(roster: roster, from: d(12), to: d(14), published: [d(12), d(13)], fixedDays: [d(13)],
+                                       people: ["李四": SiteAPI.Person(onDuty: true, telemetryWeekdays: [3, 1], category: "研发岗")],
+                                       restHistory: ["张三": [d(12): 3]], restNow: ["张三": 4],
+                                       me: "张三", matcher: m, calendar: cal, today: d(14))
+        let json = String(decoding: try XCTUnwrap(RotationExport.encode(file)), as: UTF8.self)
+        for name in ["张三", "李四", "张三丰"] { XCTAssertFalse(json.contains(name), name) }
+        // 按名字排好编号：张三 P01，张三丰 P02，李四 P03
+        XCTAssertEqual(file.people.map(\.code), ["P01", "P02", "P03"])
+        XCTAssertEqual(file.people.first { $0.me }?.code, "P01")
+        XCTAssertEqual(file.people[0].restNow, 4)
+        XCTAssertEqual(file.people[0].restHistory, ["2026-10-12": 3])
+        XCTAssertEqual(file.people[2].telemetryWeekdays, [1, 3])
+        XCTAssertEqual(file.people[2].category, "研发岗")
+        XCTAssertEqual(file.days.map(\.date), ["2026-10-12", "2026-10-13", "2026-10-14"])
+        XCTAssertEqual(file.days[0].weekday, 1)
+        XCTAssertEqual(file.days[0].posts, ["P01": "遥测", "P02": "组A"])
+        XCTAssertTrue(file.days[1].fixedTelemetry)
+        XCTAssertFalse(file.days[2].published)
+        // 岗位里带的人名也换成代号（长名字先换）
+        XCTAssertEqual(file.days[2].posts["P02"], "组B（替P01）")
+        XCTAssertEqual(try JSONDecoder().decode(RotationExport.File.self, from: XCTUnwrap(RotationExport.encode(file))), file)
+    }
+}

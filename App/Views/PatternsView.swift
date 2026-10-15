@@ -5,6 +5,7 @@ struct SchedulePatternsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var months = 6
     @State private var result: Result?
+    @State private var sharing: ShareBundle?
 
     struct Result {
         var duty: SchedulePatterns.Rotation?
@@ -38,6 +39,7 @@ struct SchedulePatternsView: View {
                     warningSection
                     siteRulesSection
                     dutySection(result.duty, title: "遥测轮转", icon: "antenna.radiowaves.left.and.right")
+                    if store.canEdit { exportSection }
                     holidaySection(result.holiday)
                     restSection(result.rest)
                     groupSection(result.groups)
@@ -48,6 +50,7 @@ struct SchedulePatternsView: View {
                 Section { SkeletonRows(rows: 5) }
             }
         }
+        .sheet(item: $sharing) { ActivityView(items: $0.urls) }
         .appList()
         .navigationTitle("排班规律")
         .navigationBarTitleDisplayMode(.inline)
@@ -78,6 +81,38 @@ struct SchedulePatternsView: View {
                 days: days.count)
         }.value
         result = computed
+    }
+
+    /// 管理员：把推算遥测要用的数据导出来（名字换成代号），发给开发者找出网站到底怎么排
+    private var exportSection: some View {
+        Section {
+            Button {
+                if let url = exportFile() {
+                    sharing = ShareBundle(urls: [url])
+                } else {
+                    ToastCenter.shared.show("没能导出", style: .error)
+                }
+            } label: {
+                Label("导出推算数据（名字换成代号）", systemImage: "square.and.arrow.up")
+            }
+        } footer: {
+            Text("导出最近一年多的全员排班、网站人员设置和待休记录。所有名字都换成 P01、P02 这样的代号，不含组别说明、公告、网址和账号。发给开发者，用来找出网站怎么排遥测、把推算改准。")
+        }
+    }
+
+    private func exportFile() -> URL? {
+        let today = DayKey.today
+        let rest = store.settings.restHistory.mapValues { points in
+            Dictionary(points.map { p in (p.day, p.value) }, uniquingKeysWith: { _, last in last })
+        }
+        let file = RotationExport.make(roster: store.roster, from: today.adding(days: -400),
+                                       to: max(store.publishedDays.max() ?? today, today),
+                                       published: store.publishedDays, fixedDays: store.fixedTelemetryDaySet,
+                                       people: store.settings.sitePeople, restHistory: rest, restNow: store.settings.restBalance,
+                                       me: store.myRosterName, matcher: store.matcher, calendar: .app, today: today)
+        guard let data = RotationExport.encode(file) else { return nil }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("遥测推算数据-\(today).json")
+        return (try? data.write(to: url, options: .atomic)) != nil ? url : nil
     }
 
     /// ①②③…（序号和名字不会被拆到两行）
