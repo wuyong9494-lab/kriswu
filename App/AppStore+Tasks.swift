@@ -68,7 +68,7 @@ extension AppStore {
     private func tasksChanged() {
         guard !Self.isDemo else { return }
         updateWidget()
-        DutyActivityManager.update(schedule: schedule, matcher: matcher, enabled: settings.liveActivity)
+        DutyActivityManager.update(schedule: mySchedule, matcher: matcher, enabled: settings.liveActivity)
     }
 
     /// 通知上点了「清单全部做完」

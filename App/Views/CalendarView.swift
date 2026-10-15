@@ -20,20 +20,30 @@ struct CalendarView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     header
-                    LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
-                        ForEach(weekdays, id: \.self) { w in
-                            Text(w).font(.caption).foregroundStyle(.secondary)
-                        }
-                        ForEach(0..<leadingBlanks, id: \.self) { i in
-                            Color.clear.frame(height: 64).id("blank-\(i)")
-                        }
-                        ForEach(days) { day in
-                            // 按钮（读屏会说「按钮」，也有按下效果）
-                            Button { Haptics.tap(); editing = day } label: {
-                                DayCell(day: day, isToday: day == DayKey.today)
+                    VStack(spacing: DS.Space.xs) {
+                        LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
+                            ForEach(weekdays, id: \.self) { w in
+                                Text(w).font(.caption).foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            ForEach(0..<leadingBlanks, id: \.self) { i in
+                                Color.clear.frame(height: 64).id("blank-\(i)")
+                            }
+                            ForEach(days) { day in
+                                // 按钮（读屏会说「按钮」，也有按下效果）
+                                Button { Haptics.tap(); editing = day } label: {
+                                    DayCell(day: day, isToday: day == DayKey.today)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
+                        // 格子最下面那行小字是什么：说清楚，免得以为是我的班
+                        HStack(spacing: 4) {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                            Text("最下面的小字：这天值遥测的同事。上面一行才是你的班，点一天看详细")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .card(padding: DS.Space.s)
                     .id("\(year)-\(month)")
@@ -60,7 +70,7 @@ struct CalendarView: View {
                             Label("分享 / 复制本月统计", systemImage: "square.and.arrow.up")
                         }
                         // 给家人：导出成日历文件，导入后他们的日历里就有我的班
-                        ShareLink(item: ScheduleICS(schedule: store.schedule, matcher: store.matcher),
+                        ShareLink(item: ScheduleICS(schedule: store.mySchedule, matcher: store.matcher),
                                   preview: SharePreview("我的排班.ics")) {
                             Label("导出日历文件（给家人）", systemImage: "calendar.badge.plus")
                         }
@@ -213,13 +223,19 @@ private struct DayCell: View {
             } else {
                 Spacer(minLength: 0)
             }
-            // 这天谁值遥测（全员排班里有、又不是我自己）
+            // 这天谁值遥测（全员排班里有、又不是我自己）：前面带遥测的图标，
+            // 不然光一个同事的名字，看着像是把同事的名字当成了我的班
             if !mineIsDuty, let duty = dutyNames {
-                Text(duty)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                HStack(spacing: 1) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 7, weight: .semibold))
+                    Text(duty)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("\(duty)值遥测")
             }
         }
         .frame(maxWidth: .infinity, minHeight: 76, maxHeight: 76)

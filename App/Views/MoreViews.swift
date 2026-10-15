@@ -276,7 +276,7 @@ struct LeavePlannerView: View {
 
     var body: some View {
         let from = DayKey(date: start, calendar: .app), to = DayKey(date: max(start, end), calendar: .app)
-        let plan = LeavePlanner.plan(from: from, to: to, mine: store.schedule, published: store.publishedDays,
+        let plan = LeavePlanner.plan(from: from, to: to, mine: store.mySchedule, published: store.publishedDays,
                                      matcher: store.matcher, calendar: .app)
         let rest = store.myRosterName.flatMap { store.settings.restBalance[$0] }
         List {

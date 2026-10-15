@@ -10,7 +10,7 @@ struct SwapHelperView: View {
 
     var body: some View {
         let myPost = store.shift(on: day) ?? ""
-        let list = SwapFinder.candidates(day: day, myPost: myPost, mine: store.schedule, roster: store.roster,
+        let list = SwapFinder.candidates(day: day, myPost: myPost, mine: store.mySchedule, roster: store.roster,
                                          records: store.settings.swapRecords, matcher: store.matcher,
                                          isMe: store.isMe, calendar: .app)
         List {

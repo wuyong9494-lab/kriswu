@@ -270,7 +270,7 @@ struct SettingsView: View {
                             }
                             calendarMessage = nil
                             store.settings.calendarSync = true
-                            CalendarSync.sync(store.schedule, matcher: store.matcher)
+                            CalendarSync.sync(store.mySchedule, matcher: store.matcher)
                         } else {
                             store.settings.calendarSync = false
                             CalendarSync.removeCalendar()

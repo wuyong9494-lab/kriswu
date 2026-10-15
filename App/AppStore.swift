@@ -406,7 +406,24 @@ final class AppStore: ObservableObject {
         ScheduleParser(aliases: settings.aliases, reference: .today, timeZone: .current)
     }
 
-    func shift(on day: DayKey) -> String? { schedule[day] }
+    func shift(on day: DayKey) -> String? { mySchedule[day] }
+
+    /// 看的、提醒用的「我的班」：「我的分工」接口里没有休息、值班交接前、调休、请假、出差这些，
+    /// 全员排班里我这天有这些就补上（以前日历上这些日子只剩一个点，像是我的信息没了）；
+    /// 「我的分工」还没取到的日子（以前的月份），全员排班里我的岗位也补上。比较变动、存档仍然只用 schedule
+    var mySchedule: [DayKey: String] {
+        let key = "\(dataRevision)-\(covered.count)"
+        if let cached = myScheduleCache, cached.key == key { return cached.value }
+        var s = schedule
+        if let me = myRosterName, let mine = roster[me] {
+            for (day, raw) in mine where s[day] == nil
+                && (RosterExtractor.isLeave(raw, matcher: matcher) || !covered.contains(day)) {
+                s[day] = raw
+            }
+        }
+        myScheduleCache = (key, s)
+        return s
+    }
 
     func setShift(_ value: String?, on day: DayKey) {
         guard canEdit else { ToastCenter.shared.show("只有管理员能修改排班", style: .error); return }
@@ -537,7 +554,9 @@ final class AppStore: ObservableObject {
     /// 这一天是否已经取到过排班结果（没排班也算）。
     /// 以后的日子，全员排班里还没人排组别、遥测（网站还没排到那天）时，不算取到了
     func isCovered(_ day: DayKey) -> Bool {
-        if schedule[day] != nil { return true }
+        if mySchedule[day] != nil { return true }
+        // 网站已经排了这天（全员排班里有人排了组别、遥测）、全员排班里也有我，却没给我排：就是没排班
+        if publishedDays.contains(day), myRosterName != nil { return true }
         guard covered.contains(day) else { return false }
         return day <= .today || roster.isEmpty || publishedDays.contains(day)
     }
@@ -1168,6 +1187,7 @@ final class AppStore: ObservableObject {
         return value
     }
     private var myNameCache: (key: String, value: String?)?
+    private var myScheduleCache: (key: String, value: [DayKey: String])?
 
     /// 我的待休攒到设定的天数时提醒一次，之后再涨才再提醒；休掉了就重新计
     func notifyRestIfNeeded() async {

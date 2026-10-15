@@ -22,7 +22,7 @@ extension AppStore {
 
     /// 提醒用的排班：已经取到数据、但没给我排班的日子补上「未排班」，这样每天都会提醒。
     var reminderSchedule: [DayKey: String] {
-        var s = schedule
+        var s = mySchedule
         let today = DayKey.today
         // 网站还没排到的日子不提醒「未排班」
         if settings.remindUnassigned {
@@ -40,11 +40,12 @@ extension AppStore {
         await NotificationService.reschedule(local.plan(schedule: reminderSchedule, now: Date()), voice: settings.voiceEnabled)
         updateWidget()
         updateAppIcon()
-        DutyActivityManager.update(schedule: schedule, matcher: matcher, enabled: settings.liveActivity)
+        let mine = mySchedule
+        DutyActivityManager.update(schedule: mine, matcher: matcher, enabled: settings.liveActivity)
         if settings.calendarSync {
             var predicted: [DayKey: String] = [:]
-            if let turn = myDutyTurn(), !turn.scheduled, let day = turn.day, schedule[day] == nil { predicted[day] = "遥测（预测）" }
-            CalendarSync.sync(schedule, matcher: matcher, predicted: predicted)
+            if let turn = myDutyTurn(), !turn.scheduled, let day = turn.day, mine[day] == nil { predicted[day] = "遥测（预测）" }
+            CalendarSync.sync(mine, matcher: matcher, predicted: predicted)
         }
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
         // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
@@ -56,7 +57,7 @@ extension AppStore {
     func iconName(for raw: String?) -> String? { ShiftIcon.name(for: raw, matcher: matcher) }
 
     /// 今天该用的图标（nil = 默认的「值」）
-    var wantedAppIcon: String? { settings.dynamicIcon ? iconName(for: schedule[.today]) : nil }
+    var wantedAppIcon: String? { settings.dynamicIcon ? iconName(for: shift(on: .today)) : nil }
 
     /// iPhone 只允许 App 在前台时换图标，每次换系统会弹一个「已更改图标」的提示。
     /// 刚回到前台的一瞬间换，系统偶尔会报「暂时不可用」：隔一秒再试，最多再试两次
@@ -97,7 +98,7 @@ extension AppStore {
         let today = DayKey.today
         let days = (-1...31).compactMap { offset -> WidgetDay? in
             let day = today.adding(days: offset)
-            guard let raw = schedule[day] else {
+            guard let raw = shift(on: day) else {
                 // 取到过、但没给我排班
                 return isCovered(day) ? WidgetDay(date: day.description, title: "未排班", emoji: "", colorHex: "#8E8E93") : nil
             }
