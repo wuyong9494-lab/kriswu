@@ -241,6 +241,13 @@ public enum JSONScheduleExtractor {
         return nil
     }
 
+    /// 全员排班表里的岗位列：「组A」「assignments.组A」「telemetry」「遥测」「值班交班前」……
+    static func isPostColumn(_ key: String, matcher: ShiftMatcher) -> Bool {
+        let last = String(key.split(separator: ".").last ?? Substring(key)).trimmingCharacters(in: .whitespaces)
+        return SiteAPI.post(forColumn: key, matcher: matcher) != nil || SiteAPI.columnPosts.values.contains(last)
+            || ["值班交班前", "值班交接前"].contains(last)
+    }
+
     private static let shiftKeyHints = ["shift", "duty", "group", "post", "work", "task", "job", "class", "team",
                                         "分工", "班", "组", "岗", "职"]
 
@@ -262,7 +269,10 @@ public enum JSONScheduleExtractor {
         guard let dateKey = dateKey(in: rows, dates: dates) else { return [:] }
 
         // 2. 多人数据：找出包含自己名字的字段，只保留自己的行
-        let personKey = keys.filter { $0 != dateKey }.first { k in rows.contains { $0[k].map(parser.isMe) ?? false } }
+        let personKey = keys.filter { $0 != dateKey }.sorted().first { k in rows.contains { $0[k].map(parser.isMe) ?? false } }
+        // 我的名字出现在「组A」「telemetry」这种岗位列里：这是全员排班表（每个岗位一列、格子里是人名），不是「我的班」。
+        // 从这里读会把同一行别的岗位上的同事名字当成我的班（全员排班另有地方读）
+        if let personKey, isPostColumn(personKey, matcher: matcher) { return [:] }
         let mine = personKey.map { k in rows.filter { $0[k].map(parser.isMe) ?? false } } ?? rows
 
         // 没认出自己、又是每天好几条的多人数据：认不准，放弃
@@ -283,16 +293,19 @@ public enum JSONScheduleExtractor {
                 if v.count > 40 { s -= 1; continue }
                 if matcher.match(v) != nil { s += 3 }
                 if parser.isMe(v) { s -= 3 }
+                // 像人名、又不像班次（「焦洋」「王健」）：多半是交接人、填表人这类字段，不是我的班
+                else if matcher.match(v) == nil && RosterExtractor.looksLikeName(v) { s -= 3 }
             }
             let lower = k.lowercased()
             if shiftKeyHints.contains(where: { lower.contains($0) }) { s += values.count }
             if lower.hasSuffix("id") || lower.contains("time") || lower.contains("week") { s -= values.count }
             return s
         }
+        // 分数一样时按字段名挑（每次都挑同一个，不会这次读这个字段、下次读那个）
         let shiftKey = keys.subtracting([dateKey, personKey].compactMap { $0 })
             .map { ($0, score($0)) }
             .filter { $0.1 > 0 }
-            .max { $0.1 < $1.1 }?.0
+            .max { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 > $1.0 }?.0
         guard let shiftKey else { return [:] }
 
         var entries: [DayKey: String] = [:]

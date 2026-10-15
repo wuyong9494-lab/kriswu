@@ -350,6 +350,26 @@ final class APIDiscoveryTests: XCTestCase {
                        "两天各两条，不算明显的多人数据时仍会合并")
     }
 
+    func testRosterTableIsNotMySchedule() {
+        // 全员排班表：每个岗位一列、格子里是人名。我的名字在「组A」列里，不能把同一行别的岗位上的同事当成我的班
+        let json = """
+        {"data":[{"date":"2026-10-15","telemetry":"张昊","assignments":{"组A":"张伟","组B":"焦洋"}},
+                 {"date":"2026-10-16","telemetry":"李家宝","assignments":{"组A":"王健","组B":"张伟"}}]}
+        """
+        XCTAssertTrue(JSONScheduleExtractor.extract(json, aliases: ["张伟"], matcher: matcher, reference: ref).isEmpty)
+    }
+
+    func testNameFieldIsNotTheShift() {
+        // 「我的值班」接口带了交接人：分工还是读班次那个字段，人名字段不当成班
+        let json = """
+        [{"dutyDate":"2026-10-15","shiftName":"组A","dutyPerson":"焦洋"},
+         {"dutyDate":"2026-10-16","shiftName":"组B","dutyPerson":"王健"},
+         {"dutyDate":"2026-10-17","shiftName":"休息","dutyPerson":"李家宝"}]
+        """
+        XCTAssertEqual(JSONScheduleExtractor.extract(json, aliases: ["张伟"], matcher: matcher, reference: ref),
+                       [d(10, 15): "组A", d(10, 16): "组B", d(10, 17): "休息"])
+    }
+
     func testIgnoresUnrelatedJSON() {
         XCTAssertTrue(JSONScheduleExtractor.extract(#"{"user":{"name":"张伟","role":"admin"}}"#,
                                                     aliases: [], matcher: matcher, reference: ref).isEmpty)

@@ -293,6 +293,24 @@ final class AppStore: ObservableObject {
         covered = Set((-40...14).map { today.adding(days: $0) })
     }
 
+    /// 以前读错过表、把同事的名字当成了我的班（「焦洋」「王健」）：清掉这些日子，下次同步当作重新开始（不提醒变动、不重复记），
+    /// 因此记下的假变动、换班账一起去掉
+    func repairNameShifts() {
+        guard !Self.isDemo else { return }
+        let colleagues = Set(roster.keys).filter { !isMe($0) }
+        let bad = schedule.filter { _, raw in matcher.posts(raw).contains(where: colleagues.contains) }
+        guard !bad.isEmpty else { return }
+        let wrongNames = Set(bad.values.flatMap { matcher.posts($0) }.filter(colleagues.contains))
+        var fixed = schedule
+        for day in bad.keys { fixed[day] = nil }
+        schedule = fixed
+        var s = settings
+        s.nextSyncIsBaseline = true
+        s.changeLog = s.changeLog.filter { e in !wrongNames.contains { e.text.contains("→ \($0)") || e.text.contains("\($0) →") } }
+        s.swapRecords = s.swapRecords.filter { !wrongNames.contains($0.myOld) && !wrongNames.contains($0.myNew) }
+        settings = s
+    }
+
     /// 把自己录入的节假日交给统计用的节假日表
     func applyCustomHolidays() {
         AccentTheme.current = settings.accentTheme
@@ -725,6 +743,13 @@ final class AppStore: ObservableObject {
             let result = outcome.result
             // 同步途中换了人、改了名字：这次是按旧名字读的，不能当成现在这个人的班。交给下一次同步
             guard settings.aliases == aliasesAtStart else { return false }
+            // 读到的「我的班」里是同事的名字（读错了网页上的表，比如全员排班表）：不采用，也不提醒变动
+            let colleagues = Set(roster.keys).union(outcome.roster.keys).filter { !isMe($0) }
+            if let wrong = result.entries.values.flatMap({ matcher.posts($0) }).first(where: colleagues.contains) {
+                settings.syncState = .anomaly
+                settings.lastSyncMessage = "同步结果异常：读到的「我的班」里是同事的名字（\(wrong)），可能读错了网页上的表，这次没有采用"
+                return false
+            }
             if !userInitiated, !settings.nextSyncIsBaseline, result.range != nil {
                 // 已经知道的日子里，一大半都变了：多半是网站改版读错了，先不采用
                 // 和 apply() 同一个规则：网站还没正式排班、只有请假调休记录的以后日子不算「已经知道」

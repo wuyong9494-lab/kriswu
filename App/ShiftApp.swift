@@ -14,6 +14,8 @@ struct ShiftApp: App {
                 .preferredColorScheme(store.settings.appearance.colorScheme)
                 .task {
                     guard !AppStore.isDemo else { return }
+                    // 以前读错表留下的「同事名字当成我的班」先清掉
+                    store.repairNameShifts()
                     _ = await NotificationService.requestAuthorization()
                     await store.rescheduleNotifications()
                 }
