@@ -55,7 +55,7 @@ struct WorkloadView: View {
                 if report.days.isEmpty {
                     Text("这个月还没有全员排班数据。")
                 } else {
-                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」= 值班（遥测）+ 节假日值完遥测的第二天 + 日常（各组、调度等岗位）+ 出差。工作日网站上没排岗位、也没写休息的日子：不轮组别的人在做别的日常工作，算日常、算工作量；轮组别（组A–E）的人算正常上班，计入「上班」但不算工作量。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日」是法定假日里网站上没排任何岗位的天数，调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
+                    ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」= 值班（遥测）+ 节假日值完遥测的第二天 + 日常（各组、调度等岗位）+ 出差。工作日网站上没排岗位、也没写休息的日子：不轮组别的人在做别的日常工作，算日常、算工作量；轮组别（组A–E）的人算正常上班，计入「上班」但不算工作量。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日放假」是法定假日里网站上没排任何岗位的天数；「节假日上班」是法定假日里上了班（值班、各组、调度）的天数，两个数分开算；调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
                 }
             }
             Section {
@@ -156,16 +156,16 @@ struct WorkloadView: View {
         }
     }
 
-    /// 「值班 2 · 日常 8 · 休息 3 · 节假日 7」，出差、节假日上班有才显示
+    /// 「值班 2 · 日常 8 · 休息 3 · 节假日放假 7」，节假日上班有才显示（和节假日放假分开算，不是其中的一部分）
     private func summary(_ p: PersonWorkload) -> String {
         var parts = ["值班 \(p.dutyDays)"]
         // 值班调休只在管理员手动改过时才有
         if p.dutyRestDays > 0 { parts.append("值班调休 \(p.dutyRestDays)") }
         parts += ["日常 \(p.regularDays)", "出差 \(p.tripDays)"]
         if p.attendanceDays > 0 { parts.append("上班没排岗位 \(p.attendanceDays)（不算工作量）") }
-        parts += ["休息 \(p.offDays)", "节假日 \(p.holidayDays)"]
+        parts += ["休息 \(p.offDays)", "节假日放假 \(p.holidayDays)"]
         if p.unassignedDays > 0 { parts.append("没排班 \(p.unassignedDays)") }
-        if p.holidayWorkedDays > 0 { parts.append("其中节假日上班 \(p.holidayWorkedDays)") }
+        if p.holidayWorkedDays > 0 { parts.append("节假日上班 \(p.holidayWorkedDays)") }
         return parts.joined(separator: " · ")
     }
 

@@ -202,7 +202,7 @@ private struct RowView: View {
             Text("遥测 \(w.dutyDays) · 组别 \(row.groupDays) · 其它岗位 \(max(0, w.regularDays - row.groupDays)) · 出差 \(w.tripDays)"
                  + (w.attendanceDays > 0 ? " · 上班没排岗位 \(w.attendanceDays)（不算工作量）" : "")
                  + " · 休息 \(w.offDays)"
-                 + (w.holidayDays > 0 ? " · 节假日 \(w.holidayDays)" : "")
+                 + (w.holidayDays > 0 ? " · 节假日放假 \(w.holidayDays)" : "")
                  + (w.unassignedDays > 0 ? " · 没排班 \(w.unassignedDays)" : ""))
                 .font(.footnote)
                 .foregroundStyle(.secondary)

@@ -261,7 +261,7 @@ struct YearStatsView: View {
                             if p.dutyRestDays > 0 { Chip(text: "值班调休 \(p.dutyRestDays)", color: .secondary) }
                             if p.tripDays > 0 { Chip(text: "出差 \(p.tripDays)", color: .secondary) }
                             Chip(text: "休息 \(p.offDays)", color: .secondary)
-                            Chip(text: "节假日 \(p.holidayDays)", color: .secondary)
+                            Chip(text: "节假日放假 \(p.holidayDays)", color: .secondary)
                         }
                     }
                 }

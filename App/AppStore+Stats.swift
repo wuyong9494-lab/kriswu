@@ -48,7 +48,7 @@ extension AppStore {
         for p in people {
             text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)\(p.dutyRestDays > 0 ? "，值班调休 \(p.dutyRestDays)" : "")，日常 \(p.regularDays)，出差 \(p.tripDays)），上班 \(p.presentDays) 天"
                 + (p.attendanceDays > 0 ? "（其中没排岗位 \(p.attendanceDays) 天，不算工作量）" : "")
-                + "，休息 \(p.offDays) 天，节假日 \(p.holidayDays) 天" + (p.unassignedDays > 0 ? "，没排班 \(p.unassignedDays) 天" : "")
+                + "，休息 \(p.offDays) 天，节假日放假 \(p.holidayDays) 天" + (p.unassignedDays > 0 ? "，没排班 \(p.unassignedDays) 天" : "")
                 + (restBalance[p.name].map { "，待休 \($0) 天" } ?? "")
                 + (p.holidayWorkedDays > 0 ? "，节假日上班 \(p.holidayWorkedDays) 天" : "") + "；"
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
