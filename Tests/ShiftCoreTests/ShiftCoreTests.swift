@@ -2268,7 +2268,8 @@ final class AuditFixTests: XCTestCase {
         XCTAssertEqual(second.roster["甲"]?[day], "请假")
         XCTAssertEqual(second.roster["乙"]?[day], "出差")
         XCTAssertNil(second.roster["丙"]?[day])
-        XCTAssertEqual(second.edits.map(\.name), ["丙"])
+        // 丙的休息取消了、戊新休息：都是真变动；甲、乙没有变动
+        XCTAssertEqual(second.edits.map(\.name), ["丙", "戊"])
         XCTAssertEqual(RosterMerger.leaveKinds(of: "值班交接前", matcher: m), ["休息"])
         XCTAssertEqual(RosterMerger.leaveKinds(of: "组A", matcher: m), [])
     }
