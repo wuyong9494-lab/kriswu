@@ -61,10 +61,20 @@ extension AppStore {
     func notifyRosterEdits(_ edits: [RosterEdit], published: Set<DayKey>) async {
         guard !Self.isDemo, settings.notifyAllChanges else { return }
         let today = DayKey.today
+        // 和我对换的同事：我自己的「排班有更新」里已经写了（「组A原来是某某」），这里不再重复一条
+        func posts(_ raw: String?) -> Set<String> { Set(raw.map { matcher.posts($0).map(matcher.displayName) } ?? []) }
+        let mine = Dictionary(edits.filter { isMe($0.name) }.map { ($0.day, $0) }, uniquingKeysWith: { a, _ in a })
+        func swappedWithMe(_ e: RosterEdit) -> Bool {
+            guard settings.notifyChanges, let my = mine[e.day] else { return false }
+            // 他让出来的正是我新接的，或者他新接的正是我让出来的
+            let myAdded = posts(my.new).subtracting(posts(my.old)), myRemoved = posts(my.old).subtracting(posts(my.new))
+            let hisAdded = posts(e.new).subtracting(posts(e.old)), hisRemoved = posts(e.old).subtracting(posts(e.new))
+            return !hisRemoved.isDisjoint(with: myAdded) || !hisAdded.isDisjoint(with: myRemoved)
+        }
         // 关注的同事另有「⭐」提醒，这里不再重复
         let upcoming = edits.filter { e in
             e.day >= today && published.contains(e.day) && !isMe(e.name)
-                && !(settings.notifyFavorites && isFavorite(e.name))
+                && !(settings.notifyFavorites && isFavorite(e.name)) && !swappedWithMe(e)
         }.sorted { ($0.day, $0.name) < ($1.day, $1.name) }
         guard !upcoming.isEmpty else { return }
         func show(_ raw: String?) -> String { raw.map(matcher.displayName) ?? "没排" }

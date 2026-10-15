@@ -9,6 +9,34 @@ struct WorkloadView: View {
     @State private var monthFile: URL?
     /// 点了工具格子里的第几个
     @State private var toolIndex: Int?
+    @State private var sort: Sort = .work
+    @State private var query = ""
+
+    /// 名单怎么排
+    enum Sort: String, CaseIterable, Identifiable {
+        case work = "工作量", present = "上班天数", rest = "待休", holiday = "节假日上班", name = "姓名"
+        var id: String { rawValue }
+    }
+
+    /// 按选的方式排好；搜索时只留名字里有搜索词的；我自己固定在最前面
+    private func people(_ report: AppStore.Workload) -> [PersonWorkload] {
+        let zh = Locale(identifier: "zh_CN")
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let rest = store.settings.restBalance
+        func byName(_ a: PersonWorkload, _ b: PersonWorkload) -> Bool { a.name.compare(b.name, locale: zh) == .orderedAscending }
+        func value(_ p: PersonWorkload) -> Int {
+            switch sort {
+            case .work: return p.workDays
+            case .present: return p.presentDays
+            case .rest: return rest[p.name] ?? -1
+            case .holiday: return p.holidayWorkedDays
+            case .name: return 0
+            }
+        }
+        let list = report.people.filter { q.isEmpty || $0.name.contains(q) }
+            .sorted { a, b in value(a) != value(b) ? value(a) > value(b) : byName(a, b) }
+        return list.filter { store.isMe($0.name) } + list.filter { !store.isMe($0.name) }
+    }
 
     private var tools: [ToolGrid.Item] {
         [
@@ -107,7 +135,14 @@ struct WorkloadView: View {
             } footer: {
                 Text("用电脑版打开「值班查看」，点「上一周」往前翻 9 周，把每周的全员排班存下来（约半分钟）。每天第一次打开 App 时也会自动读一次。")
             }
-            ForEach(report.people, id: \.name) { person in
+            if !report.people.isEmpty {
+                Section {
+                    Picker("排序", selection: $sort) {
+                        ForEach(Sort.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                }
+            }
+            ForEach(people(report), id: \.name) { person in
                 Section {
                     NavigationLink {
                         WorkloadDetailView(name: person.name, days: report.days)
@@ -136,6 +171,7 @@ struct WorkloadView: View {
             }
         }
         .task(id: "\(year)-\(month)-\(store.dataRevision)") { monthFile = store.workloadCSVFile(year: year, month: month) }
+        .searchable(text: $query, prompt: "搜名字")
         .appList()
         .navigationDestination(isPresented: Binding(get: { toolIndex != nil }, set: { if !$0 { toolIndex = nil } })) {
             if let i = toolIndex { tools[i].destination }
@@ -156,17 +192,15 @@ struct WorkloadView: View {
         }
     }
 
-    /// 「值班 2 · 日常 8 · 休息 3 · 节假日放假 7」，节假日上班有才显示（和节假日放假分开算，不是其中的一部分）
+    /// 「值班 2 · 日常 8 · 休息 3 · 节假日放假 7」：只写不是 0 的（节假日上班和节假日放假分开算，不是其中的一部分）
     private func summary(_ p: PersonWorkload) -> String {
-        var parts = ["值班 \(p.dutyDays)"]
-        // 值班调休只在管理员手动改过时才有
-        if p.dutyRestDays > 0 { parts.append("值班调休 \(p.dutyRestDays)") }
-        parts += ["日常 \(p.regularDays)", "出差 \(p.tripDays)"]
-        if p.attendanceDays > 0 { parts.append("上班没排岗位 \(p.attendanceDays)（不算工作量）") }
-        parts += ["休息 \(p.offDays)", "节假日放假 \(p.holidayDays)"]
-        if p.unassignedDays > 0 { parts.append("没排班 \(p.unassignedDays)") }
-        if p.holidayWorkedDays > 0 { parts.append("节假日上班 \(p.holidayWorkedDays)") }
-        return parts.joined(separator: " · ")
+        let parts: [(label: String, value: Int, note: String)] = [
+            ("值班", p.dutyDays, ""), ("值班调休", p.dutyRestDays, ""), ("日常", p.regularDays, ""), ("出差", p.tripDays, ""),
+            ("上班没排岗位", p.attendanceDays, "（不算工作量）"), ("休息", p.offDays, ""), ("节假日放假", p.holidayDays, ""),
+            ("没排班", p.unassignedDays, ""), ("节假日上班", p.holidayWorkedDays, ""),
+        ]
+        let shown = parts.filter { $0.value > 0 }.map { "\($0.label) \($0.value)\($0.note)" }
+        return shown.isEmpty ? "这个月没有记录" : shown.joined(separator: " · ")
     }
 
     private func move(_ delta: Int) {

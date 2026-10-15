@@ -294,10 +294,7 @@ struct DayEditor: View {
                         Text(store.matcher.displayName(current)).font(DS.Font.headline)
                         // 这个组这天要做什么
                         ForEach(store.notes(for: current), id: \.group) { n in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(n.group).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                Text(n.note).font(.subheadline)
-                            }
+                            GroupNoteView(group: n.group, note: n.note)
                         }
                     }
                 }

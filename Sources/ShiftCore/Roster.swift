@@ -328,6 +328,28 @@ public enum RosterExtractor {
 public enum GroupNotes {
     private static let groupName = try! NSRegularExpression(pattern: #"^组\s*[A-Za-z0-9一二三四五六七八九十]{1,2}$"#)
     static let minLength = 8
+    /// 电脑版表格右边那列（注意事项）存在这一行后面，和要做的事分开
+    public static let cautionMarker = "【注意事项】"
+
+    /// 要做的事、注意事项分开（没有注意事项时 caution 为 nil）
+    public static func split(_ note: String) -> (work: String, caution: String?) {
+        guard let r = note.range(of: cautionMarker) else { return (note, nil) }
+        let work = note[..<r.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        let caution = note[r.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return (work, caution.isEmpty ? nil : caution)
+    }
+
+    /// 显示用：一条一行。网站上用「●」隔开的拆开（前面加「•」），句号后面、空格后面的「2.」「②」这类编号另起一行；
+    /// 「08/10」「9.5」这种不拆
+    public static func displayLines(_ text: String) -> [String] {
+        var t = text.replacingOccurrences(of: #"\s*[●•]+\s*"#, with: "\n• ", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?<=[。；;！!])\s*(?=\d{1,2}[.．、](?!\d)|[①-⑳])"#, with: "\n", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"[ \t]+(?=\d{1,2}[.．、](?!\d)|[①-⑳])"#, with: "\n", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?<=\S)(?=[①-⑳])"#, with: "\n", options: .regularExpression)
+        return t.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0 != "•" }
+    }
 
     static func isGroup(_ s: String) -> Bool {
         let t = s.halfwidthAlnum.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "：:")))
@@ -389,7 +411,10 @@ public enum GroupNotes {
                 cells.insert(head.dropFirst().joined(separator: "\n"), at: 1)
             }
             guard let first = cells.first, isGroup(first) else { continue }
-            let note = cells.dropFirst().filter { !$0.isEmpty }.joined(separator: "\n")
+            // 第二格是要做的事，后面的格子是注意事项（存在「【注意事项】」后面，显示时分开）
+            let work = cells.count > 1 ? cells[1] : ""
+            let caution = cells.dropFirst(2).filter { !$0.isEmpty }.joined(separator: "\n")
+            let note = ([work] + (caution.isEmpty ? [] : [cautionMarker, caution])).filter { !$0.isEmpty }.joined(separator: "\n")
             if note.count >= minLength { notes[normalizeGroup(first)] = note }
         }
         if !notes.isEmpty { return notes }

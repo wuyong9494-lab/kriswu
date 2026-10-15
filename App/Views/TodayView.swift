@@ -178,11 +178,10 @@ struct TodayHero: View {
             // 这个组要干什么（电脑版网页上的说明，或自己在设置里填写的）
             let notes = store.notes(for: raw)
             if !notes.isEmpty {
-                VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     ForEach(notes, id: \.group) { item in
-                        Text(notes.count > 1 ? "\(item.group)：\(item.note)" : item.note)
-                            .font(DS.Font.body)
-                            .fixedSize(horizontal: false, vertical: true)
+                        GroupNoteView(group: notes.count > 1 ? item.group : nil, note: item.note,
+                                      cautionBackground: Color.white.opacity(0.14))
                     }
                 }
                 .padding(DS.Space.s)
@@ -207,7 +206,9 @@ struct TodayHero: View {
                     }
                     let tomorrowNotes = store.notes(for: store.shift(on: day.adding(days: 1)))
                     if let first = tomorrowNotes.first {
-                        Text(tomorrowNotes.count > 1 ? "\(first.group)：\(first.note)" : first.note)
+                        // 明天只看一眼要做的事（注意事项点进去看）
+                        let work = GroupNotes.displayLines(GroupNotes.split(first.note).work).joined(separator: " ")
+                        Text(tomorrowNotes.count > 1 ? "\(first.group)：\(work)" : work)
                             .font(DS.Font.caption)
                             .opacity(0.75)
                             .lineLimit(2)

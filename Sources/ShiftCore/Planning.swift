@@ -96,8 +96,8 @@ public enum TaskList {
     private static let numbering = try! NSRegularExpression(pattern: #"^\s*(?:\d+|[一二三四五六七八九十]+)\s*[、.．)）:：]\s*"#)
 
     public static func items(from note: String) -> [String] {
-        // 先按行，行里再按「；」「。」分
-        let pieces = note.components(separatedBy: CharacterSet.newlines)
+        // 注意事项不是要做的事，不进清单；先按行，行里再按「；」「。」分
+        let pieces = GroupNotes.split(note).work.components(separatedBy: CharacterSet.newlines)
             .flatMap { $0.split(whereSeparator: { "；;。".contains($0) }).map(String.init) }
         return pieces.compactMap { raw in
             let ns = raw as NSString

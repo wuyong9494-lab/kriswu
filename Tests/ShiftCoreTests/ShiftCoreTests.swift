@@ -531,9 +531,25 @@ final class RosterTests: XCTestCase {
         <table><tr><td>2026-10-05</td><td>周一</td><td>张三</td></tr></table>
         """
         let notes = GroupNotes.fromDesktopHTML(html)
-        XCTAssertEqual(notes["组A"], "下午可做： GF03C02\n发遥测：等每日自动生成log令的星\n1.所有星进行备份数传")
+        XCTAssertEqual(notes["组A"], "下午可做： GF03C02\n发遥测：等每日自动生成log令的星\n【注意事项】\n1.所有星进行备份数传")
+        let a = GroupNotes.split(notes["组A"] ?? "")
+        XCTAssertEqual(a.work, "下午可做： GF03C02\n发遥测：等每日自动生成log令的星")
+        XCTAssertEqual(a.caution, "1.所有星进行备份数传")
+        XCTAssertNil(GroupNotes.split(notes["组B"] ?? "").caution)
+        // 注意事项不进清单
+        XCTAssertEqual(TaskList.items(from: notes["组A"] ?? ""), ["下午可做： GF03C02", "发遥测：等每日自动生成log令的星"])
         XCTAssertEqual(notes["组B"], "下午可做： KF02B01星规划")
         XCTAssertEqual(notes.count, 2)
+    }
+
+    func testGroupNoteDisplayLines() {
+        XCTAssertEqual(GroupNotes.displayLines("下午可做：●GF03C02●GF03D19/20/22●东坡08/10 发遥测●●"),
+                       ["下午可做：", "• GF03C02", "• GF03D19/20/22", "• 东坡08/10 发遥测"])
+        XCTAssertEqual(GroupNotes.displayLines("1.所有星进行备份数传。 2.如涉及地面站数传的，不做备份。3.如确有不满足时效的，不做备份。"),
+                       ["1.所有星进行备份数传。", "2.如涉及地面站数传的，不做备份。", "3.如确有不满足时效的，不做备份。"])
+        XCTAssertEqual(GroupNotes.displayLines("①节假日值班规则②然后再询问"), ["①节假日值班规则", "②然后再询问"])
+        // 日期、版本号、小数不拆
+        XCTAssertEqual(GroupNotes.displayLines("9月20日发射，DT01A/DT01B 版本 2.0.0 收益 9.5 万"), ["9月20日发射，DT01A/DT01B 版本 2.0.0 收益 9.5 万"])
     }
 
     func testGroupNotesFromDesktopBlocks() {
