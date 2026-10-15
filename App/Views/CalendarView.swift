@@ -36,10 +36,10 @@ struct CalendarView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        // 格子最下面那行小字是什么：说清楚，免得以为是我的班
+                        // 格子里只有我的班；小点是什么、同事的安排在哪看
                         HStack(spacing: 4) {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
-                            Text("最下面的小字：这天值遥测的同事。上面一行才是你的班，点一天看详细")
+                            Image(systemName: "hand.tap")
+                            Text("格子里是你自己的班，小点是那天没给你排。点一天看全员分工、谁值遥测")
                         }
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -194,7 +194,6 @@ private struct DayCell: View {
         // 取到过结果但没给我排班：淡淡一个点；还没取到数据的日子：留空
         let unassigned = display == nil && store.isCovered(day)
         let holiday = ChinaHolidays.isHoliday(day)
-        let mineIsDuty = display.map { WorkloadCounter.isDuty($0.name) } ?? false
         VStack(spacing: DS.Space.xxs) {
             Text("\(day.day)")
                 .font(.system(size: 15, weight: isToday ? .heavy : .medium, design: .rounded))
@@ -223,20 +222,8 @@ private struct DayCell: View {
             } else {
                 Spacer(minLength: 0)
             }
-            // 这天谁值遥测（全员排班里有、又不是我自己）：前面带遥测的图标，
-            // 不然光一个同事的名字，看着像是把同事的名字当成了我的班
-            if !mineIsDuty, let duty = dutyNames {
-                HStack(spacing: 1) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 7, weight: .semibold))
-                    Text(duty)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                }
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("\(duty)值遥测")
-            }
+            // 格子里只放我自己的班：同事的名字（谁值遥测）放在格子里，看着就像把同事的名字当成了我的班。
+            // 谁值遥测、全员分工点开这一天看
         }
         .frame(maxWidth: .infinity, minHeight: 76, maxHeight: 76)
         .padding(.vertical, DS.Space.xxs)
@@ -248,11 +235,6 @@ private struct DayCell: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-    }
-
-    private var dutyNames: String? {
-        let names = store.dayRoster(day).filter { WorkloadCounter.isDuty($0.post) }.flatMap(\.names)
-        return names.isEmpty ? nil : names.joined(separator: "·")
     }
 }
 
