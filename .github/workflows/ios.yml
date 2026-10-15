@@ -254,8 +254,9 @@ jobs:
   testflight:
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译
-    runs-on: macos-26
+    # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
+    # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
+    runs-on: macos-15
     env:
       # 值班网站地址：只在 TestFlight 版里内置（仓库是公开的，地址不写进代码，也不进公开的安装包）
       SITE_URL: ${{ secrets.SITE_URL }}
