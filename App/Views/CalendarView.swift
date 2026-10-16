@@ -284,6 +284,22 @@ struct DayEditor: View {
     @ObservedObject private var log = WorkLogStore.shared
     let day: DayKey
     @State private var custom = ""
+    /// 正在写的备注（nil = 没改过）。点「保存」、关掉这页时存
+    @State private var memoDraft: String?
+
+    private var savedMemo: String { store.settings.dayMemos[day.description] ?? "" }
+    private var memoChanged: Bool {
+        memoDraft.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) != savedMemo } ?? false
+    }
+
+    private func saveMemo() {
+        guard let text = memoDraft else { return }
+        memoDraft = nil
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t != savedMemo else { return }
+        store.settings.dayMemos[day.description] = t.isEmpty ? nil : t
+        ToastCenter.shared.show(t.isEmpty ? "备注已删除" : "备注已保存", style: .success)
+    }
 
     var body: some View {
         let current = store.shift(on: day)
@@ -298,12 +314,16 @@ struct DayEditor: View {
                         }
                     }
                 }
-                Section("我的备注") {
-                    DraftTextField("比如：带资料、换班已说好", value: store.settings.dayMemos[day.description] ?? "",
-                                   axis: .vertical) { text in
-                        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        store.settings.dayMemos[day.description] = t.isEmpty ? nil : t
+                Section {
+                    TextField("比如：带资料、换班已说好", text: Binding(get: { memoDraft ?? savedMemo }, set: { memoDraft = $0 }),
+                              axis: .vertical)
+                    if memoChanged {
+                        Button("保存备注") { saveMemo() }
                     }
+                } header: {
+                    Text("我的备注")
+                } footer: {
+                    Text("那天的提醒里会带上，日历上有小点。")
                 }
                 // 这一天全员分工直接看（不用再点进去）
                 let roster = store.dayRoster(day)
@@ -386,10 +406,18 @@ struct DayEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(store.canEdit ? "取消" : "完成") { dismiss() }
+                    // 关掉也会存下写好的备注
+                    Button("关闭") { saveMemo(); dismiss() }
+                }
+                if memoChanged {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") { saveMemo(); dismiss() }.fontWeight(.semibold)
+                    }
                 }
             }
         }
+        // 下拉关掉这页：写好的备注也存下
+        .onDisappear { saveMemo() }
         .presentationDetents([.medium, .large])
     }
 }
