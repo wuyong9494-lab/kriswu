@@ -46,6 +46,9 @@ public enum ChinaHolidays {
     }
 
     /// 是否工作日：调休上班的周末算，法定假日不算，其余按周一到周五。
+    /// 周六是不是正常工作日（法定节假日除外）。App 按设置写进来，默认（单元测试里）周六休息
+    @Locked public static var saturdayIsWorkday = false
+
     public static func isWorkday(_ day: DayKey, calendar: Calendar) -> Bool {
         let key = day.description
         if customWork.contains(key) { return true }
@@ -55,7 +58,8 @@ public enum ChinaHolidays {
         if workingWeekends.contains(key) { return true }
         if off.contains(key) { return false }
         let w = calendar.component(.weekday, from: day.date(calendar: calendar, hour: 12))
-        return w != 1 && w != 7
+        // 1 = 周日，7 = 周六
+        return w != 1 && (w != 7 || saturdayIsWorkday)
     }
 }
 

@@ -2291,4 +2291,17 @@ final class AuditFixTests: XCTestCase {
         let csv = WorkloadCSV.make(people)
         XCTAssertTrue(csv.contains("甲,5,5,0,0,5,0,0,0,0,0,0,,是,3,"), csv)
     }
+
+    func testSaturdayIsWorkdayExceptHolidays() {
+        ChinaHolidays.saturdayIsWorkday = true
+        defer { ChinaHolidays.saturdayIsWorkday = false }
+        XCTAssertTrue(ChinaHolidays.isWorkday(d(10, 17), calendar: cal))     // 普通周六：上班
+        XCTAssertFalse(ChinaHolidays.isWorkday(d(10, 18), calendar: cal))    // 周日：休息
+        XCTAssertFalse(ChinaHolidays.isWorkday(d(10, 3), calendar: cal))     // 国庆里的周六：放假
+        // 甲周六没排、没写休息：正常上班，算工作量；周日没排是休息
+        let p = WorkloadCounter.count(roster: ["甲": [d(10, 12): "组A"]], days: (12...18).map { d(10, $0) },
+                                      matcher: m, calendar: cal).first
+        XCTAssertEqual(p?.workDays, 6)
+        XCTAssertEqual(p?.offDays, 1)
+    }
 }

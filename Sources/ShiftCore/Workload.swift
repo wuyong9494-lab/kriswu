@@ -220,7 +220,7 @@ public enum WorkloadCounter {
                         rules r: WorkloadRules, matcher: ShiftMatcher, roleNote: String = "") -> DayExplanation {
         guard let raw else {
             if holiday { return DayExplanation(kind: .holiday, reason: "法定节假日，网站上没排岗位") }
-            guard workday else { return DayExplanation(kind: .off, reason: "周末，网站上没排岗位") }
+            guard workday else { return DayExplanation(kind: .off, reason: "周末休息日，网站上没排岗位") }
             if !r.blankWorkdayIsWork {
                 return DayExplanation(kind: .unassigned, reason: "工作日没排岗位（规则：没排岗位不算上班）")
             }

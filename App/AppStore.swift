@@ -36,6 +36,7 @@ final class AppStore: ObservableObject {
                 publishedDays = Self.published(in: roster, matcher: matcher)
             }
             if settings.customHolidayOff != oldValue.customHolidayOff || settings.customHolidayWork != oldValue.customHolidayWork
+                || settings.saturdayIsWorkday != oldValue.saturdayIsWorkday
                 || settings.downloadedHolidayOff != oldValue.downloadedHolidayOff
                 || settings.downloadedHolidayWork != oldValue.downloadedHolidayWork
                 || settings.workloadRules != oldValue.workloadRules || settings.workloadOverrides != oldValue.workloadOverrides
@@ -346,6 +347,7 @@ final class AppStore: ObservableObject {
         VoiceSound.rate = min(max(settings.voiceRate, 0.3), 0.6)
         ChinaHolidays.customOff = Set(settings.customHolidayOff)
         ChinaHolidays.customWork = Set(settings.customHolidayWork)
+        ChinaHolidays.saturdayIsWorkday = settings.saturdayIsWorkday
         ChinaHolidays.downloadedOff = Set(settings.downloadedHolidayOff)
         ChinaHolidays.downloadedWork = Set(settings.downloadedHolidayWork)
         WorkloadCounter.rules = settings.workloadRules

@@ -156,6 +156,8 @@ struct AppSettings: Codable, Equatable {
     /// 自己录入的节假日（yyyy-MM-dd）：放假的日子、调休上班的周末
     var customHolidayOff: [String] = []
     var customHolidayWork: [String] = []
+    /// 周六是正常工作日（法定节假日除外）：没排岗位、没写休息的周六算上班、算工作量
+    var saturdayIsWorkday = true
     /// 人员档案（管理员确认过的角色、来走日期）
     var profiles: [String: PersonProfile] = [:]
     /// 工作量规则开关
@@ -315,6 +317,7 @@ struct AppSettings: Codable, Equatable {
         swapRecords = (try? c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords)) ?? []
         customHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .customHolidayOff)) ?? []
         customHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .customHolidayWork)) ?? []
+        saturdayIsWorkday = (try? c.decodeIfPresent(Bool.self, forKey: .saturdayIsWorkday)) ?? true
         restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
         restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
         restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
@@ -453,6 +456,7 @@ extension AppSettings {
         a.workloadOverrides = o.workloadOverrides
         a.customHolidayOff = o.customHolidayOff
         a.customHolidayWork = o.customHolidayWork
+        a.saturdayIsWorkday = o.saturdayIsWorkday
         a.manualGroupNotes = o.manualGroupNotes
         a.scheduleOnlyMembers = o.scheduleOnlyMembers
         a.shiftTypes = o.shiftTypes
@@ -541,7 +545,7 @@ extension AppSettings {
     func sameData(as o: AppSettings) -> Bool {
         aliases == o.aliases && favorites == o.favorites && scheduleOnlyMembers == o.scheduleOnlyMembers
             && swapRecords == o.swapRecords && customHolidayOff == o.customHolidayOff && customHolidayWork == o.customHolidayWork
-            && downloadedHolidayOff == o.downloadedHolidayOff && downloadedHolidayWork == o.downloadedHolidayWork
+            && saturdayIsWorkday == o.saturdayIsWorkday && downloadedHolidayOff == o.downloadedHolidayOff && downloadedHolidayWork == o.downloadedHolidayWork
             && restHistory == o.restHistory && restBalance == o.restBalance && profiles == o.profiles
             && ruleHistory == o.ruleHistory && leaveSources == o.leaveSources && workloadRules == o.workloadRules
             && workloadOverrides == o.workloadOverrides && teamChanges == o.teamChanges && sitePeople == o.sitePeople
