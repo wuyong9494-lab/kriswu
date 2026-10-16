@@ -128,10 +128,11 @@ enum NotificationService {
         content.title = title
         content.body = body
         if let route { content.userInfo = ["route": route] }
-        // 一次同步可能发好几条（变动、公告、预警……）：归到一组，只有第一条响铃
+        // 一次同步可能接连发好几条（变动、公告、预警……）：归到一组，只有第一条响铃。
+        // 只静音几秒内接连发的：以前是 30 秒，同步完半分钟内读电脑版周表又发现的变动就不响了，容易漏看
         content.threadIdentifier = "updates"
         let now = Date()
-        content.sound = now.timeIntervalSince(lastSound) > 30 ? .default : nil
+        content.sound = now.timeIntervalSince(lastSound) > 8 ? .default : nil
         lastSound = now
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         // 左边的大图用今天的班（App 在后台时换不了图标，图标可能还是前几天的）

@@ -633,9 +633,9 @@ final class AppStore: ObservableObject {
             let ok = await running.value
             // 等的时候换了人、改了名字：那次是按旧名字读的，要重新来一次
             let renamed = settings.aliases != runningAliases
-            // 自动同步不会重试登录、不采用异常结果；手动下拉要自己再来一次
-            // 只有那次自动同步失败（没登录上、结果异常被忽略）时才再来一次
-            guard renamed || (userInitiated && !runningWasUser && !ok) else { return ok }
+            // 手动下拉时正在跑的是自动同步：那次可能在网站刚改之前就读过了，等它做完再读一次最新的
+            //（自动同步不会重试登录、不采用异常结果，这一次也会补上）
+            guard renamed || (userInitiated && !runningWasUser) else { return ok }
             // 等待期间别人已经开始了新的一次：用那一次
             if let next = syncTask { return await next.value }
         }
