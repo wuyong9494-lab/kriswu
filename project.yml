@@ -30,6 +30,8 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.kriswu.shiftreminder
+        # 通讯通知：推送左边的大图显示那天的班（见 ShiftNotificationAvatar）
+        com.apple.developer.usernotifications.communication: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder

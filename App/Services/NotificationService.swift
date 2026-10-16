@@ -25,6 +25,10 @@ enum NotificationService {
         // 避免中途被系统挂起时旧提醒已删、新提醒还没登记完
         var voiceFiles = Set<String>()
         var requests: [UNNotificationRequest] = []
+        // 图标跟着班次换时：通知左边的大图用那天的班（App 没打开过时图标还是旧的，见 ShiftNotificationAvatar）
+        let store = AppStore.shared
+        let avatars = store.settings.dynamicIcon
+        if avatars { await ShiftNotificationAvatar.clearDonations() }
         for n in plan {
             let content = UNMutableNotificationContent()
             content.title = n.title
@@ -48,7 +52,10 @@ enum NotificationService {
             let when = DateComponents(calendar: Calendar(identifier: .gregorian), year: n.day.year, month: n.day.month,
                                       day: n.day.day, hour: n.time.hour, minute: n.time.minute)
             let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: false)
-            requests.append(UNNotificationRequest(identifier: n.id, content: content, trigger: trigger))
+            let final: UNNotificationContent = avatars
+                ? await ShiftNotificationAvatar.apply(to: content, icon: store.iconName(for: store.shift(on: about)))
+                : content
+            requests.append(UNNotificationRequest(identifier: n.id, content: final, trigger: trigger))
         }
         // 已经有更新的一次在排队：这次的内容过时了，不要替换
         if Task.isCancelled { return }
@@ -127,7 +134,12 @@ enum NotificationService {
         content.sound = now.timeIntervalSince(lastSound) > 30 ? .default : nil
         lastSound = now
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+        // 左边的大图用今天的班（App 在后台时换不了图标，图标可能还是前几天的）
+        let store = AppStore.shared
+        let final: UNNotificationContent = store.settings.dynamicIcon
+            ? await ShiftNotificationAvatar.apply(to: content, icon: store.iconName(for: store.shift(on: .today)))
+            : content
+        try? await center.add(UNNotificationRequest(identifier: id, content: final, trigger: trigger))
     }
 
     /// 上一条即时通知响铃的时间
