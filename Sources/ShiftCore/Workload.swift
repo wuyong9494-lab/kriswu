@@ -33,6 +33,10 @@ public struct PersonWorkload: Equatable {
     public var unassignedDays: Int = 0
     /// 上班但不算工作量的天数（假期里值完遥测的第二天休息、手动改成「上班」的日子）
     public var attendanceDays: Int = 0
+    /// 日常里工作日网站上没排岗位、也没写休息的天数（正常上班、算工作量，单独数出来看）
+    public var blankWorkDays: Int = 0
+    /// 这段时间是不是轮组别（组A–E）的人：有档案按档案，没有的按最近三个月的排班认
+    public var isGroupMember = false
 
     /// 工作量 = 值班 + 值班调休 + 日常 + 出差
     public var workDays: Int { dutyDays + dutyRestDays + regularDays + tripDays }
@@ -378,6 +382,7 @@ public enum WorkloadCounter {
                                             forced: members?.contains(name) == true, calendar: calendar).mapValues(\.kind)
             // 这段时间一天都不统计（领导、已经走了、还没来）：不列出来
             if dayKinds.isEmpty { return nil }
+            p.isGroupMember = isGroupMember(history: history, matcher: matcher, asOf: last, name: name)
             for day in days {
                 let holiday = holidays.contains(day)
                 // 不统计的日子（手动改成不算、已经调走）岗位也不计
@@ -388,7 +393,11 @@ public enum WorkloadCounter {
                 switch kind {
                 case .duty: p.dutyDays += 1; if holiday { p.holidayWorkedDays += 1 }
                 case .dutyRest: p.dutyRestDays += 1
-                case .regular: p.regularDays += 1; if holiday { p.holidayWorkedDays += 1 }
+                case .regular:
+                    p.regularDays += 1
+                    if holiday { p.holidayWorkedDays += 1 }
+                    // 网站上没排岗位、没写休息：正常上班（算工作量），另外数一下
+                    if effective(history[day], matcher: matcher) == nil { p.blankWorkDays += 1 }
                 case .trip: p.tripDays += 1
                 case .holiday: p.holidayDays += 1
                 case .off: p.offDays += 1

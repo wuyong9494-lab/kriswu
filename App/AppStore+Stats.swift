@@ -46,12 +46,19 @@ extension AppStore {
             text += "（\(first.dateText) – \(last.dateText)，共 \(days.count) 天；工作量 = 值班（遥测）+ 日常（各组、调度等岗位；除了调度，没排岗位、没写休息的工作日也算）+ 出差；休息、调休、请假、值班交接前一律不算；上班 = 工作量 + 假期里值完遥测后休息的那天）"
         }
         for p in people {
-            text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)\(p.dutyRestDays > 0 ? "，值班调休 \(p.dutyRestDays)" : "")，日常 \(p.regularDays)，出差 \(p.tripDays)），上班 \(p.presentDays) 天"
-                + (p.attendanceDays > 0 ? "（其中没排岗位 \(p.attendanceDays) 天，不算工作量）" : "")
+            text += "\n\(p.name)：工作量 \(p.workDays) 天（值班 \(p.dutyDays)\(p.dutyRestDays > 0 ? "，值班调休 \(p.dutyRestDays)" : "")，日常 \(p.regularDays)"
+                + (p.blankWorkDays > 0 ? "（其中没排岗位 \(p.blankWorkDays)）" : "") + "，出差 \(p.tripDays)），上班 \(p.presentDays) 天"
+                + (p.attendanceDays > 0 ? "（其中 \(p.attendanceDays) 天不算工作量）" : "")
                 + "，休息 \(p.offDays) 天，节假日放假 \(p.holidayDays) 天" + (p.unassignedDays > 0 ? "，没排班 \(p.unassignedDays) 天" : "")
                 + (restBalance[p.name].map { "，待休 \($0) 天" } ?? "")
                 + (p.holidayWorkedDays > 0 ? "，节假日上班 \(p.holidayWorkedDays) 天" : "") + "；"
                 + Self.sortedPosts(p).map { "\($0.post)×\($0.count)" }.joined(separator: " ")
+        }
+        // 轮组别的人单独看：上了多少天班，其中多少天网站上没给排岗位
+        let members = people.filter(\.isGroupMember).sorted { $0.name.compare($1.name, locale: zh) == .orderedAscending }
+        if !members.isEmpty {
+            text += "\n\n轮组别的人（\(members.count) 人）：上班天数，其中没排班（工作日网站上没排岗位、没写休息，照常算工作量）"
+            for p in members { text += "\n\(p.name)：上班 \(p.presentDays) 天，其中没排班 \(p.blankWorkDays) 天" }
         }
         return Workload(days: days, people: people, text: text)
     }

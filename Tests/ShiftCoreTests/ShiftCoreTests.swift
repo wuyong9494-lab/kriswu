@@ -2276,4 +2276,19 @@ final class AuditFixTests: XCTestCase {
         XCTAssertEqual(RosterMerger.leaveKinds(of: "值班交接前", matcher: m), ["休息"])
         XCTAssertEqual(RosterMerger.leaveKinds(of: "组A", matcher: m), [])
     }
+
+    func testGroupMembersBlankDaysCountedSeparately() {
+        // 10/12 周一 … 10/16 周五：甲轮组别（组A、组B），14–16 日没排、没写休息；乙只值遥测、不轮组别
+        let roster: Roster = ["甲": [d(10, 12): "组A", d(10, 13): "组B"], "乙": [d(10, 12): "遥测"]]
+        let people = WorkloadCounter.count(roster: roster, days: (12...16).map { d(10, $0) }, matcher: m, calendar: cal)
+        let jia = people.first { $0.name == "甲" }, yi = people.first { $0.name == "乙" }
+        XCTAssertEqual(jia?.isGroupMember, true)
+        XCTAssertEqual(jia?.workDays, 5)          // 没排的也算工作量
+        XCTAssertEqual(jia?.presentDays, 5)
+        XCTAssertEqual(jia?.blankWorkDays, 3)     // 其中 14–16 日没排班
+        XCTAssertEqual(yi?.isGroupMember, false)
+        XCTAssertEqual(yi?.blankWorkDays, 4)
+        let csv = WorkloadCSV.make(people)
+        XCTAssertTrue(csv.contains("甲,5,5,0,0,5,0,0,0,0,0,0,,是,3,"), csv)
+    }
 }

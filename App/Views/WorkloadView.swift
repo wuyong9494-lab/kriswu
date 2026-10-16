@@ -86,6 +86,7 @@ struct WorkloadView: View {
                     ExpandableText(text: "只算到今天，网站上能看到的日子才算得进来。「工作量」= 值班（遥测）+ 日常（各组、调度等岗位）+ 出差；假期里值完遥测的第二天休息算上班、算节假日上班，不算工作量。工作日网站上没排岗位、也没写休息的日子：除了调度，不管轮不轮组别都是正常上班，算日常、算工作量。写了休息、调休、请假的不管节假日还是平时都算休息；调度没排班的日子既不算工作量也不算上班。「节假日放假」是法定假日里网站上没排任何岗位的天数；「节假日上班」是法定假日里上了班（值班、各组、调度）的天数，两个数分开算；调休上班的周末算工作日。点开某个人可以看每一天怎么算的。")
                 }
             }
+            GroupAttendanceSection(people: report.people)
             Section {
                 ToolGrid(items: tools, selection: $toolIndex)
                 NavigationLink { SwapLedgerView() } label: { Label("换班账本", systemImage: "book.closed") }
@@ -195,7 +196,8 @@ struct WorkloadView: View {
     /// 「值班 2 · 日常 8 · 休息 3 · 节假日放假 7」：只写不是 0 的（节假日上班和节假日放假分开算，不是其中的一部分）
     private func summary(_ p: PersonWorkload) -> String {
         let parts: [(label: String, value: Int, note: String)] = [
-            ("值班", p.dutyDays, ""), ("值班调休", p.dutyRestDays, ""), ("日常", p.regularDays, ""), ("出差", p.tripDays, ""),
+            ("值班", p.dutyDays, ""), ("值班调休", p.dutyRestDays, ""),
+            ("日常", p.regularDays, p.blankWorkDays > 0 ? "（其中没排岗位 \(p.blankWorkDays)）" : ""), ("出差", p.tripDays, ""),
             ("上班", p.attendanceDays, "（不算工作量）"), ("休息", p.offDays, ""), ("节假日放假", p.holidayDays, ""),
             ("没排班", p.unassignedDays, ""), ("节假日上班", p.holidayWorkedDays, ""),
         ]
@@ -389,5 +391,40 @@ struct RotationMembersView: View {
         .adminOnly()
         .navigationTitle("没排班不算上班的人")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+/// 轮组别的人单独看：上了多少天班，其中多少天网站上没给排岗位（没排岗位、没写休息照常算上班、算工作量）
+struct GroupAttendanceSection: View {
+    @EnvironmentObject private var store: AppStore
+    let people: [PersonWorkload]
+
+    var body: some View {
+        let zh = Locale(identifier: "zh_CN")
+        let members = people.filter(\.isGroupMember).sorted { a, b in
+            a.presentDays != b.presentDays ? a.presentDays > b.presentDays : a.name.compare(b.name, locale: zh) == .orderedAscending
+        }
+        if !members.isEmpty {
+            Section {
+                ForEach(members, id: \.name) { p in
+                    HStack {
+                        Text(p.name)
+                            .foregroundStyle(store.isMe(p.name) ? Color.accentColor : Color.primary)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("上班 \(p.presentDays) 天").font(.body.monospacedDigit())
+                            Text("其中没排班 \(p.blankWorkDays) 天")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(p.blankWorkDays > 0 ? Color.orange : Color.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("轮组别的人（\(members.count) 人）")
+            } footer: {
+                Text("上班天数 = 工作量 + 假期里值完遥测后休息的那天。「没排班」是工作日网站上没给排岗位、也没写休息的日子：照常算上班、算工作量，这里单独数出来。谁轮组别看「人员档案」，没建档案的按最近三个月的排班认。")
+            }
+        }
     }
 }

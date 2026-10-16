@@ -60,12 +60,12 @@ public enum WorkloadCSV {
     }
 
     public static func make(_ people: [PersonWorkload], restBalance: [String: Int] = [:]) -> String {
-        var lines = ["姓名,工作量,上班天数,值班(遥测),值班调休,日常,出差,上班(不算工作量),休息,节假日,没排班,节假日上班,待休,各岗位"]
+        var lines = ["姓名,工作量,上班天数,值班(遥测),值班调休,日常,出差,上班(不算工作量),休息,节假日,没排班,节假日上班,待休,轮组别,其中没排岗位上班,各岗位"]
         for p in people {
             let posts = p.posts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map { "\($0.key)×\($0.value)" }.joined(separator: " ")
             let cells = [p.name, "\(p.workDays)", "\(p.presentDays)", "\(p.dutyDays)", "\(p.dutyRestDays)", "\(p.regularDays)",
                          "\(p.tripDays)", "\(p.attendanceDays)", "\(p.offDays)", "\(p.holidayDays)", "\(p.unassignedDays)", "\(p.holidayWorkedDays)",
-                         restBalance[p.name].map(String.init) ?? "", posts]
+                         restBalance[p.name].map(String.init) ?? "", p.isGroupMember ? "是" : "", "\(p.blankWorkDays)", posts]
             lines.append(cells.map(field).joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"

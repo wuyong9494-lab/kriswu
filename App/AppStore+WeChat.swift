@@ -111,6 +111,11 @@ extension AppStore {
             "\(p.name)：\(p.workDays) 天（遥测 \(p.dutyDays)，休息 \(p.offDays)）" + (settings.restBalance[p.name].map { "，待休 \($0)" } ?? "")
         }
         if !balance.rows.isEmpty { lines.append("\n有组别的人：\(balance.verdict)。" + balance.findings.joined(separator: "；")) }
+        // 轮组别的人：上了多少天班，其中多少天网站上没给排岗位
+        let members = report.people.filter(\.isGroupMember)
+        if !members.isEmpty {
+            lines.append("\n轮组别的人（上班 / 其中没排班）：" + members.map { "\($0.name) \($0.presentDays)/\($0.blankWorkDays)" }.joined(separator: "，"))
+        }
         let sent = await pushToWeChat(title: "📊 \(m)月工作量月报", content: lines.joined(separator: "\n"))
         if !sent { settings.lastMonthlyReport = last }
     }

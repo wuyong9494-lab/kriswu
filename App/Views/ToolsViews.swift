@@ -244,6 +244,7 @@ struct YearStatsView: View {
                     ExpandableText(text: "统计 \(report.days.first!.dateText) – \(report.days.last!.dateText) 共 \(report.days.count) 天（只算到今天），规则和每月统计一样。前面缺的月份点上面的按钮，用电脑版「值班查看」一周周往前翻着读（翻几十周要 1–2 分钟，读的时候别离开 App）。")
                 }
             }
+            GroupAttendanceSection(people: report.people)
             ForEach(report.people, id: \.name) { p in
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     HStack(alignment: .center) {
@@ -258,6 +259,7 @@ struct YearStatsView: View {
                             Chip(text: "遥测 \(p.dutyDays)", color: DS.Palette.accent)
                             Chip(text: "节假日上班 \(p.holidayWorkedDays)", color: .secondary)
                             Chip(text: "日常 \(p.regularDays)", color: .secondary)
+                            if p.blankWorkDays > 0 { Chip(text: "其中没排岗位 \(p.blankWorkDays)", color: .orange) }
                             if p.dutyRestDays > 0 { Chip(text: "值班调休 \(p.dutyRestDays)", color: .secondary) }
                             if p.tripDays > 0 { Chip(text: "出差 \(p.tripDays)", color: .secondary) }
                             Chip(text: "休息 \(p.offDays)", color: .secondary)
