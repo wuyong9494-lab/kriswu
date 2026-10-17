@@ -2304,4 +2304,40 @@ final class AuditFixTests: XCTestCase {
         XCTAssertEqual(p?.workDays, 6)
         XCTAssertEqual(p?.offDays, 1)
     }
+
+    func testMergeDoesNotFlipPastDaysBetweenSources() {
+        let t0 = Date(timeIntervalSince1970: 1_000), t1 = Date(timeIntervalSince1970: 2_000), t2 = Date(timeIntervalSince1970: 3_000)
+        let past = d(10, 12), future = d(10, 20), today = d(10, 16)
+        // 电脑版周表：甲 12 日休息、20 日休息
+        let desktop: Roster = ["甲": [past: "休息", future: "休息"], "乙": [past: "组A", future: "组A"]]
+        let first = RosterMerger.merge(old: [:], oldSources: [:], new: desktop, source: "desktop", at: t0,
+                                       carriesLeave: true, today: today, matcher: m)
+        // 数据接口这两天没列甲：过去的 12 日留着电脑版读到的休息；以后的 20 日照常以新的为准
+        let api: Roster = ["乙": [past: "组A", future: "组A"], "丙": [past: "休息", future: "休息"]]
+        let second = RosterMerger.merge(old: first.roster, oldSources: first.sources, new: api, source: "sync", at: t1,
+                                        carriesLeave: true, today: today, matcher: m)
+        XCTAssertEqual(second.roster["甲"]?[past], "休息")
+        XCTAssertNil(second.roster["甲"]?[future])
+        XCTAssertFalse(second.edits.contains { $0.name == "甲" && $0.day == past })   // 过去的 12 日不记成变动
+        XCTAssertTrue(second.edits.contains { $0.name == "甲" && $0.day == future })
+        // 同一种读取方式（电脑版）再读，没列甲：过去的照常删
+        let third = RosterMerger.merge(old: second.roster, oldSources: second.sources, new: ["乙": [past: "组A"]],
+                                       source: "desktop", at: t2, carriesLeave: true, today: today, matcher: m)
+        XCTAssertNil(third.roster["甲"]?[past])
+    }
+
+    func testMergeKeepsDayWhenReadLooksPartial() {
+        let day = d(10, 12), today = d(10, 16)
+        var full: Roster = [:]
+        for i in 0..<10 { full["人\(i)"] = [day: "组A"] }
+        let first = RosterMerger.merge(old: [:], oldSources: [:], new: full, source: "desktop", at: Date(),
+                                       carriesLeave: false, today: today, matcher: m)
+        // 这次只读到 3 个人（翻页没加载全）：别的 7 个人留着
+        let partial: Roster = ["人0": [day: "组B"], "人1": [day: "组A"], "人2": [day: "组A"]]
+        let second = RosterMerger.merge(old: first.roster, oldSources: first.sources, new: partial, source: "desktop",
+                                        at: Date(), carriesLeave: false, today: today, matcher: m)
+        XCTAssertEqual(second.roster.filter { $0.value[day] != nil }.count, 10)
+        XCTAssertEqual(second.roster["人0"]?[day], "组B")              // 读到的照常更新
+        XCTAssertEqual(second.edits.map(\.name), ["人0"])
+    }
 }

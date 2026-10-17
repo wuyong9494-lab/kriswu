@@ -92,8 +92,13 @@ public enum RosterMerger {
     /// 把这次读到的合并进已保存的：读到的日子整天以新的为准；
     /// 但这种读取方式不带休息列（carriesLeave = false）时，保留之前读到的休息、请假（来源也保留）。
     /// carriedKinds：这次读到的有哪几类（见 leaveKinds）；只带休息、调休列的读取不会冲掉以前读到的请假、出差。
+    /// today：给了就开启两条保护（App 里都给）——
+    /// 1. 已经过去的日子：这次没列某人，不删别的读取方式读到的他那天的记录（电脑版周表和数据接口写法不完全一样，
+    ///    以前一边写「休息」、一边不列，每读一次就来回变一次，全年工作量跟着变）；同一种读取方式没再列出来的照常删
+    /// 2. 这次读到的人数明显比以前少（翻页没加载全）：那天只补新读到的，不删已有的
     public static func merge(old: Roster, oldSources: RosterSources, new: Roster, source: String, at: Date,
-                             carriesLeave: Bool, carriedKinds: Set<String>? = nil, matcher: ShiftMatcher) -> Result {
+                             carriesLeave: Bool, carriedKinds: Set<String>? = nil, today: DayKey? = nil,
+                             matcher: ShiftMatcher) -> Result {
         guard !new.isEmpty else { return Result(roster: old, sources: oldSources, edits: []) }
         // 这次读取带哪几列：读到了请假或出差的，是什么都带的读取方式（同步的数据接口、手机版）；
         // 只读到休息、调休的（电脑版周表）只带这两列，以前读到的请假、出差不能当成取消了
@@ -105,6 +110,27 @@ public enum RosterMerger {
         var roster = old
         var sources = oldSources
         var edits: [RosterEdit] = []
+        var oldCount: [DayKey: Int] = [:], newCount: [DayKey: Int] = [:]
+        if today != nil {
+            for person in old.values { for day in person.keys where days.contains(day) { oldCount[day, default: 0] += 1 } }
+            for person in new.values { for day in person.keys { newCount[day, default: 0] += 1 } }
+        }
+        /// 这次读到的人数不到以前的七成（以前至少 5 人）：多半是没读全
+        func partial(_ day: DayKey) -> Bool {
+            let before = oldCount[day] ?? 0
+            return before >= 5 && (newCount[day] ?? 0) * 10 < before * 7
+        }
+        /// 这次没列出来的旧记录要不要留着
+        func keep(_ name: String, _ day: DayKey, _ oldValue: String) -> Bool {
+            // 这种读取方式根本不带这一类（电脑版周表没有请假、出差）
+            let kinds = leaveKinds(of: oldValue, matcher: matcher)
+            if !kinds.isEmpty && !kinds.isSubset(of: carried) { return true }
+            guard let today else { return false }
+            if partial(day) { return true }
+            // 过去的日子：别的读取方式读到的，不因为这次没列而删
+            if day < today, let by = oldSources[name]?[day]?.source, by != source { return true }
+            return false
+        }
         let names = Set(old.keys).union(new.keys)
         for name in names {
             for day in days {
@@ -114,8 +140,7 @@ public enum RosterMerger {
                 if let newValue {
                     final = newValue
                     sources[name, default: [:]][day] = Provenance(source: source, at: at)
-                } else if let oldValue, case let kinds = leaveKinds(of: oldValue, matcher: matcher),
-                          !kinds.isEmpty, !kinds.isSubset(of: carried) {
+                } else if let oldValue, keep(name, day, oldValue) {
                     final = oldValue   // 来源不变
                 } else {
                     final = nil

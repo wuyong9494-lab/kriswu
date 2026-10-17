@@ -1221,7 +1221,7 @@ final class AppStore: ObservableObject {
         // 先在副本上算好，只赋值一次（每次赋值都会重算已排班的日子、刷新界面）
         let result = RosterMerger.merge(old: roster, oldSources: rosterSources, new: new, source: source, at: Date(),
                                         carriesLeave: carries, carriedKinds: RosterMerger.leaveKinds(new, matcher: matcher),
-                                        matcher: matcher)
+                                        today: .today, matcher: matcher)
         // 留一年多，全年统计用
         let cutoff = DayKey.today.adding(days: -400)
         // 以前没拆开存下的「张三李四」也一起拆开
