@@ -33,7 +33,7 @@ extension AppStore {
 
     /// 导入失败的提示（显示成红色）
     nonisolated static func meetingImportFailed(_ message: String) -> Bool {
-        ["没认出", "读不出", "打不开", "剪贴板里没有"].contains { message.hasPrefix($0) }
+        ["没认出", "读不出", "打不开", "剪贴板里没有", "自动下载没成功"].contains { message.hasPrefix($0) }
     }
 
     /// 导入 Excel（.xlsx）、CSV 文件：金山文档里「导出 / 发送副本」成 Excel 分享给值班提醒

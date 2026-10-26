@@ -2449,6 +2449,22 @@ final class MeetingTests: XCTestCase {
                        "https://drive.kdocs.cn/api/v5/groups/1/files/2/download?isblocks=false&support_checksums=md5,sha1")
     }
 
+    func testIssueDetailParts() {
+        let w = DayKey(year: 2026, month: 10, day: 26)
+        var issue = MeetingIssue(id: "x", group: "调度组", text: "接口改造", firstWeek: w, lastWeek: w, status: .open,
+                                 detail: "本周问题 · 负责人：甲、乙 · 进展：进行中")
+        XCTAssertEqual(issue.owners, ["甲", "乙"])
+        XCTAssertEqual(issue.progress, "进行中")
+        XCTAssertEqual(issue.topic, "本周问题")
+        issue.detail = "负责人：丙 · 状态：未解决"
+        XCTAssertEqual(issue.owners, ["丙"])
+        XCTAssertEqual(issue.progress, "未解决")
+        XCTAssertNil(issue.topic)
+        issue.detail = nil
+        XCTAssertEqual(issue.owners, [])
+        XCTAssertNil(issue.progress)
+    }
+
     func testClosureNotes() {
         XCTAssertEqual(MeetingTable.closureNotes("，完成；2。明确；3 进行中；4，上线；5，进行中。"),
                        [1: "完成", 2: "明确", 3: "进行中", 4: "上线", 5: "进行中"])

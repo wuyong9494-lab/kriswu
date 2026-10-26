@@ -56,6 +56,32 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
                                            to: end.date(calendar: calendar, hour: 12)).day ?? 0
         return max(1, days / 7 + 1)
     }
+
+    // 补充说明是「本周问题 · 负责人：甲、乙 · 进展：进行中」这样拼起来的，拆开来按人筛、单独显示
+
+    /// 负责人（「甲、乙」拆成两个人）
+    public var owners: [String] {
+        guard let raw = detailPart("负责人：") else { return [] }
+        return raw.split { "、,，/／;； ".contains($0) }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// 文档里写的进展（「完成情况」那一列对上这一条的）或状态
+    public var progress: String? { detailPart("进展：") ?? detailPart("状态：") }
+
+    /// 这一条在文档里属于哪一项（「本周问题」「上上周问题进展」）
+    public var topic: String? {
+        guard let first = detail?.components(separatedBy: " · ").first, !first.isEmpty,
+              !["负责人：", "进展：", "状态："].contains(where: { first.hasPrefix($0) }) else { return nil }
+        return first
+    }
+
+    private func detailPart(_ prefix: String) -> String? {
+        guard let part = detail?.components(separatedBy: " · ").first(where: { $0.hasPrefix(prefix) }) else { return nil }
+        let value = part.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? nil : value
+    }
 }
 
 /// 把周会文档的文字拆成「组 → 问题」
