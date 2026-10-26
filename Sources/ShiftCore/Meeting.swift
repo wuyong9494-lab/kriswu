@@ -283,6 +283,27 @@ public enum MeetingTracker {
     }
 
     /// 用这一周的文档更新问题清单。week：这一周的周一
+    /// 文档还是同一版时：只补上每条在表格里的位置（旧版本导入的没记位置，重新导入一次就能写回金山文档），别的不动
+    public static func refreshSources(_ issues: [MeetingIssue], with sections: [MeetingNotes.Section]) -> [MeetingIssue] {
+        var result = issues
+        var touched = Set<String>()
+        for section in sections {
+            for entry in section.entries where entry.source != nil {
+                let key = normalized(entry.text)
+                guard !key.isEmpty else { continue }
+                let best = result.indices
+                    .filter { result[$0].group == section.group && !touched.contains(result[$0].id) }
+                    .map { (index: $0, score: similarity(key, normalized(result[$0].text))) }
+                    .filter { $0.score >= 0.6 }
+                    .max { $0.score < $1.score }
+                guard let i = best?.index else { continue }
+                result[i].source = entry.source
+                touched.insert(result[i].id)
+            }
+        }
+        return result
+    }
+
     public static func update(_ issues: [MeetingIssue], with sections: [MeetingNotes.Section], week: DayKey) -> [MeetingIssue] {
         var result = issues
         var touched = Set<String>()

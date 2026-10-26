@@ -115,6 +115,8 @@ struct MeetingIssuesView: View {
     @State private var additions: [NewIssue] = []
     @State private var confirming: PendingMeetingWrite?
     @State private var askSetup: PendingMeetingWrite?
+    /// 打开「导入」页时直接翻到「写回金山文档」
+    @State private var sourceShowsWriteback = false
 
     private var week: DayKey { MeetingTracker.monday(of: .today) }
 
@@ -175,6 +177,9 @@ struct MeetingIssuesView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if let g = editingGroup {
+                    Button { openSource(writeback: true) } label: {
+                        Image(systemName: "square.and.arrow.down").accessibilityLabel("导入、设置写回金山文档")
+                    }
                     Button("保存") { save(g) }.bold()
                 } else {
                     toolbarButtons
@@ -194,13 +199,13 @@ struct MeetingIssuesView: View {
                 stopEditing()
             }
             Button("去设置写回") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showingSource = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { openSource(writeback: true) }
             }
         } message: { _ in
             Text("设置好以后，保存时会把改动写进金山文档的周会表格。")
         }
         .sheet(isPresented: $showingSource) {
-            NavigationStack { MeetingSourceView() }
+            NavigationStack { MeetingSourceView(showWriteback: sourceShowsWriteback) }
         }
         .onAppear {
             // 没有没解决的、只剩待确认的：直接看待确认
@@ -220,9 +225,14 @@ struct MeetingIssuesView: View {
         } label: {
             Image(systemName: byOwner ? "person.2" : "square.grid.2x2").accessibilityLabel("按组分还是按负责人分")
         }
-        Button { showingSource = true } label: {
+        Button { openSource(writeback: false) } label: {
             Image(systemName: "square.and.arrow.down").accessibilityLabel("导入周会文档")
         }
+    }
+
+    private func openSource(writeback: Bool) {
+        sourceShowsWriteback = writeback
+        showingSource = true
     }
 
     // MARK: - 编辑一个组
@@ -270,15 +280,28 @@ struct MeetingIssuesView: View {
     @ViewBuilder
     private func editSections(_ group: String, issues: [MeetingIssue]) -> some View {
         let items = issues.filter { $0.group == group }.sorted(by: documentOrder)
+        let ready = store.meetingWritebackReady
+        let unplaced = items.filter { $0.source == nil }.count
         Section {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
-                Text(store.meetingWritebackReady
+                if unplaced > 0 {
+                    Text("这个组有 \(unplaced) 条是以前导入的，没记下在表格里的位置，写不回金山文档：在「导入」页重新下载一次（或重新复制导入），就记下了，改好的不会丢。")
+                        .font(.footnote).foregroundStyle(DS.Palette.warning)
+                }
+                Text(ready
                      ? "改完点右上角「保存」：先给你看要改金山文档里哪几格，确认了才写进去。"
-                     : "改完点右上角「保存」。还没设置写回金山文档，保存时可以只存在手机上，或者先去设置。")
+                     : "改完点右上角「保存」。要写回金山文档，先在「导入」页最下面「写回金山文档」设置一次（要用电脑把脚本放进周会表格）；没设置时只能存在手机上。")
                     .font(.footnote).foregroundStyle(.secondary)
-                Button("不改了", role: .cancel) { stopEditing() }
-                    .font(.footnote.weight(.semibold))
-                    .buttonStyle(.borderless)
+                HStack(spacing: DS.Space.l) {
+                    if !ready {
+                        Button("设置写回金山文档") { openSource(writeback: true) }
+                    } else if unplaced > 0 {
+                        Button("去重新导入") { openSource(writeback: false) }
+                    }
+                    Button("不改了", role: .cancel) { stopEditing() }
+                }
+                .font(.footnote.weight(.semibold))
+                .buttonStyle(.borderless)
             }
         }
         Section {
@@ -714,6 +737,8 @@ struct MeetingWriteConfirmView: View {
 struct MeetingSourceView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    /// 打开时直接翻到「写回金山文档」
+    var showWriteback = false
     @State private var browsing = false
     @State private var pasting = false
     @State private var pasteText = ""
@@ -725,6 +750,9 @@ struct MeetingSourceView: View {
 
     var body: some View {
         List {
+            // 从「设置写回金山文档」进来的：写回那一段放最上面
+            if showWriteback { writebackSection }
+
             Section {
                 DraftTextField("粘贴周会文档的分享链接（金山文档、腾讯文档）", value: store.settings.meetingDocURL) {
                     store.settings.meetingDocURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -782,7 +810,7 @@ struct MeetingSourceView: View {
                 Text("在金山文档 App 里全选表格复制，回来点「从剪贴板导入」；或导出成 Excel，用「分享 → 值班提醒」打开。按「分组」一列分组，「完成进展」里 1. 2. 3. 每条算一个问题，「完成情况」写了完成、上线、已解决的算解决了。文档内容只存在这台手机上。")
             }
 
-            writebackSection
+            if !showWriteback { writebackSection }
 
             if store.settings.meetingMessage != nil || !store.settings.meetingDownloadLog.isEmpty || store.meetingPageText != nil {
                 Section("上次导入") {
@@ -812,7 +840,7 @@ struct MeetingSourceView: View {
             }
         }
         .appList()
-        .navigationTitle("导入周会文档")
+        .navigationTitle(showWriteback ? "写回金山文档" : "导入周会文档")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }

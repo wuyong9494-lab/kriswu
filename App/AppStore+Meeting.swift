@@ -90,9 +90,14 @@ extension AppStore {
         let print = MeetingTracker.fingerprint(text)
         // 文档还是上次那一版（周一还没更新）：不当成新的一周，免得把问题都算成「没再提」
         guard print != s.meetingFingerprint else {
+            // 同一版：补上表格位置（以前导入的没记，补上了就能写回金山文档）
+            let refreshed = MeetingTracker.refreshSources(s.meetingIssues, with: sections)
+            let filled = zip(refreshed, s.meetingIssues).filter { $0.0.source != $0.1.source }.count
+            s.meetingIssues = refreshed
             s.meetingMessage = "文档还是上次那一版，没有新内容（\(source)，\(Date().formatted(date: .omitted, time: .shortened))）"
+                + (filled > 0 ? "；记下了 \(filled) 条在表格里的位置" : "")
             settings = s
-            return "文档还没更新"
+            return filled > 0 ? "文档没变，记下了 \(filled) 条在表格里的位置，可以写回金山文档了" : "文档还没更新"
         }
         let before = s.meetingIssues
         s.meetingIssues = MeetingTracker.update(before, with: sections, week: week)

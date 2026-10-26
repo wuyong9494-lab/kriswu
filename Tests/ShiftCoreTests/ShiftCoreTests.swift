@@ -2535,6 +2535,22 @@ final class MeetingTests: XCTestCase {
         XCTAssertEqual(again.count, after.count)
     }
 
+    func testRefreshSourcesKeepsStatus() throws {
+        let w = DayKey(year: 2026, month: 10, day: 26)
+        // 以前从文字导入的：没有位置；自己标了解决
+        var old = MeetingTracker.update([], with: [.init(group: "调度组", items: ["接入新站", "接口改造"])], week: w)
+        let i = try XCTUnwrap(old.firstIndex { $0.text == "接口改造" })
+        old[i].status = .resolved
+        old[i].manual = true
+        XCTAssertNil(old[i].source)
+        let tsv = "分组\t项目或工作内容\t完成进展、进度\t负责人\n调度组\t本周问题\t\"1.接入新站\n2.接口改造\"\t甲\n"
+        let refreshed = MeetingTracker.refreshSources(old, with: MeetingNotes.parse(tsv))
+        XCTAssertEqual(refreshed.first { $0.text == "接口改造" }?.source?.number, 2)
+        XCTAssertEqual(refreshed.first { $0.text == "接口改造" }?.status, .resolved)
+        XCTAssertEqual(refreshed.first { $0.text == "接入新站" }?.source?.row, 2)
+        XCTAssertEqual(refreshed.count, old.count)
+    }
+
     func testScriptResult() throws {
         let logs = #"{"data":{"logs":[{"args":["SHIFT_RESULT {\"ok\":false,\"problems\":[{\"index\":1,\"reason\":\"changed\"}]}"]}],"result":null},"error":"","status":"finished"}"#
         let json = try JSONSerialization.jsonObject(with: Data(logs.utf8))
