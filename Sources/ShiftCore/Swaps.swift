@@ -125,8 +125,9 @@ public enum SwapFinder {
             // 最近两周在网站上出现过（调走的人不算）
             guard history.keys.contains(where: window.contains) else { continue }
             let raw = history[day]
-            // 那天要有空：没排岗位，也不是请假、出差
+            // 那天要有空：没排岗位，也不是调休、请假、出差（只有普通休息、没排班的能找）
             guard free(raw), !(raw ?? "").contains("出差") else { continue }
+            if let raw, !RosterMerger.leaveKinds(of: raw, matcher: matcher).subtracting(["休息"]).isEmpty { continue }
             // 还在值完遥测后的休息里（休两三天），不打扰
             guard !(1...3).contains(where: { back in
                 let d = day.adding(days: -back, calendar: calendar)

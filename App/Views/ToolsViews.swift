@@ -17,7 +17,7 @@ struct SwapHelperView: View {
             Section {
                 LabeledContent(day.dateText, value: store.matcher.displayName(myPost))
             } footer: {
-                Text("找的是那天没排岗位（没排班、休息）的人；前一天值了遥测在调休的、请假出差的不算。"
+                Text("找的是那天没排岗位（没排班、休息）的人；那天调休、请假、出差的，和刚值完遥测还在休息的不算。"
                      + (WorkloadCounter.isDuty(store.matcher.displayName(myPost)) ? "遥测只找值过遥测、第二天没班的人。" : "")
                      + "欠你班的、和你换过的、以后有班正好能换回来的排在前面。")
             }

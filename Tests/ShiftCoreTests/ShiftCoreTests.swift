@@ -1164,6 +1164,7 @@ final class UpgradeTests: XCTestCase {
             "丁": [d(15): "休息", d(13): "组B"],                  // 没值过遥测
             "戊": [d(11): "遥测", d(16): "组C"],                  // 第二天有班
             "己": [d(9): "遥测", d(17): "组D"],                   // 有空，欠我一天，17 日有班我没班 → 可以换回来
+            "庚": [d(8): "遥测", d(15): "调休"],                  // 那天调休，不能找
         ]
         let records = [SwapRecord(day: d(1), person: "己", myOld: "", myNew: "组A", effect: 1)]
         let c = SwapFinder.candidates(day: d(15), myPost: "遥测", mine: [d(15): "遥测"], roster: roster,
@@ -2275,6 +2276,7 @@ final class AuditFixTests: XCTestCase {
         XCTAssertEqual(second.edits.map(\.name), ["丙", "戊"])
         XCTAssertEqual(RosterMerger.leaveKinds(of: "值班交接前", matcher: m), ["休息"])
         XCTAssertEqual(RosterMerger.leaveKinds(of: "组A", matcher: m), [])
+        XCTAssertEqual(RosterMerger.leaveKinds(of: "调休", matcher: m), ["调休"])
     }
 
     func testGroupMembersBlankDaysCountedSeparately() {
