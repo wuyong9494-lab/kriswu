@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
 /// 今天页：周会文档里各组提的问题还有几个没解决；没设置时是导入入口
@@ -58,6 +59,7 @@ struct MeetingIssuesView: View {
     @State private var pasting = false
     @State private var pasteText = ""
     @State private var showResolved = false
+    @State private var pickingFile = false
 
     private var week: DayKey { MeetingTracker.monday(of: .today) }
 
@@ -79,11 +81,15 @@ struct MeetingIssuesView: View {
                 }
                 .disabled(store.settings.meetingDocURL.isEmpty)
                 Button {
-                    let text = UIPasteboard.general.string ?? ""
-                    let result = text.isEmpty ? "剪贴板里没有文字" : store.importMeeting(text: text, source: "剪贴板")
-                    ToastCenter.shared.show(result, style: text.isEmpty ? .error : .success)
+                    let result = store.importMeetingFromClipboard()
+                    ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
                 } label: {
                     Label("从剪贴板导入", systemImage: "doc.on.clipboard")
+                }
+                Button {
+                    pickingFile = true
+                } label: {
+                    Label("从文件导入（Excel / CSV）", systemImage: "tablecells")
                 }
                 Button {
                     pasteText = ""
@@ -107,7 +113,7 @@ struct MeetingIssuesView: View {
             } header: {
                 Text("周会文档")
             } footer: {
-                Text("文档每周一更新：每周第一次打开 App 时自动去读，读到新的一版就通知你。第一次先点「打开文档读取」，要登录就在里面登录一下。自动读不到时，在金山文档里全选复制，回来点「从剪贴板导入」。文档内容只存在这台手机上。")
+                Text("周会文档是在线表格时网页上读不出文字，每周一会提醒你导入一次：在金山文档 App 里打开表格，点左上角全选（或按住拖选全部格子）复制，回来点「从剪贴板导入」；也可以在金山文档里「导出为 Excel」，用「分享 → 值班提醒」打开。按「分组」一列分组，「完成进展」里 1. 2. 3. 每条算一个问题，「完成情况」写了完成、上线、已解决的算解决了。文档内容只存在这台手机上。")
             }
 
             if issues.isEmpty {
@@ -140,6 +146,13 @@ struct MeetingIssuesView: View {
         .navigationTitle("周会问题")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $browsing) { MeetingDocBrowser() }
+        .fileImporter(isPresented: $pickingFile,
+                      allowedContentTypes: [UTType("org.openxmlformats.spreadsheetml.sheet") ?? .data,
+                                            .commaSeparatedText, .tabSeparatedText]) { result in
+            guard case .success(let url) = result else { return }
+            let message = store.importMeetingFile(url)
+            ToastCenter.shared.show(message, style: AppStore.meetingImportFailed(message) ? .error : .success)
+        }
         .sheet(isPresented: $pasting) {
             NavigationStack {
                 TextEditor(text: $pasteText)
@@ -151,7 +164,7 @@ struct MeetingIssuesView: View {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("导入") {
                                 let result = store.importMeeting(text: pasteText, source: "粘贴")
-                                ToastCenter.shared.show(result, style: .success)
+                                ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
                                 pasting = false
                             }
                             .disabled(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -179,6 +192,9 @@ struct MeetingIssuesView: View {
                 Text(issue.text).font(.subheadline)
                     .strikethrough(issue.status == .resolved)
                     .foregroundStyle(issue.status == .resolved ? Color.secondary : Color.primary)
+            }
+            if let detail = issue.detail, !detail.isEmpty {
+                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
             }
             Text(caption(issue)).font(.caption)
                 .foregroundStyle(issue.status == .quiet ? Color.orange : Color.secondary)
@@ -247,7 +263,7 @@ struct MeetingDocBrowser: View {
                             let text = (try? await model.webView.evaluateJavaScript(DocTextLoader.textScript) as? String) ?? ""
                             let result = store.importMeeting(text: text, source: "打开文档")
                             if MeetingNotes.parse(text).isEmpty {
-                                toast = "这一页上没认出各组的内容。文档还没显示完就等一下再点；一直不行就在金山文档里全选复制，用「从剪贴板导入」"
+                                toast = "这一页读不出表格里的字（在线表格是画出来的）。请在金山文档里全选复制，用「从剪贴板导入」；或导出成 Excel 分享给值班提醒"
                             } else {
                                 ToastCenter.shared.show(result, style: .success)
                                 dismiss()

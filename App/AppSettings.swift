@@ -167,6 +167,8 @@ struct AppSettings: Codable, Equatable {
     var meetingWeek: DayKey?
     var meetingLastAttempt: Date?
     var meetingMessage: String?
+    /// 自动读不到（文档是在线表格）时，这一周已经提醒过去复制导入
+    var meetingNudgedWeek: DayKey?
     /// 人员档案（管理员确认过的角色、来走日期）
     var profiles: [String: PersonProfile] = [:]
     /// 工作量规则开关
@@ -334,6 +336,7 @@ struct AppSettings: Codable, Equatable {
         meetingWeek = try? c.decodeIfPresent(DayKey.self, forKey: .meetingWeek)
         meetingLastAttempt = try? c.decodeIfPresent(Date.self, forKey: .meetingLastAttempt)
         meetingMessage = try? c.decodeIfPresent(String.self, forKey: .meetingMessage)
+        meetingNudgedWeek = try? c.decodeIfPresent(DayKey.self, forKey: .meetingNudgedWeek)
         restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
         restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
         restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
@@ -492,6 +495,7 @@ extension AppSettings {
         a.meetingWeek = o.meetingWeek
         a.meetingLastAttempt = o.meetingLastAttempt
         a.meetingMessage = o.meetingMessage
+        a.meetingNudgedWeek = o.meetingNudgedWeek
         a.syncLog = o.syncLog
         a.lastBackgroundWake = o.lastBackgroundWake
         a.weChatMessage = o.weChatMessage

@@ -20,9 +20,11 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
     public var resolvedWeek: DayKey?
     /// 自己手动改过状态
     public var manual: Bool
+    /// 文档里最近一次的补充：这一行属于什么（「本周问题」）、负责人、进展
+    public var detail: String?
 
     public init(id: String, group: String, text: String, firstWeek: DayKey, lastWeek: DayKey,
-                status: Status, resolvedWeek: DayKey? = nil, manual: Bool = false) {
+                status: Status, resolvedWeek: DayKey? = nil, manual: Bool = false, detail: String? = nil) {
         self.id = id
         self.group = group
         self.text = text
@@ -31,6 +33,7 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
         self.status = status
         self.resolvedWeek = resolvedWeek
         self.manual = manual
+        self.detail = detail
     }
 
     public init(from decoder: Decoder) throws {
@@ -43,6 +46,7 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
         status = (try? c.decodeIfPresent(Status.self, forKey: .status)) ?? .open
         resolvedWeek = try? c.decodeIfPresent(DayKey.self, forKey: .resolvedWeek)
         manual = (try? c.decodeIfPresent(Bool.self, forKey: .manual)) ?? false
+        detail = try? c.decodeIfPresent(String.self, forKey: .detail)
     }
 
     /// 从第一次提出到 week 挂了几周（同一周提出算第 1 周）
@@ -56,12 +60,29 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
 
 /// 把周会文档的文字拆成「组 → 问题」
 public enum MeetingNotes {
+    /// 一条：文字、文档里是不是写了已经解决、补充说明（这一行属于什么、负责人、进展）
+    public struct Entry: Equatable {
+        public var text: String
+        public var done: Bool
+        public var detail: String?
+        public init(text: String, done: Bool? = nil, detail: String? = nil) {
+            self.text = text
+            self.done = done ?? MeetingTracker.isMarkedDone(text)
+            self.detail = detail
+        }
+    }
+
     public struct Section: Equatable {
         public var group: String
-        public var items: [String]
+        public var entries: [Entry]
+        public var items: [String] { entries.map(\.text) }
         public init(group: String, items: [String]) {
             self.group = group
-            self.items = items
+            self.entries = items.map { Entry(text: $0) }
+        }
+        public init(group: String, entries: [Entry]) {
+            self.group = group
+            self.entries = entries
         }
     }
 
@@ -133,7 +154,15 @@ public enum MeetingNotes {
         return nil
     }
 
+    /// 周会文档的文字：表格（复制出来的格子之间是制表符，第一行有「分组」）按表格读，别的按一行一行读
     public static func parse(_ text: String) -> [Section] {
+        if text.contains("\t"), let sections = MeetingTable.sections(MeetingTable.rows(text, separator: "\t")), !sections.isEmpty {
+            return sections
+        }
+        return parseLines(text)
+    }
+
+    static func parseLines(_ text: String) -> [Section] {
         struct Draft { var group: String; var all: [String] = []; var issues: [String] = []; var hasIssueHeading = false }
         var drafts: [Draft] = []
         var inIssues = false
@@ -225,8 +254,9 @@ public enum MeetingTracker {
         var result = issues
         var touched = Set<String>()
         for section in sections {
-            for item in section.items {
-                let done = isMarkedDone(item)
+            for entry in section.entries {
+                let item = entry.text
+                let done = entry.done
                 let key = normalized(item)
                 guard !key.isEmpty else { continue }
                 // 同一组里最像的那条（这一周还没对上的）；没解决的优先
@@ -240,6 +270,7 @@ public enum MeetingTracker {
                     }
                 if let i = best?.index {
                     result[i].text = item
+                    result[i].detail = entry.detail ?? result[i].detail
                     result[i].lastWeek = max(result[i].lastWeek, week)
                     if done {
                         if result[i].status != .resolved { result[i].resolvedWeek = week }
@@ -254,7 +285,8 @@ public enum MeetingTracker {
                 } else {
                     let id = "\(section.group)|\(week)|\(key.prefix(32))"
                     let issue = MeetingIssue(id: id, group: section.group, text: item, firstWeek: week, lastWeek: week,
-                                             status: done ? .resolved : .open, resolvedWeek: done ? week : nil)
+                                             status: done ? .resolved : .open, resolvedWeek: done ? week : nil,
+                                             detail: entry.detail)
                     result.append(issue)
                     touched.insert(id)
                 }

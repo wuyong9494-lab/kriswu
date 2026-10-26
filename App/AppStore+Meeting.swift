@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// 周会文档：导入、每周一自动读，跟进各组提的问题有没有解决
 @MainActor
@@ -7,9 +8,61 @@ extension AppStore {
     @discardableResult
     func importMeeting(text: String, source: String) -> String {
         meetingPageText = String(text.prefix(6000))
-        let sections = MeetingNotes.parse(text)
+        return applyMeeting(MeetingNotes.parse(text), fingerprintOf: text, source: source)
+    }
+
+    /// 从剪贴板导入：在金山 / 腾讯文档里选中表格复制。剪贴板里有网页表格（HTML）就按它读，一格里的换行、合并的「分组」都保得住
+    func importMeetingFromClipboard() -> String {
+        let board = UIPasteboard.general
+        if let data = board.data(forPasteboardType: "public.html"),
+           let html = String(data: data, encoding: .utf8) ?? SyncService.decode(data) {
+            let rows = MeetingTable.htmlRows(html)
+            if let sections = MeetingTable.sections(rows), !sections.isEmpty {
+                let text = rows.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+                meetingPageText = String(text.prefix(6000))
+                return applyMeeting(sections, fingerprintOf: text, source: "剪贴板")
+            }
+        }
+        guard let text = board.string, !text.isEmpty else {
+            let message = "剪贴板里没有文字：在金山文档里选中表格的格子，点「复制」再回来"
+            settings.meetingMessage = message
+            return message
+        }
+        return importMeeting(text: text, source: "剪贴板")
+    }
+
+    /// 导入失败的提示（显示成红色）
+    nonisolated static func meetingImportFailed(_ message: String) -> Bool {
+        ["没认出", "读不出", "打不开", "剪贴板里没有"].contains { message.hasPrefix($0) }
+    }
+
+    /// 导入 Excel（.xlsx）、CSV 文件：金山文档里「导出 / 发送副本」成 Excel 分享给值班提醒
+    @discardableResult
+    func importMeetingFile(_ url: URL) -> String {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
+        }
+        guard let data = try? Data(contentsOf: url) else { return "打不开这个文件" }
+        let ext = url.pathExtension.lowercased()
+        if ext == "xlsx" {
+            guard let rows = XLSXReader.rows(data) else { return "读不出这个 Excel 文件" }
+            let text = rows.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+            meetingPageText = String(text.prefix(6000))
+            return applyMeeting(MeetingTable.sections(rows) ?? [], fingerprintOf: text, source: "Excel 文件")
+        }
+        guard let text = SyncService.decode(data) else { return "读不出这个文件" }
+        if ext == "csv", let sections = MeetingTable.sections(MeetingTable.rows(text, separator: ",")), !sections.isEmpty {
+            meetingPageText = String(text.prefix(6000))
+            return applyMeeting(sections, fingerprintOf: text, source: "CSV 文件")
+        }
+        return importMeeting(text: text, source: "文件")
+    }
+
+    private func applyMeeting(_ sections: [MeetingNotes.Section], fingerprintOf text: String, source: String) -> String {
         guard !sections.isEmpty else {
-            let message = "没认出各组的内容：文档里要有「组A」「研发组」这样的组名（\(source)）"
+            let message = "没认出各组的内容（\(source)）：表格要有「分组」那一列，文字要有「组A」「研发组」这样的组名"
             settings.meetingMessage = message
             return message
         }
@@ -57,8 +110,16 @@ extension AppStore {
         if let done = settings.meetingWeek, done >= week { return }
         if let last = settings.meetingLastAttempt, Date().timeIntervalSince(last) < 3 * 3600 { return }
         settings.meetingLastAttempt = Date()
-        guard let text = await DocTextLoader.text(from: url), !text.isEmpty else {
-            settings.meetingMessage = "自动读周会文档没读到内容：在「周会问题」里点「打开文档」看看是不是要先登录"
+        let text = await DocTextLoader.text(from: url) ?? ""
+        guard !MeetingNotes.parse(text).isEmpty else {
+            // 在线表格是画出来的，网页上取不到文字：每周一提醒一次去复制导入
+            settings.meetingMessage = "自动读不到周会文档的内容（在线表格读不出文字）：在金山文档里全选复制，回来点「从剪贴板导入」，或导出成 Excel 分享给值班提醒"
+            if settings.meetingNudgedWeek != week {
+                settings.meetingNudgedWeek = week
+                await NotificationService.notifyNow(id: "meeting-nudge-\(week)", title: "📝 这周的周会文档导入了吗",
+                                                    body: "在金山文档里打开周会表格，全选复制，回到值班提醒点「从剪贴板导入」，就能看各组的问题解决了没有。",
+                                                    route: "meeting")
+            }
             return
         }
         let result = importMeeting(text: text, source: "自动")

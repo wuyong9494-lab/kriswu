@@ -2371,7 +2371,66 @@ final class MeetingTests: XCTestCase {
         let text = "组别\t问题\t负责人\t状态\n组A\t天线告警\t张三\t未解决\n\t遥测断帧\t李四\t已解决\n组C\t无\t\t"
         let s = MeetingNotes.parse(text)
         XCTAssertEqual(s.map(\.group), ["组A"])
-        XCTAssertEqual(s[0].items, ["天线告警，张三，未解决", "遥测断帧，李四，已解决"])
+        XCTAssertEqual(s[0].items, ["天线告警", "遥测断帧"])
+        XCTAssertEqual(s[0].entries.map(\.done), [false, true])      // 状态那一列
+        XCTAssertEqual(s[0].entries[0].detail, "负责人：张三 · 状态：未解决")
+    }
+
+    /// 金山表格那种：分组列合并单元格、一格里编号的几条、「闭环」列逐条写进展
+    func testSheetLayoutFromClipboard() {
+        let tsv = "分组\t项目或工作内容\t完成进展、进度\t计划完成时间\t负责人\t重点：上周闭环情况\n"
+            + "调度组\t上上周问题进展\t\"1.接入新站\n2.接口改造\n3.增加标识\"\t\t\t，完成；2。明确显示规则；3 上线\n"
+            + "\t本周问题\t参数位置不能修改\t\t\t软件继承\n"
+            + "\t\t\t\t\t\n"
+            + "管理组\t\"（上周）\n异常处置问题\"\t\"1️⃣结果判断不清，建议质检给出结论\n2️⃣重传问题：1、缺失；2、重传两次\n3️⃣细化描述\"\t进行中\t甲、乙\t1、2再讨论\n"
+            + "遥控组\t任务保障\t1.异常排查\t进行中\t丙\t1，梳理状态\n"
+        let s = MeetingNotes.parse(tsv)
+        XCTAssertEqual(s.map(\.group), ["调度组", "管理组", "遥控组"])
+        XCTAssertEqual(s[0].items, ["接入新站", "接口改造", "增加标识", "参数位置不能修改"])
+        XCTAssertEqual(s[0].entries.map(\.done), [true, false, true, false])
+        XCTAssertEqual(s[0].entries[1].detail, "上上周问题进展 · 进展：明确显示规则")
+        // 1️⃣2️⃣3️⃣ 拆三条，里面的「1、2、」不拆
+        XCTAssertEqual(s[1].items, ["结果判断不清，建议质检给出结论", "重传问题：1、缺失；2、重传两次", "细化描述"])
+        XCTAssertEqual(s[1].entries.map(\.done), [false, false, false])
+        XCTAssertEqual(s[1].entries[0].detail, "（上周）异常处置问题 · 负责人：甲、乙 · 进展：再讨论")
+        XCTAssertEqual(s[2].items, ["异常排查"])
+    }
+
+    func testSheetLayoutFromCopiedHTML() throws {
+        // 金山文档复制出来的网页表格：「分组」合并了两行，一格里用 <br> 换行
+        let html = """
+        <html><body><table>
+        <tr><td>分组</td><td>项目或工作内容</td><td>完成进展、进度</td><td>负责人</td><td>闭环情况</td></tr>
+        <tr><td rowspan="2" style="x">调度组</td><td>上上周问题进展</td><td>1.接入新站<br>2.接口&amp;改造</td><td>甲</td><td>，完成；2 进行中</td></tr>
+        <tr><td>本周问题</td><td><span>参数位置&nbsp;不能修改</span></td><td colspan="2">乙</td></tr>
+        <tr><td>遥控组</td><td>任务保障</td><td>1.异常排查</td><td>丙</td><td>&#19978;线</td></tr>
+        </table></body></html>
+        """
+        let rows = MeetingTable.htmlRows(html)
+        XCTAssertEqual(rows[2], ["", "本周问题", "参数位置 不能修改", "乙", ""])
+        let s = try XCTUnwrap(MeetingTable.sections(rows))
+        XCTAssertEqual(s.map(\.group), ["调度组", "遥控组"])
+        XCTAssertEqual(s[0].items, ["接入新站", "接口&改造", "参数位置 不能修改"])
+        XCTAssertEqual(s[0].entries.map(\.done), [true, false, false])
+        XCTAssertEqual(s[1].entries.map(\.done), [true])
+    }
+
+    func testClosureNotes() {
+        XCTAssertEqual(MeetingTable.closureNotes("，完成；2。明确；3 进行中；4，上线；5，进行中。"),
+                       [1: "完成", 2: "明确", 3: "进行中", 4: "上线", 5: "进行中"])
+        XCTAssertEqual(MeetingTable.closureNotes("1、2再讨论具体情况"), [1: "再讨论具体情况", 2: "再讨论具体情况"])
+        XCTAssertTrue(MeetingTable.isDoneNote("上线"))
+        XCTAssertFalse(MeetingTable.isDoneNote("计划完成"))
+    }
+
+    func testExcelFile() throws {
+        let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+        let rows = try XCTUnwrap(XLSXReader.rows(data))
+        XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+        let s = try XCTUnwrap(MeetingTable.sections(rows))
+        XCTAssertEqual(s.map(\.group), ["测控组"])
+        XCTAssertEqual(s[0].items, ["天线告警", "备件不足"])
+        XCTAssertEqual(s[0].entries.map(\.done), [true, false])
     }
 
     func testTrackAcrossWeeks() {

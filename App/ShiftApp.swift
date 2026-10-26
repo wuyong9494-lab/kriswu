@@ -215,7 +215,14 @@ struct RootView: View {
         // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕；
         // shiftreminder://capture/photo|record|note：小组件上的按钮
         .onOpenURL { url in
-            if url.isFileURL {
+            if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()) {
+                // 金山文档里导出、分享过来的周会表格
+                let result = store.importMeetingFile(url)
+                ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
+                tab = .today
+                rootSheet = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .meeting }
+            } else if url.isFileURL {
                 if WorkLogStore.shared.importFile(url) != nil {
                     tab = .today
                     rootSheet = .workLog
