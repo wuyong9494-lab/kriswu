@@ -2564,6 +2564,8 @@ final class MeetingTests: XCTestCase {
         let direct = try JSONSerialization.jsonObject(with: Data(#"{"data":{"result":"{\"ok\":true,\"written\":3}"}}"#.utf8))
         XCTAssertEqual(MeetingWriteback.scriptResult(in: direct)?["written"] as? Int, 3)
         XCTAssertNil(MeetingWriteback.scriptResult(in: try JSONSerialization.jsonObject(with: Data(#"{"data":{"result":null}}"#.utf8))))
+        let neutral = #"{"data":{"logs":[{"args":["RESULT_JSON {\"ok\":true,\"sheets\":[\"工作表1\"]}"]}]}}"#
+        XCTAssertEqual(MeetingWriteback.scriptResult(in: try JSONSerialization.jsonObject(with: Data(neutral.utf8)))?["sheets"] as? [String], ["工作表1"])
     }
 
     func testRowStatusWithQuestionNote() {

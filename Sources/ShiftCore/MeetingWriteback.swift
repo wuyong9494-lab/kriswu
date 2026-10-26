@@ -221,7 +221,7 @@ public enum MeetingWriteback {
         return plan
     }
 
-    /// 金山文档脚本回来的内容里，写回脚本的结果：脚本把它打在日志里（「SHIFT_RESULT {…}」），也可能直接在 result 里
+    /// 金山文档脚本回来的内容里，写回脚本的结果：脚本把它打在日志里（「RESULT_JSON {…}」，旧版脚本是 SHIFT_RESULT），也可能直接在 result 里
     public static func scriptResult(in json: Any?) -> [String: Any]? {
         func object(_ text: String) -> [String: Any]? {
             (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
@@ -233,7 +233,9 @@ public enum MeetingWriteback {
             let node = queue[i]
             i += 1
             if let text = node as? String {
-                if let r = text.range(of: "SHIFT_RESULT "), let found = object(String(text[r.upperBound...])) { return found }
+                for marker in ["RESULT_JSON ", "SHIFT_RESULT "] {
+                    if let r = text.range(of: marker), let found = object(String(text[r.upperBound...])) { return found }
+                }
             } else if let dict = node as? [String: Any] {
                 for key in dict.keys.sorted() {
                     guard let value = dict[key] else { continue }

@@ -116,6 +116,11 @@ struct MeetingIssuesView: View {
     @State private var confirming: PendingMeetingWrite?
     /// 打开「导入」页时直接翻到「写回金山文档」
     @State private var sourceShowsWriteback = false
+    /// 没设置写回就点了保存：问是去设置还是只存手机上
+    @State private var needSetup: PendingMeetingWrite?
+    /// 跳到金山文档里改了：回来时读一遍最新的
+    @State private var openedDocument = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private var week: DayKey { MeetingTracker.monday(of: .today) }
 
@@ -190,6 +195,25 @@ struct MeetingIssuesView: View {
                 MeetingWriteConfirmView(pending: pending) { stopEditing() }
             }
         }
+        .confirmationDialog("还没设置写回金山文档", isPresented: Binding(get: { needSetup != nil }, set: { if !$0 { needSetup = nil } }),
+                            titleVisibility: .visible, presenting: needSetup) { pending in
+            Button("去设置写回") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { openSource(writeback: true) }
+            }
+            Button("只存在手机上") {
+                store.saveMeetingEdits(drafts: pending.drafts, plan: pending.plan, group: pending.group, written: false)
+                ToastCenter.shared.show("存在手机上了，金山文档里没改", style: .success)
+                stopEditing()
+            }
+        } message: { _ in
+            Text("设置一次以后，保存就直接写进金山文档的周会表格。改好的先留着，设置完回来再点保存。")
+        }
+        .onChange(of: scenePhase) { phase in
+            // 从金山文档改完回来：读一遍最新的
+            guard phase == .active, openedDocument else { return }
+            openedDocument = false
+            refreshAfterEditing()
+        }
         .sheet(isPresented: $showingSource) {
             NavigationStack { MeetingSourceView(showWriteback: sourceShowsWriteback) }
         }
@@ -221,6 +245,33 @@ struct MeetingIssuesView: View {
         showingSource = true
     }
 
+    /// 在金山文档（WPS）App 里打开周会表格去改；没装就用浏览器打开
+    private func openDocument() {
+        let link = store.settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: link), url.scheme?.hasPrefix("http") == true else {
+            openSource(writeback: false)
+            return
+        }
+        openedDocument = true
+        UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in
+            if !opened { UIApplication.shared.open(url) }
+        }
+    }
+
+    private func refreshAfterEditing() {
+        guard let url = URL(string: store.settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              DocDownload.isSupported(url) else { return }
+        Task {
+            // 金山文档存盘要一会儿
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let before = store.settings.meetingFingerprint
+            let result = await store.downloadMeeting(link: url)
+            if result.ok, store.settings.meetingFingerprint != before {
+                ToastCenter.shared.show("读到了刚改的：" + result.message, style: .success)
+            }
+        }
+    }
+
     // MARK: - 编辑一个组
 
     private func startEditing(_ group: String) {
@@ -240,19 +291,20 @@ struct MeetingIssuesView: View {
         }
     }
 
-    /// 保存：算出要改表格里哪几格，先给看要改什么。设置好写回的确认了自动写；没设置的逐格复制、自己到金山文档里粘贴
+    /// 保存：算出要改表格里哪几格。设置好写回的先给看要改什么，确认了才写；没设置的问去设置还是只存手机上
     private func save(_ group: String) {
         let plan = MeetingWriteback.plan(issues: store.settings.meetingIssues, drafts: drafts,
                                          additions: additions.map(\.draft), group: group)
         guard plan.hasChanges else { stopEditing(); return }
-        let pending = PendingMeetingWrite(group: group, plan: plan, drafts: drafts, manual: !store.meetingWritebackReady)
+        let pending = PendingMeetingWrite(group: group, plan: plan, drafts: drafts)
         if plan.writes.isEmpty {
             store.saveMeetingEdits(drafts: drafts, plan: plan, group: group, written: false)
             ToastCenter.shared.show(plan.skipped.first ?? "存在手机上了", style: .success)
             stopEditing()
-        } else {
-            // 设置了写回：确认后自动写；没设置：逐格复制，到金山文档里粘贴
+        } else if store.meetingWritebackReady {
             confirming = pending
+        } else {
+            needSetup = pending
         }
     }
 
@@ -275,11 +327,16 @@ struct MeetingIssuesView: View {
                 }
                 Text(ready
                      ? "改完点右上角「保存」：先给你看要改金山文档里哪几格，确认了才写进去。"
-                     : "改完点右上角「保存」：列出要改金山文档里哪几格、改成什么，逐格点「复制」，到金山文档 App 里那一格粘贴就行，不用放脚本。")
+                     : "改完点右上角「保存」。要直接写进金山文档，先在「导入」页「写回金山文档」设置一次；没设置时只存在手机上。")
                     .font(.footnote).foregroundStyle(.secondary)
                 HStack(spacing: DS.Space.l) {
-                    if unplaced > 0 {
+                    if !ready {
+                        Button("设置写回") { openSource(writeback: true) }
+                    } else if unplaced > 0 {
                         Button("去重新导入") { openSource(writeback: false) }
+                    }
+                    if !store.settings.meetingDocURL.isEmpty {
+                        Button("在金山文档里打开") { openDocument() }
                     }
                     Button("不改了", role: .cancel) { stopEditing() }
                 }
@@ -389,6 +446,13 @@ struct MeetingIssuesView: View {
                 if let date = store.settings.meetingLastImport {
                     Text("文档 \(date.formatted(.dateTime.month().day())) 更新 · 点一条看详情，左滑标解决")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                if !store.settings.meetingDocURL.isEmpty {
+                    Button { openDocument() } label: {
+                        Label("在金山文档里打开编辑", systemImage: "square.and.pencil")
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .buttonStyle(.borderless)
                 }
             }
             .padding(.vertical, DS.Space.xxs)
@@ -637,8 +701,6 @@ struct PendingMeetingWrite: Identifiable {
     let group: String
     let plan: MeetingWriteback.Plan
     let drafts: [String: MeetingWriteback.Draft]
-    /// 没设置写回脚本：自己逐格复制、到金山文档里粘贴
-    let manual: Bool
 }
 
 /// 写进金山文档之前给人看：要改哪几格、改成什么
@@ -650,12 +712,11 @@ struct MeetingWriteConfirmView: View {
     let saved: () -> Void
     @State private var writing = false
     @State private var problem: String?
-    @State private var copied: Set<Int> = []
 
     var body: some View {
         List {
             Section {
-                ForEach(Array(pending.plan.writes.enumerated()), id: \.offset) { index, write in
+                ForEach(Array(pending.plan.writes.enumerated()), id: \.offset) { _, write in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                             Text(write.address)
@@ -663,14 +724,6 @@ struct MeetingWriteConfirmView: View {
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(DS.Palette.accentSoft, in: Capsule())
                             Text(write.summary).font(.subheadline)
-                            Spacer(minLength: 0)
-                            Button(copied.contains(index) ? "已复制" : "复制") {
-                                UIPasteboard.general.string = write.value
-                                copied.insert(index)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .tint(copied.contains(index) ? DS.Palette.success : DS.Palette.accent)
                         }
                         Text(write.value.isEmpty ? "（清空这一格）" : write.value)
                             .font(.caption).foregroundStyle(.secondary).lineLimit(10)
@@ -678,12 +731,9 @@ struct MeetingWriteConfirmView: View {
                     .padding(.vertical, 2)
                 }
             } header: {
-                Text(pending.manual ? "在金山文档里把这 \(pending.plan.writes.count) 格改成下面的内容"
-                                    : "要改金山文档里这 \(pending.plan.writes.count) 个格子")
+                Text("要改金山文档里这 \(pending.plan.writes.count) 个格子")
             } footer: {
-                Text(pending.manual
-                     ? "逐格点「复制」，到金山文档 App 里点那一格（比如 F2 就是 F 列第 2 行），把格子里原来的字全选，粘贴。这一格是整格换掉的，别的条目也在里面，不用另外改。都贴好了点右上角「贴好了」。表格要是有人插过行，以格子里的内容为准。"
-                     : "写之前会核对：这几格要是有人刚改过，一个都不改，提醒你先下载最新一版。也可以自己点「复制」到金山文档里粘贴。")
+                Text("写之前会核对：这几格要是有人刚改过，一个都不改，提醒你先下载最新一版。")
             }
             if !pending.plan.skipped.isEmpty {
                 Section("只改手机上的") {
@@ -713,20 +763,7 @@ struct MeetingWriteConfirmView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("返回修改") { dismiss() }.disabled(writing)
             }
-            ToolbarItem(placement: .confirmationAction) {
-                if pending.manual {
-                    Button("贴好了") {
-                        // 自己贴进去了：按贴进去的内容记下，下次改的时候核对用
-                        store.saveMeetingEdits(drafts: pending.drafts, plan: pending.plan, group: pending.group, written: true)
-                        ToastCenter.shared.show("存好了", style: .success)
-                        saved()
-                        dismiss()
-                    }
-                    .bold()
-                } else {
-                    writeButton
-                }
-            }
+            ToolbarItem(placement: .confirmationAction) { writeButton }
         }
     }
 
@@ -947,7 +984,7 @@ struct MeetingSourceView: View {
         } header: {
             Text("写回金山文档")
         } footer: {
-            Text("在「周会问题」里点组名旁边的「编辑」，改完保存就写进周会表格。要有这份表格的编辑权限，第一次用电脑设置：\n1. 点「把脚本存成文件发到电脑」（用微信文件传输助手等发过去），电脑上打开这个文件，全选复制。直接发文字的话，有的聊天软件会把换行变成 <br/>，脚本就用不了了。\n2. 电脑上用 WPS / 金山文档打开周会表格，菜单「效率 → 高级开发 → AirScript 脚本编辑器」（不是「JS 宏」）。脚本要建在左边「文档共享脚本」里（「我的脚本」没有 webhook，App 调用不了），能编辑表格的人都看得到；不想放脚本的话不用设置，保存时逐格复制、到金山文档里粘贴就行。把复制的内容整段粘贴进去，保存。\n3. 在编辑器左边的脚本列表里，右键这个脚本的名字（不是在代码里右键），复制「webhook 链接」，填到上面。\n4. 在脚本编辑器里点「脚本令牌」生成一个，填到上面，点「测试连接」。\n令牌只存在这台手机的钥匙串里。菜单的名字以 WPS 为准。")
+            Text("在「周会问题」里点组名旁边的「编辑」，改完保存就写进周会表格。要有这份表格的编辑权限，第一次用电脑设置：\n1. 点「把脚本存成文件发到电脑」（用微信文件传输助手等发过去），电脑上打开这个文件，全选复制。直接发文字的话，有的聊天软件会把换行变成 <br/>，脚本就用不了了。\n2. 电脑上用 WPS / 金山文档打开周会表格，菜单「效率 → 高级开发 → AirScript 脚本编辑器」（不是「JS 宏」）。在左上角「+」旁边的小箭头里选新建「文档共享脚本」（「我的脚本」没有 webhook，App 调用不了；文档共享脚本能编辑表格的人都看得到），起个名字比如「周会更新」，把复制的内容整段粘贴进去，保存。\n3. 在编辑器左边的脚本列表里，右键这个脚本的名字（不是在代码里右键），复制「webhook 链接」，填到上面。\n4. 在脚本编辑器里点「脚本令牌」生成一个，填到上面，点「测试连接」。\n令牌只存在这台手机的钥匙串里。菜单的名字以 WPS 为准。")
         }
         .onAppear { hasToken = !(Keychain.get(.kdocsScriptToken) ?? "").isEmpty }
     }

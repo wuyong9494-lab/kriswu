@@ -5,9 +5,7 @@ import Foundation
 enum MeetingWriter {
     /// 放进周会表格的脚本（「复制脚本」复制的就是它）
     static let script = #"""
-    /* 值班提醒 · 周会问题写回。放在周会表格的 AirScript 脚本编辑器里（不是 JS 宏），整段粘贴后保存。 */
-    /* App 发来要改的格子：先按这一行原来的内容找到这一行，格子里还是 App 导入时看到的内容才改；有一个格子被别人改过，这次一个都不改。 */
-    /* 在编辑器里直接点「运行」只会在日志里列出工作表的名字，不改表格。 */
+    /* 按传入的格子更新表格：先按这一行原来的内容找到这一行，格子里还是原来的内容才改；有一个对不上，一个都不改。直接运行只列出工作表名字。 */
     function norm(v) {
       if (v === null || v === undefined) { return ""; }
       return String(v).replace(/\r\n?/g, "\n").replace(/^\s+|\s+$/g, "");
@@ -62,13 +60,13 @@ enum MeetingWriter {
       for (var m = 0; m < ready.length; m++) { ready[m].cell.Value2 = ready[m].value; }
       return { ok: true, written: ready.length };
     }
-    var shiftResult = run(typeof Context !== "undefined" ? Context.argv : null);
-    console.log("SHIFT_RESULT " + JSON.stringify(shiftResult));
+    var result = run(typeof Context !== "undefined" ? Context.argv : null);
+    console.log("RESULT_JSON " + JSON.stringify(result));
     """#
 
     /// 脚本存成文本文件，分享到电脑上（微信、QQ 发文字常把换行变成 <br/>，发文件不会）
     static var scriptFile: URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("周会写回脚本.txt")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("周会更新.txt")
         try? script.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
