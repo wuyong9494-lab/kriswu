@@ -171,6 +171,10 @@ struct AppSettings: Codable, Equatable {
     var meetingNudgedWeek: DayKey?
     /// 上次自动下载周会表格每一步的结果（没下载成功时看卡在哪一步）
     var meetingDownloadLog: [String] = []
+    /// 周会表格里写回脚本的 webhook 链接（令牌在钥匙串里）
+    var meetingScriptURL: String = ""
+    /// 写回金山文档的记录（新的在前）
+    var meetingWriteLog: [String] = []
     /// 人员档案（管理员确认过的角色、来走日期）
     var profiles: [String: PersonProfile] = [:]
     /// 工作量规则开关
@@ -340,6 +344,8 @@ struct AppSettings: Codable, Equatable {
         meetingMessage = try? c.decodeIfPresent(String.self, forKey: .meetingMessage)
         meetingNudgedWeek = try? c.decodeIfPresent(DayKey.self, forKey: .meetingNudgedWeek)
         meetingDownloadLog = (try? c.decodeIfPresent([String].self, forKey: .meetingDownloadLog)) ?? []
+        meetingScriptURL = (try? c.decodeIfPresent(String.self, forKey: .meetingScriptURL)) ?? ""
+        meetingWriteLog = (try? c.decodeIfPresent([String].self, forKey: .meetingWriteLog)) ?? []
         restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
         restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
         restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
@@ -500,6 +506,8 @@ extension AppSettings {
         a.meetingMessage = o.meetingMessage
         a.meetingNudgedWeek = o.meetingNudgedWeek
         a.meetingDownloadLog = o.meetingDownloadLog
+        a.meetingScriptURL = o.meetingScriptURL
+        a.meetingWriteLog = o.meetingWriteLog
         a.syncLog = o.syncLog
         a.lastBackgroundWake = o.lastBackgroundWake
         a.weChatMessage = o.weChatMessage

@@ -6,6 +6,8 @@ enum Keychain {
     enum Key: String {
         case sourcePassword
         case pushPlusToken
+        /// 金山文档的脚本令牌（周会问题写回金山文档用）
+        case kdocsScriptToken
     }
 
     private static let service = "com.kriswu.shiftreminder"

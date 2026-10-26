@@ -147,13 +147,13 @@ public enum MeetingTable {
         var order: [String] = []
         var byGroup: [String: [Row]] = [:]
         var current: String?
-        for raw in rows.dropFirst(h + 1) {
+        for (offset, raw) in rows.enumerated() where offset > h {
             func cell(_ i: Int?) -> String { guard let i, i < raw.count else { return "" }; return clean(raw[i]) }
             let name = cell(groupCol)
             if !name.isEmpty { current = MeetingNotes.normalizeGroup(name) }
             guard let group = current else { continue }
-            let body = cell(contentCol)
-            let pieces = splitNumbered(body)
+            let body = contentCol < raw.count ? raw[contentCol] : ""
+            let pieces = numberedPieces(body)
             guard !pieces.isEmpty else { continue }
             let topic = contentCol == topicCol ? "" : cell(topicCol)
             let owner = cell(ownerCol)
@@ -163,14 +163,20 @@ public enum MeetingTable {
             let rowDone = isDoneNote(rowStatus)
                 || raw.indices.contains { $0 != contentCol && $0 != closureCol && ["完成", "已完成", "已解决", "已闭环"].contains(clean(raw[$0])) }
             var entries: [MeetingNotes.Entry] = []
-            for (i, piece) in pieces.enumerated() {
-                let note = notes[i + 1] ?? (pieces.count == 1 ? notes.values.first : nil)
-                let done = note.map(isDoneNote) ?? (rowDone || MeetingTracker.isMarkedDone(piece))
+            // 在表格里的位置（第几行、第几列都从 1 数）和这几格的原文：改了写回金山文档时核对用
+            func rawCell(_ i: Int?) -> String { guard let i, i < raw.count else { return "" }; return raw[i] }
+            for piece in pieces {
+                let note = notes[piece.number] ?? (pieces.count == 1 ? notes.values.first : nil)
+                let done = note.map(isDoneNote) ?? (rowDone || MeetingTracker.isMarkedDone(piece.text))
                 let detail = [topic.isEmpty ? nil : topic.replacingOccurrences(of: "\n", with: ""),
                               owner.isEmpty ? nil : "负责人：\(owner)",
                               note.map { "进展：\($0)" } ?? (rowStatus.isEmpty ? nil : "状态：\(rowStatus)")]
                     .compactMap { $0 }.joined(separator: " · ")
-                entries.append(MeetingNotes.Entry(text: piece, done: done, detail: detail.isEmpty ? nil : detail))
+                let source = MeetingSource(row: offset + 1, contentColumn: contentCol + 1, number: piece.number, content: body,
+                                           closureColumn: closureCol.map { $0 + 1 }, closure: rawCell(closureCol),
+                                           ownerColumn: ownerCol.map { $0 + 1 }, owner: rawCell(ownerCol),
+                                           topic: topic.replacingOccurrences(of: "\n", with: ""))
+                entries.append(MeetingNotes.Entry(text: piece.text, done: done, detail: detail.isEmpty ? nil : detail, source: source))
             }
             if byGroup[group] == nil { order.append(group) }
             byGroup[group, default: []].append(Row(topic: topic, entries: entries))
@@ -184,38 +190,103 @@ public enum MeetingTable {
         }
     }
 
+    /// 一格里的一条：第几条（从 1 数，「无」这类被去掉的也占号）、文字、在这一格原文里的位置
+    struct Piece {
+        var number: Int
+        var text: String
+        var range: NSRange
+    }
+
     /// 一格里的内容拆成一条条：有「1️⃣2️⃣」就按它拆（里面的「1、2、」是小点，不拆）；
     /// 否则按行首的「1.」「2、」拆，没编号的行接在上一条后面
     static func splitNumbered(_ body: String) -> [String] {
-        let text = body.replacingOccurrences(of: "\r", with: "")
+        numberedPieces(body).map(\.text)
+    }
+
+    static func numberedPieces(_ body: String) -> [Piece] {
+        let ns = body as NSString
+        var raw: [(text: String, range: NSRange)] = []
         let keycap = try! NSRegularExpression(pattern: "[0-9#*]\u{FE0F}?\u{20E3}")
-        let ns = text as NSString
-        let caps = keycap.matches(in: text, range: NSRange(location: 0, length: ns.length))
-        var pieces: [String] = []
+        let caps = keycap.matches(in: body, range: NSRange(location: 0, length: ns.length))
         if !caps.isEmpty {
             for (i, m) in caps.enumerated() {
                 let start = m.range.location + m.range.length
                 let end = i + 1 < caps.count ? caps[i + 1].range.location : ns.length
-                pieces.append(ns.substring(with: NSRange(location: start, length: end - start)))
+                let range = NSRange(location: start, length: end - start)
+                raw.append((ns.substring(with: range), range))
             }
         } else {
-            let numbered = try! NSRegularExpression(pattern: #"^\s*[\(（]?\d{1,2}[\.、．\)）]\s*"#)
-            for line in text.components(separatedBy: "\n") {
-                let l = line.trimmingCharacters(in: .whitespaces)
-                guard !l.isEmpty else { continue }
-                let lns = l as NSString
-                if let m = numbered.firstMatch(in: l, range: NSRange(location: 0, length: lns.length)) {
-                    pieces.append(lns.substring(from: m.range.length))
-                } else if pieces.isEmpty {
-                    pieces.append(l)
-                } else {
-                    pieces[pieces.count - 1] += " " + l
+            let numbered = try! NSRegularExpression(pattern: #"^[ \t]*[\(（]?\d{1,2}[\.、．\)）][ \t]*"#, options: [.anchorsMatchLines])
+            var lineStart = 0
+            while lineStart <= ns.length {
+                let newline = ns.range(of: "\n", options: [], range: NSRange(location: lineStart, length: ns.length - lineStart))
+                let lineEnd = newline.location == NSNotFound ? ns.length : newline.location
+                let lineRange = NSRange(location: lineStart, length: lineEnd - lineStart)
+                let line = ns.substring(with: lineRange)
+                if !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if let m = numbered.firstMatch(in: body, range: lineRange) {
+                        let start = m.range.location + m.range.length
+                        let range = NSRange(location: start, length: lineEnd - start)
+                        raw.append((ns.substring(with: range), range))
+                    } else if let last = raw.last {
+                        raw[raw.count - 1] = (last.text + " " + line.trimmingCharacters(in: .whitespacesAndNewlines),
+                                              NSRange(location: last.range.location, length: lineEnd - last.range.location))
+                    } else {
+                        raw.append((line, lineRange))
+                    }
                 }
+                if newline.location == NSNotFound { break }
+                lineStart = lineEnd + 1
             }
         }
-        return pieces
-            .map { $0.replacingOccurrences(of: "\n", with: "").trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "；;，,"))) }
-            .filter { $0.count >= 2 && !["无", "暂无", "无问题"].contains($0) }
+        let strip = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "；;，,"))
+        return raw.enumerated().compactMap { item -> Piece? in
+            let (i, piece) = item
+            let text = piece.text.replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: "\r", with: "")
+                .trimmingCharacters(in: strip)
+            guard text.count >= 2, !["无", "暂无", "无问题"].contains(text) else { return nil }
+            return Piece(number: i + 1, text: text, range: trimmedRange(piece.range, in: ns))
+        }
+    }
+
+    /// 位置去掉头尾的空白、换行（换文字时不把换行也换掉）
+    private static func trimmedRange(_ range: NSRange, in ns: NSString) -> NSRange {
+        let blank = CharacterSet.whitespacesAndNewlines
+        func isBlank(_ i: Int) -> Bool { UnicodeScalar(ns.character(at: i)).map { blank.contains($0) } ?? false }
+        var start = range.location, end = range.location + range.length
+        while start < end, isBlank(start) { start += 1 }
+        while end > start, isBlank(end - 1) { end -= 1 }
+        return NSRange(location: start, length: end - start)
+    }
+
+    // MARK: - 改了以后拼回一格
+
+    /// 把一格里第 n 条换成新的文字，别的原样不动
+    static func replacingPieces(in body: String, with edits: [Int: String]) -> String {
+        guard !edits.isEmpty else { return body }
+        let text = NSMutableString(string: body)
+        for piece in numberedPieces(body).sorted(by: { $0.range.location > $1.range.location }) {
+            if let new = edits[piece.number] { text.replaceCharacters(in: piece.range, with: new) }
+        }
+        return text as String
+    }
+
+    /// 在一格最后接上几条，编号接着往下（原来用 1️⃣ 的也接着用）。返回新的内容和第一条新加的是第几条
+    static func appending(_ items: [String], to body: String) -> (text: String, firstNumber: Int) {
+        let start = (numberedPieces(body).map(\.number).max() ?? 0) + 1
+        let keycaps = body.unicodeScalars.contains("\u{20E3}")
+        var text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        for (i, item) in items.enumerated() {
+            let n = start + i
+            let marker = keycaps && n <= 9 ? "\(n)\u{FE0F}\u{20E3}" : "\(n)."
+            text += (text.isEmpty ? "" : "\n") + marker + item
+        }
+        return (text, start)
+    }
+
+    /// 「完成情况」那一格按条重写：「1. 完成；2. 进行中」（「1、2」会被当成两条，所以用「1.」）
+    static func closureText(_ notes: [Int: String]) -> String {
+        notes.keys.sorted().compactMap { n in notes[n].map { "\(n). \($0)" } }.joined(separator: "；")
     }
 
     /// 「闭环」那一格：「，完成；2。明确…；3 进行中；4，上线；5，进行中。」→ [1: 完成, 2: 明确…, 3: 进行中, …]

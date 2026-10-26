@@ -161,6 +161,45 @@ extension AppStore {
         }
     }
 
+    // MARK: - 编辑一个组、写回金山文档
+
+    /// 写回金山文档设置好了没有（脚本 webhook 链接 + 脚本令牌）
+    var meetingWritebackReady: Bool {
+        MeetingWriter.isScriptURL(settings.meetingScriptURL) && !(Keychain.get(.kdocsScriptToken) ?? "").isEmpty
+    }
+
+    /// 编辑完存到手机上；written：已经写进金山文档了
+    func saveMeetingEdits(drafts: [String: MeetingWriteback.Draft], plan: MeetingWriteback.Plan, group: String, written: Bool) {
+        settings.meetingIssues = MeetingWriteback.applyLocally(issues: settings.meetingIssues, drafts: drafts, plan: plan, group: group,
+                                                               week: MeetingTracker.monday(of: .today), written: written)
+    }
+
+    /// 写进金山文档，写成了再存到手机上
+    func writeMeeting(plan: MeetingWriteback.Plan, drafts: [String: MeetingWriteback.Draft], group: String) async -> (message: String, ok: Bool) {
+        guard let url = URL(string: settings.meetingScriptURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let token = Keychain.get(.kdocsScriptToken), !token.isEmpty else {
+            return ("还没设置写回金山文档", false)
+        }
+        let reply = await MeetingWriter.write(plan.writes, url: url, token: token)
+        let entry = ["\(Date().formatted(date: .abbreviated, time: .shortened)) 写回「\(group)」"] + plan.writes.map { "· " + $0.summary }
+            + [(reply.ok ? "✓ " : "✗ ") + reply.message]
+        settings.meetingWriteLog = Array((entry + settings.meetingWriteLog).prefix(60))
+        guard reply.ok else { return (reply.message, false) }
+        saveMeetingEdits(drafts: drafts, plan: plan, group: group, written: true)
+        return (reply.message, true)
+    }
+
+    /// 测试写回脚本连不连得上
+    func testMeetingScript() async -> (message: String, ok: Bool) {
+        let link = settings.meetingScriptURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard MeetingWriter.isScriptURL(link), let url = URL(string: link) else {
+            return ("脚本链接不对：要金山文档脚本编辑器里复制的 webhook 链接", false)
+        }
+        guard let token = Keychain.get(.kdocsScriptToken), !token.isEmpty else { return ("还没填脚本令牌", false) }
+        let reply = await MeetingWriter.ping(url: url, token: token)
+        return (reply.message, reply.ok)
+    }
+
     /// 自己改一条问题的状态（标成解决了、还没解决）
     func setMeetingIssue(_ id: String, status: MeetingIssue.Status) {
         guard let i = settings.meetingIssues.firstIndex(where: { $0.id == id }) else { return }

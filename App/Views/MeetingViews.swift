@@ -109,8 +109,20 @@ struct MeetingIssuesView: View {
     @State private var query = ""
     @State private var expanded: Set<String> = []
     @State private var showingSource = false
+    /// 正在编辑的组（一次编辑一个组）
+    @State private var editingGroup: String?
+    @State private var drafts: [String: MeetingWriteback.Draft] = [:]
+    @State private var additions: [NewIssue] = []
+    @State private var confirming: PendingMeetingWrite?
+    @State private var askSetup: PendingMeetingWrite?
 
     private var week: DayKey { MeetingTracker.monday(of: .today) }
+
+    /// 编辑时新加的一条
+    private struct NewIssue: Identifiable {
+        let id = UUID()
+        var draft = MeetingWriteback.Draft()
+    }
 
     private struct IssueSection {
         let title: String
@@ -125,6 +137,8 @@ struct MeetingIssuesView: View {
         List {
             if issues.isEmpty {
                 emptyState
+            } else if let g = editingGroup {
+                editSections(g, issues: issues)
             } else {
                 overview(issues: issues, matching: matching)
                 if shown.isEmpty {
@@ -140,6 +154,14 @@ struct MeetingIssuesView: View {
                             Text(section.title)
                             Spacer()
                             Text("\(section.items.count) 条").monospacedDigit()
+                            if !byOwner {
+                                Button { startEditing(section.title) } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                                .font(.caption.weight(.semibold))
+                                .buttonStyle(.borderless)
+                                .padding(.leading, DS.Space.xs)
+                            }
                         }
                     }
                 }
@@ -149,20 +171,33 @@ struct MeetingIssuesView: View {
         .navigationTitle("周会问题")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: "搜问题、负责人")
+        .navigationBarBackButtonHidden(editingGroup != nil)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Picker("怎么分", selection: $byOwner) {
-                        Label("按组分", systemImage: "square.grid.2x2").tag(false)
-                        Label("按负责人分", systemImage: "person.2").tag(true)
-                    }
-                } label: {
-                    Image(systemName: byOwner ? "person.2" : "square.grid.2x2").accessibilityLabel("按组分还是按负责人分")
-                }
-                Button { showingSource = true } label: {
-                    Image(systemName: "square.and.arrow.down").accessibilityLabel("导入周会文档")
+                if let g = editingGroup {
+                    Button("保存") { save(g) }.bold()
+                } else {
+                    toolbarButtons
                 }
             }
+        }
+        .sheet(item: $confirming) { pending in
+            NavigationStack {
+                MeetingWriteConfirmView(pending: pending) { stopEditing() }
+            }
+        }
+        .confirmationDialog("还没设置写回金山文档", isPresented: Binding(get: { askSetup != nil }, set: { if !$0 { askSetup = nil } }),
+                            titleVisibility: .visible, presenting: askSetup) { pending in
+            Button("只存在手机上") {
+                store.saveMeetingEdits(drafts: pending.drafts, plan: pending.plan, group: pending.group, written: false)
+                ToastCenter.shared.show("存在手机上了，金山文档里没改", style: .success)
+                stopEditing()
+            }
+            Button("去设置写回") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showingSource = true }
+            }
+        } message: { _ in
+            Text("设置好以后，保存时会把改动写进金山文档的周会表格。")
         }
         .sheet(isPresented: $showingSource) {
             NavigationStack { MeetingSourceView() }
@@ -173,6 +208,155 @@ struct MeetingIssuesView: View {
                 filter = .quiet
             }
         }
+    }
+
+    @ViewBuilder
+    private var toolbarButtons: some View {
+        Menu {
+            Picker("怎么分", selection: $byOwner) {
+                Label("按组分", systemImage: "square.grid.2x2").tag(false)
+                Label("按负责人分", systemImage: "person.2").tag(true)
+            }
+        } label: {
+            Image(systemName: byOwner ? "person.2" : "square.grid.2x2").accessibilityLabel("按组分还是按负责人分")
+        }
+        Button { showingSource = true } label: {
+            Image(systemName: "square.and.arrow.down").accessibilityLabel("导入周会文档")
+        }
+    }
+
+    // MARK: - 编辑一个组
+
+    private func startEditing(_ group: String) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            drafts = [:]
+            additions = []
+            expanded = []
+            editingGroup = group
+        }
+    }
+
+    private func stopEditing() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            editingGroup = nil
+            drafts = [:]
+            additions = []
+        }
+    }
+
+    /// 保存：算出要改表格里哪几格。设置好写回的先给看要改什么，确认了才写；没设置的问只存手机上还是去设置
+    private func save(_ group: String) {
+        let plan = MeetingWriteback.plan(issues: store.settings.meetingIssues, drafts: drafts,
+                                         additions: additions.map(\.draft), group: group)
+        guard plan.hasChanges else { stopEditing(); return }
+        let pending = PendingMeetingWrite(group: group, plan: plan, drafts: drafts)
+        if plan.writes.isEmpty {
+            store.saveMeetingEdits(drafts: drafts, plan: plan, group: group, written: false)
+            ToastCenter.shared.show(plan.skipped.first ?? "存在手机上了", style: .success)
+            stopEditing()
+        } else if store.meetingWritebackReady {
+            confirming = pending
+        } else {
+            askSetup = pending
+        }
+    }
+
+    /// 按表格里的先后排（第几行、一格里第几条）
+    private func documentOrder(_ a: MeetingIssue, _ b: MeetingIssue) -> Bool {
+        let x = (a.source?.row ?? .max, a.source?.number ?? 0), y = (b.source?.row ?? .max, b.source?.number ?? 0)
+        return x != y ? x < y : (a.firstWeek, a.text) < (b.firstWeek, b.text)
+    }
+
+    @ViewBuilder
+    private func editSections(_ group: String, issues: [MeetingIssue]) -> some View {
+        let items = issues.filter { $0.group == group }.sorted(by: documentOrder)
+        Section {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text(store.meetingWritebackReady
+                     ? "改完点右上角「保存」：先给你看要改金山文档里哪几格，确认了才写进去。"
+                     : "改完点右上角「保存」。还没设置写回金山文档，保存时可以只存在手机上，或者先去设置。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("不改了", role: .cancel) { stopEditing() }
+                    .font(.footnote.weight(.semibold))
+                    .buttonStyle(.borderless)
+            }
+        }
+        Section {
+            ForEach(items) { editRow($0) }
+            ForEach($additions) { $item in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: DS.Space.xs) {
+                        Image(systemName: "plus.circle.fill").foregroundStyle(DS.Palette.accent).font(.subheadline)
+                        TextField("新的问题", text: $item.draft.text, axis: .vertical).font(.subheadline)
+                    }
+                    TextField("进展（可以不填）", text: $item.draft.progress, axis: .vertical)
+                        .font(.caption)
+                        .padding(.leading, 24)
+                }
+                .padding(.vertical, 2)
+            }
+            .onDelete { additions.remove(atOffsets: $0) }
+            Button {
+                additions.append(NewIssue())
+            } label: {
+                Label("加一条问题", systemImage: "plus")
+            }
+        } header: {
+            HStack {
+                Text("编辑「\(group)」")
+                Spacer()
+                Text("\(items.count + additions.count) 条").monospacedDigit()
+            }
+        } footer: {
+            Text("同一行的几条共用一个负责人格子，改了负责人整行都跟着改。新加的接在这个组「本周问题」那一行的最后。")
+        }
+    }
+
+    private func draft(_ issue: MeetingIssue) -> Binding<MeetingWriteback.Draft> {
+        Binding(get: { drafts[issue.id] ?? MeetingWriteback.Draft(issue) },
+                set: { drafts[issue.id] = $0 })
+    }
+
+    /// 勾「解决了」时进展跟着写成「完成」，取消勾写成「进行中」
+    private func resolved(_ issue: MeetingIssue) -> Binding<Bool> {
+        Binding(get: { (drafts[issue.id] ?? MeetingWriteback.Draft(issue)).resolved },
+                set: { on in
+                    var d = drafts[issue.id] ?? MeetingWriteback.Draft(issue)
+                    d.resolved = on
+                    d.progress = MeetingWriteback.progress(afterToggling: on, current: d.progress)
+                    drafts[issue.id] = d
+                })
+    }
+
+    private func editRow(_ issue: MeetingIssue) -> some View {
+        let d = draft(issue)
+        let changed = drafts[issue.id].map { $0 != MeetingWriteback.Draft(issue) } ?? false
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: DS.Space.xs) {
+                Circle().fill(changed ? DS.Palette.accent : Color.clear)
+                    .overlay(Circle().strokeBorder(DS.Palette.hairline))
+                    .frame(width: 7, height: 7).padding(.top, 6)
+                TextField("问题", text: d.text, axis: .vertical).font(.subheadline)
+                Toggle("解决了", isOn: resolved(issue))
+                    .toggleStyle(.button)
+                    .controlSize(.small)
+                    .font(.caption)
+                    .tint(DS.Palette.success)
+            }
+            HStack(spacing: DS.Space.xs) {
+                Image(systemName: "person").font(.caption).foregroundStyle(.secondary).frame(width: 16)
+                TextField("负责人", text: d.owner).font(.caption)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
+                Image(systemName: "text.bubble").font(.caption).foregroundStyle(.secondary).frame(width: 16)
+                TextField("进展（写进「完成情况」那一列）", text: d.progress, axis: .vertical).font(.caption)
+            }
+            if issue.source == nil {
+                Text("这条是从文字导入的，表格里找不到它的位置，只能改手机上的")
+                    .font(.caption2).foregroundStyle(DS.Palette.warning)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: - 上面：三格 + 组名
@@ -441,6 +625,91 @@ struct MeetingIssuesView: View {
     }
 }
 
+/// 编辑完要写回金山文档的改动
+struct PendingMeetingWrite: Identifiable {
+    let id = UUID()
+    let group: String
+    let plan: MeetingWriteback.Plan
+    let drafts: [String: MeetingWriteback.Draft]
+}
+
+/// 写进金山文档之前给人看：要改哪几格、改成什么
+struct MeetingWriteConfirmView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    let pending: PendingMeetingWrite
+    /// 存好了（写进去了，或者选了只存手机上）
+    let saved: () -> Void
+    @State private var writing = false
+    @State private var problem: String?
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(Array(pending.plan.writes.enumerated()), id: \.offset) { _, write in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(write.summary).font(.subheadline)
+                        Text(write.value.isEmpty ? "（清空）" : write.value)
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(8)
+                    }
+                    .padding(.vertical, 2)
+                }
+            } header: {
+                Text("要改金山文档里这 \(pending.plan.writes.count) 个格子")
+            } footer: {
+                Text("写之前会核对：这几格要是有人刚改过，一个都不改，提醒你先下载最新一版。")
+            }
+            if !pending.plan.skipped.isEmpty {
+                Section("只改手机上的") {
+                    ForEach(pending.plan.skipped, id: \.self) { Text($0).font(.footnote) }
+                }
+            }
+            if let problem {
+                Section {
+                    Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
+                }
+            }
+            Section {
+                Button("不写金山文档，只存在手机上") {
+                    store.saveMeetingEdits(drafts: pending.drafts, plan: pending.plan, group: pending.group, written: false)
+                    ToastCenter.shared.show("存在手机上了，金山文档里没改", style: .success)
+                    saved()
+                    dismiss()
+                }
+                .disabled(writing)
+            }
+        }
+        .appList()
+        .navigationTitle("写回金山文档")
+        .navigationBarTitleDisplayMode(.inline)
+        .interactiveDismissDisabled(writing)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("返回修改") { dismiss() }.disabled(writing)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(writing ? "写入中…" : "写入") {
+                    writing = true
+                    problem = nil
+                    Task {
+                        let result = await store.writeMeeting(plan: pending.plan, drafts: pending.drafts, group: pending.group)
+                        writing = false
+                        if result.ok {
+                            ToastCenter.shared.show(result.message, style: .success)
+                            saved()
+                            dismiss()
+                        } else {
+                            problem = result.message
+                        }
+                    }
+                }
+                .bold()
+                .disabled(writing)
+            }
+        }
+    }
+}
+
 /// 导入周会文档：文档链接、登录、自动下载，和手动导入（剪贴板、文件、粘贴）
 struct MeetingSourceView: View {
     @EnvironmentObject private var store: AppStore
@@ -450,6 +719,9 @@ struct MeetingSourceView: View {
     @State private var pasteText = ""
     @State private var pickingFile = false
     @State private var downloading = false
+    @State private var tokenDraft = ""
+    @State private var hasToken = false
+    @State private var testing = false
 
     var body: some View {
         List {
@@ -510,6 +782,8 @@ struct MeetingSourceView: View {
                 Text("在金山文档 App 里全选表格复制，回来点「从剪贴板导入」；或导出成 Excel，用「分享 → 值班提醒」打开。按「分组」一列分组，「完成进展」里 1. 2. 3. 每条算一个问题，「完成情况」写了完成、上线、已解决的算解决了。文档内容只存在这台手机上。")
             }
 
+            writebackSection
+
             if store.settings.meetingMessage != nil || !store.settings.meetingDownloadLog.isEmpty || store.meetingPageText != nil {
                 Section("上次导入") {
                     if let message = store.settings.meetingMessage {
@@ -569,6 +843,71 @@ struct MeetingSourceView: View {
                     }
             }
         }
+    }
+
+    /// 在 App 里改了组里的问题，保存时写进金山文档：周会表格里放一个脚本，App 带着脚本令牌调用它
+    private var writebackSection: some View {
+        Section {
+            Button {
+                UIPasteboard.general.string = MeetingWriter.script
+                ToastCenter.shared.show("脚本复制好了，去金山文档的脚本编辑器里粘贴", style: .success)
+            } label: {
+                Label("复制脚本", systemImage: "doc.on.doc")
+            }
+            DraftTextField("脚本的 webhook 链接", value: store.settings.meetingScriptURL) {
+                store.settings.meetingScriptURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            SecureField(hasToken ? "脚本令牌（已保存，粘贴新的可替换）" : "脚本令牌", text: $tokenDraft)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .onSubmit(saveToken)
+            Button {
+                saveToken()
+                testing = true
+                Task {
+                    let result = await store.testMeetingScript()
+                    testing = false
+                    ToastCenter.shared.show(result.message, style: result.ok ? .success : .error)
+                }
+            } label: {
+                HStack {
+                    Label("测试连接", systemImage: "bolt.horizontal")
+                    if testing { Spacer(); ProgressView() }
+                }
+            }
+            .disabled(testing || store.settings.meetingScriptURL.isEmpty)
+            if hasToken {
+                Button("删除脚本令牌", role: .destructive) {
+                    Keychain.set("", for: .kdocsScriptToken)
+                    hasToken = false
+                }
+            }
+            if !store.settings.meetingWriteLog.isEmpty {
+                NavigationLink("查看写回记录") {
+                    List(Array(store.settings.meetingWriteLog.enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.footnote).textSelection(.enabled)
+                    }
+                    .appList()
+                    .navigationTitle("写回记录")
+                }
+            }
+        } header: {
+            Text("写回金山文档")
+        } footer: {
+            Text("在「周会问题」里点组名旁边的「编辑」，改完保存就写进周会表格。要有这份表格的编辑权限，第一次用电脑设置：\n1. 点「复制脚本」，发到电脑上。\n2. 电脑上用金山文档打开周会表格，菜单「效率 → 高级开发 → AirScript 脚本编辑器」，新建一个脚本，把复制的内容整段粘贴进去，保存。\n3. 在这个脚本的「…」菜单里复制「webhook 链接」，填到上面。\n4. 在脚本编辑器里点「脚本令牌」生成一个，填到上面，点「测试连接」。\n脚本存在这份表格里，能编辑表格的人都看得到；令牌只存在这台手机的钥匙串里。菜单的名字以金山文档为准。")
+        }
+        .onAppear { hasToken = !(Keychain.get(.kdocsScriptToken) ?? "").isEmpty }
+    }
+
+    private func saveToken() {
+        let token = tokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return }
+        Keychain.set(token, for: .kdocsScriptToken)
+        tokenDraft = ""
+        hasToken = true
     }
 
     /// 导入成功就回到问题列表看结果

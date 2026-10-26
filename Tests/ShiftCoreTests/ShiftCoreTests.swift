@@ -2465,6 +2465,87 @@ final class MeetingTests: XCTestCase {
         XCTAssertNil(issue.progress)
     }
 
+    func testPieceRangesAndRebuild() {
+        let body = "1.接入新站\n2.接口改造\n  补充说明\n3.增加标识"
+        XCTAssertEqual(MeetingTable.splitNumbered(body), ["接入新站", "接口改造 补充说明", "增加标识"])
+        XCTAssertEqual(MeetingTable.replacingPieces(in: body, with: [1: "接入两个新站"]),
+                       "1.接入两个新站\n2.接口改造\n  补充说明\n3.增加标识")
+        let caps = "1️⃣结果判断不清\n2️⃣重传问题：1、缺失；2、重传两次\n3️⃣细化描述"
+        XCTAssertEqual(MeetingTable.replacingPieces(in: caps, with: [2: "重传问题已定位"]),
+                       "1️⃣结果判断不清\n2️⃣重传问题已定位\n3️⃣细化描述")
+        XCTAssertEqual(MeetingTable.appending(["新问题"], to: caps).text, caps + "\n4️⃣新问题")
+        XCTAssertEqual(MeetingTable.appending(["新问题"], to: body).firstNumber, 4)
+        XCTAssertEqual(MeetingTable.appending(["甲", "乙乙"], to: "参数不能改").text, "参数不能改\n2.甲\n3.乙乙")
+        // 「完成情况」重写后还能按条读回来；进展以数字开头也不会被当成编号
+        let notes = [1: "完成", 2: "2号天线进行中"]
+        XCTAssertEqual(MeetingTable.closureText(notes), "1. 完成；2. 2号天线进行中")
+        XCTAssertEqual(MeetingTable.closureNotes(MeetingTable.closureText(notes)), notes)
+    }
+
+    func testWritebackPlan() throws {
+        let tsv = "分组\t项目或工作内容\t完成进展、进度\t负责人\t完成情况\n"
+            + "调度组\t上周问题\t\"1.接入新站\n2.接口改造\"\t甲\t，完成；2 进行中\n"
+            + "\t本周问题\t参数不能改\t乙\t\n"
+        let w = DayKey(year: 2026, month: 10, day: 26)
+        let issues = MeetingTracker.update([], with: MeetingNotes.parse(tsv), week: w)
+        let iface = try XCTUnwrap(issues.first { $0.text == "接口改造" })
+        XCTAssertEqual(iface.source, MeetingSource(row: 2, contentColumn: 3, number: 2, content: "1.接入新站\n2.接口改造",
+                                                   closureColumn: 5, closure: "，完成；2 进行中", ownerColumn: 4, owner: "甲", topic: "上周问题"))
+        let param = try XCTUnwrap(issues.first { $0.text == "参数不能改" })
+
+        // 第 2 条改文字、标成解决；本周问题那一行加一条；负责人改了
+        var d = MeetingWriteback.Draft(iface)
+        d.text = "接口改造（含测试）"
+        d.resolved = true
+        d.progress = MeetingWriteback.progress(afterToggling: true, current: d.progress)
+        XCTAssertEqual(d.progress, "完成")
+        var p = MeetingWriteback.Draft(param)
+        p.owner = "乙、丙"
+        let plan = MeetingWriteback.plan(issues: issues, drafts: [iface.id: d, param.id: p],
+                                         additions: [.init(text: "备件不足", progress: "进行中")], group: "调度组")
+        XCTAssertTrue(plan.skipped.isEmpty)
+        XCTAssertEqual(plan.writes.map { "\($0.row),\($0.column)" }, ["2,3", "2,5", "3,3", "3,5", "3,4"])
+        XCTAssertEqual(plan.writes[0].value, "1.接入新站\n2.接口改造（含测试）")
+        XCTAssertEqual(plan.writes[0].expect, "1.接入新站\n2.接口改造")
+        XCTAssertEqual(plan.writes[1].value, "1. 完成；2. 完成")
+        XCTAssertEqual(plan.writes[2].value, "参数不能改\n2.备件不足")
+        XCTAssertEqual(plan.writes[2].anchorText, "参数不能改")
+        XCTAssertEqual(plan.writes[3].value, "2. 进行中")
+        XCTAssertEqual(plan.writes[4].value, "乙、丙")
+        XCTAssertEqual(plan.additions.first?.number, 2)
+
+        let after = MeetingWriteback.applyLocally(issues: issues, drafts: [iface.id: d, param.id: p], plan: plan,
+                                                  group: "调度组", week: w, written: true)
+        let changed = try XCTUnwrap(after.first { $0.id == iface.id })
+        XCTAssertEqual(changed.text, "接口改造（含测试）")
+        XCTAssertEqual(changed.status, .resolved)
+        XCTAssertEqual(changed.source?.content, "1.接入新站\n2.接口改造（含测试）")
+        XCTAssertEqual(changed.source?.closure, "1. 完成；2. 完成")
+        let added = try XCTUnwrap(after.first { $0.text == "备件不足" })
+        XCTAssertEqual(added.source?.number, 2)
+        XCTAssertEqual(added.source?.content, "参数不能改\n2.备件不足")
+        XCTAssertEqual(added.owners, ["乙", "丙"])
+        XCTAssertEqual(added.progress, "进行中")
+
+        // 再导入改过的表格：对得上，不会多出来
+        let tsv2 = "分组\t项目或工作内容\t完成进展、进度\t负责人\t完成情况\n"
+            + "调度组\t上周问题\t\"1.接入新站\n2.接口改造（含测试）\"\t甲\t1. 完成；2. 完成\n"
+            + "\t本周问题\t\"参数不能改\n2.备件不足\"\t乙、丙\t2. 进行中\n"
+        let again = MeetingTracker.update(after, with: MeetingNotes.parse(tsv2), week: w)
+        XCTAssertEqual(again.count, after.count)
+    }
+
+    func testScriptResult() throws {
+        let logs = #"{"data":{"logs":[{"args":["SHIFT_RESULT {\"ok\":false,\"problems\":[{\"index\":1,\"reason\":\"changed\"}]}"]}],"result":null},"error":"","status":"finished"}"#
+        let json = try JSONSerialization.jsonObject(with: Data(logs.utf8))
+        let found = try XCTUnwrap(MeetingWriteback.scriptResult(in: json))
+        XCTAssertEqual(found["ok"] as? Bool, false)
+        XCTAssertEqual((found["problems"] as? [[String: Any]])?.first?["index"] as? Int, 1)
+        let direct = try JSONSerialization.jsonObject(with: Data(#"{"data":{"result":"{\"ok\":true,\"written\":3}"}}"#.utf8))
+        XCTAssertEqual(MeetingWriteback.scriptResult(in: direct)?["written"] as? Int, 3)
+        XCTAssertNil(MeetingWriteback.scriptResult(in: try JSONSerialization.jsonObject(with: Data(#"{"data":{"result":null}}"#.utf8))))
+    }
+
     func testClosureNotes() {
         XCTAssertEqual(MeetingTable.closureNotes("，完成；2。明确；3 进行中；4，上线；5，进行中。"),
                        [1: "完成", 2: "明确", 3: "进行中", 4: "上线", 5: "进行中"])

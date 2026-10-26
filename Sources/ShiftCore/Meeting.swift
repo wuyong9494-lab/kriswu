@@ -22,9 +22,12 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
     public var manual: Bool
     /// 文档里最近一次的补充：这一行属于什么（「本周问题」）、负责人、进展
     public var detail: String?
+    /// 在表格里的位置和导入时那几格的原文（从表格导入的才有）：改了写回金山文档时用
+    public var source: MeetingSource?
 
     public init(id: String, group: String, text: String, firstWeek: DayKey, lastWeek: DayKey,
-                status: Status, resolvedWeek: DayKey? = nil, manual: Bool = false, detail: String? = nil) {
+                status: Status, resolvedWeek: DayKey? = nil, manual: Bool = false, detail: String? = nil,
+                source: MeetingSource? = nil) {
         self.id = id
         self.group = group
         self.text = text
@@ -34,6 +37,7 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
         self.resolvedWeek = resolvedWeek
         self.manual = manual
         self.detail = detail
+        self.source = source
     }
 
     public init(from decoder: Decoder) throws {
@@ -47,6 +51,7 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
         resolvedWeek = try? c.decodeIfPresent(DayKey.self, forKey: .resolvedWeek)
         manual = (try? c.decodeIfPresent(Bool.self, forKey: .manual)) ?? false
         detail = try? c.decodeIfPresent(String.self, forKey: .detail)
+        source = try? c.decodeIfPresent(MeetingSource.self, forKey: .source)
     }
 
     /// 从第一次提出到 week 挂了几周（同一周提出算第 1 周）
@@ -91,10 +96,12 @@ public enum MeetingNotes {
         public var text: String
         public var done: Bool
         public var detail: String?
-        public init(text: String, done: Bool? = nil, detail: String? = nil) {
+        public var source: MeetingSource?
+        public init(text: String, done: Bool? = nil, detail: String? = nil, source: MeetingSource? = nil) {
             self.text = text
             self.done = done ?? MeetingTracker.isMarkedDone(text)
             self.detail = detail
+            self.source = source
         }
     }
 
@@ -297,6 +304,7 @@ public enum MeetingTracker {
                 if let i = best?.index {
                     result[i].text = item
                     result[i].detail = entry.detail ?? result[i].detail
+                    result[i].source = entry.source ?? result[i].source
                     result[i].lastWeek = max(result[i].lastWeek, week)
                     if done {
                         if result[i].status != .resolved { result[i].resolvedWeek = week }
@@ -312,7 +320,7 @@ public enum MeetingTracker {
                     let id = "\(section.group)|\(week)|\(key.prefix(32))"
                     let issue = MeetingIssue(id: id, group: section.group, text: item, firstWeek: week, lastWeek: week,
                                              status: done ? .resolved : .open, resolvedWeek: done ? week : nil,
-                                             detail: entry.detail)
+                                             detail: entry.detail, source: entry.source)
                     result.append(issue)
                     touched.insert(id)
                 }
