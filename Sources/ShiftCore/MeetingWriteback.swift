@@ -70,6 +70,21 @@ public enum MeetingWriteback {
         public var value: String
         /// 给人看的：哪一行哪一格改了什么
         public var summary: String
+
+        /// 表格里的格子名：第 2 行第 6 列是「F2」
+        public var address: String { MeetingWriteback.columnName(column) + "\(row)" }
+    }
+
+    /// 第几列 → 列名：1 是 A，27 是 AA
+    public static func columnName(_ column: Int) -> String {
+        var n = max(1, column)
+        var name = ""
+        while n > 0 {
+            let r = (n - 1) % 26
+            name = String(Character(UnicodeScalar(UInt8(65 + r)))) + name
+            n = (n - 1) / 26
+        }
+        return name
     }
 
     /// 新加的一条放在哪：这一行内容那一格里的第几条

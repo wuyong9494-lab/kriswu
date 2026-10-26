@@ -2515,6 +2515,8 @@ final class MeetingTests: XCTestCase {
         XCTAssertEqual(plan.writes[3].value, "2. 进行中")
         XCTAssertEqual(plan.writes[4].value, "乙、丙")
         XCTAssertEqual(plan.additions.first?.number, 2)
+        XCTAssertEqual(plan.writes.map(\.address), ["C2", "E2", "C3", "E3", "D3"])
+        XCTAssertEqual([1, 26, 27, 52].map(MeetingWriteback.columnName), ["A", "Z", "AA", "AZ"])
 
         let after = MeetingWriteback.applyLocally(issues: issues, drafts: [iface.id: d, param.id: p], plan: plan,
                                                   group: "调度组", week: w, written: true)
