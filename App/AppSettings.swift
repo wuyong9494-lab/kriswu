@@ -158,6 +158,15 @@ struct AppSettings: Codable, Equatable {
     var customHolidayWork: [String] = []
     /// 周六是正常工作日（法定节假日除外）：没排岗位、没写休息的周六算上班、算工作量
     var saturdayIsWorkday = true
+    /// 周会文档（金山文档、腾讯文档的分享链接）：每周一更新，App 自动读，跟进各组提的问题
+    var meetingDocURL = ""
+    var meetingIssues: [MeetingIssue] = []
+    /// 上次导入的文档内容指纹（没变就不当成新的一周）、导入时间、哪一周、读取结果
+    var meetingFingerprint: String?
+    var meetingLastImport: Date?
+    var meetingWeek: DayKey?
+    var meetingLastAttempt: Date?
+    var meetingMessage: String?
     /// 人员档案（管理员确认过的角色、来走日期）
     var profiles: [String: PersonProfile] = [:]
     /// 工作量规则开关
@@ -318,6 +327,13 @@ struct AppSettings: Codable, Equatable {
         customHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .customHolidayOff)) ?? []
         customHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .customHolidayWork)) ?? []
         saturdayIsWorkday = (try? c.decodeIfPresent(Bool.self, forKey: .saturdayIsWorkday)) ?? true
+        meetingDocURL = (try? c.decodeIfPresent(String.self, forKey: .meetingDocURL)) ?? ""
+        meetingIssues = (try? c.decodeIfPresent([MeetingIssue].self, forKey: .meetingIssues)) ?? []
+        meetingFingerprint = try? c.decodeIfPresent(String.self, forKey: .meetingFingerprint)
+        meetingLastImport = try? c.decodeIfPresent(Date.self, forKey: .meetingLastImport)
+        meetingWeek = try? c.decodeIfPresent(DayKey.self, forKey: .meetingWeek)
+        meetingLastAttempt = try? c.decodeIfPresent(Date.self, forKey: .meetingLastAttempt)
+        meetingMessage = try? c.decodeIfPresent(String.self, forKey: .meetingMessage)
         restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
         restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
         restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
@@ -468,6 +484,14 @@ extension AppSettings {
     /// 和 o 比，只有记账类的字段变了（同步记录、已发标记、提示文字、不影响手机提醒的开关）
     func onlyBookkeepingChanged(from o: AppSettings) -> Bool {
         var a = self
+        // 周会问题跟进：不影响提醒
+        a.meetingDocURL = o.meetingDocURL
+        a.meetingIssues = o.meetingIssues
+        a.meetingFingerprint = o.meetingFingerprint
+        a.meetingLastImport = o.meetingLastImport
+        a.meetingWeek = o.meetingWeek
+        a.meetingLastAttempt = o.meetingLastAttempt
+        a.meetingMessage = o.meetingMessage
         a.syncLog = o.syncLog
         a.lastBackgroundWake = o.lastBackgroundWake
         a.weChatMessage = o.weChatMessage

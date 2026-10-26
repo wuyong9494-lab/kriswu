@@ -38,6 +38,8 @@ struct ShiftApp: App {
                     await store.refreshHolidaysIfNeeded()
                     await store.syncIfStale()
                     await store.sendDueWeChatReminders()
+                    // 周会文档每周一更新：这周还没读到新的就读一次
+                    await store.refreshMeetingIfDue()
                     await store.rescheduleNotifications()
                     store.autoBackupIfNeeded()
                     store.flushSave(wait: true)
@@ -119,7 +121,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
-        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices
+        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices, meeting
         var id: String { rawValue }
     }
 
@@ -265,6 +267,11 @@ struct RootView: View {
             case .notices:
                 NavigationStack {
                     SiteNoticesView()
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
+                }
+            case .meeting:
+                NavigationStack {
+                    MeetingIssuesView()
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
                 }
             case .rosterLog, .teamChanges:

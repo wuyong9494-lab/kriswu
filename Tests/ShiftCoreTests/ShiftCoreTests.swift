@@ -2341,3 +2341,63 @@ final class AuditFixTests: XCTestCase {
         XCTAssertEqual(second.edits.map(\.name), ["人0"])
     }
 }
+
+final class MeetingTests: XCTestCase {
+    func d(_ month: Int, _ day: Int) -> DayKey { DayKey(year: 2026, month: month, day: day) }
+
+    func testParseGroupsAndIssueHeadings() {
+        let text = """
+        10月26日 周会纪要
+        一、组A
+        本周工作：
+        1. 完成巡检
+        存在问题：
+        1. 二号天线告警频繁
+        2、数据处理问题较多
+        二、B组：遥测帧计数跳变
+        【研发组】
+        • 接口返回慢（已解决）
+        • 无
+        各组注意：按时交接
+        """
+        let s = MeetingNotes.parse(text)
+        XCTAssertEqual(s.map(\.group), ["组A", "组B", "研发组"])
+        XCTAssertEqual(s[0].items, ["二号天线告警频繁", "数据处理问题较多"])   // 只取「存在问题」下面的
+        XCTAssertEqual(s[1].items, ["遥测帧计数跳变"])
+        XCTAssertEqual(s[2].items, ["接口返回慢（已解决）", "各组注意：按时交接"])
+    }
+
+    func testParseTableRows() {
+        let text = "组别\t问题\t负责人\t状态\n组A\t天线告警\t张三\t未解决\n\t遥测断帧\t李四\t已解决\n组C\t无\t\t"
+        let s = MeetingNotes.parse(text)
+        XCTAssertEqual(s.map(\.group), ["组A"])
+        XCTAssertEqual(s[0].items, ["天线告警，张三，未解决", "遥测断帧，李四，已解决"])
+    }
+
+    func testTrackAcrossWeeks() {
+        let w1 = d(10, 19), w2 = d(10, 26), w3 = d(11, 2)
+        var issues = MeetingTracker.update([], with: [.init(group: "组A", items: ["二号天线告警频繁", "备件不足"])], week: w1)
+        XCTAssertEqual(issues.filter { $0.status == .open }.count, 2)
+        // 第二周：天线还在（写法稍有变化），备件写了已解决，新提一条
+        issues = MeetingTracker.update(issues, with: [.init(group: "组A", items: ["二号天线告警仍频繁", "备件不足（已解决）", "机房空调漏水"])], week: w2)
+        let antenna = issues.first { $0.text.contains("天线") }
+        XCTAssertEqual(antenna?.status, .open)
+        XCTAssertEqual(antenna?.firstWeek, w1)
+        XCTAssertEqual(antenna?.weeks(through: w2), 2)
+        XCTAssertEqual(issues.first { $0.text.contains("备件") }?.status, .resolved)
+        XCTAssertEqual(issues.count, 3)
+        // 第三周：空调没再提 → 没再提；天线又出现 → 仍未解决
+        issues = MeetingTracker.update(issues, with: [.init(group: "组A", items: ["二号天线告警频繁"])], week: w3)
+        XCTAssertEqual(issues.first { $0.text.contains("空调") }?.status, .quiet)
+        XCTAssertEqual(issues.first { $0.text.contains("天线") }?.weeks(through: w3), 3)
+        // 不同组的同一句话不混
+        let other = MeetingTracker.update(issues, with: [.init(group: "组B", items: ["二号天线告警频繁"])], week: w3)
+        XCTAssertEqual(other.filter { $0.text.contains("天线") }.count, 2)
+    }
+
+    func testMondayAndFingerprint() {
+        XCTAssertEqual(MeetingTracker.monday(of: d(10, 28)), d(10, 26))
+        XCTAssertEqual(MeetingTracker.monday(of: d(10, 25)), d(10, 19))   // 周日算上一周
+        XCTAssertEqual(MeetingTracker.fingerprint("组A：天线 告警"), MeetingTracker.fingerprint("组A 天线告警"))
+    }
+}

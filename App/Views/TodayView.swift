@@ -70,6 +70,7 @@ struct TodayView: View {
                         DutyInsightCard(today: today).staggered(3)
                         TaskChecklistCard(day: today).staggered(3)
                         RecentChanges().staggered(3)
+                        MeetingCard(today: today).staggered(3)
                         // 两列：左边本月数字，右边常用入口（高度不同，有节奏）
                         HStack(alignment: .top, spacing: DS.Space.s) {
                             MonthStatCard(today: today)

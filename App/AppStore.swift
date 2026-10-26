@@ -85,6 +85,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var isSyncing = false
     /// 上次读电脑版页面时看到的文字（只在内存里，排查用）
     @Published var desktopPageText: String?
+    /// 上次读周会文档读到的文字（没认出各组时给人看读到了什么）
+    @Published var meetingPageText: String?
 
     private static let rosterURL: URL = {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
