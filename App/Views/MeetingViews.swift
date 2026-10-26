@@ -882,6 +882,10 @@ struct MeetingSourceView: View {
             } label: {
                 Label("复制脚本", systemImage: "doc.on.doc")
             }
+            // 微信、QQ 发文字常把换行变成 <br/>，发文件不会
+            ShareLink(item: MeetingWriter.scriptFile) {
+                Label("把脚本存成文件发到电脑", systemImage: "square.and.arrow.up")
+            }
             DraftTextField("脚本的 webhook 链接", value: store.settings.meetingScriptURL) {
                 store.settings.meetingScriptURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
             }
@@ -925,7 +929,7 @@ struct MeetingSourceView: View {
         } header: {
             Text("写回金山文档")
         } footer: {
-            Text("在「周会问题」里点组名旁边的「编辑」，改完保存就写进周会表格。要有这份表格的编辑权限，第一次用电脑设置：\n1. 点「复制脚本」，发到电脑上。\n2. 电脑上用 WPS / 金山文档打开周会表格，菜单「效率 → 高级开发 → AirScript 脚本编辑器」（不是「JS 宏」）。左边新建脚本时建在「我的脚本」里只有自己看得到；建在「文档共享脚本」里，能编辑表格的人都看得到。把复制的内容整段粘贴进去，保存。\n3. 在这个脚本的「…」或右键菜单里复制「webhook 链接」，填到上面（「我的脚本」要是没有这一项，就只能建在文档共享脚本里）。\n4. 在脚本编辑器里点「脚本令牌」生成一个，填到上面，点「测试连接」。\n令牌只存在这台手机的钥匙串里。菜单的名字以 WPS 为准。")
+            Text("在「周会问题」里点组名旁边的「编辑」，改完保存就写进周会表格。要有这份表格的编辑权限，第一次用电脑设置：\n1. 点「把脚本存成文件发到电脑」（用微信文件传输助手等发过去），电脑上打开这个文件，全选复制。直接发文字的话，有的聊天软件会把换行变成 <br/>，脚本就用不了了。\n2. 电脑上用 WPS / 金山文档打开周会表格，菜单「效率 → 高级开发 → AirScript 脚本编辑器」（不是「JS 宏」）。左边新建脚本时建在「我的脚本」里只有自己看得到；建在「文档共享脚本」里，能编辑表格的人都看得到。把复制的内容整段粘贴进去，保存。\n3. 在编辑器左边的脚本列表里，右键这个脚本的名字（不是在代码里右键），复制「webhook 链接」，填到上面（「我的脚本」要是没有这一项，就只能建在文档共享脚本里）。\n4. 在脚本编辑器里点「脚本令牌」生成一个，填到上面，点「测试连接」。\n令牌只存在这台手机的钥匙串里。菜单的名字以 WPS 为准。")
         }
         .onAppear { hasToken = !(Keychain.get(.kdocsScriptToken) ?? "").isEmpty }
     }

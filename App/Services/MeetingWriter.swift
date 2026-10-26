@@ -5,73 +5,73 @@ import Foundation
 enum MeetingWriter {
     /// 放进周会表格的脚本（「复制脚本」复制的就是它）
     static let script = #"""
-    // 值班提醒 · 周会问题写回
-    // 放在周会表格里：效率 → 高级开发 → AirScript 脚本编辑器，新建脚本，整段粘贴进去保存。
-    // App 发来要改的格子：先按这一行原来的内容找到这一行（表格上面插了行也找得到），
-    // 格子里还是 App 导入时看到的内容才改；有一个格子被别人改过，这次一个都不改。
-    // 在编辑器里直接点「运行」只会列出工作表的名字，不改表格。
-
+    /* 值班提醒 · 周会问题写回。放在周会表格的 AirScript 脚本编辑器里（不是 JS 宏），整段粘贴后保存。 */
+    /* App 发来要改的格子：先按这一行原来的内容找到这一行，格子里还是 App 导入时看到的内容才改；有一个格子被别人改过，这次一个都不改。 */
+    /* 在编辑器里直接点「运行」只会在日志里列出工作表的名字，不改表格。 */
     function norm(v) {
-      if (v === null || v === undefined) return ""
-      return String(v).replace(/\r\n?/g, "\n").replace(/^\s+|\s+$/g, "")
+      if (v === null || v === undefined) { return ""; }
+      return String(v).replace(/\r\n?/g, "\n").replace(/^\s+|\s+$/g, "");
     }
-
     function allSheets() {
-      var list = []
-      var count = Application.Sheets.Count
-      for (var i = 1; i <= count; i++) list.push(Application.Sheets.Item(i))
-      return list
+      var list = [];
+      var count = Application.Sheets.Count;
+      for (var i = 1; i <= count; i++) { list.push(Application.Sheets.Item(i)); }
+      return list;
     }
-
     function locate(w, sheets) {
       for (var i = 0; i < sheets.length; i++) {
         if (norm(sheets[i].Cells.Item(w.anchorRow, w.anchorColumn).Value2) === norm(w.anchorText)) {
-          return { sheet: sheets[i], dr: 0, dc: 0 }
+          return { sheet: sheets[i], dr: 0, dc: 0 };
         }
       }
       for (var j = 0; j < sheets.length; j++) {
-        var used = sheets[j].UsedRange
-        var rows = used.Rows.Count
-        var cols = used.Columns.Count
+        var used = sheets[j].UsedRange;
+        var rows = used.Rows.Count;
+        var cols = used.Columns.Count;
         for (var r = 1; r <= rows; r++) {
           for (var c = 1; c <= cols; c++) {
-            var cell = used.Cells.Item(r, c)
+            var cell = used.Cells.Item(r, c);
             if (norm(cell.Value2) === norm(w.anchorText)) {
-              return { sheet: sheets[j], dr: cell.Row - w.anchorRow, dc: cell.Column - w.anchorColumn }
+              return { sheet: sheets[j], dr: cell.Row - w.anchorRow, dc: cell.Column - w.anchorColumn };
             }
           }
         }
       }
-      return null
+      return null;
     }
-
     function run(args) {
-      var sheets = allSheets()
+      var sheets = allSheets();
       if (!args || !args.writes) {
-        var names = []
-        for (var i = 0; i < sheets.length; i++) names.push(sheets[i].Name)
-        return { ok: true, sheets: names }
+        var names = [];
+        for (var i = 0; i < sheets.length; i++) { names.push(sheets[i].Name); }
+        return { ok: true, sheets: names };
       }
-      var ready = []
-      var problems = []
+      var ready = [];
+      var problems = [];
       for (var k = 0; k < args.writes.length; k++) {
-        var w = args.writes[k]
-        var at = locate(w, sheets)
-        if (!at) { problems.push({ index: k, reason: "notFound" }); continue }
-        var cell = at.sheet.Cells.Item(w.row + at.dr, w.column + at.dc)
-        var now = norm(cell.Value2)
-        if (now === norm(w.value)) continue
-        if (now !== norm(w.expect)) { problems.push({ index: k, reason: "changed" }); continue }
-        ready.push({ cell: cell, value: w.value })
+        var w = args.writes[k];
+        var at = locate(w, sheets);
+        if (!at) { problems.push({ index: k, reason: "notFound" }); continue; }
+        var cell = at.sheet.Cells.Item(w.row + at.dr, w.column + at.dc);
+        var now = norm(cell.Value2);
+        if (now === norm(w.value)) { continue; }
+        if (now !== norm(w.expect)) { problems.push({ index: k, reason: "changed" }); continue; }
+        ready.push({ cell: cell, value: w.value });
       }
-      if (problems.length > 0) return { ok: false, problems: problems }
-      for (var m = 0; m < ready.length; m++) ready[m].cell.Value2 = ready[m].value
-      return { ok: true, written: ready.length }
+      if (problems.length > 0) { return { ok: false, problems: problems }; }
+      for (var m = 0; m < ready.length; m++) { ready[m].cell.Value2 = ready[m].value; }
+      return { ok: true, written: ready.length };
     }
-
-    var shiftResult = run(typeof Context !== "undefined" ? Context.argv : null)
-    console.log("SHIFT_RESULT " + JSON.stringify(shiftResult))
+    var shiftResult = run(typeof Context !== "undefined" ? Context.argv : null);
+    console.log("SHIFT_RESULT " + JSON.stringify(shiftResult));
     """#
+
+    /// 脚本存成文本文件，分享到电脑上（微信、QQ 发文字常把换行变成 <br/>，发文件不会）
+    static var scriptFile: URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("周会写回脚本.txt")
+        try? script.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
 
     struct Reply {
         var ok: Bool
