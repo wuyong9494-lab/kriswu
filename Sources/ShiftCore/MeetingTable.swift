@@ -167,7 +167,9 @@ public enum MeetingTable {
             func rawCell(_ i: Int?) -> String { guard let i, i < raw.count else { return "" }; return raw[i] }
             for piece in pieces {
                 let note = notes[piece.number] ?? (pieces.count == 1 ? notes.values.first : nil)
-                let done = note.map(isDoneNote) ?? (rowDone || MeetingTracker.isMarkedDone(piece.text))
+                // 「完成情况」写了完成就算解决；写的是别的（「部署更新？」），看这一行别的格子（「计划完成时间」写着「已完成」）
+                let done = note.map { isDoneNote($0) || (!isNotDoneNote($0) && rowDone) }
+                    ?? (rowDone || MeetingTracker.isMarkedDone(piece.text))
                 let detail = [topic.isEmpty ? nil : topic.replacingOccurrences(of: "\n", with: ""),
                               owner.isEmpty ? nil : "负责人：\(owner)",
                               note.map { "进展：\($0)" } ?? (rowStatus.isEmpty ? nil : "状态：\(rowStatus)")]
@@ -315,10 +317,14 @@ public enum MeetingTable {
         return result
     }
 
+    /// 进展写明了还没做完
+    static func isNotDoneNote(_ note: String) -> Bool {
+        ["未完成", "没完成", "进行中", "未解决", "待", "计划", "再讨论", "跟进", "推进中"].contains(where: note.contains)
+    }
+
     /// 进展写的是做完了
     static func isDoneNote(_ note: String) -> Bool {
-        let notDone = ["未完成", "没完成", "进行中", "未解决", "待", "计划", "再讨论", "跟进", "推进中"]
-        guard !notDone.contains(where: note.contains) else { return false }
+        guard !isNotDoneNote(note) else { return false }
         return ["完成", "上线", "已解决", "解决", "闭环", "关闭", "已处理", "结束", "落实", "已协调"].contains(where: note.contains)
     }
 }

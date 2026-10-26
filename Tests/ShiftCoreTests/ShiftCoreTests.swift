@@ -2564,6 +2564,17 @@ final class MeetingTests: XCTestCase {
         XCTAssertNil(MeetingWriteback.scriptResult(in: try JSONSerialization.jsonObject(with: Data(#"{"data":{"result":null}}"#.utf8))))
     }
 
+    func testRowStatusWithQuestionNote() {
+        // 一条一行：「计划完成时间」写着已完成，「完成情况」只写了个问句，算解决；写着进行中的不算
+        let tsv = "分组\t项目或工作内容\t完成进展、进度\t计划完成时间\t负责人\t重点：上周闭环情况\n"
+            + "遥控组\t系统开发\t1.回放功能开发完成\t已完成\t甲\t部署更新？\n"
+            + "\t\t2.表格核对\t进行中\t乙\t数传模式？\n"
+            + "\t\t3.接口联调\t已完成\t丙\t进行中\n"
+        let s = MeetingNotes.parse(tsv)
+        XCTAssertEqual(s.first?.items, ["回放功能开发完成", "表格核对", "接口联调"])
+        XCTAssertEqual(s.first?.entries.map(\.done), [true, false, false])
+    }
+
     func testClosureNotes() {
         XCTAssertEqual(MeetingTable.closureNotes("，完成；2。明确；3 进行中；4，上线；5，进行中。"),
                        [1: "完成", 2: "明确", 3: "进行中", 4: "上线", 5: "进行中"])

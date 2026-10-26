@@ -78,11 +78,12 @@ enum MeetingWriter {
         var message: String
     }
 
-    /// 是金山文档脚本的 webhook 链接（…/api/v3/ide/file/…/script/…/sync_task）
+    /// 是金山文档（WPS）脚本的 webhook 链接。文档里的脚本是 …/api/v3/ide/file/…/script/…/sync_task；
+    /// 「我的脚本」的链接可能长得不一样，只认网址是金山文档、WPS 的
     static func isScriptURL(_ text: String) -> Bool {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme == "https", let host = url.host?.lowercased() else { return false }
-        return (host == "kdocs.cn" || host.hasSuffix(".kdocs.cn") || host.hasSuffix(".wps.cn")) && url.path.contains("/script/")
+              url.scheme == "https", let host = url.host?.lowercased(), url.path.count > 1 else { return false }
+        return host == "kdocs.cn" || host.hasSuffix(".kdocs.cn") || host == "wps.cn" || host.hasSuffix(".wps.cn")
     }
 
     /// 测试连接：脚本回工作表的名字
