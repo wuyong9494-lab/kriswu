@@ -254,14 +254,19 @@ public enum MeetingTable {
 
 /// 读 Excel（.xlsx）文件的第一张表：只取每一格的文字
 public enum XLSXReader {
+    /// 第一张表
     public static func rows(_ data: Data) -> [[String]]? {
+        sheets(data)?.first
+    }
+
+    /// 每一张表，按 sheet1、sheet2… 的顺序
+    public static func sheets(_ data: Data) -> [[[String]]]? {
         guard let files = unzip(data, wanted: { $0 == "xl/sharedStrings.xml" || $0.hasPrefix("xl/worksheets/sheet") }) else { return nil }
         let shared = files["xl/sharedStrings.xml"].map(SharedStrings.parse) ?? []
-        // 第一张表：sheet1.xml（没有就取编号最小的）
-        let sheetName = files.keys.filter { $0.hasPrefix("xl/worksheets/sheet") && $0.hasSuffix(".xml") }
-            .min { a, b in (Int(a.filter(\.isNumber)) ?? 0) < (Int(b.filter(\.isNumber)) ?? 0) }
-        guard let name = sheetName, let sheet = files[name] else { return nil }
-        return Sheet.parse(sheet, shared: shared)
+        let names = files.keys.filter { $0.hasPrefix("xl/worksheets/sheet") && $0.hasSuffix(".xml") }
+            .sorted { a, b in (Int(a.filter(\.isNumber)) ?? 0) < (Int(b.filter(\.isNumber)) ?? 0) }
+        guard !names.isEmpty else { return nil }
+        return names.compactMap { files[$0] }.map { Sheet.parse($0, shared: shared) }
     }
 
     /// 只解压用得到的几个文件

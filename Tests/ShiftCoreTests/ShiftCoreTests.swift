@@ -2415,6 +2415,40 @@ final class MeetingTests: XCTestCase {
         XCTAssertEqual(s[1].entries.map(\.done), [true])
     }
 
+    func testDocDownloadParsing() throws {
+        let link = try XCTUnwrap(URL(string: "https://www.kdocs.cn/l/abcDEF123?from=share"))
+        XCTAssertEqual(DocDownload.shareID(link), "abcDEF123")
+        XCTAssertTrue(DocDownload.isSupported(link))
+        XCTAssertFalse(DocDownload.isSupported(try XCTUnwrap(URL(string: "https://docs.qq.com/sheet/abc"))))
+        XCTAssertFalse(DocDownload.isSupported(try XCTUnwrap(URL(string: "https://www.kdocs.cn/latest"))))
+
+        // 链接信息：fileinfo 里 id + groupid + 文件名；creator 的 id 不算
+        let info = #"{"result":"ok","creator":{"id":9,"name":"x"},"fileinfo":{"id":100200300,"groupid":555,"fname":"周会.xlsx"}}"#
+        XCTAssertEqual(DocDownload.file(inJSON: Data(info.utf8)), DocDownload.FileRef(group: "555", id: "100200300", name: "周会.xlsx"))
+        let linkOnly = #"{"linkinfo":{"sid":"abc","fileid":"77","groupid":"88"}}"#
+        XCTAssertEqual(DocDownload.file(inJSON: Data(linkOnly.utf8)), DocDownload.FileRef(group: "88", id: "77"))
+        XCTAssertNil(DocDownload.file(inJSON: Data(#"{"result":"userNotLogin","msg":"need login"}"#.utf8)))
+
+        // 网页源码里当字符串写的 JSON；{…} 里还套着 {…}
+        let page = #"<script>window.__S = "{"fileinfo":{"id":5,"groupid":6,"fname":"a.xlsx"}}";</script>"#
+        XCTAssertEqual(DocDownload.file(inText: page), DocDownload.FileRef(group: "6", id: "5", name: "a.xlsx"))
+        let nested = #"var f = {"id": 41, "groupid": 42, "fver": {"v": 3}, "fname": "b.xlsx"};"#
+        XCTAssertEqual(DocDownload.file(inText: nested), DocDownload.FileRef(group: "42", id: "41", name: "b.xlsx"))
+
+        // 下载说明：键名叫 url 的优先
+        let dl = #"{"result":"ok","fileinfo":{"avatar_url":"https://a.example/x.png"},"url":"https://cdn.example/f.xlsx?sig=1"}"#
+        XCTAssertEqual(DocDownload.fileURL(inJSON: Data(dl.utf8))?.absoluteString, "https://cdn.example/f.xlsx?sig=1")
+        XCTAssertEqual(DocDownload.fileURL(inJSON: Data(#"{"data":{"download_url":"https://cdn.example/g"}}"#.utf8))?.absoluteString,
+                       "https://cdn.example/g")
+
+        XCTAssertEqual(DocDownload.brief(Data(#"{"result":"userNotLogin","msg":"need login"}"#.utf8)), "userNotLogin need login")
+        XCTAssertTrue(DocDownload.saysLogin(status: 403, data: Data(#"{"result":"userNotLogin"}"#.utf8)))
+        XCTAssertFalse(DocDownload.saysLogin(status: 403, data: Data(#"{"result":"PermissionDenied"}"#.utf8)))
+        XCTAssertTrue(DocDownload.isZip(Data([0x50, 0x4B, 0x03, 0x04, 0x14])))
+        XCTAssertEqual(DocDownload.downloadURLs(DocDownload.FileRef(group: "1", id: "2")).first?.absoluteString,
+                       "https://drive.kdocs.cn/api/v5/groups/1/files/2/download?isblocks=false&support_checksums=md5,sha1")
+    }
+
     func testClosureNotes() {
         XCTAssertEqual(MeetingTable.closureNotes("，完成；2。明确；3 进行中；4，上线；5，进行中。"),
                        [1: "完成", 2: "明确", 3: "进行中", 4: "上线", 5: "进行中"])

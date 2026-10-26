@@ -60,6 +60,7 @@ struct MeetingIssuesView: View {
     @State private var pasteText = ""
     @State private var showResolved = false
     @State private var pickingFile = false
+    @State private var downloading = false
 
     private var week: DayKey { MeetingTracker.monday(of: .today) }
 
@@ -77,9 +78,24 @@ struct MeetingIssuesView: View {
                 Button {
                     browsing = true
                 } label: {
-                    Label("打开文档读取", systemImage: "safari")
+                    Label("打开文档（在这里登录金山文档）", systemImage: "safari")
                 }
                 .disabled(store.settings.meetingDocURL.isEmpty)
+                Button {
+                    guard let url = URL(string: store.settings.meetingDocURL) else { return }
+                    downloading = true
+                    Task {
+                        let result = await store.downloadMeeting(link: url)
+                        downloading = false
+                        ToastCenter.shared.show(result.message, style: result.ok ? .success : .error)
+                    }
+                } label: {
+                    HStack {
+                        Label("现在下载最新一版", systemImage: "arrow.down.circle")
+                        if downloading { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(downloading || !(URL(string: store.settings.meetingDocURL).map(DocDownload.isSupported) ?? false))
                 Button {
                     let result = store.importMeetingFromClipboard()
                     ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
@@ -100,6 +116,15 @@ struct MeetingIssuesView: View {
                 if let message = store.settings.meetingMessage {
                     Text(message).font(.footnote).foregroundStyle(.secondary)
                 }
+                if !store.settings.meetingDownloadLog.isEmpty {
+                    NavigationLink("查看上次自动下载的过程") {
+                        List(Array(store.settings.meetingDownloadLog.enumerated()), id: \.offset) { _, line in
+                            Text(line).font(.footnote).textSelection(.enabled)
+                        }
+                        .appList()
+                        .navigationTitle("下载过程")
+                    }
+                }
                 if let text = store.meetingPageText {
                     NavigationLink("查看上次读到的内容") {
                         ScrollView {
@@ -113,7 +138,7 @@ struct MeetingIssuesView: View {
             } header: {
                 Text("周会文档")
             } footer: {
-                Text("周会文档是在线表格时网页上读不出文字，每周一会提醒你导入一次：在金山文档 App 里打开表格，点左上角全选（或按住拖选全部格子）复制，回来点「从剪贴板导入」；也可以在金山文档里「导出为 Excel」，用「分享 → 值班提醒」打开。按「分组」一列分组，「完成进展」里 1. 2. 3. 每条算一个问题，「完成情况」写了完成、上线、已解决的算解决了。文档内容只存在这台手机上。")
+                Text("第一次点「打开文档」，在里面登录你自己的金山文档账号。之后每周一 App 自己下载这份表格的 Excel 读一遍，读到新的一版就通知你，不用再手动导。文档设了禁止下载就下载不了；下载不成功时会提醒你，点「查看上次自动下载的过程」能看卡在哪一步。\n\n手动导入：在金山文档 App 里全选表格复制，回来点「从剪贴板导入」；或导出成 Excel，用「分享 → 值班提醒」打开。\n\n按「分组」一列分组，「完成进展」里 1. 2. 3. 每条算一个问题，「完成情况」写了完成、上线、已解决的算解决了。文档内容只存在这台手机上。")
             }
 
             if issues.isEmpty {
@@ -237,13 +262,14 @@ struct MeetingDocBrowser: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = WebModel()
     @State private var toast: String?
+    @State private var reading = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 if model.isLoading { ProgressView().frame(maxWidth: .infinity) }
                 WebView(webView: model.webView)
-                Text(toast ?? "文档显示出来后点「读取本页」；要登录就先在这里登录")
+                Text(toast ?? "第一次先在这里登录金山文档；文档显示出来后点「读取文档」")
                     .font(.footnote)
                     .padding(8)
                     .frame(maxWidth: .infinity)
@@ -258,19 +284,34 @@ struct MeetingDocBrowser: View {
                     Button { model.webView.goBack() } label: { Image(systemName: "chevron.left").accessibilityLabel("后退") }
                     Button { model.webView.reload() } label: { Image(systemName: "arrow.clockwise").accessibilityLabel("刷新") }
                     Spacer()
-                    Button("读取本页") {
+                    Button(reading ? "读取中…" : "读取文档") {
+                        reading = true
+                        toast = "正在用你登录的账号下载这份表格…"
                         Task {
+                            defer { reading = false }
+                            // 先用刚登录的账号下载 Excel；不是金山文档或下载不了，再读这一页上的字
+                            var problem: String?
+                            if let url = URL(string: store.settings.meetingDocURL), DocDownload.isSupported(url) {
+                                let result = await store.downloadMeeting(link: url)
+                                if result.ok {
+                                    ToastCenter.shared.show(result.message, style: .success)
+                                    dismiss()
+                                    return
+                                }
+                                problem = result.message
+                            }
                             let text = (try? await model.webView.evaluateJavaScript(DocTextLoader.textScript) as? String) ?? ""
-                            let result = store.importMeeting(text: text, source: "打开文档")
                             if MeetingNotes.parse(text).isEmpty {
-                                toast = "这一页读不出表格里的字（在线表格是画出来的）。请在金山文档里全选复制，用「从剪贴板导入」；或导出成 Excel 分享给值班提醒"
+                                toast = (problem.map { $0 + "。" } ?? "这一页读不出表格里的字。")
+                                    + "可以在金山文档里全选复制，用「从剪贴板导入」"
                             } else {
-                                ToastCenter.shared.show(result, style: .success)
+                                ToastCenter.shared.show(store.importMeeting(text: text, source: "打开文档"), style: .success)
                                 dismiss()
                             }
                         }
                     }
                     .bold()
+                    .disabled(reading)
                 }
             }
             .onAppear { model.load(store.settings.meetingDocURL) }

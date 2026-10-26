@@ -46,18 +46,37 @@ extension AppStore {
         }
         guard let data = try? Data(contentsOf: url) else { return "打不开这个文件" }
         let ext = url.pathExtension.lowercased()
-        if ext == "xlsx" {
-            guard let rows = XLSXReader.rows(data) else { return "读不出这个 Excel 文件" }
+        return importMeetingData(data, isExcel: ext == "xlsx", isCSV: ext == "csv", source: ext == "xlsx" ? "Excel 文件" : "文件")
+    }
+
+    private func importMeetingData(_ data: Data, isExcel: Bool, isCSV: Bool = false, source: String) -> String {
+        if isExcel {
+            guard let sheets = XLSXReader.sheets(data), let first = sheets.first else { return "读不出这个 Excel 文件" }
+            // 好几张表时用第一张认得出各组的
+            let rows = sheets.first { !(MeetingTable.sections($0) ?? []).isEmpty } ?? first
             let text = rows.map { $0.joined(separator: "\t") }.joined(separator: "\n")
             meetingPageText = String(text.prefix(6000))
-            return applyMeeting(MeetingTable.sections(rows) ?? [], fingerprintOf: text, source: "Excel 文件")
+            return applyMeeting(MeetingTable.sections(rows) ?? [], fingerprintOf: text, source: source)
         }
         guard let text = SyncService.decode(data) else { return "读不出这个文件" }
-        if ext == "csv", let sections = MeetingTable.sections(MeetingTable.rows(text, separator: ",")), !sections.isEmpty {
+        if isCSV, let sections = MeetingTable.sections(MeetingTable.rows(text, separator: ",")), !sections.isEmpty {
             meetingPageText = String(text.prefix(6000))
             return applyMeeting(sections, fingerprintOf: text, source: "CSV 文件")
         }
-        return importMeeting(text: text, source: "文件")
+        return importMeeting(text: text, source: source)
+    }
+
+    /// 用 App 里登录的金山文档账号下载周会表格（Excel）并导入；下载过程记在设置里，「周会问题」里能看
+    func downloadMeeting(link: URL) async -> (message: String, ok: Bool) {
+        let outcome = await MeetingDownloader.download(link)
+        settings.meetingDownloadLog = ["\(Date().formatted(date: .abbreviated, time: .shortened)) 下载周会表格"] + outcome.log
+        guard let data = outcome.data else {
+            let message = "自动下载没成功：" + (outcome.problem ?? "没拿到文件")
+            settings.meetingMessage = message
+            return (message, false)
+        }
+        let message = importMeetingData(data, isExcel: true, source: "自动下载")
+        return (message, !Self.meetingImportFailed(message))
     }
 
     private func applyMeeting(_ sections: [MeetingNotes.Section], fingerprintOf text: String, source: String) -> String {
@@ -101,30 +120,43 @@ extension AppStore {
         return parts.joined(separator: "，")
     }
 
-    /// 打开 App 时：这周还没读到新一版的周会文档，就在后台打开文档读一次（3 小时内最多试一次）
+    /// 打开 App 时自动更新周会文档：金山文档的链接就用登录的账号下载 Excel；别的链接在后台打开网页读文字。
+    /// 这周还没读到新一版：3 小时试一次；读到了：半天看一次有没有再改
     func refreshMeetingIfDue() async {
         guard !Self.isDemo else { return }
         let link = settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: link), url.scheme?.hasPrefix("http") == true else { return }
         let week = MeetingTracker.monday(of: .today)
-        if let done = settings.meetingWeek, done >= week { return }
-        if let last = settings.meetingLastAttempt, Date().timeIntervalSince(last) < 3 * 3600 { return }
+        let doneThisWeek = settings.meetingWeek.map { $0 >= week } ?? false
+        if let last = settings.meetingLastAttempt, Date().timeIntervalSince(last) < (doneThisWeek ? 12 : 3) * 3600 { return }
         settings.meetingLastAttempt = Date()
-        let text = await DocTextLoader.text(from: url) ?? ""
-        guard !MeetingNotes.parse(text).isEmpty else {
-            // 在线表格是画出来的，网页上取不到文字：每周一提醒一次去复制导入
-            settings.meetingMessage = "自动读不到周会文档的内容（在线表格读不出文字）：在金山文档里全选复制，回来点「从剪贴板导入」，或导出成 Excel 分享给值班提醒"
+        let before = settings.meetingFingerprint
+        var result: String?
+        var problem: String?
+        if DocDownload.isSupported(url) {
+            let r = await downloadMeeting(link: url)
+            if r.ok { result = r.message } else { problem = r.message }
+        }
+        if result == nil, !doneThisWeek {
+            let text = await DocTextLoader.text(from: url) ?? ""
+            if !MeetingNotes.parse(text).isEmpty { result = importMeeting(text: text, source: "自动") }
+        }
+        guard let result else {
+            guard !doneThisWeek else { return }
+            // 自动拿不到：每周提醒一次去复制导入
+            settings.meetingMessage = (problem.map { $0 + "。" } ?? "自动读不到周会文档的内容（在线表格读不出文字）。")
+                + "可以在金山文档里全选复制，回来点「从剪贴板导入」，或导出成 Excel 分享给值班提醒"
             if settings.meetingNudgedWeek != week {
                 settings.meetingNudgedWeek = week
                 await NotificationService.notifyNow(id: "meeting-nudge-\(week)", title: "📝 这周的周会文档导入了吗",
-                                                    body: "在金山文档里打开周会表格，全选复制，回到值班提醒点「从剪贴板导入」，就能看各组的问题解决了没有。",
+                                                    body: (problem.map { $0 + "。" } ?? "")
+                                                        + "在金山文档里打开周会表格，全选复制，回到值班提醒点「从剪贴板导入」，就能看各组的问题解决了没有。",
                                                     route: "meeting")
             }
             return
         }
-        let result = importMeeting(text: text, source: "自动")
-        // 读到了这周的新一版：通知一下
-        if settings.meetingWeek == week, settings.meetingFingerprint == MeetingTracker.fingerprint(text) {
+        // 读到了新的一版：通知一下
+        if settings.meetingWeek == week, settings.meetingFingerprint != before {
             await NotificationService.notifyNow(id: "meeting-\(week)", title: "📝 周会文档更新了", body: result, route: "meeting")
         }
     }
