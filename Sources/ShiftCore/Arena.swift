@@ -410,17 +410,17 @@ public struct ArenaGame: Sendable {
 
     public let mode: Mode
     public let map: ArenaMap
-    public private(set) var time: Double = 0
-    public private(set) var fighters: [Fighter]
-    public private(set) var projectiles: [Projectile] = []
+    public internal(set) var time: Double = 0
+    public internal(set) var fighters: [Fighter]
+    public internal(set) var projectiles: [Projectile] = []
     /// 地上的星星
-    public private(set) var stars: [V2] = []
-    public private(set) var teamKills = [0, 0]
-    public private(set) var zoneProgress = [0.0, 0.0]
-    public private(set) var countdown: Countdown?
+    public internal(set) var stars: [V2] = []
+    public internal(set) var teamKills = [0, 0]
+    public internal(set) var zoneProgress = [0.0, 0.0]
+    public internal(set) var countdown: Countdown?
     /// 毒圈半径（各自为战）
-    public private(set) var safeRadius: Double
-    public private(set) var result: Result?
+    public internal(set) var safeRadius: Double
+    public internal(set) var result: Result?
     public var events: [Event] = []
     private var nextProjectile = 1
     private var starTimer = 0.0
@@ -526,14 +526,7 @@ public struct ArenaGame: Sendable {
 
     /// 走：先整个走，碰墙了就只走横的或只走竖的（贴着墙滑）
     private mutating func walk(_ i: Int, by delta: V2) {
-        let p = fighters[i].pos, r = Self.fighterRadius
-        if !map.collides(p + delta, radius: r) {
-            fighters[i].pos = p + delta
-        } else if !map.collides(p + V2(delta.x, 0), radius: r) {
-            fighters[i].pos = p + V2(delta.x, 0)
-        } else if !map.collides(p + V2(0, delta.y), radius: r) {
-            fighters[i].pos = p + V2(0, delta.y)
-        }
+        fighters[i].pos = Self.walk(from: fighters[i].pos, by: delta, on: map)
     }
 
     private mutating func respawn(_ i: Int) {

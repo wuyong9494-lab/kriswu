@@ -20,6 +20,9 @@ final class ArenaScene: SKScene {
     private var lastPoison: Double = -1
     private var lastTime: TimeInterval?
     private var builtSize: CGSize = .zero
+    /// 在上边那一队的人看到的地图倒过来（自己家总在下边）
+    private var flipped = false
+    private var mapSize = V2(0, 0)
 
     static let blue = UIColor(red: 0.20, green: 0.55, blue: 1.0, alpha: 1)
     static let red = UIColor(red: 0.95, green: 0.30, blue: 0.30, alpha: 1)
@@ -64,7 +67,7 @@ final class ArenaScene: SKScene {
                 return created
             }()
             let visible = game.isVisible(fighter, to: myTeam)
-            node.update(fighter, at: point(fighter.pos), visible: visible, hidden: game.map.inBush(fighter.pos), tile: tile)
+            node.update(fighter, at: point(fighter.pos), visible: visible, hidden: game.map.inBush(fighter.pos), flipped: flipped)
         }
 
         // 子弹、炸弹
@@ -141,7 +144,8 @@ final class ArenaScene: SKScene {
     }
 
     private func point(_ v: V2) -> CGPoint {
-        CGPoint(x: CGFloat(v.x) * tile, y: -CGFloat(v.y) * tile)
+        let p = flipped ? mapSize - v : v
+        return CGPoint(x: CGFloat(p.x) * tile, y: -CGFloat(p.y) * tile)
     }
 
     private func color(team: Int, myTeam: Int, mode: ArenaGame.Mode) -> UIColor {
@@ -156,26 +160,28 @@ final class ArenaScene: SKScene {
         fighterNodes.values.forEach { $0.removeFromParent() }
         fighterNodes = [:]
         builtSize = size
+        mapSize = V2(Double(map.width), Double(map.height))
+        if let controller { flipped = controller.game.mode.isTeams && controller.mine.team == 1 }
         // 竖屏看 11 格宽；iPad 上看得多一点
         tile = max(24, min(size.width / 11, size.height / 15))
         let node = SKNode()
         let ground = SKSpriteNode(color: Self.ground, size: CGSize(width: CGFloat(map.width) * tile, height: CGFloat(map.height) * tile))
-        ground.anchorPoint = CGPoint(x: 0, y: 1)
-        ground.position = .zero
+        ground.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        ground.position = point(V2(Double(map.width) / 2, Double(map.height) / 2))
         ground.zPosition = -10
         node.addChild(ground)
         // 浅浅的格子
         for y in 0..<map.height {
             for x in 0..<map.width where (x + y) % 2 == 0 && map.tile(x, y) == .floor {
                 let checker = SKSpriteNode(color: UIColor.black.withAlphaComponent(0.035), size: CGSize(width: tile, height: tile))
-                checker.position = CGPoint(x: (CGFloat(x) + 0.5) * tile, y: -(CGFloat(y) + 0.5) * tile)
+                checker.position = point(V2(Double(x) + 0.5, Double(y) + 0.5))
                 checker.zPosition = -9
                 node.addChild(checker)
             }
         }
         for y in 0..<map.height {
             for x in 0..<map.width {
-                let center = CGPoint(x: (CGFloat(x) + 0.5) * tile, y: -(CGFloat(y) + 0.5) * tile)
+                let center = point(V2(Double(x) + 0.5, Double(y) + 0.5))
                 switch map.tile(x, y) {
                 case .wall:
                     let block = SKSpriteNode(color: Self.wall, size: CGSize(width: tile, height: tile))
@@ -343,6 +349,7 @@ final class ArenaScene: SKScene {
         let range = isSuper ? fighter.brawler.superRange : fighter.brawler.attackRange
         let direction = drag.length > 0.25 ? drag.normalized : fighter.facing
         let origin = point(fighter.pos)
+        let flipSign: CGFloat = flipped ? -1 : 1
         let path = CGMutablePath()
         let lobbing = fighter.brawler == .frog || (isSuper && fighter.brawler == .tiger)
         if lobbing {
@@ -355,7 +362,7 @@ final class ArenaScene: SKScene {
         } else {
             let width = (fighter.brawler == .panda || (isSuper && fighter.brawler == .robot) || fighter.brawler == .tiger ? 0.9 : 0.3) * tile
             let end = point(fighter.pos + direction * range)
-            let normal = CGPoint(x: -CGFloat(direction.y), y: -CGFloat(direction.x)) * (width / 2)
+            let normal = CGPoint(x: -CGFloat(direction.y), y: -CGFloat(direction.x)) * (width / 2 * flipSign)
             path.move(to: origin + normal)
             path.addLine(to: end + normal * (fighter.brawler == .panda || isSuper && fighter.brawler == .robot ? 2.5 : 1))
             path.addLine(to: end - normal * (fighter.brawler == .panda || isSuper && fighter.brawler == .robot ? 2.5 : 1))
@@ -437,7 +444,7 @@ final class ArenaFighterNode: SKNode {
 
     required init?(coder: NSCoder) { fatalError("不从文件里读") }
 
-    func update(_ fighter: Fighter, at position: CGPoint, visible: Bool, hidden: Bool, tile: CGFloat) {
+    func update(_ fighter: Fighter, at position: CGPoint, visible: Bool, hidden: Bool, flipped: Bool) {
         self.position = position
         guard fighter.alive else {
             alpha = 0
@@ -449,9 +456,10 @@ final class ArenaFighterNode: SKNode {
         let fraction = CGFloat(fighter.health) / CGFloat(max(fighter.maxHealth, 1))
         healthFill.xScale = max(0, min(1, fraction))
         healthFill.color = isMe ? (fraction < 0.3 ? .systemRed : .systemGreen) : color
-        face.xScale = fighter.facing.x < -0.1 ? -1 : 1
+        face.xScale = (flipped ? -fighter.facing.x : fighter.facing.x) < -0.1 ? -1 : 1
         ring.isHidden = fighter.superCharge < 1
-        starsLabel.text = fighter.stars > 0 ? "⭐️\(fighter.stars)" : ""
+        let stars = fighter.stars > 0 ? "⭐️\(fighter.stars)" : ""
+        if starsLabel.text != stars { starsLabel.text = stars }
         for (k, bar) in ammo.enumerated() {
             let fill = CGFloat(min(max(fighter.ammo - Double(k), 0), 1))
             bar.xScale = max(fill, 0.02)

@@ -159,3 +159,76 @@ final class ArenaTests: XCTestCase {
         }
     }
 }
+
+final class ArenaNetTests: XCTestCase {
+    private let dt = 1.0 / 60
+
+    private func entrants() -> [ArenaGame.Entrant] {
+        (0..<6).map { ArenaGame.Entrant(name: "电脑\($0)", brawler: Brawler.allCases[$0 % 5], isBot: true, team: $0 < 3 ? 0 : 1) }
+    }
+
+    /// 房主打成一包、别人解开照着改：位置差不到 1/100 格，血量、比分、子弹、星星一样
+    func testSnapshotRoundTripAndApply() throws {
+        var host = ArenaGame(mode: .stars, entrants: entrants(), seed: 9)
+        var bots = host.fighters.map { ArenaBot(id: $0.id, seed: 9) }
+        var events: [ArenaGame.Event] = []
+        for _ in 0..<Int(12 / dt) {
+            var inputs: [Int: ArenaInput] = [:]
+            for k in bots.indices { inputs[k] = bots[k].input(in: host, dt: dt) }
+            host.step(dt, inputs: inputs)
+            events += host.events
+            host.events.removeAll()
+        }
+        let snapshot = host.snapshot(events: events, acks: [2: 42])
+        let data = snapshot.encoded()
+        XCTAssertLessThan(data.count, 2000, "一包不大")
+        let decoded = try XCTUnwrap(ArenaSnapshot(data: data))
+        XCTAssertEqual(decoded.fighters.count, 6)
+        XCTAssertEqual(decoded.fighters[2].ack, 42)
+        XCTAssertEqual(decoded.projectiles.count, snapshot.projectiles.count)
+        XCTAssertEqual(decoded.stars.count, snapshot.stars.count)
+        XCTAssertEqual(decoded.events.count, min(snapshot.events.count, 60))
+
+        var client = ArenaGame(mode: .stars, entrants: entrants(), seed: 9)
+        client.apply(decoded)
+        XCTAssertEqual(client.fighters.map(\.health), host.fighters.map(\.health))
+        XCTAssertEqual(client.fighters.map(\.alive), host.fighters.map(\.alive))
+        XCTAssertEqual(client.fighters.map(\.stars), host.fighters.map(\.stars))
+        XCTAssertEqual(client.teamKills, host.teamKills)
+        for (a, b) in zip(client.fighters, host.fighters) {
+            XCTAssertEqual(a.pos.x, b.pos.x, accuracy: 0.006)
+            XCTAssertEqual(a.pos.y, b.pos.y, accuracy: 0.006)
+            XCTAssertEqual(a.superCharge, b.superCharge, accuracy: 0.005)
+        }
+        XCTAssertEqual(client.time, host.time, accuracy: 0.001)
+    }
+
+    func testEveryResultSurvivesEncoding() throws {
+        for result: ArenaGame.Result? in [nil, .team(1), .survivor(4), .draw] {
+            let snapshot = ArenaSnapshot(time: 1, fighters: [], projectiles: [], stars: [], teamKills: [3, 4], zoneProgress: [12.5, 0],
+                                         countdown: ArenaGame.Countdown(team: 1, left: 7.5), safeRadius: 9, result: result,
+                                         events: [.knockout(target: 2, by: nil), .explosion(at: V2(3.25, 4.5), radius: 1.2)])
+            let decoded = try XCTUnwrap(ArenaSnapshot(data: snapshot.encoded()))
+            XCTAssertEqual(decoded, snapshot)
+        }
+        XCTAssertNil(ArenaSnapshot(data: Data([1, 2, 3])), "坏包不认")
+    }
+
+    /// 两包之间自己往前推：子弹照直飞、扔的炸弹接着飞，飞到头就没了
+    func testExtrapolationMovesShotsBetweenSnapshots() {
+        var game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "狐", brawler: .fox, isBot: false, team: 0),
+            .init(name: "蛙", brawler: .frog, isBot: false, team: 1),
+        ], seed: 1)
+        game.adjust(0) { $0.pos = V2(3.5, 20.5) }
+        game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1)), 1: ArenaInput(attack: V2(0, 3))])
+        let before = game.projectiles
+        XCTAssertEqual(before.count, 2)
+        game.extrapolate(0.1)
+        let straight = game.projectiles.first { $0.lob == nil }!
+        XCTAssertEqual(straight.pos.y, before.first { $0.lob == nil }!.pos.y - 1.7, accuracy: 0.001)
+        game.extrapolate(1)
+        XCTAssertTrue(game.projectiles.allSatisfy { $0.lob == nil }, "炸弹落地了")
+        XCTAssertEqual(ArenaGame.walk(from: V2(0.5, 0.5), by: V2(-1, 0), on: game.map).x, 0.5, accuracy: 0.6, "地图边上走不出去")
+    }
+}

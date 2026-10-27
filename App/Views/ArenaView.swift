@@ -9,7 +9,13 @@ struct ArenaHomeView: View {
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
     @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .panda
     @State private var playing: ArenaEntry?
+    @State private var lobby: LobbyEntry?
     @EnvironmentObject private var store: AppStore
+
+    struct LobbyEntry: Identifiable {
+        let id = UUID()
+        let lobby: ArenaLobby
+    }
 
     struct ArenaEntry: Identifiable {
         let id = UUID()
@@ -55,11 +61,17 @@ struct ArenaHomeView: View {
             } footer: {
                 Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；上面黄圈满了放大招。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
             }
+            GameRoomButtons(kind: .arena, remotePlayers: 2...6, nearbyCapacity: 6) { room in
+                lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: brawler))
+            }
         }
         .appList()
         .navigationTitle("萌兽乱斗")
         .fullScreenCover(item: $playing) { entry in
             ArenaPlayView(setup: entry.setup)
+        }
+        .fullScreenCover(item: $lobby) { entry in
+            ArenaRoomView(lobby: entry.lobby)
         }
     }
 
@@ -106,32 +118,135 @@ struct ArenaHomeView: View {
 
 // MARK: - 一局
 
+/// 和电脑打：「再来一局」换一个新的
 struct ArenaPlayView: View {
     let setup: ArenaController.Setup
     @Environment(\.dismiss) private var dismiss
+    @State private var controller: ArenaController
     @State private var round = 0
 
+    init(setup: ArenaController.Setup) {
+        self.setup = setup
+        _controller = State(initialValue: ArenaController(setup: setup))
+    }
+
     var body: some View {
-        ArenaMatchView(setup: setup, onAgain: { round += 1 }, onExit: { dismiss() })
-            .id(round)
+        ArenaMatchView(controller: controller, onAgain: {
+            controller = ArenaController(setup: setup)
+            round += 1
+        }, onExit: { dismiss() })
+        .id(round)
+    }
+}
+
+// MARK: - 联机房间
+
+struct ArenaRoomView: View {
+    @ObservedObject var lobby: ArenaLobby
+    @ObservedObject private var room: GameRoom
+    @Environment(\.dismiss) private var dismiss
+
+    init(lobby: ArenaLobby) {
+        self.lobby = lobby
+        room = lobby.room
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                GameRoomLobby(room: room) {
+                    Section {
+                        HStack(spacing: DS.Space.xs) {
+                            ForEach(Brawler.allCases, id: \.self) { brawler in
+                                Button {
+                                    lobby.choose(brawler)
+                                } label: {
+                                    Text(brawler.emoji)
+                                        .font(.system(size: 30))
+                                        .frame(width: 50, height: 50)
+                                        .background(Circle().fill(lobby.myPick == brawler ? DS.Palette.accentSoft : DS.Palette.surfaceSunken))
+                                        .overlay(Circle().strokeBorder(lobby.myPick == brawler ? DS.Palette.accent : .clear, lineWidth: 2))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    } header: {
+                        Text("我用 \(lobby.myPick.name)（\(lobby.myPick.role)）")
+                    }
+                    Section {
+                        ForEach(room.members) { member in
+                            HStack {
+                                Text(lobby.pick(of: member.id)?.emoji ?? "❔")
+                                Text(member.id == room.me.id ? "\(member.name)（我）" : member.name)
+                                Spacer()
+                                if member.id == room.hostID { Text("房主").font(DS.Font.caption).foregroundStyle(.secondary) }
+                            }
+                        }
+                    } header: {
+                        Text("谁用什么")
+                    } footer: {
+                        Text(lobby.mode.isTeams ? "按进房间的先后轮流分到两队，每队不够 3 个人电脑补。" : "各打各的，不够 6 个人电脑补。")
+                    }
+                    Section {
+                        if room.isHost {
+                            Picker("玩法", selection: Binding(get: { lobby.mode }, set: { lobby.choose($0) })) {
+                                ForEach(ArenaGame.Mode.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                            Button {
+                                lobby.start()
+                            } label: {
+                                Label("开打（\(room.members.count) 个人）", systemImage: "play.fill").frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(room.members.count < 2)
+                        } else {
+                            LabeledContent("玩法", value: lobby.mode.title)
+                            Text("等房主开打，开了自动进去。").foregroundStyle(.secondary)
+                        }
+                    } footer: {
+                        Text(lobby.mode.rules)
+                    }
+                }
+            }
+            .appList()
+            .navigationTitle(room.code == nil ? "面对面乱斗" : "远程乱斗")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("离开") {
+                        room.leave()
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear { room.start() }
+        .fullScreenCover(item: $lobby.playing) { playing in
+            ArenaMatchView(controller: playing.controller, onAgain: nil, onExit: { lobby.playing = nil })
+        }
     }
 }
 
 private struct ArenaMatchView: View {
-    var onAgain: () -> Void
+    @ObservedObject var controller: ArenaController
+    /// 和电脑打才有「再来一局」；联机的回房间等房主再开
+    var onAgain: (() -> Void)?
     var onExit: () -> Void
-    @StateObject private var controller: ArenaController
     @State private var scene: ArenaScene
     @State private var confirmingExit = false
 
-    init(setup: ArenaController.Setup, onAgain: @escaping () -> Void, onExit: @escaping () -> Void) {
+    init(controller: ArenaController, onAgain: (() -> Void)?, onExit: @escaping () -> Void) {
+        self.controller = controller
         self.onAgain = onAgain
         self.onExit = onExit
-        _controller = StateObject(wrappedValue: ArenaController(setup: setup))
         let scene = ArenaScene(size: CGSize(width: 390, height: 844))
         scene.scaleMode = .resizeFill
         _scene = State(initialValue: scene)
     }
+
+    /// 在上边那一队的人：画面倒过来（自己的家总在下边），摇杆也跟着反过来
+    private var flip: Double { controller.game.mode.isTeams && controller.mine.team == 1 ? -1 : 1 }
 
     private var hud: ArenaController.HUD { controller.hud }
 
@@ -152,6 +267,14 @@ private struct ArenaMatchView: View {
                     .padding(.horizontal, DS.Space.l)
                     .padding(.vertical, DS.Space.s)
                     .background(.black.opacity(0.45), in: Capsule())
+            }
+            if controller.disconnected && hud.result == nil {
+                VStack(spacing: DS.Space.s) {
+                    Text("和房主断开了").font(DS.Font.title)
+                    Button("退出") { onExit() }.buttonStyle(.borderedProminent)
+                }
+                .padding(DS.Space.l)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl))
             }
             if let result = hud.result { resultCard(result) }
         }
@@ -240,20 +363,20 @@ private struct ArenaMatchView: View {
 
     private var controls: some View {
         HStack(alignment: .bottom) {
-            ArenaStick(kind: .move, onChange: { controller.move = $0 }, onRelease: { _ in controller.move = .zero })
+            ArenaStick(kind: .move, onChange: { controller.move = $0 * flip }, onRelease: { _ in controller.move = .zero })
             Spacer()
             VStack(alignment: .trailing, spacing: DS.Space.s) {
                 ArenaStick(kind: .special(charge: hud.superCharge),
-                           onChange: { controller.superAiming = $0 },
+                           onChange: { controller.superAiming = $0 * flip },
                            onRelease: { drag in
                                controller.superAiming = nil
-                               controller.fireSpecial(drag)
+                               controller.fireSpecial(drag * flip)
                            })
                 ArenaStick(kind: .attack,
-                           onChange: { controller.aiming = $0 },
+                           onChange: { controller.aiming = $0 * flip },
                            onRelease: { drag in
                                controller.aiming = nil
-                               controller.fire(drag)
+                               controller.fire(drag * flip)
                            })
             }
         }
@@ -291,10 +414,15 @@ private struct ArenaMatchView: View {
                     stat("伤害", mine.damageDealt)
                 }
                 HStack(spacing: DS.Space.s) {
-                    Button("再来一局") { onAgain() }
-                        .buttonStyle(.borderedProminent)
-                    Button("换玩法、角色") { onExit() }
-                        .buttonStyle(.bordered)
+                    if let onAgain {
+                        Button("再来一局") { onAgain() }
+                            .buttonStyle(.borderedProminent)
+                        Button("换玩法、角色") { onExit() }
+                            .buttonStyle(.bordered)
+                    } else {
+                        Button("回房间") { onExit() }
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .padding(DS.Space.l)

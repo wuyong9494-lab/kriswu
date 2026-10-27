@@ -4,13 +4,14 @@ import UIKit
 
 /// 小游戏的种类：联机时用来分开（叠叠消的房间不会和五子棋的连到一起）
 enum GameKind: String, Codable, Sendable {
-    case tiles, gomoku
+    case tiles, gomoku, arena
 
     /// Game Center 配对分组用的编号
     var index: Int {
         switch self {
         case .tiles: return 1
         case .gomoku: return 2
+        case .arena: return 3
         }
     }
 
@@ -18,6 +19,7 @@ enum GameKind: String, Codable, Sendable {
         switch self {
         case .tiles: return "叠叠消"
         case .gomoku: return "五子棋"
+        case .arena: return "萌兽乱斗"
         }
     }
 }
@@ -161,6 +163,8 @@ final class GameRoom: NSObject, ObservableObject {
     var accepting = true
     /// 收到游戏自己的消息（谁发的）
     var onPayload: ((Data, String) -> Void)?
+    /// 收到只在房主和每个人之间来回、不转发的消息（乱斗的摇杆、画面）
+    var onDirect: ((Data, String) -> Void)?
     /// 有人进来、走了
     var onMembersChanged: (() -> Void)?
 
@@ -233,6 +237,7 @@ final class GameRoom: NSObject, ObservableObject {
             match = nil
         }
         onPayload = nil
+        onDirect = nil
         onMembersChanged = nil
     }
 
@@ -258,6 +263,39 @@ final class GameRoom: NSObject, ObservableObject {
             guard let match, let encoded = try? JSONEncoder().encode(envelope) else { return }
             try? match.sendData(toAllPlayers: encoded, with: .reliable)
         }
+    }
+
+    enum Delivery { case reliable, unreliable }
+
+    /// 不转发的消息：房主发给所有人，别人只发给房主。unreliable 的快、丢了不补（每秒几十次的摇杆、画面用）
+    func sendDirect(_ data: Data, delivery: Delivery = .reliable) {
+        var packet = Data([Self.directMarker, UInt8(clamping: me.id.utf8.count)])
+        packet.append(contentsOf: Array(me.id.utf8))
+        packet.append(data)
+        switch mode {
+        case .nearbyHost, .nearbyGuest:
+            guard let session else { return }
+            let peers = mode == .nearbyHost ? session.connectedPeers : hostPeer.map { [$0] } ?? []
+            guard !peers.isEmpty else { return }
+            try? session.send(packet, toPeers: peers, with: delivery == .reliable ? .reliable : .unreliable)
+        case .remote:
+            guard let match else { return }
+            let players = isHost ? match.players : match.players.filter { $0.gamePlayerID == hostID }
+            guard !players.isEmpty else { return }
+            try? match.send(packet, to: players, dataMode: delivery == .reliable ? .reliable : .unreliable)
+        }
+    }
+
+    /// 不转发的消息开头的一个字节（JSON 的消息开头是「{」）
+    nonisolated static let directMarker: UInt8 = 0xD1
+
+    /// 拆开不转发的消息：谁发的、内容
+    nonisolated static func direct(_ packet: Data) -> (from: String, data: Data)? {
+        let bytes = [UInt8](packet)
+        guard bytes.count >= 2, bytes[0] == directMarker, bytes.count >= 2 + Int(bytes[1]) else { return nil }
+        let length = Int(bytes[1])
+        guard let from = String(bytes: bytes[2..<(2 + length)], encoding: .utf8) else { return nil }
+        return (from, Data(bytes[(2 + length)...]))
     }
 
     // MARK: 面对面
@@ -372,6 +410,10 @@ extension GameRoom: MCSessionDelegate {
     }
 
     nonisolated func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
+        if let direct = GameRoom.direct(data) {
+            Task { @MainActor in self.onDirect?(direct.data, direct.from) }
+            return
+        }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return }
         Task { @MainActor in self.received(envelope, from: peerID) }
     }
@@ -427,6 +469,10 @@ extension GameRoom: MCNearbyServiceBrowserDelegate {
 
 extension GameRoom: GKMatchDelegate {
     nonisolated func match(_ match: GKMatch, didReceive data: Data, fromRemotePlayer player: GKPlayer) {
+        if let direct = GameRoom.direct(data) {
+            Task { @MainActor in self.onDirect?(direct.data, direct.from) }
+            return
+        }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
               case .payload(let from, let body) = envelope else { return }
         Task { @MainActor in self.onPayload?(body, from) }
