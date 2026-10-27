@@ -435,34 +435,27 @@ struct PassPlanSheet: View {
     let name: String
     let rows: [PassPlanRow]
 
+    /// 和网页上的表一样：同样的表头、列的先后、行的先后，时间写全；居中、每行一条细线
     var body: some View {
-        let title = PassPlan.message(name: name, rows: rows).components(separatedBy: "\n").first ?? name
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 20, weight: .bold))
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+        let table = PassPlan.table(rows)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(PassPlan.title(name: name, rows: rows)).font(.system(size: 20, weight: .bold))
+            Grid(alignment: .center, horizontalSpacing: 18, verticalSpacing: 0) {
+                // 间距加在每一格上（GridRow 本身加修饰会打乱对齐）
                 GridRow {
-                    ForEach(["序号", "开始", "结束", "卫星", "圈号", "地面站", "数传信息"], id: \.self) {
-                        Text($0).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color(white: 0.4))
+                    ForEach(Array(table.headers.enumerated()), id: \.offset) { _, header in
+                        Text(header).font(.system(size: 14, weight: .semibold)).padding(.vertical, 10)
+                    }
+                }
+                ForEach(Array(table.cells.enumerated()), id: \.offset) { _, cells in
+                    Divider().gridCellUnsizedAxes(.horizontal)
+                    GridRow {
+                        ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                            Text(cell).font(.system(size: 14)).monospacedDigit().padding(.vertical, 10)
+                        }
                     }
                 }
                 Divider().gridCellUnsizedAxes(.horizontal)
-                ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                    GridRow {
-                        Text("\(i + 1)")
-                        Text(PassPlan.shortTime(row.start)).monospacedDigit().fontWeight(.semibold)
-                        Text(PassPlan.shortTime(row.end)).monospacedDigit()
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(row.satellite.isEmpty ? row.satelliteID : row.satellite)
-                            if !row.satellite.isEmpty, !row.satelliteID.isEmpty {
-                                Text(row.satelliteID).font(.system(size: 11)).foregroundStyle(Color(white: 0.45))
-                            }
-                        }
-                        Text(row.orbit).monospacedDigit()
-                        Text(row.station)
-                        Text(row.info).font(.system(size: 12))
-                    }
-                    .font(.system(size: 14))
-                }
             }
         }
         .foregroundStyle(Color.black)

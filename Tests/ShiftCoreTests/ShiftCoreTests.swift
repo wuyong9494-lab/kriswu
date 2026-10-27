@@ -2994,7 +2994,7 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(groups[2].rows.map(\.station), ["己光01", "戊站-东区01"])
         XCTAssertEqual(PassPlan.grouped(rows).map(\.name), ["戊站", "甲站", PassPlan.unassigned],
                        "没填对照表：按「-」前面的，没有「-」的分不出")
-        XCTAssertEqual(groups[0].rows.map(\.station), ["甲站-北区05", "甲站-北区01"], "按开始时间")
+        XCTAssertEqual(groups[0].rows.map(\.station), ["甲站-北区01", "甲站-北区05"], "照网页上的顺序")
         XCTAssertEqual(PassPlan.idle(rows, rules: rules), ["丙"], "今天没有计划的")
     }
 
@@ -3035,11 +3035,16 @@ final class PassPlanTests: XCTestCase {
         ]
         let groups = PassPlan.grouped(rows)
         XCTAssertEqual(groups.map(\.name), ["甲站", "乙站"])
-        XCTAssertEqual(groups[0].rows.map(\.orbit), ["103", "101"], "按开始时间排")
+        XCTAssertEqual(groups[0].rows.map(\.orbit), ["101", "103"], "照网页上的顺序，不按时间重排")
+        // 表头、列的先后照网页；这一家都没有状态，就不要状态这一列
+        let table = PassPlan.table(groups[0].rows)
+        XCTAssertEqual(table.headers, ["No.", "圈号", "卫星ID", "卫星名称", "地面站", "数传开始时间", "数传结束时间", "数传信息"])
+        XCTAssertEqual(table.cells[1], ["2", "103", "SAT-B", "试验二号", "甲站-北区05", "2026-10-27 22:04:27", "2026-10-27 22:11:21", ""])
         XCTAssertEqual(PassPlan.message(name: "甲站", rows: groups[0].rows), """
         10月27日数传计划（甲站）共 2 条
-        1. 22:04:27–22:11:21  试验二号  SAT-B  圈号 103  甲站-北区05
-        2. 22:57:51–23:05:03  试验一号  SAT-A  圈号 101  甲站-北区01  通道1
+        No.  圈号  卫星ID  卫星名称  地面站  数传开始时间  数传结束时间  数传信息
+        1  101  SAT-A  试验一号  甲站-北区01  2026-10-27 22:57:51  2026-10-27 23:05:03  通道1
+        2  103  SAT-B  试验二号  甲站-北区05  2026-10-27 22:04:27  2026-10-27 22:11:21
         """)
         XCTAssertNil(PassPlan.operatorName(of: "丙站"))
         XCTAssertEqual(PassPlan.operatorName(of: "丁站—东区"), "丁站")

@@ -314,7 +314,8 @@ public enum PassPlan {
         return trimmed.isEmpty ? s : trimmed
     }
 
-    /// 按运营商分开，每家按开始时间排；家的先后按对照表里的顺序，表里没有的按第一次出现，认不出的放最后
+    /// 按运营商分开，每家里的先后照网页上的顺序（不重排，序号和原表对得上）；
+    /// 家的先后按对照表里的顺序，表里没有的按第一次出现，分不出的放最后
     public static func grouped(_ rows: [PassPlanRow], rules: [OperatorRule] = []) -> [(name: String, rows: [PassPlanRow])] {
         var order: [String] = []
         var map: [String: [PassPlanRow]] = [:]
@@ -330,7 +331,7 @@ public enum PassPlan {
             return ruleIndex[name].map { (0, $0) } ?? (1, firstSeen[name] ?? 0)
         }
         return order.sorted { rank($0) < rank($1) }
-            .map { ($0, map[$0]!.sorted { ($0.start, $0.station) < ($1.start, $1.station) }) }
+            .map { ($0, map[$0]!) }
     }
 
     /// 对照表里今天没有计划的那几家
@@ -366,25 +367,32 @@ public enum PassPlan {
         return rules
     }
 
-    /// 发到群里的一段话：标题一行，每条一行（时间在前，方便看）
-    public static func message(name: String, rows: [PassPlanRow]) -> String {
+    /// 发到群里的表：表头、列的先后照网页上的（No.、圈号、卫星ID、卫星名称、地面站、数传开始时间、数传结束时间、
+    /// 数传信息、状态），时间写全；这几条里整列都是空的（没拍到、网页上没有）就不要这一列。No. 是这一家里的第几条
+    public static func table(_ rows: [PassPlanRow]) -> (headers: [String], cells: [[String]]) {
+        let columns: [(String, (PassPlanRow) -> String)] = [
+            ("圈号", \.orbit), ("卫星ID", \.satelliteID), ("卫星名称", \.satellite), ("地面站", \.station),
+            ("数传开始时间", \.start), ("数传结束时间", \.end), ("数传信息", \.info), ("状态", \.status),
+        ]
+        let used = columns.filter { column in rows.contains { !column.1($0).isEmpty } }
+        let cells = rows.enumerated().map { i, row in ["\(i + 1)"] + used.map { $0.1(row) } }
+        return (["No."] + used.map(\.0), cells)
+    }
+
+    /// 标题：「10月27日数传计划（甲站）共 3 条」（跨了几天的不写日期）
+    public static func title(name: String, rows: [PassPlanRow]) -> String {
         let days = Set(rows.map { String($0.start.prefix(10)) }).sorted()
-        let title: String
         if days.count == 1, let d = DayKey(string: days[0]) {
-            title = "\(d.month)月\(d.day)日数传计划（\(name)）共 \(rows.count) 条"
-        } else {
-            title = "数传计划（\(name)）共 \(rows.count) 条"
+            return "\(d.month)月\(d.day)日数传计划（\(name)）共 \(rows.count) 条"
         }
-        let lines = rows.enumerated().map { i, r -> String in
-            let time = [shortTime(r.start), shortTime(r.end)].filter { !$0.isEmpty }.joined(separator: "–")
-            var parts = [time, r.satellite.isEmpty ? r.satelliteID : r.satellite]
-            if !r.satelliteID.isEmpty, !r.satellite.isEmpty { parts.append(r.satelliteID) }
-            if !r.orbit.isEmpty { parts.append("圈号 \(r.orbit)") }
-            parts.append(r.station)
-            if !r.info.isEmpty { parts.append(r.info) }
-            return "\(i + 1). " + parts.filter { !$0.isEmpty }.joined(separator: "  ")
-        }
-        return ([title] + lines).joined(separator: "\n")
+        return "数传计划（\(name)）共 \(rows.count) 条"
+    }
+
+    /// 发到群里的一段话：标题、表头、每条一行，和图上的表一样
+    public static func message(name: String, rows: [PassPlanRow]) -> String {
+        let t = table(rows)
+        return ([title(name: name, rows: rows), t.headers.joined(separator: "  ")]
+                + t.cells.map { $0.filter { !$0.isEmpty }.joined(separator: "  ") }).joined(separator: "\n")
     }
 
     /// 「2026-10-27 22:57:51」→「22:57:51」；不是这个格式的原样
