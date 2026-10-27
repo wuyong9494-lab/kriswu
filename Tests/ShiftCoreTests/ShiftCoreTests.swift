@@ -2833,3 +2833,93 @@ final class YearArchiveTests: XCTestCase {
         XCTAssertEqual(list.first?.days, 9)
     }
 }
+
+final class PassPlanTests: XCTestCase {
+    func testColumnsFromHeaders() {
+        XCTAssertEqual(PassPlan.column(forHeader: "卫星ID"), .satelliteID)
+        XCTAssertEqual(PassPlan.column(forHeader: "卫星名称"), .satellite)
+        XCTAssertEqual(PassPlan.column(forHeader: "数传开始时间"), .start)
+        XCTAssertEqual(PassPlan.column(forHeader: "数传结束时间"), .end)
+        XCTAssertEqual(PassPlan.column(forHeader: "数传信息"), .info)
+        XCTAssertEqual(PassPlan.column(forHeader: "圈号"), .orbit)
+        XCTAssertEqual(PassPlan.column(forHeader: "No."), .number)
+        XCTAssertNil(PassPlan.column(forHeader: "通道1:900M"), "数据里的字不当表头")
+    }
+
+    func testRowsFromTable() {
+        let table = [
+            ["导出时间 2026-10-27"],
+            ["No.", "圈号", "卫星ID", "卫星名称", "地面站", "数传开始时间", "数传结束时间", "数传信息", "状态"],
+            ["1", "101", "SAT-A", "试验一号", "甲站-北区01", "2026-10-27 22:57:51", "2026-10-27 23:05:03", "通道1", "等待"],
+            ["", "", "", "", "", "", "", "", ""],
+            ["2", "102", "SAT-B", "试验二号", "乙站-南区02", "2026/10/27 20:31", "2026/10/27 20:39", "通道2", "等待"],
+        ]
+        let rows = PassPlan.rows(fromTable: table)
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[0], PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
+                                           start: "2026-10-27 22:57:51", end: "2026-10-27 23:05:03", info: "通道1", status: "等待"))
+        XCTAssertEqual(rows[1].start, "2026-10-27 20:31:00", "斜杠、没有秒的也统一")
+    }
+
+    func testNormalizedTime() {
+        XCTAssertEqual(PassPlan.normalizedTime("2026-10-27 22.57.51"), "2026-10-27 22:57:51")
+        XCTAssertEqual(PassPlan.normalizedTime("2026-10-27  22：57：51"), "2026-10-27 22:57:51")
+        XCTAssertEqual(PassPlan.normalizedTime("2026年10月27日 8:05"), "2026-10-27 08:05:00")
+        XCTAssertEqual(PassPlan.normalizedTime("不知道"), "不知道")
+    }
+
+    /// 拍的屏幕是斜的（越往右越低），日期和时间被认成两块，上面还有工具栏的字
+    func testRowsFromTiltedPhoto() {
+        let slope = 0.02
+        func box(_ text: String, _ x: Double, _ y: Double, _ w: Double = 0.06) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: x, y: y + slope * (x + w / 2), width: w, height: 0.02)
+        }
+        let columns: [(String, Double)] = [("No.", 0.05), ("圈号", 0.12), ("卫星ID", 0.2), ("卫星名称", 0.3), ("地面站", 0.4),
+                                           ("数传开始时间", 0.52), ("数传结束时间", 0.66), ("数传信息", 0.8), ("状态", 0.92)]
+        var boxes = [box("导出Excel", 0.1, 0.02), box("150%", 0.25, 0.02)]
+        boxes += columns.map { box($0.0, $0.1, 0.1) }
+        let data = [
+            ["1", "101", "SAT-A", "试验一号", "甲站-北区01", "2026-10-27|22:57:51", "2026-10-27 23:05:03", "通道1", "等待"],
+            ["2", "102", "SAT-B", "试验二号", "乙站-南区02", "2026-10-27 20:31:27", "2026-10-27 20:39:03", "通道2", "等待"],
+            ["3", "103", "SAT-B", "试验二号", "甲站-北区05", "2026-10-27 22:04:27", "2026-10-27 22:11:21", "通道1", "等待"],
+        ]
+        for (r, cells) in data.enumerated() {
+            let y = 0.16 + Double(r) * 0.06
+            for (c, cell) in cells.enumerated() {
+                let parts = cell.split(separator: "|").map(String.init)
+                for (k, part) in parts.enumerated() {
+                    boxes.append(box(part, columns[c].1 + Double(k) * 0.035, y, parts.count > 1 ? 0.03 : 0.06))
+                }
+            }
+        }
+        let rows = PassPlan.rows(fromBoxes: boxes.shuffled())
+        XCTAssertEqual(rows.count, 3)
+        XCTAssertEqual(rows[0].start, "2026-10-27 22:57:51", "分成两块的日期和时间拼回来")
+        XCTAssertEqual(rows[0].station, "甲站-北区01")
+        XCTAssertEqual(rows[1].satellite, "试验二号")
+        XCTAssertEqual(rows[2].end, "2026-10-27 22:11:21")
+        XCTAssertEqual(rows[2].orbit, "103")
+        XCTAssertEqual(PassPlan.rows(fromBoxes: [box("随便", 0.1, 0.1)]), [], "没有表头")
+    }
+
+    func testGroupedByOperatorAndMessage() {
+        let rows = [
+            PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
+                        start: "2026-10-27 22:57:51", end: "2026-10-27 23:05:03", info: "通道1"),
+            PassPlanRow(orbit: "102", satelliteID: "SAT-B", satellite: "试验二号", station: "乙站-南区02",
+                        start: "2026-10-27 20:31:27", end: "2026-10-27 20:39:03"),
+            PassPlanRow(orbit: "103", satelliteID: "SAT-B", satellite: "试验二号", station: "甲站-北区05",
+                        start: "2026-10-27 22:04:27", end: "2026-10-27 22:11:21"),
+        ]
+        let groups = PassPlan.grouped(rows)
+        XCTAssertEqual(groups.map(\.name), ["甲站", "乙站"])
+        XCTAssertEqual(groups[0].rows.map(\.orbit), ["103", "101"], "按开始时间排")
+        XCTAssertEqual(PassPlan.message(name: "甲站", rows: groups[0].rows), """
+        10月27日数传计划（甲站）共 2 条
+        1. 22:04:27–22:11:21  试验二号  SAT-B  圈号 103  甲站-北区05
+        2. 22:57:51–23:05:03  试验一号  SAT-A  圈号 101  甲站-北区01  通道1
+        """)
+        XCTAssertEqual(PassPlan.operatorName(of: "丙站"), "丙站")
+        XCTAssertEqual(PassPlan.operatorName(of: "丁站—东区"), "丁站")
+    }
+}
