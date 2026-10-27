@@ -256,6 +256,9 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
 
+      - name: 编译截图对比工具
+        run: swiftc -O scripts/shotdiff.swift -o shotdiff
+
       - name: 截图
         run: |
           APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
@@ -286,7 +289,33 @@ jobs:
               rm "shots/$mode-$s.png"
             done
           done
+          # 长页面往下再截两屏（-scrollPage n：页面出来后往下翻 n 屏）；翻不动了（和上一屏一样）就不要这张
+          xcrun simctl ui "$DEVICE" appearance light
+          LONG="today settings allFeatures diagnostics rulesExplain meeting stats"
+          for s in $LONG; do
+            prev="shots/light-$s.jpg"
+            for p in 1 2; do
+              out="shots/light-$s-$((p + 1))"
+              xcrun simctl launch "$DEVICE" $ID -demo -screen $s -scrollPage $p > /dev/null
+              sleep 5
+              xcrun simctl io "$DEVICE" screenshot "$out.png" > /dev/null 2>&1
+              xcrun simctl terminate "$DEVICE" $ID || true
+              sips -s format jpeg -s formatOptions 70 -Z 1100 "$out.png" --out "$out.jpg" > /dev/null
+              rm "$out.png"
+              if ./shotdiff same "$prev" "$out.jpg"; then rm "$out.jpg"; break; fi
+              prev="$out.jpg"
+            done
+          done
           ls -la shots
+
+      - name: 和上一版截图比
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone -q --depth 1 --branch screenshots "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" prev || mkdir -p prev
+          ./shotdiff compare shots prev shots/diff > shots/CHANGES.md
+          cat shots/CHANGES.md
+          cat shots/CHANGES.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: 推到 screenshots 分支
         env:

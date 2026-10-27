@@ -172,6 +172,7 @@ struct RootView: View {
         Group {
             if let screen = UserDefaults.standard.string(forKey: "screen"), Tab(rawValue: screen) == nil {
                 NavigationStack { ScreenCatalog.view(screen) }
+                    .onAppear { ScreenCatalog.scrollIfAsked() }
             } else {
                 // 五页一直都在（切回来时导航、滚动位置都还在），只显示选中的那页；底部是悬浮的玻璃标签栏
                 ZStack {
@@ -186,6 +187,7 @@ struct RootView: View {
                 }
                 .onPreferenceChange(TabBarTopKey.self) { tabBarTop = $0 }
                 .environment(\.floatingTabBarTop, tabBarTop)
+                .onAppear { ScreenCatalog.scrollIfAsked() }
             }
         }
         // 换主题色时整个界面重画一遍
@@ -341,6 +343,37 @@ struct RootView: View {
 
 /// 截图用：按名字打开某一页（只在启动参数 -screen 时用到）
 enum ScreenCatalog {
+    /// 截长页面的第二、三屏：启动参数 -scrollPage n，页面出来后把最大的那块滚动区域往下翻 n 屏
+    @MainActor
+    static func scrollIfAsked() {
+        let pages = UserDefaults.standard.integer(forKey: "scrollPage")
+        guard pages > 0 else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            let windows = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            guard let scroll = windows.compactMap({ largestScrollView(in: $0) }).first else { return }
+            let inset = scroll.adjustedContentInset
+            let page = scroll.bounds.height - inset.top - inset.bottom
+            let bottom = max(-inset.top, scroll.contentSize.height - scroll.bounds.height + inset.bottom)
+            scroll.setContentOffset(CGPoint(x: 0, y: min(-inset.top + CGFloat(pages) * page * 0.9, bottom)), animated: false)
+        }
+    }
+
+    /// 能竖着滚的里面最大的一块（横着滑的一排组名、7 天不算）
+    @MainActor
+    private static func largestScrollView(in root: UIView) -> UIScrollView? {
+        var best: UIScrollView?
+        func walk(_ view: UIView) {
+            if let s = view as? UIScrollView, s.contentSize.height > s.bounds.height + 1, s.bounds.width > 200,
+               best.map({ s.bounds.width * s.bounds.height > $0.bounds.width * $0.bounds.height }) ?? true {
+                best = s
+            }
+            view.subviews.forEach(walk)
+        }
+        walk(root)
+        return best
+    }
+
     @MainActor @ViewBuilder
     static func view(_ name: String) -> some View {
         let today = DayKey.today
