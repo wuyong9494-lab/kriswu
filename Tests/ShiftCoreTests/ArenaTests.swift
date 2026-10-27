@@ -39,6 +39,75 @@ final class ArenaTests: XCTestCase {
         }
     }
 
+    /// 每张地图：大小、出生点对、对称（分队的中心对称，各自为战的上下左右都对称）、没有被墙围死走不到的空地
+    func testEveryMapIsFairAndOpen() {
+        for mode in [ArenaGame.Mode.teamFight, .showdown] {
+            for map in ArenaMap.pool(for: mode) {
+                XCTAssertEqual(ArenaMap.named(map.id)?.title, map.title)
+                XCTAssertFalse(map.title.isEmpty, map.id)
+                XCTAssertEqual(map.width, mode.isTeams ? 15 : 19, map.id)
+                XCTAssertEqual(map.height, mode.isTeams ? 25 : 19, map.id)
+                XCTAssertEqual(map.spawns.map(\.count), mode.isTeams ? [3, 3] : [6], map.id)
+                for y in 0..<map.height {
+                    for x in 0..<map.width {
+                        XCTAssertEqual(map.tile(x, y), map.tile(map.width - 1 - x, map.height - 1 - y), "\(map.id) \(x),\(y)")
+                        if !mode.isTeams {
+                            XCTAssertEqual(map.tile(x, y), map.tile(map.width - 1 - x, y), "\(map.id) \(x),\(y)")
+                        }
+                    }
+                }
+                // 从中间往外一格格走，每块不是墙的地方都要走得到（出生点也在里面）
+                var reached = Set<Int>()
+                var queue = [Int(map.center.y) * map.width + Int(map.center.x)]
+                reached.insert(queue[0])
+                while let cell = queue.popLast() {
+                    let x = cell % map.width, y = cell / map.width
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] where map.tile(x + dx, y + dy) != .wall {
+                        let next = (y + dy) * map.width + x + dx
+                        if reached.insert(next).inserted { queue.append(next) }
+                    }
+                }
+                let open = map.tiles.filter { $0 != .wall }.count
+                XCTAssertEqual(reached.count, open, "\(map.id) 有走不到的地方")
+                for spawn in map.spawns.flatMap({ $0 }) {
+                    XCTAssertFalse(map.collides(spawn, radius: ArenaGame.fighterRadius), map.id)
+                    XCTAssertTrue(reached.contains(Int(spawn.y) * map.width + Int(spawn.x)), map.id)
+                }
+            }
+        }
+    }
+
+    /// 开局指定的地图照用；和玩法对不上的（拿分队的图打大乱斗）换成这个玩法的第一张
+    func testGameUsesTheChosenMap() {
+        let game = ArenaGame(mode: .zone, entrants: entrants(), seed: 1, map: .garden)
+        XCTAssertEqual(game.map.id, "garden")
+        XCTAssertTrue(game.map.spawns[0].contains(game.fighters[0].pos))
+        XCTAssertTrue(game.map.spawns[1].contains(game.fighters[5].pos))
+        let wrong = ArenaGame(mode: .showdown, entrants: entrants(), seed: 1, map: .garden)
+        XCTAssertEqual(wrong.map.id, ArenaMap.pool(for: .showdown)[0].id)
+        XCTAssertEqual(ArenaGame(mode: .stars, entrants: entrants(), seed: 1).map.id, "canyon", "不指定用第一张")
+    }
+
+    /// 电脑在每张地图上都打得起来：会开火、打中人，没人卡进墙里
+    func testBotsFightOnEveryMap() {
+        for mode in [ArenaGame.Mode.teamFight, .showdown] {
+            for map in ArenaMap.pool(for: mode) {
+                var game = ArenaGame(mode: mode, entrants: entrants(), seed: 11, map: map)
+                var bots = game.fighters.map { ArenaBot(id: $0.id, seed: 11) }
+                var stuck = 0
+                while game.result == nil && game.time < 60 {
+                    var inputs: [Int: ArenaInput] = [:]
+                    for k in bots.indices { inputs[bots[k].id] = bots[k].input(in: game, dt: dt) }
+                    game.step(dt, inputs: inputs)
+                    game.events.removeAll()
+                    stuck += game.fighters.filter { $0.alive && !$0.busy && game.map.collides($0.pos, radius: ArenaGame.fighterRadius - 1e-6) }.count
+                }
+                XCTAssertEqual(stuck, 0, "\(map.id) 有人卡进墙里")
+                XCTAssertGreaterThan(game.fighters.map(\.damageDealt).reduce(0, +), 0, "\(map.id) 打起来了")
+            }
+        }
+    }
+
     func testWallsStopWalking() {
         var game = ArenaGame(mode: .teamFight, entrants: entrants(2), seed: 1)
         for direction in [V2(0, -1), V2(1, 0), V2(-1, 0.3), V2(0, 1)] {

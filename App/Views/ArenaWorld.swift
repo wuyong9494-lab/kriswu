@@ -137,6 +137,7 @@ final class ArenaWorldView: SCNView {
         flipped = game.mode.isTeams && myTeam == 1
         let root = world.rootNode
         let width = Float(map.width), height = Float(map.height)
+        let look = ThemeLook.of(map.theme)
 
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
@@ -161,7 +162,7 @@ final class ArenaWorldView: SCNView {
         let sun = SCNLight()
         sun.type = .directional
         sun.intensity = 650
-        sun.color = UIColor(red: 1.0, green: 0.97, blue: 0.9, alpha: 1)
+        sun.color = look.sunlight
         sun.castsShadow = true
         sun.shadowMapSize = CGSize(width: 2048, height: 2048)
         sun.shadowSampleCount = 4
@@ -178,7 +179,7 @@ final class ArenaWorldView: SCNView {
 
         // 地：场地外一大片草，场地一格格的
         let lawn = SCNPlane(width: CGFloat(width + 160), height: CGFloat(height + 160))
-        lawn.firstMaterial = ArenaAvatar.material(ArenaPalette.grass, lit: true)
+        lawn.firstMaterial = ArenaAvatar.material(look.lawn, lit: true)
         let lawnNode = SCNNode(geometry: lawn)
         lawnNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         lawnNode.simdPosition = SIMD3(width / 2, -0.02, height / 2)
@@ -187,7 +188,7 @@ final class ArenaWorldView: SCNView {
         let floor = SCNPlane(width: CGFloat(width), height: CGFloat(height))
         let floorMaterial = SCNMaterial()
         floorMaterial.lightingModel = .lambert
-        floorMaterial.diffuse.contents = groundImage(game)
+        floorMaterial.diffuse.contents = groundImage(game, look: look)
         floorMaterial.diffuse.mipFilter = .linear
         floor.firstMaterial = floorMaterial
         let floorNode = SCNNode(geometry: floor)
@@ -198,7 +199,7 @@ final class ArenaWorldView: SCNView {
         root.addChildNode(border(map))
 
         // 墙：箱子、桶；草丛
-        root.addChildNode(walls(map))
+        root.addChildNode(walls(map, look: look))
         let leafy = bushGeometry(ArenaPalette.bush)
         let leafyDark = bushGeometry(ArenaPalette.bushDark)
         for y in 0..<map.height {
@@ -288,7 +289,7 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 场地的地面：浅浅的棋盘格，两队家门口带一点队伍的颜色
-    private func groundImage(_ game: ArenaGame) -> UIImage {
+    private func groundImage(_ game: ArenaGame, look: ThemeLook) -> UIImage {
         let map = game.map
         let cell: CGFloat = 64
         let format = UIGraphicsImageRendererFormat()
@@ -301,9 +302,9 @@ final class ArenaWorldView: SCNView {
                 for x in 0..<map.width {
                     let color: UIColor
                     switch map.tile(x, y) {
-                    case .bush: color = UIColor(red: 0.55, green: 0.66, blue: 0.38, alpha: 1)
-                    case .wall: color = UIColor(red: 0.66, green: 0.56, blue: 0.43, alpha: 1)
-                    case .floor: color = (x + y) % 2 == 0 ? ArenaPalette.sand : ArenaPalette.sandDark
+                    case .bush: color = look.bushGround
+                    case .wall: color = look.floorDark
+                    case .floor: color = (x + y) % 2 == 0 ? look.floor : look.floorDark
                     }
                     cg.setFillColor(color.cgColor)
                     cg.fill(CGRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell, width: cell, height: cell))
@@ -346,27 +347,22 @@ final class ArenaWorldView: SCNView {
         return holder.flattenedClone()
     }
 
-    /// 墙：大多是木箱，夹几个桶、一摞箱子（同一格每次都一样）
-    private func walls(_ map: ArenaMap) -> SCNNode {
-        let models = ArenaModels.shared
-        let crate = models.prop("box_large.glb"), barrel = models.prop("barrel_large.glb"), stack = models.prop("crates_stacked.glb")
+    /// 墙：按地图的样子挑箱子、桶、矮树丛（同一格每次都一样）
+    private func walls(_ map: ArenaMap, look: ThemeLook) -> SCNNode {
+        let pieces = look.walls.map { (model: ArenaModels.shared.prop($0.file), scale: $0.scale, weight: $0.weight) }
+        let total = max(pieces.reduce(0) { $0 + $1.weight }, 1)
         let fallback = SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0.06)
         fallback.firstMaterial = ArenaAvatar.material(UIColor(red: 0.62, green: 0.45, blue: 0.3, alpha: 1), lit: true)
         let holder = SCNNode()
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .wall {
-                let pick = (x * 37 + y * 61 + x * y) % 10
-                let model: GLTFModel?
-                let scale: Float
-                switch pick {
-                case 0, 1: model = barrel; scale = 1 / 1.85
-                case 2: model = stack; scale = 1 / 2.2
-                default: model = crate; scale = 1 / 1.5
-                }
+                let pick = (x * 37 + y * 61 + x * y) % total
+                var left = pick
+                let piece = pieces.first { left -= $0.weight; return left < 0 } ?? pieces.first
                 let node: SCNNode
-                if let model {
+                if let piece, let model = piece.model {
                     node = model.instantiate(shareMaterials: true).root
-                    node.simdScale = SIMD3(repeating: scale)
+                    node.simdScale = SIMD3(repeating: piece.scale)
                 } else {
                     node = SCNNode(geometry: fallback)
                     node.simdPosition = SIMD3(0, 0.5, 0)
@@ -912,6 +908,44 @@ final class ArenaWorldView: SCNView {
         aimNode.geometry = shape
         aimNode.simdPosition = SIMD3(Float(fighter.pos.x), 0.07, Float(fighter.pos.y))
         aimNode.isHidden = false
+    }
+}
+
+/// 每种地图的样子：地面颜色、场地外的草、阳光、墙用什么模型（缩多少、占几成）
+private struct ThemeLook {
+    let floor: UIColor
+    let floorDark: UIColor
+    let bushGround: UIColor
+    let lawn: UIColor
+    let sunlight: UIColor
+    let walls: [(file: String, scale: Float, weight: Int)]
+
+    private static func color(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> UIColor {
+        UIColor(red: r, green: g, blue: b, alpha: 1)
+    }
+
+    static func of(_ theme: ArenaMap.Theme) -> ThemeLook {
+        let crate = (file: "box_large.glb", scale: Float(1 / 1.5))
+        let barrel = (file: "barrel_large.glb", scale: Float(1 / 1.85))
+        let stack = (file: "crates_stacked.glb", scale: Float(1 / 2.2))
+        switch theme {
+        case .sand:
+            return ThemeLook(floor: ArenaPalette.sand, floorDark: ArenaPalette.sandDark, bushGround: color(0.55, 0.66, 0.38),
+                             lawn: ArenaPalette.grass, sunlight: color(1.0, 0.97, 0.9),
+                             walls: [(crate.file, crate.scale, 7), (barrel.file, barrel.scale, 2), (stack.file, stack.scale, 1)])
+        case .meadow:
+            return ThemeLook(floor: color(0.66, 0.82, 0.47), floorDark: color(0.61, 0.77, 0.43), bushGround: color(0.45, 0.62, 0.33),
+                             lawn: color(0.33, 0.58, 0.30), sunlight: color(1.0, 0.98, 0.92),
+                             walls: [("trees_A_small.gltf", 0.68, 4), ("trees_B_small.gltf", 0.72, 4), (barrel.file, barrel.scale, 2)])
+        case .stone:
+            return ThemeLook(floor: color(0.82, 0.82, 0.80), floorDark: color(0.76, 0.76, 0.74), bushGround: color(0.55, 0.62, 0.45),
+                             lawn: color(0.45, 0.62, 0.40), sunlight: color(0.95, 0.97, 1.0),
+                             walls: [(stack.file, stack.scale, 5), (crate.file, crate.scale, 5)])
+        case .dusk:
+            return ThemeLook(floor: color(0.93, 0.76, 0.58), floorDark: color(0.88, 0.70, 0.53), bushGround: color(0.58, 0.60, 0.38),
+                             lawn: color(0.50, 0.58, 0.34), sunlight: color(1.0, 0.85, 0.68),
+                             walls: [(barrel.file, barrel.scale, 5), (crate.file, crate.scale, 5)])
+        }
     }
 }
 

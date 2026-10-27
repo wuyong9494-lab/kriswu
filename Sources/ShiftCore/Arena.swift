@@ -75,7 +75,13 @@ public enum Brawler: Int, CaseIterable, Codable, Sendable {
 
 public struct ArenaMap: Sendable {
     public enum Tile: Sendable { case floor, wall, bush }
+    /// 地面、墙长什么样（画面上用）
+    public enum Theme: String, Sendable { case sand, meadow, stone, dusk }
 
+    /// 联机开局时房主告诉大家用哪张
+    public let id: String
+    public let title: String
+    public let theme: Theme
     public let width: Int
     public let height: Int
     public let tiles: [Tile]
@@ -85,7 +91,10 @@ public struct ArenaMap: Sendable {
     public let center: V2
 
     /// 用字画地图：# 墙、* 草丛、. 空地；a 下边一队的出生点、b 上边一队的、o 各自为战的；s 中间
-    public init(rows: [String]) {
+    public init(id: String = "custom", title: String = "", theme: Theme = .sand, rows: [String]) {
+        self.id = id
+        self.title = title
+        self.theme = theme
         height = rows.count
         width = rows.map(\.count).max() ?? 0
         var tiles: [Tile] = []
@@ -197,42 +206,127 @@ public struct ArenaMap: Sendable {
         return cells.reversed()
     }
 
-    /// 分队玩法的地图（15 × 25，上下两队，中心对称）
-    public static let canyon: ArenaMap = {
-        let top = [
-            "**....###....**",
-            "*...b..b..b...*",
-            "...............",
-            "..###.....###..",
-            "..#.........#..",
-            "....**...**....",
-            "....**...**....",
-            ".#...........#.",
-            ".#...#####...#.",
-            "...............",
-            "**...*...*...**",
-            "**...*...*...**",
-        ]
+    /// 分队玩法的地图都是 15 × 25：只画上边一半，下边一半中心对称（上边一队的 b 换成下边一队的 a）
+    private static func teams(_ id: String, _ title: String, _ theme: Theme, _ top: [String], middle: String) -> ArenaMap {
         let bottom = top.reversed().map { String($0.reversed()).replacingOccurrences(of: "b", with: "a") }
-        return ArenaMap(rows: top + [".......s......."] + bottom)
-    }()
+        return ArenaMap(id: id, title: title, theme: theme, rows: top + [middle] + bottom)
+    }
 
-    /// 各自为战的地图（19 × 19，六个出生点）
-    public static let plaza: ArenaMap = {
-        let top = [
-            "....*.........*....",
-            "....o.........o....",
-            "..##....***....##..",
-            "..#.............#..",
-            ".......#...#.......",
-            "**....##...##....**",
-            "**...............**",
-            "....#....*....#....",
-            "...##...***...##...",
-        ]
-        let middle = ".o.......s.......o."
-        return ArenaMap(rows: top + [middle] + top.reversed())
-    }()
+    /// 各自为战的地图都是 19 × 19、六个出生点：只画上边一半，下边一半上下对称
+    private static func solo(_ id: String, _ title: String, _ theme: Theme, _ top: [String], middle: String) -> ArenaMap {
+        ArenaMap(id: id, title: title, theme: theme, rows: top + [middle] + top.reversed())
+    }
+
+    public static let canyon = teams("canyon", "峡谷", .sand, [
+        "**....###....**",
+        "*...b..b..b...*",
+        "...............",
+        "..###.....###..",
+        "..#.........#..",
+        "....**...**....",
+        "....**...**....",
+        ".#...........#.",
+        ".#...#####...#.",
+        "...............",
+        "**...*...*...**",
+        "**...*...*...**",
+    ], middle: ".......s.......")
+
+    /// 中间一个十字口，两边草丛绕过去
+    public static let crossroads = teams("crossroads", "十字路口", .dusk, [
+        "...**.....**...",
+        "..b....b....b..",
+        "...............",
+        "###...***...###",
+        "..#.........#..",
+        "..#..#...#..#..",
+        "**...#...#...**",
+        "**...........**",
+        "....##...##....",
+        "...............",
+        "..*...###...*..",
+        ".***.......***.",
+    ], middle: "**.....s.....**")
+
+    /// 两队家门口各有一道墙，中间空旷
+    public static let fortress = teams("fortress", "双城堡", .stone, [
+        "...............",
+        ".#..b..b..b..#.",
+        ".#...........#.",
+        ".####.....####.",
+        "......***......",
+        "..*...***...*..",
+        ".***.......***.",
+        "..*..#...#..*..",
+        ".....#...#.....",
+        "##...........##",
+        "....**...**....",
+        "....**...**....",
+    ], middle: ".......s.......")
+
+    /// 墙少、草丛多，适合埋伏
+    public static let garden = teams("garden", "花园", .meadow, [
+        "**.....*.....**",
+        "*..b...b...b..*",
+        "...............",
+        ".***..***..***.",
+        ".***.......***.",
+        "......#.#......",
+        "..**..#.#..**..",
+        "..**.......**..",
+        "#.....***.....#",
+        "#.....***.....#",
+        "...*.......*...",
+        "..***..#..***..",
+    ], middle: ".......s.......")
+
+    public static let plaza = solo("plaza", "广场", .sand, [
+        "....*.........*....",
+        "....o.........o....",
+        "..##....***....##..",
+        "..#.............#..",
+        ".......#...#.......",
+        "**....##...##....**",
+        "**...............**",
+        "....#....*....#....",
+        "...##...***...##...",
+    ], middle: ".o.......s.......o.")
+
+    /// 东一块西一块的断墙
+    public static let ruins = solo("ruins", "废墟", .stone, [
+        "........***........",
+        "....o.........o....",
+        "..#.............#..",
+        ".##..**.....**..##.",
+        "......#.....#......",
+        "..**.....#.....**..",
+        "..**....###....**..",
+        "......#.....#......",
+        "...#...........#...",
+    ], middle: ".o.*.....s.....*.o.")
+
+    /// 到处是草丛
+    public static let grove = solo("grove", "树林", .meadow, [
+        "***.............***",
+        "*...o.........o...*",
+        "....***.....***....",
+        "..#.***.....***.#..",
+        "..#.............#..",
+        "......**...**......",
+        ".**...**.#.**...**.",
+        ".**......#......**.",
+        ".....#.......#.....",
+    ], middle: ".o.......s.......o.")
+
+    /// 这个玩法能用的地图（第一张是老版本一直用的那张）
+    public static func pool(for mode: ArenaGame.Mode) -> [ArenaMap] {
+        mode.isTeams ? [canyon, crossroads, fortress, garden] : [plaza, ruins, grove]
+    }
+
+    /// 按名字找（联机开局时房主发来的）
+    public static func named(_ id: String) -> ArenaMap? {
+        (pool(for: .teamFight) + pool(for: .showdown)).first { $0.id == id }
+    }
 }
 
 // MARK: - 一局
@@ -428,9 +522,14 @@ public struct ArenaGame: Sendable {
     private var starTimer = 0.0
     private var random: SeededRandom
 
-    public init(mode: Mode, entrants: [Entrant], seed: UInt64) {
+    /// map：用哪张地图；nil 或者和玩法对不上（分队玩法要两组出生点，各自为战要一组）就用这个玩法的第一张
+    public init(mode: Mode, entrants: [Entrant], seed: UInt64, map chosen: ArenaMap? = nil) {
         self.mode = mode
-        map = mode == .showdown ? .plaza : .canyon
+        if let chosen, chosen.spawns.count == (mode.isTeams ? 2 : 1) {
+            map = chosen
+        } else {
+            map = ArenaMap.pool(for: mode)[0]
+        }
         random = SeededRandom(seed: seed)
         safeRadius = Double(max(map.width, map.height))
         var slots = [Int: Int]()

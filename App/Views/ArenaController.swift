@@ -14,6 +14,8 @@ struct ArenaStart: Codable, Equatable {
     var mode: ArenaGame.Mode
     var seed: UInt64
     var seats: [Seat]
+    /// 地图（ArenaMap.id）；老版本房主发来的没有，用这个玩法的第一张
+    var map: String?
 
     var entrants: [ArenaGame.Entrant] {
         seats.map { ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team) }
@@ -95,19 +97,22 @@ final class ArenaController: ObservableObject {
         var random = SeededRandom(seed: seed)
         var others = Brawler.allCases.filter { $0 != setup.brawler }
         random.shuffle(&others)
+        let maps = ArenaMap.pool(for: setup.mode)
+        let map = maps[random.below(maps.count)]
         var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0)]
         for k in 0..<5 {
             let brawler = others[k % others.count]
             let team = setup.mode.isTeams ? (k < 2 ? 0 : 1) : k + 1
             entrants.append(ArenaGame.Entrant(name: "电脑\(brawler.name)", brawler: brawler, isBot: true, team: team))
         }
-        self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed), me: 0, room: nil, seed: seed)
+        self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map), me: 0, room: nil, seed: seed)
     }
 
     /// 联机：房主开的这一局
     convenience init(start: ArenaStart, room: GameRoom) {
         let me = start.seats.firstIndex { $0.member == room.me.id } ?? 0
-        self.init(role: room.isHost ? .host : .client, game: ArenaGame(mode: start.mode, entrants: start.entrants, seed: start.seed),
+        self.init(role: room.isHost ? .host : .client,
+                  game: ArenaGame(mode: start.mode, entrants: start.entrants, seed: start.seed, map: start.map.flatMap(ArenaMap.named)),
                   me: me, room: room, seed: start.seed)
         for (index, seat) in start.seats.enumerated() {
             if let member = seat.member { seatOfMember[member] = index }
@@ -448,7 +453,9 @@ final class ArenaLobby: ObservableObject {
     func start() {
         guard room.isHost, room.members.count >= 2 else { return }
         round += 1
-        let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats())
+        let maps = ArenaMap.pool(for: mode)
+        let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats(),
+                               map: maps.randomElement()?.id)
         send(.start(start))
         playing = Playing(controller: ArenaController(start: start, room: room))
     }

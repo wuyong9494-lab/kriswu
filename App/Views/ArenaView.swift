@@ -342,6 +342,14 @@ private struct ArenaMatchView: View {
             Text("毒圈在缩小，待在圈里").font(DS.Font.caption).foregroundStyle(.white)
                 .padding(.horizontal, DS.Space.s).padding(.vertical, 4)
                 .background(Color.green.opacity(0.6), in: Capsule())
+        } else if controller.game.mode.duration - Double(hud.timeLeft) < 3 {
+            // 开局头几秒：这局的地图
+            Text("\(controller.game.mode.title) · \(controller.game.map.title)")
+                .font(DS.Font.headline)
+                .foregroundStyle(.white)
+                .padding(.horizontal, DS.Space.m)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.4), in: Capsule())
         }
     }
 
