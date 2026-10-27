@@ -538,6 +538,8 @@ struct ToastOverlay: View {
 
 // MARK: - 触感
 
+/// 震动反馈：只在界面（主线程）上用
+@MainActor
 enum Haptics {
     static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
     static func select() { UISelectionFeedbackGenerator().selectionChanged() }
@@ -548,7 +550,8 @@ enum Haptics {
 // MARK: - 导航栏、标签栏外观
 
 enum ChromeAppearance {
-    /// 导航栏、标签栏：毛玻璃、圆体标题、没有分隔线
+    /// 导航栏、标签栏：毛玻璃、圆体标题、没有分隔线（App 启动时在主线程设一次）
+    @MainActor
     static func apply() {
         func rounded(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
             let base = UIFont.systemFont(ofSize: size, weight: weight)
@@ -813,7 +816,7 @@ struct FloatingTabBar<Tab: Hashable>: View {
 }
 
 struct TabBarTopKey: PreferenceKey {
-    static var defaultValue: CGFloat = .infinity
+    static let defaultValue: CGFloat = .infinity
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
 }
 

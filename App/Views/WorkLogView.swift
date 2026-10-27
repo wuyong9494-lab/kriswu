@@ -328,7 +328,8 @@ extension TaskDayRecord {
 
 /// 列表里的小图：在后台按 44 点解码，解一次缓存起来（不整张解码相机原图）
 enum WorkLogThumbnails {
-    private static let cache = NSCache<NSString, UIImage>()
+    /// NSCache 自己是线程安全的（后台解码、界面读取同时用）
+    nonisolated(unsafe) private static let cache = NSCache<NSString, UIImage>()
 
     static func cached(_ url: URL) -> UIImage? { cache.object(forKey: url.path as NSString) }
 
