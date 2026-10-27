@@ -109,17 +109,18 @@ struct PassPlanView: View {
                     if !idle.isEmpty {
                         Text("今天没有计划：\(idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
                     }
-                    let unsent = groups.map(\.name).filter { !store.passPlan.sent.contains($0) }
-                    if !unsent.isEmpty {
-                        Button { sendInTurn(unsent) } label: {
-                            Label(unsent.count == groups.count ? "依次发给各家（\(unsent.count) 家）" : "接着发剩下的 \(unsent.count) 家",
-                                  systemImage: "paperplane.fill")
+                    // 一直在：都发了就是「再依次发一遍」
+                    let names = groups.map(\.name)
+                    let unsent = names.filter { !store.passPlan.sent.contains($0) }
+                    if !names.isEmpty {
+                        Button { sendInTurn(unsent.isEmpty ? names : unsent) } label: {
+                            Label(chainTitle(names), systemImage: unsent.isEmpty ? "arrow.clockwise" : "paperplane.fill")
                                 .font(.headline)
                         }
                         .disabled(images.count < groups.count)
                     }
                 } footer: {
-                    Text("依次发：点一下从第一家开始，发完一家自动弹出下一家，面板最上面写着这次发给谁、该选哪个群。每家在面板里点：微信 → 发送给朋友 → 选群 → 发送。微信不让别的 App 替你选群、替你发，这几下省不掉；面板里用不上的隔空投送、信息、邮件已经拿掉，微信在前面，每次点同一个位置。")
+                    Text("依次发：点一下从第一家开始，发完一家自动弹出下一家，面板最上面写着第几家、发给谁、该选哪个群；都发完了按钮还在，能再发一遍。每家在面板里点：微信 → 发送给朋友 → 选群 → 发送。微信不让别的 App 替你选群、替你发，这几下省不掉；面板里用不上的隔空投送、信息、邮件已经拿掉，微信在前面，每次点同一个位置。")
                 }
                 // 分不出是哪家的放最上面：先分好再发
                 if let lost = all.first(where: { $0.name == PassPlan.unassigned }) {
@@ -388,25 +389,36 @@ struct PassPlanView: View {
         editing = EditingRow(index: rows.firstIndex(of: row), row: row)
     }
 
-    /// 发出去（在微信里选群）；真的发了就标「已发」。then：发出去以后接着做（依次发下一家）
-    private func share(_ item: Any, name: String, then next: (@MainActor () -> Void)? = nil) {
+    /// 发出去（在微信里选群）；真的发了就标「已发」。progress：依次发时面板标题前面的「2/5」；
+    /// then：发完（或没发出去）以后接着做，参数是发出去没有
+    private func share(_ item: Any, name: String, progress: String? = nil, then next: (@MainActor (Bool) -> Void)? = nil) {
+        let step = progress.map { "\($0) · " } ?? ""
         let target = store.settings.passPlanGroups[name].map { " → 发到「\($0)」" } ?? ""
-        let payload = SharePayload(item, title: "\(name)数传计划\(target)", preview: images[name])
+        let payload = SharePayload(item, title: "\(step)\(name)数传计划\(target)", preview: images[name])
         ActivityShare.present([payload], excluding: ActivityShare.chatOnly) { completed in
-            guard completed else { return }
-            markSent(name)
-            next?()
+            if completed { markSent(name) }
+            next?(completed)
         }
     }
 
-    /// 从第一家开始，发完一家弹下一家；中途取消就停下
-    private func sendInTurn(_ names: [String]) {
+    /// 「依次发」按钮上的字
+    private func chainTitle(_ names: [String]) -> String {
+        let unsent = names.filter { !store.passPlan.sent.contains($0) }
+        if unsent.isEmpty { return "再依次发一遍（\(names.count) 家）" }
+        return unsent.count == names.count ? "依次发给各家（\(names.count) 家）" : "接着发剩下的 \(unsent.count) 家"
+    }
+
+    /// 从第一家开始，发完一家弹下一家（上一个面板收完马上弹）；中途取消就停下，提示停在哪家
+    private func sendInTurn(_ names: [String], step: Int = 1, total: Int? = nil) {
+        let total = total ?? names.count
         guard let name = names.first, let image = images[name] else { return }
-        share(image, name: name) {
+        share(image, name: name, progress: total > 1 ? "\(step)/\(total)" : nil) { sent in
             let rest = Array(names.dropFirst())
-            guard !rest.isEmpty else { return }
-            // 等上一个分享面板收起来
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { sendInTurn(rest) }
+            if sent {
+                if !rest.isEmpty { sendInTurn(rest, step: step + 1, total: total) }
+            } else if total > 1 {
+                ToastCenter.shared.show("停在\(name)，这家没发出去。要接着发，点「\(chainTitle(sendable.map(\.name)))」", style: .warning)
+            }
         }
     }
 
@@ -424,7 +436,8 @@ struct PassPlanView: View {
     }
 
     private func markSent(_ name: String) {
-        store.passPlan.sent.insert(name)
+        // 再发一遍的不算（不然每发一家都说一次「各家都发了」）
+        guard store.passPlan.sent.insert(name).inserted else { return }
         let all = Set(sendable.map(\.name))
         guard !all.isEmpty, all.isSubset(of: store.passPlan.sent) else { return }
         // 各家都发了：今天不再提醒

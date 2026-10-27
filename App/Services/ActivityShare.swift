@@ -9,25 +9,56 @@ enum ActivityShare {
         [.airDrop, .message, .mail, .print, .assignToContact, .addToReadingList, .openInIBooks, .markupAsPDF]
     }
 
+    /// 连着发的时候，上一个面板（和微信的发送窗口）可能还没收完：等它收完再弹，不然弹不出来。
+    /// 等了几秒还收不完、或者弹不出来，就当没发（completion(false)），调用的地方好提示停在哪
     @MainActor
     static func present(_ items: [Any], excluding excluded: [UIActivity.ActivityType] = [],
                         completion: @escaping @MainActor (Bool) -> Void) {
-        guard let root = UIApplication.shared.connectedScenes
-            .compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { return }
-        var top = root
-        while let presented = top.presentedViewController { top = presented }
         let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
         controller.excludedActivityTypes = excluded
         controller.completionWithItemsHandler = { _, completed, _, _ in
             Task { @MainActor in completion(completed) }
         }
-        // iPad 上从屏幕中间弹出
-        if let popover = controller.popoverPresentationController {
-            popover.sourceView = top.view
-            popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 1, height: 1)
-            popover.permittedArrowDirections = []
+        Task { @MainActor in
+            var waited = 0
+            while isBusy, waited < 50 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 1
+            }
+            guard !isBusy, let top = topController() else { completion(false); return }
+            // iPad 上从屏幕中间弹出
+            if let popover = controller.popoverPresentationController {
+                popover.sourceView = top.view
+                popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 1, height: 1)
+                popover.permittedArrowDirections = []
+            }
+            top.present(controller, animated: true)
+            if controller.presentingViewController == nil { completion(false) }
         }
-        top.present(controller, animated: true)
+    }
+
+    @MainActor
+    private static var rootController: UIViewController? {
+        UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+    }
+
+    /// 最上面那一层（分享面板从它上面弹出来）
+    @MainActor
+    private static func topController() -> UIViewController? {
+        guard var top = rootController else { return nil }
+        while let presented = top.presentedViewController { top = presented }
+        return top
+    }
+
+    /// 还有分享面板开着，或者有一层正在弹出、收起
+    @MainActor
+    private static var isBusy: Bool {
+        var current = rootController
+        while let controller = current {
+            if controller is UIActivityViewController || controller.isBeingPresented || controller.isBeingDismissed { return true }
+            current = controller.presentedViewController
+        }
+        return false
     }
 }
 
