@@ -120,7 +120,7 @@ struct RootView: View {
     /// 打开过的页：没打开过的不建（网站页不会一启动就去登录网站，也少画几页）
     @State private var visited: Set<Tab> = []
     /// 分享过来的数传计划（打开「发数传计划」时带进去）；从快捷指令打开时直接进扫描
-    @State private var passPlanRows: [PassPlanRow] = []
+    @State private var passPlanReading: PassPlan.Reading?
     @State private var passPlanAutoScan = false
     @State private var inReviewDemo = UserDefaults.standard.bool(forKey: AppStore.demoKey)
     @Environment(\.scenePhase) private var scenePhase
@@ -223,9 +223,9 @@ struct RootView: View {
         // shiftreminder://capture/photo|record|note：小组件上的按钮
         .onOpenURL { url in
             if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
-               let plan = try? PlanReader.rows(inFile: url) {
+               let plan = try? PlanReader.read(file: url) {
                 // 导出、分享过来的数传计划：直接打开「发数传计划」
-                passPlanRows = plan
+                passPlanReading = plan
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .passPlan }
@@ -292,11 +292,11 @@ struct RootView: View {
                 }
             case .passPlan:
                 NavigationStack {
-                    PassPlanView(rows: passPlanRows, autoScan: passPlanAutoScan)
+                    PassPlanView(reading: passPlanReading, autoScan: passPlanAutoScan)
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
                 }
                 .onDisappear {
-                    passPlanRows = []
+                    passPlanReading = nil
                     passPlanAutoScan = false
                 }
             case .meeting, .meetingMine:
@@ -339,7 +339,7 @@ struct RootView: View {
             case .record: rootSheet = .record
             case .note: rootSheet = .note
             case .plan:
-                passPlanRows = []
+                passPlanReading = nil
                 passPlanAutoScan = true
                 rootSheet = .passPlan
             }
@@ -436,7 +436,7 @@ enum ScreenCatalog {
         case "meetingTrend": MeetingTrendView()
         case "todayLayout": TodayLayoutView()
         case "years": MultiYearStatsView()
-        case "passPlan": PassPlanView(rows: PassPlanView.demoRows)
+        case "passPlan": PassPlanView(reading: PassPlan.Reading(rows: PassPlanView.demoRows, layout: nil))
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         default: TodayView()

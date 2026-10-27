@@ -1,7 +1,7 @@
 import Foundation
 
-/// 每天的数传计划：从导出的 Excel / 复制的表格，或者手机拍的照片（识别出的文字块）读出每一行，
-/// 按运营商（地面站「-」前面的名字）分开，生成发到各家群里的文字
+/// 每天的数传计划：从导出的 Excel / 复制的表格，或者手机拍的照片（网页上的表、电脑上打开的 Excel，识别出的文字块）
+/// 读出每一行，按运营商分开，生成发到各家群里的表
 public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public var orbit: String
     public var satelliteID: String
@@ -11,9 +11,11 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public var end: String
     public var info: String
     public var status: String
+    /// 这一行每一列原来的字（和读到的那张表的列一一对应，见 PassPlan.Layout）：发出去的表照原样
+    public var cells: [String]
 
     public init(orbit: String = "", satelliteID: String = "", satellite: String = "", station: String = "",
-                start: String = "", end: String = "", info: String = "", status: String = "") {
+                start: String = "", end: String = "", info: String = "", status: String = "", cells: [String] = []) {
         self.orbit = orbit
         self.satelliteID = satelliteID
         self.satellite = satellite
@@ -22,14 +24,16 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
         self.end = end
         self.info = info
         self.status = status
+        self.cells = cells
     }
 }
 
 public enum PassPlan {
-    /// 表里的各列：表头里出现这些字就是这一列（先认长的，「卫星名称」不会被当成「卫星ID」）
+    /// 认得出含义的列：表头里出现这些字就是这一列（先认长的，「卫星名称」不会被当成「卫星ID」）。
+    /// 网页上的表和导出的 Excel 叫法不一样（圈号 / 圈次、数传开始时间 / 数传开始、数传信息 / 数传速率），都认
     public enum Column: String, CaseIterable, Sendable {
         case orbit, satelliteID, satellite, station, start, end, info, status
-        /// 序号（No.）：只用来分列，不留
+        /// 序号（No.）：只用来分列，发出去的表重新编
         case number
 
         /// 一格里只有一个值（日期时间、数传信息可能被认成好几块，要拼起来）
@@ -43,43 +47,87 @@ public enum PassPlan {
             case .station: return ["地面站", "接收站", "站名"]
             case .start: return ["开始时间", "开始"]
             case .end: return ["结束时间", "结束"]
-            case .info: return ["数传信息", "信息"]
+            case .info: return ["数传信息", "信息", "速率"]
             case .status: return ["状态"]
             case .number: return []
             }
         }
     }
 
-    /// 这个表头格子是哪一列
+    /// 这个表头格子是哪一列；认不出含义（创建时间、是否应急……）返回 nil
     public static func column(forHeader text: String) -> Column? {
         let t = text.lowercased().filter { !$0.isWhitespace }
         guard !t.isEmpty else { return nil }
         if ["no", "no.", "序号"].contains(t) { return .number }
         if t.contains("卫星") && t.contains("id") { return .satelliteID }
+        // 导出的 Excel 里那一列就叫「卫星」（写的是卫星代号）
+        if t == "卫星" { return .satellite }
         return Column.allCases.first { c in c.headerWords.contains { t.contains($0) } }
+    }
+
+    /// 读到的那张表有哪几列：表头原来写的字、是哪一列（认不出含义的是 nil，原样带着）、在照片里的左右位置（0–1；表格文件里是第几列）。
+    /// 往下翻着连拍时，后面几张拍不到表头，就用前一张的
+    public struct Layout: Equatable, Sendable {
+        public struct Slot: Equatable, Sendable {
+            public var label: String
+            public var column: Column?
+            public var x: Double
+
+            public init(label: String, column: Column?, x: Double) {
+                self.label = label
+                self.column = column
+                self.x = x
+            }
+        }
+
+        public var slots: [Slot]
+
+        public init(slots: [Slot]) { self.slots = slots }
+
+        /// 表头一个个认：同一种列出现两次，后面那个当作认不出含义的列
+        init(labels: [(String, Double)]) {
+            var used = Set<Column>()
+            slots = labels.map { label, x in
+                var c = PassPlan.column(forHeader: label)
+                if let found = c, !used.insert(found).inserted { c = nil }
+                return Slot(label: label.trimmingCharacters(in: .whitespaces), column: c, x: x)
+            }
+        }
+
+        /// 有哪几种认得出的列
+        public var columns: Set<Column> { Set(slots.compactMap(\.column)) }
+    }
+
+    /// 读一次的结果：每一行、读到的那张表的列（没认出表头时是 nil）
+    public struct Reading: Equatable, Sendable {
+        public var rows: [PassPlanRow]
+        public var layout: Layout?
+
+        public init(rows: [PassPlanRow], layout: Layout?) {
+            self.rows = rows
+            self.layout = layout
+        }
     }
 
     // MARK: - 从表格读（Excel、复制的文字）
 
     /// 第一行认得出三列以上的是表头，下面每行是一条；空行、表头重复的行跳过
     public static func rows(fromTable table: [[String]]) -> [PassPlanRow] {
-        guard let headerIndex = table.firstIndex(where: { row in Set(row.compactMap(column(forHeader:))).count >= 3 }) else { return [] }
-        var columns: [Int: Column] = [:]
-        var used = Set<Column>()
-        for (i, cell) in table[headerIndex].enumerated() {
-            if let c = column(forHeader: cell), !used.contains(c) {
-                columns[i] = c
-                used.insert(c)
-            }
+        readTable(table).rows
+    }
+
+    public static func readTable(_ table: [[String]]) -> Reading {
+        guard let headerIndex = table.firstIndex(where: { row in Set(row.compactMap(column(forHeader:))).count >= 3 }) else {
+            return Reading(rows: [], layout: nil)
         }
-        return table[(headerIndex + 1)...].compactMap { cells in
-            var values: [Column: String] = [:]
-            for (i, cell) in cells.enumerated() {
-                guard let c = columns[i] else { continue }
-                values[c] = cell.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            return row(from: values)
+        // 表头空着的列不要
+        let kept = table[headerIndex].indices.filter { !table[headerIndex][$0].trimmingCharacters(in: .whitespaces).isEmpty }
+        let layout = Layout(labels: kept.map { (table[headerIndex][$0], Double($0)) })
+        let rows = table[(headerIndex + 1)...].compactMap { cells -> PassPlanRow? in
+            let values = kept.map { $0 < cells.count ? cells[$0].trimmingCharacters(in: .whitespacesAndNewlines) : "" }
+            return row(cells: values, layout: layout)
         }
+        return Reading(rows: rows, layout: layout)
     }
 
     // MARK: - 从照片读（识别出的一块块文字）
@@ -104,37 +152,35 @@ public enum PassPlan {
         var midY: Double { y + height / 2 }
     }
 
-    /// 每列在照片里的左右位置（0–1）：往下翻着连拍时，后面几张拍不到表头，就用前一张的
-    public struct ColumnLayout: Equatable, Sendable {
-        public var centers: [Column: Double]
-        public init(centers: [Column: Double]) { self.centers = centers }
-    }
-
     /// 拍屏幕常常是斜的：用表头那一排的位置算出倾斜，扶正以后按上下分行、按表头的左右位置分列
     public static func rows(fromBoxes boxes: [TextBox]) -> [PassPlanRow] {
         read(boxes).rows
     }
 
-    /// 同上，另外返回这张认出的列位置；这张没拍到表头时用 fallback（前一张的列位置，当作没有倾斜）
-    public static func read(_ boxes: [TextBox], fallback: ColumnLayout? = nil) -> (rows: [PassPlanRow], layout: ColumnLayout?) {
-        let headers = boxes.compactMap { b in column(forHeader: b.text).map { (box: b, column: $0) } }
+    /// 同上，另外返回读到的那张表的列；这张没拍到表头时用 fallback（前一张的列，当作没有倾斜）。
+    /// 表头那一排上认不出含义的格子（创建时间、是否应急……）也算一列：它们下面的字归它们，不会串进旁边的列
+    public static func read(_ boxes: [TextBox], fallback: Layout? = nil) -> Reading {
+        let recognized = boxes.compactMap { b in column(forHeader: b.text).map { (box: b, column: $0) } }
         let heights = boxes.map(\.height).sorted()
         let lineHeight = heights.isEmpty ? 0.02 : heights[heights.count / 2]
         let slope: Double
         let body: [TextBox]
-        let layout: ColumnLayout
-        if let top = headerRow(headers) {
+        let layout: Layout
+        if let top = headerRow(recognized) {
             let s = tilt(top.map(\.box))
             let headerLevel = top.map { $0.box.midY - s * $0.box.midX }.reduce(0, +) / Double(top.count)
+            // 表头那一排的高低差：表头的字一般比表里的大
+            let tolerance = max(lineHeight, top.map(\.box.height).reduce(0, +) / Double(top.count)) * 0.6
+            let headerBoxes = boxes.filter { abs($0.midY - s * $0.midX - headerLevel) < tolerance }.sorted { $0.x < $1.x }
             slope = s
-            body = boxes.filter { b in b.midY - s * b.midX > headerLevel + lineHeight * 0.6 && !top.contains { $0.box == b } }
-            layout = ColumnLayout(centers: Dictionary(top.map { ($0.column, $0.box.midX) }, uniquingKeysWith: { a, _ in a }))
+            body = boxes.filter { b in b.midY - s * b.midX > headerLevel + tolerance && !headerBoxes.contains(b) }
+            layout = Layout(labels: headerBoxes.map { ($0.text, $0.midX) })
         } else if let fallback {
             slope = 0
             body = boxes
             layout = fallback
         } else {
-            return ([], nil)
+            return Reading(rows: [], layout: nil)
         }
         func level(_ b: TextBox) -> Double { b.midY - slope * b.midX }
         // 上下挨得近的算一行
@@ -146,25 +192,24 @@ public enum PassPlan {
                 lines.append([b])
             }
         }
-        let centers = layout.centers.map { (column: $0.key, x: $0.value) }
+        let slots = layout.slots
         let rows = lines.compactMap { line -> PassPlanRow? in
-            var parts: [Column: [TextBox]] = [:]
+            guard !slots.isEmpty else { return nil }
+            var parts = [[TextBox]](repeating: [], count: slots.count)
             for b in line {
-                guard let nearest = centers.min(by: { abs($0.x - b.midX) < abs($1.x - b.midX) }) else { continue }
-                parts[nearest.column, default: []].append(b)
+                let i = slots.indices.min { abs(slots[$0].x - b.midX) < abs(slots[$1].x - b.midX) }!
+                parts[i].append(b)
             }
-            var values: [Column: String] = [:]
-            for (column, boxes) in parts {
-                if column.isSingleValue, let x = layout.centers[column] {
-                    // 圈号、卫星、地面站一格只有一个值：最左边序号那列没拍到表头时，序号会挤进圈号，只留离表头最近的
-                    values[column] = boxes.min { abs($0.midX - x) < abs($1.midX - x) }?.text
-                } else {
-                    values[column] = boxes.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ")
+            let cells = parts.enumerated().map { i, boxes -> String in
+                if slots[i].column?.isSingleValue == true {
+                    // 圈号、卫星、地面站一格只有一个值：最左边的序号、Excel 的行号会挤进来，只留离表头最近的
+                    return boxes.min { abs($0.midX - slots[i].x) < abs($1.midX - slots[i].x) }?.text ?? ""
                 }
+                return boxes.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ")
             }
-            return row(from: values)
+            return row(cells: cells, layout: layout)
         }
-        return (rows, layout)
+        return Reading(rows: rows, layout: layout)
     }
 
     /// 表头那一排：每个认得出的表头格子和它上下差不多高的（允许屏幕拍斜）算一排，
@@ -201,6 +246,16 @@ public enum PassPlan {
     // MARK: - 整理一行
 
     /// 一行里有卫星、地面站、开始时间才算一条（只认出一两个字的行是噪点）
+    static func row(cells: [String], layout: Layout) -> PassPlanRow? {
+        var values: [Column: String] = [:]
+        for (i, slot) in layout.slots.enumerated() where i < cells.count {
+            if let c = slot.column { values[c] = cells[i] }
+        }
+        guard var r = row(from: values) else { return nil }
+        r.cells = cells
+        return r
+    }
+
     static func row(from values: [Column: String]) -> PassPlanRow? {
         var r = PassPlanRow(orbit: values[.orbit] ?? "", satelliteID: values[.satelliteID] ?? "",
                             satellite: values[.satellite] ?? "", station: values[.station] ?? "",
@@ -253,14 +308,16 @@ public enum PassPlan {
         return order.compactMap { best[$0] }
     }
 
-    /// 这一条可能认错的地方（页面上标出来，让人核对）；没有返回空
-    public static func problems(_ r: PassPlanRow, rules: [OperatorRule] = []) -> [String] {
+    /// 这一条可能认错的地方（页面上标出来，让人核对）；没有返回空。
+    /// layout：读到的那张表有哪几列（导出的 Excel 没有结束时间，就不说「没有结束时间」）
+    public static func problems(_ r: PassPlanRow, rules: [OperatorRule] = [], layout: Layout? = nil) -> [String] {
+        let has = { (c: Column) in layout.map { $0.columns.contains(c) } ?? true }
         var list: [String] = []
         let time = #"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"#
         func isTime(_ s: String) -> Bool { s.range(of: time, options: .regularExpression) != nil }
         if !isTime(r.start) { list.append("开始时间没认全") }
         if r.end.isEmpty {
-            list.append("没有结束时间")
+            if has(.end) { list.append("没有结束时间") }
         } else if !isTime(r.end) {
             list.append("结束时间没认全")
         } else if isTime(r.start), r.end <= r.start {
@@ -268,7 +325,7 @@ public enum PassPlan {
         }
         if operatorName(of: r.station, rules: rules) == nil { list.append("分不出是哪家（运营商对照表里没有这个站）") }
         if !r.orbit.isEmpty, !r.orbit.allSatisfy(\.isNumber) { list.append("圈号不全是数字") }
-        if r.satellite.isEmpty { list.append("没认出卫星名称") }
+        if r.satellite.isEmpty, has(.satellite) { list.append("没认出卫星名称") }
         return list
     }
 
@@ -369,7 +426,8 @@ public enum PassPlan {
 
     /// 发到群里的表：表头、列的先后照网页上的（No.、圈号、卫星ID、卫星名称、地面站、数传开始时间、数传结束时间、
     /// 数传信息、状态），时间写全；这几条里整列都是空的（没拍到、网页上没有）就不要这一列。No. 是这一家里的第几条
-    public static func table(_ rows: [PassPlanRow]) -> (headers: [String], cells: [[String]]) {
+    public static func table(_ rows: [PassPlanRow], layout: Layout? = nil) -> (headers: [String], cells: [[String]]) {
+        if let layout { return table(rows, layout: layout) }
         let columns: [(String, (PassPlanRow) -> String)] = [
             ("圈号", \.orbit), ("卫星ID", \.satelliteID), ("卫星名称", \.satellite), ("地面站", \.station),
             ("数传开始时间", \.start), ("数传结束时间", \.end), ("数传信息", \.info), ("状态", \.status),
@@ -377,6 +435,27 @@ public enum PassPlan {
         let used = columns.filter { column in rows.contains { !column.1($0).isEmpty } }
         let cells = rows.enumerated().map { i, row in ["\(i + 1)"] + used.map { $0.1(row) } }
         return (["No."] + used.map(\.0), cells)
+    }
+
+    /// 照读到的那张表：同样的表头、同样的列（认不出含义的列原样带上），前面一列 No. 是这一家里的第几条。
+    /// 认得出含义的列用整理过的值（改过的、补的一条也对得上），其他列用原来的字
+    private static func table(_ rows: [PassPlanRow], layout: Layout) -> (headers: [String], cells: [[String]]) {
+        let kept = layout.slots.indices.filter { layout.slots[$0].column != .number }
+        func value(_ row: PassPlanRow, _ i: Int) -> String {
+            switch layout.slots[i].column {
+            case .orbit: return row.orbit
+            case .satelliteID: return row.satelliteID
+            case .satellite: return row.satellite
+            case .station: return row.station
+            case .start: return row.start
+            case .end: return row.end
+            case .info: return row.info
+            case .status: return row.status
+            case .number, nil: return i < row.cells.count ? row.cells[i] : ""
+            }
+        }
+        let cells = rows.enumerated().map { n, row in ["\(n + 1)"] + kept.map { value(row, $0) } }
+        return (["No."] + kept.map { layout.slots[$0].label }, cells)
     }
 
     /// 标题：「10月27日数传计划（甲站）共 3 条」（跨了几天的不写日期）
@@ -389,8 +468,8 @@ public enum PassPlan {
     }
 
     /// 发到群里的一段话：标题、表头、每条一行，和图上的表一样
-    public static func message(name: String, rows: [PassPlanRow]) -> String {
-        let t = table(rows)
+    public static func message(name: String, rows: [PassPlanRow], layout: Layout? = nil) -> String {
+        let t = table(rows, layout: layout)
         return ([title(name: name, rows: rows), t.headers.joined(separator: "  ")]
                 + t.cells.map { $0.filter { !$0.isEmpty }.joined(separator: "  ") }).joined(separator: "\n")
     }

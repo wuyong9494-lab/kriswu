@@ -14,26 +14,27 @@ enum PlanReader {
         }
     }
 
-    /// 几张照片（计划长、往下翻着拍的）→ 合成一份。第一张要拍到表头；后面几张没拍到表头的，按前一张的列位置分
-    static func rows(inPages images: [UIImage]) async throws -> [PassPlanRow] {
+    /// 几张照片（计划长、往下翻着拍的）→ 合成一份。第一张要拍到表头；后面几张没拍到表头的，按前一张的列分。
+    /// 网页上的表、电脑上打开的导出 Excel 都行：拍到什么表头，发出去的表就是什么表头
+    static func read(pages images: [UIImage]) async throws -> PassPlan.Reading {
         var pages: [[PassPlanRow]] = []
         var sawText = false
-        var layout: PassPlan.ColumnLayout?
+        var layout: PassPlan.Layout?
         for image in images {
             let boxes = try await textBoxes(in: image)
             sawText = sawText || !boxes.isEmpty
             let result = PassPlan.read(boxes, fallback: layout)
-            layout = result.layout ?? layout
+            layout = layout ?? result.layout
             pages.append(result.rows)
         }
         guard sawText else { throw Failure.noText }
         let rows = PassPlan.merge(pages)
         guard !rows.isEmpty else { throw Failure.noTable }
-        return rows
+        return PassPlan.Reading(rows: rows, layout: layout)
     }
 
-    /// 表格文件（Excel、CSV）或复制的表格 → 每一行
-    static func rows(inFile url: URL) throws -> [PassPlanRow] {
+    /// 表格文件（Excel、CSV）
+    static func read(file url: URL) throws -> PassPlan.Reading {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)
@@ -43,14 +44,14 @@ enum PlanReader {
         case "csv": table = MeetingTable.rows(String(decoding: data, as: UTF8.self), separator: ",")
         default: table = MeetingTable.rows(String(decoding: data, as: UTF8.self), separator: "\t")
         }
-        let rows = PassPlan.rows(fromTable: table)
-        guard !rows.isEmpty else { throw Failure.noTable }
-        return rows
+        let reading = PassPlan.readTable(table)
+        guard !reading.rows.isEmpty else { throw Failure.noTable }
+        return reading
     }
 
     /// 剪贴板里的表格（网页、Excel 里选中复制的）
     @MainActor
-    static func rowsFromClipboard() throws -> [PassPlanRow] {
+    static func readClipboard() throws -> PassPlan.Reading {
         let board = UIPasteboard.general
         var tables: [[[String]]] = []
         if let data = board.data(forPasteboardType: UTType.html.identifier) {
@@ -59,8 +60,8 @@ enum PlanReader {
         if let text = board.string {
             tables.append(MeetingTable.rows(text, separator: "\t"))
         }
-        guard let rows = tables.lazy.map(PassPlan.rows(fromTable:)).first(where: { !$0.isEmpty }) else { throw Failure.noTable }
-        return rows
+        guard let reading = tables.lazy.map(PassPlan.readTable).first(where: { !$0.rows.isEmpty }) else { throw Failure.noTable }
+        return reading
     }
 
     // MARK: - 文字识别

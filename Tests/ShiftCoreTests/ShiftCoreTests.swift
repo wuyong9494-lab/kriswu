@@ -2856,8 +2856,11 @@ final class PassPlanTests: XCTestCase {
         ]
         let rows = PassPlan.rows(fromTable: table)
         XCTAssertEqual(rows.count, 2)
-        XCTAssertEqual(rows[0], PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
-                                           start: "2026-10-27 22:57:51", end: "2026-10-27 23:05:03", info: "通道1", status: "等待"))
+        var first = rows[0]
+        XCTAssertEqual(first.cells, table[2], "每一列原来的字都留着")
+        first.cells = []
+        XCTAssertEqual(first, PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
+                                          start: "2026-10-27 22:57:51", end: "2026-10-27 23:05:03", info: "通道1", status: "等待"))
         XCTAssertEqual(rows[1].start, "2026-10-27 20:31:00", "斜杠、没有秒的也统一")
     }
 
@@ -2918,6 +2921,62 @@ final class PassPlanTests: XCTestCase {
         let page2 = PassPlan.read(second, fallback: page1.layout)
         XCTAssertEqual(page2.rows.map(\.station), ["乙站-南区02"])
         XCTAssertEqual(page2.rows.first?.end, "2026-10-27 21:07:00")
+    }
+
+    /// 拍电脑上打开的导出 Excel：列名不一样（卫星、圈次、数传开始、数传速率），没有结束时间，
+    /// 多了认不出含义的列（创建时间、是否应急），左边有行号、上面有列字母
+    func testPhotographedExcel() {
+        func box(_ text: String, _ x: Double, _ y: Double, _ w: Double = 0.06, _ h: Double = 0.012) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: x, y: y, width: w, height: h)
+        }
+        var boxes = ["A", "B", "C", "D", "E", "F"].enumerated().map { box($1, 0.12 + Double($0) * 0.15, 0.02, 0.01) }
+        let headers: [(String, Double)] = [("卫星", 0.1), ("地面站", 0.25), ("圈次", 0.4), ("数传开始", 0.55),
+                                           ("创建时间", 0.7), ("数传速率", 0.85)]
+        boxes += headers.map { box($0.0, $0.1, 0.05, 0.08, 0.022) }
+        let data = [
+            ["SAT-A", "甲站-北区05", "101", "2026-10-27|22:57:51", "2026-10-26|17:11:06", "通道1:900M，|通道2:900"],
+            ["SAT-B", "乙光北区04", "102", "2026-10-28|00:29:28", "2026-10-26|17:11:07", "通道1:900M"],
+        ]
+        for (r, cells) in data.enumerated() {
+            let y = 0.08 + Double(r) * 0.016
+            boxes.append(box("\(r + 2)", 0.02, y, 0.01))     // Excel 的行号
+            for (c, cell) in cells.enumerated() {
+                let parts = cell.split(separator: "|").map(String.init)
+                for (k, part) in parts.enumerated() {
+                    boxes.append(box(part, headers[c].1 - 0.02 + Double(k) * 0.045, y, 0.04))
+                }
+            }
+        }
+        let reading = PassPlan.read(boxes.shuffled())
+        XCTAssertEqual(reading.rows.count, 2)
+        XCTAssertEqual(reading.rows[0].satellite, "SAT-A", "行号不会挤进卫星那一列")
+        XCTAssertEqual(reading.rows[0].start, "2026-10-27 22:57:51", "创建时间不会串进数传开始")
+        XCTAssertEqual(reading.rows[0].info, "通道1:900M， 通道2:900")
+        XCTAssertEqual(reading.rows[1].orbit, "102")
+        XCTAssertEqual(reading.layout?.slots.map(\.label), ["卫星", "地面站", "圈次", "数传开始", "创建时间", "数传速率"])
+        XCTAssertNil(reading.layout?.slots[4].column, "创建时间认不出含义，原样带着")
+        // 没有结束时间这一列：不提示「没有结束时间」
+        XCTAssertEqual(PassPlan.problems(reading.rows[0], layout: reading.layout), [])
+        // 发出去的表照拍到的那张：同样的表头，前面加 No.
+        let table = PassPlan.table(reading.rows, layout: reading.layout)
+        XCTAssertEqual(table.headers, ["No.", "卫星", "地面站", "圈次", "数传开始", "创建时间", "数传速率"])
+        XCTAssertEqual(table.cells[0], ["1", "SAT-A", "甲站-北区05", "101", "2026-10-27 22:57:51", "2026-10-26 17:11:06",
+                                        "通道1:900M， 通道2:900"])
+        // 改过的一格（认得出含义的列）按改过的
+        var edited = reading.rows[1]
+        edited.station = "乙光北区03"
+        XCTAssertEqual(PassPlan.table([edited], layout: reading.layout).cells[0][2], "乙光北区03")
+    }
+
+    func testTableFileKeepsItsColumns() {
+        let table = [
+            ["卫星", "地面站", "圈次", "数传开始", "创建时间", "是否应急", ""],
+            ["SAT-A", "甲站-北区05", "101", "2026-10-27 22:57:51", "2026-10-26 17:11:06", "不是", "x"],
+        ]
+        let reading = PassPlan.readTable(table)
+        XCTAssertEqual(reading.layout?.slots.map(\.label), ["卫星", "地面站", "圈次", "数传开始", "创建时间", "是否应急"],
+                       "表头空着的列不要")
+        XCTAssertEqual(PassPlan.table(reading.rows, layout: reading.layout).cells[0].last, "不是")
     }
 
     func testMergePagesDropsOverlap() {

@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 /// 发数传计划这一次的状态：读到的计划、哪几家已经发了。只在内存里（离开这一页再回来还在，关掉 App 就没了）
 struct PassPlanSession: Equatable {
     var rows: [PassPlanRow] = []
+    /// 读到的那张表的列（发出去的表照它）；补的、演示的是 nil，用默认的列
+    var layout: PassPlan.Layout?
     var sent: Set<String> = []
 }
 
@@ -14,7 +16,7 @@ struct PassPlanSession: Equatable {
 struct PassPlanView: View {
     @EnvironmentObject private var store: AppStore
     /// 打开时带进来的计划（分享过来的 Excel、截图演示）
-    private let initialRows: [PassPlanRow]
+    private let initial: PassPlan.Reading?
     /// 从快捷指令「拍数传计划」打开：直接进扫描
     private let autoScan: Bool
     @State private var reading = false
@@ -38,12 +40,13 @@ struct PassPlanView: View {
         var row: PassPlanRow
     }
 
-    init(rows: [PassPlanRow] = [], autoScan: Bool = false) {
-        initialRows = rows
+    init(reading: PassPlan.Reading? = nil, autoScan: Bool = false) {
+        initial = reading
         self.autoScan = autoScan
     }
 
     private var rows: [PassPlanRow] { store.passPlan.rows }
+    private var layout: PassPlan.Layout? { store.passPlan.layout }
     /// 运营商对照表（没填名字的那行不算）
     private var rules: [PassPlan.OperatorRule] { store.settings.passPlanOperators.filter { !$0.name.isEmpty } }
     /// 分得出是哪家的（能发的）
@@ -54,7 +57,7 @@ struct PassPlanView: View {
     var body: some View {
         let all = PassPlan.grouped(rows, rules: rules)
         let groups = all.filter { $0.name != PassPlan.unassigned }
-        let doubtful = rows.filter { !PassPlan.problems($0, rules: rules).isEmpty }.count
+        let doubtful = rows.filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }.count
         let idle = PassPlan.idle(rows, rules: rules)
         List {
             Section {
@@ -67,7 +70,7 @@ struct PassPlanView: View {
                 DisclosureGroup("其他方式") {
                     Button { showingCamera = true } label: { Label("普通拍照", systemImage: "camera") }
                     Button { importing = true } label: { Label("导入 Excel", systemImage: "tablecells") }
-                    Button { read { try PlanReader.rowsFromClipboard() } } label: {
+                    Button { read { try PlanReader.readClipboard() } } label: {
                         Label("粘贴复制的表格", systemImage: "doc.on.clipboard")
                     }
                 }
@@ -152,11 +155,11 @@ struct PassPlanView: View {
         .navigationTitle("发数传计划")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $scanning) {
-            DocumentScanner { pages in read { try await PlanReader.rows(inPages: pages) } }
+            DocumentScanner { pages in read { try await PlanReader.read(pages: pages) } }
                 .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showingCamera) {
-            CameraPicker { image in read { try await PlanReader.rows(inPages: [image]) } }
+            CameraPicker { image in read { try await PlanReader.read(pages: [image]) } }
                 .ignoresSafeArea()
         }
         .onChange(of: photoItems) { items in
@@ -169,13 +172,13 @@ struct PassPlanView: View {
                         pages.append(image)
                     }
                 }
-                return try await PlanReader.rows(inPages: pages)
+                return try await PlanReader.read(pages: pages)
             }
         }
         .fileImporter(isPresented: $importing,
                       allowedContentTypes: [UTType(filenameExtension: "xlsx") ?? .data, .commaSeparatedText, .tabSeparatedText, .plainText]) { result in
             guard case .success(let url) = result else { return }
-            read { try PlanReader.rows(inFile: url) }
+            read { try PlanReader.read(file: url) }
         }
         .sheet(item: $editing) { target in
             NavigationStack {
@@ -213,14 +216,14 @@ struct PassPlanView: View {
             Text("微信不让别的 App 直接发到群里：点「发图片」以后在微信里选这个群。记下来按钮上就写着该发哪个群。")
         }
         .onAppear {
-            if !initialRows.isEmpty { store.passPlan = PassPlanSession(rows: initialRows) }
+            if let initial, !initial.rows.isEmpty { store.passPlan = PassPlanSession(rows: initial.rows, layout: initial.layout) }
             if autoScan {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     if DocumentScanner.isSupported { scanning = true } else { showingCamera = true }
                 }
             }
         }
-        .task(id: "\(rows.hashValue)-\(rules.hashValue)") { renderImages() }
+        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")") { renderImages() }
     }
 
     // MARK: - 一家的标题、一行
@@ -229,7 +232,7 @@ struct PassPlanView: View {
         Button { edit(row) } label: { rowView(row) }
             .buttonStyle(.plain)
             // 可能认错的标黄
-            .listRowBackground(PassPlan.problems(row, rules: rules).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
+            .listRowBackground(PassPlan.problems(row, rules: rules, layout: layout).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
             .swipeActions {
                 Button("删掉", role: .destructive) { store.passPlan.rows.removeAll { $0 == row } }
             }
@@ -293,7 +296,7 @@ struct PassPlanView: View {
     }
 
     private func rowView(_ row: PassPlanRow) -> some View {
-        let problems = PassPlan.problems(row, rules: rules)
+        let problems = PassPlan.problems(row, rules: rules, layout: layout)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
                 Text([PassPlan.shortTime(row.start), PassPlan.shortTime(row.end)].filter { !$0.isEmpty }.joined(separator: "–"))
@@ -327,7 +330,7 @@ struct PassPlanView: View {
             .buttonStyle(.borderedProminent)
             .tint(sent ? DS.Palette.success : DS.Palette.accent)
             .disabled(images[name] == nil)
-            Button { share(PassPlan.message(name: name, rows: rows), name: name) } label: {
+            Button { share(PassPlan.message(name: name, rows: rows, layout: layout), name: name) } label: {
                 Label("发文字", systemImage: "text.alignleft").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -338,14 +341,15 @@ struct PassPlanView: View {
 
     // MARK: - 读、改、发
 
-    private func read(_ work: @escaping @MainActor () async throws -> [PassPlanRow]) {
+    private func read(_ work: @escaping @MainActor () async throws -> PassPlan.Reading) {
         reading = true
         problem = nil
         Task {
             do {
-                let found = try await work()
-                withAnimation { store.passPlan = PassPlanSession(rows: found) }
-                let doubtful = found.filter { !PassPlan.problems($0, rules: rules).isEmpty }.count
+                let reading = try await work()
+                let found = reading.rows
+                withAnimation { store.passPlan = PassPlanSession(rows: found, layout: reading.layout) }
+                let doubtful = found.filter { !PassPlan.problems($0, rules: rules, layout: reading.layout).isEmpty }.count
                 let grouped = PassPlan.grouped(found, rules: rules)
                 let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
                 let families = grouped.filter { $0.name != PassPlan.unassigned }.count
@@ -422,7 +426,7 @@ struct PassPlanView: View {
     private func renderImages() {
         var made: [String: UIImage] = [:]
         for group in sendable {
-            let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows))
+            let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows, layout: layout))
             renderer.scale = 3
             if let image = renderer.uiImage { made[group.name] = image }
         }
@@ -434,10 +438,11 @@ struct PassPlanView: View {
 struct PassPlanSheet: View {
     let name: String
     let rows: [PassPlanRow]
+    var layout: PassPlan.Layout?
 
     /// 和网页上的表一样：同样的表头、列的先后、行的先后，时间写全；居中、每行一条细线
     var body: some View {
-        let table = PassPlan.table(rows)
+        let table = PassPlan.table(rows, layout: layout)
         VStack(alignment: .leading, spacing: 12) {
             Text(PassPlan.title(name: name, rows: rows)).font(.system(size: 20, weight: .bold))
             Grid(alignment: .center, horizontalSpacing: 18, verticalSpacing: 0) {
