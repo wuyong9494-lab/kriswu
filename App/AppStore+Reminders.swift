@@ -62,6 +62,7 @@ extension AppStore {
             }
             await DutyAlarms.reschedule(alarms)
         }
+        await scheduleMeetingReminder()
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
         // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
         await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)

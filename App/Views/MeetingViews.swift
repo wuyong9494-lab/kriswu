@@ -45,7 +45,8 @@ struct MeetingCard: View {
         let quiet = issues.filter { $0.status == .quiet }.count
         let groups = Dictionary(grouping: open, by: \.group).map { ($0.key, $0.value.count) }
             .sorted { ($1.1, $0.0) < ($0.1, $1.0) }
-        NavigationLink { MeetingIssuesView() } label: {
+        let mine = store.myMeetingIssues.filter { $0.status == .open }
+        NavigationLink { MeetingIssuesView(mineOnly: !mine.isEmpty) } label: {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 HStack {
                     Label("周会问题", systemImage: "doc.text.magnifyingglass")
@@ -72,7 +73,13 @@ struct MeetingCard: View {
                             .font(DS.Font.caption).foregroundStyle(.secondary)
                             .lineLimit(2).multilineTextAlignment(.leading)
                     }
-                    ForEach(open.prefix(3)) { issue in
+                    if !mine.isEmpty {
+                        Label("我负责的 \(mine.count) 个", systemImage: "person.crop.circle")
+                            .font(DS.Font.caption.weight(.semibold))
+                            .foregroundStyle(DS.Palette.accent)
+                    }
+                    // 有我负责的：先列我的
+                    ForEach(Array((mine + open.filter { o in !mine.contains { $0.id == o.id } }).prefix(3))) { issue in
                         let weeks = issue.weeks(through: week)
                         HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                             Circle().fill(ageColor(weeks)).frame(width: 6, height: 6)
@@ -106,6 +113,9 @@ struct MeetingIssuesView: View {
     @State private var filter: MeetingFilter = .open
     @State private var group: String?
     @State private var byOwner = false
+    /// 只看负责人里有我的
+    @State private var mineOnly: Bool
+    @State private var showingTrend = false
     @State private var query = ""
     @State private var expanded: Set<String> = []
     @State private var showingSource = false
@@ -122,8 +132,9 @@ struct MeetingIssuesView: View {
     @State private var openedDocument = false
     @Environment(\.scenePhase) private var scenePhase
 
-    init(editing: String? = nil) {
+    init(editing: String? = nil, mineOnly: Bool = false) {
         _editingGroup = State(initialValue: editing)
+        _mineOnly = State(initialValue: mineOnly)
     }
 
     private var week: DayKey { MeetingTracker.monday(of: .today) }
@@ -141,7 +152,10 @@ struct MeetingIssuesView: View {
 
     var body: some View {
         let issues = store.meeting.issues
-        let matching = issues.filter(matchesQuery)
+        let names = store.settings.aliases
+        let searched = issues.filter(matchesQuery)
+        let mineCount = searched.filter { $0.status == filter.status && MeetingInsights.isMine($0, names: names) }.count
+        let matching = mineOnly ? searched.filter { MeetingInsights.isMine($0, names: names) } : searched
         let shown = matching.filter { $0.status == filter.status && (group == nil || $0.group == group) }
         let hasHistory = issues.contains { $0.firstWeek < week }
         List {
@@ -150,7 +164,7 @@ struct MeetingIssuesView: View {
             } else if let g = editingGroup {
                 editSections(g, issues: issues)
             } else {
-                overview(issues: issues, matching: matching)
+                overview(issues: issues, matching: matching, mineCount: mineCount)
                 if shown.isEmpty {
                     Section {
                         Text(emptyText).font(.footnote).foregroundStyle(.secondary)
@@ -221,6 +235,7 @@ struct MeetingIssuesView: View {
         .sheet(isPresented: $showingSource) {
             NavigationStack { MeetingSourceView(showWriteback: sourceShowsWriteback) }
         }
+        .navigationDestination(isPresented: $showingTrend) { MeetingTrendView() }
         .onAppear {
             // 没有没解决的、只剩待确认的：直接看待确认
             if filter == .open, !issues.contains(where: { $0.status == .open }), issues.contains(where: { $0.status == .quiet }) {
@@ -236,8 +251,15 @@ struct MeetingIssuesView: View {
                 Label("按组分", systemImage: "square.grid.2x2").tag(false)
                 Label("按负责人分", systemImage: "person.2").tag(true)
             }
+            Divider()
+            Button { showingTrend = true } label: {
+                Label("各组趋势", systemImage: "chart.xyaxis.line")
+            }
+            ShareLink(item: MeetingInsights.digest(store.meeting.issues, week: week)) {
+                Label("把还挂着的问题发给同事", systemImage: "square.and.arrow.up")
+            }
         } label: {
-            Image(systemName: byOwner ? "person.2" : "square.grid.2x2").accessibilityLabel("按组分还是按负责人分")
+            Image(systemName: "ellipsis.circle").accessibilityLabel("怎么分、趋势、发给同事")
         }
         Button { openSource(writeback: false) } label: {
             Image(systemName: "square.and.arrow.down").accessibilityLabel("导入周会文档")
@@ -428,7 +450,7 @@ struct MeetingIssuesView: View {
 
     // MARK: - 上面：三格 + 组名
 
-    private func overview(issues: [MeetingIssue], matching: [MeetingIssue]) -> some View {
+    private func overview(issues: [MeetingIssue], matching: [MeetingIssue], mineCount: Int) -> some View {
         let inGroup = matching.filter { group == nil || $0.group == group }
         let ofStatus = matching.filter { $0.status == filter.status }
         let groups = groupOrder(issues)
@@ -441,6 +463,9 @@ struct MeetingIssuesView: View {
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
+                        if mineOnly || mineCount > 0 || !store.myMeetingIssues.isEmpty {
+                            mineChip(count: mineCount)
+                        }
                         groupChip(nil, count: ofStatus.count)
                         ForEach(groups, id: \.self) { name in
                             groupChip(name, count: ofStatus.filter { $0.group == name }.count)
@@ -491,6 +516,27 @@ struct MeetingIssuesView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// 「我负责的」：和组名一起用（只看我负责的 + 某个组）
+    private func mineChip(count: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { mineOnly.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: mineOnly ? "person.crop.circle.fill" : "person.crop.circle")
+                Text("我负责的")
+                Text("\(count)").monospacedDigit()
+                    .foregroundStyle(mineOnly ? Color.white.opacity(0.85) : Color.secondary)
+            }
+            .font(.footnote.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .foregroundStyle(mineOnly ? Color.white : DS.Palette.accent)
+            .background(mineOnly ? DS.Palette.accent : DS.Palette.accent.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(mineOnly ? .isSelected : [])
     }
 
     private func groupChip(_ name: String?, count: Int) -> some View {
@@ -551,6 +597,10 @@ struct MeetingIssuesView: View {
     private var emptyText: String {
         let q = query.trimmingCharacters(in: .whitespaces)
         if !q.isEmpty { return "没搜到「\(q)」" }
+        if mineOnly {
+            if store.settings.aliases.isEmpty { return "还没填你的名字（设置 › 账号与同步），对不上哪些是你负责的" }
+            return "这一栏没有你负责的。再点一下「我负责的」看全部"
+        }
         switch filter {
         case .open: return "没有没解决的问题"
         case .quiet: return "没有要确认的：上周提的这周都还在文档里"

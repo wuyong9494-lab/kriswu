@@ -353,8 +353,8 @@ final class APIDiscoveryTests: XCTestCase {
     func testRosterTableIsNotMySchedule() {
         // 全员排班表：每个岗位一列、格子里是人名。我的名字在「组A」列里，不能把同一行别的岗位上的同事当成我的班
         let json = """
-        {"data":[{"date":"2026-10-15","telemetry":"张昊","assignments":{"组A":"张伟","组B":"焦洋"}},
-                 {"date":"2026-10-16","telemetry":"李家宝","assignments":{"组A":"王健","组B":"张伟"}}]}
+        {"data":[{"date":"2026-10-15","telemetry":"方舟","assignments":{"组A":"张伟","组B":"戴明"}},
+                 {"date":"2026-10-16","telemetry":"卢一鸣","assignments":{"组A":"韩松","组B":"张伟"}}]}
         """
         XCTAssertTrue(JSONScheduleExtractor.extract(json, aliases: ["张伟"], matcher: matcher, reference: ref).isEmpty)
     }
@@ -362,9 +362,9 @@ final class APIDiscoveryTests: XCTestCase {
     func testNameFieldIsNotTheShift() {
         // 「我的值班」接口带了交接人：分工还是读班次那个字段，人名字段不当成班
         let json = """
-        [{"dutyDate":"2026-10-15","shiftName":"组A","dutyPerson":"焦洋"},
-         {"dutyDate":"2026-10-16","shiftName":"组B","dutyPerson":"王健"},
-         {"dutyDate":"2026-10-17","shiftName":"休息","dutyPerson":"李家宝"}]
+        [{"dutyDate":"2026-10-15","shiftName":"组A","dutyPerson":"戴明"},
+         {"dutyDate":"2026-10-16","shiftName":"组B","dutyPerson":"韩松"},
+         {"dutyDate":"2026-10-17","shiftName":"休息","dutyPerson":"卢一鸣"}]
         """
         XCTAssertEqual(JSONScheduleExtractor.extract(json, aliases: ["张伟"], matcher: matcher, reference: ref),
                        [d(10, 15): "组A", d(10, 16): "组B", d(10, 17): "休息"])
@@ -962,11 +962,11 @@ final class BalanceTests: XCTestCase {
     let m = ShiftMatcher(types: ShiftType.defaults)
 
     func testRestBalancesFromText() {
-        let text = "2026-10-12\t周一\t李家宝(5)\t高梦瑶(3)\t吴庸（1）\t组A(2)\n2026-10-13\t周二\t李家宝(4)"
+        let text = "2026-10-12\t周一\t卢一鸣(5)\t白露(3)\t林溪（1）\t组A(2)\n2026-10-13\t周二\t卢一鸣(4)"
         let rest = RosterExtractor.restBalances(text, matcher: m)
-        XCTAssertEqual(rest["李家宝"], 5)        // 取第一次出现的
-        XCTAssertEqual(rest["高梦瑶"], 3)
-        XCTAssertEqual(rest["吴庸"], 1)
+        XCTAssertEqual(rest["卢一鸣"], 5)        // 取第一次出现的
+        XCTAssertEqual(rest["白露"], 3)
+        XCTAssertEqual(rest["林溪"], 1)
         XCTAssertNil(rest["组A"])
     }
 
@@ -2674,5 +2674,103 @@ final class DayRulesTests: XCTestCase {
         XCTAssertTrue(text.contains("周六、周日都是休息日"))
         let blank = RuleBook.Example(label: "", input: "", result: "", check: .workday)
         XCTAssertEqual(RuleBook.actual(blank, matcher: m, rules: r), "未排班，不算工作量")
+    }
+}
+
+final class MeetingInsightsTests: XCTestCase {
+    private let w1 = DayKey(year: 2026, month: 10, day: 5)
+    private var w2: DayKey { w1.adding(days: 7, calendar: .dayMath) }
+    private var w3: DayKey { w1.adding(days: 14, calendar: .dayMath) }
+    private var w4: DayKey { w1.adding(days: 21, calendar: .dayMath) }
+
+    private func issue(_ id: String, group: String = "组A", owners: String? = nil, first: DayKey, last: DayKey,
+                       status: MeetingIssue.Status = .open, resolved: DayKey? = nil) -> MeetingIssue {
+        MeetingIssue(id: id, group: group, text: "问题\(id)", firstWeek: first, lastWeek: last, status: status,
+                     resolvedWeek: resolved, detail: owners.map { "负责人：" + $0 })
+    }
+
+    func testIsMineMatchesNameVariants() {
+        let a = issue("1", owners: "甲乙（组A）、丙", first: w1, last: w1)
+        XCTAssertTrue(MeetingInsights.isMine(a, names: ["甲乙"]))
+        XCTAssertTrue(MeetingInsights.isMine(a, names: ["丙"]))
+        XCTAssertTrue(MeetingInsights.isMine(a, names: [" 甲 乙 "]))
+        XCTAssertFalse(MeetingInsights.isMine(a, names: ["甲"]), "单字名只认一模一样的")
+        XCTAssertFalse(MeetingInsights.isMine(a, names: []))
+        XCTAssertFalse(MeetingInsights.isMine(issue("2", first: w1, last: w1), names: ["甲乙"]), "没写负责人")
+        XCTAssertTrue(MeetingInsights.isMine(issue("3", owners: "丁戊", first: w1, last: w1), names: ["组B丁戊"]))
+    }
+
+    func testMineSkipsResolvedAndPutsOpenFirst() {
+        let issues = [
+            issue("1", owners: "甲乙", first: w2, last: w2),
+            issue("2", owners: "甲乙", first: w1, last: w1, status: .quiet),
+            issue("3", owners: "甲乙", first: w1, last: w2, status: .resolved, resolved: w2),
+            issue("4", owners: "甲乙", first: w1, last: w2),
+            issue("5", owners: "丙丁", first: w1, last: w2),
+        ]
+        XCTAssertEqual(MeetingInsights.mine(issues, names: ["甲乙"]).map(\.id), ["4", "1", "2"])
+    }
+
+    func testDigestListsOpenIssuesByGroup() {
+        let issues = [
+            issue("1", group: "组A", owners: "甲", first: w1, last: w3),
+            issue("2", group: "组B", first: w3, last: w3),
+            issue("3", group: "组A", first: w3, last: w3, status: .resolved, resolved: w3),
+            issue("4", group: "组C", first: w1, last: w2, status: .quiet),
+        ]
+        let text = MeetingInsights.digest(issues, week: w3)
+        XCTAssertEqual(text, """
+        周会问题（10/19 那周）：还有 2 个没解决，1 个这周没再提、待确认
+
+        【组A】1 个
+        · 问题1（甲，第 3 周）
+
+        【组B】1 个
+        · 问题2
+        """)
+        XCTAssertTrue(MeetingInsights.digest([], week: w3).hasSuffix("没有没解决的问题"))
+        let many = (0..<7).map { issue("m\($0)", first: w1, last: w3) }
+        XCTAssertTrue(MeetingInsights.digest(many, week: w3, limit: 5).hasSuffix("· 还有 2 个"))
+    }
+
+    func testTrendCountsOpenNewResolvedPerWeek() {
+        let issues = [
+            issue("1", first: w1, last: w4),                                   // 一直挂着
+            issue("2", first: w1, last: w3, status: .resolved, resolved: w3),  // 第三周解决
+            issue("3", first: w2, last: w2, status: .quiet),                   // 第二周提了，之后没再提
+            issue("4", group: "组B", first: w3, last: w4),
+        ]
+        let points = MeetingInsights.trend(issues, through: w4.adding(days: 2, calendar: .dayMath))
+        XCTAssertEqual(points.count, 8, "4 周 × 2 个组")
+        func point(_ w: DayKey, _ g: String) -> MeetingInsights.WeekPoint? { points.first { $0.week == w && $0.group == g } }
+        XCTAssertEqual(point(w1, "组A").map { [$0.open, $0.new, $0.resolved] }, [2, 2, 0])
+        XCTAssertEqual(point(w2, "组A").map { [$0.open, $0.new, $0.resolved] }, [3, 1, 0])
+        XCTAssertEqual(point(w3, "组A").map { [$0.open, $0.new, $0.resolved] }, [1, 0, 1])
+        XCTAssertEqual(point(w4, "组A").map { [$0.open, $0.new, $0.resolved] }, [1, 0, 0])
+        XCTAssertEqual(point(w1, "组B")?.open, 0)
+        XCTAssertEqual(point(w3, "组B").map { [$0.open, $0.new] }, [1, 1])
+        // 只看最近两周
+        XCTAssertEqual(Set(MeetingInsights.trend(issues, through: w4, maxWeeks: 2).map(\.week)), [w3, w4])
+        XCTAssertEqual(MeetingInsights.trend([], through: w4), [])
+    }
+
+    func testGroupStats() {
+        let issues = [
+            issue("1", first: w1, last: w4),
+            issue("2", first: w1, last: w3, status: .resolved, resolved: w3),
+            issue("3", first: w2, last: w3, status: .resolved, resolved: w3),
+            issue("4", group: "组B", first: w3, last: w4),
+            issue("5", group: "组B", first: w4, last: w4),
+        ]
+        let stats = MeetingInsights.groupStats(issues, week: w4)
+        XCTAssertEqual(stats.map(\.group), ["组B", "组A"], "挂着的多的在前")
+        XCTAssertEqual(stats[1].open, 1)
+        XCTAssertEqual(stats[1].resolved, 2)
+        XCTAssertEqual(stats[1].oldestWeeks, 4)
+        XCTAssertEqual(stats[1].averageWeeksToResolve, 2.5)
+        XCTAssertEqual(stats[0].open, 2)
+        XCTAssertNil(stats[0].averageWeeksToResolve)
+        // 一样多：按文档里的先后
+        XCTAssertEqual(MeetingInsights.groupStats(Array(issues.prefix(4)), week: w4).map(\.group), ["组A", "组B"])
     }
 }

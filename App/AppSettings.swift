@@ -120,6 +120,10 @@ struct AppSettings: Codable, Equatable {
     var monthlyReport: Bool = true
     /// 每周一推送上周的管理摘要（只有管理者、管理员会发）
     var weeklyDigest: Bool = true
+    /// 周一早上提醒我负责的周会问题（负责人里有「我的名字」的）
+    var meetingMineReminder = true
+    /// 周会文档每周更新后，把各组还挂着的问题发到微信
+    var meetingWeChat = false
     /// 遥测下班后补觉到几点（给快捷指令的勿扰自动化用）
     var restFocusUntil = ClockTime(hour: 14, minute: 0)
     /// 遥测接班时间（上一班到这时下班）；接班前多少分钟提醒，0 不提醒
@@ -422,6 +426,7 @@ extension AppSettings {
         a.weChatDaily = o.weChatDaily
         a.weChatChanges = o.weChatChanges
         a.weChatTeam = o.weChatTeam
+        a.meetingWeChat = o.meetingWeChat
         a.dutyHeadsUp = o.dutyHeadsUp
         a.syncState = o.syncState
         a.lastSyncAttempt = o.lastSyncAttempt

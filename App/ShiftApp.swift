@@ -121,7 +121,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
-        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices, meeting
+        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices, meeting, meetingMine
         var id: String { rawValue }
     }
 
@@ -276,9 +276,9 @@ struct RootView: View {
                     SiteNoticesView()
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
                 }
-            case .meeting:
+            case .meeting, .meetingMine:
                 NavigationStack {
-                    MeetingIssuesView()
+                    MeetingIssuesView(mineOnly: sheet == .meetingMine)
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
                 }
             case .rosterLog, .teamChanges:
@@ -375,6 +375,7 @@ enum ScreenCatalog {
         case "meeting": MeetingIssuesView()
         case "meetingEdit": MeetingIssuesView(editing: "调度组")
         case "meetingSource": MeetingSourceView()
+        case "meetingTrend": MeetingTrendView()
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         default: TodayView()

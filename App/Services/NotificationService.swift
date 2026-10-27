@@ -106,6 +106,22 @@ enum NotificationService {
                                                     trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
     }
 
+    /// 周一早上 9 点提醒我负责的、还没解决的周会问题（周会前看一眼进展）。
+    /// 周会问题一变、重排提醒时重新登记；没有就取消
+    static func scheduleMeetingReminder(_ issues: [MeetingIssue]) async {
+        let id = "meeting-mine"
+        center.removePendingNotificationRequests(withIdentifiers: [id])
+        guard !issues.isEmpty else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "📝 你负责的周会问题还有 \(issues.count) 个没解决"
+        content.body = issues.prefix(3).map { "· " + $0.text }.joined(separator: "\n")
+            + (issues.count > 3 ? "\n· 还有 \(issues.count - 3) 个" : "")
+        content.sound = .default
+        content.userInfo = ["route": "meetingMine"]
+        let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: 9, minute: 0, weekday: 2), repeats: false)
+        try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+    }
+
     /// 下一条要弹的排班提醒。
     static func nextReminder() async -> (date: Date, title: String)? {
         await center.pendingNotificationRequests()

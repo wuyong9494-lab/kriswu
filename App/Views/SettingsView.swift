@@ -410,6 +410,9 @@ struct SettingsView: View {
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("每周一发一条我的一周小结", isOn: $store.settings.personalWeekly)
+            if !store.meeting.issues.isEmpty {
+                Toggle("周一早上提醒我负责的周会问题", isOn: $store.settings.meetingMineReminder)
+            }
             Toggle("值遥测时锁屏显示倒计时", isOn: $store.settings.liveActivity)
             Toggle("到点语音播报", isOn: $store.settings.voiceEnabled)
             if store.settings.voiceEnabled {
@@ -464,6 +467,9 @@ struct SettingsView: View {
                 Toggle("每天的提醒也发到微信", isOn: $store.settings.weChatDaily)
                 Toggle("排班变动也发到微信", isOn: $store.settings.weChatChanges)
                 Toggle("同事的排班变动、网站公告也发到微信", isOn: $store.settings.weChatTeam)
+                if !store.meeting.issues.isEmpty || !store.meeting.docURL.isEmpty {
+                    Toggle("周会文档更新后把各组的问题发到微信", isOn: $store.settings.meetingWeChat)
+                }
                 // 月报、管理摘要里都是同事的名字：跟着上面这个开关
                 if store.settings.weChatTeam {
                     Toggle("每月 1 号发上个月的工作量月报", isOn: $store.settings.monthlyReport)

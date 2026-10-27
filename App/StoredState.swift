@@ -17,6 +17,8 @@ struct MeetingState: Codable, Equatable {
     var scriptURL = ""
     /// 写回金山文档的记录（新的在前）
     var writeLog: [String] = []
+    /// 这一周的问题已经发到微信了
+    var pushedWeek: DayKey?
 }
 
 /// 会越攒越多的记录：同步记录、「排班有更新」、清单历史。单独存在 records.json（以前在设置里）

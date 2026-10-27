@@ -91,7 +91,11 @@ final class AppStore: ObservableObject {
 
     /// 周会问题跟进（单独存在 meeting.json）
     @Published var meeting = MeetingState() {
-        didSet { if meeting != oldValue { saveSide(meeting, to: Self.meetingURL, blocked: meetingBlocked) } }
+        didSet {
+            guard meeting != oldValue else { return }
+            saveSide(meeting, to: Self.meetingURL, blocked: meetingBlocked)
+            if meeting.issues != oldValue.issues { Task { await scheduleMeetingReminder() } }
+        }
     }
     /// 同步记录、「排班有更新」、清单历史（单独存在 records.json）
     @Published var records = RecordsState() {
@@ -386,7 +390,14 @@ final class AppStore: ObservableObject {
             MeetingIssue(id: id, group: group, text: text, firstWeek: first, lastWeek: status == .quiet ? last : week, status: status,
                          resolvedWeek: status == .resolved ? week : nil, detail: detail, source: source)
         }
-        return [
+        // 早几周已经解决的（各组趋势里看得出走势）
+        let solved = [
+            MeetingIssue(id: "d0", group: "调度组", text: "交接表格式统一", firstWeek: week.adding(days: -42), lastWeek: week.adding(days: -21),
+                         status: .resolved, resolvedWeek: week.adding(days: -21), detail: "本周问题 · 负责人：周远"),
+            MeetingIssue(id: "m0", group: "管理组", text: "夜间巡检记录补全", firstWeek: week.adding(days: -35), lastWeek: week.adding(days: -14),
+                         status: .resolved, resolvedWeek: week.adding(days: -14), detail: "本周问题 · 负责人：孙悦"),
+        ]
+        return solved + [
             issue("d1", "调度组", "接入新站后排队规则不清", first: earlier, status: .open,
                   detail: "上上周问题进展 · 负责人：林夏 · 进展：进行中", source: source(2, 1, dispatch, "上上周问题进展", "林夏", "1. 进行中；2. 完成")),
             issue("d2", "调度组", "接口改造", first: last, status: .resolved,
@@ -394,9 +405,9 @@ final class AppStore: ObservableObject {
             issue("d3", "调度组", "增加不参与合并的标识", first: last, status: .open,
                   detail: "上上周问题进展 · 负责人：林夏", source: source(2, 3, dispatch, "上上周问题进展", "林夏", "1. 进行中；2. 完成")),
             issue("d4", "调度组", "参数位置不能修改", first: week, status: .open,
-                  detail: "本周问题 · 负责人：周远", source: source(3, 1, "参数位置不能修改", "本周问题", "周远", "")),
+                  detail: "本周问题 · 负责人：陈晨", source: source(3, 1, "参数位置不能修改", "本周问题", "陈晨", "")),
             issue("m1", "管理组", "异常结果判断标准不清，需要给出结论", first: earlier, status: .open,
-                  detail: "（上周）异常处置问题 · 负责人：孙悦、赵一凡 · 进展：再讨论", source: nil),
+                  detail: "（上周）异常处置问题 · 负责人：孙悦、陈晨 · 进展：再讨论", source: nil),
             issue("m2", "管理组", "重传两次后仍有缺失", first: last, status: .quiet,
                   detail: "（上周）异常处置问题 · 负责人：孙悦", source: nil),
             issue("r1", "遥控组", "回放功能开发", first: last, status: .resolved,
@@ -406,7 +417,7 @@ final class AppStore: ObservableObject {
         ]
     }
 
-    /// 以前读错过表、把同事的名字当成了我的班（「焦洋」「王健」）：清掉这些日子，下次同步当作重新开始（不提醒变动、不重复记），
+    /// 以前读错过表、把同事的名字当成了我的班（「戴明」「韩松」）：清掉这些日子，下次同步当作重新开始（不提醒变动、不重复记），
     /// 因此记下的假变动、换班账一起去掉
     func repairNameShifts() {
         guard !Self.isDemo else { return }
@@ -442,7 +453,7 @@ final class AppStore: ObservableObject {
         return known.filter { !isMe($0) && !matcher.isStrictMatch($0) && !GroupNotes.isGroup($0) }
     }
 
-    /// 这条「我的班」里出现的同事名字（「焦洋」「焦洋(5)」「焦洋 王健」都认得出）；没有返回 nil
+    /// 这条「我的班」里出现的同事名字（「戴明」「戴明(5)」「戴明 韩松」都认得出）；没有返回 nil
     func colleagueName(in raw: String, colleagues: Set<String>) -> String? {
         let cleaned = raw.replacingOccurrences(of: #"[（(]\s*-?\d+\s*[)）]"#, with: " ", options: .regularExpression)
         return cleaned.split(whereSeparator: { "+、,，;；/ \t\n".contains($0) }).map(String.init).first(where: colleagues.contains)

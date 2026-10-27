@@ -65,6 +65,17 @@ enum DS {
             Color(light: 0xFF453A, dark: 0xFF6961),   // 红
         ]
 
+        /// 图表里区分几个组（固定顺序，第 1 组永远是蓝的；深浅两套都校验过色弱也分得清）
+        static let series: [Color] = [
+            Color(light: 0x2A78D6, dark: 0x3987E5),   // 蓝
+            Color(light: 0xEB6834, dark: 0xD95926),   // 橙
+            Color(light: 0x1BAF7A, dark: 0x199E70),   // 青绿
+            Color(light: 0xEDA100, dark: 0xC98500),   // 黄
+            Color(light: 0xE87BA4, dark: 0xD55181),   // 品红
+            Color(light: 0x008300, dark: 0x008300),   // 绿
+            Color(light: 0x6250D6, dark: 0x9085E9),   // 紫
+        ]
+
         /// 每个图标固定一种颜色（同一个功能到哪都是同一个颜色）
         static func vivid(for key: String) -> Color {
             var h: UInt32 = 2166136261

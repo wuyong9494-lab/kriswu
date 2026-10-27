@@ -108,6 +108,7 @@ extension AppStore {
         let count = sections.reduce(0) { $0 + $1.items.count }
         s.message = "\(source)读到 \(sections.count) 个组、\(count) 条（\(Date().formatted(date: .abbreviated, time: .shortened))）：\(summary)"
         meeting = s
+        Task { await pushMeetingToWeChatIfDue() }
         return summary
     }
 
@@ -160,10 +161,40 @@ extension AppStore {
             }
             return
         }
-        // 读到了新的一版：通知一下
+        // 读到了新的一版：通知一下（有我负责的就带上）
         if meeting.week == week, meeting.fingerprint != before {
-            await NotificationService.notifyNow(id: "meeting-\(week)", title: "📝 周会文档更新了", body: result, route: "meeting")
+            let mine = myMeetingIssues.filter { $0.status == .open }.count
+            await NotificationService.notifyNow(id: "meeting-\(week)", title: "📝 周会文档更新了",
+                                                body: result + (mine > 0 ? "；你负责的 \(mine) 个" : ""),
+                                                route: mine > 0 ? "meetingMine" : "meeting")
         }
+        await pushMeetingToWeChatIfDue()
+    }
+
+    // MARK: - 我负责的、发到微信
+
+    /// 我负责的、还没解决的（负责人按「我的名字」里的几种写法对）
+    var myMeetingIssues: [MeetingIssue] {
+        MeetingInsights.mine(meeting.issues, names: settings.aliases)
+    }
+
+    /// 周一早上提醒我负责的（没开、没有就取消）
+    func scheduleMeetingReminder() async {
+        let open = settings.meetingMineReminder && !Self.isDemo ? myMeetingIssues.filter { $0.status == .open } : []
+        await NotificationService.scheduleMeetingReminder(open)
+    }
+
+    /// 这一周的文档读到了、还没发过：把各组挂着的问题发到微信（一周一次）
+    func pushMeetingToWeChatIfDue() async {
+        let week = MeetingTracker.monday(of: .today)
+        guard settings.meetingWeChat, settings.weChatEnabled, !Self.isDemo,
+              meeting.week == week, meeting.pushedWeek != week else { return }
+        // 先记上，免得自动读到和手动导入同时发两遍；没发出去再清掉，下次运行时补发
+        let last = meeting.pushedWeek
+        meeting.pushedWeek = week
+        let sent = await pushToWeChat(title: "📝 周会问题（\(week.month)/\(week.day) 那周）",
+                                      content: MeetingInsights.digest(meeting.issues, week: week))
+        if !sent { meeting.pushedWeek = last }
     }
 
     // MARK: - 编辑一个组、写回金山文档

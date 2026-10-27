@@ -303,7 +303,7 @@ public enum JSONScheduleExtractor {
                 if v.count > 40 { s -= 1; continue }
                 if matcher.match(v) != nil { s += 3 }
                 if parser.isMe(v) { s -= 3 }
-                // 像人名、又不像班次（「焦洋」「王健」）：多半是交接人、填表人这类字段，不是我的班
+                // 像人名、又不像班次（「戴明」「韩松」）：多半是交接人、填表人这类字段，不是我的班
                 else if matcher.match(v) == nil && RosterExtractor.looksLikeName(v) { s -= 3 }
             }
             let lower = k.lowercased()
