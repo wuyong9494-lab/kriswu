@@ -3,13 +3,21 @@ import UIKit
 
 /// 系统分享面板（发到微信等）：和 ShareLink 不同，能知道是不是真的发出去了
 enum ActivityShare {
+    /// 只往微信这类聊天 App 发：面板里去掉用不上的（隔空投送、信息、邮件、打印……），微信就挪到 App 那一排前面
     @MainActor
-    static func present(_ items: [Any], completion: @escaping @MainActor (Bool) -> Void) {
+    static var chatOnly: [UIActivity.ActivityType] {
+        [.airDrop, .message, .mail, .print, .assignToContact, .addToReadingList, .openInIBooks, .markupAsPDF]
+    }
+
+    @MainActor
+    static func present(_ items: [Any], excluding excluded: [UIActivity.ActivityType] = [],
+                        completion: @escaping @MainActor (Bool) -> Void) {
         guard let root = UIApplication.shared.connectedScenes
             .compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { return }
         var top = root
         while let presented = top.presentedViewController { top = presented }
         let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.excludedActivityTypes = excluded
         controller.completionWithItemsHandler = { _, completed, _, _ in
             Task { @MainActor in completion(completed) }
         }

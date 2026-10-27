@@ -119,7 +119,7 @@ struct PassPlanView: View {
                         .disabled(images.count < groups.count)
                     }
                 } footer: {
-                    Text("依次发：发完一家自动弹出下一家，分享面板最上面写着这次发给谁、该选哪个群。微信最近聊过的群会排在分享面板第一排，点那个群、再点「发送」就发出去了（微信不让别的 App 直接替你发到群里，这两下省不掉）。")
+                    Text("依次发：点一下从第一家开始，发完一家自动弹出下一家，面板最上面写着这次发给谁、该选哪个群。每家在面板里点：微信 → 发送给朋友 → 选群 → 发送。微信不让别的 App 替你选群、替你发，这几下省不掉；面板里用不上的隔空投送、信息、邮件已经拿掉，微信在前面，每次点同一个位置。")
                 }
                 // 分不出是哪家的放最上面：先分好再发
                 if let lost = all.first(where: { $0.name == PassPlan.unassigned }) {
@@ -392,7 +392,7 @@ struct PassPlanView: View {
     private func share(_ item: Any, name: String, then next: (@MainActor () -> Void)? = nil) {
         let target = store.settings.passPlanGroups[name].map { " → 发到「\($0)」" } ?? ""
         let payload = SharePayload(item, title: "\(name)数传计划\(target)", preview: images[name])
-        ActivityShare.present([payload]) { completed in
+        ActivityShare.present([payload], excluding: ActivityShare.chatOnly) { completed in
             guard completed else { return }
             markSent(name)
             next?()
