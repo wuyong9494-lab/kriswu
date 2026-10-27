@@ -84,6 +84,14 @@ public enum PassPlan {
 
         public init(slots: [Slot]) { self.slots = slots }
 
+        /// 「是否应急」那一列（导出的 Excel 里有，网页上的表没有）
+        public var emergencyIndex: Int? {
+            slots.firstIndex { $0.label.filter { !$0.isWhitespace }.contains("应急") }
+        }
+
+        /// 填「是 / 不是」的列（是否应急、是否重点保障）
+        func isYesNo(_ i: Int) -> Bool { slots[i].label.trimmingCharacters(in: .whitespaces).hasPrefix("是否") }
+
         /// 表头一个个认：同一种列出现两次，后面那个当作认不出含义的列
         init(labels: [(String, Double)]) {
             var used = Set<Column>()
@@ -305,6 +313,17 @@ public enum PassPlan {
 
     /// 一行里有卫星、地面站、开始时间才算一条（只认出一两个字的行是噪点）
     static func row(cells: [String], layout: Layout) -> PassPlanRow? {
+        var cells = cells
+        // 「是否……」那几列的字紧挨着左边一列（Excel 里左边那格的字被截断，右边紧跟着「是」），常被认成一块（「通道2:900是」）：
+        // 这一格空着、左边那格末尾是「是 / 不是 / 否」，就挪回来
+        for i in layout.slots.indices.dropFirst() where i < cells.count && layout.isYesNo(i) && !layout.isYesNo(i - 1) {
+            guard cells[i].trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            let left = cells[i - 1].trimmingCharacters(in: .whitespaces)
+            if let answer = ["不是", "是", "否"].first(where: { left.hasSuffix($0) && left.count > $0.count }) {
+                cells[i] = answer
+                cells[i - 1] = String(left.dropLast(answer.count)).trimmingCharacters(in: .whitespaces)
+            }
+        }
         var values: [Column: String] = [:]
         for (i, slot) in layout.slots.enumerated() where i < cells.count {
             if let c = slot.column { values[c] = cells[i] }
@@ -384,7 +403,26 @@ public enum PassPlan {
         if operatorName(of: r.station, rules: rules) == nil { list.append("分不出是哪家（运营商对照表里没有这个站）") }
         if !r.orbit.isEmpty, !r.orbit.allSatisfy(\.isNumber) { list.append("圈号不全是数字") }
         if r.satellite.isEmpty, has(.satellite) { list.append("没认出卫星名称") }
+        if layout?.emergencyIndex != nil, emergency(r, layout: layout) == nil {
+            list.append("是否应急没认出来（发的时候按不是应急算）")
+        }
         return list
+    }
+
+    // MARK: - 应急
+
+    /// 这一条是不是应急计划：看「是否应急」那一列；没有这一列返回 nil，认不出「是 / 不是」也返回 nil
+    public static func emergency(_ r: PassPlanRow, layout: Layout?) -> Bool? {
+        guard let i = layout?.emergencyIndex else { return nil }
+        let value = i < r.cells.count ? r.cells[i].filter { !$0.isWhitespace } : ""
+        if ["是", "是的", "Y", "y", "YES", "Yes", "yes", "√", "✓"].contains(value) { return true }
+        if ["不是", "否", "N", "n", "NO", "No", "no", "×"].contains(value) { return false }
+        return nil
+    }
+
+    /// 发图时下面那句话：这一家里有应急计划用 urgent，没有用 normal
+    public static func caption(_ rows: [PassPlanRow], layout: Layout?, normal: String, urgent: String) -> String {
+        rows.contains { emergency($0, layout: layout) == true } ? urgent : normal
     }
 
     // MARK: - 按运营商分开
@@ -526,10 +564,13 @@ public enum PassPlan {
     }
 
     /// 发到群里的一段话：标题、表头、每条一行，和图上的表一样
-    public static func message(name: String, rows: [PassPlanRow], layout: Layout? = nil) -> String {
+    /// caption：最后一行的那句话（「麻烦确认一下数传计划」），空的不加
+    public static func message(name: String, rows: [PassPlanRow], layout: Layout? = nil, caption: String = "") -> String {
         let t = table(rows, layout: layout)
-        return ([title(name: name, rows: rows), t.headers.joined(separator: "  ")]
-                + t.cells.map { $0.filter { !$0.isEmpty }.joined(separator: "  ") }).joined(separator: "\n")
+        let lines = [title(name: name, rows: rows), t.headers.joined(separator: "  ")]
+            + t.cells.map { $0.filter { !$0.isEmpty }.joined(separator: "  ") }
+            + (caption.isEmpty ? [] : [caption])
+        return lines.joined(separator: "\n")
     }
 
     /// 「2026-10-27 22:57:51」→「22:57:51」；不是这个格式的原样

@@ -3003,6 +3003,38 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(PassPlan.singleValue([box("12", 0.0, 0.015), box("10885", 0.06, 0.06)], center: 0.08, gap: 0.016), "10885")
     }
 
+    /// 是否应急：认出「是」的那家，图下面那句话加上「应急计划优先推送」；
+    /// 「是」紧挨着左边数传速率的字、被认成一块的，挪回来
+    func testEmergencyCaption() {
+        let table = [
+            ["卫星", "地面站", "圈次", "数传开始", "数传速率", "是否应急", "是否重点保障"],
+            ["SAT-A", "甲站-北区05", "101", "2026-10-27 22:57:51", "通道1:900M， 通道2:900是", "", "不是"],
+            ["SAT-B", "甲站-北区01", "102", "2026-10-27 20:31:27", "通道1:900M", "不是", "不是"],
+            ["SAT-C", "乙站-南区02", "103", "2026-10-28 01:09:24", "通道1:900M 不是", "", "不是"],
+            ["SAT-D", "乙站-南区03", "104", "2026-10-28 02:09:24", "通道1:900M", "", "不是"],
+        ]
+        let reading = PassPlan.readTable(table)
+        let rows = reading.rows
+        XCTAssertEqual(rows[0].info, "通道1:900M， 通道2:900", "粘在一起的「是」挪回是否应急")
+        XCTAssertEqual(PassPlan.emergency(rows[0], layout: reading.layout), true)
+        XCTAssertEqual(PassPlan.emergency(rows[1], layout: reading.layout), false)
+        XCTAssertEqual(PassPlan.emergency(rows[2], layout: reading.layout), false, "「不是」也挪回来，不会当成「是」")
+        XCTAssertEqual(rows[2].info, "通道1:900M")
+        XCTAssertNil(PassPlan.emergency(rows[3], layout: reading.layout), "空着的认不出")
+        XCTAssertEqual(PassPlan.problems(rows[3], rules: [PassPlan.OperatorRule(name: "乙", prefixes: ["乙站"])], layout: reading.layout),
+                       ["是否应急没认出来（发的时候按不是应急算）"])
+        XCTAssertNil(PassPlan.emergency(rows[0], layout: nil), "网页上的表没有这一列")
+
+        let normal = "麻烦确认一下数传计划", urgent = "麻烦确认一下数传计划，应急计划优先推送"
+        let groups = PassPlan.grouped(rows)
+        XCTAssertEqual(groups.map(\.name), ["甲站", "乙站"])
+        XCTAssertEqual(PassPlan.caption(groups[0].rows, layout: reading.layout, normal: normal, urgent: urgent), urgent)
+        XCTAssertEqual(PassPlan.caption(groups[1].rows, layout: reading.layout, normal: normal, urgent: urgent), normal)
+        XCTAssertTrue(PassPlan.message(name: "甲站", rows: groups[0].rows, layout: reading.layout, caption: urgent).hasSuffix("\n" + urgent))
+        // 表里的「是否应急」那一格也是挪好的
+        XCTAssertEqual(PassPlan.table(groups[0].rows, layout: reading.layout).cells[0].suffix(2), ["是", "不是"])
+    }
+
     func testTableFileKeepsItsColumns() {
         let table = [
             ["卫星", "地面站", "圈次", "数传开始", "创建时间", "是否应急", ""],

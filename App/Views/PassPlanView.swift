@@ -49,6 +49,11 @@ struct PassPlanView: View {
     private var layout: PassPlan.Layout? { store.passPlan.layout }
     /// 运营商对照表（没填名字的那行不算）
     private var rules: [PassPlan.OperatorRule] { store.settings.passPlanOperators.filter { !$0.name.isEmpty } }
+    /// 图下面那句话（这一家有应急计划就是「……应急计划优先推送」）
+    private func caption(_ rows: [PassPlanRow]) -> String {
+        PassPlan.caption(rows, layout: layout, normal: store.settings.passPlanCaption, urgent: store.settings.passPlanUrgentCaption)
+    }
+
     /// 分得出是哪家的（能发的）
     private var sendable: [(name: String, rows: [PassPlanRow])] {
         PassPlan.grouped(rows, rules: rules).filter { $0.name != PassPlan.unassigned }
@@ -114,7 +119,7 @@ struct PassPlanView: View {
                         .disabled(images.count < groups.count)
                     }
                 } footer: {
-                    Text("依次发：发完一家自动弹出下一家，分享面板最上面写着这次发给谁、该选哪个群。")
+                    Text("依次发：发完一家自动弹出下一家，分享面板最上面写着这次发给谁、该选哪个群。微信最近聊过的群会排在分享面板第一排，点那个群、再点「发送」就发出去了（微信不让别的 App 直接替你发到群里，这两下省不掉）。")
                 }
                 // 分不出是哪家的放最上面：先分好再发
                 if let lost = all.first(where: { $0.name == PassPlan.unassigned }) {
@@ -127,7 +132,8 @@ struct PassPlanView: View {
                         }
                         sendButtons(group.name, rows: group.rows)
                     } header: {
-                        header(group.name, count: group.rows.count)
+                        header(group.name, count: group.rows.count,
+                               urgent: group.rows.contains { PassPlan.emergency($0, layout: layout) == true })
                     }
                 }
                 Section {
@@ -142,6 +148,11 @@ struct PassPlanView: View {
                     PassPlanOperatorsView()
                 } label: {
                     LabeledContent("运营商对照表", value: rules.isEmpty ? "还没填" : "\(rules.count) 家")
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("图片下面那句话").font(.caption).foregroundStyle(.secondary)
+                    TextField("没有应急计划时", text: $store.settings.passPlanCaption)
+                    TextField("有应急计划时（「是否应急」认出「是」）", text: $store.settings.passPlanUrgentCaption)
                 }
                 Toggle("每天提醒发计划", isOn: $store.settings.passPlanReminder)
                 if store.settings.passPlanReminder {
@@ -182,7 +193,7 @@ struct PassPlanView: View {
         }
         .sheet(item: $editing) { target in
             NavigationStack {
-                PassPlanRowEditor(row: target.row, isNew: target.index == nil) { saved in
+                PassPlanRowEditor(row: target.row, layout: layout, isNew: target.index == nil) { saved in
                     if let i = target.index, store.passPlan.rows.indices.contains(i) {
                         if let saved { store.passPlan.rows[i] = saved } else { store.passPlan.rows.remove(at: i) }
                     } else if let saved {
@@ -223,7 +234,9 @@ struct PassPlanView: View {
                 }
             }
         }
-        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")") { renderImages() }
+        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")-\(store.settings.passPlanCaption)-\(store.settings.passPlanUrgentCaption)") {
+            renderImages()
+        }
     }
 
     // MARK: - 一家的标题、一行
@@ -275,9 +288,14 @@ struct PassPlanView: View {
         }
     }
 
-    private func header(_ name: String, count: Int) -> some View {
+    private func header(_ name: String, count: Int, urgent: Bool = false) -> some View {
         HStack {
             Text("\(name) · \(count) 条")
+            if urgent {
+                Text("应急").font(.caption2.weight(.bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(DS.Palette.danger, in: Capsule())
+            }
             if store.passPlan.sent.contains(name) {
                 Label("已发", systemImage: "checkmark.circle.fill")
                     .labelStyle(.titleAndIcon)
@@ -301,6 +319,9 @@ struct PassPlanView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text([PassPlan.shortTime(row.start), PassPlan.shortTime(row.end)].filter { !$0.isEmpty }.joined(separator: "–"))
                     .font(.subheadline.weight(.semibold)).monospacedDigit()
+                if PassPlan.emergency(row, layout: layout) == true {
+                    Text("应急").font(.caption2.weight(.bold)).foregroundStyle(DS.Palette.danger)
+                }
                 Spacer()
                 Text(row.satellite.isEmpty ? row.satelliteID : row.satellite).font(.subheadline)
             }
@@ -330,7 +351,7 @@ struct PassPlanView: View {
             .buttonStyle(.borderedProminent)
             .tint(sent ? DS.Palette.success : DS.Palette.accent)
             .disabled(images[name] == nil)
-            Button { share(PassPlan.message(name: name, rows: rows, layout: layout), name: name) } label: {
+            Button { share(PassPlan.message(name: name, rows: rows, layout: layout, caption: caption(rows)), name: name) } label: {
                 Label("发文字", systemImage: "text.alignleft").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -346,10 +367,10 @@ struct PassPlanView: View {
         problem = nil
         Task {
             do {
-                let reading = try await work()
-                let found = reading.rows
-                withAnimation { store.passPlan = PassPlanSession(rows: found, layout: reading.layout) }
-                let doubtful = found.filter { !PassPlan.problems($0, rules: rules, layout: reading.layout).isEmpty }.count
+                let result = try await work()
+                let found = result.rows
+                withAnimation { store.passPlan = PassPlanSession(rows: found, layout: result.layout) }
+                let doubtful = found.filter { !PassPlan.problems($0, rules: rules, layout: result.layout).isEmpty }.count
                 let grouped = PassPlan.grouped(found, rules: rules)
                 let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
                 let families = grouped.filter { $0.name != PassPlan.unassigned }.count
@@ -426,7 +447,8 @@ struct PassPlanView: View {
     private func renderImages() {
         var made: [String: UIImage] = [:]
         for group in sendable {
-            let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows, layout: layout))
+            let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows, layout: layout,
+                                                                caption: caption(group.rows)))
             renderer.scale = 3
             if let image = renderer.uiImage { made[group.name] = image }
         }
@@ -439,6 +461,15 @@ struct PassPlanSheet: View {
     let name: String
     let rows: [PassPlanRow]
     var layout: PassPlan.Layout?
+    /// 表下面那一行字（「麻烦确认一下数传计划」）
+    var caption = ""
+
+    /// 「是否应急」在表里是第几列（前面多了一列 No.）
+    private var urgentColumn: Int? {
+        layout?.emergencyIndex.map { index in
+            1 + (layout?.slots.prefix(index).filter { $0.column != .number }.count ?? 0)
+        }
+    }
 
     /// 和网页上的表一样：同样的表头、列的先后、行的先后，时间写全；居中、每行一条细线
     var body: some View {
@@ -455,12 +486,19 @@ struct PassPlanSheet: View {
                 ForEach(Array(table.cells.enumerated()), id: \.offset) { _, cells in
                     Divider().gridCellUnsizedAxes(.horizontal)
                     GridRow {
-                        ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                            Text(cell).font(.system(size: 14)).monospacedDigit().padding(.vertical, 10)
+                        ForEach(Array(cells.enumerated()), id: \.offset) { c, cell in
+                            // 「是否应急」是「是」的那一格标红
+                            let urgent = c == urgentColumn && cell.filter { !$0.isWhitespace } == "是"
+                            Text(cell).font(.system(size: 14, weight: urgent ? .bold : .regular)).monospacedDigit()
+                                .foregroundStyle(urgent ? Color.red : Color.black)
+                                .padding(.vertical, 10)
                         }
                     }
                 }
                 Divider().gridCellUnsizedAxes(.horizontal)
+            }
+            if !caption.isEmpty {
+                Text(caption).font(.system(size: 18, weight: .semibold)).padding(.top, 4)
             }
         }
         .foregroundStyle(Color.black)
@@ -472,10 +510,29 @@ struct PassPlanSheet: View {
 
 /// 改一条（认错的字、漏的一条）
 struct PassPlanRowEditor: View {
-    @State var row: PassPlanRow
+    @State private var row: PassPlanRow
+    /// 读到的那张表的列：认不出含义的列（是否应急、创建时间……）也能改
+    private let layout: PassPlan.Layout?
     let isNew: Bool
     var onDone: (PassPlanRow?) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    init(row: PassPlanRow, layout: PassPlan.Layout?, isNew: Bool, onDone: @escaping (PassPlanRow?) -> Void) {
+        var r = row
+        if let layout, r.cells.count < layout.slots.count {
+            r.cells += Array(repeating: "", count: layout.slots.count - r.cells.count)
+        }
+        _row = State(initialValue: r)
+        self.layout = layout
+        self.isNew = isNew
+        self.onDone = onDone
+    }
+
+    /// 只有原表里才有、App 认不出含义的那几列
+    private var otherColumns: [Int] {
+        guard let layout else { return [] }
+        return layout.slots.indices.filter { layout.slots[$0].column == nil }
+    }
 
     var body: some View {
         Form {
@@ -492,6 +549,15 @@ struct PassPlanRowEditor: View {
                 TextField("状态", text: $row.status)
             } footer: {
                 Text("时间写成 2026-10-27 22:57:51 这样")
+            }
+            if let layout, !otherColumns.isEmpty {
+                Section {
+                    ForEach(otherColumns, id: \.self) { i in
+                        TextField(layout.slots[i].label, text: $row.cells[i])
+                    }
+                } footer: {
+                    Text("「是否应急」写「是」或「不是」：哪家有「是」，图下面就写「应急计划优先推送」。")
+                }
             }
             if !isNew {
                 Section {
