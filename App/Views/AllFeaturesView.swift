@@ -65,6 +65,10 @@ struct AllFeaturesView: View {
                 feature("各组工作内容", "组A–组E 各干什么", "list.bullet.rectangle", keywords: "组别 说明 分工") { GroupNotesView() },
                 feature("网站公告", "值班网站上的公告", "pin", keywords: "通知 公告") { SiteNoticesView() },
             ]),
+            FeatureGroup(title: "休息一下", features: [
+                feature("叠叠消", "三张一样的凑一起消掉；能和身边同事面对面比，也能发挑战码到微信群比", "square.stack.3d.up.fill",
+                        keywords: "游戏 小游戏 羊了个羊 消除 三消 对战 多人 挑战 今日挑战") { TileGameHomeView() },
+            ]),
             FeatureGroup(title: "设置和帮助", features: [
                 feature("规则说明", "工作量、换班、周会都是怎么算的", "text.book.closed", keywords: "规则 怎么算 口径") { RulesExplainView() },
                 feature("自检与诊断", "哪条连接不通，出问题先看这里", "stethoscope", keywords: "诊断 故障 同步失败 不通") { DiagnosticsView() },
