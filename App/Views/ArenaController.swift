@@ -8,6 +8,8 @@ struct ArenaStart: Codable, Equatable {
         var name: String
         var brawler: Brawler
         var team: Int
+        /// 角色等级；老版本房主发来的没有，按 1 级
+        var level: Int?
     }
 
     var round: Int
@@ -18,7 +20,7 @@ struct ArenaStart: Codable, Equatable {
     var map: String?
 
     var entrants: [ArenaGame.Entrant] {
-        seats.map { ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team) }
+        seats.map { ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team, level: $0.level ?? 1) }
     }
 }
 
@@ -54,6 +56,8 @@ final class ArenaController: ObservableObject {
         var mode: ArenaGame.Mode
         var brawler: Brawler
         var name: String
+        /// 自己这个角色的等级（电脑补位的也按这个等级）
+        var level = 1
     }
 
     static let step = 1.0 / 60
@@ -66,6 +70,8 @@ final class ArenaController: ObservableObject {
     private var accumulator = 0.0
     private var hudTimer = 0.0
     @Published private(set) var hud = HUD()
+    /// 打完这局得到的奖杯、金币（结果出来时记一次）
+    @Published private(set) var reward: ArenaProgress.Reward?
     /// 联机时房主走了
     @Published private(set) var disconnected = false
     /// 走的摇杆（长度 0–1）
@@ -99,11 +105,12 @@ final class ArenaController: ObservableObject {
         random.shuffle(&others)
         let maps = ArenaMap.pool(for: setup.mode)
         let map = maps[random.below(maps.count)]
-        var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0)]
+        var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
+                                          level: setup.level)]
         for k in 0..<5 {
             let brawler = others[k % others.count]
             let team = setup.mode.isTeams ? (k < 2 ? 0 : 1) : k + 1
-            entrants.append(ArenaGame.Entrant(name: "电脑\(brawler.name)", brawler: brawler, isBot: true, team: team))
+            entrants.append(ArenaGame.Entrant(name: "电脑\(brawler.name)", brawler: brawler, isBot: true, team: team, level: setup.level))
         }
         self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map), me: 0, room: nil, seed: seed)
     }
@@ -353,8 +360,20 @@ final class ArenaController: ObservableObject {
         if hud.result != nil, !recorded {
             recorded = true
             ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
+            reward = ArenaProgressStore.shared.record(outcome(hud.result), brawler: mine.brawler)
         }
         if hud != self.hud { self.hud = hud }
+    }
+
+    /// 这局对自己来说算什么（大乱斗看名次）
+    private func outcome(_ result: ArenaGame.Result?) -> ArenaProgress.Outcome {
+        if game.mode == .showdown {
+            return .place(mine.place ?? (won(result) ? 1 : game.fighters.count))
+        }
+        switch result {
+        case .draw?: return .draw
+        default: return won(result) ? .win : .loss
+        }
     }
 
     func won(_ result: ArenaGame.Result?) -> Bool {
@@ -393,6 +412,37 @@ final class ArenaRecords: ObservableObject {
     }
 }
 
+/// 乱斗的成长（奖杯、金币、角色等级），存在这台手机上
+@MainActor
+final class ArenaProgressStore: ObservableObject {
+    static let shared = ArenaProgressStore()
+    private static let key = "arena.progress"
+
+    @Published private(set) var progress: ArenaProgress
+
+    private init() {
+        progress = UserDefaults.standard.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(ArenaProgress.self, from: $0) }
+            ?? ArenaProgress()
+    }
+
+    func record(_ outcome: ArenaProgress.Outcome, brawler: Brawler) -> ArenaProgress.Reward {
+        let reward = progress.record(outcome, brawler: brawler)
+        save()
+        return reward
+    }
+
+    @discardableResult
+    func upgrade(_ brawler: Brawler) -> Bool {
+        guard progress.upgrade(brawler) else { return false }
+        save()
+        return true
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(progress) { UserDefaults.standard.set(data, forKey: Self.key) }
+    }
+}
+
 // MARK: - 联机房间里：选角色、选玩法、开局
 
 /// 乱斗的联机房间：大家各选各的角色，房主选玩法、点开始；人按进房间的先后分到两队（大乱斗各自为战），不够 3v3 / 6 个人电脑补
@@ -402,6 +452,8 @@ final class ArenaLobby: ObservableObject {
         case pick(Brawler)
         case mode(ArenaGame.Mode)
         case start(ArenaStart)
+        /// 选的角色几级（老版本收到不认识，当 1 级）
+        case level(Int)
     }
 
     struct Playing: Identifiable {
@@ -412,6 +464,7 @@ final class ArenaLobby: ObservableObject {
     let room: GameRoom
     @Published private(set) var mode: ArenaGame.Mode
     @Published private(set) var picks: [String: Brawler] = [:]
+    @Published private(set) var levels: [String: Int] = [:]
     @Published var playing: Playing?
     @Published private(set) var myPick: Brawler
     private var round = 0
@@ -428,6 +481,7 @@ final class ArenaLobby: ObservableObject {
         objectWillChange.send()
         picks[room.me.id] = myPick
         send(.pick(myPick))
+        send(.level(myLevel))
         if room.isHost { send(.mode(mode)) }
         playing?.controller.membersChanged()
     }
@@ -441,6 +495,15 @@ final class ArenaLobby: ObservableObject {
         myPick = brawler
         picks[room.me.id] = brawler
         send(.pick(brawler))
+        send(.level(myLevel))
+    }
+
+    /// 自己选的角色几级
+    var myLevel: Int { ArenaProgressStore.shared.progress.level(myPick) }
+
+    /// 谁的角色几级
+    func level(of member: String) -> Int {
+        member == room.me.id ? myLevel : (levels[member] ?? 1)
     }
 
     func choose(_ newMode: ArenaGame.Mode) {
@@ -466,20 +529,22 @@ final class ArenaLobby: ObservableObject {
         var seats: [ArenaStart.Seat] = []
         for (k, member) in people.enumerated() {
             seats.append(ArenaStart.Seat(member: member.id, name: member.name, brawler: pick(of: member.id) ?? .knight,
-                                         team: mode.isTeams ? k % 2 : k))
+                                         team: mode.isTeams ? k % 2 : k, level: level(of: member.id)))
         }
+        // 电脑补位的按大家的平均等级
+        let botLevel = people.isEmpty ? 1 : Int((Double(people.map { level(of: $0.id) }.reduce(0, +)) / Double(people.count)).rounded())
         if mode.isTeams {
             for team in 0...1 {
                 while seats.filter({ $0.team == team }).count < 3 {
                     let used = Set(seats.filter { $0.team == team }.map(\.brawler))
                     let brawler = Brawler.allCases.first { !used.contains($0) } ?? .knight
-                    seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: team))
+                    seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: team, level: botLevel))
                 }
             }
         } else {
             while seats.count < 6 {
                 let brawler = Brawler.allCases[seats.count % Brawler.allCases.count]
-                seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: seats.count))
+                seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: seats.count, level: botLevel))
             }
         }
         return seats
@@ -494,6 +559,8 @@ final class ArenaLobby: ObservableObject {
         switch message {
         case .pick(let brawler):
             picks[from] = brawler
+        case .level(let level):
+            levels[from] = min(max(level, 1), ArenaProgress.maxLevel)
         case .mode(let newMode):
             if from == room.hostID { mode = newMode }
         case .start(let start):

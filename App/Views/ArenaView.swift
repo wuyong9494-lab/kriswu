@@ -5,6 +5,7 @@ import SwiftUI
 /// 勇者乱斗：斜着往下看的 3D 小地图，左手摇杆走、右手摇杆瞄准开火（点一下自动瞄最近的敌人），大招攒满了上面那个钮亮起来
 struct ArenaHomeView: View {
     @ObservedObject private var records = ArenaRecords.shared
+    @ObservedObject private var growth = ArenaProgressStore.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
     @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .knight
     @State private var playing: ArenaEntry?
@@ -21,8 +22,14 @@ struct ArenaHomeView: View {
         let setup: ArenaController.Setup
     }
 
+    private var progress: ArenaProgress { growth.progress }
+
+    /// 选的角色还没解锁（比如换了一台手机）就用第一个
+    private var chosen: Brawler { progress.isUnlocked(brawler) ? brawler : .knight }
+
     var body: some View {
         List {
+            progressSection
             Section {
                 ForEach(ArenaGame.Mode.allCases, id: \.self) { item in
                     Button {
@@ -43,13 +50,18 @@ struct ArenaHomeView: View {
                     } label: {
                         brawlerRow(item)
                     }
+                    .disabled(!progress.isUnlocked(item))
                 }
             } header: {
                 Text("角色")
+            } footer: {
+                Text("每升一级血量、伤害多 6%，最高 \(ArenaProgress.maxLevel) 级；联机时电脑补位的按大家的平均等级。")
             }
+            upgradeSection
             Section {
                 Button {
-                    playing = ArenaEntry(setup: ArenaController.Setup(mode: mode, brawler: brawler, name: store.settings.aliases.first ?? "我"))
+                    playing = ArenaEntry(setup: ArenaController.Setup(mode: mode, brawler: chosen, name: store.settings.aliases.first ?? "我",
+                                                                      level: progress.level(chosen)))
                 } label: {
                     Label("开打（人不够电脑补位）", systemImage: "play.fill")
                         .font(DS.Font.headline)
@@ -61,7 +73,7 @@ struct ArenaHomeView: View {
                 Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；上面黄圈满了放大招。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
             }
             GameRoomButtons(kind: .arena, remotePlayers: 2...6, nearbyCapacity: 6) { room in
-                lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: brawler))
+                lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: chosen))
             }
         }
         .appList()
@@ -95,8 +107,17 @@ struct ArenaHomeView: View {
     }
 
     private func brawlerRow(_ item: Brawler) -> some View {
-        HStack(spacing: DS.Space.s) {
-            BrawlerBadge(brawler: item, size: 56, selected: brawler == item)
+        let unlocked = progress.isUnlocked(item)
+        let level = progress.level(item)
+        return HStack(spacing: DS.Space.s) {
+            BrawlerBadge(brawler: item, size: 56, selected: chosen == item)
+                .overlay(alignment: .bottomTrailing) {
+                    if !unlocked {
+                        Image(systemName: "lock.fill").font(.caption.weight(.bold)).foregroundStyle(.white)
+                            .padding(5).background(Circle().fill(.black.opacity(0.6)))
+                    }
+                }
+                .opacity(unlocked ? 1 : 0.55)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.name).font(DS.Font.headline).foregroundStyle(.primary)
@@ -105,11 +126,112 @@ struct ArenaHomeView: View {
                         .background(Capsule().fill(DS.Palette.surfaceSunken))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text("血 \(item.maxHealth)").font(DS.Font.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    if unlocked {
+                        Text("\(level) 级").font(DS.Font.caption.weight(.semibold).monospacedDigit()).foregroundStyle(DS.Palette.accent)
+                    }
+                }
+                if unlocked {
+                    HStack(spacing: DS.Space.s) {
+                        Label("\(progress.trophies(item))", systemImage: "trophy.fill").foregroundStyle(.orange)
+                        Text("血 \(item.health(level: level))").foregroundStyle(.secondary)
+                    }
+                    .font(DS.Font.caption.monospacedDigit())
+                } else {
+                    Text("总奖杯到 \(item.unlockAt) 解锁").font(DS.Font.caption).foregroundStyle(.secondary)
                 }
                 Text(item.attackNote + "。" + item.superNote).font(DS.Font.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    // MARK: 奖杯、金币、升级
+
+    private var progressSection: some View {
+        Section {
+            HStack(spacing: DS.Space.l) {
+                Label("\(progress.totalTrophies)", systemImage: "trophy.fill")
+                    .foregroundStyle(.orange)
+                Label("\(progress.coins)", systemImage: "dollarsign.circle.fill")
+                    .foregroundStyle(.yellow)
+                Spacer()
+            }
+            .font(DS.Font.title.monospacedDigit())
+            if let next = progress.nextMilestone {
+                let start = ArenaProgress.road.last { $0.trophies <= max(progress.totalTrophies, progress.reached) }?.trophies ?? 0
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(next.brawler.map { "总奖杯到 \(next.trophies) 解锁\($0.name)" } ?? "总奖杯到 \(next.trophies) 得 \(next.coins) 金币")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(.secondary)
+                    ProgressView(value: Double(min(max(progress.totalTrophies - start, 0), next.trophies - start)),
+                                 total: Double(max(next.trophies - start, 1)))
+                        .tint(.orange)
+                }
+            }
+            NavigationLink {
+                ArenaTrophyRoad()
+            } label: {
+                Label("奖杯之路", systemImage: "flag.checkered")
+            }
+        } footer: {
+            Text("赢一局这个角色 +8 杯，输了 -3（不到 30 杯不扣）；大乱斗按名次。每局都给金币，金币用来升级角色。")
+        }
+    }
+
+    @ViewBuilder private var upgradeSection: some View {
+        let level = progress.level(chosen)
+        Section {
+            if let cost = progress.upgradeCost(chosen) {
+                Button {
+                    growth.upgrade(chosen)
+                } label: {
+                    HStack {
+                        Label("\(chosen.name)升到 \(level + 1) 级", systemImage: "arrow.up.circle.fill")
+                        Spacer()
+                        Label("\(cost)", systemImage: "dollarsign.circle.fill")
+                            .foregroundStyle(progress.coins >= cost ? Color.yellow : Color.secondary)
+                    }
+                }
+                .disabled(progress.coins < cost)
+            } else {
+                Label("\(chosen.name)已经满级了", systemImage: "checkmark.seal.fill").foregroundStyle(.secondary)
+            }
+        } footer: {
+            Text("升级后血 \(chosen.health(level: level)) → \(chosen.health(level: min(level + 1, ArenaProgress.maxLevel)))，伤害同样多 6%。")
+        }
+    }
+}
+
+/// 奖杯之路：总奖杯到了哪个点给什么
+struct ArenaTrophyRoad: View {
+    @ObservedObject private var growth = ArenaProgressStore.shared
+
+    var body: some View {
+        let reached = max(growth.progress.totalTrophies, growth.progress.reached)
+        List {
+            Section {
+                ForEach(ArenaProgress.road, id: \.trophies) { point in
+                    HStack(spacing: DS.Space.s) {
+                        Image(systemName: point.trophies <= reached ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(point.trophies <= reached ? DS.Palette.success : .secondary)
+                        Label("\(point.trophies)", systemImage: "trophy.fill")
+                            .font(DS.Font.headline.monospacedDigit())
+                            .foregroundStyle(.orange)
+                            .frame(width: 90, alignment: .leading)
+                        if let brawler = point.brawler {
+                            BrawlerBadge(brawler: brawler, size: 32)
+                            Text("解锁\(brawler.name)")
+                        } else {
+                            Label("\(point.coins) 金币", systemImage: "dollarsign.circle.fill")
+                        }
+                        Spacer()
+                    }
+                }
+            } footer: {
+                Text("所有角色的奖杯加起来算。奖杯掉了再涨回来，已经给过的奖励不重复给。")
+            }
+        }
+        .appList()
+        .navigationTitle("奖杯之路")
     }
 }
 
@@ -176,6 +298,7 @@ struct ArenaRoomView: View {
                                     Text("❔").frame(width: 30)
                                 }
                                 Text(member.id == room.me.id ? "\(member.name)（我）" : member.name)
+                                Text("\(lobby.level(of: member.id)) 级").font(DS.Font.caption.monospacedDigit()).foregroundStyle(.secondary)
                                 Spacer()
                                 if member.id == room.hostID { Text("房主").font(DS.Font.caption).foregroundStyle(.secondary) }
                             }
@@ -402,6 +525,20 @@ private struct ArenaMatchView: View {
             VStack(spacing: DS.Space.m) {
                 BrawlerBadge(brawler: mine.brawler, size: 84)
                 Text(title).font(DS.Font.display).foregroundStyle(tint)
+                if let reward = controller.reward {
+                    HStack(spacing: DS.Space.l) {
+                        Label(reward.trophies >= 0 ? "+\(reward.trophies)" : "\(reward.trophies)", systemImage: "trophy.fill")
+                            .foregroundStyle(.orange)
+                        Label("+\(reward.coins)", systemImage: "dollarsign.circle.fill")
+                            .foregroundStyle(.yellow)
+                    }
+                    .font(DS.Font.headline.monospacedDigit())
+                    if !reward.unlocked.isEmpty {
+                        Text("解锁了" + reward.unlocked.map(\.name).joined(separator: "、") + "！")
+                            .font(DS.Font.headline)
+                            .foregroundStyle(DS.Palette.success)
+                    }
+                }
                 HStack(spacing: DS.Space.l) {
                     stat("打倒", mine.kills)
                     stat("被打倒", mine.deaths)

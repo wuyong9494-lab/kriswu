@@ -69,6 +69,18 @@ public enum Brawler: Int, CaseIterable, Codable, Sendable {
     public var superCost: Double { [7200, 3900, 8400, 4800, 6000][rawValue] }
     /// 子弹飞多快（电脑瞄准提前量用）
     public var bulletSpeed: Double { [13, 17, 14, 10, 14][rawValue] }
+    /// 总奖杯到多少解锁（一开始就有的是 0）
+    public var unlockAt: Int { 0 }
+
+    /// 等级加成：每升一级血量、伤害多 6%（1 级不加）
+    public static func boost(_ level: Int) -> Double {
+        1 + 0.06 * Double(min(max(level, 1), ArenaProgress.maxLevel) - 1)
+    }
+
+    /// 这个等级的满血
+    public func health(level: Int) -> Int {
+        Int((Double(maxHealth) * Self.boost(level)).rounded())
+    }
 }
 
 // MARK: - 地图
@@ -357,6 +369,8 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var team: Int
     public var brawler: Brawler
     public var isBot: Bool
+    /// 等级（1–9，血量、伤害按等级加成）
+    public var level = 1
     public var pos: V2
     public var facing: V2
     public var health: Int
@@ -381,7 +395,7 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     /// 各自为战：第几名（被打倒或赢了时定下）
     public var place: Int?
 
-    public var maxHealth: Int { brawler.maxHealth }
+    public var maxHealth: Int { brawler.health(level: level) }
     public var busy: Bool { dash != nil || leap != nil }
 }
 
@@ -489,12 +503,24 @@ public struct ArenaGame: Sendable {
         public var brawler: Brawler
         public var isBot: Bool
         public var team: Int
+        public var level: Int
 
-        public init(name: String, brawler: Brawler, isBot: Bool, team: Int) {
+        public init(name: String, brawler: Brawler, isBot: Bool, team: Int, level: Int = 1) {
             self.name = name
             self.brawler = brawler
             self.isBot = isBot
             self.team = team
+            self.level = level
+        }
+
+        /// 老版本存的、发来的没有等级，按 1 级
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decode(String.self, forKey: .name)
+            brawler = try container.decode(Brawler.self, forKey: .brawler)
+            isBot = try container.decode(Bool.self, forKey: .isBot)
+            team = try container.decode(Int.self, forKey: .team)
+            level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 1
         }
     }
 
@@ -541,8 +567,9 @@ public struct ArenaGame: Sendable {
             slots[team, default: 0] += 1
             let spawn = group.isEmpty ? map.center : group[slot % group.count]
             let facing = (map.center - spawn).normalized
-            list.append(Fighter(id: index, name: entrant.name, team: team, brawler: entrant.brawler, isBot: entrant.isBot,
-                                pos: spawn, facing: facing, health: entrant.brawler.maxHealth))
+            let level = min(max(entrant.level, 1), ArenaProgress.maxLevel)
+            list.append(Fighter(id: index, name: entrant.name, team: team, brawler: entrant.brawler, isBot: entrant.isBot, level: level,
+                                pos: spawn, facing: facing, health: entrant.brawler.health(level: level)))
         }
         fighters = list
     }
@@ -695,9 +722,14 @@ public struct ArenaGame: Sendable {
                                 pierce: Bool = false, isSuper: Bool = false) {
         let fighter = fighters[i]
         projectiles.append(Projectile(id: nextProjectile, owner: i, team: fighter.team, pos: fighter.pos + direction * 0.3,
-                                      velocity: direction * speed, rangeLeft: range, damage: damage, radius: radius,
+                                      velocity: direction * speed, rangeLeft: range, damage: power(i, damage), radius: radius,
                                       pierce: pierce, charges: !isSuper, isSuper: isSuper))
         nextProjectile += 1
+    }
+
+    /// 按这个人的等级加成后的伤害
+    private func power(_ i: Int, _ damage: Int) -> Int {
+        Int((Double(damage) * Brawler.boost(fighters[i].level)).rounded())
     }
 
     private mutating func spread(_ i: Int, _ direction: V2, count: Int, angle: Double, speed: Double, range: Double,
@@ -711,7 +743,7 @@ public struct ArenaGame: Sendable {
     private mutating func lob(_ i: Int, to target: V2, duration: Double, blast: Double, damage: Int, isSuper: Bool) {
         let fighter = fighters[i]
         projectiles.append(Projectile(id: nextProjectile, owner: i, team: fighter.team, pos: fighter.pos, velocity: .zero,
-                                      rangeLeft: .infinity, damage: damage, radius: 0.3, charges: !isSuper, isSuper: isSuper,
+                                      rangeLeft: .infinity, damage: power(i, damage), radius: 0.3, charges: !isSuper, isSuper: isSuper,
                                       lob: Projectile.Lob(from: fighter.pos, to: target, duration: duration, elapsed: 0, blast: blast)))
         nextProjectile += 1
     }
@@ -730,7 +762,7 @@ public struct ArenaGame: Sendable {
         for j in fighters.indices where fighters[j].alive && fighters[j].team != fighters[i].team && !dash.hit.contains(j)
             && fighters[j].pos.distance(to: next) < Self.fighterRadius * 2.2 {
             dash.hit.append(j)
-            hurt(j, 1600, by: i, charges: false)
+            hurt(j, power(i, 1600), by: i, charges: false)
         }
         fighters[i].dash = dash.remaining > 0.01 ? dash : nil
     }
@@ -742,7 +774,7 @@ public struct ArenaGame: Sendable {
         fighters[i].pos = V2.lerp(leap.from, leap.to, t)
         if t >= 1 {
             fighters[i].leap = nil
-            blast(at: leap.to, radius: 1.6, damage: 1800, by: i, team: fighters[i].team, charges: false)
+            blast(at: leap.to, radius: 1.6, damage: power(i, 1800), by: i, team: fighters[i].team, charges: false)
         } else {
             fighters[i].leap = leap
         }
@@ -798,7 +830,9 @@ public struct ArenaGame: Sendable {
         if let attacker, fighters.indices.contains(attacker) {
             fighters[attacker].damageDealt += dealt
             if charges {
-                fighters[attacker].superCharge = min(1, fighters[attacker].superCharge + Double(amount) / fighters[attacker].brawler.superCost)
+                // 等级高的伤害大，攒大招要的伤害也跟着大：打中几下攒满不变
+                let cost = fighters[attacker].brawler.superCost * Brawler.boost(fighters[attacker].level)
+                fighters[attacker].superCharge = min(1, fighters[attacker].superCharge + Double(amount) / cost)
             }
         }
         if fighters[j].health <= 0 { knockOut(j, by: attacker) }
