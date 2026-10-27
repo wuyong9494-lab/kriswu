@@ -478,10 +478,11 @@ public enum PassPlan {
         }
     }
 
-    /// 高的图（长截图、拼起来的长图）切成上下重叠的几段：每段高不超过宽的 1.4 倍（字相对这一段够大，不会被当成太小跳过），
-    /// 相邻两段重叠一段高的 1/5（被切开的那行在另一段里是整的）。不高的图就一段
+    /// 图切成上下重叠的几段分别认：每段不超过约 240 万像素、也不高过宽的 1.4 倍（一整张一起认时手机先把图缩小，
+    /// 一屏几十行的小字就糊了；一段十来行，用原来的清晰度认，和只拍一家时一样准），
+    /// 相邻两段重叠一段高的 1/5（被切开的那行在另一段里是整的）。小图就一段
     public static func strips(width: Int, height: Int) -> [Strip] {
-        let size = max(1, width * 7 / 5)
+        let size = max(600, min(width * 7 / 5, 2_400_000 / max(width, 1)))
         let overlap = size / 5
         guard height > size + overlap else { return [Strip(top: 0, height: height, keep: -Double.infinity..<Double.infinity)] }
         var spans: [(top: Int, bottom: Int)] = []

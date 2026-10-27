@@ -3194,7 +3194,11 @@ final class PassPlanTests: XCTestCase {
 
     /// 长图切成上下重叠的几段：盖住整张图，每段不太高；重叠处的字只归一段
     func testStripsCoverTallImagesOnce() {
-        XCTAssertEqual(PassPlan.strips(width: 4032, height: 3024).count, 1, "普通照片不切")
+        XCTAssertEqual(PassPlan.strips(width: 1200, height: 900).count, 1, "小图不切")
+        let photo = PassPlan.strips(width: 4032, height: 3024)
+        XCTAssertGreaterThan(photo.count, 4, "一屏几十行的照片：切成十来行一段")
+        XCTAssertTrue(photo.allSatisfy { $0.height <= 600 })
+        XCTAssertEqual(photo.last.map { $0.top + $0.height }, 3024)
         let strips = PassPlan.strips(width: 1000, height: 6000)
         XCTAssertGreaterThan(strips.count, 3)
         XCTAssertEqual(strips.first?.top, 0)
