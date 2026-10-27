@@ -1173,8 +1173,8 @@ final class ArenaWorldView: SCNView {
                 path.close()
             }
         }
+        path.flatness = 0.03
         let shape = SCNShape(path: path, extrusionDepth: 0)
-        shape.flatness = 0.03
         shape.firstMaterial = ArenaAvatar.decal((isSuper ? ArenaPalette.gold : UIColor.white).withAlphaComponent(0.3))
         aimNode.geometry = shape
         aimNode.simdPosition = SIMD3(Float(fighter.pos.x), 0.07, Float(fighter.pos.y))

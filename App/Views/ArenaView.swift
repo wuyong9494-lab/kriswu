@@ -484,9 +484,10 @@ private struct ArenaMatchView: View {
             score
             Spacer()
             Text(String(format: "%d:%02d", hud.timeLeft / 60, hud.timeLeft % 60))
-                .font(DS.Font.callout.monospacedDigit())
+                .font(.system(size: 18, weight: .black, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
-                .frame(width: 52, height: 36)
+                .arenaInk()
+                .frame(width: 60, height: 36)
                 .background(.black.opacity(0.35), in: Capsule())
         }
         .padding(.horizontal, DS.Space.m)
@@ -503,8 +504,9 @@ private struct ArenaMatchView: View {
             versus("\(hud.blue)%", "\(hud.red)%", note: "站圈加分")
         case .showdown:
             Text("剩 \(hud.alive) 个人")
-                .font(DS.Font.headline)
+                .font(.system(size: 17, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
+                .arenaInk()
                 .padding(.horizontal, DS.Space.m)
                 .frame(height: 36)
                 .background(.black.opacity(0.35), in: Capsule())
@@ -514,12 +516,14 @@ private struct ArenaMatchView: View {
     private func versus(_ blue: String, _ red: String, note: String) -> some View {
         VStack(spacing: 2) {
             HStack(spacing: 0) {
-                Text(blue).frame(minWidth: 52).padding(.vertical, 4).background(Color(uiColor: ArenaPalette.blue))
-                Text(red).frame(minWidth: 52).padding(.vertical, 4).background(Color(uiColor: ArenaPalette.red))
+                Text(blue).frame(minWidth: 56).padding(.vertical, 4).background(Color(uiColor: ArenaPalette.blue))
+                Text(red).frame(minWidth: 56).padding(.vertical, 4).background(Color(uiColor: ArenaPalette.red))
             }
-            .font(DS.Font.headline.monospacedDigit())
+            .font(.system(size: 18, weight: .black, design: .rounded).monospacedDigit())
             .foregroundStyle(.white)
+            .arenaInk()
             .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(.black.opacity(0.55), lineWidth: 2))
             Text(note).font(DS.Font.overline).foregroundStyle(.white.opacity(0.9))
                 .shadow(color: .black.opacity(0.5), radius: 2)
         }
@@ -679,6 +683,14 @@ private struct ArenaMatchView: View {
     }
 }
 
+private extension View {
+    /// 卡通游戏里那种粗字：底下一道硬黑影，外面一圈淡淡的黑边
+    func arenaInk() -> some View {
+        shadow(color: .black.opacity(0.85), radius: 0, x: 0, y: 1.5)
+            .shadow(color: .black.opacity(0.6), radius: 1)
+    }
+}
+
 /// 摇杆：按住拖动，松手时告诉外面拖到了哪（长度 0–1）
 private struct ArenaStick: View {
     enum Kind: Equatable {
@@ -708,7 +720,7 @@ private struct ArenaStick: View {
     private var tint: Color {
         switch kind {
         case .move: return .white
-        case .attack: return Color(uiColor: ArenaPalette.blue)
+        case .attack: return Color(uiColor: ArenaPalette.attack)
         case .special: return ready ? .yellow : .gray
         }
     }

@@ -159,10 +159,10 @@ enum ArenaArt {
         var random = SeededRandom(seed: 11)
         cg.setLineCap(.round)
         // 一簇簇短草叶
-        for _ in 0..<80 {
+        for _ in 0..<110 {
             let center = CGPoint(x: unit(&random) * 256, y: unit(&random) * 256)
-            let shade = 0.8 + unit(&random) * 0.1
-            let color = UIColor(red: shade - 0.05, green: min(shade + 0.1, 1), blue: shade - 0.14, alpha: 1).cgColor
+            let shade = 0.72 + unit(&random) * 0.1
+            let color = UIColor(red: shade - 0.06, green: min(shade + 0.08, 1), blue: shade - 0.16, alpha: 1).cgColor
             let count = 2 + random.below(3)
             var blades: [(root: CGFloat, bend: CGPoint, tip: CGPoint)] = []
             for k in 0..<count {
@@ -173,7 +173,7 @@ enum ArenaArt {
             }
             tiled(256, at: center, reach: 16) { origin in
                 cg.setStrokeColor(color)
-                cg.setLineWidth(2)
+                cg.setLineWidth(2.6)
                 for blade in blades {
                     cg.move(to: CGPoint(x: origin.x + blade.root, y: origin.y))
                     cg.addQuadCurve(to: CGPoint(x: origin.x + blade.tip.x, y: origin.y + blade.tip.y),

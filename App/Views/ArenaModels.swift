@@ -18,6 +18,8 @@ enum ArenaPalette {
     /// 自己这边、对面打出来的子弹
     static let allyShot = UIColor(red: 0.55, green: 0.82, blue: 1.0, alpha: 1)
     static let enemyShot = UIColor(red: 1.0, green: 0.48, blue: 0.38, alpha: 1)
+    /// 攻击摇杆（红）
+    static let attack = UIColor(red: 0.96, green: 0.33, blue: 0.24, alpha: 1)
     /// 自己的血条（绿）、弹药（橙）
     static let mine = UIColor(red: 0.36, green: 0.86, blue: 0.22, alpha: 1)
     static let ammo = UIColor(red: 1.0, green: 0.62, blue: 0.10, alpha: 1)
