@@ -31,6 +31,12 @@ extension AppStore {
         return s
     }
 
+    /// 发数传计划的提醒（没开就取消）
+    func schedulePlanReminder() async {
+        await NotificationService.schedulePlanReminder(at: settings.passPlanReminder && !Self.isDemo ? settings.passPlanReminderTime : nil,
+                                                       sentDay: settings.passPlanSentDay)
+    }
+
     func performReschedule() async {
         // 小组件、日历要用「下次遥测」：先在后台算好，下面直接取
         await warmRotation()
@@ -63,6 +69,7 @@ extension AppStore {
             await DutyAlarms.reschedule(alarms)
         }
         await scheduleMeetingReminder()
+        await schedulePlanReminder()
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
         // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
         await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)

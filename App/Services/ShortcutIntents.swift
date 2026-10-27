@@ -207,5 +207,9 @@ struct ShiftShortcuts: AppShortcutsProvider {
         AppShortcut(intent: CapturePhotoIntent(), phrases: [
             "\(.applicationName)拍照留痕",
         ])
+        AppShortcut(intent: CapturePlanIntent(), phrases: [
+            "\(.applicationName)拍数传计划",
+            "\(.applicationName)发计划",
+        ])
     }
 }

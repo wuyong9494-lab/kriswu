@@ -18,7 +18,9 @@ struct DocumentScanner: UIViewControllerRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+    /// 扫描的回调系统在主线程调（VisionKit 没标出来，@preconcurrency：按主线程的代码对待）
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency VNDocumentCameraViewControllerDelegate {
         let parent: DocumentScanner
         init(_ parent: DocumentScanner) { self.parent = parent }
 

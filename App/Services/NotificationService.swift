@@ -122,6 +122,26 @@ enum NotificationService {
         try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
     }
 
+    /// 每天到点提醒发数传计划：登记下一次（今天已经发完就从明天起）
+    static func schedulePlanReminder(at time: ClockTime?, sentDay: DayKey?) async {
+        let id = "pass-plan"
+        center.removePendingNotificationRequests(withIdentifiers: [id])
+        guard let time else { return }
+        let cal = Calendar.current
+        var day = DayKey.today
+        let todayFire = day.date(calendar: cal, hour: time.hour, minute: time.minute)
+        if sentDay == day || todayFire <= Date() { day = day.adding(days: 1) }
+        let content = UNMutableNotificationContent()
+        content.title = "📡 该发数传计划了"
+        content.body = "拍一张计划，按运营商分好发到各家群里。"
+        content.sound = .default
+        content.userInfo = ["route": "passPlan"]
+        let fire = day.date(calendar: cal, hour: time.hour, minute: time.minute)
+        let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        try? await center.add(UNNotificationRequest(identifier: id, content: content,
+                                                    trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
+    }
+
     /// 下一条要弹的排班提醒。
     static func nextReminder() async -> (date: Date, title: String)? {
         await center.pendingNotificationRequests()

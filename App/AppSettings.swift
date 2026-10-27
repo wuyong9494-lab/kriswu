@@ -86,6 +86,10 @@ struct AppSettings: Codable, Equatable {
     var appearance: Appearance = .system
     /// 发数传计划：每家运营商发到哪个群（只是给自己看的提示）
     var passPlanGroups: [String: String] = [:]
+    /// 每天到点提醒发数传计划；哪天各家都发完了，那天就不再提醒
+    var passPlanReminder = false
+    var passPlanReminderTime = ClockTime(hour: 15, minute: 0)
+    var passPlanSentDay: DayKey?
     /// 今天页卡片的顺序、藏起来的卡片（TodayCard 的名字；空 = 默认顺序）
     var todayCardOrder: [String] = []
     var hiddenTodayCards: [String] = []
@@ -437,6 +441,7 @@ extension AppSettings {
         a.weChatTeam = o.weChatTeam
         a.meetingWeChat = o.meetingWeChat
         a.passPlanGroups = o.passPlanGroups
+        a.passPlanSentDay = o.passPlanSentDay
         a.todayCardOrder = o.todayCardOrder
         a.hiddenTodayCards = o.hiddenTodayCards
         a.dutyHeadsUp = o.dutyHeadsUp

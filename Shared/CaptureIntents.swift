@@ -6,6 +6,8 @@ import WidgetKit
 /// App 和小组件里都编进了这份代码；动作先把「要做什么」写进 App Group，再打开 App，App 打开后接着做。
 enum CaptureAction: String, Codable {
     case photo, record, note
+    /// 拍数传计划：打开「发数传计划」直接进扫描
+    case plan
 
     var url: URL { URL(string: "shiftreminder://capture/\(rawValue)")! }
 }
@@ -65,6 +67,17 @@ struct CaptureNoteIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         PendingCapture.set(.note)
+        return .result()
+    }
+}
+
+struct CapturePlanIntent: AppIntent {
+    static let title: LocalizedStringResource = "拍数传计划"
+    static let description = IntentDescription("打开值班提醒直接拍计划，按运营商分好以后发到各家微信群。可以设成轻点两下手机背面（辅助功能 › 触控 › 轻点背面）或者操作按钮。")
+    static let openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        PendingCapture.set(.plan)
         return .result()
     }
 }

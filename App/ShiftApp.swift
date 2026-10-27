@@ -119,8 +119,9 @@ struct RootView: View {
     @State private var tabBarTop: CGFloat = .infinity
     /// 打开过的页：没打开过的不建（网站页不会一启动就去登录网站，也少画几页）
     @State private var visited: Set<Tab> = []
-    /// 分享过来的数传计划（打开「发数传计划」时带进去）
+    /// 分享过来的数传计划（打开「发数传计划」时带进去）；从快捷指令打开时直接进扫描
     @State private var passPlanRows: [PassPlanRow] = []
+    @State private var passPlanAutoScan = false
     @State private var inReviewDemo = UserDefaults.standard.bool(forKey: AppStore.demoKey)
     @Environment(\.scenePhase) private var scenePhase
 
@@ -291,8 +292,12 @@ struct RootView: View {
                 }
             case .passPlan:
                 NavigationStack {
-                    PassPlanView(rows: passPlanRows)
+                    PassPlanView(rows: passPlanRows, autoScan: passPlanAutoScan)
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
+                }
+                .onDisappear {
+                    passPlanRows = []
+                    passPlanAutoScan = false
                 }
             case .meeting, .meetingMine:
                 NavigationStack {
@@ -333,6 +338,10 @@ struct RootView: View {
             case .photo: camera = true
             case .record: rootSheet = .record
             case .note: rootSheet = .note
+            case .plan:
+                passPlanRows = []
+                passPlanAutoScan = true
+                rootSheet = .passPlan
             }
         }
     }

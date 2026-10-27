@@ -15,6 +15,8 @@ struct PassPlanView: View {
     @EnvironmentObject private var store: AppStore
     /// 打开时带进来的计划（分享过来的 Excel、截图演示）
     private let initialRows: [PassPlanRow]
+    /// 从快捷指令「拍数传计划」打开：直接进扫描
+    private let autoScan: Bool
     @State private var reading = false
     @State private var problem: String?
     @State private var scanning = false
@@ -33,8 +35,9 @@ struct PassPlanView: View {
         var row: PassPlanRow
     }
 
-    init(rows: [PassPlanRow] = []) {
+    init(rows: [PassPlanRow] = [], autoScan: Bool = false) {
         initialRows = rows
+        self.autoScan = autoScan
     }
 
     private var rows: [PassPlanRow] { store.passPlan.rows }
@@ -74,6 +77,17 @@ struct PassPlanView: View {
                         Label("有 \(doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote).foregroundStyle(DS.Palette.warning)
                     }
+                    let unsent = groups.map(\.name).filter { !store.passPlan.sent.contains($0) }
+                    if !unsent.isEmpty {
+                        Button { sendInTurn(unsent) } label: {
+                            Label(unsent.count == groups.count ? "依次发给各家（\(unsent.count) 家）" : "接着发剩下的 \(unsent.count) 家",
+                                  systemImage: "paperplane.fill")
+                                .font(.headline)
+                        }
+                        .disabled(images.count < groups.count)
+                    }
+                } footer: {
+                    Text("依次发：发完一家自动弹出下一家，分享面板最上面写着这次发给谁、该选哪个群。")
                 }
                 ForEach(groups, id: \.name) { group in
                     Section {
@@ -97,6 +111,14 @@ struct PassPlanView: View {
                     }
                     Button("全部清掉", role: .destructive) { store.passPlan = PassPlanSession(); problem = nil }
                 }
+            }
+            Section {
+                Toggle("每天提醒发计划", isOn: $store.settings.passPlanReminder)
+                if store.settings.passPlanReminder {
+                    DatePicker("提醒时间", selection: reminderTime, displayedComponents: .hourAndMinute)
+                }
+            } footer: {
+                Text("到点提醒一次，点提醒直接打开这一页；那天各家都发完了就不再提醒。也可以在「快捷指令」里把「拍数传计划」设成轻点两下手机背面（设置 › 辅助功能 › 触控 › 轻点背面），一下就进扫描。")
             }
         }
         .appList()
@@ -154,6 +176,11 @@ struct PassPlanView: View {
         }
         .onAppear {
             if !initialRows.isEmpty { store.passPlan = PassPlanSession(rows: initialRows) }
+            if autoScan {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    if DocumentScanner.isSupported { scanning = true } else { showingCamera = true }
+                }
+            }
         }
         .task(id: rows) { renderImages() }
     }
@@ -207,7 +234,7 @@ struct PassPlanView: View {
         return HStack(spacing: DS.Space.s) {
             Button {
                 guard let image = images[name] else { return }
-                share([image], name: name)
+                share(image, name: name)
             } label: {
                 Label(sent ? "再发一次图片" : (target.map { "发图片到\($0)" } ?? "发图片"), systemImage: "photo")
                     .frame(maxWidth: .infinity)
@@ -215,7 +242,7 @@ struct PassPlanView: View {
             .buttonStyle(.borderedProminent)
             .tint(sent ? DS.Palette.success : DS.Palette.accent)
             .disabled(images[name] == nil)
-            Button { share([PassPlan.message(name: name, rows: rows)], name: name) } label: {
+            Button { share(PassPlan.message(name: name, rows: rows), name: name) } label: {
                 Label("发文字", systemImage: "text.alignleft").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -247,11 +274,47 @@ struct PassPlanView: View {
         editing = EditingRow(index: rows.firstIndex(of: row), row: row)
     }
 
-    /// 发出去（在微信里选群）；真的发了就标「已发」
-    private func share(_ items: [Any], name: String) {
-        ActivityShare.present(items) { completed in
-            if completed { store.passPlan.sent.insert(name) }
+    /// 发出去（在微信里选群）；真的发了就标「已发」。then：发出去以后接着做（依次发下一家）
+    private func share(_ item: Any, name: String, then next: (@MainActor () -> Void)? = nil) {
+        let target = store.settings.passPlanGroups[name].map { " → 发到「\($0)」" } ?? ""
+        let payload = SharePayload(item, title: "\(name)数传计划\(target)", preview: images[name])
+        ActivityShare.present([payload]) { completed in
+            guard completed else { return }
+            markSent(name)
+            next?()
         }
+    }
+
+    /// 从第一家开始，发完一家弹下一家；中途取消就停下
+    private func sendInTurn(_ names: [String]) {
+        guard let name = names.first, let image = images[name] else { return }
+        share(image, name: name) {
+            let rest = Array(names.dropFirst())
+            guard !rest.isEmpty else { return }
+            // 等上一个分享面板收起来
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { sendInTurn(rest) }
+        }
+    }
+
+    private func markSent(_ name: String) {
+        store.passPlan.sent.insert(name)
+        let all = Set(PassPlan.grouped(rows).map(\.name))
+        guard !all.isEmpty, all.isSubset(of: store.passPlan.sent) else { return }
+        // 各家都发了：今天不再提醒
+        ToastCenter.shared.show("各家都发了", style: .success)
+        store.settings.passPlanSentDay = .today
+        Task { await store.schedulePlanReminder() }
+    }
+
+    /// 提醒时间（DatePicker 用 Date）
+    private var reminderTime: Binding<Date> {
+        Binding(get: {
+            let t = store.settings.passPlanReminderTime
+            return DayKey.today.date(calendar: .current, hour: t.hour, minute: t.minute)
+        }, set: { date in
+            let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+            store.settings.passPlanReminderTime = ClockTime(hour: c.hour ?? 15, minute: c.minute ?? 0)
+        })
     }
 
     private func renderImages() {
