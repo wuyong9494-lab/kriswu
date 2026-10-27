@@ -11,6 +11,13 @@ final class ArenaTests: XCTestCase {
         }
     }
 
+    /// 按这个玩法的座位排好的一组电脑
+    private func seated(_ mode: ArenaGame.Mode) -> [ArenaGame.Entrant] {
+        mode.seatTeams.enumerated().map { i, team in
+            ArenaGame.Entrant(name: "电脑\(i)", brawler: Brawler.allCases[i % Brawler.allCases.count], isBot: true, team: team)
+        }
+    }
+
     private func run(_ game: inout ArenaGame, seconds: Double, inputs: [Int: ArenaInput] = [:]) {
         for _ in 0..<Int(seconds / dt) where game.result == nil {
             game.step(dt, inputs: inputs)
@@ -39,15 +46,22 @@ final class ArenaTests: XCTestCase {
         }
     }
 
-    /// 每张地图：大小、出生点对、对称（分队的中心对称，各自为战的上下左右都对称）、没有被墙围死走不到的空地
+    /// 每张地图：大小、出生点对、对称（两队对打的中心对称，各自为战的上下左右都对称）、没有被墙围死走不到的空地；
+    /// 足球的两头有球门，宝箱攻防两边各一个宝箱
     func testEveryMapIsFairAndOpen() {
-        for mode in [ArenaGame.Mode.teamFight, .showdown] {
+        let shapes: [(ArenaGame.Mode, width: Int, height: Int, spawns: [Int])] = [
+            (.teamFight, 15, 25, [3, 3]), (.ball, 15, 25, [3, 3]), (.heist, 15, 25, [3, 3]), (.duel, 15, 17, [1, 1]),
+            (.boss, 19, 19, [3, 1]), (.showdown, 19, 19, [6]),
+        ]
+        var checked = Set<String>()
+        for (mode, width, height, spawns) in shapes {
             for map in ArenaMap.pool(for: mode) {
+                checked.insert(map.id)
                 XCTAssertEqual(ArenaMap.named(map.id)?.title, map.title)
                 XCTAssertFalse(map.title.isEmpty, map.id)
-                XCTAssertEqual(map.width, mode.isTeams ? 15 : 19, map.id)
-                XCTAssertEqual(map.height, mode.isTeams ? 25 : 19, map.id)
-                XCTAssertEqual(map.spawns.map(\.count), mode.isTeams ? [3, 3] : [6], map.id)
+                XCTAssertEqual(map.width, width, map.id)
+                XCTAssertEqual(map.height, height, map.id)
+                XCTAssertEqual(map.spawns.map(\.count), spawns, map.id)
                 for y in 0..<map.height {
                     for x in 0..<map.width {
                         XCTAssertEqual(map.tile(x, y), map.tile(map.width - 1 - x, map.height - 1 - y), "\(map.id) \(x),\(y)")
@@ -56,6 +70,8 @@ final class ArenaTests: XCTestCase {
                         }
                     }
                 }
+                XCTAssertEqual(map.goalCenters.compactMap { $0 }.count, mode == .ball ? 2 : 0, map.id)
+                XCTAssertEqual(map.chestSpots.map(\.team).sorted(), mode == .heist ? [0, 1] : [], map.id)
                 // 从中间往外一格格走，每块不是墙的地方都要走得到（出生点也在里面）
                 var reached = Set<Int>()
                 var queue = [Int(map.center.y) * map.width + Int(map.center.x)]
@@ -72,8 +88,13 @@ final class ArenaTests: XCTestCase {
                 for spawn in map.spawns.flatMap({ $0 }) {
                     XCTAssertFalse(map.collides(spawn, radius: ArenaGame.fighterRadius), map.id)
                     XCTAssertTrue(reached.contains(Int(spawn.y) * map.width + Int(spawn.x)), map.id)
+                    XCTAssertEqual(map.path(from: spawn, to: map.center).last, map.center, "\(map.id) 从出生点走得到中间")
                 }
             }
+        }
+        XCTAssertEqual(checked, Set(ArenaMap.all.map(\.id)), "每张地图都查过")
+        for mode in ArenaGame.Mode.allCases {
+            XCTAssertFalse(ArenaMap.pool(for: mode).isEmpty, "\(mode)")
         }
     }
 
@@ -90,9 +111,9 @@ final class ArenaTests: XCTestCase {
 
     /// 电脑在每张地图上都打得起来：会开火、打中人，没人卡进墙里
     func testBotsFightOnEveryMap() {
-        for mode in [ArenaGame.Mode.teamFight, .showdown] {
+        for mode in [ArenaGame.Mode.teamFight, .showdown, .ball, .heist, .duel, .boss] {
             for map in ArenaMap.pool(for: mode) {
-                var game = ArenaGame(mode: mode, entrants: entrants(), seed: 11, map: map)
+                var game = ArenaGame(mode: mode, entrants: seated(mode), seed: 11, map: map)
                 var bots = game.fighters.map { ArenaBot(id: $0.id, seed: 11) }
                 var stuck = 0
                 while game.result == nil && game.time < 60 {
@@ -278,10 +299,10 @@ final class ArenaTests: XCTestCase {
         XCTAssertEqual(game.fighters.compactMap(\.place).sorted(), [1, 2, 3, 4, 5, 6])
     }
 
-    /// 六个电脑打完一局：每种玩法都能分出结果（或时间到），没人卡进墙里
+    /// 电脑打完一局：每种玩法都能分出结果（或时间到），没人卡进墙里
     func testBotsFinishEveryMode() {
         for mode in ArenaGame.Mode.allCases {
-            var game = ArenaGame(mode: mode, entrants: entrants(), seed: 7)
+            var game = ArenaGame(mode: mode, entrants: seated(mode), seed: 7)
             var bots = game.fighters.map { ArenaBot(id: $0.id, seed: 7) }
             var shots = 0
             while game.result == nil && game.time < mode.duration + 1 {
@@ -384,12 +405,8 @@ final class ArenaNetTests: XCTestCase {
         XCTAssertEqual(client.zones.count, 1)
         XCTAssertEqual(client.turrets.count, 1)
         XCTAssertEqual(client.fighters[2].shield, 4, accuracy: 0.03)
-        // 老版本的包：去掉后加的那几段（没有圈、没有塔时是 0、0、人数、每人一个字节）
-        var plain = snapshot
-        plain.zones = []
-        plain.turrets = []
-        let old = Data(plain.encoded().dropLast(3 + plain.fighters.count))
-        let fromOld = try XCTUnwrap(ArenaSnapshot(data: old))
+        // 老版本的包：只到事件为止
+        let fromOld = try XCTUnwrap(ArenaSnapshot(data: snapshot.encoded(version: 1)))
         XCTAssertTrue(fromOld.zones.isEmpty)
         XCTAssertEqual(fromOld.fighters[2].shield, 0)
         XCTAssertEqual(fromOld.events, snapshot.events)

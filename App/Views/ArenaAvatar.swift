@@ -14,6 +14,8 @@ final class ArenaAvatar {
 
     let node = SCNNode()
     let brawler: Brawler
+    /// 个子多大（骷髅王 2.2 倍）
+    let size: Float
     private let look: BrawlerLook
     private let model: GLTFModel?
     private let instance: GLTFModel.Instance?
@@ -61,8 +63,9 @@ final class ArenaAvatar {
     private var flashing = false
     private var placed = false
 
-    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true) {
+    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1) {
         self.brawler = brawler
+        self.size = size
         look = BrawlerLook.of(brawler)
         model = ArenaModels.shared.character(brawler)
         if let model {
@@ -88,7 +91,7 @@ final class ArenaAvatar {
             outlines += instance.outlines
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
-            body.simdScale = SIMD3(repeating: ArenaAvatar.scale)
+            body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size)
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -114,6 +117,7 @@ final class ArenaAvatar {
         ring.addChildNode(discNode)
         ring.addChildNode(rimNode)
         ring.simdPosition = SIMD3(0, 0.03, 0)
+        ring.simdScale = SIMD3(size, 1, size)
         ring.renderingOrder = 5
         ring.castsShadow = false
         discNode.castsShadow = false
@@ -125,6 +129,7 @@ final class ArenaAvatar {
         halo.firstMaterial = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.9))
         glow.geometry = halo
         glow.simdPosition = SIMD3(0, 0.04, 0)
+        glow.simdScale = SIMD3(size, 1, size)
         glow.castsShadow = false
         glow.renderingOrder = 6
         glow.isHidden = true
@@ -135,8 +140,8 @@ final class ArenaAvatar {
         shine.isDoubleSided = false
         shell.firstMaterial = shine
         bubble.geometry = shell
-        bubble.simdPosition = SIMD3(0, 0.7, 0)
-        bubble.simdScale = SIMD3(1, 1.05, 1)
+        bubble.simdPosition = SIMD3(0, 0.7 * size, 0)
+        bubble.simdScale = SIMD3(size, 1.05 * size, size)
         bubble.castsShadow = false
         bubble.renderingOrder = 12
         bubble.isHidden = true
@@ -212,7 +217,7 @@ final class ArenaAvatar {
         glow.isHidden = !(fighter.alive && fighter.superCharge >= 1)
         bubble.isHidden = !(fighter.alive && fighter.shield > 0)
         if !glow.isHidden {
-            let pulse = 1 + 0.07 * Float(sin(clock * 6))
+            let pulse = (1 + 0.07 * Float(sin(clock * 6))) * size
             glow.simdScale = SIMD3(pulse, 1, pulse)
         }
 
@@ -359,9 +364,10 @@ final class ArenaTag {
     private static let width: CGFloat = 58
     private static let barHeight: CGFloat = 12
 
-    init(fighter: Fighter, isMe: Bool, ally: Bool) {
-        let width = ArenaTag.width, barHeight = ArenaTag.barHeight
-        name = ArenaText(size: 12, color: isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName))
+    /// boss：骷髅王的血条长一倍、粗一点
+    init(fighter: Fighter, isMe: Bool, ally: Bool, boss: Bool = false) {
+        let width = boss ? 120 : ArenaTag.width, barHeight = boss ? 15 : ArenaTag.barHeight
+        name = ArenaText(size: boss ? 15 : 12, color: isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName))
         bar = ArenaBar(width: width, height: barHeight, color: isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red))
         name.set(isMe ? "我" : fighter.name)
         name.node.position = CGPoint(x: 0, y: barHeight / 2 + 10)

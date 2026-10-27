@@ -1,7 +1,7 @@
 import Foundation
 
 /// 电脑补位的人怎么打：找最近、看得见的敌人，保持在自己射程里横着绕着打，血少了往回跑；
-/// 没看见敌人就去做这个玩法该做的事（捡星星、站圈、往中间走躲毒圈）
+/// 没看见敌人就去做这个玩法该做的事（捡星星、站圈、带球射门、打宝箱、往中间走躲毒圈）；地上的红圈会躲开
 public struct ArenaBot: Sendable {
     public let id: Int
     private var random: SeededRandom
@@ -19,9 +19,10 @@ public struct ArenaBot: Sendable {
     }
 
     public mutating func input(in game: ArenaGame, dt: Double) -> ArenaInput {
-        guard game.fighters.indices.contains(id), game.result == nil else { return ArenaInput() }
+        guard game.fighters.indices.contains(id), game.result == nil, game.pause <= 0 else { return ArenaInput() }
         let me = game.fighters[id]
-        guard me.alive, !me.busy else { return ArenaInput() }
+        // 骷髅王自己会打（规则里算），不用电脑操作
+        guard me.alive, !me.busy, !me.isBoss else { return ArenaInput() }
         strafeTimer -= dt
         trigger -= dt
         repath -= dt
@@ -31,14 +32,24 @@ public struct ArenaBot: Sendable {
         }
 
         let enemies = game.fighters.filter { $0.alive && $0.team != me.team && game.isVisible($0, to: me.team) }
-        let target = enemies.min { $0.pos.distance(to: me.pos) < $1.pos.distance(to: me.pos) }
+        // 对面带着球的人先打
+        let carrier = game.ball?.carrier.flatMap { game.fighters.indices.contains($0) ? game.fighters[$0] : nil }
+        let target = carrier.flatMap { $0.team != me.team && $0.alive ? $0 : nil }
+            ?? enemies.min { $0.pos.distance(to: me.pos) < $1.pos.distance(to: me.pos) }
         var input = ArenaInput()
         var goal = objective(me, game)
-        if let target, target.pos.distance(to: me.pos) < 10 {
+        let carrying = game.ball?.carrier == id
+        if carrying {
+            // 带着球：往对面球门带，看得见球门、离得不远就射门；被人贴身就赶紧踢出去
+            if let aim = shot(me, enemies, game) { input.attack = aim }
+            if let aim = input.attack, me.superCharge >= 1, aim.length > 5 { input.special = aim }
+        } else if let target, target.pos.distance(to: me.pos) < 10 {
             let distance = target.pos.distance(to: me.pos)
             let range = me.brawler.attackRange
             let away = (me.pos - target.pos).normalized
-            let low = Double(me.health) < Double(me.maxHealth) * 0.3
+            // 悬赏高了打得小心点
+            let careful = game.mode == .bounty && me.stars >= 5
+            let low = Double(me.health) < Double(me.maxHealth) * (careful ? 0.5 : 0.3)
             let ideal = range * ([.barbarian, .knight, .guardian].contains(me.brawler) ? 0.55 : 0.75)
             let clear = me.brawler == .mage || game.map.lineOfSight(me.pos, target.pos)
             if low && distance < range + 2.5 {
@@ -79,7 +90,7 @@ public struct ArenaBot: Sendable {
             }
         }
         // 附近有对面的骨塔、又没有更近的敌人：先拆塔
-        if input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
+        if !carrying, input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
            let turret = game.turrets.filter({ $0.team != me.team }).min(by: { $0.pos.distance(to: me.pos) < $1.pos.distance(to: me.pos) }),
            turret.pos.distance(to: me.pos) <= me.brawler.attackRange * 0.95,
            me.brawler == .mage || game.map.lineOfSight(me.pos, turret.pos),
@@ -87,24 +98,98 @@ public struct ArenaBot: Sendable {
             trigger = 0.3
             input.attack = turret.pos - me.pos
         }
+        // 宝箱攻防：够得着对面的宝箱、又没有更近的敌人就打宝箱
+        if game.mode == .heist, !carrying, input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
+           let chest = game.chests.first(where: { $0.team != me.team && $0.health > 0 }) {
+            let face = chest.center + (me.pos - chest.center).normalized * 1.3
+            let distance = face.distance(to: me.pos)
+            if distance <= me.brawler.attackRange * 0.95, me.brawler == .mage || game.map.lineOfSight(me.pos, face),
+               target.map({ $0.pos.distance(to: me.pos) > distance }) ?? true {
+                trigger = 0.3
+                input.attack = chest.center - me.pos
+            }
+        }
+        // 毒圈快到了：往中间走
+        if game.mode.hasPoison, me.pos.distance(to: game.map.center) > game.safeRadius - 1.2 {
+            goal = game.map.center
+        }
+        // 地上的红圈：赶紧走出去
+        for warning in game.warnings where warning.team != me.team {
+            let away = me.pos - warning.center
+            if away.length < warning.radius + 0.7 {
+                goal = warning.center + (away.length > 0.01 ? away.normalized : V2(1, 0)) * (warning.radius + 1.6)
+            }
+        }
         input.move = steer(me, to: goal, in: game)
         return input
+    }
+
+    /// 带着球时往哪踢（不踢返回 nil）：看得见对面球门、离得不远就射门；被敌人贴身了往前踢
+    private mutating func shot(_ me: Fighter, _ enemies: [Fighter], _ game: ArenaGame) -> V2? {
+        guard trigger <= 0, let goal = game.map.goalCenters.indices.contains(1 - me.team) ? game.map.goalCenters[1 - me.team] : nil else {
+            return nil
+        }
+        let toGoal = goal - me.pos
+        let pressed = enemies.contains { $0.pos.distance(to: me.pos) < 2.2 }
+        guard (toGoal.length < 7.5 && game.map.lineOfSight(me.pos, goal)) || pressed else { return nil }
+        trigger = 0.4
+        let noise = (Double(random.below(21)) - 10) / 150
+        return toGoal.rotated(by: noise)
     }
 
     /// 没在打架时去哪
     private func objective(_ me: Fighter, _ game: ArenaGame) -> V2 {
         let center = game.map.center
+        let home = game.map.spawns.indices.contains(me.team) ? (game.map.spawns[me.team].first ?? center) : center
         switch game.mode {
         case .stars:
-            let home = game.map.spawns[me.team].first ?? center
             if let countdown = game.countdown, countdown.team == me.team, me.stars > 0 { return home }
             return game.stars.min { $0.distance(to: me.pos) < $1.distance(to: me.pos) } ?? center
-        case .zone, .showdown:
+        case .zone, .showdown, .duel:
             return center
-        case .teamFight:
-            let enemyHome = game.map.spawns[1 - me.team].first ?? center
+        case .teamFight, .bounty:
+            let enemyHome = game.map.spawns.indices.contains(1 - me.team) ? (game.map.spawns[1 - me.team].first ?? center) : center
             return V2.lerp(center, enemyHome, 0.3)
+        case .knockout:
+            return V2.lerp(home, center, 0.6)
+        case .duo:
+            // 跟着队友，别走散
+            if let mate = game.fighters.first(where: { $0.team == me.team && $0.id != me.id && $0.alive }),
+               mate.pos.distance(to: me.pos) > 4 {
+                return mate.pos
+            }
+            return center
+        case .ball:
+            return ballObjective(me, game)
+        case .heist:
+            guard let chest = game.chests.first(where: { $0.team != me.team }) else { return center }
+            // 一个人守家，其余的去打对面的宝箱（站在射程里）
+            if me.id % 3 == 2, let own = game.chests.first(where: { $0.team == me.team }) {
+                return V2.lerp(own.center, center, 0.35)
+            }
+            let toward = (me.pos - chest.center).normalized
+            return chest.center + toward * (me.brawler.attackRange * 0.7 + 1)
+        case .boss:
+            guard let boss = game.fighters.first(where: { $0.isBoss && $0.alive }) else { return center }
+            return boss.pos + (me.pos - boss.pos).normalized * (me.brawler.attackRange * 0.75)
         }
+    }
+
+    /// 足球：自己带着球就去对面球门；队友带着跟在前面接应；对面带着去抢；球没人带离得最近的去捡，其余的守在球和自己球门中间
+    private func ballObjective(_ me: Fighter, _ game: ArenaGame) -> V2 {
+        let center = game.map.center
+        let goals = game.map.goalCenters
+        let ownGoal = (goals.indices.contains(me.team) ? goals[me.team] : nil) ?? center
+        let enemyGoal = (goals.indices.contains(1 - me.team) ? goals[1 - me.team] : nil) ?? center
+        guard let ball = game.ball else { return center }
+        if let carrier = ball.carrier, game.fighters.indices.contains(carrier) {
+            let holder = game.fighters[carrier]
+            if carrier == me.id { return enemyGoal }
+            return holder.team == me.team ? V2.lerp(holder.pos, enemyGoal, 0.35) : holder.pos
+        }
+        let mates = game.fighters.filter { $0.team == me.team && $0.alive }
+        let closest = mates.min { $0.pos.distance(to: ball.pos) < $1.pos.distance(to: ball.pos) }
+        return closest?.id == me.id ? ball.pos : V2.lerp(ball.pos, ownGoal, 0.45)
     }
 
     /// 朝 goal 走：一路上没有墙就直走，不然按格子绕

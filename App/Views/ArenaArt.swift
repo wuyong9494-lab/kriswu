@@ -129,6 +129,181 @@ enum ArenaArt {
         }
     }()
 
+    // MARK: - 足球、球门、宝箱
+
+    /// 足球：白底上一块块深色的格子，外面一圈描边；脚下一片影子
+    static func ball() -> SCNNode {
+        var mesh = Mesh(parts: 2)
+        mesh.sphere(center: .zero, radius: SIMD3(repeating: Float(ArenaGame.Ball.radius)), part: 0, rings: 10, segments: 16)
+        mesh.sphere(center: .zero, radius: SIMD3(repeating: Float(ArenaGame.Ball.radius) + 0.035), part: 1, rings: 10, segments: 16)
+        let skin = SCNMaterial()
+        skin.lightingModel = .lambert
+        skin.diffuse.contents = ballSkin
+        skin.diffuse.mipFilter = .linear
+        return SCNNode(geometry: mesh.geometry([skin, edge(rgb(0.1, 0.1, 0.12))]))
+    }
+
+    /// 足球的花纹（经纬展开的图）：白底，几圈错开的深色五边形
+    private static let ballSkin: UIImage = draw(CGSize(width: 256, height: 128)) { cg in
+        cg.setFillColor(UIColor(white: 0.97, alpha: 1).cgColor)
+        cg.fill(CGRect(x: 0, y: 0, width: 256, height: 128))
+        cg.setFillColor(rgb(0.15, 0.16, 0.2).cgColor)
+        for (row, y) in [CGFloat(14), 50, 86, 118].enumerated() {
+            let count = row == 0 || row == 3 ? 3 : 5
+            for k in 0..<count {
+                let x = (CGFloat(k) + (row % 2 == 0 ? 0 : 0.5)) * 256 / CGFloat(count)
+                let r: CGFloat = row == 0 || row == 3 ? 14 : 15
+                let pentagon = CGMutablePath()
+                for corner in 0..<5 {
+                    let angle = CGFloat(corner) * 2 * .pi / 5 - .pi / 2
+                    let point = CGPoint(x: x + cos(angle) * r * (row == 0 || row == 3 ? 2.2 : 1), y: y + sin(angle) * r)
+                    if corner == 0 { pentagon.move(to: point) } else { pentagon.addLine(to: point) }
+                }
+                pentagon.closeSubpath()
+                for shift in [CGFloat(-256), 0, 256] {
+                    cg.saveGState()
+                    cg.translateBy(x: shift, y: 0)
+                    cg.addPath(pentagon)
+                    cg.fillPath()
+                    cg.restoreGState()
+                }
+            }
+        }
+    }
+
+    /// 球门：两根白门柱、横梁、后面和顶上一张网。x0–x1 是门口的两边，mouth 是门口那条线、back 是后面那条线（地图坐标的 y）
+    static func goal(from x0: Float, to x1: Float, mouth: Float, back: Float) -> SCNNode {
+        var frame = Mesh(parts: 2)
+        let height: Float = 1.25, thick: Float = 0.14
+        let zs = [mouth, back]
+        for z in zs {
+            for x in [x0, x1] {
+                frame.box(center: SIMD3(x, height / 2, z), size: SIMD3(thick, height, thick), part: 0)
+                frame.box(center: SIMD3(x, height / 2, z), size: SIMD3(thick + 0.06, height + 0.06, thick + 0.06), part: 1)
+            }
+            frame.box(center: SIMD3((x0 + x1) / 2, height, z), size: SIMD3(x1 - x0 + thick, thick, thick), part: 0)
+            frame.box(center: SIMD3((x0 + x1) / 2, height, z), size: SIMD3(x1 - x0 + thick + 0.06, thick + 0.06, thick + 0.06), part: 1)
+        }
+        for x in [x0, x1] {
+            frame.box(center: SIMD3(x, height, (mouth + back) / 2), size: SIMD3(thick, thick, abs(back - mouth)), part: 0)
+            frame.box(center: SIMD3(x, height, (mouth + back) / 2), size: SIMD3(thick + 0.06, thick + 0.06, abs(back - mouth) + 0.06), part: 1)
+        }
+        let white = SCNMaterial()
+        white.lightingModel = .lambert
+        white.diffuse.contents = UIColor(white: 0.97, alpha: 1)
+        let node = SCNNode(geometry: frame.geometry([white, edge(rgb(0.12, 0.12, 0.15))]))
+        // 网：后面一张、顶上一张、两边各一张
+        let net = SCNMaterial()
+        net.lightingModel = .constant
+        net.diffuse.contents = netImage
+        net.diffuse.wrapS = .repeat
+        net.diffuse.wrapT = .repeat
+        net.isDoubleSided = true
+        net.writesToDepthBuffer = false
+        let width = x1 - x0, depth = abs(back - mouth)
+        let sheets: [(size: SIMD2<Float>, at: SIMD3<Float>, angles: SIMD3<Float>)] = [
+            (SIMD2(width, height), SIMD3((x0 + x1) / 2, height / 2, back), .zero),
+            (SIMD2(width, depth), SIMD3((x0 + x1) / 2, height, (mouth + back) / 2), SIMD3(-.pi / 2, 0, 0)),
+            (SIMD2(depth, height), SIMD3(x0, height / 2, (mouth + back) / 2), SIMD3(0, .pi / 2, 0)),
+            (SIMD2(depth, height), SIMD3(x1, height / 2, (mouth + back) / 2), SIMD3(0, .pi / 2, 0)),
+        ]
+        for sheet in sheets {
+            let plane = SCNPlane(width: CGFloat(sheet.size.x), height: CGFloat(sheet.size.y))
+            let material = net.copy() as? SCNMaterial ?? net
+            material.diffuse.contentsTransform = SCNMatrix4MakeScale(sheet.size.x * 4, sheet.size.y * 4, 1)
+            plane.firstMaterial = material
+            let piece = SCNNode(geometry: plane)
+            piece.simdPosition = sheet.at
+            piece.simdEulerAngles = sheet.angles
+            piece.castsShadow = false
+            piece.renderingOrder = 15
+            node.addChildNode(piece)
+        }
+        return node
+    }
+
+    /// 球网的格子（透明底上白线）
+    private static let netImage: UIImage = draw(CGSize(width: 32, height: 32), opaque: false) { cg in
+        cg.setStrokeColor(UIColor(white: 1, alpha: 0.85).cgColor)
+        cg.setLineWidth(3)
+        cg.stroke(CGRect(x: 1.5, y: 1.5, width: 29, height: 29))
+    }
+
+    /// 宝箱：深色木头、金色的箍和锁，弧形的盖子，描边；插一面 color 颜色（队伍颜色）的小旗。
+    /// 返回的材质挨打时闪一下
+    static func chest(color: UIColor) -> (node: SCNNode, glow: [SCNMaterial]) {
+        let width: Float = 2.7, depth: Float = 1.7, height: Float = 0.95
+        var mesh = Mesh(parts: 3)
+        mesh.box(center: SIMD3(0, height / 2, 0), size: SIMD3(width, height, depth), part: 0)
+        mesh.box(center: SIMD3(0, height / 2, 0), size: SIMD3(width + 0.09, height + 0.09, depth + 0.09), part: 2)
+        // 金箍：竖着三道
+        for x in [-width * 0.33, 0, width * 0.33] {
+            mesh.box(center: SIMD3(x, height / 2, 0), size: SIMD3(0.16, height + 0.02, depth + 0.02), part: 1)
+        }
+        let wood = SCNMaterial()
+        wood.lightingModel = .lambert
+        wood.diffuse.contents = chestWood
+        let gold = SCNMaterial()
+        gold.lightingModel = .blinn
+        gold.diffuse.contents = rgb(1.0, 0.78, 0.25)
+        gold.specular.contents = UIColor(white: 0.8, alpha: 1)
+        let node = SCNNode(geometry: mesh.geometry([wood, gold, edge(ink)]))
+        // 盖子：横放的圆柱，下半截藏在箱子里
+        let lid = SCNCylinder(radius: CGFloat(depth / 2), height: CGFloat(width))
+        lid.radialSegmentCount = 24
+        let lidWood = wood.copy() as? SCNMaterial ?? wood
+        lid.materials = [lidWood, gold, gold]
+        let lidNode = SCNNode(geometry: lid)
+        lidNode.simdEulerAngles = SIMD3(0, 0, .pi / 2)
+        lidNode.simdPosition = SIMD3(0, height, 0)
+        node.addChildNode(lidNode)
+        let lidEdge = SCNCylinder(radius: CGFloat(depth / 2 + 0.045), height: CGFloat(width + 0.09))
+        lidEdge.radialSegmentCount = 24
+        lidEdge.firstMaterial = edge(ink)
+        let lidEdgeNode = SCNNode(geometry: lidEdge)
+        lidEdgeNode.simdEulerAngles = SIMD3(0, 0, .pi / 2)
+        lidEdgeNode.simdPosition = SIMD3(0, height, 0)
+        node.addChildNode(lidEdgeNode)
+        // 锁
+        let lock = SCNBox(width: 0.36, height: 0.42, length: 0.12, chamferRadius: 0.04)
+        lock.firstMaterial = gold
+        let lockNode = SCNNode(geometry: lock)
+        lockNode.simdPosition = SIMD3(0, height * 0.85, depth / 2 + 0.05)
+        node.addChildNode(lockNode)
+        // 小旗
+        let pole = SCNCylinder(radius: 0.04, height: 1.3)
+        pole.firstMaterial = wood
+        let poleNode = SCNNode(geometry: pole)
+        poleNode.simdPosition = SIMD3(width / 2 - 0.15, height + 0.9, -depth / 2 + 0.15)
+        node.addChildNode(poleNode)
+        let cloth = SCNBox(width: 0.55, height: 0.36, length: 0.03, chamferRadius: 0)
+        let flag = SCNMaterial()
+        flag.lightingModel = .lambert
+        flag.diffuse.contents = color
+        cloth.firstMaterial = flag
+        let clothNode = SCNNode(geometry: cloth)
+        clothNode.simdPosition = SIMD3(width / 2 - 0.15 - 0.3, height + 1.35, -depth / 2 + 0.15)
+        node.addChildNode(clothNode)
+        return (node, [wood, lidWood])
+    }
+
+    /// 宝箱的木头：深棕色的木板
+    private static let chestWood: UIImage = draw(CGSize(width: 128, height: 128)) { cg in
+        cg.setFillColor(rgb(0.55, 0.33, 0.18).cgColor)
+        cg.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
+        cg.setFillColor(rgb(0.30, 0.17, 0.08).cgColor)
+        for k in 1..<4 { cg.fill(CGRect(x: 0, y: CGFloat(k) * 32 - 2, width: 128, height: 4)) }
+        var random = SeededRandom(seed: 21)
+        cg.setStrokeColor(rgb(0.45, 0.26, 0.13).cgColor)
+        cg.setLineWidth(2)
+        for _ in 0..<18 {
+            let start = CGPoint(x: unit(&random) * 90, y: unit(&random) * 128)
+            cg.move(to: start)
+            cg.addLine(to: CGPoint(x: start.x + 20 + unit(&random) * 40, y: start.y + (unit(&random) - 0.5) * 3))
+        }
+        cg.strokePath()
+    }
+
     // MARK: - 贴图
 
     private static func draw(_ size: CGSize, opaque: Bool = true, _ body: (CGContext) -> Void) -> UIImage {

@@ -26,6 +26,9 @@ public struct ArenaSnapshot: Equatable, Sendable {
         public var ack: Int
         /// 骨盾还剩几秒
         public var shield: Double = 0
+        /// 现在用的角色、一对一上到第几个（老版本的包里没有：nil 不改）
+        public var brawler: Brawler?
+        public var lineupIndex = 0
     }
 
     public var time: Double
@@ -41,6 +44,14 @@ public struct ArenaSnapshot: Equatable, Sendable {
     /// 亡灵之地、骨塔（老版本的包里没有，读出来是空的）
     public var zones: [ArenaGame.Zone] = []
     public var turrets: [ArenaGame.Turret] = []
+    /// 后加的玩法：比分、足球、宝箱、红圈、第几局、停顿（老版本的包里没有）
+    public var score = [0, 0]
+    public var ball: ArenaGame.Ball?
+    public var chests: [ArenaGame.Chest] = []
+    public var warnings: [ArenaGame.Warning] = []
+    public var round = 1
+    public var roundStart = 0.0
+    public var pause = 0.0
 }
 
 extension ArenaGame {
@@ -53,10 +64,11 @@ extension ArenaGame {
                                            superCharge: f.superCharge, alive: f.alive, respawnIn: f.respawnIn, stars: f.stars,
                                            kills: f.kills, deaths: f.deaths, damageDealt: f.damageDealt, place: f.place,
                                            attackedRecently: time - f.lastAttack < 1, leap: f.leap, dashing: f.dash != nil,
-                                           ack: acks[f.id] ?? 0, shield: f.shield)
+                                           ack: acks[f.id] ?? 0, shield: f.shield, brawler: f.brawler, lineupIndex: f.lineupIndex)
             },
             projectiles: projectiles, stars: stars, teamKills: teamKills, zoneProgress: zoneProgress,
-            countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets)
+            countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets,
+            score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause)
     }
 
     /// 收到房主的一帧：照着改（名字、角色、队伍这些开局定下的不变）
@@ -80,9 +92,18 @@ extension ArenaGame {
             fighters[i].leap = state.leap
             fighters[i].dash = state.dashing ? Fighter.Dash(direction: state.moving.normalized, remaining: 1, hit: []) : nil
             fighters[i].shield = state.shield
+            if let brawler = state.brawler, !fighters[i].isBoss { fighters[i].brawler = brawler }
+            fighters[i].lineupIndex = state.lineupIndex
         }
         zones = snapshot.zones
         turrets = snapshot.turrets
+        score = snapshot.score
+        ball = snapshot.ball
+        chests = snapshot.chests
+        warnings = snapshot.warnings
+        round = snapshot.round
+        roundStart = snapshot.roundStart
+        pause = snapshot.pause
         projectiles = snapshot.projectiles
         stars = snapshot.stars
         teamKills = snapshot.teamKills
@@ -97,6 +118,20 @@ extension ArenaGame {
     public mutating func extrapolate(_ dt: Double, except skipped: Int? = nil) {
         guard result == nil else { return }
         time += dt
+        // 停着的时候谁也不动
+        if pause > 0 {
+            pause = max(0, pause - dt)
+            return
+        }
+        for k in warnings.indices { warnings[k].left = max(0, warnings[k].left - dt) }
+        if var current = ball {
+            if let carrier = current.carrier, fighters.indices.contains(carrier) {
+                current.pos = fighters[carrier].pos + fighters[carrier].facing * 0.45
+            } else {
+                ArenaGame.roll(&current, dt, on: map)
+            }
+            ball = current
+        }
         for i in fighters.indices where i != skipped && fighters[i].alive {
             if var leap = fighters[i].leap {
                 leap.elapsed = min(leap.elapsed + dt, Fighter.Leap.duration)
@@ -141,8 +176,11 @@ extension ArenaGame {
 // MARK: - 打包
 
 extension ArenaSnapshot {
-    /// 压成字节：位置精确到 1/100 格，血量整数，其余按需要的精度
-    public func encoded() -> Data {
+    /// 现在的包有几段：1 到事件为止（最早的版本），2 加上亡灵之地、骨塔、骨盾，3 加上后加的玩法
+    public static let version = 3
+
+    /// 压成字节：位置精确到 1/100 格，血量整数，其余按需要的精度。version：只写到第几段（测试老版本的包用）
+    public func encoded(version: Int = ArenaSnapshot.version) -> Data {
         var w = ByteWriter()
         w.f32(time)
         w.u8(teamKills.count)
@@ -226,8 +264,13 @@ extension ArenaSnapshot {
             case .special(let fighter): w.u8(6); w.u8(fighter)
             case .attack(let fighter): w.u8(7); w.u8(fighter)
             case .heal(let target, let amount): w.u8(8); w.u8(target); w.u16(min(amount, 65535))
+            case .goal(let team): w.u8(9); w.u8(team)
+            case .round(let winner): w.u8(10); w.u8(winner ?? 255)
+            case .reset: w.u8(11)
+            case .chestHit(let chest, let amount): w.u8(12); w.u8(chest); w.u16(min(amount, 65535))
             }
         }
+        guard version >= 2 else { return w.data }
         // 后加的：亡灵之地、骨塔、每个人的骨盾（老版本读到这里就不往下读了）
         w.u8(zones.count)
         for zone in zones {
@@ -252,6 +295,45 @@ extension ArenaSnapshot {
         }
         w.u8(fighters.count)
         for f in fighters { w.u8(Int((f.shield * 40).rounded())) }
+        guard version >= 3 else { return w.data }
+        // 再后加的：比分、足球、宝箱、红圈、第几局、停顿、每个人现在用的角色
+        w.u8(score.count)
+        score.forEach { w.u16($0) }
+        if let ball {
+            w.u8(1)
+            w.v2(ball.pos)
+            w.v2(ball.velocity)
+            w.u8(ball.carrier ?? 255)
+            w.u8(ball.kicker ?? 255)
+            w.u8(Int((ball.kickTimer * 100).rounded()))
+        } else {
+            w.u8(0)
+        }
+        w.u8(chests.count)
+        for chest in chests {
+            w.u8(chest.team)
+            w.v2(chest.center)
+            w.u32(max(chest.health, 0))
+            w.u32(chest.maxHealth)
+        }
+        w.u8(warnings.count)
+        for warning in warnings {
+            w.v2(warning.center)
+            w.u8(Int((warning.radius * 20).rounded()))
+            w.u8(Int((max(warning.left, 0) * 100).rounded()))
+            w.u8(Int((warning.total * 100).rounded()))
+            w.u16(warning.damage)
+            w.u8(warning.owner)
+            w.u8(warning.team)
+        }
+        w.u8(round)
+        w.f32(roundStart)
+        w.u8(Int((pause * 20).rounded()))
+        w.u8(fighters.count)
+        for f in fighters {
+            w.u8(f.brawler?.rawValue ?? 255)
+            w.u8(f.lineupIndex)
+        }
         return w.data
     }
 
@@ -325,6 +407,10 @@ extension ArenaSnapshot {
             case 6: guard let f = r.u8() else { return nil }; events.append(.special(fighter: f))
             case 7: guard let f = r.u8() else { return nil }; events.append(.attack(fighter: f))
             case 8: guard let t = r.u8(), let a = r.u16() else { return nil }; events.append(.heal(target: t, amount: a))
+            case 9: guard let t = r.u8() else { return nil }; events.append(.goal(team: t))
+            case 10: guard let w = r.u8() else { return nil }; events.append(.round(winner: w == 255 ? nil : w))
+            case 11: events.append(.reset)
+            case 12: guard let c = r.u8(), let a = r.u16() else { return nil }; events.append(.chestHit(chest: c, amount: a))
             default: return nil
             }
         }
@@ -351,8 +437,49 @@ extension ArenaSnapshot {
                 if fighters.indices.contains(k) { fighters[k].shield = Double(shield) / 40 }
             }
         }
+        var score = [0, 0]
+        var ball: ArenaGame.Ball?
+        var chests: [ArenaGame.Chest] = []
+        var warnings: [ArenaGame.Warning] = []
+        var round = 1
+        var roundStart = 0.0
+        var pause = 0.0
+        if r.remaining > 0 {
+            guard let scoreCount = r.u8() else { return nil }
+            score = []
+            for _ in 0..<scoreCount { guard let v = r.u16() else { return nil }; score.append(v) }
+            guard let hasBall = r.u8() else { return nil }
+            if hasBall == 1 {
+                guard let pos = r.v2(), let velocity = r.v2(), let carrier = r.u8(), let kicker = r.u8(), let timer = r.u8() else { return nil }
+                ball = ArenaGame.Ball(pos: pos, velocity: velocity, carrier: carrier == 255 ? nil : carrier,
+                                      kicker: kicker == 255 ? nil : kicker, kickTimer: Double(timer) / 100)
+            }
+            guard let chestCount = r.u8() else { return nil }
+            for _ in 0..<chestCount {
+                guard let team = r.u8(), let center = r.v2(), let health = r.u32(), let maxHealth = r.u32() else { return nil }
+                chests.append(ArenaGame.Chest(team: team, center: center, health: health, maxHealth: maxHealth))
+            }
+            guard let warningCount = r.u8() else { return nil }
+            for _ in 0..<warningCount {
+                guard let center = r.v2(), let radius = r.u8(), let left = r.u8(), let total = r.u8(), let damage = r.u16(),
+                      let owner = r.u8(), let team = r.u8() else { return nil }
+                warnings.append(ArenaGame.Warning(center: center, radius: Double(radius) / 20, left: Double(left) / 100,
+                                                  total: Double(total) / 100, damage: damage, owner: owner, team: team))
+            }
+            guard let roundNumber = r.u8(), let start = r.f32(), let paused = r.u8(), let fighterCount = r.u8() else { return nil }
+            round = roundNumber
+            roundStart = start
+            pause = Double(paused) / 20
+            for k in 0..<fighterCount {
+                guard let brawler = r.u8(), let index = r.u8() else { return nil }
+                guard fighters.indices.contains(k) else { continue }
+                fighters[k].brawler = Brawler(rawValue: brawler)
+                fighters[k].lineupIndex = index
+            }
+        }
         self.init(time: time, fighters: fighters, projectiles: projectiles, stars: stars, teamKills: kills, zoneProgress: zone,
-                  countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets)
+                  countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets,
+                  score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause)
     }
 }
 

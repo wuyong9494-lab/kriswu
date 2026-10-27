@@ -25,6 +25,14 @@ struct ArenaHomeView: View {
 
     private var progress: ArenaProgress { growth.progress }
 
+    /// 一对一另外带的两个：解锁了的里面奖杯最多的
+    private var duelPartners: [Brawler] {
+        let others = Brawler.allCases.filter { $0 != chosen && progress.isUnlocked($0) }
+        return Array(others.sorted {
+            progress.trophies($0) != progress.trophies($1) ? progress.trophies($0) > progress.trophies($1) : $0.rawValue < $1.rawValue
+        }.prefix(2))
+    }
+
     /// 选的角色还没解锁（比如换了一台手机）就用第一个
     private var chosen: Brawler { progress.isUnlocked(brawler) ? brawler : .knight }
 
@@ -62,7 +70,7 @@ struct ArenaHomeView: View {
             Section {
                 Button {
                     playing = ArenaEntry(setup: ArenaController.Setup(mode: mode, brawler: chosen, name: store.settings.aliases.first ?? "我",
-                                                                      level: progress.level(chosen)))
+                                                                      level: progress.level(chosen), lineup: duelPartners))
                 } label: {
                     Label("开打（人不够电脑补位）", systemImage: "play.fill")
                         .font(DS.Font.headline)
@@ -71,7 +79,12 @@ struct ArenaHomeView: View {
                 .buttonStyle(.borderedProminent)
                 .listRowBackground(Color.clear)
             } footer: {
-                Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；上面黄圈满了放大招。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
+                VStack(alignment: .leading, spacing: 4) {
+                    if mode == .duel {
+                        Text("一对一带：" + ([chosen] + duelPartners).map(\.name).joined(separator: "、") + "（按这个顺序上场）")
+                    }
+                    Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；上面黄圈满了放大招。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
+                }
             }
             GameRoomButtons(kind: .arena, remotePlayers: 2...6, nearbyCapacity: 6) { room in
                 lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: chosen))
@@ -321,6 +334,17 @@ struct ArenaRoomView: View {
     @ObservedObject private var room: GameRoom
     @Environment(\.dismiss) private var dismiss
 
+    /// 这个玩法怎么分人
+    static func seatNote(_ mode: ArenaGame.Mode) -> String {
+        switch mode {
+        case .showdown: return "各打各的，不够 6 个人电脑补。"
+        case .duo: return "两人一队、一共 3 队，按进房间的先后轮流分，不够的电脑补。"
+        case .duel: return "只能两个人对打（人多了开不了），各带 3 个角色：先上自己选的，另外两个电脑帮你挑。"
+        case .boss: return "最多 3 个人当勇者，不够的电脑补；骷髅王是电脑。"
+        default: return "按进房间的先后轮流分到两队，每队不够 3 个人电脑补。"
+        }
+    }
+
     init(lobby: ArenaLobby) {
         self.lobby = lobby
         room = lobby.room
@@ -362,7 +386,7 @@ struct ArenaRoomView: View {
                     } header: {
                         Text("谁用什么")
                     } footer: {
-                        Text(lobby.mode.isTeams ? "按进房间的先后轮流分到两队，每队不够 3 个人电脑补。" : "各打各的，不够 6 个人电脑补。")
+                        Text(Self.seatNote(lobby.mode))
                     }
                     Section {
                         if room.isHost {
@@ -375,7 +399,7 @@ struct ArenaRoomView: View {
                                 Label("开打（\(room.members.count) 个人）", systemImage: "play.fill").frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(room.members.count < 2)
+                            .disabled(!lobby.fits)
                         } else {
                             LabeledContent("玩法", value: lobby.mode.title)
                             Text("等房主开打，开了自动进去。").foregroundStyle(.secondary)
@@ -435,7 +459,7 @@ private struct ArenaMatchView: View {
                 Spacer()
                 controls
             }
-            if hud.dead && hud.result == nil && controller.game.mode.isTeams {
+            if hud.dead && hud.result == nil && controller.willRespawn {
                 Text("\(hud.respawnIn) 秒后复活")
                     .font(DS.Font.title)
                     .foregroundStyle(.white)
@@ -502,14 +526,54 @@ private struct ArenaMatchView: View {
             versus("⭐️\(hud.blue)", "⭐️\(hud.red)", note: "凑 \(ArenaGame.goal) 颗守 15 秒")
         case .zone:
             versus("\(hud.blue)%", "\(hud.red)%", note: "站圈加分")
+        case .ball:
+            versus("⚽️\(hud.blue)", "\(hud.red)", note: "先进 \(ArenaGame.ballGoals) 球")
+        case .heist:
+            versus("\(hud.blue)%", "\(hud.red)%", note: "打爆对面的宝箱")
+        case .bounty:
+            versus("★\(hud.blue)", "★\(hud.red)", note: "打倒人拿悬赏")
+        case .knockout:
+            versus("\(hud.blue)", "\(hud.red)", note: "第 \(hud.round) 局 · 先赢 \(ArenaGame.roundsToWin) 局")
+        case .duel:
+            versus("\(hud.blue)", "\(hud.red)", note: "打倒对方 3 个角色")
         case .showdown:
-            Text("剩 \(hud.alive) 个人")
-                .font(.system(size: 17, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .arenaInk()
-                .padding(.horizontal, DS.Space.m)
-                .frame(height: 36)
-                .background(.black.opacity(0.35), in: Capsule())
+            pill("剩 \(hud.alive) 个人")
+        case .duo:
+            pill("剩 \(hud.teamsLeft) 队")
+        case .boss:
+            bossBar
+        }
+    }
+
+    private func pill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 17, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .arenaInk()
+            .padding(.horizontal, DS.Space.m)
+            .frame(height: 36)
+            .background(.black.opacity(0.35), in: Capsule())
+    }
+
+    /// 讨伐骷髅王：上面一条长长的红血条
+    private var bossBar: some View {
+        let fraction = CGFloat(hud.bossHealth) / CGFloat(max(hud.bossMaxHealth, 1))
+        return VStack(spacing: 2) {
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.black.opacity(0.6))
+                Capsule().fill(Color(uiColor: ArenaPalette.red))
+                    .frame(width: max(0, 226 * min(fraction, 1)), height: 14)
+                    .padding(.leading, 2)
+                Text("骷髅王  \(hud.bossHealth)")
+                    .font(.system(size: 13, weight: .black, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .arenaInk()
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(width: 230, height: 18)
+            .overlay(Capsule().strokeBorder(.black.opacity(0.6), lineWidth: 2))
+            Text("3 分钟内打倒它").font(DS.Font.overline).foregroundStyle(.white.opacity(0.9))
+                .shadow(color: .black.opacity(0.5), radius: 2)
         }
     }
 
@@ -530,7 +594,16 @@ private struct ArenaMatchView: View {
     }
 
     @ViewBuilder private var banner: some View {
-        if let team = hud.countdownTeam {
+        if let note = controller.announcement {
+            // 进球、一局打完、开新一局：大字
+            Text(note.text)
+                .font(.system(size: 30, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .arenaInk()
+                .padding(.horizontal, DS.Space.l)
+                .padding(.vertical, DS.Space.xs)
+                .background((note.good ? Color(uiColor: ArenaPalette.blue) : Color(uiColor: ArenaPalette.red)).opacity(0.85), in: Capsule())
+        } else if let team = hud.countdownTeam {
             Text(team == controller.mine.team ? "守住 \(hud.countdownLeft) 秒就赢了！" : "对方再守 \(hud.countdownLeft) 秒就赢了，快抢！")
                 .font(DS.Font.headline)
                 .foregroundStyle(.white)
@@ -542,7 +615,7 @@ private struct ArenaMatchView: View {
             Text("毒圈在缩小，待在圈里").font(DS.Font.caption).foregroundStyle(.white)
                 .padding(.horizontal, DS.Space.s).padding(.vertical, 4)
                 .background(Color.green.opacity(0.6), in: Capsule())
-        } else if controller.game.mode.duration - Double(hud.timeLeft) < 3 {
+        } else if controller.game.time < 3 {
             // 开局头几秒：这局的地图
             Text("\(controller.game.mode.title) · \(controller.game.map.title)")
                 .font(DS.Font.headline)
@@ -603,8 +676,18 @@ private struct ArenaMatchView: View {
         let tint: Color
         switch result {
         case .team(let team):
-            title = team == mine.team ? "胜利！" : "输了"
-            tint = team == mine.team ? DS.Palette.success : DS.Palette.danger
+            switch controller.game.mode {
+            case .duo:
+                let place = controller.place ?? (team == mine.team ? 1 : 3)
+                title = place == 1 ? "你们活到了最后！" : "第 \(place) 名"
+                tint = place == 1 ? DS.Palette.success : (place == 2 ? DS.Palette.warning : DS.Palette.danger)
+            case .boss:
+                title = team == mine.team ? "打倒了骷髅王！" : "没打倒骷髅王"
+                tint = team == mine.team ? DS.Palette.success : DS.Palette.danger
+            default:
+                title = team == mine.team ? "胜利！" : "输了"
+                tint = team == mine.team ? DS.Palette.success : DS.Palette.danger
+            }
         case .draw:
             title = "平局"
             tint = DS.Palette.warning

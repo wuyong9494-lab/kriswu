@@ -10,6 +10,8 @@ struct ArenaStart: Codable, Equatable {
         var team: Int
         /// 角色等级；老版本房主发来的没有，按 1 级
         var level: Int?
+        /// 一对一带的角色（老版本没有）
+        var lineup: [Brawler]?
     }
 
     var round: Int
@@ -20,7 +22,10 @@ struct ArenaStart: Codable, Equatable {
     var map: String?
 
     var entrants: [ArenaGame.Entrant] {
-        seats.map { ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team, level: $0.level ?? 1) }
+        seats.map {
+            ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team, level: $0.level ?? 1,
+                              lineup: $0.lineup ?? [])
+        }
     }
 }
 
@@ -35,9 +40,17 @@ final class ArenaController: ObservableObject {
 
     struct HUD: Equatable {
         var timeLeft = 0
-        /// 两队的分（团战：打倒几次；抢星星：几颗；占点：百分之几）
+        /// 两队的分（团战：打倒几次；抢星星：几颗；占点：百分之几；足球：进了几球；宝箱攻防：宝箱剩百分之几；
+        /// 悬赏：几颗星；三局两胜：赢了几局；一对一：打倒对方几个）
         var blue = 0
         var red = 0
+        /// 三局两胜：第几局
+        var round = 1
+        /// 讨伐骷髅王：骷髅王的血
+        var bossHealth = 0
+        var bossMaxHealth = 1
+        /// 双人大乱斗：还剩几队
+        var teamsLeft = 0
         /// 抢星星：哪队在倒数、还剩几秒
         var countdownTeam: Int?
         var countdownLeft = 0
@@ -58,6 +71,8 @@ final class ArenaController: ObservableObject {
         var name: String
         /// 自己这个角色的等级（电脑补位的也按这个等级）
         var level = 1
+        /// 一对一带的另外两个角色
+        var lineup: [Brawler] = []
     }
 
     static let step = 1.0 / 60
@@ -74,6 +89,15 @@ final class ArenaController: ObservableObject {
     @Published private(set) var reward: ArenaProgress.Reward?
     /// 联机时房主走了
     @Published private(set) var disconnected = false
+    /// 进球、一局打完、开新一局时屏幕中间写一行大字（两秒后消失）
+    @Published private(set) var announcement: Announcement?
+
+    struct Announcement: Equatable {
+        let text: String
+        /// 好事（自己这边进球、赢了这局）用蓝底，不然红底
+        let good: Bool
+        let at: Double
+    }
     /// 走的摇杆（长度 0–1）
     var move = V2.zero
     /// 正在拖的攻击 / 大招摇杆（画瞄准线用；长度 0–1，占射程的比例）
@@ -105,12 +129,14 @@ final class ArenaController: ObservableObject {
         random.shuffle(&others)
         let maps = ArenaMap.pool(for: setup.mode)
         let map = maps[random.below(maps.count)]
-        var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
-                                          level: setup.level)]
-        for k in 0..<5 {
-            let brawler = others[k % others.count]
-            let team = setup.mode.isTeams ? (k < 2 ? 0 : 1) : k + 1
-            entrants.append(ArenaGame.Entrant(name: "电脑\(brawler.name)", brawler: brawler, isBot: true, team: team, level: setup.level))
+        let teams = setup.mode.seatTeams
+        var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: teams[0],
+                                          level: setup.level, lineup: setup.lineup)]
+        for k in 1..<teams.count {
+            let brawler = others[(k - 1) % others.count]
+            let boss = setup.mode == .boss && teams[k] == 1
+            entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
+                                              level: setup.level))
         }
         self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map), me: 0, room: nil, seed: seed)
     }
@@ -177,6 +203,7 @@ final class ArenaController: ObservableObject {
         let events = game.events
         game.events.removeAll()
         sceneEvents += events
+        announce(events)
         if role == .host {
             netEvents += events
             ticks += 1
@@ -291,6 +318,7 @@ final class ArenaController: ObservableObject {
     /// 收到房主的一帧：照着摆；自己从房主算到的位置，把房主还没收到的那几步补上
     private func apply(_ snapshot: ArenaSnapshot) {
         game.apply(snapshot)
+        announce(game.events)
         sceneEvents += game.events
         game.events.removeAll()
         guard snapshot.fighters.indices.contains(me) else { return }
@@ -329,34 +357,52 @@ final class ArenaController: ObservableObject {
     private func refreshHUD() {
         var hud = HUD()
         hud.timeLeft = Int(game.timeLeft.rounded(.up))
+        let mineTeam = min(mine.team, 1), theirs = 1 - min(mine.team, 1)
         switch game.mode {
         case .teamFight:
-            hud.blue = game.teamKills[mine.team == 0 ? 0 : 1]
-            hud.red = game.teamKills[mine.team == 0 ? 1 : 0]
+            hud.blue = game.teamKills[mineTeam]
+            hud.red = game.teamKills[theirs]
         case .stars:
-            hud.blue = game.teamStars(mine.team == 0 ? 0 : 1)
-            hud.red = game.teamStars(mine.team == 0 ? 1 : 0)
+            hud.blue = game.teamStars(mineTeam)
+            hud.red = game.teamStars(theirs)
             hud.countdownTeam = game.countdown?.team
             hud.countdownLeft = Int((game.countdown?.left ?? 0).rounded(.up))
         case .zone:
-            hud.blue = Int(game.zoneProgress[mine.team == 0 ? 0 : 1])
-            hud.red = Int(game.zoneProgress[mine.team == 0 ? 1 : 0])
+            hud.blue = Int(game.zoneProgress[mineTeam])
+            hud.red = Int(game.zoneProgress[theirs])
+        case .ball, .bounty, .knockout, .duel:
+            hud.blue = game.score[mineTeam]
+            hud.red = game.score[theirs]
+            hud.round = game.round
+        case .heist:
+            hud.blue = Int((game.chestShare(mineTeam) * 100).rounded(.up))
+            hud.red = Int((game.chestShare(theirs) * 100).rounded(.up))
+        case .boss:
+            if let boss = game.fighters.first(where: \.isBoss) {
+                hud.bossHealth = max(boss.health, 0)
+                hud.bossMaxHealth = max(boss.maxHealth, 1)
+            }
         case .showdown:
             hud.alive = game.aliveCount
-            hud.poisonShrinking = game.time > 15
+        case .duo:
+            hud.teamsLeft = Set(game.fighters.filter(\.alive).map(\.team)).count
         }
+        hud.poisonShrinking = game.poisonShrinking
         let fighter = mine
         hud.health = fighter.health
         hud.maxHealth = fighter.maxHealth
         hud.superCharge = fighter.superCharge
         hud.dead = !fighter.alive
         hud.respawnIn = Int(fighter.respawnIn.rounded(.up))
-        // 大乱斗被打倒就算结束（不用看别人打完）
+        // 大乱斗被打倒、双人大乱斗自己这队出局就算结束（不用看别人打完）
         if game.mode == .showdown, !fighter.alive, game.result == nil {
             hud.result = .survivor(-1)
+        } else if game.mode == .duo, fighter.place != nil, game.result == nil {
+            hud.result = .team(-1)
         } else {
             hud.result = game.result
         }
+        if let current = announcement, game.time - current.at > 2.2 || game.time < current.at { announcement = nil }
         if hud.result != nil, !recorded {
             recorded = true
             ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
@@ -365,10 +411,34 @@ final class ArenaController: ObservableObject {
         if hud != self.hud { self.hud = hud }
     }
 
+    /// 被打倒了还会回来（画面上显示「几秒后复活」）
+    var willRespawn: Bool { game.canRespawn(me) }
+
+    private func announce(_ events: [ArenaGame.Event]) {
+        for event in events {
+            switch event {
+            case .goal(let team):
+                announcement = Announcement(text: team == mine.team ? "进球了！" : "对方进球", good: team == mine.team, at: game.time)
+            case .round(let winner):
+                let text = winner == nil ? "这一局平了" : (winner == mine.team ? "这一局赢了！" : "这一局输了")
+                announcement = Announcement(text: text, good: winner == mine.team, at: game.time)
+            case .reset where game.mode == .knockout:
+                announcement = Announcement(text: "第 \(game.round) 局", good: true, at: game.time)
+            default:
+                break
+            }
+        }
+    }
+
     /// 这局对自己来说算什么（大乱斗看名次）
     private func outcome(_ result: ArenaGame.Result?) -> ArenaProgress.Outcome {
         if game.mode == .showdown {
             return .place(mine.place ?? (won(result) ? 1 : game.fighters.count))
+        }
+        if game.mode == .duo {
+            // 三队里第几：按六人大乱斗的第 1、3、5 名给
+            let place = mine.place ?? (won(result) ? 1 : 3)
+            return .place([1, 3, 5][min(max(place, 1), 3) - 1])
         }
         switch result {
         case .draw?: return .draw
@@ -514,7 +584,7 @@ final class ArenaLobby: ObservableObject {
 
     /// 房主开局
     func start() {
-        guard room.isHost, room.members.count >= 2 else { return }
+        guard room.isHost, fits else { return }
         round += 1
         let maps = ArenaMap.pool(for: mode)
         let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats(),
@@ -523,29 +593,48 @@ final class ArenaLobby: ObservableObject {
         playing = Playing(controller: ArenaController(start: start, room: room))
     }
 
-    /// 座位：人按进房间的先后轮流分到两队；不够的电脑补（同一队不重复角色）
-    private func seats() -> [ArenaStart.Seat] {
-        let people = Array(room.members.prefix(6))
-        var seats: [ArenaStart.Seat] = []
-        for (k, member) in people.enumerated() {
-            seats.append(ArenaStart.Seat(member: member.id, name: member.name, brawler: pick(of: member.id) ?? .knight,
-                                         team: mode.isTeams ? k % 2 : k, level: level(of: member.id)))
+    /// 这个玩法最多几个真人（一对一 2 个，讨伐骷髅王 3 个勇者，其余 6 个）
+    static func humanSeats(_ mode: ArenaGame.Mode) -> Int {
+        switch mode {
+        case .duel: return 2
+        case .boss: return 3
+        default: return 6
         }
+    }
+
+    /// 人数合不合这个玩法
+    var fits: Bool { room.members.count >= 2 && room.members.count <= Self.humanSeats(mode) }
+
+    /// 座位：人按进房间的先后轮流分到各队（讨伐骷髅王的人都是勇者）；不够的电脑补（同一队不重复角色）
+    private func seats() -> [ArenaStart.Seat] {
+        let teams = mode.seatTeams
+        // 真人坐哪几个座位：两队对打一边一个轮流坐，双人大乱斗先每队一个
+        let order: [Int]
+        switch mode {
+        case .showdown, .duel, .boss: order = Array(teams.indices)
+        case .duo: order = [0, 2, 4, 1, 3, 5]
+        default: order = [0, 3, 1, 4, 2, 5]
+        }
+        let people = Array(room.members.prefix(min(Self.humanSeats(mode), order.count)))
         // 电脑补位的按大家的平均等级
         let botLevel = people.isEmpty ? 1 : Int((Double(people.map { level(of: $0.id) }.reduce(0, +)) / Double(people.count)).rounded())
-        if mode.isTeams {
-            for team in 0...1 {
-                while seats.filter({ $0.team == team }).count < 3 {
-                    let used = Set(seats.filter { $0.team == team }.map(\.brawler))
-                    let brawler = Brawler.allCases.first { !used.contains($0) } ?? .knight
-                    seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: team, level: botLevel))
-                }
+        var seated: [Int: ArenaStart.Seat] = [:]
+        for (k, member) in people.enumerated() {
+            let seat = order[k]
+            let pick = pick(of: member.id) ?? .knight
+            seated[seat] = ArenaStart.Seat(member: member.id, name: member.name, brawler: pick, team: teams[seat], level: level(of: member.id),
+                                           lineup: mode == .duel ? [pick] : nil)
+        }
+        var seats: [ArenaStart.Seat] = []
+        for (seat, team) in teams.enumerated() {
+            if let person = seated[seat] {
+                seats.append(person)
+                continue
             }
-        } else {
-            while seats.count < 6 {
-                let brawler = Brawler.allCases[seats.count % Brawler.allCases.count]
-                seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: seats.count, level: botLevel))
-            }
+            let used = Set(seated.values.filter { $0.team == team }.map(\.brawler) + seats.filter { $0.team == team }.map(\.brawler))
+            let brawler = Brawler.allCases.first { !used.contains($0) } ?? .knight
+            let boss = mode == .boss && team == 1
+            seats.append(ArenaStart.Seat(member: nil, name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, team: team, level: botLevel))
         }
         return seats
     }

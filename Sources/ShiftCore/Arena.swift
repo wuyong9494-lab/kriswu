@@ -93,9 +93,17 @@ public enum Brawler: Int, CaseIterable, Codable, Sendable {
 // MARK: - 地图
 
 public struct ArenaMap: Sendable {
-    public enum Tile: Sendable { case floor, wall, bush }
+    /// goal：球门里的格子（球能进、人进不去）
+    public enum Tile: Sendable { case floor, wall, bush, goal }
     /// 地面、墙长什么样（画面上用）
     public enum Theme: String, Sendable { case sand, meadow, stone, dusk }
+
+    /// 宝箱攻防的宝箱：占几格（当墙），上半边的归上边一队
+    public struct ChestSpot: Equatable, Sendable {
+        public let team: Int
+        public let center: V2
+        public let cells: [Int]
+    }
 
     /// 联机开局时房主告诉大家用哪张
     public let id: String
@@ -106,27 +114,43 @@ public struct ArenaMap: Sendable {
     public let tiles: [Tile]
     /// 出生点：分队玩法是 [下边一队, 上边一队]，各自为战是一组
     public let spawns: [[V2]]
-    /// 中间：星星冒出来的地方、占点的圈
+    /// 中间：星星冒出来的地方、占点的圈、开球的地方
     public let center: V2
+    /// 宝箱（宝箱攻防的地图才有）
+    public let chestSpots: [ChestSpot]
+    /// 两队守的球门的中间：[下边一队的, 上边一队的]（足球的地图才有）
+    public let goalCenters: [V2?]
+    private let chestOfCell: [Int: Int]
 
-    /// 用字画地图：# 墙、* 草丛、. 空地；a 下边一队的出生点、b 上边一队的、o 各自为战的；s 中间
+    /// 用字画地图：# 墙、* 草丛、. 空地；a 下边一队的出生点、b 上边一队的、o 各自为战的；s 中间；
+    /// G 球门（上半边的是上边一队守的）；C 宝箱（连在一起的几格是一个）
     public init(id: String = "custom", title: String = "", theme: Theme = .sand, rows: [String]) {
         self.id = id
         self.title = title
         self.theme = theme
-        height = rows.count
-        width = rows.map(\.count).max() ?? 0
+        let h = rows.count
+        let w = rows.map(\.count).max() ?? 0
+        height = h
+        width = w
         var tiles: [Tile] = []
         var a: [V2] = [], b: [V2] = [], o: [V2] = []
-        var center = V2(Double(width) / 2, Double(height) / 2)
+        var center = V2(Double(w) / 2, Double(h) / 2)
+        var chestCells = Set<Int>()
+        var goals: [[V2]] = [[], []]
         for (y, row) in rows.enumerated() {
             let characters = Array(row)
-            for x in 0..<width {
+            for x in 0..<w {
                 let c = x < characters.count ? characters[x] : "."
                 let spot = V2(Double(x) + 0.5, Double(y) + 0.5)
                 switch c {
                 case "#": tiles.append(.wall)
                 case "*": tiles.append(.bush)
+                case "G":
+                    tiles.append(.goal)
+                    goals[spot.y < Double(h) / 2 ? 1 : 0].append(spot)
+                case "C":
+                    tiles.append(.wall)
+                    chestCells.insert(y * w + x)
                 default: tiles.append(.floor)
                 }
                 switch c {
@@ -141,6 +165,34 @@ public struct ArenaMap: Sendable {
         self.tiles = tiles
         spawns = o.isEmpty ? [a, b] : [o]
         self.center = center
+        goalCenters = goals.map { cells in
+            cells.isEmpty ? nil : cells.reduce(V2.zero, +) * (1 / Double(cells.count))
+        }
+        // 连在一起的宝箱格子算一个宝箱
+        var spots: [ChestSpot] = []
+        var owner: [Int: Int] = [:]
+        for cell in chestCells.sorted() where owner[cell] == nil {
+            var group: [Int] = []
+            var stack = [cell]
+            owner[cell] = spots.count
+            while let current = stack.popLast() {
+                group.append(current)
+                let cx = current % w, cy = current / w
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nx = cx + dx, ny = cy + dy
+                    guard nx >= 0, ny >= 0, nx < w, ny < h else { continue }
+                    let next = ny * w + nx
+                    if chestCells.contains(next) && owner[next] == nil {
+                        owner[next] = spots.count
+                        stack.append(next)
+                    }
+                }
+            }
+            let middle = group.reduce(V2.zero) { $0 + V2(Double($1 % w) + 0.5, Double($1 / w) + 0.5) } * (1 / Double(group.count))
+            spots.append(ChestSpot(team: middle.y < Double(h) / 2 ? 1 : 0, center: middle, cells: group.sorted()))
+        }
+        chestSpots = spots
+        chestOfCell = owner
     }
 
     public func tile(_ x: Int, _ y: Int) -> Tile {
@@ -150,16 +202,40 @@ public struct ArenaMap: Sendable {
 
     public func tile(at p: V2) -> Tile { tile(Int(p.x.rounded(.down)), Int(p.y.rounded(.down))) }
 
+    /// 人走不过去（墙、宝箱、球门）
+    public func solid(_ x: Int, _ y: Int) -> Bool {
+        let t = tile(x, y)
+        return t == .wall || t == .goal
+    }
+
+    /// 子弹过不去（墙、宝箱；球门挡不住子弹）
     public func blocks(_ p: V2) -> Bool { tile(at: p) == .wall }
 
     public func inBush(_ p: V2) -> Bool { tile(at: p) == .bush }
 
-    /// 一个圆（角色）有没有碰到墙或地图边
-    public func collides(_ p: V2, radius: Double) -> Bool {
+    /// 这一格是不是宝箱
+    public func isChest(_ x: Int, _ y: Int) -> Bool {
+        x >= 0 && y >= 0 && x < width && y < height && chestOfCell[y * width + x] != nil
+    }
+
+    /// 这一点在第几个宝箱里
+    public func chest(at p: V2) -> Int? {
+        let x = Int(p.x.rounded(.down)), y = Int(p.y.rounded(.down))
+        guard x >= 0, y >= 0, x < width, y < height else { return nil }
+        return chestOfCell[y * width + x]
+    }
+
+    /// 这一点在不在球门里：在的话是哪队守的门（上半边的门上边一队守）
+    public func goalTeam(at p: V2) -> Int? {
+        tile(at: p) == .goal ? (p.y < Double(height) / 2 ? 1 : 0) : nil
+    }
+
+    /// 一个圆有没有碰到墙或地图边。人：球门也算墙；球（ball）：球门进得去
+    public func collides(_ p: V2, radius: Double, ball: Bool = false) -> Bool {
         let minX = Int((p.x - radius).rounded(.down)), maxX = Int((p.x + radius).rounded(.down))
         let minY = Int((p.y - radius).rounded(.down)), maxY = Int((p.y + radius).rounded(.down))
         for y in minY...maxY {
-            for x in minX...maxX where tile(x, y) == .wall {
+            for x in minX...maxX where ball ? tile(x, y) == .wall : solid(x, y) {
                 let nearX = min(max(p.x, Double(x)), Double(x + 1))
                 let nearY = min(max(p.y, Double(y)), Double(y + 1))
                 let dx = p.x - nearX, dy = p.y - nearY
@@ -193,7 +269,7 @@ public struct ArenaMap: Sendable {
     /// 格子之间走得通的最短路（四个方向，绕开墙），返回路上每一格的中心（不含起点所在的格）
     public func path(from start: V2, to goal: V2) -> [V2] {
         let sx = Int(start.x), sy = Int(start.y), gx = Int(goal.x), gy = Int(goal.y)
-        guard tile(gx, gy) != .wall, tile(sx, sy) != .wall else { return [goal] }
+        guard !solid(gx, gy), !solid(sx, sy) else { return [goal] }
         if sx == gx && sy == gy { return [goal] }
         var previous = [Int](repeating: -1, count: width * height)
         var queue = [sy * width + sx]
@@ -207,7 +283,7 @@ public struct ArenaMap: Sendable {
             let cx = current % width, cy = current / width
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                 let nx = cx + dx, ny = cy + dy
-                guard tile(nx, ny) != .wall else { continue }
+                guard !solid(nx, ny) else { continue }
                 let next = ny * width + nx
                 if previous[next] == -1 {
                     previous[next] = current
@@ -223,128 +299,6 @@ public struct ArenaMap: Sendable {
             current = previous[current]
         }
         return cells.reversed()
-    }
-
-    /// 分队玩法的地图都是 15 × 25：只画上边一半，下边一半中心对称（上边一队的 b 换成下边一队的 a）
-    private static func teams(_ id: String, _ title: String, _ theme: Theme, _ top: [String], middle: String) -> ArenaMap {
-        let bottom = top.reversed().map { String($0.reversed()).replacingOccurrences(of: "b", with: "a") }
-        return ArenaMap(id: id, title: title, theme: theme, rows: top + [middle] + bottom)
-    }
-
-    /// 各自为战的地图都是 19 × 19、六个出生点：只画上边一半，下边一半上下对称
-    private static func solo(_ id: String, _ title: String, _ theme: Theme, _ top: [String], middle: String) -> ArenaMap {
-        ArenaMap(id: id, title: title, theme: theme, rows: top + [middle] + top.reversed())
-    }
-
-    public static let canyon = teams("canyon", "峡谷", .sand, [
-        "**....###....**",
-        "*...b..b..b...*",
-        "...............",
-        "..###.....###..",
-        "..#.........#..",
-        "....**...**....",
-        "....**...**....",
-        ".#...........#.",
-        ".#...#####...#.",
-        "...............",
-        "**...*...*...**",
-        "**...*...*...**",
-    ], middle: ".......s.......")
-
-    /// 中间一个十字口，两边草丛绕过去
-    public static let crossroads = teams("crossroads", "十字路口", .dusk, [
-        "...**.....**...",
-        "..b....b....b..",
-        "...............",
-        "###...***...###",
-        "..#.........#..",
-        "..#..#...#..#..",
-        "**...#...#...**",
-        "**...........**",
-        "....##...##....",
-        "...............",
-        "..*...###...*..",
-        ".***.......***.",
-    ], middle: "**.....s.....**")
-
-    /// 两队家门口各有一道墙，中间空旷
-    public static let fortress = teams("fortress", "双城堡", .stone, [
-        "...............",
-        ".#..b..b..b..#.",
-        ".#...........#.",
-        ".####.....####.",
-        "......***......",
-        "..*...***...*..",
-        ".***.......***.",
-        "..*..#...#..*..",
-        ".....#...#.....",
-        "##...........##",
-        "....**...**....",
-        "....**...**....",
-    ], middle: ".......s.......")
-
-    /// 墙少、草丛多，适合埋伏
-    public static let garden = teams("garden", "花园", .meadow, [
-        "**.....*.....**",
-        "*..b...b...b..*",
-        "...............",
-        ".***..***..***.",
-        ".***.......***.",
-        "......#.#......",
-        "..**..#.#..**..",
-        "..**.......**..",
-        "#.....***.....#",
-        "#.....***.....#",
-        "...*.......*...",
-        "..***..#..***..",
-    ], middle: ".......s.......")
-
-    public static let plaza = solo("plaza", "广场", .sand, [
-        "....*.........*....",
-        "....o.........o....",
-        "..##....***....##..",
-        "..#.............#..",
-        ".......#...#.......",
-        "**....##...##....**",
-        "**...............**",
-        "....#....*....#....",
-        "...##...***...##...",
-    ], middle: ".o.......s.......o.")
-
-    /// 东一块西一块的断墙
-    public static let ruins = solo("ruins", "废墟", .stone, [
-        "........***........",
-        "....o.........o....",
-        "..#.............#..",
-        ".##..**.....**..##.",
-        "......#.....#......",
-        "..**.....#.....**..",
-        "..**....###....**..",
-        "......#.....#......",
-        "...#...........#...",
-    ], middle: ".o.*.....s.....*.o.")
-
-    /// 到处是草丛
-    public static let grove = solo("grove", "树林", .meadow, [
-        "***.............***",
-        "*...o.........o...*",
-        "....***.....***....",
-        "..#.***.....***.#..",
-        "..#.............#..",
-        "......**...**......",
-        ".**...**.#.**...**.",
-        ".**......#......**.",
-        ".....#.......#.....",
-    ], middle: ".o.......s.......o.")
-
-    /// 这个玩法能用的地图（第一张是老版本一直用的那张）
-    public static func pool(for mode: ArenaGame.Mode) -> [ArenaMap] {
-        mode.isTeams ? [canyon, crossroads, fortress, garden] : [plaza, ruins, grove]
-    }
-
-    /// 按名字找（联机开局时房主发来的）
-    public static func named(_ id: String) -> ArenaMap? {
-        (pool(for: .teamFight) + pool(for: .showdown)).first { $0.id == id }
     }
 }
 
@@ -403,8 +357,13 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var damageDealt = 0
     /// 各自为战：第几名（被打倒或赢了时定下）
     public var place: Int?
+    /// 讨伐骷髅王里的骷髅王（血多、个子大、自己会打，不复活）
+    public var isBoss = false
+    /// 一对一：带的几个角色（按顺序上场）、现在上的是第几个
+    public var lineup: [Brawler] = []
+    public var lineupIndex = 0
 
-    public var maxHealth: Int { brawler.health(level: level) }
+    public var maxHealth: Int { isBoss ? ArenaGame.bossHealth(level: level) : brawler.health(level: level) }
     public var busy: Bool { dash != nil || leap != nil }
 }
 
@@ -450,14 +409,21 @@ public struct ArenaInput: Equatable, Codable, Sendable {
 
 public struct ArenaGame: Sendable {
     public enum Mode: String, CaseIterable, Codable, Sendable {
-        case teamFight, stars, showdown, zone
+        case teamFight, stars, ball, heist, bounty, zone, knockout, showdown, duo, duel, boss
 
         public var title: String {
             switch self {
             case .teamFight: return "3v3 团战"
             case .stars: return "抢星星"
-            case .showdown: return "大乱斗"
+            case .ball: return "足球赛"
+            case .heist: return "宝箱攻防"
+            case .bounty: return "悬赏"
             case .zone: return "占点"
+            case .knockout: return "三局两胜"
+            case .showdown: return "大乱斗"
+            case .duo: return "双人大乱斗"
+            case .duel: return "一对一"
+            case .boss: return "讨伐骷髅王"
             }
         }
 
@@ -465,22 +431,60 @@ public struct ArenaGame: Sendable {
             switch self {
             case .teamFight: return "两队各 3 人，先打倒对方 10 次的赢；时间到了打倒次数多的赢。被打倒 3 秒后在自己家复活。"
             case .stars: return "中间每隔几秒冒一颗星星，捡到带在身上；一队凑够 10 颗、又比对方多，守住 15 秒就赢。被打倒身上的星星全掉出来。"
-            case .showdown: return "6 个人各打各的，不复活；毒圈慢慢缩小，圈外一直掉血，活到最后的赢。"
+            case .ball:
+                return "两队各 3 人，抢中间的球：走过去就捡起来，带着球时攻击键把球踢出去、大招踢得又快又远；踢进对面的球门进 1 球，先进 2 球的赢。进球后大家回去重新开球；带着球不能开枪，被打倒球就掉了。"
+            case .heist: return "两队家里各有一个宝箱：打对面的宝箱、守住自己的，先把对面宝箱打爆的赢；时间到了宝箱剩的血多的赢。"
+            case .bounty:
+                return "每个人头上有悬赏（一开始 2 颗星）：打倒一个敌人，按他的悬赏给队里加星星，自己的悬赏 +1（最多 7 颗），被打倒了回到 2 颗。时间到了星星多的赢。"
             case .zone: return "地图中间有个圈，只有一队的人站在圈里就给这队加分，两队都在就谁也不加，先满 100 的赢。"
+            case .knockout: return "被打倒了这一局就不能复活：一队全倒下，另一队赢这一局，先赢两局的赢。每局开打 40 秒后毒圈开始缩小。"
+            case .showdown: return "6 个人各打各的，不复活；毒圈慢慢缩小，圈外一直掉血，活到最后的赢。"
+            case .duo: return "6 个人分 3 队、两人一队，毒圈慢慢缩小；被打倒了只要队友还活着，10 秒后在队友身边复活，最后剩下的一队赢。"
+            case .duel: return "1 对 1，每人带 3 个角色轮流上场：一个被打倒了，3 秒后换下一个；先把对方 3 个都打倒的赢。"
+            case .boss:
+                return "3 个勇者一起打骷髅王：它会砸地（地上的红圈快躲开）、冲撞、召唤骨塔，血少了会发狂；3 分钟内打倒它就赢。勇者被打倒 5 秒后复活。"
             }
         }
 
-        /// 一局最长几秒
+        /// 一局最长几秒（三局两胜是所有局加起来的上限，每局另算）
         public var duration: Double {
             switch self {
-            case .teamFight: return 150
-            case .stars: return 180
-            case .showdown: return 150
-            case .zone: return 150
+            case .stars, .boss: return 180
+            case .knockout: return 400
+            default: return 150
             }
         }
 
-        public var isTeams: Bool { self != .showdown }
+        /// 两队对打（下边一队、上边一队）；大乱斗、双人大乱斗不是
+        public var isTeams: Bool { self != .showdown && self != .duo }
+
+        /// 有毒圈
+        public var hasPoison: Bool { self == .showdown || self == .duo || self == .knockout }
+
+        /// 被打倒了还能回来（三局两胜这一局、大乱斗不行；双人大乱斗要队友还活着；一对一换下一个角色上）
+        public var respawns: Bool { self != .showdown && self != .knockout }
+
+        /// 被打倒后几秒回来
+        public var respawnDelay: Double {
+            switch self {
+            case .ball: return 4
+            case .boss: return 5
+            case .duo: return 10
+            default: return ArenaGame.respawnDelay
+            }
+        }
+
+        /// 每个座位在哪队（也就是一局几个人）：两队对打 3v3，大乱斗 6 个各自为战，双人大乱斗 3 队各 2 人，一对一 1v1，
+        /// 讨伐骷髅王 3 个勇者 + 骷髅王
+        public var seatTeams: [Int] {
+            switch self {
+            case .showdown: return [0, 1, 2, 3, 4, 5]
+            case .duo: return [0, 0, 1, 1, 2, 2]
+            case .duel: return [0, 1]
+            case .boss: return [0, 0, 0, 1]
+            default: return [0, 0, 0, 1, 1, 1]
+            }
+        }
     }
 
     public enum Result: Equatable, Sendable {
@@ -501,6 +505,14 @@ public struct ArenaGame: Sendable {
         case attack(fighter: Int)
         /// 回了血（骨盾、亡灵之地）
         case heal(target: Int, amount: Int)
+        /// 进球了（哪队进的）
+        case goal(team: Int)
+        /// 三局两胜：这一局分出来了（哪队赢；nil 是平局）
+        case round(winner: Int?)
+        /// 进球、一局打完停一会儿后，大家回到出发的地方
+        case reset
+        /// 宝箱挨打（第几个宝箱、多少）
+        case chestHit(chest: Int, amount: Int)
     }
 
     /// 亡灵之地：圈里的队友回血、敌人掉血，每 0.5 秒结一次
@@ -538,6 +550,38 @@ public struct ArenaGame: Sendable {
         public var left: Double
     }
 
+    /// 足球：在哪、往哪滚、谁带着
+    public struct Ball: Equatable, Sendable {
+        public var pos: V2
+        public var velocity: V2 = .zero
+        public var carrier: Int?
+        /// 刚踢出去的人一小会儿碰不到球（不然一踢就又捡回来了）
+        public var kicker: Int?
+        public var kickTimer: Double = 0
+        public static let radius = 0.3
+    }
+
+    /// 宝箱攻防的宝箱（和地图上的宝箱一个对一个）
+    public struct Chest: Equatable, Sendable {
+        public var team: Int
+        public var center: V2
+        public var health: Int
+        public var maxHealth: Int
+        public static let fullHealth = 36000
+    }
+
+    /// 地上的红圈：时间到了炸（骷髅王砸地）
+    public struct Warning: Equatable, Sendable {
+        public var center: V2
+        public var radius: Double
+        public var left: Double
+        /// 一共要等几秒（画面上按这个画红圈慢慢填满）
+        public var total: Double
+        public var damage: Int
+        public var owner: Int
+        public var team: Int
+    }
+
     /// 报名的人
     public struct Entrant: Equatable, Codable, Sendable {
         public var name: String
@@ -545,16 +589,19 @@ public struct ArenaGame: Sendable {
         public var isBot: Bool
         public var team: Int
         public var level: Int
+        /// 一对一带的角色（第一个是 brawler；不够 3 个开局时补上）
+        public var lineup: [Brawler]
 
-        public init(name: String, brawler: Brawler, isBot: Bool, team: Int, level: Int = 1) {
+        public init(name: String, brawler: Brawler, isBot: Bool, team: Int, level: Int = 1, lineup: [Brawler] = []) {
             self.name = name
             self.brawler = brawler
             self.isBot = isBot
             self.team = team
             self.level = level
+            self.lineup = lineup
         }
 
-        /// 老版本存的、发来的没有等级，按 1 级
+        /// 老版本存的、发来的没有等级（按 1 级）、没有一对一的阵容
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             name = try container.decode(String.self, forKey: .name)
@@ -562,6 +609,7 @@ public struct ArenaGame: Sendable {
             isBot = try container.decode(Bool.self, forKey: .isBot)
             team = try container.decode(Int.self, forKey: .team)
             level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 1
+            lineup = try container.decodeIfPresent([Brawler].self, forKey: .lineup) ?? []
         }
     }
 
@@ -570,6 +618,17 @@ public struct ArenaGame: Sendable {
     public static let starHold = 15.0
     public static let zoneRadius = 2.5
     public static let respawnDelay = 3.0
+    /// 足球先进几球赢、三局两胜先赢几局
+    public static let ballGoals = 2
+    public static let roundsToWin = 2
+    /// 三局两胜：每局开打多少秒后毒圈开始缩、一局最长打多久
+    public static let roundPoison = 40.0
+    public static let roundLimit = 80.0
+    /// 进球、一局打完后停几秒
+    public static let breakTime = 2.5
+    /// 悬赏：一开始几颗星、最多几颗
+    public static let startingBounty = 2
+    public static let maxBounty = 7
 
     public let mode: Mode
     public let map: ArenaMap
@@ -587,39 +646,92 @@ public struct ArenaGame: Sendable {
     /// 地上的亡灵之地、骨塔
     public internal(set) var zones: [Zone] = []
     public internal(set) var turrets: [Turret] = []
+    /// 两队的分：足球进了几球、悬赏攒了几颗星、三局两胜赢了几局、一对一打倒对方几个
+    public internal(set) var score = [0, 0]
+    public internal(set) var ball: Ball?
+    public internal(set) var chests: [Chest] = []
+    /// 地上快要炸的红圈
+    public internal(set) var warnings: [Warning] = []
+    /// 三局两胜：第几局、这局从第几秒开始
+    public internal(set) var round = 1
+    public internal(set) var roundStart = 0.0
+    /// 进球、一局打完后停一会儿（停完大家回到出发的地方）
+    public internal(set) var pause = 0.0
     public var events: [Event] = []
-    private var nextProjectile = 1
-    private var nextTurret = 1
+    var nextProjectile = 1
+    var nextTurret = 1
     private var starTimer = 0.0
-    private var random: SeededRandom
+    var random: SeededRandom
+    var bossBrain = BossBrain()
 
-    /// map：用哪张地图；nil 或者和玩法对不上（分队玩法要两组出生点，各自为战要一组）就用这个玩法的第一张
+    /// map：用哪张地图；nil 或者不是这个玩法的地图（拿团战的图打大乱斗）就用这个玩法的第一张
     public init(mode: Mode, entrants: [Entrant], seed: UInt64, map chosen: ArenaMap? = nil) {
         self.mode = mode
-        if let chosen, chosen.spawns.count == (mode.isTeams ? 2 : 1) {
+        let pool = ArenaMap.pool(for: mode)
+        if let chosen, pool.contains(where: { $0.id == chosen.id })
+            || (chosen.id == "custom" && chosen.spawns.count == (mode.isTeams ? 2 : 1)) {
             map = chosen
         } else {
-            map = ArenaMap.pool(for: mode)[0]
+            map = pool[0]
         }
         random = SeededRandom(seed: seed)
         safeRadius = Double(max(map.width, map.height))
         var slots = [Int: Int]()
         var list: [Fighter] = []
+        let anchors = Self.duoAnchors(map)
         for (index, entrant) in entrants.enumerated() {
-            let team = mode.isTeams ? min(max(entrant.team, 0), 1) : index
-            let group = mode.isTeams ? map.spawns[team] : map.spawns[0]
-            let slot = mode.isTeams ? slots[team, default: 0] : index
+            let team: Int
+            switch mode {
+            case .showdown: team = index
+            case .duo: team = min(max(entrant.team, 0), 2)
+            default: team = min(max(entrant.team, 0), 1)
+            }
+            let slot = slots[team, default: 0]
             slots[team, default: 0] += 1
-            let spawn = group.isEmpty ? map.center : group[slot % group.count]
-            let facing = (map.center - spawn).normalized
+            let spawn: V2
+            switch mode {
+            case .showdown:
+                let group = map.spawns[0]
+                spawn = group.isEmpty ? map.center : group[index % group.count]
+            case .duo:
+                spawn = Self.duoSpawn(map, anchors: anchors, team: team, slot: slot)
+            default:
+                let group = map.spawns.indices.contains(team) ? map.spawns[team] : []
+                spawn = group.isEmpty ? map.center : group[slot % group.count]
+            }
             let level = min(max(entrant.level, 1), ArenaProgress.maxLevel)
-            list.append(Fighter(id: index, name: entrant.name, team: team, brawler: entrant.brawler, isBot: entrant.isBot, level: level,
-                                pos: spawn, facing: facing, health: entrant.brawler.health(level: level)))
+            var fighter = Fighter(id: index, name: entrant.name, team: team, brawler: entrant.brawler, isBot: entrant.isBot, level: level,
+                                  pos: spawn, facing: (map.center - spawn).normalized, health: entrant.brawler.health(level: level))
+            if mode == .duel { fighter.lineup = Self.lineup(entrant, seed: seed &+ UInt64(index + 1)) }
+            if mode == .bounty { fighter.stars = Self.startingBounty }
+            list.append(fighter)
         }
         fighters = list
+        switch mode {
+        case .ball:
+            ball = Ball(pos: map.center)
+        case .heist:
+            chests = map.chestSpots.map { Chest(team: $0.team, center: $0.center, health: Chest.fullHealth, maxHealth: Chest.fullHealth) }
+        case .boss:
+            setUpBoss()
+        default:
+            break
+        }
     }
 
-    public var timeLeft: Double { max(0, mode.duration - time) }
+    /// 还剩几秒（三局两胜是这一局还剩几秒）
+    public var timeLeft: Double {
+        mode == .knockout ? max(0, Self.roundLimit - (time - roundStart)) : max(0, mode.duration - time)
+    }
+
+    /// 毒圈在缩
+    public var poisonShrinking: Bool {
+        switch mode {
+        case .showdown, .duo: return time > 15
+        case .knockout: return time - roundStart > Self.roundPoison
+        default: return false
+        }
+    }
 
     /// 一队身上带着几颗星星
     public func teamStars(_ team: Int) -> Int {
@@ -631,6 +743,7 @@ public struct ArenaGame: Sendable {
     /// 这个人现在看不看得见：在草丛里的，敌人走近（2.5 格内）或者他刚开过火才看得见
     public func isVisible(_ fighter: Fighter, to team: Int) -> Bool {
         guard fighter.alive else { return false }
+        if fighter.isBoss { return true }
         if fighter.team == team || !map.inBush(fighter.pos) || time - fighter.lastAttack < 1 { return true }
         return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 2.5 }
     }
@@ -640,24 +753,39 @@ public struct ArenaGame: Sendable {
     public mutating func step(_ dt: Double, inputs: [Int: ArenaInput]) {
         guard result == nil else { return }
         time += dt
+        // 进球、一局打完：停一会儿，停完大家回到出发的地方
+        if pause > 0 {
+            pause -= dt
+            if pause <= 0 {
+                pause = 0
+                resetField()
+            }
+            return
+        }
         for i in fighters.indices {
-            update(i, inputs[i] ?? ArenaInput(), dt)
+            if fighters[i].isBoss {
+                updateBoss(i, dt)
+            } else {
+                update(i, inputs[i] ?? ArenaInput(), dt)
+            }
         }
         moveProjectiles(dt)
+        updateWarnings(dt)
         updateZones(dt)
         updateTurrets(dt)
         switch mode {
         case .stars: updateStars(dt)
         case .zone: updateZone(dt)
-        case .showdown: updatePoison(dt)
-        case .teamFight: break
+        case .ball: updateBall(dt)
+        case .showdown, .duo, .knockout: updatePoison(dt)
+        case .teamFight, .heist, .bounty, .duel, .boss: break
         }
         decide()
     }
 
     private mutating func update(_ i: Int, _ input: ArenaInput, _ dt: Double) {
         if !fighters[i].alive {
-            guard mode.isTeams else { return }
+            guard canRespawn(i) else { return }
             fighters[i].respawnIn -= dt
             if fighters[i].respawnIn <= 0 { respawn(i) }
             return
@@ -688,11 +816,20 @@ public struct ArenaGame: Sendable {
             }
             fighters[i].burst = burst.left > 0 ? burst : nil
         }
-        if let aim = input.attack, fighters[i].ammo >= 1, fighters[i].cooldown <= 0 {
-            attack(i, aim)
-        }
-        if let aim = input.special, fighters[i].superCharge >= 1, fighters[i].alive {
-            special(i, aim)
+        if ball?.carrier == i {
+            // 带着球：攻击键把球踢出去，大招大力踢；不开枪
+            if let aim = input.special, fighters[i].superCharge >= 1 {
+                kick(i, aim, power: true)
+            } else if let aim = input.attack {
+                kick(i, aim, power: false)
+            }
+        } else {
+            if let aim = input.attack, fighters[i].ammo >= 1, fighters[i].cooldown <= 0 {
+                attack(i, aim)
+            }
+            if let aim = input.special, fighters[i].superCharge >= 1, fighters[i].alive {
+                special(i, aim)
+            }
         }
         if fighters[i].alive, time - max(fighters[i].lastHurt, fighters[i].lastAttack) > 3 {
             let gain = Int((Double(fighters[i].maxHealth) * 0.13 * dt).rounded(.up))
@@ -701,13 +838,48 @@ public struct ArenaGame: Sendable {
     }
 
     /// 走：先整个走，碰墙了就只走横的或只走竖的（贴着墙滑）
-    private mutating func walk(_ i: Int, by delta: V2) {
+    mutating func walk(_ i: Int, by delta: V2) {
         fighters[i].pos = Self.walk(from: fighters[i].pos, by: delta, on: map)
     }
 
+    /// 被打倒的这个人还回不回来：大乱斗、三局两胜（这一局）不回来，双人大乱斗要队友还活着，一对一要还有角色没上过
+    func canRespawn(_ i: Int) -> Bool {
+        guard mode.respawns, !fighters[i].isBoss else { return false }
+        switch mode {
+        case .duo: return fighters.contains { $0.team == fighters[i].team && $0.id != i && $0.alive }
+        case .duel: return fighters[i].lineupIndex + 1 < fighters[i].lineup.count
+        default: return true
+        }
+    }
+
+    /// 出发的地方（复活、重新开球时站回去）：自己队的出生点里按在队里的先后挑
+    func homeSpot(_ i: Int) -> V2 {
+        let team = fighters[i].team
+        if !mode.isTeams {
+            let group = map.spawns.first ?? []
+            return group.isEmpty ? map.center : group[i % group.count]
+        }
+        let group = map.spawns.indices.contains(team) ? map.spawns[team] : []
+        let slot = fighters.filter { $0.team == team && $0.id < i }.count
+        return group.isEmpty ? map.center : group[slot % group.count]
+    }
+
     private mutating func respawn(_ i: Int) {
-        let group = map.spawns[mode.isTeams ? fighters[i].team : 0]
-        let spawn = group.isEmpty ? map.center : group[i % group.count]
+        let spawn: V2
+        if mode == .duo, let mate = fighters.first(where: { $0.team == fighters[i].team && $0.id != i && $0.alive }) {
+            // 双人大乱斗：在队友身边回来
+            spawn = map.nearestOpen(to: mate.pos + V2(0.9, 0))
+        } else {
+            spawn = homeSpot(i)
+        }
+        if mode == .duel {
+            // 一对一：换下一个角色上
+            fighters[i].lineupIndex = min(fighters[i].lineupIndex + 1, max(fighters[i].lineup.count - 1, 0))
+            if fighters[i].lineup.indices.contains(fighters[i].lineupIndex) {
+                fighters[i].brawler = fighters[i].lineup[fighters[i].lineupIndex]
+            }
+            fighters[i].superCharge = 0
+        }
         fighters[i].pos = spawn
         fighters[i].facing = (map.center - spawn).normalized
         fighters[i].health = fighters[i].maxHealth
@@ -810,7 +982,7 @@ public struct ArenaGame: Sendable {
         }
     }
 
-    private mutating func shoot(_ i: Int, _ direction: V2, speed: Double, range: Double, damage: Int, radius: Double,
+    mutating func shoot(_ i: Int, _ direction: V2, speed: Double, range: Double, damage: Int, radius: Double,
                                 pierce: Bool = false, isSuper: Bool = false) {
         let fighter = fighters[i]
         projectiles.append(Projectile(id: nextProjectile, owner: i, team: fighter.team, pos: fighter.pos + direction * 0.3,
@@ -820,11 +992,11 @@ public struct ArenaGame: Sendable {
     }
 
     /// 按这个人的等级加成后的伤害
-    private func power(_ i: Int, _ damage: Int) -> Int {
+    func power(_ i: Int, _ damage: Int) -> Int {
         Int((Double(damage) * Brawler.boost(fighters[i].level)).rounded())
     }
 
-    private mutating func spread(_ i: Int, _ direction: V2, count: Int, angle: Double, speed: Double, range: Double,
+    mutating func spread(_ i: Int, _ direction: V2, count: Int, angle: Double, speed: Double, range: Double,
                                  damage: Int, radius: Double, isSuper: Bool = false) {
         for k in 0..<count {
             let offset = count == 1 ? 0 : angle * (Double(k) / Double(count - 1) - 0.5)
@@ -840,7 +1012,7 @@ public struct ArenaGame: Sendable {
         nextProjectile += 1
     }
 
-    private mutating func updateDash(_ i: Int, _ dt: Double) {
+    mutating func updateDash(_ i: Int, _ dt: Double) {
         guard var dash = fighters[i].dash else { return }
         let step = min(dash.remaining, 12 * dt)
         let next = fighters[i].pos + dash.direction * step
@@ -852,9 +1024,9 @@ public struct ArenaGame: Sendable {
         fighters[i].moving = dash.direction * 12
         dash.remaining -= step
         for j in fighters.indices where fighters[j].alive && fighters[j].team != fighters[i].team && !dash.hit.contains(j)
-            && fighters[j].pos.distance(to: next) < Self.fighterRadius * 2.2 {
+            && fighters[j].pos.distance(to: next) < Self.hitRadius(fighters[j]) + Self.hitRadius(fighters[i]) + 0.08 {
             dash.hit.append(j)
-            hurt(j, power(i, 1600), by: i, charges: false)
+            hurt(j, power(i, fighters[i].isBoss ? 2000 : 1600), by: i, charges: false)
         }
         fighters[i].dash = dash.remaining > 0.01 ? dash : nil
     }
@@ -889,10 +1061,17 @@ public struct ArenaGame: Sendable {
             let delta = p.velocity * dt
             p.pos = p.pos + delta
             p.rangeLeft -= delta.length
-            if p.rangeLeft <= 0 || map.blocks(p.pos) { continue }
+            if p.rangeLeft <= 0 { continue }
+            if map.blocks(p.pos) {
+                // 打到墙上；是对面的宝箱就扣宝箱的血
+                if let k = map.chest(at: p.pos), chests.indices.contains(k), chests[k].team != p.team {
+                    hitChest(k, p.damage, by: p.owner)
+                }
+                continue
+            }
             var consumed = false
             for j in fighters.indices where fighters[j].alive && fighters[j].team != p.team && fighters[j].leap == nil && !p.hit.contains(j) {
-                guard fighters[j].pos.distance(to: p.pos) < Self.fighterRadius + p.radius else { continue }
+                guard fighters[j].pos.distance(to: p.pos) < Self.hitRadius(fighters[j]) + p.radius else { continue }
                 hurt(j, p.damage, by: p.owner, charges: p.charges)
                 if p.pierce {
                     p.hit.append(j)
@@ -919,13 +1098,17 @@ public struct ArenaGame: Sendable {
         projectiles = kept
     }
 
-    private mutating func blast(at point: V2, radius: Double, damage: Int, by owner: Int, team: Int, charges: Bool) {
+    mutating func blast(at point: V2, radius: Double, damage: Int, by owner: Int, team: Int, charges: Bool) {
         events.append(.explosion(at: point, radius: radius))
-        for j in fighters.indices where fighters[j].alive && fighters[j].team != team && fighters[j].pos.distance(to: point) < radius + Self.fighterRadius {
+        for j in fighters.indices where fighters[j].alive && fighters[j].team != team
+            && fighters[j].pos.distance(to: point) < radius + Self.hitRadius(fighters[j]) {
             hurt(j, damage, by: owner, charges: charges)
         }
         for t in turrets.indices where turrets[t].team != team && turrets[t].pos.distance(to: point) < radius + Turret.radius {
             turrets[t].health -= damage
+        }
+        for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + 1.3 {
+            hitChest(k, damage, by: owner)
         }
     }
 
@@ -981,7 +1164,7 @@ public struct ArenaGame: Sendable {
         turrets.removeAll { $0.left <= 0 || $0.health <= 0 }
     }
 
-    private mutating func hurt(_ j: Int, _ raw: Int, by attacker: Int?, charges: Bool) {
+    mutating func hurt(_ j: Int, _ raw: Int, by attacker: Int?, charges: Bool) {
         guard fighters[j].alive, raw > 0 else { return }
         // 骨盾：少受六成
         let amount = fighters[j].shield > 0 ? max(1, Int((Double(raw) * 0.4).rounded())) : raw
@@ -1000,7 +1183,8 @@ public struct ArenaGame: Sendable {
         if fighters[j].health <= 0 { knockOut(j, by: attacker) }
     }
 
-    private mutating func knockOut(_ j: Int, by attacker: Int?) {
+    mutating func knockOut(_ j: Int, by attacker: Int?) {
+        let victim = fighters[j]
         fighters[j].alive = false
         fighters[j].health = 0
         fighters[j].deaths += 1
@@ -1012,18 +1196,38 @@ public struct ArenaGame: Sendable {
         if let attacker, attacker != j {
             fighters[attacker].kills += 1
             if mode.isTeams { teamKills[fighters[attacker].team] += 1 }
+            // 悬赏：按他头上的星星给队里加分，自己的悬赏涨一颗
+            if mode == .bounty, fighters[attacker].team != victim.team {
+                score[fighters[attacker].team] += victim.stars
+                fighters[attacker].stars = min(Self.maxBounty, fighters[attacker].stars + 1)
+            }
         }
-        // 身上的星星掉出来，散在旁边
-        for _ in 0..<fighters[j].stars {
-            let angle = Double(random.below(360)) * .pi / 180
-            let offset = V2(cos(angle), sin(angle)) * (0.4 + Double(random.below(80)) / 100)
-            stars.append(map.nearestOpen(to: fighters[j].pos + offset, radius: 0.2))
+        switch mode {
+        case .bounty:
+            fighters[j].stars = Self.startingBounty
+        default:
+            // 身上的星星掉出来，散在旁边
+            for _ in 0..<fighters[j].stars {
+                let angle = Double(random.below(360)) * .pi / 180
+                let offset = V2(cos(angle), sin(angle)) * (0.4 + Double(random.below(80)) / 100)
+                stars.append(map.nearestOpen(to: fighters[j].pos + offset, radius: 0.2))
+            }
+            fighters[j].stars = 0
         }
-        fighters[j].stars = 0
-        if mode.isTeams {
-            fighters[j].respawnIn = Self.respawnDelay
-        } else {
+        // 带着的球掉在地上
+        if ball?.carrier == j {
+            ball?.carrier = nil
+            ball?.velocity = .zero
+        }
+        if mode == .duel, victim.team <= 1 { score[1 - victim.team] += 1 }
+        if canRespawn(j) {
+            fighters[j].respawnIn = mode.respawnDelay
+        } else if mode == .showdown {
             fighters[j].place = aliveCount + 1
+        } else if mode == .duo, !fighters.contains(where: { $0.team == victim.team && $0.alive }) {
+            // 队友也倒下了：这一队出局，按还剩几队排名次
+            let teamsLeft = Set(fighters.filter(\.alive).map(\.team)).count
+            for k in fighters.indices where fighters[k].team == victim.team { fighters[k].place = teamsLeft + 1 }
         }
         events.append(.knockout(target: j, by: attacker))
     }
@@ -1072,8 +1276,10 @@ public struct ArenaGame: Sendable {
         }
     }
 
+    /// 毒圈：大乱斗开打 15 秒后、三局两胜每局开打 40 秒后开始缩，圈外一直掉血
     private mutating func updatePoison(_ dt: Double) {
-        let start = 15.0, end = 110.0
+        let start = mode == .knockout ? roundStart + Self.roundPoison : 15
+        let end = mode == .knockout ? start + 30 : 110
         let biggest = Double(max(map.width, map.height)) * 0.75
         let t = min(max((time - start) / (end - start), 0), 1)
         safeRadius = biggest - (biggest - 2.5) * t
@@ -1097,7 +1303,28 @@ public struct ArenaGame: Sendable {
             } else if alive.isEmpty {
                 result = .draw
             }
-        case .stars, .zone:
+        case .duo:
+            let teams = Set(fighters.filter(\.alive).map(\.team))
+            if teams.count == 1, let team = teams.first {
+                for k in fighters.indices where fighters[k].team == team { fighters[k].place = 1 }
+                result = .team(team)
+            } else if teams.isEmpty {
+                result = .draw
+            }
+        case .ball:
+            if let team = score.firstIndex(where: { $0 >= Self.ballGoals }) { result = .team(team) }
+        case .heist:
+            if let broken = chests.first(where: { $0.health <= 0 }) { result = .team(1 - broken.team) }
+        case .knockout:
+            decideRound()
+        case .duel:
+            // 一边的角色都倒下了、也没有下一个了
+            for team in 0...1 where !fighters.contains(where: { $0.team == team && ($0.alive || canRespawn($0.id)) }) {
+                result = .team(1 - team)
+            }
+        case .boss:
+            if fighters.contains(where: { $0.isBoss && !$0.alive }) { result = .team(0) }
+        case .stars, .zone, .bounty:
             break
         }
         guard result == nil, time >= mode.duration else { return }
@@ -1106,15 +1333,42 @@ public struct ArenaGame: Sendable {
         case .teamFight: result = compare(Double(teamKills[0]), Double(teamKills[1]))
         case .stars: result = compare(Double(teamStars(0)), Double(teamStars(1)))
         case .zone: result = compare(zoneProgress[0], zoneProgress[1])
+        case .ball, .bounty, .knockout: result = compare(Double(score[0]), Double(score[1]))
+        case .heist: result = compare(chestShare(0), chestShare(1))
+        case .duel:
+            // 打倒的一样多：看场上那个血剩几成
+            result = score[0] != score[1] ? compare(Double(score[0]), Double(score[1])) : compare(healthShare(0), healthShare(1))
+        case .boss:
+            result = .team(1)
         case .showdown:
             // 还剩几个人：血多的赢，其余按血排名
             let alive = fighters.filter(\.alive).sorted { $0.health > $1.health }
             for (rank, fighter) in alive.enumerated() { fighters[fighter.id].place = rank + 1 }
             result = alive.first.map { .survivor($0.id) } ?? .draw
+        case .duo:
+            // 还剩几队：按队里剩的血排名
+            var totals: [Int: Int] = [:]
+            for fighter in fighters where fighter.alive { totals[fighter.team, default: 0] += fighter.health }
+            let ranked = totals.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            for (rank, entry) in ranked.enumerated() {
+                for k in fighters.indices where fighters[k].team == entry.key { fighters[k].place = rank + 1 }
+            }
+            result = ranked.first.map { .team($0.key) } ?? .draw
         }
     }
 
-    private func compare(_ a: Double, _ b: Double) -> Result {
+    /// 自己队的宝箱还剩几成血
+    func chestShare(_ team: Int) -> Double {
+        guard let chest = chests.first(where: { $0.team == team }) else { return 0 }
+        return Double(chest.health) / Double(max(chest.maxHealth, 1))
+    }
+
+    /// 这队场上的人还剩几成血（一对一比血用）
+    func healthShare(_ team: Int) -> Double {
+        fighters.filter { $0.team == team && $0.alive }.reduce(0) { $0 + Double($1.health) / Double(max($1.maxHealth, 1)) }
+    }
+
+    func compare(_ a: Double, _ b: Double) -> Result {
         a == b ? .draw : (a > b ? .team(0) : .team(1))
     }
 

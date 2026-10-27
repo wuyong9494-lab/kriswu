@@ -69,6 +69,24 @@ final class ArenaWorldView: SCNView {
     private var finished = false
     /// 伤害数字的贴图（同样的数字、颜色画一次）
     private var numberTextures: [String: (texture: SKTexture, size: CGSize)] = [:]
+    /// 足球：球、地上的影子、转到哪了（滚动）、上一帧在哪
+    private var ballNode: SCNNode?
+    private var ballShadow: SCNNode?
+    private var ballSpin = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+    private var lastBallSpot: V2?
+    /// 宝箱攻防的宝箱（和 game.chests 一个对一个）
+    private var chestViews: [ChestView] = []
+    /// 地上快要炸的红圈
+    private var warningNodes: [SCNNode] = []
+
+    private struct ChestView {
+        let node: SCNNode
+        let bar: ArenaBar
+        let number: ArenaText
+        let glow: [SCNMaterial]
+        var flashUntil: Double = 0
+        var shownHealth = -1
+    }
 
     private struct TurretView {
         let node: SCNNode
@@ -274,7 +292,42 @@ final class ArenaWorldView: SCNView {
             padNode.simdPosition = center + SIMD3(0, 0.02, 0)
             padNode.castsShadow = false
             root.addChildNode(padNode)
-        case .showdown:
+        case .ball:
+            for team in 0...1 {
+                guard let box = goalBox(map, team: team) else { continue }
+                root.addChildNode(ArenaArt.goal(from: box.x0, to: box.x1, mouth: box.mouth, back: box.back))
+            }
+            let ball = ArenaArt.ball()
+            root.addChildNode(ball)
+            ballNode = ball
+            let shadow = SCNNode(geometry: shared("ball-shadow") {
+                let disc = SCNCylinder(radius: 0.3, height: 0.005)
+                disc.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.3))
+                return disc
+            })
+            shadow.castsShadow = false
+            shadow.renderingOrder = 4
+            root.addChildNode(shadow)
+            ballShadow = shadow
+        case .heist:
+            for chest in game.chests {
+                let color = chest.team == myTeam ? ArenaPalette.blue : ArenaPalette.red
+                let made = ArenaArt.chest(color: color)
+                made.node.simdPosition = SIMD3(Float(chest.center.x), 0, Float(chest.center.y))
+                // 锁朝着场地中间
+                made.node.simdEulerAngles = SIMD3(0, chest.center.y < map.center.y ? 0 : .pi, 0)
+                root.addChildNode(made.node)
+                let bar = ArenaBar(width: 96, height: 13, color: chest.team == myTeam ? ArenaPalette.blue : ArenaPalette.red)
+                let number = ArenaText(size: 11, color: .white)
+                bar.node.addChild(number.node)
+                bar.node.isHidden = true
+                overlay.addChild(bar.node)
+                chestViews.append(ChestView(node: made.node, bar: bar, number: number, glow: made.glow))
+            }
+        case .teamFight, .bounty, .knockout, .duel, .boss, .showdown, .duo:
+            break
+        }
+        if game.mode.hasPoison {
             // 毒圈：圈外一圈半透明的绿墙，边上一道亮线
             let radius = game.safeRadius
             let wall = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 80), height: 1.6)
@@ -295,18 +348,17 @@ final class ArenaWorldView: SCNView {
             root.addChildNode(wallNode)
             root.addChildNode(edgeNode)
             poison = (wall, edge, radius)
-        case .teamFight:
-            break
         }
 
-        // 人：自己这边蓝、对面红（大乱斗除了自己都是红）
+        // 人：自己这边蓝、对面红（大乱斗除了自己都是红）；骷髅王 2.2 倍大
         for fighter in game.fighters {
             let isMe = fighter.id == controller.me
             let ally = fighter.team == myTeam
-            let avatar = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red, isMe: isMe)
+            let avatar = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red, isMe: isMe,
+                                     size: fighter.isBoss ? 2.2 : 1)
             root.addChildNode(avatar.node)
             avatars.append(avatar)
-            let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally)
+            let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
             overlay.addChild(tag.node)
             tags.append(tag)
         }
@@ -373,6 +425,11 @@ final class ArenaWorldView: SCNView {
                     case .wall:
                         cg.setFillColor(UIColor(white: 0, alpha: 0.18).cgColor)
                         cg.fill(rect.insetBy(dx: -cell * 0.06, dy: -cell * 0.06))
+                    case .goal:
+                        // 球门里：守门那队的颜色，淡淡的
+                        let team = Double(y) + 0.5 < Double(map.height) / 2 ? 1 : 0
+                        cg.setFillColor((team == myTeam ? ArenaPalette.blue : ArenaPalette.red).withAlphaComponent(0.3).cgColor)
+                        cg.fill(rect)
                     case .floor:
                         break
                     }
@@ -412,10 +469,30 @@ final class ArenaWorldView: SCNView {
                     cg.strokePath()
                 }
             }
+            // 球门线：白的
+            for team in 0...1 {
+                guard let box = goalBox(map, team: team) else { continue }
+                cg.setFillColor(UIColor(white: 1, alpha: 0.85).cgColor)
+                cg.fill(CGRect(x: CGFloat(box.x0) * cell, y: CGFloat(box.mouth) * cell - 2, width: CGFloat(box.x1 - box.x0) * cell, height: 4))
+            }
             cg.setStrokeColor(UIColor(white: 0, alpha: 0.2).cgColor)
             cg.setLineWidth(4)
             cg.stroke(CGRect(origin: .zero, size: size).insetBy(dx: 2, dy: 2))
         }
+    }
+
+    /// 一队守的球门在哪：门口两边的 x、门口那条线、后面那条线（地图坐标）
+    private func goalBox(_ map: ArenaMap, team: Int) -> (x0: Float, x1: Float, mouth: Float, back: Float)? {
+        var xs: [Int] = [], ys: [Int] = []
+        for y in 0..<map.height {
+            for x in 0..<map.width where map.tile(x, y) == .goal && (Double(y) + 0.5 < Double(map.height) / 2 ? 1 : 0) == team {
+                xs.append(x)
+                ys.append(y)
+            }
+        }
+        guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else { return nil }
+        let top = team == 1
+        return (Float(minX), Float(maxX + 1), top ? Float(maxY + 1) : Float(minY), top ? Float(minY) : Float(maxY + 1))
     }
 
     /// 墙：按地图的主题挑木箱、木桶、石块（同一格每次都一样），整张地图拼成一个网格
@@ -423,7 +500,7 @@ final class ArenaWorldView: SCNView {
         let total = max(look.walls.reduce(0) { $0 + $1.weight }, 1)
         var cells: [(x: Int, y: Int, kind: ArenaArt.Wall)] = []
         for y in 0..<map.height {
-            for x in 0..<map.width where map.tile(x, y) == .wall {
+            for x in 0..<map.width where map.tile(x, y) == .wall && !map.isChest(x, y) {
                 var left = (x * 37 + y * 61 + x * y) % total
                 let kind = look.walls.first { left -= $0.weight; return left < 0 }?.kind ?? .crate
                 cells.append((x: x, y: y, kind: kind))
@@ -503,6 +580,9 @@ final class ArenaWorldView: SCNView {
         let game = controller.game
         moveCamera(dt: dt, game: game)
         let view = cameraNode.simdWorldTransform.inverse
+        let events = controller.takeEvents()
+        // 进球、一局打完大家回到出发的地方：不算闪现
+        if events.contains(.reset) { lastPositions = [] }
 
         // 人、头顶的血条
         let winners: (Fighter) -> Bool = { fighter in
@@ -521,11 +601,20 @@ final class ArenaWorldView: SCNView {
                 burst(at: to, color: UIColor(red: 0.6, green: 0.4, blue: 1, alpha: 1), count: 24, speed: 2, size: 0.35, life: 0.5)
             }
             lastPositions[fighter.id] = fighter.alive ? fighter.pos : nil
+            // 一对一换了下一个角色上：换模型
+            if avatars[fighter.id].brawler != fighter.brawler, !fighter.isBoss {
+                avatars[fighter.id].node.removeFromParentNode()
+                let ally = fighter.team == myTeam
+                let replacement = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red,
+                                              isMe: fighter.id == controller.me)
+                world.rootNode.addChildNode(replacement.node)
+                avatars[fighter.id] = replacement
+            }
             let avatar = avatars[fighter.id]
             let visible = game.isVisible(fighter, to: myTeam)
             let hidden = fighter.team == myTeam && game.map.inBush(fighter.pos)
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock)
-            let head = avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight, 0)
+            let head = avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight * avatar.size, 0)
             tags[fighter.id].update(fighter, at: project(head, view), opacity: avatar.opacity)
         }
 
@@ -544,6 +633,9 @@ final class ArenaWorldView: SCNView {
         syncZone(game)
         syncHealZones(game)
         syncTurrets(game, view: view)
+        syncBall(game)
+        syncChests(game, view: view)
+        syncWarnings(game)
         if var current = poison, abs(current.radius - game.safeRadius) > 0.02 {
             current.radius = game.safeRadius
             current.wall.outerRadius = CGFloat(current.radius + 80)
@@ -553,7 +645,7 @@ final class ArenaWorldView: SCNView {
             poison = current
         }
 
-        for event in controller.takeEvents() { effect(event, game: game) }
+        for event in events { effect(event, game: game) }
         if !finished, let result = controller.hud.result {
             finished = true
             ArenaSound.shared.finish(won: controller.won(result))
@@ -591,6 +683,98 @@ final class ArenaWorldView: SCNView {
         let x = c.x / -c.z / tanX
         let y = c.y / -c.z / tanY
         return CGPoint(x: CGFloat(x + 1) / 2 * bounds.width, y: CGFloat(y + 1) / 2 * bounds.height)
+    }
+
+    // MARK: - 足球、宝箱、红圈
+
+    /// 球：有人带着画在他脚前（跳起来也跟着），没人带画在地上；按走了多远滚着转
+    private func syncBall(_ game: ArenaGame) {
+        guard let node = ballNode else { return }
+        guard let ball = game.ball else {
+            node.isHidden = true
+            ballShadow?.isHidden = true
+            return
+        }
+        var spot = ball.pos
+        var lift: Float = 0
+        if let carrier = ball.carrier, game.fighters.indices.contains(carrier), avatars.indices.contains(carrier) {
+            let holder = game.fighters[carrier]
+            spot = holder.pos + holder.facing * 0.5
+            lift = avatars[carrier].node.simdPosition.y
+        }
+        if let last = lastBallSpot {
+            let moved = spot - last
+            if moved.length > 0.0001, moved.length < 2 {
+                let axis = simd_normalize(SIMD3(Float(moved.y), 0, Float(-moved.x)))
+                ballSpin = simd_normalize(simd_quatf(angle: Float(moved.length / ArenaGame.Ball.radius), axis: axis) * ballSpin)
+            }
+        }
+        lastBallSpot = spot
+        node.isHidden = false
+        node.simdPosition = SIMD3(Float(spot.x), Float(ArenaGame.Ball.radius) + lift, Float(spot.y))
+        node.simdOrientation = ballSpin
+        ballShadow?.isHidden = false
+        ballShadow?.simdPosition = SIMD3(Float(spot.x), 0.03, Float(spot.y))
+    }
+
+    /// 宝箱头顶的血条（数字写在条上）；挨打白一下
+    private func syncChests(_ game: ArenaGame, view: simd_float4x4) {
+        for (k, chest) in game.chests.enumerated() where chestViews.indices.contains(k) {
+            let item = chestViews[k]
+            if let point = project(SIMD3(Float(chest.center.x), 2.6, Float(chest.center.y)), view) {
+                item.bar.node.isHidden = chest.health <= 0
+                item.bar.node.position = point
+                item.bar.set(CGFloat(chest.health) / CGFloat(max(chest.maxHealth, 1)))
+                if chest.health != item.shownHealth {
+                    chestViews[k].shownHealth = chest.health
+                    item.number.set("\(max(chest.health, 0))")
+                }
+            } else {
+                item.bar.node.isHidden = true
+            }
+            if item.flashUntil > 0, clock >= item.flashUntil {
+                chestViews[k].flashUntil = 0
+                item.glow.forEach { $0.emission.contents = UIColor.black }
+            }
+        }
+    }
+
+    /// 地上快要炸的红圈：外面一道红边，里面的红一点点填满
+    private func syncWarnings(_ game: ArenaGame) {
+        while warningNodes.count < game.warnings.count {
+            let node = SCNNode()
+            let rim = SCNNode(geometry: shared("warning-rim") {
+                let tube = SCNTube(innerRadius: 0.93, outerRadius: 1, height: 0.02)
+                tube.radialSegmentCount = 48
+                tube.firstMaterial = ArenaAvatar.decal(UIColor(red: 1, green: 0.2, blue: 0.15, alpha: 0.95))
+                return tube
+            })
+            let fill = SCNNode(geometry: shared("warning-fill") {
+                let disc = SCNCylinder(radius: 1, height: 0.01)
+                disc.radialSegmentCount = 48
+                disc.firstMaterial = ArenaAvatar.decal(UIColor(red: 1, green: 0.15, blue: 0.1, alpha: 0.4))
+                return disc
+            })
+            fill.name = "fill"
+            for part in [rim, fill] {
+                part.castsShadow = false
+                part.renderingOrder = 7
+                node.addChildNode(part)
+            }
+            world.rootNode.addChildNode(node)
+            warningNodes.append(node)
+        }
+        while warningNodes.count > game.warnings.count {
+            warningNodes.removeLast().removeFromParentNode()
+        }
+        for (k, warning) in game.warnings.enumerated() {
+            let node = warningNodes[k]
+            let radius = Float(warning.radius)
+            node.simdPosition = SIMD3(Float(warning.center.x), 0.05, Float(warning.center.y))
+            node.simdScale = SIMD3(radius, 1, radius)
+            let progress = Float(min(max(1 - warning.left / max(warning.total, 0.01), 0.05), 1))
+            node.childNode(withName: "fill", recursively: false)?.simdScale = SIMD3(progress, 1, progress)
+        }
     }
 
     // MARK: - 子弹
@@ -842,6 +1026,29 @@ final class ArenaWorldView: SCNView {
             burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 10, speed: 1, size: 0.25, life: 0.5)
             floater("+\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
                     color: UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1))
+        case .goal(let team):
+            let ours = team == myTeam
+            ArenaSound.shared.play(ours ? .win : .lose, volume: 0.8)
+            if let ball = game.ball {
+                let at = SIMD3(Float(ball.pos.x), 0.7, Float(ball.pos.y))
+                burst(at: at, color: ArenaPalette.gold, count: 70, speed: 5, size: 0.35, life: 0.9)
+                burst(at: at, color: ours ? ArenaPalette.blue : ArenaPalette.red, count: 50, speed: 4, size: 0.3, life: 0.8)
+            }
+            if ours { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+        case .round(let winner):
+            ArenaSound.shared.play(winner == myTeam ? .win : .lose, volume: 0.7)
+        case .reset:
+            for (k, fighter) in game.fighters.enumerated() where fighter.alive && avatars.indices.contains(k) {
+                ring(at: avatars[k].node.simdPosition, color: fighter.team == myTeam ? ArenaPalette.blue : ArenaPalette.red, to: 1.8)
+            }
+            lastBallSpot = nil
+        case .chestHit(let chest, let amount):
+            guard chestViews.indices.contains(chest), game.chests.indices.contains(chest) else { return }
+            let center = game.chests[chest].center
+            chestViews[chest].glow.forEach { $0.emission.contents = UIColor(white: 0.45, alpha: 1) }
+            chestViews[chest].flashUntil = clock + 0.08
+            ArenaSound.shared.play(.hit, volume: loudness(center) * 0.6)
+            floater("\(amount)", at: SIMD3(Float(center.x) + Float.random(in: -0.4...0.4), 2.0, Float(center.y)), color: .white)
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos))
