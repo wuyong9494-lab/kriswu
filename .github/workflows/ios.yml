@@ -306,6 +306,32 @@ jobs:
               prev="$out.jpg"
             done
           done
+          # iPad 上看几页（内容限宽居中）
+          xcrun simctl shutdown "$DEVICE" || true
+          IPAD=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          print(next((x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPad')), ''))")
+          if [ -n "$IPAD" ]; then
+            xcrun simctl boot "$IPAD" || true
+            xcrun simctl bootstatus "$IPAD" -b
+            xcrun simctl spawn "$IPAD" defaults write -g AppleLanguages -array zh-Hans
+            xcrun simctl spawn "$IPAD" defaults write -g AppleLocale zh_CN
+            xcrun simctl shutdown "$IPAD"
+            xcrun simctl boot "$IPAD"
+            xcrun simctl bootstatus "$IPAD" -b
+            xcrun simctl install "$IPAD" "$APP"
+            xcrun simctl status_bar "$IPAD" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+            xcrun simctl ui "$IPAD" appearance light
+            for s in today meeting settings years; do
+              xcrun simctl launch "$IPAD" $ID -demo -screen $s > /dev/null
+              sleep 5
+              xcrun simctl io "$IPAD" screenshot "shots/ipad-$s.png" > /dev/null 2>&1
+              xcrun simctl terminate "$IPAD" $ID || true
+              sips -s format jpeg -s formatOptions 70 -Z 1400 "shots/ipad-$s.png" --out "shots/ipad-$s.jpg" > /dev/null
+              rm "shots/ipad-$s.png"
+            done
+          fi
           ls -la shots
 
       - name: 和上一版截图比

@@ -80,6 +80,9 @@ struct TodayView: View {
                     }
                     .padding(.horizontal, DS.Space.m)
                     .padding(.bottom, DS.Space.l)
+                    // iPad 上限宽居中（两边空白处也能滑动）
+                    .frame(maxWidth: DS.readableWidth)
+                    .frame(maxWidth: .infinity)
                 }
                 .appBackground()
             }
@@ -766,6 +769,9 @@ struct ManagerHomeView: View {
                     }
                     .padding(.horizontal, DS.Space.m)
                     .padding(.bottom, DS.Space.l)
+                    // iPad 上限宽居中（两边空白处也能滑动）
+                    .frame(maxWidth: DS.readableWidth)
+                    .frame(maxWidth: .infinity)
                 }
                 .appBackground()
             }

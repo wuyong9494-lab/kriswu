@@ -7,6 +7,8 @@ import UIKit
 // 间距走 8pt 网格；表面用毛玻璃 + 极细描边（Glassmorphism），浅色模式下卡片顶边带一道高光（少量 Neumorphism）。
 
 enum DS {
+    /// iPad 上内容最宽多少（iPhone 上用不到这么宽）
+    static let readableWidth: CGFloat = 720
     /// 8pt 网格（4 只用于图标和文字之间的微小间隔）
     enum Space {
         static let xxs: CGFloat = 4
@@ -169,6 +171,9 @@ extension View {
     /// 列表、表单页面：去掉系统灰底，换成 App 背景
     func appList() -> some View {
         scrollContentBackground(.hidden)
+            // iPad 上不铺满整个屏幕：一行太长不好读，限宽居中
+            .frame(maxWidth: DS.readableWidth)
+            .frame(maxWidth: .infinity)
             .background(AppBackground())
             .modifier(AvoidTabBar())
     }
@@ -796,6 +801,8 @@ struct FloatingTabBar<Tab: Hashable>: View {
                 .overlay(shape.strokeBorder(DS.Palette.hairline, lineWidth: 1))
                 .shadow(color: DS.Palette.shadow, radius: 24, x: 0, y: 10)
         }
+        // iPad 上不拉满一整行
+        .frame(maxWidth: 520)
         .padding(.horizontal, DS.Space.l)
         .padding(.bottom, DS.Space.xs)
         // 告诉页面标签栏的上边在哪（网页要停在它上面，不然网页底部的按钮被挡住）
