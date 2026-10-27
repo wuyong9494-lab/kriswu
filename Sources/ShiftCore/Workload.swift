@@ -93,11 +93,9 @@ public enum WorkloadCounter {
     @Locked public static var overrides: [String: [DayKey: String]] = [:]
     public static let excluded = "不算"
 
-    /// 休息、调休、请假、无分工都不算上班。
-    /// 「节假日值班」「假期加班」这类带「假」字的仍是上班：值班、出差、加班（不是「加班调休」）先排除
+    /// 休息、调休、请假、交接前、无分工都不算上班（规则在 DayRules：「节假日值班」「假期加班」仍是上班）
     public static func isOff(_ post: String, matcher: ShiftMatcher) -> Bool {
-        if isDuty(post) || isTrip(post) || (post.contains("加班") && !post.contains("休")) { return false }
-        return matcher.match(post)?.id == "off" || post.contains("休") || post.contains("假") || post == "无分工"
+        DayRules.part(post, matcher: matcher).isOff
     }
 
     public static func isTrip(_ post: String) -> Bool { post.contains("出差") }
@@ -131,8 +129,6 @@ public enum WorkloadCounter {
         return !["调休", "休息", "请假", "休假"].contains { post.contains($0) }
     }
 
-    /// 值班换来的休息：休息、调休（请假不算）
-    static func isRest(_ post: String) -> Bool { post.contains("休息") || post.contains("调休") }
 
     /// 一个遥测值班最多换几天调休
     public static let restPerDuty = 2
@@ -330,7 +326,8 @@ public enum WorkloadCounter {
         func restPosts(_ day: DayKey) -> Bool {
             guard let raw = history[day] else { return false }
             let posts = raw.split(separator: "+").map { matcher.displayName(String($0)) }
-            return !posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) }) && posts.contains(where: isRest)
+            return !posts.contains(where: { !isOff($0, matcher: matcher) && !isTrip($0) })
+                && posts.contains(where: { DayRules.isDutyRest($0, matcher: matcher) })
         }
         func isDutyDay(_ day: DayKey) -> Bool {
             if let value = fixed[day] { return value == Kind.duty.rawValue }

@@ -41,11 +41,9 @@ public struct SwapRecord: Codable, Hashable, Identifiable {
 public enum SwapLedger {
     static func key(_ s: String) -> String { s.filter { !$0.isWhitespace }.uppercased() }
 
-    /// 真正要上的岗位（不含休息、请假、未排班）
+    /// 真正要上的岗位（不含休息、请假、出差、未排班；规则在 DayRules）
     static func posts(_ raw: String?, matcher: ShiftMatcher) -> [String] {
-        guard let raw else { return [] }
-        return matcher.displayName(raw).split(separator: "+").map(String.init)
-            .filter { matcher.match($0)?.id != "off" && $0 != "未排班" && $0 != "无分工" && !$0.contains("出差") }
+        DayRules.posts(raw, matcher: matcher)
     }
 
     /// 从一处排班变动推断换班：我丢掉的岗位现在是谁上（他替我），我新接的岗位原来是谁的（我替他）。
@@ -117,7 +115,9 @@ public enum SwapFinder {
         let balances = SwapLedger.balances(records)
         let window = day.adding(days: -14, calendar: calendar)...day.adding(days: 14, calendar: calendar)
         let monthStart = DayKey(year: day.year, month: day.month, day: 1)
-        func free(_ raw: String?) -> Bool { SwapLedger.posts(raw, matcher: matcher).isEmpty && !(raw ?? "").contains("假") }
+        // 有空：没排，或者只是普通休息（调休、请假、出差、值班交接前都不算有空）；有班：排了岗位
+        func free(_ raw: String?) -> Bool { DayRules.canCover(raw, matcher: matcher) }
+        func works(_ raw: String?) -> Bool { !DayRules.posts(raw, matcher: matcher).isEmpty }
         func isDutyDay(_ raw: String?) -> Bool { raw.map { WorkloadCounter.isDuty(matcher.displayName($0)) } ?? false }
 
         var result: [SwapCandidate] = []
@@ -126,8 +126,7 @@ public enum SwapFinder {
             guard history.keys.contains(where: window.contains) else { continue }
             let raw = history[day]
             // 那天要有空：没排岗位，也不是调休、请假、出差（只有普通休息、没排班的能找）
-            guard free(raw), !(raw ?? "").contains("出差") else { continue }
-            if let raw, !RosterMerger.leaveKinds(of: raw, matcher: matcher).subtracting(["休息"]).isEmpty { continue }
+            guard free(raw) else { continue }
             // 还在值完遥测后的休息里（休两三天），不打扰
             guard !(1...3).contains(where: { back in
                 let d = day.adding(days: -back, calendar: calendar)
@@ -138,7 +137,7 @@ public enum SwapFinder {
             if wantDuty && !all.contains(where: WorkloadCounter.isDuty) { continue }
             if wantGroup && !all.contains(where: { $0.split(separator: "+").contains { GroupNotes.isGroup(String($0)) } }) { continue }
             // 我上遥测换给他：他第二天有班就会连上，不推荐
-            if wantDuty && !free(history[day.adding(days: 1, calendar: calendar)]) { continue }
+            if wantDuty && works(history[day.adding(days: 1, calendar: calendar)]) { continue }
 
             let past = records.filter { $0.person == name }.count
             let recent = (0...max(0, calendar.dateComponents([.day], from: monthStart.date(calendar: calendar, hour: 12),
@@ -146,7 +145,7 @@ public enum SwapFinder {
                 .map { monthStart.adding(days: $0, calendar: calendar) }
                 .filter { !SwapLedger.posts(history[$0], matcher: matcher).isEmpty }.count
             let back = (1...14).map { day.adding(days: $0, calendar: calendar) }
-                .filter { !free(history[$0]) && free(mine[$0]) && !isDutyDay(mine[$0.adding(days: -1, calendar: calendar)]) }
+                .filter { works(history[$0]) && free(mine[$0]) && !isDutyDay(mine[$0.adding(days: -1, calendar: calendar)]) }
             var reasons: [String] = []
             let owes = balances[name] ?? 0
             if owes > 0 { reasons.append("欠你 \(owes) 天") }

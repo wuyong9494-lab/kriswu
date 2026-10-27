@@ -38,7 +38,7 @@ public enum HolidayDutyStats {
                     ?? posts(previous).contains(where: WorkloadCounter.isDuty)
                 if ChinaHolidays.isHoliday(previous), previousDuty,
                    today.allSatisfy({ WorkloadCounter.isOff($0, matcher: matcher) }),
-                   today.isEmpty || today.contains(where: WorkloadCounter.isRest) {
+                   today.isEmpty || today.contains(where: { DayRules.isDutyRest($0, matcher: matcher) }) {
                     work += 1
                     continue
                 }

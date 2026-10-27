@@ -13,8 +13,7 @@ public enum SchedulePatterns {
 
     /// 这天是休息（休息、调休、请假、值班交接前）；出差算上班，不算休息
     static func isRestDay(_ raw: String, matcher: ShiftMatcher) -> Bool {
-        let list = posts(raw, matcher: matcher)
-        return !list.isEmpty && list.allSatisfy { WorkloadCounter.isOff($0, matcher: matcher) }
+        DayRules.isOffDay(raw, matcher: matcher)
     }
 
     /// 这天的岗位里有没有遥测（值班）
@@ -115,9 +114,9 @@ public enum SchedulePatterns {
         let list = posts(raw, matcher: matcher)
         if list.contains(where: { matches($0, post) }) { return nil }
         if RosterExtractor.isLeave(raw, matcher: matcher) {
-            if list.contains(where: WorkloadCounter.isTrip) { return ("出差", true) }
-            if list.contains(where: { $0.contains("请假") || ($0.contains("假") && !$0.contains("休")) }) { return ("请假", true) }
-            return (list.first(where: { $0.contains("调休") }) != nil ? "调休" : "休息", true)
+            let kinds = DayRules.parts(raw, matcher: matcher)
+            for kind in [DayRules.Part.trip, .leave, .compLeave] where kinds.contains(kind) { return (kind.rawValue, true) }
+            return ("休息", true)
         }
         // 这天排了别的岗位
         return (list.joined(separator: "+"), false)
@@ -885,7 +884,8 @@ public enum RestBalanceAudit {
         public var matched: Int { rows.filter { $0.diff == 0 }.count }
     }
 
-    /// (from, to] 之间的：多休一天的遥测、平时遥测、加班、调休、休息、请假 天数
+    /// (from, to] 之间的：多休一天的遥测、平时遥测、加班、调休、休息、请假 天数。
+    /// 这是用真实待休记录拟合出来的推算的输入，字眼判断保持拟合时的样子（不跟 DayRules 一起改，免得推算变了）
     static func features(_ history: [DayKey: String], from: DayKey, to: DayKey, matcher: ShiftMatcher,
                          calendar: Calendar) -> [Int] {
         var f = [0, 0, 0, 0, 0, 0]

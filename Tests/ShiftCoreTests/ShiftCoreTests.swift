@@ -2624,3 +2624,52 @@ final class MeetingTests: XCTestCase {
         XCTAssertEqual(MeetingTracker.fingerprint("组A：天线 告警"), MeetingTracker.fingerprint("组A 天线告警"))
     }
 }
+
+/// 「这一天算什么」集中在 DayRules；规则说明页的每个例子都要和代码算的一样
+final class DayRulesTests: XCTestCase {
+    let m = ShiftMatcher(types: ShiftType.defaults)
+
+    func testParts() {
+        XCTAssertEqual(DayRules.parts("组A+出差", matcher: m), [.post, .trip])
+        XCTAssertEqual(DayRules.posts("组A+出差", matcher: m), ["组A"])
+        XCTAssertEqual(DayRules.posts("遥测", matcher: m), ["遥测"])
+        XCTAssertEqual(DayRules.posts("调休", matcher: m), [])
+        XCTAssertTrue(DayRules.isWorking("组A+出差", matcher: m))
+        XCTAssertTrue(DayRules.isOffDay("休息+调休", matcher: m))
+        XCTAssertFalse(DayRules.isOffDay("出差", matcher: m))
+        XCTAssertFalse(DayRules.isOffDay(nil, matcher: m))
+        XCTAssertTrue(DayRules.isLeaveOrTrip("出差", matcher: m))
+        XCTAssertFalse(DayRules.isLeaveOrTrip("组A+休息", matcher: m))
+        // 休假：各处都算请假（以前有的地方当休息）
+        XCTAssertEqual(RosterMerger.leaveKinds(of: "休假", matcher: m), ["请假"])
+        XCTAssertTrue(DayRules.isDutyRest("交接休息", matcher: m))
+        XCTAssertFalse(DayRules.isDutyRest("请假", matcher: m))
+        XCTAssertTrue(DayRules.canCover(nil, matcher: m))
+        XCTAssertFalse(DayRules.canCover("组B", matcher: m))
+    }
+
+    func testRuleBookExamplesMatchCode() {
+        let sections = RuleBook.sections()
+        XCTAssertFalse(sections.isEmpty)
+        var count = 0
+        for section in sections {
+            for rule in section.rules {
+                for e in rule.examples {
+                    XCTAssertEqual(RuleBook.actual(e, matcher: m), e.result, "\(section.title)：\(e.label)")
+                    count += 1
+                }
+            }
+        }
+        XCTAssertGreaterThan(count, 20)
+    }
+
+    func testRuleBookFollowsSettings() {
+        var r = WorkloadRules()
+        r.blankWorkdayIsWork = false
+        let text = RuleBook.sections(rules: r, saturdayIsWorkday: false).flatMap(\.rules).map(\.text).joined()
+        XCTAssertTrue(text.contains("不算上班"))
+        XCTAssertTrue(text.contains("周六、周日都是休息日"))
+        let blank = RuleBook.Example(label: "", input: "", result: "", check: .workday)
+        XCTAssertEqual(RuleBook.actual(blank, matcher: m, rules: r), "未排班，不算工作量")
+    }
+}

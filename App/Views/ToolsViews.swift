@@ -21,6 +21,10 @@ struct SwapHelperView: View {
                      + (WorkloadCounter.isDuty(store.matcher.displayName(myPost)) ? "遥测只找值过遥测、第二天没班的人。" : "")
                      + "欠你班的、和你换过的、以后有班正好能换回来的排在前面。")
             }
+            Section {
+                NavigationLink("这些规则从哪来？看规则说明") { RulesExplainView() }
+                    .font(.footnote)
+            }
             if store.roster.isEmpty {
                 Text("还没有全员排班数据，先同步一次。").foregroundStyle(.secondary)
                 SyncNowButton(source: "找人换班")

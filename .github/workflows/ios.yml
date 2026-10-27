@@ -8,10 +8,8 @@ on:
 permissions:
   contents: write
 
-# 同一个分支连着推了几次：只做最新的那次，前面还在排队、还在跑的取消（省得排队等 Mac 机器）
-concurrency:
-  group: ios-${{ github.ref }}
-  cancel-in-progress: true
+# 同一个分支连着推了几次：每一步只做最新的那次，前面还在排队、还在跑的同一步取消（省得排队等 Mac 机器）。
+# 按步分开取消：写 TestFlight 测试说明要等苹果处理半小时，不跟着打包一起被取消
 
 env:
   # 装 xcodegen 时不先更新整个 Homebrew（省一两分钟）
@@ -21,6 +19,9 @@ env:
 jobs:
   build:
     runs-on: macos-15
+    concurrency:
+      group: build-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 
@@ -151,6 +152,9 @@ jobs:
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
     runs-on: macos-15
+    concurrency:
+      group: site-tests-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 
@@ -195,6 +199,9 @@ jobs:
   # 用虚构的演示数据（启动参数 -demo）在模拟器里打开各个页面截图，浅色、深色各一套，推到 screenshots 分支方便查看界面
   screenshots:
     runs-on: macos-15
+    concurrency:
+      group: screenshots-${{ github.ref }}
+      cancel-in-progress: true
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
@@ -236,7 +243,7 @@ jobs:
           xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
           mkdir -p shots
           # 浅色截全部页面；深色只截几个常用的（看配色）。截一张要十几秒，全截两套要二十多分钟
-          LIGHT="today calendar stats settings meeting meetingEdit meetingSource fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          LIGHT="today calendar stats settings meeting meetingEdit meetingSource rulesExplain allFeatures fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
           DARK="today calendar stats settings meeting day"
           for mode in light dark; do
             xcrun simctl ui "$DEVICE" appearance $mode
@@ -272,6 +279,9 @@ jobs:
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15
+    concurrency:
+      group: testflight-${{ github.ref }}
+      cancel-in-progress: true
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}
     env:
@@ -387,6 +397,10 @@ jobs:
     needs: testflight
     if: needs.testflight.outputs.uploaded == '1'
     runs-on: ubuntu-latest
+    # 一个一个来（不取消）：上一版的说明写完、标签挪好，下一版再算从哪开始
+    concurrency:
+      group: whats-new-${{ github.ref }}
+      cancel-in-progress: false
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

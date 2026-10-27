@@ -115,9 +115,7 @@ public enum RosterExtractor {
 
     /// 这条是不是休息、调休、请假、出差这类（不是具体岗位）
     static func isLeave(_ raw: String, matcher: ShiftMatcher) -> Bool {
-        // 「值班交接前」算休息
-        let parts = (WorkloadCounter.effective(raw, matcher: matcher) ?? "").split(separator: "+").map { matcher.displayName(String($0)) }
-        return !parts.isEmpty && parts.allSatisfy { WorkloadCounter.isOff($0, matcher: matcher) || WorkloadCounter.isTrip($0) }
+        DayRules.isLeaveOrTrip(raw, matcher: matcher)
     }
 
     /// 把这次读到的全员排班合并进已保存的：读到的日子整天替换（换人、取消的以新数据为准）。

@@ -57,13 +57,7 @@ public enum RosterMerger {
     /// 一条休息、请假记录是哪几类：休息（含值班交接前）、调休、请假、出差；具体岗位返回空
     public static func leaveKinds(of raw: String, matcher: ShiftMatcher) -> Set<String> {
         guard RosterExtractor.isLeave(raw, matcher: matcher) else { return [] }
-        let parts = (WorkloadCounter.effective(raw, matcher: matcher) ?? "").split(separator: "+").map { matcher.displayName(String($0)) }
-        return Set(parts.map { part -> String in
-            if WorkloadCounter.isTrip(part) { return "出差" }
-            if part.contains("调休") { return "调休" }
-            if part.contains("假") { return "请假" }
-            return "休息"
-        })
+        return Set(DayRules.parts(raw, matcher: matcher).compactMap(\.leaveCategory))
     }
 
     /// 这次读到的有哪几类休息、请假（电脑版周表有休息、调休列，但不一定有请假、出差）

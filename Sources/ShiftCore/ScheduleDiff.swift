@@ -46,11 +46,9 @@ public enum SwapExplainer {
     public static func describe(_ change: ScheduleChange, before: Roster, after: Roster, fresh: Bool,
                                 matcher: ShiftMatcher, isMe: (String) -> Bool) -> String? {
         func key(_ s: String) -> String { s.filter { !$0.isWhitespace }.uppercased() }
-        /// 真正的岗位（不含休息、未排班）
+        /// 真正的岗位（不含休息、未排班；出差也算，规则在 DayRules）
         func groups(_ raw: String?) -> [String] {
-            guard let raw else { return [] }
-            return matcher.displayName(raw).split(separator: "+").map(String.init)
-                .filter { matcher.match($0)?.id != "off" && $0 != "未排班" && $0 != "无分工" }
+            DayRules.names(raw, matcher: matcher).filter { DayRules.part($0, matcher: matcher).isWork }
         }
         func holders(_ group: String, in r: Roster) -> [String] {
             r.compactMap { name, days in

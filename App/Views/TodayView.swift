@@ -370,6 +370,7 @@ private struct QuickActions: View {
                 tile("自动同步", store.automationLooksMissing ? "exclamationmark.arrow.triangle.2.circlepath" : "arrow.triangle.2.circlepath",
                      color: store.automationLooksMissing ? DS.Palette.warning : nil) { AutomationGuideView() }
                 tile("工作量", "chart.bar") { WorkloadView() }
+                tile("全部功能", "square.grid.2x2") { AllFeaturesView() }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -645,7 +646,7 @@ struct SyncStatus: View {
 }
 
 /// 找人换班：点开时才找下一个有班的日子（没有就明天）
-private struct NextWorkSwapView: View {
+struct NextWorkSwapView: View {
     @EnvironmentObject private var store: AppStore
     let today: DayKey
 

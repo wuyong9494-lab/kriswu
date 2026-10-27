@@ -110,9 +110,19 @@ struct SettingsView: View {
                     .foregroundStyle(.primary)
                     .sheet(isPresented: $showWhatsNew) { WhatsNewView() }
                     NavigationLink {
+                        AllFeaturesView()
+                    } label: {
+                        row("全部功能", icon: "square.grid.2x2", detail: "找不到某个功能时搜一下")
+                    }
+                    NavigationLink {
+                        RulesExplainView()
+                    } label: {
+                        row("规则说明", icon: "text.book.closed", detail: "工作量、换班、周会怎么算")
+                    }
+                    NavigationLink {
                         DiagnosticsView()
                     } label: {
-                        row("诊断", icon: "stethoscope", detail: "出问题时看这里")
+                        row("自检与诊断", icon: "stethoscope", detail: "哪条连接不通，出问题先看这里")
                     }
                 } header: {
                     Text("帮助")

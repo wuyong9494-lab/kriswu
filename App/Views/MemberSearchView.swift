@@ -77,7 +77,7 @@ struct MemberScheduleView: View {
             guard let raw = store.roster[person]?[day] ?? (person == me ? store.shift(on: day) : nil) else {
                 return !ChinaHolidays.isWorkday(day, calendar: .app)
             }
-            return RosterExtractor.isLeave(raw, matcher: store.matcher) && !raw.contains("出差")
+            return DayRules.isOffDay(raw, matcher: store.matcher)
         }
         return (0..<30).map { today.adding(days: $0) }
             .filter { store.publishedDays.contains($0) && off(me, $0) && off(name, $0) }
