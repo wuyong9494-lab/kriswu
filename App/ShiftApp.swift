@@ -69,6 +69,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
+    /// 平时竖着用；乱斗对局里横过来（ArenaOrientation）；iPad 随便转
+    @MainActor
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if UIDevice.current.userInterfaceIdiom == .pad { return .all }
+        return ArenaOrientation.landscape ? .landscape : .portrait
+    }
+
     // App 在前台时也显示横幅
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {

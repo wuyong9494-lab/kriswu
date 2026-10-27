@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - 选玩法、选角色
 
@@ -253,8 +254,63 @@ struct ArenaPlayView: View {
         ArenaMatchView(controller: controller, onAgain: {
             controller = ArenaController(setup: setup)
             round += 1
-        }, onExit: { dismiss() })
+        }, onExit: {
+            ArenaOrientation.releaseAll()
+            dismiss()
+        })
         .id(round)
+        .modifier(ArenaLandscape())
+    }
+}
+
+/// 乱斗对局在 iPhone 上横着打：对局出现就转成横屏，没有对局了转回竖屏（iPad 一直随便转）
+@MainActor
+enum ArenaOrientation {
+    /// AppDelegate 按这个告诉系统现在能转成哪个方向
+    private(set) static var landscape = false
+    /// 正显示着的对局（再来一局时新的先出现、旧的后消失，也不会转回去）
+    private static var holders: Set<UUID> = []
+
+    static func hold(_ id: UUID) {
+        holders.insert(id)
+        update()
+    }
+
+    static func release(_ id: UUID) {
+        holders.remove(id)
+        update()
+    }
+
+    /// 点了退出：马上转回竖屏，不等画面关完
+    static func releaseAll() {
+        holders.removeAll()
+        update()
+    }
+
+    private static func update() {
+        let wanted = !holders.isEmpty
+        guard UIDevice.current.userInterfaceIdiom == .phone, wanted != landscape else { return }
+        landscape = wanted
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows {
+                var controller = window.rootViewController
+                while let current = controller {
+                    current.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    controller = current.presentedViewController
+                }
+            }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: wanted ? .landscape : .portrait))
+        }
+    }
+}
+
+private struct ArenaLandscape: ViewModifier {
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { ArenaOrientation.hold(id) }
+            .onDisappear { ArenaOrientation.release(id) }
     }
 }
 
@@ -343,7 +399,11 @@ struct ArenaRoomView: View {
         }
         .onAppear { room.start() }
         .fullScreenCover(item: $lobby.playing) { playing in
-            ArenaMatchView(controller: playing.controller, onAgain: nil, onExit: { lobby.playing = nil })
+            ArenaMatchView(controller: playing.controller, onAgain: nil, onExit: {
+                ArenaOrientation.releaseAll()
+                lobby.playing = nil
+            })
+            .modifier(ArenaLandscape())
         }
     }
 }
@@ -355,6 +415,10 @@ private struct ArenaMatchView: View {
     var onExit: () -> Void
     @State private var confirmingExit = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    /// iPhone 横着打（上下矮）：摇杆、结算卡片换成横的摆法
+    private var wide: Bool { verticalSizeClass == .compact }
 
     /// 在上边那一队的人：画面倒过来（自己的家总在下边），摇杆也跟着反过来
     private var flip: Double { controller.game.mode.isTeams && controller.mine.team == 1 ? -1 : 1 }
@@ -491,24 +555,40 @@ private struct ArenaMatchView: View {
         HStack(alignment: .bottom) {
             ArenaStick(kind: .move, onChange: { controller.move = $0 * flip }, onRelease: { _ in controller.move = .zero })
             Spacer()
-            VStack(alignment: .trailing, spacing: DS.Space.s) {
-                ArenaStick(kind: .special(charge: hud.superCharge),
-                           onChange: { controller.superAiming = $0 * flip },
-                           onRelease: { drag in
-                               controller.superAiming = nil
-                               controller.fireSpecial(drag * flip)
-                           })
-                ArenaStick(kind: .attack,
-                           onChange: { controller.aiming = $0 * flip },
-                           onRelease: { drag in
-                               controller.aiming = nil
-                               controller.fire(drag * flip)
-                           })
+            // 横屏：大招钮在攻击钮左上；竖屏：在攻击钮上面
+            if wide {
+                HStack(alignment: .bottom, spacing: DS.Space.m) {
+                    superStick.padding(.bottom, 44)
+                    attackStick
+                }
+            } else {
+                VStack(alignment: .trailing, spacing: DS.Space.s) {
+                    superStick
+                    attackStick
+                }
             }
         }
-        .padding(.horizontal, DS.Space.l)
-        .padding(.bottom, DS.Space.m)
+        .padding(.horizontal, wide ? DS.Space.m : DS.Space.l)
+        .padding(.bottom, wide ? DS.Space.s : DS.Space.m)
         .opacity(hud.result == nil ? 1 : 0)
+    }
+
+    private var superStick: some View {
+        ArenaStick(kind: .special(charge: hud.superCharge),
+                   onChange: { controller.superAiming = $0 * flip },
+                   onRelease: { drag in
+                       controller.superAiming = nil
+                       controller.fireSpecial(drag * flip)
+                   })
+    }
+
+    private var attackStick: some View {
+        ArenaStick(kind: .attack,
+                   onChange: { controller.aiming = $0 * flip },
+                   onRelease: { drag in
+                       controller.aiming = nil
+                       controller.fire(drag * flip)
+                   })
     }
 
     // MARK: 结果
@@ -529,46 +609,65 @@ private struct ArenaMatchView: View {
             title = place == 1 ? "你活到了最后！" : "第 \(place) 名"
             tint = place == 1 ? DS.Palette.success : (place <= 3 ? DS.Palette.warning : DS.Palette.danger)
         }
+        let heading = VStack(spacing: DS.Space.s) {
+            BrawlerBadge(brawler: mine.brawler, size: wide ? 96 : 84)
+            Text(title).font(DS.Font.display).foregroundStyle(tint)
+        }
         return ZStack {
             Color.black.opacity(0.45).ignoresSafeArea()
-            VStack(spacing: DS.Space.m) {
-                BrawlerBadge(brawler: mine.brawler, size: 84)
-                Text(title).font(DS.Font.display).foregroundStyle(tint)
-                if let reward = controller.reward {
-                    HStack(spacing: DS.Space.l) {
-                        Label(reward.trophies >= 0 ? "+\(reward.trophies)" : "\(reward.trophies)", systemImage: "trophy.fill")
-                            .foregroundStyle(.orange)
-                        Label("+\(reward.coins)", systemImage: "dollarsign.circle.fill")
-                            .foregroundStyle(.yellow)
+            Group {
+                // 横屏矮：头像、输赢在左边，奖励、按钮在右边
+                if wide {
+                    HStack(spacing: DS.Space.xl) {
+                        heading
+                        resultDetails(mine)
                     }
-                    .font(DS.Font.headline.monospacedDigit())
-                    if !reward.unlocked.isEmpty {
-                        Text("解锁了" + reward.unlocked.map(\.name).joined(separator: "、") + "！")
-                            .font(DS.Font.headline)
-                            .foregroundStyle(DS.Palette.success)
-                    }
-                }
-                HStack(spacing: DS.Space.l) {
-                    stat("打倒", mine.kills)
-                    stat("被打倒", mine.deaths)
-                    stat("伤害", mine.damageDealt)
-                }
-                HStack(spacing: DS.Space.s) {
-                    if let onAgain {
-                        Button("再来一局") { onAgain() }
-                            .buttonStyle(.borderedProminent)
-                        Button("换玩法、角色") { onExit() }
-                            .buttonStyle(.bordered)
-                    } else {
-                        Button("回房间") { onExit() }
-                            .buttonStyle(.borderedProminent)
+                } else {
+                    VStack(spacing: DS.Space.m) {
+                        heading
+                        resultDetails(mine)
                     }
                 }
             }
             .padding(DS.Space.l)
-            .frame(maxWidth: 360)
+            .frame(maxWidth: wide ? 600 : 360)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
             .padding(DS.Space.l)
+        }
+    }
+
+    private func resultDetails(_ mine: Fighter) -> some View {
+        VStack(spacing: DS.Space.m) {
+            if let reward = controller.reward {
+                HStack(spacing: DS.Space.l) {
+                    Label(reward.trophies >= 0 ? "+\(reward.trophies)" : "\(reward.trophies)", systemImage: "trophy.fill")
+                        .foregroundStyle(.orange)
+                    Label("+\(reward.coins)", systemImage: "dollarsign.circle.fill")
+                        .foregroundStyle(.yellow)
+                }
+                .font(DS.Font.headline.monospacedDigit())
+                if !reward.unlocked.isEmpty {
+                    Text("解锁了" + reward.unlocked.map(\.name).joined(separator: "、") + "！")
+                        .font(DS.Font.headline)
+                        .foregroundStyle(DS.Palette.success)
+                }
+            }
+            HStack(spacing: DS.Space.l) {
+                stat("打倒", mine.kills)
+                stat("被打倒", mine.deaths)
+                stat("伤害", mine.damageDealt)
+            }
+            HStack(spacing: DS.Space.s) {
+                if let onAgain {
+                    Button("再来一局") { onAgain() }
+                        .buttonStyle(.borderedProminent)
+                    Button("换玩法、角色") { onExit() }
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("回房间") { onExit() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
         }
     }
 

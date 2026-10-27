@@ -40,6 +40,8 @@ final class GLTFModel: @unchecked Sendable {
         let nodes: [SCNNode]
         /// 这一套自己的材质（挨打闪白只闪这一个人）
         let materials: [SCNMaterial]
+        /// 描边（半透明时藏起来，不然透出一圈黑）
+        let outlines: [SCNNode]
     }
 
     private struct NodeInfo {
@@ -54,6 +56,8 @@ final class GLTFModel: @unchecked Sendable {
         let geometry: SCNGeometry
         let boneIndices: SCNGeometrySource?
         let boneWeights: SCNGeometrySource?
+        /// 描边用的：顶点一样，法线换成同一位置上的平均
+        let hull: SCNGeometry?
     }
 
     private struct Skin {
@@ -153,9 +157,11 @@ final class GLTFModel: @unchecked Sendable {
                 let positions = reader.floats(positionIndex)
                 let count = positions.count / 3
                 guard count > 0 else { return nil }
-                var sources = [GLTFModel.source(positions, .vertex, width: 3)]
+                let vertices = GLTFModel.source(positions, .vertex, width: 3)
+                var sources = [vertices]
+                var normals: [Float] = []
                 if let normalIndex = attributes["NORMAL"] {
-                    let normals = reader.floats(normalIndex)
+                    normals = reader.floats(normalIndex)
                     if normals.count == count * 3 { sources.append(GLTFModel.source(normals, .normal, width: 3)) }
                 }
                 if let uvIndex = attributes["TEXCOORD_0"] {
@@ -165,7 +171,11 @@ final class GLTFModel: @unchecked Sendable {
                 let indices: [UInt32] = (primitive["indices"] as? Int).map { reader.integers($0) }
                     ?? (0..<UInt32(count)).map { $0 }
                 guard !indices.isEmpty, indices.allSatisfy({ Int($0) < count }) else { return nil }
-                let geometry = SCNGeometry(sources: sources, elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
+                let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
+                let geometry = SCNGeometry(sources: sources, elements: [element])
+                let hull = normals.count == count * 3
+                    ? SCNGeometry(sources: [vertices, GLTFModel.source(GLTFModel.smoothed(normals, at: positions), .normal, width: 3)], elements: [element])
+                    : nil
                 if let material = primitive["material"] as? Int, materials.indices.contains(material) {
                     geometry.materials = [materials[material]]
                 }
@@ -181,7 +191,7 @@ final class GLTFModel: @unchecked Sendable {
                         boneWeights = GLTFModel.source(weights, .boneWeights, width: 4)
                     }
                 }
-                return Primitive(geometry: geometry, boneIndices: boneIndices, boneWeights: boneWeights)
+                return Primitive(geometry: geometry, boneIndices: boneIndices, boneWeights: boneWeights, hull: hull)
             }
         }
 
@@ -297,8 +307,9 @@ final class GLTFModel: @unchecked Sendable {
         return result
     }
 
-    /// 做一套新的节点（骨骼、蒙皮、自己的材质）。shareMaterials：大家共用一份材质（树、箱子这种不会闪的摆设）
-    func instantiate(shareMaterials: Bool = false) -> Instance {
+    /// 做一套新的节点（骨骼、蒙皮、自己的材质）。shareMaterials：大家共用一份材质（树、箱子这种不会闪的摆设）；
+    /// outline：给每块网格套一层描边，用这个材质（ArenaArt.outline：沿法线撑开、只画背面）
+    func instantiate(shareMaterials: Bool = false, outline: SCNMaterial? = nil) -> Instance {
         let made = nodes.indices.map { index -> SCNNode in
             let node = SCNNode()
             node.name = nodes[index].name
@@ -318,6 +329,7 @@ final class GLTFModel: @unchecked Sendable {
         }
         var copies: [ObjectIdentifier: SCNMaterial] = [:]
         var owned: [SCNMaterial] = []
+        var shells: [SCNNode] = []
         for (index, info) in nodes.enumerated() {
             guard let mesh = info.mesh, meshes.indices.contains(mesh) else { continue }
             let skin = info.skin.flatMap { skins.indices.contains($0) ? skins[$0] : nil }
@@ -337,19 +349,69 @@ final class GLTFModel: @unchecked Sendable {
                     }
                 }
                 let holder = SCNNode(geometry: geometry)
-                if let skin, !skin.joints.isEmpty, let indices = primitive.boneIndices, let weights = primitive.boneWeights {
-                    let skinner = SCNSkinner(baseGeometry: geometry, bones: skin.joints.map { made[$0] },
-                                             boneInverseBindTransforms: skin.inverseBinds, boneWeights: weights, boneIndices: indices)
-                    // glTF 里蒙皮按网格所在节点的坐标算
-                    skinner.skeleton = made[index]
-                    holder.skinner = skinner
+                var parts = [(holder, geometry)]
+                if let outline, let hull = primitive.hull {
+                    let shellGeometry = hull.copy() as? SCNGeometry ?? hull
+                    shellGeometry.materials = [outline]
+                    let shell = SCNNode(geometry: shellGeometry)
+                    shell.castsShadow = false
+                    parts.append((shell, shellGeometry))
+                    shells.append(shell)
                 }
-                made[index].addChildNode(holder)
+                for (part, partGeometry) in parts {
+                    if let skin, !skin.joints.isEmpty, let indices = primitive.boneIndices, let weights = primitive.boneWeights {
+                        let skinner = SCNSkinner(baseGeometry: partGeometry, bones: skin.joints.map { made[$0] },
+                                                 boneInverseBindTransforms: skin.inverseBinds, boneWeights: weights, boneIndices: indices)
+                        // glTF 里蒙皮按网格所在节点的坐标算
+                        skinner.skeleton = made[index]
+                        part.skinner = skinner
+                    }
+                    made[index].addChildNode(part)
+                }
             }
         }
         let root = SCNNode()
         for index in roots where made[index].parent == nil { root.addChildNode(made[index]) }
-        return Instance(root: root, nodes: made, materials: owned)
+        return Instance(root: root, nodes: made, materials: owned, outlines: shells)
+    }
+
+    /// 同一个位置上的几个顶点（硬边处拆开的，法线不同）法线取平均：描边沿这个方向撑开，硬边上不裂开
+    private static func smoothed(_ normals: [Float], at positions: [Float]) -> [Float] {
+        let count = min(positions.count, normals.count) / 3
+        var groups: [SIMD3<Int32>: Int] = [:]
+        var sums: [SIMD3<Float>] = []
+        var group = [Int](repeating: 0, count: count)
+        for v in 0..<count {
+            let key = SIMD3(quantized(positions[v * 3]), quantized(positions[v * 3 + 1]), quantized(positions[v * 3 + 2]))
+            let g: Int
+            if let found = groups[key] {
+                g = found
+            } else {
+                g = sums.count
+                groups[key] = g
+                sums.append(.zero)
+            }
+            group[v] = g
+            sums[g] += SIMD3(normals[v * 3], normals[v * 3 + 1], normals[v * 3 + 2])
+        }
+        var result = normals
+        for v in 0..<count {
+            let sum = sums[group[v]]
+            let length = simd_length(sum)
+            // 正反两面叠在一起的（披风）加起来是零，用原来的
+            guard length > 1e-4 else { continue }
+            let unit = sum / length
+            result[v * 3] = unit.x
+            result[v * 3 + 1] = unit.y
+            result[v * 3 + 2] = unit.z
+        }
+        return result
+    }
+
+    /// 位置按 0.1 毫米取整（同一点的几个顶点算一组）
+    private static func quantized(_ value: Float) -> Int32 {
+        let scaled = (value * 10_000).rounded()
+        return scaled.isFinite ? Int32(max(min(scaled, 2e9), -2e9)) : 0
     }
 
     private static func source(_ values: [Float], _ semantic: SCNGeometrySource.Semantic, width: Int) -> SCNGeometrySource {

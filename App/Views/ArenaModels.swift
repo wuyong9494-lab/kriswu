@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 import simd
 
-// 乱斗的 3D 素材：角色、箱子、树这些模型从 App 里读（KayKit 的免费素材，CC0 授权，见 App/Arena3D/KayKit-LICENSE.txt）。
+// 乱斗的 3D 素材：角色、武器、场外的树这些模型从 App 里读（KayKit 的免费素材，CC0 授权，见 App/Arena3D/KayKit-LICENSE.txt）。
 // 以后换成买的素材：同名文件放进私有仓库，打包时覆盖这里的就行
 
 /// 乱斗的颜色（3D 画面、上面那排比分、摇杆共用）
@@ -13,15 +13,18 @@ enum ArenaPalette {
     static let blue = UIColor(red: 0.20, green: 0.55, blue: 1.0, alpha: 1)
     static let red = UIColor(red: 0.95, green: 0.30, blue: 0.30, alpha: 1)
     static let gold = UIColor(red: 1.0, green: 0.82, blue: 0.22, alpha: 1)
-    static let grass = UIColor(red: 0.42, green: 0.68, blue: 0.36, alpha: 1)
-    static let sand = UIColor(red: 0.95, green: 0.86, blue: 0.64, alpha: 1)
-    static let sandDark = UIColor(red: 0.91, green: 0.81, blue: 0.58, alpha: 1)
-    static let bush = UIColor(red: 0.30, green: 0.63, blue: 0.29, alpha: 1)
-    static let bushDark = UIColor(red: 0.25, green: 0.55, blue: 0.26, alpha: 1)
+    static let grass = UIColor(red: 0.45, green: 0.67, blue: 0.26, alpha: 1)
     static let poison = UIColor(red: 0.28, green: 0.80, blue: 0.36, alpha: 1)
     /// 自己这边、对面打出来的子弹
     static let allyShot = UIColor(red: 0.55, green: 0.82, blue: 1.0, alpha: 1)
     static let enemyShot = UIColor(red: 1.0, green: 0.48, blue: 0.38, alpha: 1)
+    /// 自己的血条（绿）、弹药（橙）
+    static let mine = UIColor(red: 0.36, green: 0.86, blue: 0.22, alpha: 1)
+    static let ammo = UIColor(red: 1.0, green: 0.62, blue: 0.10, alpha: 1)
+    /// 头顶的名字：自己、队友、对面
+    static let myName = UIColor(red: 0.62, green: 1.0, blue: 0.38, alpha: 1)
+    static let allyName = UIColor(red: 0.50, green: 0.80, blue: 1.0, alpha: 1)
+    static let enemyName = UIColor(red: 1.0, green: 0.47, blue: 0.43, alpha: 1)
 }
 
 /// 每个角色的样子：用哪个模型、拿什么、怎么动
@@ -118,9 +121,8 @@ struct BrawlerLook {
 final class ArenaModels: @unchecked Sendable {
     static let shared = ArenaModels()
 
-    /// 墙用的箱子、桶，场地外的树、石头、旗子，骷髅的武器
-    static let props = ["box_large.glb", "barrel_large.glb", "crates_stacked.glb",
-                        "Skeleton_Axe.gltf", "Skeleton_Shield_Large_A.gltf", "Skeleton_Staff.gltf", "Skeleton_Crossbow.gltf", "Skeleton_Blade.gltf",
+    /// 骷髅的武器，场地外的树、石头、旗子（墙的箱子、桶是代码画的，见 ArenaArt）
+    static let props = ["Skeleton_Axe.gltf", "Skeleton_Shield_Large_A.gltf", "Skeleton_Staff.gltf", "Skeleton_Crossbow.gltf", "Skeleton_Blade.gltf",
                         "trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
                         "trees_B_small.gltf", "trees_B_medium.gltf", "trees_B_large.gltf",
                         "rock_single_A.gltf", "rock_single_B.gltf", "rock_single_C.gltf",

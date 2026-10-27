@@ -24,6 +24,9 @@ final class ArenaAvatar {
     private let bubble = SCNNode()
     /// 材质本来的自发光（骷髅的眼睛），挨打闪白后改回去
     private var glows: [Any?] = []
+    /// 身上、手里武器的描边（半透明、淡出时藏起来）
+    private var outlines: [SCNNode] = []
+    private var outlined = true
     /// 上半身的骨骼（跑着出手只换这些）
     private let upper: [Int]
 
@@ -63,7 +66,7 @@ final class ArenaAvatar {
         look = BrawlerLook.of(brawler)
         model = ArenaModels.shared.character(brawler)
         if let model {
-            instance = model.instantiate()
+            instance = model.instantiate(outline: ArenaArt.outline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
         } else {
             instance = nil
@@ -76,11 +79,13 @@ final class ArenaAvatar {
             for weapon in look.weapons {
                 guard let piece = ArenaModels.shared.prop(weapon.file),
                       let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else { continue }
-                let held = piece.instantiate(shareMaterials: true).root
-                held.simdPosition = weapon.position
-                held.simdOrientation = weapon.rotation
-                bone.addChildNode(held)
+                let held = piece.instantiate(shareMaterials: true, outline: ArenaArt.outline)
+                held.root.simdPosition = weapon.position
+                held.root.simdOrientation = weapon.rotation
+                bone.addChildNode(held.root)
+                outlines += held.outlines
             }
+            outlines += instance.outlines
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             body.simdScale = SIMD3(repeating: ArenaAvatar.scale)
@@ -197,6 +202,12 @@ final class ArenaAvatar {
         }
         node.opacity = CGFloat(opacity)
         node.isHidden = opacity < 0.02
+        // 不透明时才描边（半透明时会从身子里透出一圈黑）
+        let solid = opacity > 0.97
+        if solid != outlined {
+            outlined = solid
+            outlines.forEach { $0.isHidden = !solid }
+        }
         ring.isHidden = !fighter.alive
         glow.isHidden = !(fighter.alive && fighter.superCharge >= 1)
         bubble.isHidden = !(fighter.alive && fighter.shield > 0)
@@ -333,55 +344,38 @@ final class ArenaAvatar {
     }
 }
 
-/// 一个人头顶上的名字、血条（自己的再加三格弹药），画在 3D 画面上面那层
+/// 一个人头顶上的东西：名字（自己绿、队友蓝、对面红）、圆头粗血条（血量写在条上），自己的再加一排橙色弹药。
+/// 字是粗圆体描黑边的，画在 3D 画面上面那层
 @MainActor
 final class ArenaTag {
     let node = SKNode()
-    private let label: SKLabelNode
-    private let back: SKSpriteNode
-    private let fill: SKSpriteNode
-    private let number: SKLabelNode
-    private let starLabel: SKLabelNode
-    private var ammo: [SKSpriteNode] = []
-    private let color: UIColor
-    private let isMe: Bool
+    private let name: ArenaText
+    private let bar: ArenaBar
+    private let number = ArenaText(size: 11, color: .white)
+    private let starText = ArenaText(size: 13, color: ArenaPalette.gold)
+    private var ammo: [ArenaBar] = []
     private var shownHealth = -1
     private var shownStars = -1
-    private static let width: CGFloat = 50
-    private static let barHeight: CGFloat = 9
+    private static let width: CGFloat = 58
+    private static let barHeight: CGFloat = 12
 
-    init(fighter: Fighter, isMe: Bool, color: UIColor) {
-        self.isMe = isMe
-        self.color = color
-        let width = ArenaTag.width
-        label = SKLabelNode(fontNamed: "PingFangSC-Semibold")
-        label.text = isMe ? "我" : fighter.name
-        label.fontSize = 11
-        label.fontColor = .white
-        label.verticalAlignmentMode = .baseline
-        label.position = CGPoint(x: 0, y: ArenaTag.barHeight / 2 + 4)
-        back = SKSpriteNode(color: UIColor.black.withAlphaComponent(0.6), size: CGSize(width: width + 2, height: ArenaTag.barHeight + 2))
-        fill = SKSpriteNode(color: isMe ? .systemGreen : color, size: CGSize(width: width, height: ArenaTag.barHeight))
-        fill.anchorPoint = CGPoint(x: 0, y: 0.5)
-        fill.position = CGPoint(x: -width / 2, y: 0)
-        number = SKLabelNode(fontNamed: "AvenirNext-Bold")
-        number.fontSize = 8
-        number.fontColor = .white
-        number.verticalAlignmentMode = .center
-        starLabel = SKLabelNode(fontNamed: "AvenirNext-Heavy")
-        starLabel.fontSize = 12
-        starLabel.fontColor = ArenaPalette.gold
-        starLabel.verticalAlignmentMode = .baseline
-        starLabel.position = CGPoint(x: 0, y: ArenaTag.barHeight / 2 + 18)
-        [back, fill, number, label, starLabel].forEach(node.addChild)
+    init(fighter: Fighter, isMe: Bool, ally: Bool) {
+        let width = ArenaTag.width, barHeight = ArenaTag.barHeight
+        name = ArenaText(size: 12, color: isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName))
+        bar = ArenaBar(width: width, height: barHeight, color: isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red))
+        name.set(isMe ? "我" : fighter.name)
+        name.node.position = CGPoint(x: 0, y: barHeight / 2 + 10)
+        starText.node.position = CGPoint(x: 0, y: barHeight / 2 + 26)
+        number.node.position = CGPoint(x: 0, y: 0.5)
+        [bar.node, number.node, name.node, starText.node].forEach(node.addChild)
         if isMe {
-            let segment = (width - 4) / 3
+            let gap: CGFloat = 3
+            let segment = (width - gap * 2) / 3
             for k in 0..<3 {
-                let bar = SKSpriteNode(color: .systemOrange, size: CGSize(width: segment, height: 4))
-                bar.anchorPoint = CGPoint(x: 0, y: 0.5)
-                bar.position = CGPoint(x: -width / 2 + CGFloat(k) * (segment + 2), y: -ArenaTag.barHeight / 2 - 5)
-                node.addChild(bar)
-                ammo.append(bar)
+                let piece = ArenaBar(width: segment, height: 5, color: ArenaPalette.ammo, border: 1.2)
+                piece.node.position = CGPoint(x: -width / 2 + segment / 2 + CGFloat(k) * (segment + gap), y: -barHeight / 2 - 7)
+                node.addChild(piece.node)
+                ammo.append(piece)
             }
         }
         node.isHidden = true
@@ -396,21 +390,18 @@ final class ArenaTag {
         node.isHidden = false
         node.position = point
         node.alpha = CGFloat(min(1, opacity * 1.4))
-        let fraction = CGFloat(fighter.health) / CGFloat(max(fighter.maxHealth, 1))
-        fill.xScale = max(0, min(1, fraction))
-        if isMe { fill.color = fraction < 0.3 ? .systemRed : .systemGreen }
+        bar.set(CGFloat(fighter.health) / CGFloat(max(fighter.maxHealth, 1)))
         if fighter.health != shownHealth {
             shownHealth = fighter.health
-            number.text = "\(max(fighter.health, 0))"
+            number.set("\(max(fighter.health, 0))")
         }
         if fighter.stars != shownStars {
             shownStars = fighter.stars
-            starLabel.text = fighter.stars > 0 ? "★\(fighter.stars)" : ""
+            starText.set(fighter.stars > 0 ? "★\(fighter.stars)" : "")
         }
-        for (k, bar) in ammo.enumerated() {
+        for (k, piece) in ammo.enumerated() {
             let part = CGFloat(min(max(fighter.ammo - Double(k), 0), 1))
-            bar.xScale = max(part, 0.02)
-            bar.alpha = part >= 1 ? 1 : 0.45
+            piece.set(part, dim: part < 1)
         }
     }
 }
