@@ -303,8 +303,8 @@ jobs:
           xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
           mkdir -p shots
           # 浅色截全部页面；深色只截几个常用的（看配色）。截一张要十几秒，全截两套要二十多分钟
-          LIGHT="today calendar stats settings meeting meetingEdit meetingSource meetingTrend todayLayout years passPlan rulesExplain allFeatures game tiles gameBoard gomoku gomokuBoard fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
-          DARK="today calendar stats settings meeting day gameBoard gomokuBoard"
+          LIGHT="today calendar stats settings meeting meetingEdit meetingSource meetingTrend todayLayout years passPlan rulesExplain allFeatures game arena arenaPlay arenaShowdown tiles gameBoard gomoku gomokuBoard fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          DARK="today calendar stats settings meeting day arenaPlay"
           for mode in light dark; do
             xcrun simctl ui "$DEVICE" appearance $mode
             if [ $mode = light ]; then SCREENS=$LIGHT; else SCREENS=$DARK; fi
