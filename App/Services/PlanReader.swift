@@ -179,25 +179,59 @@ enum PlanReader {
                                    width: block.boundingBox.width, height: block.boundingBox.height),
              count: block.characterBoxes?.count ?? 0)
         }
-        return (request.results ?? []).flatMap { tokens($0, aspect: aspect) }.flatMap { divide($0, by: spots) }
+        var result: [PassPlan.TextBox] = []
+        var rereads = 0
+        for box in (request.results ?? []).flatMap({ tokens($0, aspect: aspect) }) {
+            // 认出的一块字（中文常把隔得很远的一整行认成一串，还会漏字）横跨好几块隔开的字
+            let inside = spots.filter { spot in
+                let midX = spot.box.x + spot.box.width / 2, midY = spot.box.y + spot.box.height / 2
+                return spot.count > 0 && midX > box.x && midX < box.x + box.width && midY > box.y && midY < box.y + box.height
+            }.sorted { $0.box.x < $1.box.x }
+            guard inside.count > 1 else {
+                result.append(box)
+                continue
+            }
+            // 字数对得上：按每块几个字依次分
+            let characters = Array(box.text)
+            if inside.reduce(0, { $0 + $1.count }) == characters.count {
+                var start = 0
+                for spot in inside {
+                    var piece = spot.box
+                    piece.text = String(characters[start..<(start + spot.count)])
+                    result.append(piece)
+                    start += spot.count
+                }
+                continue
+            }
+            // 对不上：每一块单独裁下来再认一遍（一张图最多认几百块，太多就不拆）
+            guard rereads + inside.count <= 400 else {
+                result.append(box)
+                continue
+            }
+            rereads += inside.count
+            result += inside.compactMap { reread($0.box, in: image, words: words, settings: settings) }
+        }
+        return result
     }
 
-    /// 认出的一块字（中文常把隔得很远的一整行认成一串）横跨好几块隔开的字：
-    /// 按每块里有几个字，把认出的字依次分给它们。字数对不上就不拆
-    private static func divide(_ box: PassPlan.TextBox, by spots: [(box: PassPlan.TextBox, count: Int)]) -> [PassPlan.TextBox] {
-        let inside = spots.filter { spot in
-            let midX = spot.box.x + spot.box.width / 2, midY = spot.box.y + spot.box.height / 2
-            return spot.count > 0 && midX > box.x && midX < box.x + box.width && midY > box.y && midY < box.y + box.height
-        }.sorted { $0.box.x < $1.box.x }
-        let characters = Array(box.text)
-        guard inside.count > 1, inside.reduce(0, { $0 + $1.count }) == characters.count else { return [box] }
-        var start = 0
-        return inside.map { spot in
-            defer { start += spot.count }
-            var piece = spot.box
-            piece.text = String(characters[start..<(start + spot.count)])
-            return piece
-        }
+    /// 把一小块字（位置是这张图的 0–1）裁下来单独认
+    private static func reread(_ spot: PassPlan.TextBox, in image: CGImage, words: [String], settings: Settings) -> PassPlan.TextBox? {
+        let w = Double(image.width), h = Double(image.height)
+        let pad = spot.height * h * 0.3
+        let rect = CGRect(x: spot.x * w - pad, y: spot.y * h - pad, width: spot.width * w + pad * 2, height: spot.height * h + pad * 2)
+            .intersection(CGRect(x: 0, y: 0, width: w, height: h)).integral
+        guard rect.width > 2, rect.height > 2, let piece = image.cropping(to: rect) else { return nil }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.usesLanguageCorrection = settings.languageCorrection
+        if settings.languageCorrection { request.customWords = words }
+        guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { return nil }
+        let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+        guard !text.isEmpty else { return nil }
+        var box = spot
+        box.text = text
+        return box
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算

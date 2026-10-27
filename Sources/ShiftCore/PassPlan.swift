@@ -243,12 +243,12 @@ public enum PassPlan {
         } else {
             return Reading(rows: [], layout: nil)
         }
-        // 表的左右边：最左、最右两列再往外半列多一点；表里的字更靠外（表头没认出来的列）就到那里，
-        // 只是最靠外的几块不算（照片里表外面零星的字）
+        // 表的左右边：最左、最右两列再往外；表里的字更靠外就到那里，只是最靠外的几块不算（照片里表外面零星的字）
         let xs = layout.slots.map(\.x).sorted()
         let spacing = xs.count > 1 ? (xs[xs.count - 1] - xs[0]) / Double(xs.count - 1) : 0.1
-        var left = (xs.first ?? 0) - spacing * 0.65
-        var right = (xs.last ?? 1) + spacing * 0.65
+        // 往外多留一列：最边上的列表头没认出来（「状态」那种带框的小标签）也裁得进去
+        var left = (xs.first ?? 0) - spacing * 1.5
+        var right = (xs.last ?? 1) + spacing * 1.5
         if body.count >= 20 {
             let lefts = body.map(\.x).sorted(), rights = body.map { $0.x + $0.width }.sorted()
             left = min(left, lefts[lefts.count * 3 / 100] - 0.01)
