@@ -163,53 +163,111 @@ public enum PassPlan {
         let recognized = boxes.compactMap { b in column(forHeader: b.text).map { (box: b, column: $0) } }
         let heights = boxes.map(\.height).sorted()
         let lineHeight = heights.isEmpty ? 0.02 : heights[heights.count / 2]
-        let slope: Double
         let body: [TextBox]
         let layout: Layout
+        /// 每一列表头在照片里的高低（往下数每一行时，各列从这个高低差开始跟）；用前一张的列时不知道，当作一样高
+        let headerY: [Double]?
         if let top = headerRow(recognized) {
             let s = tilt(top.map(\.box))
             let headerLevel = top.map { $0.box.midY - s * $0.box.midX }.reduce(0, +) / Double(top.count)
             // 表头那一排的高低差：表头的字一般比表里的大
             let tolerance = max(lineHeight, top.map(\.box.height).reduce(0, +) / Double(top.count)) * 0.6
             let headerBoxes = boxes.filter { abs($0.midY - s * $0.midX - headerLevel) < tolerance }.sorted { $0.x < $1.x }
-            slope = s
             body = boxes.filter { b in b.midY - s * b.midX > headerLevel + tolerance && !headerBoxes.contains(b) }
             layout = Layout(labels: headerBoxes.map { ($0.text, $0.midX) })
+            headerY = headerBoxes.map(\.midY)
         } else if let fallback {
-            slope = 0
             body = boxes
             layout = fallback
+            headerY = nil
         } else {
             return Reading(rows: [], layout: nil)
         }
-        func level(_ b: TextBox) -> Double { b.midY - slope * b.midX }
-        // 上下挨得近的算一行
-        var lines: [[TextBox]] = []
-        for b in body.sorted(by: { level($0) < level($1) }) {
-            if let last = lines.last?.last, abs(level(b) - level(last)) < lineHeight * 0.7 {
-                lines[lines.count - 1].append(b)
-            } else {
-                lines.append([b])
+        return Reading(rows: assemble(body, layout: layout, headerY: headerY, lineHeight: lineHeight), layout: layout)
+    }
+
+    /// 把表里的字拼成一行行。
+    /// 手机拍屏幕会梯形变形：上面几行往一边斜、下面几行往另一边斜，用一个角度扶不正（密密麻麻的 Excel 下面几行会串行）。
+    /// 所以先按左右分到各列，每列里按上下分成一格格；再以「地面站」那一列为准（每行都有），一列列往右对：
+    /// 每往下一行，记下这一列比地面站高多少低多少，跟着慢慢变，斜度一点点变也跟得上
+    static func assemble(_ body: [TextBox], layout: Layout, headerY: [Double]?, lineHeight: Double) -> [PassPlanRow] {
+        let slots = layout.slots
+        guard !slots.isEmpty else { return [] }
+        // 按左右分到最近的那一列
+        var perSlot = [[TextBox]](repeating: [], count: slots.count)
+        for b in body {
+            let i = slots.indices.min { abs(slots[$0].x - b.midX) < abs(slots[$1].x - b.midX) }!
+            perSlot[i].append(b)
+        }
+        // 每一列里上下挨着的算一格（日期、时间被认成两块的拼在一格）
+        struct Cell { var boxes: [TextBox]; var y: Double }
+        let cells: [[Cell]] = perSlot.map { boxes in
+            var list: [Cell] = []
+            for b in boxes.sorted(by: { $0.midY < $1.midY }) {
+                if var last = list.last, abs(b.midY - last.y) < lineHeight * 0.6 {
+                    last.boxes.append(b)
+                    last.y = last.boxes.map(\.midY).reduce(0, +) / Double(last.boxes.count)
+                    list[list.count - 1] = last
+                } else {
+                    list.append(Cell(boxes: [b], y: b.midY))
+                }
+            }
+            return list
+        }
+        // 以地面站那一列为准：它的每一格是一行
+        let ref = slots.firstIndex { $0.column == .station } ?? cells.indices.max { cells[$0].count < cells[$1].count }!
+        let anchors = cells[ref]
+        guard !anchors.isEmpty else { return [] }
+        let gaps = zip(anchors.dropFirst(), anchors).map { $0.y - $1.y }.sorted()
+        let pitch = gaps.isEmpty ? lineHeight * 2 : gaps[gaps.count / 2]
+        let tolerance = max(lineHeight * 0.5, pitch * 0.45)
+        // 别的列一行行对上去：预计的位置 = 地面站那格 + 这一列现在的高低差
+        var matched = [[Int?]](repeating: [Int?](repeating: nil, count: anchors.count), count: slots.count)
+        for s in slots.indices where s != ref {
+            var offset = headerY.map { $0[s] - $0[ref] } ?? 0
+            var used = Set<Int>()
+            for (r, anchor) in anchors.enumerated() {
+                let predicted = anchor.y + offset
+                guard let best = cells[s].indices.filter({ !used.contains($0) })
+                        .min(by: { abs(cells[s][$0].y - predicted) < abs(cells[s][$1].y - predicted) }),
+                      abs(cells[s][best].y - predicted) < tolerance else { continue }
+                used.insert(best)
+                matched[s][r] = best
+                offset = (offset + (cells[s][best].y - anchor.y)) / 2
             }
         }
-        let slots = layout.slots
-        let rows = lines.compactMap { line -> PassPlanRow? in
-            guard !slots.isEmpty else { return nil }
-            var parts = [[TextBox]](repeating: [], count: slots.count)
-            for b in line {
-                let i = slots.indices.min { abs(slots[$0].x - b.midX) < abs(slots[$1].x - b.midX) }!
-                parts[i].append(b)
-            }
-            let cells = parts.enumerated().map { i, boxes -> String in
-                if slots[i].column?.isSingleValue == true {
-                    // 圈号、卫星、地面站一格只有一个值：最左边的序号、Excel 的行号会挤进来，只留离表头最近的
-                    return boxes.min { abs($0.midX - slots[i].x) < abs($1.midX - slots[i].x) }?.text ?? ""
+        return anchors.indices.compactMap { r -> PassPlanRow? in
+            let values = slots.indices.map { s -> String in
+                let boxes: [TextBox]
+                if s == ref {
+                    boxes = anchors[r].boxes
+                } else if let c = matched[s][r] {
+                    boxes = cells[s][c].boxes
+                } else {
+                    return ""
+                }
+                if slots[s].column?.isSingleValue == true {
+                    return singleValue(boxes, center: slots[s].x, gap: lineHeight * 0.8)
                 }
                 return boxes.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ")
             }
-            return row(cells: cells, layout: layout)
+            return row(cells: values, layout: layout)
         }
-        return Reading(rows: rows, layout: layout)
+    }
+
+    /// 一格里只该有一个值（圈号、卫星、地面站）：挨得近的几块（一个名字被认成了两段）拼起来；
+    /// 隔得远的（挤进来的序号、Excel 的行号）只留离表头最近的那一段
+    static func singleValue(_ boxes: [TextBox], center: Double, gap: Double) -> String {
+        var groups: [[TextBox]] = []
+        for b in boxes.sorted(by: { $0.x < $1.x }) {
+            if let last = groups.last?.last, b.x - (last.x + last.width) <= gap {
+                groups[groups.count - 1].append(b)
+            } else {
+                groups.append([b])
+            }
+        }
+        func mid(_ g: [TextBox]) -> Double { (g.first!.x + g.last!.x + g.last!.width) / 2 }
+        return groups.min { abs(mid($0) - center) < abs(mid($1) - center) }?.map(\.text).joined() ?? ""
     }
 
     /// 表头那一排：每个认得出的表头格子和它上下差不多高的（允许屏幕拍斜）算一排，

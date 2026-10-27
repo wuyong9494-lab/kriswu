@@ -2968,6 +2968,41 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(PassPlan.table([edited], layout: reading.layout).cells[0][2], "乙光北区03")
     }
 
+    /// 手机拍屏幕的梯形变形：上面几行往上斜、下面几行往下斜，30 行挤在一起（一个角度扶不正，会串行）
+    func testKeystonedPhotoKeepsRowsApart() {
+        func box(_ text: String, midX: Double, midY: Double, w: Double = 0.08, h: Double = 0.012) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: midX - w / 2, y: midY - h / 2, width: w, height: h)
+        }
+        let columns: [(String, Double)] = [("卫星名称", 0.15), ("地面站", 0.35), ("数传开始时间", 0.6), ("数传结束时间", 0.85)]
+        var boxes = columns.map { box($0.0, midX: $0.1, midY: 0.05 - 0.02 * $0.1, h: 0.016) }
+        for r in 0..<30 {
+            let rowY = 0.09 + 0.022 * Double(r)
+            let k = -0.02 + 0.0015 * Double(r)      // 每一行的斜度从往上斜慢慢变成往下斜
+            let hour = String(format: "%02d", r % 24)
+            let values = ["SAT-\(r)", "甲站-北区\(r)", "2026-10-27 \(hour):00:00", "2026-10-27 \(hour):05:00"]
+            for (c, value) in values.enumerated() {
+                let x = columns[c].1
+                boxes.append(box(value, midX: x, midY: rowY + k * x))
+            }
+        }
+        let rows = PassPlan.rows(fromBoxes: boxes.shuffled())
+        XCTAssertEqual(rows.count, 30)
+        XCTAssertEqual(rows.map(\.station), (0..<30).map { "甲站-北区\($0)" })
+        for (r, row) in rows.enumerated() {
+            XCTAssertEqual(row.satellite, "SAT-\(r)", "第 \(r + 1) 行没串行")
+            XCTAssertEqual(row.end, "2026-10-27 \(String(format: "%02d", r % 24)):05:00", "第 \(r + 1) 行没串行")
+        }
+    }
+
+    /// 一格只该有一个值：名字被认成两段的拼回来，隔得远的行号不要
+    func testSingleValueCell() {
+        func box(_ text: String, _ x: Double, _ w: Double) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: x, y: 0.1, width: w, height: 0.02)
+        }
+        XCTAssertEqual(PassPlan.singleValue([box("-北区05", 0.43, 0.06), box("甲站", 0.40, 0.025)], center: 0.45, gap: 0.016), "甲站-北区05")
+        XCTAssertEqual(PassPlan.singleValue([box("12", 0.0, 0.015), box("10885", 0.06, 0.06)], center: 0.08, gap: 0.016), "10885")
+    }
+
     func testTableFileKeepsItsColumns() {
         let table = [
             ["卫星", "地面站", "圈次", "数传开始", "创建时间", "是否应急", ""],
