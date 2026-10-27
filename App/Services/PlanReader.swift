@@ -169,9 +169,35 @@ enum PlanReader {
         request.usesLanguageCorrection = settings.languageCorrection
         if settings.languageCorrection { request.customWords = words }
         if settings.smallText { request.minimumTextHeight = minimumTextHeight(image.height) }
-        try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])
+        // 系统另外找一遍「一块块的字」（按空隙分开，不管认不认得），用来把连成一长串的整行拆回一格格
+        let blocks = VNDetectTextRectanglesRequest()
+        blocks.reportCharacterBoxes = true
+        try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request, blocks])
         let aspect = Double(image.width) / Double(max(image.height, 1))
-        return (request.results ?? []).flatMap { tokens($0, aspect: aspect) }
+        let spots = (blocks.results ?? []).map { block in
+            (box: PassPlan.TextBox(text: "", x: block.boundingBox.minX, y: 1 - block.boundingBox.maxY,
+                                   width: block.boundingBox.width, height: block.boundingBox.height),
+             count: block.characterBoxes?.count ?? 0)
+        }
+        return (request.results ?? []).flatMap { tokens($0, aspect: aspect) }.flatMap { divide($0, by: spots) }
+    }
+
+    /// 认出的一块字（中文常把隔得很远的一整行认成一串）横跨好几块隔开的字：
+    /// 按每块里有几个字，把认出的字依次分给它们。字数对不上就不拆
+    private static func divide(_ box: PassPlan.TextBox, by spots: [(box: PassPlan.TextBox, count: Int)]) -> [PassPlan.TextBox] {
+        let inside = spots.filter { spot in
+            let midX = spot.box.x + spot.box.width / 2, midY = spot.box.y + spot.box.height / 2
+            return spot.count > 0 && midX > box.x && midX < box.x + box.width && midY > box.y && midY < box.y + box.height
+        }.sorted { $0.box.x < $1.box.x }
+        let characters = Array(box.text)
+        guard inside.count > 1, inside.reduce(0, { $0 + $1.count }) == characters.count else { return [box] }
+        var start = 0
+        return inside.map { spot in
+            defer { start += spot.count }
+            var piece = spot.box
+            piece.text = String(characters[start..<(start + spot.count)])
+            return piece
+        }
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算
