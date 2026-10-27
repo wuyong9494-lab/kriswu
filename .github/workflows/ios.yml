@@ -538,7 +538,8 @@ jobs:
           done
           echo "上一次写过说明的提交：${PREV:-没有}"
           if [ -n "$PREV" ] && git merge-base --is-ancestor "$PREV" HEAD 2>/dev/null; then RANGE="$PREV..HEAD"; else RANGE="-1"; fi
-          git log --format=%B $RANGE | sed -nE 's/^更新说明(：|:)[[:space:]]*//p' | awk 'NF && !seen[$0]++' > notes.txt
+          # 「（无用户可见变化）」这种整句括起来的不写进去
+          git log --format=%B $RANGE | sed -nE 's/^更新说明(：|:)[[:space:]]*//p' | grep -v '^（.*）$' | awk 'NF && !seen[$0]++' > notes.txt || true
           [ -s notes.txt ] || git log --format=%s $RANGE | head -8 > notes.txt
           cat notes.txt
 
