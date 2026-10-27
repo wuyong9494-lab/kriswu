@@ -73,6 +73,7 @@ final class TileGameTests: XCTestCase {
         XCTAssertEqual(game.tray.map(\.kind), [0, 0, 1])
         game.pick(4)
         XCTAssertEqual(game.clearing, [0, 2, 4])
+        XCTAssertFalse(game.canUndo, "凑齐消掉的不能撤回")
         XCTAssertEqual(game.waiting, 1)
         game.pick(3)
         XCTAssertEqual(game.tray.map(\.kind), [1, 2], "上一步凑齐的消掉了")
@@ -88,7 +89,9 @@ final class TileGameTests: XCTestCase {
         for id in 0..<7 { game.pick(id) }
         XCTAssertEqual(game.status, .lost)
         XCTAssertFalse(game.pick(7), "输了不能再拿")
+        XCTAssertTrue(game.canUndo)
         XCTAssertTrue(game.undo())
+        XCTAssertFalse(game.canUndo)
         XCTAssertEqual(game.status, .playing)
         XCTAssertEqual(game.tray.count, 6)
         XCTAssertTrue(game.board.contains { $0.id == 6 }, "撤回的放回牌堆")

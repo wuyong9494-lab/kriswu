@@ -264,6 +264,12 @@ public struct TileGame: Equatable, Sendable {
     /// 槽里等着凑的几张（不算正要消掉的）
     public var waiting: Int { tray.count - clearing.count }
 
+    /// 现在能撤回（上一张还在槽里等着凑、撤回还没用过）
+    public var canUndo: Bool {
+        guard undos > 0, status != .won, let move = last else { return false }
+        return tray.contains { $0.id == move.tile.id } && !clearing.contains(move.tile.id)
+    }
+
     /// 拿一张（牌堆里没被压住的，或移出去的那几张）放进槽：放在一样的旁边，凑齐三张就消掉
     @discardableResult
     public mutating func pick(_ id: Int) -> Bool {
@@ -306,9 +312,7 @@ public struct TileGame: Equatable, Sendable {
     @discardableResult
     public mutating func undo() -> Bool {
         settle()
-        guard undos > 0, status != .won, let move = last, let i = tray.firstIndex(where: { $0.id == move.tile.id }) else {
-            return false
-        }
+        guard canUndo, let move = last, let i = tray.firstIndex(where: { $0.id == move.tile.id }) else { return false }
         tray.remove(at: i)
         if move.fromParked { parked.append(move.tile) } else { board.append(move.tile) }
         undos -= 1

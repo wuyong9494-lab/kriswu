@@ -47,6 +47,8 @@ final class TileRaceSession: NSObject, ObservableObject {
     private let session: MCSession
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
+    /// 要进 / 已经进的那个房间的房主（加入的人用；同一个房间里的别人也会连上来，只认房主）
+    private var host: MCPeerID?
     /// 每台连上的手机是房间里的谁（房主用）
     private var playerOfPeer: [MCPeerID: String] = [:]
     private var roundsStarted = 0
@@ -91,6 +93,7 @@ final class TileRaceSession: NSObject, ObservableObject {
     func join(_ room: Room) {
         guard joined == nil else { return }
         joining = room.name
+        host = room.peer
         notice = nil
         let hello = try? JSONEncoder().encode(TileRace.Message.hello(me))
         browser?.invitePeer(room.peer, to: session, withContext: hello, timeout: 20)
@@ -129,7 +132,7 @@ final class TileRaceSession: NSObject, ObservableObject {
         if role == .host {
             broadcast(.progress(round: round.id, player: player))
         } else {
-            send(.progress(round: round.id, player: player), to: session.connectedPeers)
+            send(.progress(round: round.id, player: player), to: host.map { [$0] } ?? [])
         }
     }
 
@@ -191,7 +194,8 @@ final class TileRaceSession: NSObject, ObservableObject {
         case .host:
             break
         case .guest:
-            joined = peer.displayName
+            guard peer == host else { return }
+            joined = joining ?? peer.displayName
             joining = nil
             browser?.stopBrowsingForPeers()
             send(.hello(me), to: [peer])
@@ -205,6 +209,8 @@ final class TileRaceSession: NSObject, ObservableObject {
             players.removeAll { $0.id == id }
             broadcast(.lobby(players))
         case .guest:
+            guard peer == host else { return }
+            host = nil
             if joined != nil {
                 notice = "和房主断开了：房主可能退出了，或者离得太远"
                 joined = nil

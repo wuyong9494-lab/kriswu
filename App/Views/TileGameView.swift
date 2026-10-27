@@ -287,9 +287,9 @@ struct TileRaceLobbyView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session.players.count < 2 || session.roundInProgress)
+            .disabled(session.players.count < 2)
         } footer: {
-            if session.roundInProgress { Text("这一局还有人没打完") }
+            if session.roundInProgress { Text("上一局还有人没打完，现在开始的话他们直接进新的一局。") }
         }
     }
 
@@ -555,7 +555,7 @@ struct TileBoardView: View {
 
     private var tools: some View {
         HStack(spacing: DS.Space.s) {
-            tool("撤回", "arrow.uturn.backward", left: game.undos, enabled: game.undos > 0 && moves > 0) {
+            tool("撤回", "arrow.uturn.backward", left: game.undos, enabled: game.canUndo) {
                 change { $0.undo() }
             }
             tool("移出", "tray.and.arrow.up", left: game.moveOuts, enabled: game.moveOuts > 0 && !game.tray.isEmpty) {
@@ -598,7 +598,7 @@ struct TileBoardView: View {
 
     private var resultOverlay: some View {
         let won = game.status == .won
-        let canGoOn = !won && (game.undos > 0 || game.moveOuts > 0) && race?.roundFinished != true
+        let canGoOn = !won && (game.canUndo || game.moveOuts > 0)
         return ZStack {
             Color.black.opacity(0.35).ignoresSafeArea()
             VStack(spacing: DS.Space.m) {
