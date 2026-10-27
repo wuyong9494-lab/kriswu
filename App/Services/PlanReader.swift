@@ -23,10 +23,12 @@ enum PlanReader {
         var split = true
         /// 按中文、英文的词纠正认错的字（表头、运营商名、站名开头当词库）
         var languageCorrection = true
+        /// iOS 26 起也让系统直接按格子认表格，用它核对站名
+        var tables = true
 
         static let standard = Settings()
         /// 改之前的认法（测试里对比用）
-        static let original = Settings(smallText: false, split: false, languageCorrection: false)
+        static let original = Settings(smallText: false, split: false, languageCorrection: false, tables: false)
     }
 
     /// 几张照片（计划长、往下翻着拍的）→ 合成一份。第一张要拍到表头；后面几张没拍到表头的，按前一张的列分。
@@ -50,6 +52,16 @@ enum PlanReader {
             sawText = sawText || !boxes.isEmpty
             var result = PassPlan.read(boxes, fallback: positions)
             positions = positions ?? result.layout
+            // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
+            // 拼出来了就拿它核对站名（同一行它认的站名对得上对照表、这边的对不上，用它的）
+            if #available(iOS 26.0, *), settings.tables, let table = await tableReading(in: picture, words: words, settings: settings) {
+                sawText = sawText || !table.rows.isEmpty
+                if result.rows.isEmpty {
+                    result = table
+                } else {
+                    result.rows = PassPlan.adoptStations(result.rows, from: table.rows, rules: rules)
+                }
+            }
             guard let found = result.layout else { continue }
             for i in result.rows.indices { result.rows[i].region?.page = page }
             result.rows = await rereadStations(result.rows, layout: found, in: picture, rules: rules, words: words, settings: settings)
@@ -261,6 +273,31 @@ enum PlanReader {
         var box = spot
         box.text = text
         return box
+    }
+
+    /// iOS 26 起：系统直接认表格（按格子读）。照片里认出几张表的话，用读出行最多的那张
+    @available(iOS 26.0, *)
+    private static func tableReading(in image: CGImage, words: [String], settings: Settings) async -> PassPlan.Reading? {
+        var request = RecognizeDocumentsRequest()
+        request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: "zh-Hans"),
+                                                               Locale.Language(identifier: "en-US")]
+        request.textRecognitionOptions.useLanguageCorrection = settings.languageCorrection
+        if settings.languageCorrection { request.textRecognitionOptions.customWords = words }
+        if settings.smallText { request.textRecognitionOptions.minimumTextHeightFraction = minimumTextHeight(image.height) }
+        guard let observations = try? await request.perform(on: image, orientation: .up) else { return nil }
+        // 每张表一行行的格子：按格子在第几列放（空着的格子补空）
+        let grids: [[[String]]] = observations.flatMap(\.document.tables).map { table in
+            table.rows.map { row in
+                var cells: [String] = []
+                for cell in row.sorted(by: { $0.columnRange.lowerBound < $1.columnRange.lowerBound }) {
+                    while cells.count < cell.columnRange.lowerBound { cells.append("") }
+                    guard cells.count == cell.columnRange.lowerBound else { continue }
+                    cells.append(cell.content.text.transcript.replacingOccurrences(of: "\n", with: " "))
+                }
+                return cells
+            }
+        }
+        return grids.map(PassPlan.readTable).max { $0.rows.count < $1.rows.count }
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算

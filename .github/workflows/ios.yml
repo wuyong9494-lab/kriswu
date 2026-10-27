@@ -195,6 +195,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: 选用最新的 Xcode（26 或更新）
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || { echo "::error::这台云端电脑上没有 Xcode 26"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
       - name: 启动仿值班网站
         run: |
           nohup python3 Tests/MockSite/server.py 8765 > mock.log 2>&1 &
@@ -246,6 +254,14 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v5
+
+      - name: 选用最新的 Xcode（26 或更新）
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || { echo "::error::这台云端电脑上没有 Xcode 26"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       - name: 生成 Xcode 工程
         run: |

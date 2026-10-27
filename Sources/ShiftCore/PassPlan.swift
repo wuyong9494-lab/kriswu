@@ -528,6 +528,20 @@ public enum PassPlan {
         }
     }
 
+    /// 另一种认法（系统直接按格子认表格）认出的同一行（开始时间一样）：它的站名对得上对照表、这一行的对不上，就用它的
+    public static func adoptStations(_ rows: [PassPlanRow], from other: [PassPlanRow], rules: [OperatorRule]) -> [PassPlanRow] {
+        var stations: [String: String] = [:]
+        for row in other where !row.start.isEmpty && operatorName(of: row.station, rules: rules) != nil {
+            stations[row.start] = stations[row.start] ?? row.station
+        }
+        return rows.map { row in
+            guard operatorName(of: row.station, rules: rules) == nil, let better = stations[row.start] else { return row }
+            var fixed = row
+            fixed.station = better
+            return fixed
+        }
+    }
+
     /// 读得好不好（同一张照片两种认法挑一个）：认出的行越多越好，可能认错的行（时间不全、站名对不上对照表……）只算一小半
     public static func score(_ reading: Reading, rules: [OperatorRule] = []) -> Double {
         reading.rows.reduce(0) { $0 + (problems($1, rules: rules, layout: reading.layout).isEmpty ? 1 : 0.3) }

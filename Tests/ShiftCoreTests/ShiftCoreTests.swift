@@ -3301,6 +3301,18 @@ final class PassPlanTests: XCTestCase {
                                  first.y0 + first.slope * 0.5 - first.height / 2 + 0.0001, "表头那一条不带进第一行")
     }
 
+    /// 系统按格子认的表核对站名：同一行（开始时间一样）它的对得上对照表、这边的对不上才换
+    func testAdoptStationsFromTableReading() {
+        let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"])]
+        let mine = [PassPlanRow(satellite: "A", station: "申站-北区01", start: "2026-10-27 01:00:00"),
+                    PassPlanRow(satellite: "B", station: "甲站-北区02", start: "2026-10-27 02:00:00"),
+                    PassPlanRow(satellite: "C", station: "申站-北区03", start: "2026-10-27 03:00:00")]
+        let theirs = [PassPlanRow(satellite: "A", station: "甲站-北区01", start: "2026-10-27 01:00:00"),
+                      PassPlanRow(satellite: "B", station: "甲站-北区09", start: "2026-10-27 02:00:00")]
+        XCTAssertEqual(PassPlan.adoptStations(mine, from: theirs, rules: rules).map(\.station),
+                       ["甲站-北区01", "甲站-北区02", "申站-北区03"])
+    }
+
     func testVocabularyForTextRecognition() {
         let words = PassPlan.vocabulary([PassPlan.OperatorRule(name: "甲", prefixes: ["甲站", "甲光北区"]),
                                          PassPlan.OperatorRule(name: "乙", prefixes: ["甲站"])])
