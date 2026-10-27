@@ -43,6 +43,8 @@ targets:
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         # iPhone 和 iPad 都能装（iPad 上内容限宽居中，可以横着用）
         TARGETED_DEVICE_FAMILY: "1,2"
+        # 完整的并发检查（Swift 5 模式下是警告，CI 会列出来）
+        SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
     scheme:

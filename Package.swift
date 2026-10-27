@@ -10,7 +10,8 @@ let package = Package(
         .library(name: "ShiftCore", targets: ["ShiftCore"]),
     ],
     targets: [
-        .target(name: "ShiftCore"),
+        // 完整的并发检查（Swift 5 模式下是警告）：多个线程同时读写同一份数据的地方会被指出来
+        .target(name: "ShiftCore", swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]),
         .testTarget(name: "ShiftCoreTests", dependencies: ["ShiftCore"]),
     ]
 )
