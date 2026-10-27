@@ -47,6 +47,21 @@ extension AppStore {
             if let turn = myDutyTurn(), !turn.scheduled, let day = turn.day, mine[day] == nil { predicted[day] = "遥测（预测）" }
             CalendarSync.sync(mine, matcher: matcher, predicted: predicted)
         }
+        // 值遥测那天早上的闹钟（iOS 26 起；关着就全部取消）
+        if DutyAlarms.isSupported {
+            var alarms: [(date: Date, title: String)] = []
+            if settings.dutyAlarm {
+                let today = DayKey.today
+                for offset in 0..<14 {
+                    let day = today.adding(days: offset)
+                    guard DayRules.parts(mine[day], matcher: matcher).contains(.duty) else { continue }
+                    let t = settings.dutyAlarmTime
+                    alarms.append((day.date(calendar: .app, hour: t.hour, minute: t.minute),
+                                   "今天值遥测，\(settings.dutyStart.text) 接班"))
+                }
+            }
+            await DutyAlarms.reschedule(alarms)
+        }
         await NotificationService.scheduleSigningReminder(expiry: SigningInfo.expirationDate)
         // App 一直没机会运行（后台刷新被系统停掉）时，到点由系统弹出提醒
         await NotificationService.scheduleStaleReminder(after: canSync ? settings.lastSync : nil)

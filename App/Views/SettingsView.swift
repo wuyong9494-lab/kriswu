@@ -400,6 +400,13 @@ struct SettingsView: View {
                 Text("提前 2 小时").tag(120)
                 Text("前一天晚上").tag(12 * 60)
             }
+            Toggle("值遥测的提醒穿透勿扰", isOn: $store.settings.dutyTimeSensitive)
+            if DutyAlarms.isSupported {
+                Toggle("值遥测那天早上响闹钟", isOn: dutyAlarmBinding)
+                if store.settings.dutyAlarm {
+                    DatePicker("闹钟时间", selection: time(\.dutyAlarmTime), displayedComponents: .hourAndMinute)
+                }
+            }
             Toggle("网站排了班但没给我排的日子也提醒", isOn: $store.settings.remindUnassigned)
             Toggle("周日晚上预告下周安排", isOn: $store.settings.weeklyPreview)
             Toggle("每周一发一条我的一周小结", isOn: $store.settings.personalWeekly)
@@ -428,8 +435,22 @@ struct SettingsView: View {
         } header: {
             Text("推送提醒")
         } footer: {
-            Text("已登记 \(pendingCount) 条提醒（最多提前登记约 30 天）。提醒由系统准时弹出，不需要打开 App；每次打开 App 或同步后会自动续上。\n语音播报是通知的铃声：手机静音（侧边静音键）或开了专注模式时不会出声。")
+            Text("已登记 \(pendingCount) 条提醒（最多提前登记约 30 天）。提醒由系统准时弹出，不需要打开 App；每次打开 App 或同步后会自动续上。\n「穿透勿扰」：值遥测那天的早晚提醒、接班前提醒在勿扰、睡眠时也会弹出（系统设置的专注模式里可以单独关掉）。\n「响闹钟」（iOS 26 起）：值遥测那天早上像「时钟」的闹钟一样响，静音也会响，要按掉才停；提前登记两周。\n语音播报是通知的铃声：手机静音（侧边静音键）或开了专注模式时不会出声。")
         }
+    }
+
+    /// 打开闹钟时先要权限；不给就不打开
+    private var dutyAlarmBinding: Binding<Bool> {
+        Binding(get: { store.settings.dutyAlarm }, set: { on in
+            guard on else { store.settings.dutyAlarm = false; return }
+            Task {
+                if await DutyAlarms.requestPermission() {
+                    store.settings.dutyAlarm = true
+                } else {
+                    ToastCenter.shared.show("没有闹钟权限：在 设置 › 值班提醒 里打开「闹钟」", style: .error)
+                }
+            }
+        })
     }
 
     private var weChatSection: some View {

@@ -125,6 +125,11 @@ struct AppSettings: Codable, Equatable {
     /// 遥测接班时间（上一班到这时下班）；接班前多少分钟提醒，0 不提醒
     var dutyStart = ClockTime(hour: 8, minute: 30)
     var dutyLeadMinutes = 0
+    /// 值遥测的提醒标成「时效性通知」：勿扰、睡眠专注时也弹出
+    var dutyTimeSensitive = true
+    /// 值遥测那天早上响闹钟（iOS 26 起；和「时钟」的闹钟一样，静音也会响）
+    var dutyAlarm = false
+    var dutyAlarmTime = ClockTime(hour: 7, minute: 0)
     /// 工作留痕：录音自动转文字、只在手机上识别（不联网）、打开要面容 ID（面容 ID 锁跟着这台手机，见「设备本地」）
     var workLogAutoTranscribe = true
     var speechOnDeviceOnly = true

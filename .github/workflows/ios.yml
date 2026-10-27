@@ -91,6 +91,7 @@ jobs:
           APP=build/Build/Products/Release-iphoneos/ShiftReminder.app
           # 侧载用的免费账号没有「通讯通知」权限，带着会装不上：去掉（TestFlight 版保留）
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.usernotifications.communication" App/ShiftReminder.entitlements || true
+          /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.usernotifications.time-sensitive" App/ShiftReminder.entitlements || true
           codesign -f -s - --entitlements Widget/ShiftWidget.entitlements "$APP/PlugIns/ShiftWidget.appex"
           codesign -f -s - --entitlements App/ShiftReminder.entitlements "$APP"
           codesign -d --entitlements - "$APP"

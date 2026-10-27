@@ -32,6 +32,8 @@ targets:
           - group.com.kriswu.shiftreminder
         # 通讯通知：推送左边的大图显示那天的班（见 ShiftNotificationAvatar）
         com.apple.developer.usernotifications.communication: true
+        # 时效性通知：值遥测的提醒在勿扰、睡眠专注时也会弹出（见 NotificationService）
+        com.apple.developer.usernotifications.time-sensitive: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder

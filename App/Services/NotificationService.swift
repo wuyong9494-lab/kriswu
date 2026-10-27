@@ -44,6 +44,11 @@ enum NotificationService {
             var about = n.id.hasPrefix("shift-evening") ? n.day.adding(days: 1) : n.day
             if n.id.hasPrefix("shift-lead-"), let d = DayKey(string: String(n.id.dropFirst("shift-lead-".count))) { about = d }
             content.userInfo = ["route": "day:\(about)"]
+            // 值遥测的提醒：勿扰、睡眠专注时也弹出（「时效性通知」，在系统设置里每个专注模式可以单独关掉）
+            if store.settings.dutyTimeSensitive,
+               n.id.hasPrefix("shift-lead-") || DayRules.parts(store.shift(on: about), matcher: store.matcher).contains(.duty) {
+                content.interruptionLevel = .timeSensitive
+            }
             // 早上的提醒：这天有清单就带一个「清单全部做完」按钮（长按通知就能点）
             if n.id.hasPrefix("shift-morning"), !AppStore.shared.taskItems(on: about).isEmpty {
                 content.categoryIdentifier = Self.tasksCategory
