@@ -19,8 +19,8 @@ final class PlanReaderTests: XCTestCase {
         let bundle = Bundle(for: Self.self)
         let variants: [(String, PlanReader.Settings)] = [
             ("改之前", .original),
-            ("不纠错", PlanReader.Settings(smallText: true, split: true, languageCorrection: false, tables: false)),
-            ("按位置拼", PlanReader.Settings(smallText: true, split: true, languageCorrection: true, tables: false)),
+            ("只放开小字", PlanReader.Settings(smallText: true, split: false, languageCorrection: false)),
+            ("不纠错", PlanReader.Settings(smallText: true, split: true, languageCorrection: false)),
             ("现在", .standard),
         ]
         for name in ["excel_photo", "excel_scan", "web_photo", "long_table"] {
