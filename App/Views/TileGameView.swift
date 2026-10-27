@@ -30,19 +30,12 @@ struct TileRecords: Codable, Equatable {
 final class TileRecordStore: ObservableObject {
     static let shared = TileRecordStore()
     private static let key = "tileGame.records"
-    private static let nicknameKey = "tileGame.nickname"
 
     @Published private(set) var records: TileRecords
 
     private init() {
         records = UserDefaults.standard.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(TileRecords.self, from: $0) } ?? TileRecords()
-    }
-
-    /// 对战时别人看到的名字
-    var nickname: String {
-        get { UserDefaults.standard.string(forKey: Self.nicknameKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: Self.nicknameKey) }
     }
 
     func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?) {
@@ -86,18 +79,10 @@ struct TilePlay: Identifiable, Equatable {
 
 /// 小游戏「叠叠消」：三档难度自己玩、今日挑战（同一天大家同一局）、挑战码（玩别人发来的那一局）、面对面对战
 struct TileGameHomeView: View {
-    @EnvironmentObject private var store: AppStore
     @ObservedObject private var records = TileRecordStore.shared
     @State private var play: TilePlay?
     @State private var code = ""
-    @State private var nickname = ""
-    @State private var lobby: Lobby?
-
-    /// 对战房间（开房间或加入）
-    struct Lobby: Identifiable {
-        let id = UUID()
-        let session: TileRaceSession
-    }
+    @State private var lobby: GameRoomEntry?
 
     var body: some View {
         List {
@@ -115,18 +100,15 @@ struct TileGameHomeView: View {
             }
             dailySection
             codeSection
-            raceSection
+            GameRoomButtons(kind: .tiles, remotePlayers: 2...4, nearbyCapacity: TileRaceGame.most) { lobby = GameRoomEntry(room: $0) }
         }
         .appList()
         .navigationTitle("叠叠消")
-        .onAppear {
-            if nickname.isEmpty { nickname = records.nickname.isEmpty ? (store.settings.aliases.first ?? "") : records.nickname }
-        }
         .fullScreenCover(item: $play) { play in
             TileBoardView(play: play, race: nil)
         }
         .fullScreenCover(item: $lobby) { lobby in
-            TileRaceLobbyView(session: lobby.session)
+            TileRaceLobbyView(room: lobby.room)
         }
     }
 
@@ -203,141 +185,173 @@ struct TileGameHomeView: View {
             Text("别人玩完发来的挑战码输进来（整段话粘贴进来也行），玩同一局，比比谁快。")
         }
     }
+}
 
-    private var raceSection: some View {
-        Section {
-            TextField("别人看到的名字", text: $nickname)
-                .onChange(of: nickname) { records.nickname = $0 }
-            Button {
-                lobby = Lobby(session: TileRaceSession(role: .host, name: nickname))
-            } label: {
-                Label("开房间", systemImage: "person.3")
-            }
-            Button {
-                lobby = Lobby(session: TileRaceSession(role: .guest, name: nickname))
-            } label: {
-                Label("加入同事的房间", systemImage: "person.badge.plus")
-            }
-        } header: {
-            Text("面对面对战")
-        } footer: {
-            Text("身边的同事（最多 8 个人）都打开叠叠消：一个人开房间，别人点「加入」，房主点开始，大家同时玩同一局，每台手机上都看得到别人消了几张，先消完的赢。手机离得近、打开 Wi-Fi 和蓝牙就行，不用联网；对方手机上也要装着值班提醒。")
+// MARK: - 对战
+
+/// 叠叠消对战：房主开局，大家玩同一局，每走一步把自己的进度发给大家（房间负责送到每个人）
+@MainActor
+final class TileRaceGame: ObservableObject {
+    struct Round: Identifiable, Equatable {
+        let id: Int
+        let level: TileGame.Level
+        let seed: UInt64
+    }
+
+    /// 面对面最多几个人
+    static let most = 8
+
+    let room: GameRoom
+    /// 每个人这一局的进度（按房间里的编号）
+    @Published private(set) var progress: [String: TileRace.Player] = [:]
+    /// 最近开的一局（打完了也留着，房间里看排名）
+    @Published private(set) var round: Round?
+    /// 正在显示的那一局（关掉回房间时变成 nil，这一局的进度照样收发）
+    @Published var presented: Round?
+
+    init(room: GameRoom) {
+        self.room = room
+        room.onPayload = { [weak self] data, from in self?.received(data, from: from) }
+        room.onMembersChanged = { [weak self] in self?.objectWillChange.send() }
+    }
+
+    /// 房间里每个人这一局的进度（还没发来的算刚开始）
+    var players: [TileRace.Player] {
+        room.members.map { member in
+            guard var player = progress[member.id] else { return TileRace.Player(id: member.id, name: member.name) }
+            player.name = member.name
+            return player
+        }
+    }
+
+    var me: TileRace.Player {
+        progress[room.me.id] ?? TileRace.Player(id: room.me.id, name: room.me.name)
+    }
+
+    /// 这一局大家都打完了
+    var roundFinished: Bool { TileRace.finished(players) }
+    var roundInProgress: Bool { round != nil && !roundFinished }
+
+    /// 房主开一局：大家同时开始玩同一局
+    func begin(level: TileGame.Level) {
+        guard room.isHost else { return }
+        let next = Round(id: (round?.id ?? 0) + 1, level: level, seed: UInt64.random(in: 0..<TileGame.seedLimit))
+        start(next)
+        send(.start(round: next.id, level: next.level, seed: next.seed))
+    }
+
+    /// 自己这一局走了一步
+    func report(_ game: TileGame, seconds: Double) {
+        var mine = me
+        mine.cleared = game.cleared + game.clearing.count
+        mine.total = game.total
+        mine.status = game.status
+        mine.seconds = seconds
+        share(mine)
+    }
+
+    /// 中途退出：这一局算输（别人那边才知道这局打完了）
+    func forfeit(_ player: TileRace.Player) {
+        share(player)
+    }
+
+    private func share(_ player: TileRace.Player) {
+        guard let round else { return }
+        progress[player.id] = player
+        send(.progress(round: round.id, player: player))
+        if room.isHost, roundFinished { room.accepting = true }
+    }
+
+    private func start(_ next: Round) {
+        progress = [:]
+        round = next
+        presented = next
+        if room.isHost { room.accepting = false }
+    }
+
+    private func send(_ message: TileRace.Message) {
+        if let data = try? JSONEncoder().encode(message) { room.send(data) }
+    }
+
+    private func received(_ data: Data, from: String) {
+        guard let message = try? JSONDecoder().decode(TileRace.Message.self, from: data) else { return }
+        switch message {
+        case .start(let id, let level, let seed):
+            guard from == room.hostID else { return }
+            start(Round(id: id, level: level, seed: seed))
+        case .progress(let id, let player):
+            guard id == round?.id, player.id == from else { return }
+            progress[player.id] = player
+            if room.isHost, roundFinished { room.accepting = true }
         }
     }
 }
 
-// MARK: - 对战房间
-
 struct TileRaceLobbyView: View {
-    @ObservedObject var session: TileRaceSession
+    @ObservedObject private var room: GameRoom
+    @StateObject private var race: TileRaceGame
     @Environment(\.dismiss) private var dismiss
     @State private var level = TileGame.Level.normal
+
+    init(room: GameRoom) {
+        self.room = room
+        _race = StateObject(wrappedValue: TileRaceGame(room: room))
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                if let notice = session.notice {
-                    Section { Label(notice, systemImage: "exclamationmark.triangle").foregroundStyle(DS.Palette.warning) }
-                }
-                switch session.role {
-                case .host: hostSections
-                case .guest: guestSections
-                }
-                if session.round != nil && session.players.count > 1 {
-                    Section("上一局") { TileRaceStandings(session: session, compact: false) }
+                GameRoomLobby(room: room) {
+                    if room.isHost {
+                        Section {
+                            Picker("难度", selection: $level) {
+                                ForEach(TileGame.Level.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            Button {
+                                race.begin(level: level)
+                            } label: {
+                                Label("开始（\(room.members.count) 个人）", systemImage: "play.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } footer: {
+                            if race.roundInProgress { Text("上一局还有人没打完，现在开始的话他们直接进新的一局。") }
+                        }
+                    } else {
+                        Section { Text("等房主开始，开始了自动进入。").foregroundStyle(.secondary) }
+                    }
+                    if race.round != nil {
+                        Section("上一局") { TileRaceStandings(race: race, compact: false) }
+                    }
                 }
             }
             .appList()
-            .navigationTitle(session.role == .host ? "我的房间" : "加入房间")
+            .navigationTitle(room.code == nil ? "面对面比叠叠消" : "远程比叠叠消")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("离开") {
-                        session.stop()
+                        room.leave()
                         dismiss()
                     }
                 }
             }
         }
-        .onAppear { session.start() }
-        .fullScreenCover(item: $session.presented) { round in
-            TileBoardView(play: TilePlay(level: round.level, seed: round.seed, mode: .race), race: session)
-        }
-    }
-
-    @ViewBuilder private var hostSections: some View {
-        Section {
-            ForEach(session.players) { player in
-                Label(player.id == session.me.id ? "\(player.name)（我，房主）" : player.name, systemImage: "person.fill")
-            }
-        } header: {
-            Text("房间里 \(session.players.count) 个人")
-        } footer: {
-            Text("让同事打开「叠叠消」点「加入同事的房间」，找到「\(session.me.name)」点一下。")
-        }
-        Section {
-            Picker("难度", selection: $level) {
-                ForEach(TileGame.Level.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Button {
-                session.begin(level: level)
-            } label: {
-                Label(session.players.count < 2 ? "等人进来" : "开始（\(session.players.count) 个人）", systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(session.players.count < 2)
-        } footer: {
-            if session.roundInProgress { Text("上一局还有人没打完，现在开始的话他们直接进新的一局。") }
-        }
-    }
-
-    @ViewBuilder private var guestSections: some View {
-        if let host = session.joined {
-            Section {
-                ForEach(session.players) { player in
-                    Label(player.id == session.me.id ? "\(player.name)（我）" : player.name, systemImage: "person.fill")
-                }
-            } header: {
-                Text("在「\(host)」的房间里")
-            } footer: {
-                Text("等房主开始，开始了自动进入。")
-            }
-        } else {
-            Section {
-                if session.rooms.isEmpty {
-                    HStack(spacing: DS.Space.s) {
-                        ProgressView()
-                        Text(session.joining.map { "正在进「\($0)」的房间…" } ?? "正在找附近的房间…").foregroundStyle(.secondary)
-                    }
-                }
-                ForEach(session.rooms) { room in
-                    Button {
-                        session.join(room)
-                    } label: {
-                        HStack {
-                            Label("\(room.name) 的房间", systemImage: "person.3")
-                            Spacer()
-                            if session.joining == room.name { ProgressView() }
-                        }
-                    }
-                    .disabled(session.joining != nil)
-                }
-            } footer: {
-                Text("找不到的话：两台手机离近一点，打开 Wi-Fi 和蓝牙；第一次用时系统会问能不能使用本地网络，要点允许（在系统设置 › 隐私与安全性 › 本地网络 里也能打开）。")
-            }
+        .onAppear { room.start() }
+        .fullScreenCover(item: $race.presented) { round in
+            TileBoardView(play: TilePlay(level: round.level, seed: round.seed, mode: .race), race: race)
         }
     }
 }
 
 /// 对战时每个人的进度：上面一排小卡片（compact），或者一张排名表
 struct TileRaceStandings: View {
-    @ObservedObject var session: TileRaceSession
+    @ObservedObject var race: TileRaceGame
     var compact = true
 
     var body: some View {
-        let ranked = TileRace.ranking(session.players)
+        let ranked = TileRace.ranking(race.players)
         if compact {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.Space.xs) {
@@ -349,7 +363,7 @@ struct TileRaceStandings: View {
             ForEach(Array(ranked.enumerated()), id: \.element.id) { index, player in
                 HStack {
                     Text("\(index + 1)").font(DS.Font.headline.monospacedDigit()).frame(width: 24)
-                    Text(player.id == session.me.id ? "\(player.name)（我）" : player.name)
+                    Text(player.id == race.room.me.id ? "\(player.name)（我）" : player.name)
                     Spacer()
                     Text(summary(player)).font(DS.Font.caption).foregroundStyle(player.status == .won ? DS.Palette.success : .secondary)
                 }
@@ -368,7 +382,7 @@ struct TileRaceStandings: View {
                 }
             }
             ProgressView(value: Double(player.cleared), total: Double(max(player.total, 1)))
-                .tint(player.id == session.me.id ? DS.Palette.accent : DS.Palette.success)
+                .tint(player.id == race.room.me.id ? DS.Palette.accent : DS.Palette.success)
                 .frame(width: 76)
         }
         .padding(DS.Space.xs)
@@ -388,7 +402,7 @@ struct TileRaceStandings: View {
 
 struct TileBoardView: View {
     let play: TilePlay
-    let race: TileRaceSession?
+    let race: TileRaceGame?
 
     @Environment(\.dismiss) private var dismiss
     @State private var game: TileGame
@@ -402,7 +416,7 @@ struct TileBoardView: View {
     @State private var confirmingQuit = false
     @Namespace private var space
 
-    init(play: TilePlay, race: TileRaceSession?) {
+    init(play: TilePlay, race: TileRaceGame?) {
         self.play = play
         self.race = race
         _game = State(initialValue: TileGame(level: play.level, seed: play.seed))
@@ -426,7 +440,7 @@ struct TileBoardView: View {
             let width = min(proxy.size.width, 560)
             VStack(spacing: DS.Space.s) {
                 topBar
-                if let race { TileRaceStandings(session: race) }
+                if let race { TileRaceStandings(race: race) }
                 GeometryReader { area in
                     board(in: area.size)
                         .frame(width: area.size.width, height: area.size.height)
@@ -608,7 +622,7 @@ struct TileBoardView: View {
                     .foregroundStyle(.secondary)
                 if let race {
                     VStack(alignment: .leading, spacing: DS.Space.xs) {
-                        TileRaceStandings(session: race, compact: false)
+                        TileRaceStandings(race: race, compact: false)
                     }
                     .padding(DS.Space.s)
                     .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m))

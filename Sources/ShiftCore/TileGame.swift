@@ -462,7 +462,7 @@ public struct SeededRandom: Sendable {
     }
 }
 
-/// 面对面对战：几台手机玩同一局，看谁先消完。房主开局，大家每走一步把进度告诉房主，房主转给别人
+/// 对战：几台手机玩同一局，看谁先消完。房主开局，大家每走一步把进度告诉别人（房间负责把消息送到每个人）
 public enum TileRace {
     /// 一个人这一局的进度
     public struct Player: Codable, Equatable, Hashable, Identifiable, Sendable {
@@ -486,10 +486,6 @@ public enum TileRace {
     }
 
     public enum Message: Codable, Equatable, Sendable {
-        /// 加入的人告诉房主自己是谁
-        case hello(Player)
-        /// 房主告诉大家房间里有谁
-        case lobby([Player])
         /// 房主开局：第几局、难度、种子
         case start(round: Int, level: TileGame.Level, seed: UInt64)
         /// 每走一步告诉大家自己这一局的进度

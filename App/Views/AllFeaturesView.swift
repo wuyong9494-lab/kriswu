@@ -66,8 +66,8 @@ struct AllFeaturesView: View {
                 feature("网站公告", "值班网站上的公告", "pin", keywords: "通知 公告") { SiteNoticesView() },
             ]),
             FeatureGroup(title: "休息一下", features: [
-                feature("叠叠消", "三张一样的凑一起消掉；能和身边同事面对面比，也能发挑战码到微信群比", "square.stack.3d.up.fill",
-                        keywords: "游戏 小游戏 羊了个羊 消除 三消 对战 多人 挑战 今日挑战") { TileGameHomeView() },
+                feature("小游戏", "叠叠消、五子棋：自己玩，或者和同事面对面、远程、轮流下", "gamecontroller",
+                        keywords: "游戏 叠叠消 羊了个羊 消除 三消 五子棋 下棋 对战 多人 挑战 今日挑战 轮流下 Game Center") { GamesHomeView() },
             ]),
             FeatureGroup(title: "设置和帮助", features: [
                 feature("规则说明", "工作量、换班、周会都是怎么算的", "text.book.closed", keywords: "规则 怎么算 口径") { RulesExplainView() },

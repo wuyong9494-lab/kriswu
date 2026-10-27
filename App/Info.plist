@@ -74,11 +74,11 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>打开「工作留痕」前验证是你本人。</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>和身边的同事面对面玩「叠叠消」：通过 Wi-Fi、蓝牙找到对方的手机，连成一个房间。</string>
+	<string>和身边的同事面对面玩小游戏：通过 Wi-Fi、蓝牙找到对方的手机，连成一个房间。</string>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_ddx-race._tcp</string>
-		<string>_ddx-race._udp</string>
+		<string>_shift-games._tcp</string>
+		<string>_shift-games._udp</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>

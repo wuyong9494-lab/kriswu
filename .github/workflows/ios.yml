@@ -303,8 +303,8 @@ jobs:
           xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
           mkdir -p shots
           # 浅色截全部页面；深色只截几个常用的（看配色）。截一张要十几秒，全截两套要二十多分钟
-          LIGHT="today calendar stats settings meeting meetingEdit meetingSource meetingTrend todayLayout years passPlan rulesExplain allFeatures game gameBoard fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
-          DARK="today calendar stats settings meeting day gameBoard"
+          LIGHT="today calendar stats settings meeting meetingEdit meetingSource meetingTrend todayLayout years passPlan rulesExplain allFeatures game tiles gameBoard gomoku gomokuBoard fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          DARK="today calendar stats settings meeting day gameBoard gomokuBoard"
           for mode in light dark; do
             xcrun simctl ui "$DEVICE" appearance $mode
             if [ $mode = light ]; then SCREENS=$LIGHT; else SCREENS=$DARK; fi
@@ -446,6 +446,12 @@ jobs:
         run: |
           python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography || python3 -m pip install --quiet --user pyjwt cryptography
           python3 .github/scripts/asc_dev_certs.py cleanup || echo "::warning::清理开发证书失败，继续打包"
+
+      - name: 在 App Store Connect 里打开 Game Center（小游戏的远程对战、轮流下用；已经开了就跳过）
+        if: steps.check.outputs.skip != '1'
+        env:
+          BUNDLE_ID: com.kriswu.shiftreminder
+        run: python3 .github/scripts/asc_game_center.py || echo "::warning::打开 Game Center 失败，继续打包"
 
       - name: 打包（自动签名）
         if: steps.check.outputs.skip != '1'

@@ -34,6 +34,8 @@ targets:
         com.apple.developer.usernotifications.communication: true
         # 时效性通知：值遥测的提醒在勿扰、睡眠专注时也会弹出（见 NotificationService）
         com.apple.developer.usernotifications.time-sensitive: true
+        # 小游戏的远程对战、轮流下（见 GameRoom、GomokuTurns）
+        com.apple.developer.game-center: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder

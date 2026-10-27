@@ -439,8 +439,13 @@ enum ScreenCatalog {
         case "passPlan": PassPlanView(reading: PassPlan.Reading(rows: PassPlanView.demoRows, layout: nil))
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
-        case "game": TileGameHomeView()
+        case "game": GamesHomeView()
+        case "tiles": TileGameHomeView()
         case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
+        case "gomoku": GomokuHomeView()
+        case "gomokuBoard":
+            GomokuLocalScreen(mode: .computer(.normal, .black),
+                              initial: Gomoku(moves: [112, 113, 97, 128, 127, 98, 82, 142, 111, 96]))
         default: TodayView()
         }
     }

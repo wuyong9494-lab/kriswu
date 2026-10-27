@@ -156,8 +156,6 @@ final class TileGameTests: XCTestCase {
 
     func testRaceMessagesRoundTrip() throws {
         let messages: [TileRace.Message] = [
-            .hello(TileRace.Player(id: "a", name: "甲")),
-            .lobby([TileRace.Player(id: "a", name: "甲"), TileRace.Player(id: "b", name: "乙")]),
             .start(round: 2, level: .normal, seed: 123),
             .progress(round: 2, player: TileRace.Player(id: "a", name: "甲", cleared: 9, total: 99, status: .playing, seconds: 12.5)),
         ]
