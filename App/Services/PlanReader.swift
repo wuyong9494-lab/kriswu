@@ -143,23 +143,19 @@ enum PlanReader {
         if settings.languageCorrection { request.textRecognitionOptions.customWords = words }
         if settings.smallText { request.textRecognitionOptions.minimumTextHeightFraction = minimumTextHeight(image.height) }
         guard let observations = try? await request.perform(on: image, orientation: .up) else { return nil }
-        return observations.flatMap(\.document.tables)
-            .map { PassPlan.readTable(grid($0)) }
-            .max { $0.rows.count < $1.rows.count }
-    }
-
-    /// 表格一行行的格子：按格子在第几列放（空着的格子补空）
-    @available(iOS 26.0, *)
-    private static func grid(_ table: DocumentObservation.Container.Table) -> [[String]] {
-        table.rows.map { row in
-            var cells: [String] = []
-            for cell in row.sorted(by: { $0.columnRange.lowerBound < $1.columnRange.lowerBound }) {
-                while cells.count < cell.columnRange.lowerBound { cells.append("") }
-                guard cells.count == cell.columnRange.lowerBound else { continue }
-                cells.append(cell.content.text.transcript.replacingOccurrences(of: "\n", with: " "))
+        // 每张表一行行的格子：按格子在第几列放（空着的格子补空）
+        let grids: [[[String]]] = observations.flatMap(\.document.tables).map { table in
+            table.rows.map { row in
+                var cells: [String] = []
+                for cell in row.sorted(by: { $0.columnRange.lowerBound < $1.columnRange.lowerBound }) {
+                    while cells.count < cell.columnRange.lowerBound { cells.append("") }
+                    guard cells.count == cell.columnRange.lowerBound else { continue }
+                    cells.append(cell.content.text.transcript.replacingOccurrences(of: "\n", with: " "))
+                }
+                return cells
             }
-            return cells
         }
+        return grids.map(PassPlan.readTable).max { $0.rows.count < $1.rows.count }
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算
