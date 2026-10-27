@@ -25,6 +25,8 @@ enum PlanReader {
         var languageCorrection = true
         /// iOS 26 起也让系统直接按格子认表格，用它核对站名
         var tables = true
+        /// 认之前轻轻模糊一下，压掉拍屏幕的摩尔纹
+        var smooth = false
 
         static let standard = Settings()
         /// 改之前的认法（测试里对比用）
@@ -203,7 +205,8 @@ enum PlanReader {
         Float(max(10 / Double(max(pixelHeight, 1)), 0.002))
     }
 
-    private static func recognize(_ image: CGImage, words: [String], settings: Settings) throws -> [PassPlan.TextBox] {
+    private static func recognize(_ source: CGImage, words: [String], settings: Settings) throws -> [PassPlan.TextBox] {
+        let image = prepared(source, smooth: settings.smooth, enlarge: false)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
@@ -261,7 +264,9 @@ enum PlanReader {
         let pad = spot.height * h * 0.3
         let rect = CGRect(x: spot.x * w - pad, y: spot.y * h - pad, width: spot.width * w + pad * 2, height: spot.height * h + pad * 2)
             .intersection(CGRect(x: 0, y: 0, width: w, height: h)).integral
-        guard rect.width > 2, rect.height > 2, let piece = image.cropping(to: rect) else { return nil }
+        guard rect.width > 2, rect.height > 2, let cut = image.cropping(to: rect) else { return nil }
+        // 一小块字：放大到够高再认（小字放大了认得准）
+        let piece = prepared(cut, smooth: settings.smooth, enlarge: true)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
@@ -273,6 +278,21 @@ enum PlanReader {
         var box = spot
         box.text = text
         return box
+    }
+
+    /// 认之前处理一下：smooth 轻轻模糊压掉摩尔纹；enlarge 一小块字不到 80 像素高就放大到 80 以上（最多 4 倍）
+    private static func prepared(_ image: CGImage, smooth: Bool, enlarge: Bool) -> CGImage {
+        let scale = enlarge ? min(4, max(1, (80 / Double(max(image.height, 1))).rounded(.up))) : 1
+        guard smooth || scale > 1 else { return image }
+        var picture = CIImage(cgImage: image)
+        let extent = picture.extent
+        if smooth {
+            picture = picture.clampedToExtent().applyingGaussianBlur(sigma: 0.8).cropped(to: extent)
+        }
+        if scale > 1 {
+            picture = picture.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        }
+        return CIContext().createCGImage(picture, from: picture.extent.integral) ?? image
     }
 
     /// iOS 26 起：系统直接认表格（按格子读）。照片里认出几张表的话，用读出行最多的那张

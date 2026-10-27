@@ -22,6 +22,7 @@ final class PlanReaderTests: XCTestCase {
             ("只放开小字", PlanReader.Settings(smallText: true, split: false, languageCorrection: false)),
             ("不纠错", PlanReader.Settings(smallText: true, split: true, languageCorrection: false)),
             ("现在", .standard),
+            ("现在加去摩尔纹", PlanReader.Settings(smooth: true)),
         ]
         for name in ["excel_photo", "excel_scan", "web_photo", "long_table"] {
             guard let imageURL = bundle.url(forResource: name, withExtension: "jpg"),
@@ -50,7 +51,7 @@ final class PlanReaderTests: XCTestCase {
                 do {
                     let reading = try await PlanReader.read(pages: [image], rules: rules, settings: settings)
                     print(report(name, label, reading, truth, rules, seconds: Date().timeIntervalSince(began)))
-                    if settings.languageCorrection && settings.split { await dumpOriginal(name, reading, rules) }
+                    if label == "现在" { await dumpOriginal(name, reading, rules) }
                 } catch {
                     print("OCR|\(name)|\(label)|认不出：\(error.localizedDescription)")
                 }
