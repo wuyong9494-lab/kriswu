@@ -439,6 +439,8 @@ enum ScreenCatalog {
         case "passPlan": PassPlanView(reading: PassPlan.Reading(rows: PassPlanView.demoRows, layout: nil))
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
+        case "game": TileGameHomeView()
+        case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
         default: TodayView()
         }
     }

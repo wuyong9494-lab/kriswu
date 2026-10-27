@@ -17,11 +17,8 @@ final class PlanReaderTests: XCTestCase {
 
     func testRecognitionAccuracy() async throws {
         let bundle = Bundle(for: Self.self)
-        // 只认一遍的几种认法，和现在（几遍对着挑）比
+        // 模拟器里认字很慢（没有神经网络芯片），只跑现在的认法；要比较几种认法时在这里加
         let variants: [(String, PlanReader.Settings)] = [
-            ("只分段认", PlanReader.Settings(passes: [.init()])),
-            ("只分段去摩尔纹", PlanReader.Settings(passes: [.init(smooth: true)])),
-            ("只整张认", PlanReader.Settings(passes: [.init(split: false)])),
             ("现在", .standard),
         ]
         for name in ["excel_photo", "excel_scan", "web_photo", "long_table"] {
@@ -33,19 +30,6 @@ final class PlanReaderTests: XCTestCase {
             }
             let truth = try JSONDecoder().decode(Truth.self, from: Data(contentsOf: truthURL))
             let rules = truth.rules.sorted { $0.key < $1.key }.map { PassPlan.OperatorRule(name: $0.key, prefixes: $0.value) }
-            // 认出的每一块字和拼出的每一行打到日志里（虚构数据），对不上时拿来查是哪一步出的错
-            if let picture = image.cgImage {
-                let boxes = try await PlanReader.textBoxes(in: picture, words: PassPlan.vocabulary(rules))
-                // 最上面几十块（表头附近）；网页那张分段认漏行，多打一些看漏在哪
-                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(name == "web_photo" ? 150 : 30) {
-                    print(String(format: "OCRBOX|%@|%@|%.3f|%.3f|%.3f|%.4f", name, b.text, b.x, b.y, b.width, b.height))
-                }
-                let reading = PassPlan.read(boxes)
-                print("OCRLAYOUT|\(name)|" + (reading.layout?.slots.map { "\($0.label)@\(String(format: "%.3f", $0.x))" } ?? []).joined(separator: " "))
-                for row in reading.rows {
-                    print("OCRROW|\(name)|" + [row.satellite, row.satelliteID, row.station, row.orbit, row.start, row.end].joined(separator: "|"))
-                }
-            }
             for (label, settings) in variants {
                 let began = Date()
                 do {
