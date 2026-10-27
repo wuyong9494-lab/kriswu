@@ -1,13 +1,12 @@
-import SpriteKit
 import SwiftUI
 
 // MARK: - 选玩法、选角色
 
-/// 萌兽乱斗：俯视的小地图，左手摇杆走、右手摇杆瞄准开火（点一下自动瞄最近的敌人），大招攒满了上面那个钮亮起来
+/// 勇者乱斗：斜着往下看的 3D 小地图，左手摇杆走、右手摇杆瞄准开火（点一下自动瞄最近的敌人），大招攒满了上面那个钮亮起来
 struct ArenaHomeView: View {
     @ObservedObject private var records = ArenaRecords.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
-    @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .panda
+    @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .knight
     @State private var playing: ArenaEntry?
     @State private var lobby: LobbyEntry?
     @EnvironmentObject private var store: AppStore
@@ -66,7 +65,9 @@ struct ArenaHomeView: View {
             }
         }
         .appList()
-        .navigationTitle("萌兽乱斗")
+        .navigationTitle("勇者乱斗")
+        // 先在后台把 3D 模型读好、画好头像，开打时不用等
+        .task { await ArenaPortraits.shared.prepare() }
         .fullScreenCover(item: $playing) { entry in
             ArenaPlayView(setup: entry.setup)
         }
@@ -95,11 +96,7 @@ struct ArenaHomeView: View {
 
     private func brawlerRow(_ item: Brawler) -> some View {
         HStack(spacing: DS.Space.s) {
-            Text(item.emoji)
-                .font(.system(size: 34))
-                .frame(width: 52, height: 52)
-                .background(Circle().fill(brawler == item ? DS.Palette.accentSoft : DS.Palette.surfaceSunken))
-                .overlay(Circle().strokeBorder(brawler == item ? DS.Palette.accent : .clear, lineWidth: 2))
+            BrawlerBadge(brawler: item, size: 56, selected: brawler == item)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.name).font(DS.Font.headline).foregroundStyle(.primary)
@@ -161,11 +158,7 @@ struct ArenaRoomView: View {
                                 Button {
                                     lobby.choose(brawler)
                                 } label: {
-                                    Text(brawler.emoji)
-                                        .font(.system(size: 30))
-                                        .frame(width: 50, height: 50)
-                                        .background(Circle().fill(lobby.myPick == brawler ? DS.Palette.accentSoft : DS.Palette.surfaceSunken))
-                                        .overlay(Circle().strokeBorder(lobby.myPick == brawler ? DS.Palette.accent : .clear, lineWidth: 2))
+                                    BrawlerBadge(brawler: brawler, size: 50, selected: lobby.myPick == brawler)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -177,7 +170,11 @@ struct ArenaRoomView: View {
                     Section {
                         ForEach(room.members) { member in
                             HStack {
-                                Text(lobby.pick(of: member.id)?.emoji ?? "❔")
+                                if let pick = lobby.pick(of: member.id) {
+                                    BrawlerBadge(brawler: pick, size: 30)
+                                } else {
+                                    Text("❔").frame(width: 30)
+                                }
                                 Text(member.id == room.me.id ? "\(member.name)（我）" : member.name)
                                 Spacer()
                                 if member.id == room.hostID { Text("房主").font(DS.Font.caption).foregroundStyle(.secondary) }
@@ -233,17 +230,7 @@ private struct ArenaMatchView: View {
     /// 和电脑打才有「再来一局」；联机的回房间等房主再开
     var onAgain: (() -> Void)?
     var onExit: () -> Void
-    @State private var scene: ArenaScene
     @State private var confirmingExit = false
-
-    init(controller: ArenaController, onAgain: (() -> Void)?, onExit: @escaping () -> Void) {
-        self.controller = controller
-        self.onAgain = onAgain
-        self.onExit = onExit
-        let scene = ArenaScene(size: CGSize(width: 390, height: 844))
-        scene.scaleMode = .resizeFill
-        _scene = State(initialValue: scene)
-    }
 
     /// 在上边那一队的人：画面倒过来（自己的家总在下边），摇杆也跟着反过来
     private var flip: Double { controller.game.mode.isTeams && controller.mine.team == 1 ? -1 : 1 }
@@ -252,7 +239,7 @@ private struct ArenaMatchView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, preferredFramesPerSecond: 60, options: [.ignoresSiblingOrder])
+            ArenaWorld(controller: controller)
                 .ignoresSafeArea()
             VStack(spacing: DS.Space.xs) {
                 topBar
@@ -278,7 +265,6 @@ private struct ArenaMatchView: View {
             }
             if let result = hud.result { resultCard(result) }
         }
-        .onAppear { scene.controller = controller }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .confirmationDialog("退出这一局？", isPresented: $confirmingExit, titleVisibility: .visible) {
@@ -332,8 +318,8 @@ private struct ArenaMatchView: View {
     private func versus(_ blue: String, _ red: String, note: String) -> some View {
         VStack(spacing: 2) {
             HStack(spacing: 0) {
-                Text(blue).frame(minWidth: 52).padding(.vertical, 4).background(Color(uiColor: ArenaScene.blue))
-                Text(red).frame(minWidth: 52).padding(.vertical, 4).background(Color(uiColor: ArenaScene.red))
+                Text(blue).frame(minWidth: 52).padding(.vertical, 4).background(Color(uiColor: ArenaPalette.blue))
+                Text(red).frame(minWidth: 52).padding(.vertical, 4).background(Color(uiColor: ArenaPalette.red))
             }
             .font(DS.Font.headline.monospacedDigit())
             .foregroundStyle(.white)
@@ -350,7 +336,7 @@ private struct ArenaMatchView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, DS.Space.m)
                 .padding(.vertical, 6)
-                .background((team == controller.mine.team ? Color(uiColor: ArenaScene.blue) : Color(uiColor: ArenaScene.red)).opacity(0.85),
+                .background((team == controller.mine.team ? Color(uiColor: ArenaPalette.blue) : Color(uiColor: ArenaPalette.red)).opacity(0.85),
                             in: Capsule())
         } else if hud.poisonShrinking {
             Text("毒圈在缩小，待在圈里").font(DS.Font.caption).foregroundStyle(.white)
@@ -406,7 +392,7 @@ private struct ArenaMatchView: View {
         return ZStack {
             Color.black.opacity(0.45).ignoresSafeArea()
             VStack(spacing: DS.Space.m) {
-                Text(mine.brawler.emoji).font(.system(size: 56))
+                BrawlerBadge(brawler: mine.brawler, size: 84)
                 Text(title).font(DS.Font.display).foregroundStyle(tint)
                 HStack(spacing: DS.Space.l) {
                     stat("打倒", mine.kills)
@@ -469,7 +455,7 @@ private struct ArenaStick: View {
     private var tint: Color {
         switch kind {
         case .move: return .white
-        case .attack: return Color(uiColor: ArenaScene.blue)
+        case .attack: return Color(uiColor: ArenaPalette.blue)
         case .special: return ready ? .yellow : .gray
         }
     }

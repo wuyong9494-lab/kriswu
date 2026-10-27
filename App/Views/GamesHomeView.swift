@@ -16,7 +16,7 @@ struct GamesHomeView: View {
         List {
             Section {
                 NavigationLink { ArenaHomeView() } label: {
-                    row("萌兽乱斗", "俯视小地图双摇杆对战：3v3 团战、抢星星、大乱斗、占点，电脑补位", "flame.fill", 3)
+                    row("勇者乱斗", "3D 小地图双摇杆对战：3v3 团战、抢星星、大乱斗、占点，电脑补位", "flame.fill", 3)
                 }
                 NavigationLink { TileGameHomeView() } label: {
                     row("叠叠消", "三张一样的凑一起消掉；今日挑战、挑战码、和同事比谁先消完", "square.stack.3d.up.fill", 6)

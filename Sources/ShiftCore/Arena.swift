@@ -44,18 +44,18 @@ public struct V2: Equatable, Hashable, Codable, Sendable {
 
 // MARK: - 角色
 
-/// 能选的角色（都是原创的）：各有各的普通攻击和大招
+/// 能选的角色：各有各的普通攻击和大招（3D 模型用 KayKit 的冒险者，CC0 授权）
 public enum Brawler: Int, CaseIterable, Codable, Sendable {
-    case panda, fox, tiger, frog, robot
+    case knight, ranger, barbarian, mage, assassin
 
-    public var name: String { ["团团", "小狐", "虎哥", "呱呱", "铁蛋"][rawValue] }
-    public var emoji: String { ["🐼", "🦊", "🐯", "🐸", "🤖"][rawValue] }
-    public var role: String { ["近身霰弹", "远程狙击", "肉盾重拳", "隔墙投弹", "连发机枪"][rawValue] }
+    public var name: String { ["骑士", "游侠", "蛮王", "法师", "刺客"][rawValue] }
+    public var emoji: String { ["🛡️", "🏹", "🪓", "🔮", "🗡️"][rawValue] }
+    public var role: String { ["近身剑气", "远程弩箭", "肉盾斧劈", "隔墙火球", "连掷飞刀"][rawValue] }
     public var attackNote: String {
-        ["一次打出五颗散开的弹丸，贴脸打最疼", "一颗又快又远的子弹", "近身三连拳，血厚", "扔炸弹，能越过墙，落地炸一片", "一口气连射四发"][rawValue]
+        ["一剑挥出五道散开的剑气，贴脸打最疼", "一支又快又远的弩箭", "近身连劈三斧，血厚", "扔火球，能越过墙，落地炸一片", "一口气连掷四把飞刀"][rawValue]
     }
     public var superNote: String {
-        ["大招：往前冲撞，撞到的人都受伤", "大招：能穿透好几个人的大子弹", "大招：跳过去砸一片（能跳过墙）", "大招：超大炸弹", "大招：一大片扇形弹幕"][rawValue]
+        ["大招：举盾往前冲锋，撞到的人都受伤", "大招：能穿透好几个人的重弩", "大招：跳过去砸一片（能跳过墙）", "大招：召唤一颗大陨石", "大招：一大片扇形飞刀"][rawValue]
     }
 
     public var maxHealth: Int { [5600, 3200, 7800, 3800, 4400][rawValue] }
@@ -380,6 +380,8 @@ public struct ArenaGame: Sendable {
         case pickup(fighter: Int)
         case respawn(fighter: Int)
         case special(fighter: Int)
+        /// 开了一枪（普通攻击），画面上放出手的动作
+        case attack(fighter: Int)
     }
 
     public struct Countdown: Equatable, Sendable {
@@ -551,17 +553,18 @@ public struct ArenaGame: Sendable {
         fighters[i].cooldown = 0.4
         fighters[i].lastAttack = time
         fighters[i].facing = direction
+        events.append(.attack(fighter: i))
         switch fighter.brawler {
-        case .panda:
+        case .knight:
             spread(i, direction, count: 5, angle: 0.52, speed: 13, range: 4.5, damage: 360, radius: 0.2)
-        case .fox:
+        case .ranger:
             shoot(i, direction, speed: 17, range: 9, damage: 1300, radius: 0.22)
-        case .tiger:
+        case .barbarian:
             spread(i, direction, count: 3, angle: 0.9, speed: 14, range: 2.6, damage: 700, radius: 0.3)
-        case .frog:
+        case .mage:
             lob(i, to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.attackRange),
                 duration: 0.7, blast: 1.2, damage: 1200, isSuper: false)
-        case .robot:
+        case .assassin:
             fighters[i].burst = Fighter.Burst(left: 4, timer: 0, direction: direction)
         }
     }
@@ -574,17 +577,17 @@ public struct ArenaGame: Sendable {
         fighters[i].facing = direction
         events.append(.special(fighter: i))
         switch fighter.brawler {
-        case .panda:
+        case .knight:
             fighters[i].dash = Fighter.Dash(direction: direction, remaining: fighter.brawler.superRange, hit: [])
-        case .fox:
+        case .ranger:
             shoot(i, direction, speed: 18, range: fighter.brawler.superRange, damage: 2400, radius: 0.35, pierce: true, isSuper: true)
-        case .tiger:
+        case .barbarian:
             let target = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
             fighters[i].leap = Fighter.Leap(from: fighter.pos, to: target, elapsed: 0)
-        case .frog:
+        case .mage:
             lob(i, to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange),
                 duration: 0.9, blast: 2.2, damage: 2600, isSuper: true)
-        case .robot:
+        case .assassin:
             spread(i, direction, count: 12, angle: 1.05, speed: 14, range: 7, damage: 500, radius: 0.2, isSuper: true)
         }
     }

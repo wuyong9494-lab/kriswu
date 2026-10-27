@@ -443,8 +443,8 @@ enum ScreenCatalog {
         case "tiles": TileGameHomeView()
         case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
         case "arena": ArenaHomeView()
-        case "arenaPlay": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .panda, name: "我"))
-        case "arenaShowdown": ArenaPlayView(setup: ArenaController.Setup(mode: .showdown, brawler: .frog, name: "我"))
+        case "arenaPlay": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .knight, name: "我"))
+        case "arenaShowdown": ArenaPlayView(setup: ArenaController.Setup(mode: .showdown, brawler: .mage, name: "我"))
         case "gomoku": GomokuHomeView()
         case "gomokuBoard":
             GomokuLocalScreen(mode: .computer(.normal, .black),

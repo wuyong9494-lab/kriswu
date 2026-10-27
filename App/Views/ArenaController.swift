@@ -458,14 +458,14 @@ final class ArenaLobby: ObservableObject {
         let people = Array(room.members.prefix(6))
         var seats: [ArenaStart.Seat] = []
         for (k, member) in people.enumerated() {
-            seats.append(ArenaStart.Seat(member: member.id, name: member.name, brawler: pick(of: member.id) ?? .panda,
+            seats.append(ArenaStart.Seat(member: member.id, name: member.name, brawler: pick(of: member.id) ?? .knight,
                                          team: mode.isTeams ? k % 2 : k))
         }
         if mode.isTeams {
             for team in 0...1 {
                 while seats.filter({ $0.team == team }).count < 3 {
                     let used = Set(seats.filter { $0.team == team }.map(\.brawler))
-                    let brawler = Brawler.allCases.first { !used.contains($0) } ?? .panda
+                    let brawler = Brawler.allCases.first { !used.contains($0) } ?? .knight
                     seats.append(ArenaStart.Seat(member: nil, name: "电脑\(brawler.name)", brawler: brawler, team: team))
                 }
             }

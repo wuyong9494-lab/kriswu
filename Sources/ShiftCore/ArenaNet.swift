@@ -212,6 +212,7 @@ extension ArenaSnapshot {
             case .pickup(let fighter): w.u8(4); w.u8(fighter)
             case .respawn(let fighter): w.u8(5); w.u8(fighter)
             case .special(let fighter): w.u8(6); w.u8(fighter)
+            case .attack(let fighter): w.u8(7); w.u8(fighter)
             }
         }
         return w.data
@@ -285,6 +286,7 @@ extension ArenaSnapshot {
             case 4: guard let f = r.u8() else { return nil }; events.append(.pickup(fighter: f))
             case 5: guard let f = r.u8() else { return nil }; events.append(.respawn(fighter: f))
             case 6: guard let f = r.u8() else { return nil }; events.append(.special(fighter: f))
+            case 7: guard let f = r.u8() else { return nil }; events.append(.attack(fighter: f))
             default: return nil
             }
         }

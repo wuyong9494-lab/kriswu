@@ -66,7 +66,7 @@ struct AllFeaturesView: View {
                 feature("网站公告", "值班网站上的公告", "pin", keywords: "通知 公告") { SiteNoticesView() },
             ]),
             FeatureGroup(title: "休息一下", features: [
-                feature("小游戏", "萌兽乱斗、叠叠消、五子棋：自己玩，或者和同事面对面、远程一起玩", "gamecontroller",
+                feature("小游戏", "勇者乱斗、叠叠消、五子棋：自己玩，或者和同事面对面、远程一起玩", "gamecontroller",
                         keywords: "游戏 乱斗 射击 团战 抢星星 大乱斗 占点 叠叠消 羊了个羊 消除 三消 五子棋 下棋 对战 多人 挑战 今日挑战 轮流下 Game Center") { GamesHomeView() },
             ]),
             FeatureGroup(title: "设置和帮助", features: [

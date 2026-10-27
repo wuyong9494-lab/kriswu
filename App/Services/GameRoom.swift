@@ -19,7 +19,7 @@ enum GameKind: String, Codable, Sendable {
         switch self {
         case .tiles: return "叠叠消"
         case .gomoku: return "五子棋"
-        case .arena: return "萌兽乱斗"
+        case .arena: return "勇者乱斗"
         }
     }
 }

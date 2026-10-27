@@ -39,8 +39,8 @@ public struct ArenaBot: Sendable {
             let range = me.brawler.attackRange
             let away = (me.pos - target.pos).normalized
             let low = Double(me.health) < Double(me.maxHealth) * 0.3
-            let ideal = range * (me.brawler == .tiger || me.brawler == .panda ? 0.55 : 0.75)
-            let clear = me.brawler == .frog || game.map.lineOfSight(me.pos, target.pos)
+            let ideal = range * (me.brawler == .barbarian || me.brawler == .knight ? 0.55 : 0.75)
+            let clear = me.brawler == .mage || game.map.lineOfSight(me.pos, target.pos)
             if low && distance < range + 2.5 {
                 // 血少了：往反方向跑，等着回血
                 goal = me.pos + away * 4
@@ -59,7 +59,7 @@ public struct ArenaBot: Sendable {
                 input.attack = (lead - me.pos).rotated(by: noise)
             }
             if me.superCharge >= 1, distance <= me.brawler.superRange * 0.85,
-               clear || me.brawler == .tiger || me.brawler == .frog {
+               clear || me.brawler == .barbarian || me.brawler == .mage {
                 input.special = target.pos - me.pos
             }
         }

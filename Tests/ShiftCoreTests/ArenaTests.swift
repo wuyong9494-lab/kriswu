@@ -52,33 +52,33 @@ final class ArenaTests: XCTestCase {
     /// 子弹打中敌人、穿过队友、被墙挡住；打中攒大招
     func testShotsHitEnemiesNotFriendsAndStopAtWalls() {
         var game = ArenaGame(mode: .teamFight, entrants: [
-            .init(name: "狐", brawler: .fox, isBot: false, team: 0),
-            .init(name: "友", brawler: .panda, isBot: true, team: 0),
-            .init(name: "敌", brawler: .tiger, isBot: true, team: 1),
+            .init(name: "狐", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "友", brawler: .knight, isBot: true, team: 0),
+            .init(name: "敌", brawler: .barbarian, isBot: true, team: 1),
         ], seed: 2)
         game.adjust(0) { $0.pos = V2(3.5, 20.5) }
         game.adjust(1) { $0.pos = V2(3.5, 17.5) }
         game.adjust(2) { $0.pos = V2(3.5, 14.5) }
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
         run(&game, seconds: 0.6)
-        XCTAssertEqual(game.fighters[2].health, Brawler.tiger.maxHealth - 1300)
-        XCTAssertEqual(game.fighters[1].health, Brawler.panda.maxHealth, "不打自己人")
-        XCTAssertEqual(game.fighters[0].superCharge, 1300 / Brawler.fox.superCost, accuracy: 1e-9)
-        XCTAssertEqual(game.fighters[0].ammo, 2 + 0.6 / Brawler.fox.reload, accuracy: 0.05)
+        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth - 1300)
+        XCTAssertEqual(game.fighters[1].health, Brawler.knight.maxHealth, "不打自己人")
+        XCTAssertEqual(game.fighters[0].superCharge, 1300 / Brawler.ranger.superCost, accuracy: 1e-9)
+        XCTAssertEqual(game.fighters[0].ammo, 2 + 0.6 / Brawler.ranger.reload, accuracy: 0.05)
         // 中间那列有墙
         game.adjust(0) { $0.pos = V2(7.5, 20.5) }
         game.adjust(2) { $0.pos = V2(7.5, 13.5); $0.health = $0.maxHealth }
         run(&game, seconds: 0.5)
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
         run(&game, seconds: 0.8)
-        XCTAssertEqual(game.fighters[2].health, Brawler.tiger.maxHealth, "墙挡住了")
+        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth, "墙挡住了")
     }
 
     /// 打倒了给队里记一分，3 秒后在自己家满血复活；身上的星星掉出来
     func testKnockoutRespawnAndDroppedStars() {
         var game = ArenaGame(mode: .stars, entrants: [
-            .init(name: "狐", brawler: .fox, isBot: false, team: 0),
-            .init(name: "敌", brawler: .frog, isBot: true, team: 1),
+            .init(name: "狐", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "敌", brawler: .mage, isBot: true, team: 1),
         ], seed: 3)
         game.adjust(0) { $0.pos = V2(3.5, 20.5) }
         game.adjust(1) { $0.pos = V2(3.5, 14.5); $0.health = 1000; $0.stars = 3 }
@@ -92,7 +92,7 @@ final class ArenaTests: XCTestCase {
         XCTAssertTrue(game.stars.allSatisfy { $0.distance(to: V2(3.5, 14.5)) < 2.5 })
         run(&game, seconds: ArenaGame.respawnDelay)
         XCTAssertTrue(game.fighters[1].alive)
-        XCTAssertEqual(game.fighters[1].health, Brawler.frog.maxHealth)
+        XCTAssertEqual(game.fighters[1].health, Brawler.mage.maxHealth)
         XCTAssertTrue(game.map.spawns[1].contains(game.fighters[1].pos))
     }
 
@@ -130,7 +130,7 @@ final class ArenaTests: XCTestCase {
         XCTAssertEqual(Set(game.fighters.map(\.team)).count, 6, "各自为战")
         run(&game, seconds: 160)
         guard case .survivor(let winner)? = game.result else { return XCTFail("\(String(describing: game.result))") }
-        XCTAssertEqual(game.fighters[winner].brawler, .tiger, "血最厚、出生点离中间最近的活到最后")
+        XCTAssertEqual(game.fighters[winner].brawler, .barbarian, "血最厚、出生点离中间最近的活到最后")
         XCTAssertEqual(game.fighters.compactMap(\.place).sorted(), [1, 2, 3, 4, 5, 6])
     }
 
@@ -217,8 +217,8 @@ final class ArenaNetTests: XCTestCase {
     /// 两包之间自己往前推：子弹照直飞、扔的炸弹接着飞，飞到头就没了
     func testExtrapolationMovesShotsBetweenSnapshots() {
         var game = ArenaGame(mode: .teamFight, entrants: [
-            .init(name: "狐", brawler: .fox, isBot: false, team: 0),
-            .init(name: "蛙", brawler: .frog, isBot: false, team: 1),
+            .init(name: "狐", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "蛙", brawler: .mage, isBot: false, team: 1),
         ], seed: 1)
         game.adjust(0) { $0.pos = V2(3.5, 20.5) }
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1)), 1: ArenaInput(attack: V2(0, 3))])
