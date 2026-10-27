@@ -84,6 +84,8 @@ struct AppSettings: Codable, Equatable {
     /// 播报语速（0.3–0.6，系统默认 0.5）
     var voiceRate: Float = 0.47
     var appearance: Appearance = .system
+    /// 发数传计划：每家运营商发到哪个群（只是给自己看的提示）
+    var passPlanGroups: [String: String] = [:]
     /// 今天页卡片的顺序、藏起来的卡片（TodayCard 的名字；空 = 默认顺序）
     var todayCardOrder: [String] = []
     var hiddenTodayCards: [String] = []
@@ -434,6 +436,7 @@ extension AppSettings {
         a.weChatChanges = o.weChatChanges
         a.weChatTeam = o.weChatTeam
         a.meetingWeChat = o.meetingWeChat
+        a.passPlanGroups = o.passPlanGroups
         a.todayCardOrder = o.todayCardOrder
         a.hiddenTodayCards = o.hiddenTodayCards
         a.dutyHeadsUp = o.dutyHeadsUp

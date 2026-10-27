@@ -60,6 +60,7 @@ struct AllFeaturesView: View {
                 feature("周会问题", "各组提的问题解决了没有", "doc.text.magnifyingglass", keywords: "周会 金山文档 会议 问题") { MeetingIssuesView() },
                 feature("我负责的周会问题", "负责人里有我的、还没解决的", "person.crop.circle", keywords: "周会 我的 负责人") { MeetingIssuesView(mineOnly: true) },
                 feature("周会各组趋势", "每周各组还挂着几个、解决得快不快", "chart.xyaxis.line", keywords: "周会 趋势 统计 图表") { MeetingTrendView() },
+                feature("发数传计划", "拍一张计划，按运营商分好，发到各家微信群", "paperplane", keywords: "数传 计划 运营商 微信群 拍照 地面站") { PassPlanView() },
                 feature("工作留痕", "拍照、录音、记一笔，按天存", "camera", keywords: "照片 录音 笔记 记录") { WorkLogView() },
                 feature("各组工作内容", "组A–组E 各干什么", "list.bullet.rectangle", keywords: "组别 说明 分工") { GroupNotesView() },
                 feature("网站公告", "值班网站上的公告", "pin", keywords: "通知 公告") { SiteNoticesView() },

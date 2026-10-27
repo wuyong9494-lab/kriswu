@@ -384,6 +384,7 @@ private struct QuickActions: View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("常用").font(DS.Font.overline).kerning(0.6).foregroundStyle(.secondary)
             LazyVGrid(columns: columns, spacing: DS.Space.s) {
+                tile("发计划", "paperplane") { PassPlanView() }
                 tile("本周全员", "tablecells") { WeekRosterView() }
                 tile("均衡分析", "scalemass") { FairnessView() }
                 tile("请假规划", "calendar.badge.minus") { LeavePlannerView() }

@@ -119,11 +119,13 @@ struct RootView: View {
     @State private var tabBarTop: CGFloat = .infinity
     /// 打开过的页：没打开过的不建（网站页不会一启动就去登录网站，也少画几页）
     @State private var visited: Set<Tab> = []
+    /// 分享过来的数传计划（打开「发数传计划」时带进去）
+    @State private var passPlanRows: [PassPlanRow] = []
     @State private var inReviewDemo = UserDefaults.standard.bool(forKey: AppStore.demoKey)
     @Environment(\.scenePhase) private var scenePhase
 
     enum RootSheet: String, Identifiable {
-        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices, meeting, meetingMine
+        case workLog, record, note, rosterLog, teamChanges, whatsNew, notices, meeting, meetingMine, passPlan
         var id: String { rawValue }
     }
 
@@ -219,7 +221,14 @@ struct RootView: View {
         // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕；
         // shiftreminder://capture/photo|record|note：小组件上的按钮
         .onOpenURL { url in
-            if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()) {
+            if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
+               let plan = try? PlanReader.rows(inFile: url) {
+                // 导出、分享过来的数传计划：直接打开「发数传计划」
+                passPlanRows = plan
+                tab = .today
+                rootSheet = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { rootSheet = .passPlan }
+            } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()) {
                 // 金山文档里导出、分享过来的周会表格
                 let result = store.importMeetingFile(url)
                 ToastCenter.shared.show(result, style: AppStore.meetingImportFailed(result) ? .error : .success)
@@ -278,6 +287,11 @@ struct RootView: View {
             case .notices:
                 NavigationStack {
                     SiteNoticesView()
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
+                }
+            case .passPlan:
+                NavigationStack {
+                    PassPlanView(rows: passPlanRows)
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { rootSheet = nil } } }
                 }
             case .meeting, .meetingMine:
@@ -413,6 +427,7 @@ enum ScreenCatalog {
         case "meetingTrend": MeetingTrendView()
         case "todayLayout": TodayLayoutView()
         case "years": MultiYearStatsView()
+        case "passPlan": PassPlanView(rows: PassPlanView.demoRows)
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         default: TodayView()
