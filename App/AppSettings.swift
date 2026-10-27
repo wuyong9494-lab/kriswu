@@ -93,6 +93,8 @@ struct AppSettings: Codable, Equatable {
     var passPlanUrgentCaption = "麻烦确认一下数传计划，应急计划优先推送"
     /// 拍照读的计划发原图（从照片上裁下这一家的几行），不发重新画的表
     var passPlanOriginal = true
+    /// 不用发的几家（比如长春站）：读到了也不算在依次发、已发里
+    var passPlanSkipped: [String] = []
     /// 每天到点提醒发数传计划；哪天各家都发完了，那天就不再提醒
     var passPlanReminder = false
     var passPlanReminderTime = ClockTime(hour: 15, minute: 0)
@@ -452,6 +454,7 @@ extension AppSettings {
         a.passPlanCaption = o.passPlanCaption
         a.passPlanUrgentCaption = o.passPlanUrgentCaption
         a.passPlanOriginal = o.passPlanOriginal
+        a.passPlanSkipped = o.passPlanSkipped
         a.passPlanSentDay = o.passPlanSentDay
         a.todayCardOrder = o.todayCardOrder
         a.hiddenTodayCards = o.hiddenTodayCards

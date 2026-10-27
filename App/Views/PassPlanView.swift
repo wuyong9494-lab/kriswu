@@ -36,6 +36,7 @@ struct PassPlanView: View {
     @State private var newOperatorName = ""
     /// 每家的图（读完、改完重新画）
     @State private var images: [String: UIImage] = [:]
+    @State private var clearing = false
 
     private struct EditingRow: Identifiable {
         let id = UUID()
@@ -57,15 +58,20 @@ struct PassPlanView: View {
         PassPlan.caption(rows, layout: layout, normal: store.settings.passPlanCaption, urgent: store.settings.passPlanUrgentCaption)
     }
 
-    /// 分得出是哪家的（能发的）
+    /// 分得出是哪家、要发的（标了「不用发」的不算）
     private var sendable: [(name: String, rows: [PassPlanRow])] {
-        PassPlan.grouped(rows, rules: rules).filter { $0.name != PassPlan.unassigned }
+        let skipped = Set(store.settings.passPlanSkipped)
+        return PassPlan.grouped(rows, rules: rules).filter { $0.name != PassPlan.unassigned && !skipped.contains($0.name) }
     }
 
     var body: some View {
         let all = PassPlan.grouped(rows, rules: rules)
-        let groups = all.filter { $0.name != PassPlan.unassigned }
-        let doubtful = rows.filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }.count
+        let skipped = Set(store.settings.passPlanSkipped)
+        let groups = all.filter { $0.name != PassPlan.unassigned && !skipped.contains($0.name) }
+        // 标了「不用发」的几家（长春站这种）：收在最下面，不算在依次发、已发里
+        let resting = all.filter { skipped.contains($0.name) }
+        let doubtful = all.filter { !skipped.contains($0.name) }.flatMap(\.rows)
+            .filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }.count
         let idle = PassPlan.idle(rows, rules: rules)
         List {
             Section {
@@ -140,11 +146,27 @@ struct PassPlanView: View {
                                urgent: group.rows.contains { PassPlan.emergency($0, layout: layout) == true })
                     }
                 }
+                if !resting.isEmpty {
+                    Section {
+                        ForEach(resting, id: \.name) { group in
+                            HStack {
+                                Text("\(group.name) · \(group.rows.count) 条").foregroundStyle(.secondary)
+                                Spacer()
+                                Button("要发") { store.settings.passPlanSkipped.removeAll { $0 == group.name } }
+                                    .font(.caption.weight(.semibold))
+                                    .buttonStyle(.borderless)
+                            }
+                        }
+                    } header: {
+                        Text("不用发的")
+                    } footer: {
+                        Text("这几家标了「不用发」：不算在依次发、已发里。点「要发」改回来。")
+                    }
+                }
                 Section {
                     Button { editing = EditingRow(index: nil, row: PassPlanRow()) } label: {
                         Label("补一条", systemImage: "plus")
                     }
-                    Button("全部清掉", role: .destructive) { store.passPlan = PassPlanSession(); problem = nil }
                 }
             }
             Section {
@@ -178,6 +200,16 @@ struct PassPlanView: View {
         .appList()
         .navigationTitle("发数传计划")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !rows.isEmpty {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("全部清掉", role: .destructive) { clearing = true }
+                }
+            }
+        }
+        .confirmationDialog("把读到的计划全部清掉？", isPresented: $clearing, titleVisibility: .visible) {
+            Button("全部清掉", role: .destructive) { store.passPlan = PassPlanSession(); problem = nil }
+        }
         .fullScreenCover(isPresented: $scanning) {
             DocumentScanner { pages in read { try await PlanReader.read(pages: pages, rules: rules) } }
                 .ignoresSafeArea()
@@ -249,7 +281,7 @@ struct PassPlanView: View {
                 }
             }
         }
-        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")-\(store.settings.passPlanCaption)-\(store.settings.passPlanUrgentCaption)-\(store.settings.passPlanOriginal)") {
+        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")-\(store.settings.passPlanCaption)-\(store.settings.passPlanUrgentCaption)-\(store.settings.passPlanOriginal)-\(store.settings.passPlanSkipped)") {
             renderImages()
         }
     }
@@ -330,6 +362,10 @@ struct PassPlanView: View {
                     .foregroundStyle(DS.Palette.success)
             }
             Spacer()
+            Button("不用发") { store.settings.passPlanSkipped.append(name) }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
             Button {
                 groupName = store.settings.passPlanGroups[name] ?? ""
                 naming = name
