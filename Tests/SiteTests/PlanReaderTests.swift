@@ -36,7 +36,7 @@ final class PlanReaderTests: XCTestCase {
             if let picture = image.cgImage {
                 let boxes = try await PlanReader.textBoxes(in: picture, words: PassPlan.vocabulary(rules))
                 // 最上面几十块（表头附近）
-                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(45) {
+                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(name == "excel_scan" ? 800 : 45) {
                     print(String(format: "OCRBOX|%@|%@|%.3f|%.3f|%.3f|%.4f", name, b.text, b.x, b.y, b.width, b.height))
                 }
                 let reading = PassPlan.read(boxes)
