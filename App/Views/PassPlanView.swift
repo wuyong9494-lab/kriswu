@@ -167,11 +167,11 @@ struct PassPlanView: View {
         .navigationTitle("发数传计划")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $scanning) {
-            DocumentScanner { pages in read { try await PlanReader.read(pages: pages) } }
+            DocumentScanner { pages in read { try await PlanReader.read(pages: pages, rules: rules) } }
                 .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showingCamera) {
-            CameraPicker { image in read { try await PlanReader.read(pages: [image]) } }
+            CameraPicker { image in read { try await PlanReader.read(pages: [image], rules: rules) } }
                 .ignoresSafeArea()
         }
         .onChange(of: photoItems) { items in
@@ -184,7 +184,7 @@ struct PassPlanView: View {
                         pages.append(image)
                     }
                 }
-                return try await PlanReader.read(pages: pages)
+                return try await PlanReader.read(pages: pages, rules: rules)
             }
         }
         .fileImporter(isPresented: $importing,

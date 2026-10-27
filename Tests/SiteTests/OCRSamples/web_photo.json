@@ -1,0 +1,207 @@
+{
+ "kind": "web",
+ "rules": {
+  "甲": [
+   "甲光"
+  ],
+  "乙": [
+   "乙宇"
+  ],
+  "丙": [
+   "丙邑"
+  ],
+  "丁": [
+   "丁站"
+  ],
+  "戊": [
+   "戊星"
+  ],
+  "己": [
+   "己桥"
+  ],
+  "庚": [
+   "庚洲"
+  ],
+  "辛": [
+   "辛站"
+  ]
+ },
+ "rows": [
+  {
+   "satellite": "XA101C",
+   "station": "丙邑-西岭1101",
+   "orbit": "42941",
+   "start": "2026-10-27 22:05:25",
+   "end": "2026-10-27 22:14:25",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "乙宇-东山05",
+   "orbit": "10883",
+   "start": "2026-10-27 09:37:21",
+   "end": "2026-10-27 09:48:16",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "己桥-云岭01",
+   "orbit": "2031",
+   "start": "2026-10-28 07:47:07",
+   "end": "2026-10-28 07:56:58",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "甲光北湖03",
+   "orbit": "10853",
+   "start": "2026-10-28 15:54:15",
+   "end": "2026-10-28 16:05:58",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "丁站",
+   "orbit": "10840",
+   "start": "2026-10-27 14:15:18",
+   "end": "2026-10-27 14:24:10",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "辛站02",
+   "orbit": "10843",
+   "start": "2026-10-28 05:25:32",
+   "end": "2026-10-28 05:31:20",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "乙宇-东山05",
+   "orbit": "42944",
+   "start": "2026-10-28 15:57:23",
+   "end": "2026-10-28 16:02:27",
+   "emergency": null
+  },
+  {
+   "satellite": "XA101C",
+   "station": "甲光北湖04",
+   "orbit": "10850",
+   "start": "2026-10-27 03:53:19",
+   "end": "2026-10-27 04:04:27",
+   "emergency": null
+  },
+  {
+   "satellite": "XA102C",
+   "station": "辛站02",
+   "orbit": "10871",
+   "start": "2026-10-28 07:28:59",
+   "end": "2026-10-28 07:37:22",
+   "emergency": null
+  },
+  {
+   "satellite": "XA102C",
+   "station": "辛站02",
+   "orbit": "42937",
+   "start": "2026-10-27 19:59:16",
+   "end": "2026-10-27 20:09:32",
+   "emergency": null
+  },
+  {
+   "satellite": "XA1PT02A03",
+   "station": "甲光南湾01",
+   "orbit": "42962",
+   "start": "2026-10-27 04:58:49",
+   "end": "2026-10-27 05:07:50",
+   "emergency": null
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "甲光东岭02",
+   "orbit": "2016",
+   "start": "2026-10-28 07:14:35",
+   "end": "2026-10-28 07:22:09",
+   "emergency": null
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "辛站03",
+   "orbit": "2027",
+   "start": "2026-10-28 20:23:53",
+   "end": "2026-10-28 20:30:25",
+   "emergency": null
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "己桥-云岭01",
+   "orbit": "2032",
+   "start": "2026-10-28 14:23:56",
+   "end": "2026-10-28 14:29:03",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07C04",
+   "station": "甲光南湾01",
+   "orbit": "10879",
+   "start": "2026-10-27 10:12:07",
+   "end": "2026-10-27 10:20:52",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07D02",
+   "station": "丁站01",
+   "orbit": "42963",
+   "start": "2026-10-27 06:15:44",
+   "end": "2026-10-27 06:22:49",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07D02",
+   "station": "辛站03",
+   "orbit": "42936",
+   "start": "2026-10-27 21:03:26",
+   "end": "2026-10-27 21:13:23",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07D02",
+   "station": "甲光南湾01",
+   "orbit": "42930",
+   "start": "2026-10-28 10:47:33",
+   "end": "2026-10-28 10:53:51",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07D03",
+   "station": "甲光南湾01",
+   "orbit": "10885",
+   "start": "2026-10-27 03:54:45",
+   "end": "2026-10-27 04:06:11",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07D04",
+   "station": "甲光南湾01",
+   "orbit": "42938",
+   "start": "2026-10-28 00:33:06",
+   "end": "2026-10-28 00:41:08",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07D04",
+   "station": "己桥-云岭01",
+   "orbit": "10859",
+   "start": "2026-10-27 05:09:32",
+   "end": "2026-10-27 05:16:06",
+   "emergency": null
+  },
+  {
+   "satellite": "XBGF07E01",
+   "station": "丙邑-西岭1101",
+   "orbit": "10875",
+   "start": "2026-10-27 20:50:27",
+   "end": "2026-10-27 20:59:55",
+   "emergency": null
+  }
+ ]
+}

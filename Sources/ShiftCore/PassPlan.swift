@@ -28,6 +28,23 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+extension PassPlanRow {
+    /// 认得出含义的那几列整理过的值（序号不算，返回 nil）
+    func value(_ column: PassPlan.Column) -> String? {
+        switch column {
+        case .orbit: return orbit
+        case .satelliteID: return satelliteID
+        case .satellite: return satellite
+        case .station: return station
+        case .start: return start
+        case .end: return end
+        case .info: return info
+        case .status: return status
+        case .number: return nil
+        }
+    }
+}
+
 public enum PassPlan {
     /// 认得出含义的列：表头里出现这些字就是这一列（先认长的，「卫星名称」不会被当成「卫星ID」）。
     /// 网页上的表和导出的 Excel 叫法不一样（圈号 / 圈次、数传开始时间 / 数传开始、数传信息 / 数传速率），都认
@@ -97,6 +114,9 @@ public enum PassPlan {
             var used = Set<Column>()
             slots = labels.map { label, x in
                 var c = PassPlan.column(forHeader: label)
+                // 拍的是 Excel：表头那一行最左边是行号「1」，当序号（发出去的表重新编）
+                let trimmed = label.trimmingCharacters(in: .whitespaces)
+                if c == nil, !trimmed.isEmpty, trimmed.allSatisfy({ ("0"..."9").contains($0) }) { c = .number }
                 if let found = c, !used.insert(found).inserted { c = nil }
                 return Slot(label: label.trimmingCharacters(in: .whitespaces), column: c, x: x)
             }
@@ -360,6 +380,87 @@ public enum PassPlan {
         return String(format: "%04d-%02d-%02d %02d:%02d:%02d", y, mo, d, h, mi, group(6) ?? 0)
     }
 
+    // MARK: - 长图分段认、两种认法挑一个
+
+    /// 很长的图分段认：一段（照片里从上往下的像素范围）和它要留的那一块（整张图从上往下的 0–1）
+    public struct Strip: Equatable, Sendable {
+        public var top: Int
+        public var height: Int
+        /// 中心落在这里面的字才算这一段的：重叠的部分上下两段一段一半，同一行不会认出两遍
+        public var keep: Range<Double>
+
+        public init(top: Int, height: Int, keep: Range<Double>) {
+            self.top = top
+            self.height = height
+            self.keep = keep
+        }
+    }
+
+    /// 高的图（长截图、拼起来的长图）切成上下重叠的几段：每段高不超过宽的 1.4 倍（字相对这一段够大，不会被当成太小跳过），
+    /// 相邻两段重叠一段高的 1/5（被切开的那行在另一段里是整的）。不高的图就一段
+    public static func strips(width: Int, height: Int) -> [Strip] {
+        let size = max(1, width * 7 / 5)
+        let overlap = size / 5
+        guard height > size + overlap else { return [Strip(top: 0, height: height, keep: -Double.infinity..<Double.infinity)] }
+        var spans: [(top: Int, bottom: Int)] = []
+        var top = 0
+        while true {
+            let bottom = min(top + size, height)
+            spans.append((top, bottom))
+            if bottom >= height { break }
+            top = bottom - overlap
+        }
+        let h = Double(height)
+        return spans.indices.map { i in
+            let from = i == 0 ? -Double.infinity : Double(spans[i].top + spans[i - 1].bottom) / 2 / h
+            let to = i == spans.count - 1 ? Double.infinity : Double(spans[i + 1].top + spans[i].bottom) / 2 / h
+            return Strip(top: spans[i].top, height: spans[i].bottom - spans[i].top, keep: from..<to)
+        }
+    }
+
+    /// 一段里认出的字（位置是这一段的 0–1）换成整张图的位置，只留这一段该留的
+    public static func place(_ boxes: [TextBox], in strip: Strip, imageHeight: Int) -> [TextBox] {
+        let h = Double(imageHeight), top = Double(strip.top), sh = Double(strip.height)
+        return boxes.compactMap { b in
+            let placed = TextBox(text: b.text, x: b.x, y: (top + b.y * sh) / h, width: b.width, height: b.height * sh / h)
+            return strip.keep.contains(placed.midY) ? placed : nil
+        }
+    }
+
+    /// 这一页的列和发出去的表用的列不一样（另一张照片的表头、另一种认法）：按表头的字把每行的格子挪过去。
+    /// 认得出含义的列用整理过的值；target 里有、这一页没有的列空着
+    public static func remap(_ rows: [PassPlanRow], from source: Layout, to target: Layout) -> [PassPlanRow] {
+        guard source != target else { return rows }
+        func key(_ slot: Layout.Slot) -> String { slot.label.filter { !$0.isWhitespace } }
+        var index: [String: Int] = [:]
+        for (i, slot) in source.slots.enumerated() where index[key(slot)] == nil { index[key(slot)] = i }
+        return rows.map { row in
+            var moved = row
+            moved.cells = target.slots.map { slot in
+                if let typed = slot.column.flatMap(row.value) { return typed }
+                guard let i = index[key(slot)], i < row.cells.count else { return "" }
+                return row.cells[i]
+            }
+            return moved
+        }
+    }
+
+    /// 读得好不好（同一张照片两种认法挑一个）：认出的行越多越好，可能认错的行（时间不全、站名对不上对照表……）只算一小半
+    public static func score(_ reading: Reading, rules: [OperatorRule] = []) -> Double {
+        reading.rows.reduce(0) { $0 + (problems($1, rules: rules, layout: reading.layout).isEmpty ? 1 : 0.3) }
+    }
+
+    /// 给文字识别的词库：表头常见的叫法，加上对照表里的运营商名和站名开头（认得准一些）
+    public static func vocabulary(_ rules: [OperatorRule]) -> [String] {
+        // 表头的叫法是小写的（比对用），「卫星id」换成大写的写法
+        let headers = Column.allCases.flatMap(\.headerWords).filter { !$0.contains("id") }
+            + ["卫星ID", "数传开始时间", "数传结束时间", "数传速率", "创建时间", "是否应急", "是否重点保障", "等待数传", "通道"]
+        var seen = Set<String>()
+        return (headers + rules.flatMap { [$0.name] + $0.prefixes })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     // MARK: - 几张照片合起来、检查
 
     /// 计划长、拍了几张（上下有重叠）：合成一份。同一个地面站、开始和结束时间都一样的算同一条
@@ -538,17 +639,7 @@ public enum PassPlan {
     private static func table(_ rows: [PassPlanRow], layout: Layout) -> (headers: [String], cells: [[String]]) {
         let kept = layout.slots.indices.filter { layout.slots[$0].column != .number }
         func value(_ row: PassPlanRow, _ i: Int) -> String {
-            switch layout.slots[i].column {
-            case .orbit: return row.orbit
-            case .satelliteID: return row.satelliteID
-            case .satellite: return row.satellite
-            case .station: return row.station
-            case .start: return row.start
-            case .end: return row.end
-            case .info: return row.info
-            case .status: return row.status
-            case .number, nil: return i < row.cells.count ? row.cells[i] : ""
-            }
+            layout.slots[i].column.flatMap(row.value) ?? (i < row.cells.count ? row.cells[i] : "")
         }
         let cells = rows.enumerated().map { n, row in ["\(n + 1)"] + kept.map { value(row, $0) } }
         return (["No."] + kept.map { layout.slots[$0].label }, cells)

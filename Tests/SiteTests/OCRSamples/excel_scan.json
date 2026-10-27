@@ -1,0 +1,415 @@
+{
+ "kind": "excel",
+ "rules": {
+  "甲": [
+   "甲光"
+  ],
+  "乙": [
+   "乙宇"
+  ],
+  "丙": [
+   "丙邑"
+  ],
+  "丁": [
+   "丁站"
+  ],
+  "戊": [
+   "戊星"
+  ],
+  "己": [
+   "己桥"
+  ],
+  "庚": [
+   "庚洲"
+  ],
+  "辛": [
+   "辛站"
+  ]
+ },
+ "rows": [
+  {
+   "satellite": "XA101C",
+   "station": "己桥-云岭01",
+   "orbit": "42961",
+   "start": "2026-10-27 22:20:18",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA101C",
+   "station": "甲光东岭02",
+   "orbit": "2029",
+   "start": "2026-10-27 04:36:53",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA101C",
+   "station": "丁站01",
+   "orbit": "10866",
+   "start": "2026-10-28 13:16:28",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA102C",
+   "station": "丁站",
+   "orbit": "10842",
+   "start": "2026-10-28 13:06:58",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA1PT02A03",
+   "station": "乙宇-东山05",
+   "orbit": "10878",
+   "start": "2026-10-27 09:10:58",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "丙邑-西岭1101",
+   "orbit": "2021",
+   "start": "2026-10-28 20:32:41",
+   "end": "",
+   "emergency": true
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "辛站03",
+   "orbit": "10884",
+   "start": "2026-10-27 19:57:42",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "丙邑-西岭1101",
+   "orbit": "10852",
+   "start": "2026-10-27 20:27:03",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "甲光南湾01",
+   "orbit": "2031",
+   "start": "2026-10-27 19:00:09",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "己桥-云岭01",
+   "orbit": "10857",
+   "start": "2026-10-28 01:04:34",
+   "end": "",
+   "emergency": true
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "丙邑-西岭1101",
+   "orbit": "10867",
+   "start": "2026-10-27 09:01:15",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XA1GF05B",
+   "station": "戊星-南岭0751",
+   "orbit": "2028",
+   "start": "2026-10-28 00:55:54",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07C04",
+   "station": "乙宇-东山05",
+   "orbit": "42954",
+   "start": "2026-10-27 14:00:21",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07C04",
+   "station": "丙邑-青岗3101",
+   "orbit": "42957",
+   "start": "2026-10-27 01:28:20",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07C04",
+   "station": "乙宇-东山05",
+   "orbit": "42964",
+   "start": "2026-10-28 05:01:13",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07C04",
+   "station": "甲光南湾01",
+   "orbit": "42960",
+   "start": "2026-10-28 00:39:04",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D02",
+   "station": "丁站02",
+   "orbit": "42938",
+   "start": "2026-10-27 04:54:09",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D03",
+   "station": "戊星-南岭0751",
+   "orbit": "10843",
+   "start": "2026-10-27 06:08:56",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D03",
+   "station": "丙邑-西岭1101",
+   "orbit": "2017",
+   "start": "2026-10-28 06:35:48",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D03",
+   "station": "甲光东岭02",
+   "orbit": "2019",
+   "start": "2026-10-28 22:48:18",
+   "end": "",
+   "emergency": true
+  },
+  {
+   "satellite": "XBGF07D03",
+   "station": "庚洲南部站",
+   "orbit": "10861",
+   "start": "2026-10-27 10:05:20",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D03",
+   "station": "辛站03",
+   "orbit": "10861",
+   "start": "2026-10-28 15:12:24",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D04",
+   "station": "甲光北湖04",
+   "orbit": "42965",
+   "start": "2026-10-27 23:31:28",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D04",
+   "station": "乙宇-东山01",
+   "orbit": "2030",
+   "start": "2026-10-27 05:03:23",
+   "end": "",
+   "emergency": true
+  },
+  {
+   "satellite": "XBGF07D04",
+   "station": "辛站03",
+   "orbit": "2020",
+   "start": "2026-10-28 23:53:20",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07D04",
+   "station": "乙宇-东山01",
+   "orbit": "10847",
+   "start": "2026-10-27 10:04:41",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E01",
+   "station": "乙宇-东山05",
+   "orbit": "42934",
+   "start": "2026-10-27 08:50:39",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E02",
+   "station": "丁站02",
+   "orbit": "42941",
+   "start": "2026-10-28 23:27:24",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E02",
+   "station": "辛站03",
+   "orbit": "10845",
+   "start": "2026-10-27 19:00:55",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E02",
+   "station": "戊星-南岭0751",
+   "orbit": "10881",
+   "start": "2026-10-27 22:29:33",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E02",
+   "station": "戊星-南岭0751",
+   "orbit": "42969",
+   "start": "2026-10-27 00:15:47",
+   "end": "",
+   "emergency": true
+  },
+  {
+   "satellite": "XBGF07E02",
+   "station": "丁站",
+   "orbit": "2021",
+   "start": "2026-10-27 22:42:18",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E03",
+   "station": "丙邑-西岭1101",
+   "orbit": "42939",
+   "start": "2026-10-27 18:01:07",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "丙邑-青岗3101",
+   "orbit": "10864",
+   "start": "2026-10-28 23:04:21",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "庚洲南部站",
+   "orbit": "42945",
+   "start": "2026-10-27 22:59:26",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "丁站02",
+   "orbit": "2018",
+   "start": "2026-10-27 04:48:24",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "丙邑-西岭1101",
+   "orbit": "10848",
+   "start": "2026-10-27 05:43:39",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "庚洲南部站",
+   "orbit": "2017",
+   "start": "2026-10-27 16:14:25",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "甲光东岭02",
+   "orbit": "10889",
+   "start": "2026-10-28 19:18:59",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "庚洲南部站",
+   "orbit": "2026",
+   "start": "2026-10-28 10:13:39",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "甲光北湖04",
+   "orbit": "10889",
+   "start": "2026-10-28 16:14:21",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "己桥-云岭01",
+   "orbit": "10879",
+   "start": "2026-10-27 11:22:12",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "辛站02",
+   "orbit": "10863",
+   "start": "2026-10-27 21:59:35",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "乙宇-东山05",
+   "orbit": "10867",
+   "start": "2026-10-27 14:32:02",
+   "end": "",
+   "emergency": true
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "丁站",
+   "orbit": "10876",
+   "start": "2026-10-28 03:30:49",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "丁站01",
+   "orbit": "10861",
+   "start": "2026-10-28 12:03:21",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "辛站02",
+   "orbit": "10873",
+   "start": "2026-10-28 23:19:01",
+   "end": "",
+   "emergency": false
+  },
+  {
+   "satellite": "XBGF07E04",
+   "station": "甲光北湖03",
+   "orbit": "42955",
+   "start": "2026-10-27 05:56:10",
+   "end": "",
+   "emergency": true
+  }
+ ]
+}

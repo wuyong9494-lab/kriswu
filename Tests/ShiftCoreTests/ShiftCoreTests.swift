@@ -3175,4 +3175,79 @@ final class PassPlanTests: XCTestCase {
         XCTAssertNil(PassPlan.operatorName(of: "丙站"))
         XCTAssertEqual(PassPlan.operatorName(of: "丁站—东区"), "丁站")
     }
+
+    /// 拍 Excel 时表头那一行最左边的行号「1」：当序号，不当成一列发出去
+    func testExcelRowNumberOnHeaderLine() {
+        let reading = PassPlan.readTable([
+            ["1", "卫星", "地面站", "圈次", "数传开始"],
+            ["2", "SAT-A", "甲站-北区05", "101", "2026-10-27 22:57:51"],
+        ])
+        XCTAssertEqual(reading.layout?.slots.first?.column, .number)
+        XCTAssertEqual(PassPlan.table(reading.rows, layout: reading.layout).headers, ["No.", "卫星", "地面站", "圈次", "数传开始"])
+    }
+
+    /// 长图切成上下重叠的几段：盖住整张图，每段不太高；重叠处的字只归一段
+    func testStripsCoverTallImagesOnce() {
+        XCTAssertEqual(PassPlan.strips(width: 4032, height: 3024).count, 1, "普通照片不切")
+        let strips = PassPlan.strips(width: 1000, height: 6000)
+        XCTAssertGreaterThan(strips.count, 3)
+        XCTAssertEqual(strips.first?.top, 0)
+        XCTAssertEqual(strips.last.map { $0.top + $0.height }, 6000)
+        XCTAssertTrue(strips.allSatisfy { $0.height <= 1400 })
+        for (a, b) in zip(strips, strips.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(a.top + a.height - b.top, 280, "相邻两段重叠够多")
+            XCTAssertEqual(a.keep.upperBound, b.keep.lowerBound, "留的范围首尾相接")
+        }
+        // 正好在重叠处的一行：两段都认出来了，只留一个；位置换回整张图
+        let y = Double(strips[1].top + 100) / 6000
+        let lines = strips.flatMap { strip -> [PassPlan.TextBox] in
+            let local = (y * 6000 - Double(strip.top)) / Double(strip.height)
+            guard local > 0, local < 1 else { return [] }
+            let box = PassPlan.TextBox(text: "甲站-北区01", x: 0.2, y: local - 0.005, width: 0.3, height: 0.01)
+            return PassPlan.place([box], in: strip, imageHeight: 6000)
+        }
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertEqual(lines[0].y + lines[0].height / 2, y, accuracy: 0.0001)
+    }
+
+    /// 两种认法 / 两张照片的列不一样：按表头的字把格子挪到发出去的表的列上
+    func testRemapByHeaderLabel() {
+        let source = PassPlan.readTable([
+            ["卫星", "地面站", "是否应急", "数传开始"],
+            ["SAT-A", "甲站-北区05", "是", "2026-10-27 22:57:51"],
+        ])
+        let target = PassPlan.Layout(slots: [
+            .init(label: "卫星", column: .satellite, x: 0.1), .init(label: "地面站", column: .station, x: 0.3),
+            .init(label: "数传开始", column: .start, x: 0.5), .init(label: "创建时间", column: nil, x: 0.7),
+            .init(label: "是否 应急", column: nil, x: 0.9),
+        ])
+        let moved = PassPlan.remap(source.rows, from: source.layout!, to: target)
+        XCTAssertEqual(moved[0].cells, ["SAT-A", "甲站-北区05", "2026-10-27 22:57:51", "", "是"])
+        XCTAssertEqual(PassPlan.emergency(moved[0], layout: target), true, "是否应急跟着挪过去")
+        XCTAssertEqual(PassPlan.remap(source.rows, from: source.layout!, to: source.layout!), source.rows)
+    }
+
+    /// 两种认法挑一个：认出的行多、可能认错的少的好
+    func testScorePrefersCleanReadings() {
+        let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"])]
+        let good = PassPlan.readTable([
+            ["卫星名称", "地面站", "数传开始时间", "数传结束时间"],
+            ["SAT-A", "甲站-北区05", "2026-10-27 22:57:51", "2026-10-27 23:05:03"],
+            ["SAT-B", "甲站-北区01", "2026-10-27 20:31:27", "2026-10-27 20:39:03"],
+        ])
+        var garbled = good
+        garbled.rows[1].station = "申站-北区01"
+        XCTAssertGreaterThan(PassPlan.score(good, rules: rules), PassPlan.score(garbled, rules: rules))
+        XCTAssertGreaterThan(PassPlan.score(garbled, rules: rules), PassPlan.score(PassPlan.Reading(rows: [], layout: nil)))
+    }
+
+    func testVocabularyForTextRecognition() {
+        let words = PassPlan.vocabulary([PassPlan.OperatorRule(name: "甲", prefixes: ["甲站", "甲光北区"]),
+                                         PassPlan.OperatorRule(name: "乙", prefixes: ["甲站"])])
+        XCTAssertTrue(words.contains("卫星ID"))
+        XCTAssertFalse(words.contains("卫星id"))
+        XCTAssertTrue(words.contains("地面站"))
+        XCTAssertTrue(words.contains("甲光北区"))
+        XCTAssertEqual(words.filter { $0 == "甲站" }.count, 1, "不重复")
+    }
 }
