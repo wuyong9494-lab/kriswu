@@ -52,6 +52,7 @@ enum PlanReader {
             positions = positions ?? result.layout
             guard let found = result.layout else { continue }
             for i in result.rows.indices { result.rows[i].region?.page = page }
+            result.rows = await rereadStations(result.rows, layout: found, in: picture, rules: rules, words: words, settings: settings)
             result.header?.page = page
             let pageHeader = header == nil ? result.header : nil
             header = header ?? result.header
@@ -66,6 +67,34 @@ enum PlanReader {
         let rows = PassPlan.merge(pages)
         guard !rows.isEmpty else { throw Failure.noTable }
         return PassPlan.Reading(rows: rows, layout: layout, header: header, strips: strips)
+    }
+
+    /// 分家只看地面站：每一行把地面站那一格单独裁下来再认一遍（一小格单独认，比一整张里一起认准得多）。
+    /// 再认的对得上对照表、或者原来那个对不上，就用再认的
+    static func rereadStations(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
+                               rules: [PassPlan.OperatorRule], words: [String], settings: Settings) async -> [PassPlanRow] {
+        guard let s = layout.slots.firstIndex(where: { $0.column == .station }) else { return rows }
+        let xs = layout.slots.map(\.x)
+        return await Task.detached(priority: .userInitiated) {
+            rows.map { row in
+                guard let region = row.region else { return row }
+                let left = s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left
+                let right = s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right
+                let center = (left + right) / 2
+                let cell = PassPlan.TextBox(text: "", x: left, y: region.y0 + region.slope * center - region.height * 0.45,
+                                            width: right - left, height: region.height * 0.9)
+                guard let again = reread(cell, in: image, words: words, settings: settings)?.text
+                        .filter({ !$0.isWhitespace })
+                        .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-"),
+                      !again.isEmpty, again != row.station else { return row }
+                let matchesNow = PassPlan.operatorName(of: again, rules: rules) != nil
+                let matchedBefore = PassPlan.operatorName(of: row.station, rules: rules) != nil
+                guard matchesNow || !matchedBefore else { return row }
+                var fixed = row
+                fixed.station = again
+                return fixed
+            }
+        }.value
     }
 
     // MARK: - 发原图：从照片上裁
