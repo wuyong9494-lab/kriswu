@@ -29,6 +29,8 @@ struct RecordsState: Codable, Equatable {
     var changeLog: [ChangeLogEntry] = []
     /// 清单历史：日期 → 那天的清单做了哪些（保留一年）
     var taskHistory: [String: TaskDayRecord] = [:]
+    /// 系统交过来的闪退、卡顿记录（新的在前，最多 30 条）
+    var crashes: [CrashLog.Entry] = []
 }
 
 /// 以前存在设置里、现在搬到单独文件的字段：旧名 → 新名

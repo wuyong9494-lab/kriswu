@@ -60,6 +60,7 @@ struct DiagnosticsView: View {
             } footer: {
                 Text("「全部检查一遍」会真的去连一次：同步一次网站、下载一次周会表格、测一次写回脚本。出问题截这一屏就够了。")
             }
+            crashSection
             ForEach(sections) { section in
                 SwiftUI.Section(section.title) {
                     ForEach(section.rows) { row in
@@ -80,9 +81,12 @@ struct DiagnosticsView: View {
             }
             SwiftUI.Section {
                 Button(copied ? "已复制" : "复制全部诊断信息") {
-                    UIPasteboard.general.string = sections.map { s in
+                    let crashes = store.records.crashes.prefix(10).map {
+                        "\($0.date.formatted(date: .abbreviated, time: .shortened)) \($0.kind)：\($0.summary)（build \($0.build)）"
+                    }
+                    UIPasteboard.general.string = (sections.map { s in
                         "【\(s.title)】\n" + s.rows.map { "\($0.label)：\($0.value)" }.joined(separator: "\n")
-                    }.joined(separator: "\n\n")
+                    } + (crashes.isEmpty ? [] : ["【闪退和卡顿】\n" + crashes.joined(separator: "\n")])).joined(separator: "\n\n")
                     copied = true
                 }
                 Button("重新检查") { Task { await load() } }
@@ -93,6 +97,44 @@ struct DiagnosticsView: View {
         .appList()
         .navigationTitle("自检与诊断")
         .task { await load() }
+    }
+
+    // MARK: - 闪退和卡顿
+
+    private var crashSection: some View {
+        let crashes = store.records.crashes
+        var seen = Set<URL>()
+        let files = crashes.map { CrashLog.fileURL(for: $0) }.filter { seen.insert($0).inserted && FileManager.default.fileExists(atPath: $0.path) }
+        return SwiftUI.Section {
+            if crashes.isEmpty {
+                Text("最近没有闪退、卡顿。").font(.footnote).foregroundStyle(.secondary)
+            }
+            ForEach(crashes) { entry in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(entry.kind, systemImage: entry.kind == "闪退" ? "xmark.octagon.fill" : "tortoise.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(entry.kind == "闪退" ? DS.Palette.danger : DS.Palette.warning)
+                        Spacer()
+                        Text(entry.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(entry.summary).font(.caption)
+                    Text("版本 build \(entry.build)").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            if !files.isEmpty {
+                ShareLink(items: files) {
+                    Label("分享原始记录（含调用栈）", systemImage: "square.and.arrow.up")
+                }
+            }
+            if !crashes.isEmpty {
+                Button("清空记录", role: .destructive) { store.clearCrashEntries() }
+            }
+        } header: {
+            Text("闪退和卡顿")
+        } footer: {
+            Text("系统（MetricKit）记下来、下次打开 App 时交过来的，一般晚一天到；只存在这台手机上，不会自己发出去。原始记录里没有密码和排班内容。")
+        }
     }
 
     // MARK: - 自检
@@ -178,6 +220,12 @@ struct DiagnosticsView: View {
         let widget = WidgetStore.load()
         list.append(Check(name: "小组件", status: widget == nil ? .fail : .ok,
                           detail: widget.map { "数据更新于 \($0.updated.formatted(date: .omitted, time: .shortened))" } ?? "读不到小组件数据（App Group 没生效）"))
+        // 一周内闪退过：标红；只是卡顿：标黄
+        let week = store.records.crashes.filter { Date().timeIntervalSince($0.date) < 7 * 86_400 }
+        let crashed = week.filter { $0.kind == "闪退" }.count
+        list.append(Check(name: "闪退和卡顿", status: crashed > 0 ? .fail : (week.isEmpty ? .ok : .warn),
+                          detail: week.isEmpty ? "最近一周没有" : "最近一周：" + Dictionary(grouping: week, by: \.kind)
+                              .map { "\($0.key) \($0.value.count) 次" }.sorted().joined(separator: "，") + "（详情在下面）"))
         return list.map { tested[$0.name] ?? $0 }
     }
 
