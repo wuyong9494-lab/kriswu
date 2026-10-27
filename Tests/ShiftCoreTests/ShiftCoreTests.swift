@@ -3103,6 +3103,12 @@ final class PassPlanTests: XCTestCase {
         let overlap = [PassPlan.OperatorRule(name: "短", prefixes: ["乙光"]), PassPlan.OperatorRule(name: "长", prefixes: ["乙光北区"])]
         XCTAssertEqual(PassPlan.operatorName(of: "乙光北区01", rules: overlap), "长")
         XCTAssertEqual(PassPlan.operatorName(of: "乙光南区01", rules: overlap), "短")
+        // 认错一个字的站名：只像一家就提示那家（不自动分），几家一样像不猜
+        XCTAssertEqual(PassPlan.likelyOperator(of: "甲占-北区01", rules: rules), "甲")
+        XCTAssertEqual(PassPlan.likelyOperator(of: "乙尤北区02", rules: rules), "乙")
+        XCTAssertNil(PassPlan.likelyOperator(of: "戊站-东区01", rules: rules), "像甲站也像丁站：不猜")
+        XCTAssertNil(PassPlan.likelyOperator(of: "庚庚庚01", rules: rules))
+        XCTAssertNil(PassPlan.operatorName(of: "甲占-北区01", rules: rules), "不自动分过去")
         XCTAssertEqual(PassPlan.suggestedPrefix(of: "己光北区03"), "己光北区")
         XCTAssertEqual(PassPlan.suggestedPrefix(of: "戊站-东区01"), "戊站")
     }

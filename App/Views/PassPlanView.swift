@@ -272,15 +272,23 @@ struct PassPlanView: View {
         let names = (rules.map(\.name) + known).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         return Section {
             ForEach(stations, id: \.self) { station in
+                // 站名多半是认错了一个字（「驭星」认成「取星」）：最像的那家放第一个，点一下就分过去
+                let likely = PassPlan.likelyOperator(of: station, rules: rules)
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(station).font(.subheadline.weight(.medium))
-                        Text("\(rows.filter { $0.station == station }.count) 条").font(.caption).foregroundStyle(.secondary)
+                        Text("\(rows.filter { $0.station == station }.count) 条" + (likely.map { " · 像是认错了字，最像「\($0)」" } ?? ""))
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    if let likely {
+                        Button("算\(likely)") { assign(station, to: likely) }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.borderedProminent)
+                    }
                     Menu {
                         ForEach(names, id: \.self) { name in
-                            Button(name) { assign(station, to: name) }
+                            Button(name == likely ? "\(name)（最像）" : name) { assign(station, to: name) }
                         }
                         Button {
                             newOperatorName = ""
@@ -289,9 +297,10 @@ struct PassPlanView: View {
                             Label("新的一家…", systemImage: "plus")
                         }
                     } label: {
-                        Label("分给哪家", systemImage: "arrow.turn.down.right")
+                        Label(likely == nil ? "分给哪家" : "别的", systemImage: "arrow.turn.down.right")
                             .font(.caption.weight(.semibold))
                     }
+                    .buttonStyle(.borderless)
                 }
             }
             ForEach(rows, id: \.self) { row in rowButton(row) }

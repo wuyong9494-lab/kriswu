@@ -647,6 +647,31 @@ public enum PassPlan {
             .max { $0.1.count < $1.1.count }?.0
     }
 
+    /// 分不出是哪家的站，最像哪家：站名开头认错了一个字（「驭星」认成「取星」），和对照表里某一家的开头只差一个字
+    /// （开头五个字以上的差两个）、又只像这一家。不自动算成这家（真有新站恰好差一个字会发错家），「分给哪家」时排第一个
+    public static func likelyOperator(of station: String, rules: [OperatorRule]) -> String? {
+        let s = Array(station.filter { !$0.isWhitespace })
+        var best: (name: String, distance: Int)?
+        var tied = false
+        for rule in rules {
+            for prefix in rule.prefixes.map({ Array($0.filter { !$0.isWhitespace }) }) where prefix.count >= 2 && s.count >= prefix.count {
+                let distance = zip(s, prefix).filter { $0 != $1 }.count
+                guard distance <= (prefix.count >= 5 ? 2 : 1) else { continue }
+                if let current = best {
+                    if distance < current.distance {
+                        best = (rule.name, distance)
+                        tied = false
+                    } else if distance == current.distance, rule.name != current.name {
+                        tied = true
+                    }
+                } else {
+                    best = (rule.name, distance)
+                }
+            }
+        }
+        return tied ? nil : best?.name
+    }
+
     /// 给一个对不上的站记前缀用：「-」前面的名字，没有「-」就去掉末尾的编号（「丙光北区03」→「丙光北区」）
     public static func suggestedPrefix(of station: String) -> String {
         if let name = operatorName(of: station) { return name }
