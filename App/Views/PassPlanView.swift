@@ -273,11 +273,15 @@ struct PassPlanView: View {
         return Section {
             ForEach(stations, id: \.self) { station in
                 // 站名多半是认错了一个字（「驭星」认成「取星」）：最像的那家放第一个，点一下就分过去
-                let likely = PassPlan.likelyOperator(of: station, rules: rules)
+                // 或者表按地面站排过序：上下挨着的都是同一家
+                let similar = PassPlan.likelyOperator(of: station, rules: rules)
+                let neighbor = PassPlan.neighborOperator(of: station, in: self.rows, rules: rules)
+                let likely = similar ?? neighbor
+                let reason = similar.map { " · 像是认错了字，最像「\($0)」" } ?? neighbor.map { " · 上下挨着的都是「\($0)」" } ?? ""
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(station).font(.subheadline.weight(.medium))
-                        Text("\(rows.filter { $0.station == station }.count) 条" + (likely.map { " · 像是认错了字，最像「\($0)」" } ?? ""))
+                        Text("\(rows.filter { $0.station == station }.count) 条" + reason)
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()

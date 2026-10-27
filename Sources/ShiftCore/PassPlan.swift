@@ -528,6 +528,21 @@ public enum PassPlan {
         }
     }
 
+    /// 按地面站排过序的表，同一家的行挨在一起：分不出是哪家的这个站，每一条往上、往下最近的分得出的那条都是同一家，
+    /// 多半也是这家（只提示，不自动分）
+    public static func neighborOperator(of station: String, in rows: [PassPlanRow], rules: [OperatorRule]) -> String? {
+        guard !rules.isEmpty else { return nil }
+        let names = rows.map { operatorName(of: $0.station, rules: rules) }
+        var answer: String?
+        for i in rows.indices where rows[i].station == station {
+            guard let above = names[..<i].compactMap({ $0 }).last,
+                  let below = names[(i + 1)...].compactMap({ $0 }).first,
+                  above == below, answer == nil || answer == above else { return nil }
+            answer = above
+        }
+        return answer
+    }
+
     /// 另一种认法（系统直接按格子认表格）认出的同一行（开始时间一样）：它的站名对得上对照表、这一行的对不上，就用它的
     public static func adoptStations(_ rows: [PassPlanRow], from other: [PassPlanRow], rules: [OperatorRule]) -> [PassPlanRow] {
         var stations: [String: String] = [:]

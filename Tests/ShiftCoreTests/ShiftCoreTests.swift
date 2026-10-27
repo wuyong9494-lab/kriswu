@@ -3301,6 +3301,18 @@ final class PassPlanTests: XCTestCase {
                                  first.y0 + first.slope * 0.5 - first.height / 2 + 0.0001, "表头那一条不带进第一行")
     }
 
+    /// 按地面站排过序的表：分不出的站上下挨着的都是同一家，提示这家；上下不一样不猜
+    func testNeighborOperatorInSortedTable() {
+        let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"]), PassPlan.OperatorRule(name: "乙", prefixes: ["乙站"])]
+        let rows = ["甲站01", "甲站02", "戊戊01", "甲站03", "乙站01", "己己01", "乙站02", "庚庚01"]
+            .map { PassPlanRow(satellite: "A", station: $0, start: "2026-10-27 01:00:00") }
+        XCTAssertEqual(PassPlan.neighborOperator(of: "戊戊01", in: rows, rules: rules), "甲")
+        XCTAssertEqual(PassPlan.neighborOperator(of: "己己01", in: rows, rules: rules), "乙")
+        XCTAssertNil(PassPlan.neighborOperator(of: "庚庚01", in: rows, rules: rules), "最后一条，下面没有")
+        let mixed = ["甲站01", "戊戊01", "乙站01"].map { PassPlanRow(satellite: "A", station: $0, start: "2026-10-27 01:00:00") }
+        XCTAssertNil(PassPlan.neighborOperator(of: "戊戊01", in: mixed, rules: rules), "上下不是同一家不猜")
+    }
+
     /// 系统按格子认的表核对站名：同一行（开始时间一样）它的对得上对照表、这边的对不上才换
     func testAdoptStationsFromTableReading() {
         let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"])]
