@@ -32,6 +32,18 @@ final class PlanReaderTests: XCTestCase {
             }
             let truth = try JSONDecoder().decode(Truth.self, from: Data(contentsOf: truthURL))
             let rules = truth.rules.sorted { $0.key < $1.key }.map { PassPlan.OperatorRule(name: $0.key, prefixes: $0.value) }
+            // 认出的每一块字和拼出的每一行打到日志里（虚构数据），对不上时拿来查是哪一步出的错
+            if let picture = image.cgImage {
+                let boxes = try await PlanReader.textBoxes(in: picture, words: PassPlan.vocabulary(rules))
+                for b in boxes {
+                    print(String(format: "OCRBOX|%@|%@|%.4f|%.4f|%.4f|%.4f", name, b.text, b.x, b.y, b.width, b.height))
+                }
+                let reading = PassPlan.read(boxes)
+                print("OCRLAYOUT|\(name)|" + (reading.layout?.slots.map { "\($0.label)@\(String(format: "%.3f", $0.x))" } ?? []).joined(separator: " "))
+                for row in reading.rows {
+                    print("OCRROW|\(name)|" + [row.satellite, row.satelliteID, row.station, row.orbit, row.start, row.end].joined(separator: "|"))
+                }
+            }
             for (label, settings) in variants {
                 let began = Date()
                 do {
