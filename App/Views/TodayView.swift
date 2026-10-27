@@ -97,6 +97,11 @@ struct TodayView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     NavigationLink {
+                        PassPlanView()
+                    } label: {
+                        Label("发计划", systemImage: "paperplane")
+                    }
+                    NavigationLink {
                         DayRosterView()
                     } label: {
                         Label("值班表", systemImage: "tablecells")
