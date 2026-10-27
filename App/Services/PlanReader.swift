@@ -74,7 +74,12 @@ enum PlanReader {
     static func cut(_ regions: [PassPlan.Region], from image: CGImage) async -> [PassPlan.Region: Data] {
         await Task.detached(priority: .userInitiated) {
             let context = CIContext()
-            let source = CIImage(cgImage: image)
+            // 照片自动调一下明暗、对比（屏幕拍出来常常发灰）
+            var source = CIImage(cgImage: image)
+            for filter in source.autoAdjustmentFilters(options: [.redEye: false]) {
+                filter.setValue(source, forKey: kCIInputImageKey)
+                if let adjusted = filter.outputImage { source = adjusted }
+            }
             let w = Double(image.width), h = Double(image.height)
             var result: [PassPlan.Region: Data] = [:]
             for region in regions {

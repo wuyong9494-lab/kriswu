@@ -243,14 +243,34 @@ public enum PassPlan {
         } else {
             return Reading(rows: [], layout: nil)
         }
-        // 表的左右边：最左、最右两列再往外半列多一点（照片里表外面的字不算）
+        // 表的左右边：最左、最右两列再往外半列多一点；表里的字更靠外（表头没认出来的列）就到那里，
+        // 只是最靠外的几块不算（照片里表外面零星的字）
         let xs = layout.slots.map(\.x).sorted()
         let spacing = xs.count > 1 ? (xs[xs.count - 1] - xs[0]) / Double(xs.count - 1) : 0.1
-        let left = max(0, (xs.first ?? 0) - spacing * 0.65)
-        let right = min(1, (xs.last ?? 1) + spacing * 0.65)
+        var left = (xs.first ?? 0) - spacing * 0.65
+        var right = (xs.last ?? 1) + spacing * 0.65
+        if body.count >= 20 {
+            let lefts = body.map(\.x).sorted(), rights = body.map { $0.x + $0.width }.sorted()
+            left = min(left, lefts[lefts.count * 3 / 100] - 0.01)
+            right = max(right, rights[rights.count * 97 / 100] + 0.01)
+        }
+        left = max(0, left)
+        right = min(1, right)
         header?.left = left
         header?.right = right
         let rows = assemble(body, layout: layout, headerY: headerY, lineHeight: lineHeight, span: (left, right))
+        // 表头那一条往下不超过第一行的上边（不带进半截第一行）
+        let middle = (left + right) / 2
+        if var h = header, let first = rows.compactMap(\.region).min(by: { $0.y0 + $0.slope * middle < $1.y0 + $1.slope * middle }) {
+            let center = h.y0 + h.slope * middle
+            let top = center - h.height / 2
+            let bottom = min(center + h.height / 2, first.y0 + first.slope * middle - first.height / 2)
+            if bottom > top {
+                h.y0 += (top + bottom) / 2 - center
+                h.height = bottom - top
+                header = h
+            }
+        }
         return Reading(rows: rows, layout: layout, header: header)
     }
 

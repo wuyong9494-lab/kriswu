@@ -3286,6 +3286,9 @@ final class PassPlanTests: XCTestCase {
         let header = try! XCTUnwrap(reading.header)
         XCTAssertEqual(header.y0 + header.slope * 0.5, 0.1, accuracy: 0.002)
         XCTAssertEqual(header.left, reading.rows[0].region?.left)
+        let first = try! XCTUnwrap(reading.rows[0].region)
+        XCTAssertLessThanOrEqual(header.y0 + header.slope * 0.5 + header.height / 2,
+                                 first.y0 + first.slope * 0.5 - first.height / 2 + 0.0001, "表头那一条不带进第一行")
     }
 
     func testVocabularyForTextRecognition() {
