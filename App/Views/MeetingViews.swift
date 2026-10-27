@@ -122,6 +122,10 @@ struct MeetingIssuesView: View {
     @State private var openedDocument = false
     @Environment(\.scenePhase) private var scenePhase
 
+    init(editing: String? = nil) {
+        _editingGroup = State(initialValue: editing)
+    }
+
     private var week: DayKey { MeetingTracker.monday(of: .today) }
 
     /// 编辑时新加的一条

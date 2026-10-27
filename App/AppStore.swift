@@ -294,10 +294,47 @@ final class AppStore: ObservableObject {
         s.teamChanges = [TeamChange(day: today.adding(days: 2), post: "组B", from: ["周远"], to: [me])]
         s.lastSync = Date().addingTimeInterval(-600)
         s.lastSyncMessage = "同步成功：30 天，没有变动，这次读到 9 人有排班（全年累计 12 人）"
+        s.meetingDocURL = "https://www.kdocs.cn/l/demo"
+        s.meetingLastImport = Date().addingTimeInterval(-3 * 3600)
+        s.meetingIssues = Self.demoMeetingIssues(week: MeetingTracker.monday(of: today))
+        s.meetingWeek = MeetingTracker.monday(of: today)
         settings = s
         roster = r
         schedule = r[me] ?? [:]
         covered = Set((-40...14).map { today.adding(days: $0) })
+    }
+
+    /// 演示用的周会问题（虚构）：三个组，没解决、本周新提、待确认、已解决各有
+    private static func demoMeetingIssues(week: DayKey) -> [MeetingIssue] {
+        let last = week.adding(days: -7), earlier = week.adding(days: -21)
+        let dispatch = "1.接入新站后排队规则不清\n2.接口改造\n3.增加不参与合并的标识"
+        func source(_ row: Int, _ n: Int, _ content: String, _ topic: String, _ owner: String, _ closure: String) -> MeetingSource {
+            MeetingSource(row: row, contentColumn: 3, number: n, content: content, closureColumn: 6, closure: closure,
+                          ownerColumn: 5, owner: owner, topic: topic)
+        }
+        func issue(_ id: String, _ group: String, _ text: String, first: DayKey, status: MeetingIssue.Status,
+                   detail: String, source: MeetingSource?) -> MeetingIssue {
+            MeetingIssue(id: id, group: group, text: text, firstWeek: first, lastWeek: status == .quiet ? last : week, status: status,
+                         resolvedWeek: status == .resolved ? week : nil, detail: detail, source: source)
+        }
+        return [
+            issue("d1", "调度组", "接入新站后排队规则不清", first: earlier, status: .open,
+                  detail: "上上周问题进展 · 负责人：林夏 · 进展：进行中", source: source(2, 1, dispatch, "上上周问题进展", "林夏", "1. 进行中；2. 完成")),
+            issue("d2", "调度组", "接口改造", first: last, status: .resolved,
+                  detail: "上上周问题进展 · 负责人：林夏 · 进展：完成", source: source(2, 2, dispatch, "上上周问题进展", "林夏", "1. 进行中；2. 完成")),
+            issue("d3", "调度组", "增加不参与合并的标识", first: last, status: .open,
+                  detail: "上上周问题进展 · 负责人：林夏", source: source(2, 3, dispatch, "上上周问题进展", "林夏", "1. 进行中；2. 完成")),
+            issue("d4", "调度组", "参数位置不能修改", first: week, status: .open,
+                  detail: "本周问题 · 负责人：周远", source: source(3, 1, "参数位置不能修改", "本周问题", "周远", "")),
+            issue("m1", "管理组", "异常结果判断标准不清，需要给出结论", first: earlier, status: .open,
+                  detail: "（上周）异常处置问题 · 负责人：孙悦、赵一凡 · 进展：再讨论", source: nil),
+            issue("m2", "管理组", "重传两次后仍有缺失", first: last, status: .quiet,
+                  detail: "（上周）异常处置问题 · 负责人：孙悦", source: nil),
+            issue("r1", "遥控组", "回放功能开发", first: last, status: .resolved,
+                  detail: "系统开发 · 负责人：钱程 · 进展：上线", source: nil),
+            issue("r2", "遥控组", "表格核对", first: week, status: .open,
+                  detail: "系统开发 · 负责人：苏桐 · 状态：进行中", source: nil),
+        ]
     }
 
     /// 以前读错过表、把同事的名字当成了我的班（「焦洋」「王健」）：清掉这些日子，下次同步当作重新开始（不提醒变动、不重复记），

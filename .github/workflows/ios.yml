@@ -8,6 +8,16 @@ on:
 permissions:
   contents: write
 
+# 同一个分支连着推了几次：只做最新的那次，前面还在排队、还在跑的取消（省得排队等 Mac 机器）
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 装 xcodegen 时不先更新整个 Homebrew（省一两分钟）
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
 jobs:
   build:
     runs-on: macos-15
@@ -225,9 +235,12 @@ jobs:
           xcrun simctl install "$DEVICE" "$APP"
           xcrun simctl status_bar "$DEVICE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
           mkdir -p shots
-          SCREENS="today calendar stats settings fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          # 浅色截全部页面；深色只截几个常用的（看配色）。截一张要十几秒，全截两套要二十多分钟
+          LIGHT="today calendar stats settings meeting meetingEdit meetingSource fairness week swap ledger year summary check rest forecast holidays patterns preview worklog manager role onboarding profiles rosterlog rules team leave automation backup diagnostics search day roster holidayduty"
+          DARK="today calendar stats settings meeting day"
           for mode in light dark; do
             xcrun simctl ui "$DEVICE" appearance $mode
+            if [ $mode = light ]; then SCREENS=$LIGHT; else SCREENS=$DARK; fi
             for s in $SCREENS; do
               xcrun simctl launch "$DEVICE" $ID -demo -screen $s > /dev/null
               sleep 4
@@ -259,6 +272,8 @@ jobs:
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15
+    outputs:
+      uploaded: ${{ steps.upload.outputs.uploaded }}
     env:
       # 值班网站地址：只在 TestFlight 版里内置（仓库是公开的，地址不写进代码，也不进公开的安装包）
       SITE_URL: ${{ secrets.SITE_URL }}
@@ -330,6 +345,7 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} 2>&1 | tail -80
 
       - name: 上传到 TestFlight
+        id: upload
         if: steps.check.outputs.skip != '1'
         shell: bash -eo pipefail {0}
         run: |
@@ -356,6 +372,7 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -80
           echo "::notice::已上传 build ${{ github.run_number }}，App Store Connect 处理完（一般 5–30 分钟）后在 TestFlight 里就能装"
+          echo "uploaded=1" >> "$GITHUB_OUTPUT"
 
       - name: 吊销这次新建的开发证书
         if: always() && steps.check.outputs.skip != '1'
@@ -363,3 +380,42 @@ jobs:
           SERIALS=$(security find-certificate -a -c "Apple Development" -p 2>/dev/null \
             | awk '/BEGIN CERT/{n++} {print > ("/tmp/cert" n ".pem")}' ; for f in /tmp/cert*.pem; do [ -s "$f" ] && openssl x509 -in "$f" -noout -serial | cut -d= -f2; done)
           python3 .github/scripts/asc_dev_certs.py cleanup $SERIALS || echo "::warning::吊销开发证书失败"
+
+  # 把「这版改了什么」写进 TestFlight 的测试说明（装之前就能看到）。
+  # 苹果处理上传的 build 要几分钟到半小时，在便宜的 Linux 机器上等，不占 Mac 机器
+  whats-new:
+    needs: testflight
+    if: needs.testflight.outputs.uploaded == '1'
+    runs-on: ubuntu-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      BUNDLE_ID: com.kriswu.shiftreminder
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 200
+
+      - name: 整理这版改了什么
+        run: |
+          # 上次写过说明的提交打了 testflight-last 标签：从那以后的提交里，以「更新说明：」开头的行
+          git fetch -q origin "refs/tags/testflight-last:refs/tags/testflight-last" || true
+          if git merge-base --is-ancestor testflight-last HEAD 2>/dev/null; then RANGE="testflight-last..HEAD"; else RANGE="-1"; fi
+          git log --format=%B $RANGE | sed -nE 's/^更新说明(：|:)[[:space:]]*//p' | awk 'NF && !seen[$0]++' > notes.txt
+          [ -s notes.txt ] || git log --format=%s $RANGE | head -8 > notes.txt
+          cat notes.txt
+
+      - name: 写入 TestFlight 测试说明
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          export ASC_KEY_PATH="$KEY"
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography || python3 -m pip install --quiet --user pyjwt cryptography
+          python3 .github/scripts/asc_whats_new.py "${{ github.run_number }}" notes.txt
+
+      - name: 记下这次写到哪个提交
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/testflight-last"

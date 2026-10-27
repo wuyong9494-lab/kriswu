@@ -372,6 +372,9 @@ enum ScreenCatalog {
         case "day": DayEditor(day: today)
         case "roster": DayRosterView(day: today)
         case "holidayduty": HolidayDutyView()
+        case "meeting": MeetingIssuesView()
+        case "meetingEdit": MeetingIssuesView(editing: "调度组")
+        case "meetingSource": MeetingSourceView()
         default: TodayView()
         }
     }
