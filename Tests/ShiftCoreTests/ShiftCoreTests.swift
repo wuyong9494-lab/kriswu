@@ -3024,6 +3024,12 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(PassPlan.problems(rows[3], rules: [PassPlan.OperatorRule(name: "乙", prefixes: ["乙站"])], layout: reading.layout),
                        ["是否应急没认出来（发的时候按不是应急算）"])
         XCTAssertNil(PassPlan.emergency(rows[0], layout: nil), "网页上的表没有这一列")
+        // 照片最右边下一列只拍进半截，混进这一格：只看开头
+        var mixed = rows[1]
+        mixed.cells[5] = "是 不"
+        XCTAssertEqual(PassPlan.emergency(mixed, layout: reading.layout), true)
+        mixed.cells[5] = "不是不"
+        XCTAssertEqual(PassPlan.emergency(mixed, layout: reading.layout), false)
 
         let normal = "麻烦确认一下数传计划", urgent = "麻烦确认一下数传计划，应急计划优先推送"
         let groups = PassPlan.grouped(rows)

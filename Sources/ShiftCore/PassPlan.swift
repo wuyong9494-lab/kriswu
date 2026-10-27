@@ -635,6 +635,9 @@ public enum PassPlan {
         let value = i < r.cells.count ? r.cells[i].filter { !$0.isWhitespace } : ""
         if ["是", "是的", "Y", "y", "YES", "Yes", "yes", "√", "✓"].contains(value) { return true }
         if ["不是", "否", "N", "n", "NO", "No", "no", "×"].contains(value) { return false }
+        // 照片最右边下一列只拍进半截，混进这一格（「是不」「不是不」）：只看开头
+        if value.hasPrefix("不是") || value.hasPrefix("否") { return false }
+        if value.hasPrefix("是") { return true }
         return nil
     }
 
