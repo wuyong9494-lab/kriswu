@@ -2943,7 +2943,9 @@ final class PassPlanTests: XCTestCase {
         bad.start = "2026-10-2 08:00"
         bad.orbit = "1O1"
         bad.station = "甲站北区01"
-        XCTAssertEqual(PassPlan.problems(bad), ["开始时间没认全", "地面站里没有「-」，分不出是哪家", "圈号不全是数字"])
+        XCTAssertEqual(PassPlan.problems(bad), ["开始时间没认全", "分不出是哪家（运营商对照表里没有这个站）", "圈号不全是数字"])
+        XCTAssertEqual(PassPlan.problems(bad, rules: [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"])]),
+                       ["开始时间没认全", "圈号不全是数字"], "对照表里有就分得出")
         var backwards = good
         backwards.end = "2026-10-27 07:59:00"
         XCTAssertEqual(PassPlan.problems(backwards), ["结束比开始还早"])
@@ -2951,6 +2953,70 @@ final class PassPlanTests: XCTestCase {
         noEnd.end = ""
         noEnd.satellite = ""
         XCTAssertEqual(PassPlan.problems(noEnd), ["没有结束时间", "没认出卫星名称"])
+    }
+
+    func testOperatorRules() {
+        let rules = PassPlan.parseRules("""
+        甲：甲站
+        乙：乙光、丁站
+        乙：乙光北区
+        丙
+        """)
+        XCTAssertEqual(rules, [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"]),
+                               PassPlan.OperatorRule(name: "乙", prefixes: ["乙光", "丁站", "乙光北区"]),
+                               PassPlan.OperatorRule(name: "丙", prefixes: ["丙"])])
+        XCTAssertEqual(PassPlan.parseRules(PassPlan.rulesText(rules)), rules, "写成文字再读回来一样")
+        XCTAssertEqual(PassPlan.operatorName(of: "甲站-北区01", rules: rules), "甲")
+        XCTAssertEqual(PassPlan.operatorName(of: "乙光南区03", rules: rules), "乙", "站名没有「-」，按前缀")
+        XCTAssertEqual(PassPlan.operatorName(of: "丁站02", rules: rules), "乙", "一家可以有几种前缀")
+        XCTAssertEqual(PassPlan.operatorName(of: "戊站-东区01", rules: rules), "戊站", "表里没有，按「-」前面的")
+        XCTAssertNil(PassPlan.operatorName(of: "己光03", rules: rules))
+        // 前缀有长有短：对上最长的
+        let overlap = [PassPlan.OperatorRule(name: "短", prefixes: ["乙光"]), PassPlan.OperatorRule(name: "长", prefixes: ["乙光北区"])]
+        XCTAssertEqual(PassPlan.operatorName(of: "乙光北区01", rules: overlap), "长")
+        XCTAssertEqual(PassPlan.operatorName(of: "乙光南区01", rules: overlap), "短")
+        XCTAssertEqual(PassPlan.suggestedPrefix(of: "己光北区03"), "己光北区")
+        XCTAssertEqual(PassPlan.suggestedPrefix(of: "戊站-东区01"), "戊站")
+    }
+
+    func testGroupedWithRulesAndIdle() {
+        func row(_ station: String, _ start: String) -> PassPlanRow {
+            PassPlanRow(satellite: "试验一号", station: station, start: "2026-10-27 \(start)", end: "2026-10-27 23:59:00")
+        }
+        let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"]), PassPlan.OperatorRule(name: "乙", prefixes: ["乙光"]),
+                     PassPlan.OperatorRule(name: "丙", prefixes: ["丙站"])]
+        let rows = [row("己光01", "08:00:00"), row("戊站-东区01", "09:00:00"), row("乙光北区02", "10:00:00"),
+                    row("甲站-北区01", "12:00:00"), row("甲站-北区05", "11:00:00")]
+        let groups = PassPlan.grouped(rows, rules: rules)
+        XCTAssertEqual(groups.map(\.name), ["甲", "乙", "戊站", PassPlan.unassigned], "按对照表的顺序，认不出的放最后")
+        XCTAssertEqual(groups[0].rows.map(\.station), ["甲站-北区05", "甲站-北区01"], "按开始时间")
+        XCTAssertEqual(PassPlan.idle(rows, rules: rules), ["丙"], "今天没有计划的")
+    }
+
+    /// 上百条、连着扫几张：重叠的那几条第二次卫星名认错了一个字，也只留一条
+    func testMergeIgnoresSatelliteTypos() {
+        let a = PassPlanRow(orbit: "101", satellite: "试验一号", station: "甲站-北区01",
+                            start: "2026-10-27 08:00:00", end: "2026-10-27 08:07:00")
+        var typo = a
+        typo.satellite = "试验-号"
+        let b = PassPlanRow(orbit: "101", satellite: "试验一号", station: "乙光北区02",
+                            start: "2026-10-27 08:00:00", end: "2026-10-27 08:07:00")
+        XCTAssertEqual(PassPlan.merge([[a], [typo, b]]).map(\.station), ["甲站-北区01", "乙光北区02"],
+                       "同一时间不同的站是两条")
+    }
+
+    /// 序号那一列没拍到表头：序号不会挤进圈号
+    func testRowNumberWithoutHeaderStaysOutOfOrbit() {
+        func box(_ text: String, _ x: Double, _ y: Double, _ w: Double = 0.06) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: x, y: y, width: w, height: 0.02)
+        }
+        let boxes = [box("圈号", 0.05, 0.05), box("卫星名称", 0.25, 0.05), box("地面站", 0.45, 0.05),
+                     box("数传开始时间", 0.65, 0.05, 0.12),
+                     box("8", 0.0, 0.1, 0.01), box("10885", 0.06, 0.1), box("试验二号", 0.25, 0.1),
+                     box("乙光北区03", 0.45, 0.1), box("2026-10-27", 0.63, 0.1), box("23:39:09", 0.71, 0.1)]
+        let rows = PassPlan.rows(fromBoxes: boxes)
+        XCTAssertEqual(rows.map(\.orbit), ["10885"])
+        XCTAssertEqual(rows.first?.start, "2026-10-27 23:39:09")
     }
 
     func testGroupedByOperatorAndMessage() {
@@ -2970,7 +3036,7 @@ final class PassPlanTests: XCTestCase {
         1. 22:04:27–22:11:21  试验二号  SAT-B  圈号 103  甲站-北区05
         2. 22:57:51–23:05:03  试验一号  SAT-A  圈号 101  甲站-北区01  通道1
         """)
-        XCTAssertEqual(PassPlan.operatorName(of: "丙站"), "丙站")
+        XCTAssertNil(PassPlan.operatorName(of: "丙站"))
         XCTAssertEqual(PassPlan.operatorName(of: "丁站—东区"), "丁站")
     }
 }

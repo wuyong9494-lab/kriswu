@@ -32,6 +32,9 @@ public enum PassPlan {
         /// 序号（No.）：只用来分列，不留
         case number
 
+        /// 一格里只有一个值（日期时间、数传信息可能被认成好几块，要拼起来）
+        var isSingleValue: Bool { [.orbit, .satelliteID, .satellite, .station, .number].contains(self) }
+
         var headerWords: [String] {
             switch self {
             case .orbit: return ["圈号", "圈次"]
@@ -150,7 +153,15 @@ public enum PassPlan {
                 guard let nearest = centers.min(by: { abs($0.x - b.midX) < abs($1.x - b.midX) }) else { continue }
                 parts[nearest.column, default: []].append(b)
             }
-            let values = parts.mapValues { $0.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ") }
+            var values: [Column: String] = [:]
+            for (column, boxes) in parts {
+                if column.isSingleValue, let x = layout.centers[column] {
+                    // 圈号、卫星、地面站一格只有一个值：最左边序号那列没拍到表头时，序号会挤进圈号，只留离表头最近的
+                    values[column] = boxes.min { abs($0.midX - x) < abs($1.midX - x) }?.text
+                } else {
+                    values[column] = boxes.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ")
+                }
+            }
             return row(from: values)
         }
         return (rows, layout)
@@ -219,13 +230,13 @@ public enum PassPlan {
 
     // MARK: - 几张照片合起来、检查
 
-    /// 计划长、拍了几张：合成一份。同一颗星、同一个站、同一个开始时间的算同一条（上下两张重叠的部分），
-    /// 留认出字段多的那条
+    /// 计划长、拍了几张（上下有重叠）：合成一份。同一个地面站、开始和结束时间都一样的算同一条
+    /// （时间是数字，两次拍都认得一样；卫星名偶尔认错一个字也不会当成两条），留认出字段多的那条
     public static func merge(_ pages: [[PassPlanRow]]) -> [PassPlanRow] {
         var order: [String] = []
         var best: [String: PassPlanRow] = [:]
         func key(_ r: PassPlanRow) -> String {
-            [r.satelliteID.isEmpty ? r.satellite : r.satelliteID, r.station, r.start].joined(separator: "|")
+            [r.start, r.end, r.station.filter { !$0.isWhitespace }].joined(separator: "|")
         }
         func filled(_ r: PassPlanRow) -> Int {
             [r.orbit, r.satelliteID, r.satellite, r.station, r.start, r.end, r.info, r.status].filter { !$0.isEmpty }.count
@@ -243,7 +254,7 @@ public enum PassPlan {
     }
 
     /// 这一条可能认错的地方（页面上标出来，让人核对）；没有返回空
-    public static func problems(_ r: PassPlanRow) -> [String] {
+    public static func problems(_ r: PassPlanRow, rules: [OperatorRule] = []) -> [String] {
         var list: [String] = []
         let time = #"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"#
         func isTime(_ s: String) -> Bool { s.range(of: time, options: .regularExpression) != nil }
@@ -255,7 +266,7 @@ public enum PassPlan {
         } else if isTime(r.start), r.end <= r.start {
             list.append("结束比开始还早")
         }
-        if !r.station.contains("-") { list.append("地面站里没有「-」，分不出是哪家") }
+        if operatorName(of: r.station, rules: rules) == nil { list.append("分不出是哪家（运营商对照表里没有这个站）") }
         if !r.orbit.isEmpty, !r.orbit.allSatisfy(\.isNumber) { list.append("圈号不全是数字") }
         if r.satellite.isEmpty { list.append("没认出卫星名称") }
         return list
@@ -263,24 +274,95 @@ public enum PassPlan {
 
     // MARK: - 按运营商分开
 
-    /// 运营商：地面站「-」前面的名字（「甲站-北区01」→「甲站」）；没有「-」就是整个站名
-    public static func operatorName(of station: String) -> String {
-        let s = station.trimmingCharacters(in: .whitespaces)
-        guard let dash = s.firstIndex(where: { "-—－_".contains($0) }) else { return s }
-        let name = s[..<dash].trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? s : name
+    /// 一家运营商：名字和它的地面站名开头的几种写法（「乙」的站叫「乙站-…」「丙光…」都写上）
+    public struct OperatorRule: Codable, Equatable, Hashable, Sendable {
+        public var name: String
+        public var prefixes: [String]
+
+        public init(name: String, prefixes: [String]) {
+            self.name = name
+            self.prefixes = prefixes
+        }
     }
 
-    /// 按运营商分开，每家按开始时间排；家的先后按第一次出现
-    public static func grouped(_ rows: [PassPlanRow]) -> [(name: String, rows: [PassPlanRow])] {
+    /// 对照表里认不出、站名里也没有「-」的，归到这一组，页面上让人指定是哪家
+    public static let unassigned = "没分到运营商"
+
+    /// 地面站「-」前面的名字（「甲站-北区01」→「甲站」）；没有「-」返回 nil
+    public static func operatorName(of station: String) -> String? {
+        let s = station.trimmingCharacters(in: .whitespaces)
+        guard let dash = s.firstIndex(where: { "-—－_".contains($0) }) else { return nil }
+        let name = s[..<dash].trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : name
+    }
+
+    /// 是哪家：先按对照表（站名开头对上最长的那个前缀），没有再按「-」前面的名字，都没有返回 nil
+    public static func operatorName(of station: String, rules: [OperatorRule]) -> String? {
+        let s = station.filter { !$0.isWhitespace }
+        let best = rules.flatMap { rule in rule.prefixes.map { (rule.name, $0.filter { !$0.isWhitespace }) } }
+            .filter { !$0.1.isEmpty && s.hasPrefix($0.1) }
+            .max { $0.1.count < $1.1.count }
+        return best?.0 ?? operatorName(of: station)
+    }
+
+    /// 给一个对不上的站记前缀用：「-」前面的名字，没有「-」就去掉末尾的编号（「丙光北区03」→「丙光北区」）
+    public static func suggestedPrefix(of station: String) -> String {
+        if let name = operatorName(of: station) { return name }
+        let s = station.trimmingCharacters(in: .whitespaces)
+        let trimmed = s.replacingOccurrences(of: #"[\d\s]+$"#, with: "", options: .regularExpression)
+        return trimmed.isEmpty ? s : trimmed
+    }
+
+    /// 按运营商分开，每家按开始时间排；家的先后按对照表里的顺序，表里没有的按第一次出现，认不出的放最后
+    public static func grouped(_ rows: [PassPlanRow], rules: [OperatorRule] = []) -> [(name: String, rows: [PassPlanRow])] {
         var order: [String] = []
         var map: [String: [PassPlanRow]] = [:]
         for r in rows {
-            let name = operatorName(of: r.station)
+            let name = operatorName(of: r.station, rules: rules) ?? unassigned
             if map[name] == nil { order.append(name) }
             map[name, default: []].append(r)
         }
-        return order.map { ($0, map[$0]!.sorted { ($0.start, $0.station) < ($1.start, $1.station) }) }
+        let ruleIndex = Dictionary(rules.enumerated().map { ($1.name, $0) }, uniquingKeysWith: { a, _ in a })
+        let firstSeen = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        func rank(_ name: String) -> (Int, Int) {
+            if name == unassigned { return (2, 0) }
+            return ruleIndex[name].map { (0, $0) } ?? (1, firstSeen[name] ?? 0)
+        }
+        return order.sorted { rank($0) < rank($1) }
+            .map { ($0, map[$0]!.sorted { ($0.start, $0.station) < ($1.start, $1.station) }) }
+    }
+
+    /// 对照表里今天没有计划的那几家
+    public static func idle(_ rows: [PassPlanRow], rules: [OperatorRule]) -> [String] {
+        let busy = Set(grouped(rows, rules: rules).map(\.name))
+        return rules.map(\.name).filter { !busy.contains($0) }
+    }
+
+    /// 对照表写成文字（一家一行：「甲：甲站、丙光」），方便复制、粘贴导入
+    public static func rulesText(_ rules: [OperatorRule]) -> String {
+        rules.map { "\($0.name)：\($0.prefixes.joined(separator: "、"))" }.joined(separator: "\n")
+    }
+
+    /// 读粘贴的对照表：一行一家，名字后面跟冒号，前缀用顿号、逗号、空格隔开；只写名字的，前缀就是名字本身
+    public static func parseRules(_ text: String) -> [OperatorRule] {
+        var rules: [OperatorRule] = []
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let parts = line.split(maxSplits: 1, whereSeparator: { ":：".contains($0) })
+            let name = String(parts[0]).trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { continue }
+            var prefixes = parts.count > 1
+                ? parts[1].split(whereSeparator: { "、,，;；/ ".contains($0) }).map { String($0) }.filter { !$0.isEmpty }
+                : []
+            if prefixes.isEmpty { prefixes = [name] }
+            if let i = rules.firstIndex(where: { $0.name == name }) {
+                rules[i].prefixes += prefixes.filter { !rules[i].prefixes.contains($0) }
+            } else {
+                rules.append(OperatorRule(name: name, prefixes: prefixes))
+            }
+        }
+        return rules
     }
 
     /// 发到群里的一段话：标题一行，每条一行（时间在前，方便看）

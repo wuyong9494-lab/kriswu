@@ -86,6 +86,8 @@ struct AppSettings: Codable, Equatable {
     var appearance: Appearance = .system
     /// 发数传计划：每家运营商发到哪个群（只是给自己看的提示）
     var passPlanGroups: [String: String] = [:]
+    /// 运营商对照表：每家的地面站名开头是什么（只存在这台手机上）
+    var passPlanOperators: [PassPlan.OperatorRule] = []
     /// 每天到点提醒发数传计划；哪天各家都发完了，那天就不再提醒
     var passPlanReminder = false
     var passPlanReminderTime = ClockTime(hour: 15, minute: 0)
@@ -441,6 +443,7 @@ extension AppSettings {
         a.weChatTeam = o.weChatTeam
         a.meetingWeChat = o.meetingWeChat
         a.passPlanGroups = o.passPlanGroups
+        a.passPlanOperators = o.passPlanOperators
         a.passPlanSentDay = o.passPlanSentDay
         a.todayCardOrder = o.todayCardOrder
         a.hiddenTodayCards = o.hiddenTodayCards

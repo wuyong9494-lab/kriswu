@@ -26,6 +26,9 @@ struct PassPlanView: View {
     @State private var editing: EditingRow?
     @State private var naming: String?
     @State private var groupName = ""
+    /// 给这个站新建一家运营商
+    @State private var newOperatorFor: String?
+    @State private var newOperatorName = ""
     /// 每家的图（读完、改完重新画）
     @State private var images: [String: UIImage] = [:]
 
@@ -41,16 +44,24 @@ struct PassPlanView: View {
     }
 
     private var rows: [PassPlanRow] { store.passPlan.rows }
+    /// 运营商对照表（没填名字的那行不算）
+    private var rules: [PassPlan.OperatorRule] { store.settings.passPlanOperators.filter { !$0.name.isEmpty } }
+    /// 分得出是哪家的（能发的）
+    private var sendable: [(name: String, rows: [PassPlanRow])] {
+        PassPlan.grouped(rows, rules: rules).filter { $0.name != PassPlan.unassigned }
+    }
 
     var body: some View {
-        let groups = PassPlan.grouped(rows)
-        let doubtful = rows.filter { !PassPlan.problems($0).isEmpty }.count
+        let all = PassPlan.grouped(rows, rules: rules)
+        let groups = all.filter { $0.name != PassPlan.unassigned }
+        let doubtful = rows.filter { !PassPlan.problems($0, rules: rules).isEmpty }.count
+        let idle = PassPlan.idle(rows, rules: rules)
         List {
             Section {
                 Button { if DocumentScanner.isSupported { scanning = true } else { showingCamera = true } } label: {
                     Label("拍计划", systemImage: "doc.viewfinder").font(.headline)
                 }
-                PhotosPicker(selection: $photoItems, maxSelectionCount: 5, matching: .images) {
+                PhotosPicker(selection: $photoItems, maxSelectionCount: 20, matching: .images) {
                     Label("从相册选（可以选几张）", systemImage: "photo.on.rectangle")
                 }
                 DisclosureGroup("其他方式") {
@@ -77,6 +88,9 @@ struct PassPlanView: View {
                         Label("有 \(doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote).foregroundStyle(DS.Palette.warning)
                     }
+                    if !idle.isEmpty {
+                        Text("今天没有计划：\(idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
+                    }
                     let unsent = groups.map(\.name).filter { !store.passPlan.sent.contains($0) }
                     if !unsent.isEmpty {
                         Button { sendInTurn(unsent) } label: {
@@ -89,20 +103,18 @@ struct PassPlanView: View {
                 } footer: {
                     Text("依次发：发完一家自动弹出下一家，分享面板最上面写着这次发给谁、该选哪个群。")
                 }
-                ForEach(groups, id: \.name) { group in
-                    Section {
-                        ForEach(group.rows, id: \.self) { row in
-                            Button { edit(row) } label: { rowView(row) }
-                                .buttonStyle(.plain)
-                                // 可能认错的标黄
-                                .listRowBackground(PassPlan.problems(row).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
-                                .swipeActions {
-                                    Button("删掉", role: .destructive) { store.passPlan.rows.removeAll { $0 == row } }
-                                }
+                ForEach(all, id: \.name) { group in
+                    if group.name == PassPlan.unassigned {
+                        unassignedSection(group.rows, known: groups.map(\.name))
+                    } else {
+                        Section {
+                            ForEach(group.rows, id: \.self) { row in
+                                rowButton(row)
+                            }
+                            sendButtons(group.name, rows: group.rows)
+                        } header: {
+                            header(group.name, count: group.rows.count)
                         }
-                        sendButtons(group.name, rows: group.rows)
-                    } header: {
-                        header(group.name, count: group.rows.count)
                     }
                 }
                 Section {
@@ -113,6 +125,11 @@ struct PassPlanView: View {
                 }
             }
             Section {
+                NavigationLink {
+                    PassPlanOperatorsView()
+                } label: {
+                    LabeledContent("运营商对照表", value: rules.isEmpty ? "还没填" : "\(rules.count) 家")
+                }
                 Toggle("每天提醒发计划", isOn: $store.settings.passPlanReminder)
                 if store.settings.passPlanReminder {
                     DatePicker("提醒时间", selection: reminderTime, displayedComponents: .hourAndMinute)
@@ -161,6 +178,17 @@ struct PassPlanView: View {
                 }
             }
         }
+        .alert("新的一家运营商", isPresented: Binding(get: { newOperatorFor != nil }, set: { if !$0 { newOperatorFor = nil } })) {
+            TextField("运营商名字", text: $newOperatorName)
+            Button("好") {
+                let name = newOperatorName.trimmingCharacters(in: .whitespaces)
+                if let station = newOperatorFor, !name.isEmpty { assign(station, to: name) }
+                newOperatorFor = nil
+            }
+            Button("取消", role: .cancel) { newOperatorFor = nil }
+        } message: {
+            Text("「\(newOperatorFor.map(PassPlan.suggestedPrefix(of:)) ?? "")」开头的站以后都算这一家")
+        }
         .alert("\(naming ?? "")的计划发到哪个群", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("群名（只是给自己看的提示）", text: $groupName)
             Button("好") {
@@ -182,10 +210,56 @@ struct PassPlanView: View {
                 }
             }
         }
-        .task(id: rows) { renderImages() }
+        .task(id: "\(rows.hashValue)-\(rules.hashValue)") { renderImages() }
     }
 
     // MARK: - 一家的标题、一行
+
+    private func rowButton(_ row: PassPlanRow) -> some View {
+        Button { edit(row) } label: { rowView(row) }
+            .buttonStyle(.plain)
+            // 可能认错的标黄
+            .listRowBackground(PassPlan.problems(row, rules: rules).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
+            .swipeActions {
+                Button("删掉", role: .destructive) { store.passPlan.rows.removeAll { $0 == row } }
+            }
+    }
+
+    /// 分不出是哪家的：每个站点一下「分给哪家」，记进对照表，以后自动分
+    private func unassignedSection(_ rows: [PassPlanRow], known: [String]) -> some View {
+        let stations = Array(Set(rows.map(\.station))).sorted()
+        let names = (rules.map(\.name) + known).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        return Section {
+            ForEach(stations, id: \.self) { station in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(station).font(.subheadline.weight(.medium))
+                        Text("\(rows.filter { $0.station == station }.count) 条").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Menu {
+                        ForEach(names, id: \.self) { name in
+                            Button(name) { assign(station, to: name) }
+                        }
+                        Button {
+                            newOperatorName = ""
+                            newOperatorFor = station
+                        } label: {
+                            Label("新的一家…", systemImage: "plus")
+                        }
+                    } label: {
+                        Label("分给哪家", systemImage: "arrow.turn.down.right")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+            }
+            ForEach(rows, id: \.self) { row in rowButton(row) }
+        } header: {
+            Text("\(PassPlan.unassigned) · \(rows.count) 条")
+        } footer: {
+            Text("对照表里没有这些站。点「分给哪家」记下来（记的是站名开头，比如「\(PassPlan.suggestedPrefix(of: stations.first ?? ""))」），以后同样开头的站自动分过去；也可以去「运营商对照表」里改。")
+        }
+    }
 
     private func header(_ name: String, count: Int) -> some View {
         HStack {
@@ -208,7 +282,7 @@ struct PassPlanView: View {
     }
 
     private func rowView(_ row: PassPlanRow) -> some View {
-        let problems = PassPlan.problems(row)
+        let problems = PassPlan.problems(row, rules: rules)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
                 Text([PassPlan.shortTime(row.start), PassPlan.shortTime(row.end)].filter { !$0.isEmpty }.joined(separator: "–"))
@@ -260,8 +334,8 @@ struct PassPlanView: View {
             do {
                 let found = try await work()
                 withAnimation { store.passPlan = PassPlanSession(rows: found) }
-                let doubtful = found.filter { !PassPlan.problems($0).isEmpty }.count
-                ToastCenter.shared.show("认出 \(found.count) 条，分成 \(PassPlan.grouped(found).count) 家"
+                let doubtful = found.filter { !PassPlan.problems($0, rules: rules).isEmpty }.count
+                ToastCenter.shared.show("认出 \(found.count) 条，分成 \(PassPlan.grouped(found, rules: rules).count) 家"
                                         + (doubtful > 0 ? "，\(doubtful) 条要核对" : ""), style: doubtful > 0 ? .warning : .success)
             } catch {
                 problem = error.localizedDescription
@@ -296,9 +370,22 @@ struct PassPlanView: View {
         }
     }
 
+    /// 这个站（的开头）记到某一家的对照表里
+    private func assign(_ station: String, to name: String) {
+        let prefix = PassPlan.suggestedPrefix(of: station)
+        if let i = store.settings.passPlanOperators.firstIndex(where: { $0.name == name }) {
+            if !store.settings.passPlanOperators[i].prefixes.contains(prefix) {
+                store.settings.passPlanOperators[i].prefixes.append(prefix)
+            }
+        } else {
+            store.settings.passPlanOperators.append(PassPlan.OperatorRule(name: name, prefixes: [prefix]))
+        }
+        ToastCenter.shared.show("以后「\(prefix)」开头的站都算\(name)", style: .success)
+    }
+
     private func markSent(_ name: String) {
         store.passPlan.sent.insert(name)
-        let all = Set(PassPlan.grouped(rows).map(\.name))
+        let all = Set(sendable.map(\.name))
         guard !all.isEmpty, all.isSubset(of: store.passPlan.sent) else { return }
         // 各家都发了：今天不再提醒
         ToastCenter.shared.show("各家都发了", style: .success)
@@ -319,7 +406,7 @@ struct PassPlanView: View {
 
     private func renderImages() {
         var made: [String: UIImage] = [:]
-        for group in PassPlan.grouped(rows) {
+        for group in sendable {
             let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows))
             renderer.scale = 3
             if let image = renderer.uiImage { made[group.name] = image }
@@ -429,6 +516,8 @@ extension PassPlanView {
                         start: "\(day) 13:05:51", end: "\(day) 13:13:03", info: "通道2：900M", status: "等待数传"),
             PassPlanRow(orbit: "874", satelliteID: "SAT-B2", satellite: "试验二号", station: "丙站-西区01",
                         start: "\(day) 20:31:27", end: "\(day) 20:39:03", info: "通道1：900M", status: "等待数传"),
+            PassPlanRow(orbit: "875", satelliteID: "SAT-B2", satellite: "试验二号", station: "丁光北区02",
+                        start: "\(day) 22:04:27", end: "\(day) 22:11:21", info: "通道1：900M", status: "等待数传"),
         ]
     }
 }
