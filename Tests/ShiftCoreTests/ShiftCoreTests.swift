@@ -3257,6 +3257,28 @@ final class PassPlanTests: XCTestCase {
         XCTAssertGreaterThan(PassPlan.score(garbled, rules: rules), PassPlan.score(PassPlan.Reading(rows: [], layout: nil)))
     }
 
+    /// 同一张照片几种认法：按行的高低对齐，每行用毛病少的那份，漏了的行补上，按上下排好
+    func testCombineReadingsRowByRow() {
+        let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"])]
+        let layout = PassPlan.readTable([["卫星名称", "地面站", "数传开始时间"], ["A", "甲站-01", "2026-10-27 01:00:00"]]).layout
+        func row(_ satellite: String, _ station: String, _ start: String, at y: Double) -> PassPlanRow {
+            PassPlanRow(satellite: satellite, station: station, start: start, cells: [satellite, station, start],
+                        region: PassPlan.Region(y0: y, slope: 0, height: 0.04, left: 0, right: 1))
+        }
+        let bands = PassPlan.Reading(rows: [row("A", "甲站-01", "2026-10-27 01:00:00", at: 0.2),
+                                            row("B", "申站-02", "2026-10-27 02:00:00", at: 0.3)], layout: layout)
+        let whole = PassPlan.Reading(rows: [row("A", "甲站-01", "2026-10-27 0100", at: 0.21),
+                                            row("C", "甲站-03", "2026-10-27 03:00:00", at: 0.4),
+                                            row("B", "甲站-02", "2026-10-27 02:00:00", at: 0.31)], layout: layout)
+        let combined = PassPlan.combine([bands, whole], rules: rules)
+        XCTAssertEqual(combined.rows.map(\.station), ["甲站-01", "甲站-02", "甲站-03"])
+        XCTAssertEqual(combined.rows.map(\.start), ["2026-10-27 01:00:00", "2026-10-27 02:00:00", "2026-10-27 03:00:00"])
+        XCTAssertEqual(PassPlan.combine([bands], rules: rules), bands)
+        XCTAssertEqual(PassPlan.combine([PassPlan.Reading(rows: [], layout: nil), bands], rules: rules).rows.count, 2,
+                       "没认出表头的那份不算")
+        XCTAssertTrue(PassPlan.combine([]).rows.isEmpty)
+    }
+
     /// 拍屏幕认丢了「-」「:」也认得出时间；认出来不是有效时间的原样留着（标黄）；行号拼到卫星编号前面的去掉
     func testTimesWithLostSeparatorsAndGluedRowNumbers() {
         XCTAssertEqual(PassPlan.normalizedTime("2026 10-27 22:05:25"), "2026-10-27 22:05:25")

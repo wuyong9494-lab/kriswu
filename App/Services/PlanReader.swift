@@ -19,18 +19,24 @@ enum PlanReader {
     struct Settings: Sendable {
         /// 不跳过小字：系统默认跳过不到图高 1/32 的字，一张照片里几十行的表，每行的字都比这小
         var smallText = true
-        /// 很长的图切成上下几段分别认
-        var split = true
         /// 按中文、英文的词纠正认错的字（表头、运营商名、站名开头当词库）
         var languageCorrection = true
         /// iOS 26 起也让系统直接按格子认表格，用它核对站名
         var tables = true
-        /// 认之前轻轻模糊一下，压掉拍屏幕的摩尔纹
-        var smooth = false
+        /// 每张照片认几遍、每遍怎么认，几遍拼出来的一行行对着挑（哪种认法好看照片：密密麻麻的 Excel 分段认好，
+        /// 有的网页照片分段认反而漏行、整张认好，摩尔纹重的去一下纹好）
+        var passes = Pass.all
+
+        struct Pass: Sendable, Hashable {
+            /// 很长的图切成上下几段分别认
+            var split = true
+            /// 认之前轻轻模糊一下，压掉拍屏幕的摩尔纹
+            var smooth = false
+
+            static let all = [Pass(), Pass(smooth: true), Pass(split: false)]
+        }
 
         static let standard = Settings()
-        /// 改之前的认法（测试里对比用）
-        static let original = Settings(smallText: false, split: false, languageCorrection: false, tables: false)
     }
 
     /// 几张照片（计划长、往下翻着拍的）→ 合成一份。第一张要拍到表头；后面几张没拍到表头的，按前一张的列分。
@@ -50,9 +56,10 @@ enum PlanReader {
         var strips: [PassPlan.Region: Data] = [:]
         for (page, image) in images.enumerated() {
             guard let picture = upright(image) else { continue }
-            let boxes = try await textBoxes(in: picture, words: words, settings: settings)
-            sawText = sawText || !boxes.isEmpty
-            var result = PassPlan.read(boxes, fallback: positions)
+            // 几种认法同时认，拼出来的一行行对着挑
+            let readings = try await boxes(of: picture, words: words, settings: settings)
+            sawText = sawText || readings.contains { !$0.isEmpty }
+            var result = PassPlan.combine(readings.map { PassPlan.read($0, fallback: positions) }, rules: rules)
             positions = positions ?? result.layout
             // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
             // 拼出来了就拿它核对站名（同一行它认的站名对得上对照表、这边的对不上，用它的）
@@ -100,7 +107,8 @@ enum PlanReader {
                 let center = (left + right) / 2
                 let cell = PassPlan.TextBox(text: "", x: left, y: region.y0 + region.slope * center - region.height * 0.45,
                                             width: right - left, height: region.height * 0.9)
-                let text = Self.reread(cell, in: image, words: words, settings: settings)?.text.filter { !$0.isWhitespace }
+                let text = Self.reread(cell, in: image, words: words, settings: settings, smooth: false)?
+                    .text.filter { !$0.isWhitespace }
                 return text?.isEmpty == false ? text : nil
             }
             return rows.map { row in
@@ -194,19 +202,41 @@ enum PlanReader {
 
     // MARK: - 文字识别
 
+    /// 这张照片要认的几遍：只有一段的照片分不分段一样，少认一遍
+    private static func passes(of image: CGImage, settings: Settings) -> [Settings.Pass] {
+        let single = PassPlan.strips(width: image.width, height: image.height).count == 1
+        var seen = Set<Settings.Pass>()
+        let list = settings.passes.map { single ? Settings.Pass(split: false, smooth: $0.smooth) : $0 }
+            .filter { seen.insert($0).inserted }
+        return list.isEmpty ? [Settings.Pass()] : list
+    }
+
+    /// 几种认法同时认，各认出一份（顺序和 passes 一样）
+    private static func boxes(of image: CGImage, words: [String], settings: Settings) async throws -> [[PassPlan.TextBox]] {
+        let list = passes(of: image, settings: settings)
+        return try await withThrowingTaskGroup(of: (Int, [PassPlan.TextBox]).self) { group in
+            for (i, pass) in list.enumerated() {
+                group.addTask { (i, try await textBoxes(in: image, words: words, settings: settings, pass: pass)) }
+            }
+            var found = [[PassPlan.TextBox]](repeating: [], count: list.count)
+            for try await (i, boxes) in group { found[i] = boxes }
+            return found
+        }
+    }
+
     /// 认出图里的字：每一块按空格再拆开（相邻两格偶尔被认成一块），各自带位置（整张图的 0–1，y 从上往下）。
     /// 很长的图切成上下重叠的几段分别认：整张一起认，字相对整张图太小，会被跳过或认错
-    static func textBoxes(in image: CGImage, words: [String] = [],
-                          settings: Settings = .standard) async throws -> [PassPlan.TextBox] {
+    static func textBoxes(in image: CGImage, words: [String] = [], settings: Settings = .standard,
+                          pass: Settings.Pass = Settings.Pass()) async throws -> [PassPlan.TextBox] {
         try await Task.detached(priority: .userInitiated) {
-            let strips = settings.split ? PassPlan.strips(width: image.width, height: image.height)
+            let strips = pass.split ? PassPlan.strips(width: image.width, height: image.height)
                 : [PassPlan.Strip(top: 0, height: image.height, keep: -Double.infinity..<Double.infinity)]
             var boxes: [PassPlan.TextBox] = []
             for strip in strips {
                 let piece = strips.count == 1 ? image
                     : image.cropping(to: CGRect(x: 0, y: strip.top, width: image.width, height: strip.height))
                 guard let piece else { continue }
-                let found = try recognize(piece, words: words, settings: settings)
+                let found = try recognize(piece, words: words, settings: settings, smooth: pass.smooth)
                 boxes += PassPlan.place(found, in: strip, imageHeight: image.height)
             }
             return boxes
@@ -218,8 +248,9 @@ enum PlanReader {
         Float(max(10 / Double(max(pixelHeight, 1)), 0.002))
     }
 
-    private static func recognize(_ source: CGImage, words: [String], settings: Settings) throws -> [PassPlan.TextBox] {
-        let image = prepared(source, smooth: settings.smooth, enlarge: false)
+    private static func recognize(_ source: CGImage, words: [String], settings: Settings,
+                                  smooth: Bool) throws -> [PassPlan.TextBox] {
+        let image = prepared(source, smooth: smooth, enlarge: false)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
@@ -266,20 +297,21 @@ enum PlanReader {
                 continue
             }
             rereads += inside.count
-            result += inside.compactMap { reread($0.box, in: image, words: words, settings: settings) }
+            result += inside.compactMap { reread($0.box, in: image, words: words, settings: settings, smooth: smooth) }
         }
         return result
     }
 
     /// 把一小块字（位置是这张图的 0–1）裁下来单独认
-    private static func reread(_ spot: PassPlan.TextBox, in image: CGImage, words: [String], settings: Settings) -> PassPlan.TextBox? {
+    private static func reread(_ spot: PassPlan.TextBox, in image: CGImage, words: [String], settings: Settings,
+                               smooth: Bool) -> PassPlan.TextBox? {
         let w = Double(image.width), h = Double(image.height)
         let pad = spot.height * h * 0.3
         let rect = CGRect(x: spot.x * w - pad, y: spot.y * h - pad, width: spot.width * w + pad * 2, height: spot.height * h + pad * 2)
             .intersection(CGRect(x: 0, y: 0, width: w, height: h)).integral
         guard rect.width > 2, rect.height > 2, let cut = image.cropping(to: rect) else { return nil }
         // 一小块字：放大到够高再认（小字放大了认得准）
-        let piece = prepared(cut, smooth: settings.smooth, enlarge: true)
+        let piece = prepared(cut, smooth: smooth, enlarge: true)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]

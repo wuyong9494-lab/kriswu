@@ -566,6 +566,40 @@ public enum PassPlan {
         reading.rows.reduce(0) { $0 + (problems($1, rules: rules, layout: reading.layout).isEmpty ? 1 : 0.3) }
     }
 
+    /// 同一张照片几种认法各拼出一份：认得最好的那份打底，按行在照片里的高低对齐（差不到半行的是同一行），
+    /// 这一行别的认法毛病更少就用别的；打底那份漏了、别的认法拼出来了的行补进来。发出去的列用打底那份的
+    public static func combine(_ readings: [Reading], rules: [OperatorRule] = []) -> Reading {
+        let ranked = readings.enumerated().sorted { a, b in
+            let (sa, sb) = (score(a.element, rules: rules), score(b.element, rules: rules))
+            return sa != sb ? sa > sb : a.offset < b.offset
+        }.map(\.element)
+        guard var base = ranked.first else { return Reading(rows: [], layout: nil) }
+        guard let layout = base.layout else { return base }
+        /// 这一行在照片正中间那里的高低
+        func level(_ r: Region) -> Double { r.y0 + r.slope * 0.5 }
+        func issues(_ row: PassPlanRow) -> Int { problems(row, rules: rules, layout: layout).count }
+        var rows = base.rows
+        for other in ranked.dropFirst() {
+            guard let from = other.layout else { continue }
+            for row in remap(other.rows, from: from, to: layout) {
+                guard let region = row.region else { continue }
+                let same = rows.firstIndex { mine in
+                    mine.region.map { abs(level($0) - level(region)) < min($0.height, region.height) / 2 } ?? false
+                }
+                if let i = same {
+                    if issues(row) < issues(rows[i]) { rows[i] = row }
+                } else {
+                    rows.append(row)
+                }
+            }
+        }
+        if rows.allSatisfy({ $0.region != nil }) {
+            rows.sort { level($0.region!) < level($1.region!) }
+        }
+        base.rows = rows
+        return base
+    }
+
     /// 给文字识别的词库：表头常见的叫法，加上对照表里的运营商名和站名开头（认得准一些）
     public static func vocabulary(_ rules: [OperatorRule]) -> [String] {
         // 表头的叫法是小写的（比对用），「卫星id」换成大写的写法

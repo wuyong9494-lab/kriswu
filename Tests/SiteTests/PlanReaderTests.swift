@@ -17,12 +17,12 @@ final class PlanReaderTests: XCTestCase {
 
     func testRecognitionAccuracy() async throws {
         let bundle = Bundle(for: Self.self)
+        // 只认一遍的几种认法，和现在（几遍对着挑）比
         let variants: [(String, PlanReader.Settings)] = [
-            ("改之前", .original),
-            ("只放开小字", PlanReader.Settings(smallText: true, split: false, languageCorrection: false)),
-            ("不纠错", PlanReader.Settings(smallText: true, split: true, languageCorrection: false)),
+            ("只分段认", PlanReader.Settings(passes: [.init()])),
+            ("只分段去摩尔纹", PlanReader.Settings(passes: [.init(smooth: true)])),
+            ("只整张认", PlanReader.Settings(passes: [.init(split: false)])),
             ("现在", .standard),
-            ("现在加去摩尔纹", PlanReader.Settings(smooth: true)),
         ]
         for name in ["excel_photo", "excel_scan", "web_photo", "long_table"] {
             guard let imageURL = bundle.url(forResource: name, withExtension: "jpg"),
@@ -36,8 +36,8 @@ final class PlanReaderTests: XCTestCase {
             // 认出的每一块字和拼出的每一行打到日志里（虚构数据），对不上时拿来查是哪一步出的错
             if let picture = image.cgImage {
                 let boxes = try await PlanReader.textBoxes(in: picture, words: PassPlan.vocabulary(rules))
-                // 最上面几十块（表头附近）
-                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(30) {
+                // 最上面几十块（表头附近）；网页那张分段认漏行，多打一些看漏在哪
+                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(name == "web_photo" ? 150 : 30) {
                     print(String(format: "OCRBOX|%@|%@|%.3f|%.3f|%.3f|%.4f", name, b.text, b.x, b.y, b.width, b.height))
                 }
                 let reading = PassPlan.read(boxes)
