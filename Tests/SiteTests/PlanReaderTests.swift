@@ -36,7 +36,7 @@ final class PlanReaderTests: XCTestCase {
             if let picture = image.cgImage {
                 let boxes = try await PlanReader.textBoxes(in: picture, words: PassPlan.vocabulary(rules))
                 // 最上面几十块（表头附近）
-                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(name == "excel_scan" ? 800 : 45) {
+                for b in boxes.sorted(by: { $0.y < $1.y }).prefix(30) {
                     print(String(format: "OCRBOX|%@|%@|%.3f|%.3f|%.3f|%.4f", name, b.text, b.x, b.y, b.width, b.height))
                 }
                 let reading = PassPlan.read(boxes)
@@ -50,11 +50,31 @@ final class PlanReaderTests: XCTestCase {
                 do {
                     let reading = try await PlanReader.read(pages: [image], rules: rules, settings: settings)
                     print(report(name, label, reading, truth, rules, seconds: Date().timeIntervalSince(began)))
+                    if settings.languageCorrection && settings.split { await dumpOriginal(name, reading, rules) }
                 } catch {
                     print("OCR|\(name)|\(label)|认不出：\(error.localizedDescription)")
                 }
             }
         }
+    }
+
+    /// 发原图：第一家拼出来的图（缩小）打到日志里看裁得对不对，再数一下几行有原图
+    private func dumpOriginal(_ name: String, _ reading: PassPlan.Reading, _ rules: [PassPlan.OperatorRule]) async {
+        let withStrip = reading.rows.filter { $0.region.flatMap { reading.strips[$0] } != nil }.count
+        print("OCRSTRIPS|\(name)|有原图 \(withStrip)/\(reading.rows.count)|表头 \(reading.header.flatMap { reading.strips[$0] } != nil)")
+        guard let group = PassPlan.grouped(reading.rows, rules: rules).first(where: { $0.name != PassPlan.unassigned }),
+              let header = reading.header.flatMap({ reading.strips[$0] }).flatMap(UIImage.init(data:)) else { return }
+        let strips = [header] + group.rows.compactMap { $0.region.flatMap { reading.strips[$0] }.flatMap(UIImage.init(data:)) }
+        let data: Data? = await MainActor.run {
+            guard let image = PassPlanOriginal.compose(title: group.name, caption: "麻烦确认一下数传计划", strips: strips) else { return nil }
+            let width = min(1100, image.size.width)
+            let size = CGSize(width: width, height: image.size.height * width / image.size.width)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            return UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+                .jpegData(compressionQuality: 0.6)
+        }
+        if let data { print("OCRIMG|\(name)|\(data.base64EncodedString())") }
     }
 
     private func report(_ name: String, _ label: String, _ reading: PassPlan.Reading, _ truth: Truth,
@@ -76,9 +96,14 @@ final class PlanReaderTests: XCTestCase {
                 if (PassPlan.emergency(row, layout: reading.layout) ?? false) == want { emergency += 1 }
             }
         }
+        // 分到各家的条数对不对（发原图时只看这个）：每家认出的条数和应有的条数，取小的加起来
+        var want: [String: Int] = [:], got: [String: Int] = [:]
+        for row in truth.rows { want[PassPlan.operatorName(of: row.station, rules: rules) ?? "?", default: 0] += 1 }
+        for row in reading.rows { got[PassPlan.operatorName(of: row.station, rules: rules) ?? "?", default: 0] += 1 }
+        let grouped = want.reduce(0) { $0 + min($1.value, got[$1.key] ?? 0) }
         func pct(_ n: Int, _ of: Int) -> String { of == 0 ? "-" : "\(n * 100 / of)%" }
         return ["OCR", name, label,
-                "行 \(found)/\(truth.rows.count)",
+                "行 \(found)/\(truth.rows.count)", "各家条数 \(pct(grouped, truth.rows.count))",
                 "站名 \(pct(station, found))", "分家 \(pct(family, found))", "卫星 \(pct(satellite, found))",
                 "圈号 \(pct(orbit, found))", "应急 \(pct(emergency, emergencyTotal))",
                 "多出 \(reading.rows.count - found)", String(format: "%.1f 秒", seconds)].joined(separator: "|")

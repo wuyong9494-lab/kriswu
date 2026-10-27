@@ -1,3 +1,4 @@
+import CoreImage
 import UIKit
 import UniformTypeIdentifiers
 import Vision
@@ -40,13 +41,23 @@ enum PlanReader {
         var layout: PassPlan.Layout?
         /// 没拍到表头的照片按这个分列（照片里的左右位置）
         var positions: PassPlan.Layout?
-        for image in images {
+        /// 发原图用：表头那一条，和每一条从照片上裁下来扶正的图
+        var header: PassPlan.Region?
+        var strips: [PassPlan.Region: Data] = [:]
+        for (page, image) in images.enumerated() {
             guard let picture = upright(image) else { continue }
             let boxes = try await textBoxes(in: picture, words: words, settings: settings)
             sawText = sawText || !boxes.isEmpty
-            let result = PassPlan.read(boxes, fallback: positions)
+            var result = PassPlan.read(boxes, fallback: positions)
             positions = positions ?? result.layout
             guard let found = result.layout else { continue }
+            for i in result.rows.indices { result.rows[i].region?.page = page }
+            result.header?.page = page
+            let pageHeader = header == nil ? result.header : nil
+            header = header ?? result.header
+            let regions = result.rows.compactMap(\.region) + (pageHeader.map { [$0] } ?? [])
+            let cuts = await cut(regions, from: picture)
+            strips.merge(cuts) { old, _ in old }
             let target = layout ?? found
             layout = target
             pages.append(PassPlan.remap(result.rows, from: found, to: target))
@@ -54,7 +65,39 @@ enum PlanReader {
         guard sawText else { throw Failure.noText }
         let rows = PassPlan.merge(pages)
         guard !rows.isEmpty else { throw Failure.noTable }
-        return PassPlan.Reading(rows: rows, layout: layout)
+        return PassPlan.Reading(rows: rows, layout: layout, header: header, strips: strips)
+    }
+
+    // MARK: - 发原图：从照片上裁
+
+    /// 从照片上裁下这几条（每一行、表头），各自扶正成长方形，存成 JPEG（宽最多 2400）
+    static func cut(_ regions: [PassPlan.Region], from image: CGImage) async -> [PassPlan.Region: Data] {
+        await Task.detached(priority: .userInitiated) {
+            let context = CIContext()
+            let source = CIImage(cgImage: image)
+            let w = Double(image.width), h = Double(image.height)
+            var result: [PassPlan.Region: Data] = [:]
+            for region in regions {
+                // CoreImage 的原点在左下
+                func corner(_ x: Double, _ dy: Double) -> CIVector {
+                    CIVector(x: x * w, y: h - (region.y0 + region.slope * x + dy) * h)
+                }
+                guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { continue }
+                filter.setValue(source, forKey: kCIInputImageKey)
+                filter.setValue(corner(region.left, -region.height / 2), forKey: "inputTopLeft")
+                filter.setValue(corner(region.right, -region.height / 2), forKey: "inputTopRight")
+                filter.setValue(corner(region.right, region.height / 2), forKey: "inputBottomRight")
+                filter.setValue(corner(region.left, region.height / 2), forKey: "inputBottomLeft")
+                guard let straight = filter.outputImage, straight.extent.width > 1 else { continue }
+                let scale = min(1, 2400 / straight.extent.width)
+                let sized = straight.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                if let data = context.jpegRepresentation(of: sized, colorSpace: CGColorSpaceCreateDeviceRGB(),
+                                                         options: [:]) {
+                    result[region] = data
+                }
+            }
+            return result
+        }.value
     }
 
     /// 表格文件（Excel、CSV）

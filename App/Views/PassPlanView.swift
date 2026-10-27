@@ -8,6 +8,9 @@ struct PassPlanSession: Equatable {
     /// 读到的那张表的列（发出去的表照它）；补的、演示的是 nil，用默认的列
     var layout: PassPlan.Layout?
     var sent: Set<String> = []
+    /// 发原图用：表头那一条在照片里的位置，和每一条（表头、每一行）从照片上裁下来的图
+    var header: PassPlan.Region?
+    var strips: [PassPlan.Region: Data] = [:]
 }
 
 /// 发数传计划：对着电脑屏幕拍计划（系统文档扫描自动框出屏幕、扶正，长的可以连拍几张），
@@ -150,6 +153,15 @@ struct PassPlanView: View {
                 } label: {
                     LabeledContent("运营商对照表", value: rules.isEmpty ? "还没填" : "\(rules.count) 家")
                 }
+                Toggle(isOn: $store.settings.passPlanOriginal) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("发原图")
+                        Text(store.settings.passPlanOriginal
+                             ? "从照片上裁下表头和这一家的几行拼成一张，字和照片一模一样；认字只用来分家"
+                             : "发重新画的表：字是认出来的，可能有认错的，发之前核对标黄的")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("图片下面那句话").font(.caption).foregroundStyle(.secondary)
                     TextField("没有应急计划时", text: $store.settings.passPlanCaption)
@@ -228,14 +240,16 @@ struct PassPlanView: View {
             Text("微信不让别的 App 直接发到群里：点「发图片」以后在微信里选这个群。记下来按钮上就写着该发哪个群。")
         }
         .onAppear {
-            if let initial, !initial.rows.isEmpty { store.passPlan = PassPlanSession(rows: initial.rows, layout: initial.layout) }
+            if let initial, !initial.rows.isEmpty {
+                store.passPlan = PassPlanSession(rows: initial.rows, layout: initial.layout, header: initial.header, strips: initial.strips)
+            }
             if autoScan {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     if DocumentScanner.isSupported { scanning = true } else { showingCamera = true }
                 }
             }
         }
-        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")-\(store.settings.passPlanCaption)-\(store.settings.passPlanUrgentCaption)") {
+        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")-\(store.settings.passPlanCaption)-\(store.settings.passPlanUrgentCaption)-\(store.settings.passPlanOriginal)") {
             renderImages()
         }
     }
@@ -370,7 +384,9 @@ struct PassPlanView: View {
             do {
                 let result = try await work()
                 let found = result.rows
-                withAnimation { store.passPlan = PassPlanSession(rows: found, layout: result.layout) }
+                withAnimation {
+                    store.passPlan = PassPlanSession(rows: found, layout: result.layout, header: result.header, strips: result.strips)
+                }
                 let doubtful = found.filter { !PassPlan.problems($0, rules: rules, layout: result.layout).isEmpty }.count
                 let grouped = PassPlan.grouped(found, rules: rules)
                 let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
@@ -460,12 +476,29 @@ struct PassPlanView: View {
     private func renderImages() {
         var made: [String: UIImage] = [:]
         for group in sendable {
+            if store.settings.passPlanOriginal, let original = originalImage(name: group.name, rows: group.rows) {
+                made[group.name] = original
+                continue
+            }
             let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows, layout: layout,
                                                                 caption: caption(group.rows)))
             renderer.scale = 3
             if let image = renderer.uiImage { made[group.name] = image }
         }
         images = made
+    }
+
+    /// 发原图：表头那一条加上这一家每一行那一条（都是从照片上裁下来扶正的），上面标题、下面那句话。
+    /// 有一行没有原图（补的一条、从表格文件读的）就不用原图，发重新画的表
+    private func originalImage(name: String, rows: [PassPlanRow]) -> UIImage? {
+        let session = store.passPlan
+        guard let header = session.header, let top = session.strips[header].flatMap(UIImage.init(data:)) else { return nil }
+        var pieces = [top]
+        for row in rows {
+            guard let region = row.region, let strip = session.strips[region].flatMap(UIImage.init(data:)) else { return nil }
+            pieces.append(strip)
+        }
+        return PassPlanOriginal.compose(title: PassPlan.title(name: name, rows: rows), caption: caption(rows), strips: pieces)
     }
 }
 
@@ -611,5 +644,42 @@ extension PassPlanView {
             PassPlanRow(orbit: "875", satelliteID: "SAT-B2", satellite: "试验二号", station: "丁光北区02",
                         start: "\(day) 22:04:27", end: "\(day) 22:11:21", info: "通道1：900M", status: "等待数传"),
         ]
+    }
+}
+
+/// 发原图：把从照片上裁下来的几条（表头、这一家的每一行）上下拼成一张，上面标题、下面那句话
+enum PassPlanOriginal {
+    @MainActor
+    static func compose(title: String, caption: String, strips: [UIImage]) -> UIImage? {
+        let width = strips.map(\.size.width).max() ?? 0
+        guard width > 0 else { return nil }
+        let pad = (width / 50).rounded()
+        let titleFont = UIFont.boldSystemFont(ofSize: max(28, width / 36))
+        let captionFont = UIFont.systemFont(ofSize: max(26, width / 40), weight: .semibold)
+        let heights = strips.map { ($0.size.height * width / max($0.size.width, 1)).rounded() }
+        let titleHeight = ceil(titleFont.lineHeight)
+        let captionBox = (caption as NSString).boundingRect(with: CGSize(width: width - pad * 2, height: .greatestFiniteMagnitude),
+                                                            options: .usesLineFragmentOrigin,
+                                                            attributes: [.font: captionFont], context: nil)
+        let captionHeight = caption.isEmpty ? 0 : ceil(captionBox.height) + pad
+        let total = pad + titleHeight + pad + heights.reduce(0, +) + captionHeight + pad
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: CGSize(width: width, height: total), format: format).image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(x: 0, y: 0, width: width, height: total))
+            (title as NSString).draw(at: CGPoint(x: pad, y: pad), withAttributes: [.font: titleFont, .foregroundColor: UIColor.black])
+            var y = pad + titleHeight + pad
+            for (strip, height) in zip(strips, heights) {
+                strip.draw(in: CGRect(x: 0, y: y, width: width, height: height))
+                y += height
+            }
+            if !caption.isEmpty {
+                (caption as NSString).draw(with: CGRect(x: pad, y: y + pad, width: width - pad * 2, height: ceil(captionBox.height) + 2),
+                                           options: .usesLineFragmentOrigin,
+                                           attributes: [.font: captionFont, .foregroundColor: UIColor.black], context: nil)
+            }
+        }
     }
 }

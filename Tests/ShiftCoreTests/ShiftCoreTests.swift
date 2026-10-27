@@ -3257,6 +3257,37 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(reading.rows.map(\.satellite), ["XA102C", "XB7"])
     }
 
+    /// 发原图：每一行记下它在照片里的那一条（斜着拍的每行斜得不一样），表头也记一条
+    func testRowRegionsFollowEachRow() {
+        func box(_ text: String, midX: Double, midY: Double, w: Double = 0.08, h: Double = 0.012) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: midX - w / 2, y: midY - h / 2, width: w, height: h)
+        }
+        let columns: [(String, Double)] = [("卫星名称", 0.2), ("地面站", 0.4), ("数传开始时间", 0.6), ("数传结束时间", 0.8)]
+        var boxes = columns.map { box($0.0, midX: $0.1, midY: 0.1, h: 0.016) }
+        for r in 0..<10 {
+            let k = 0.01 * Double(r) / 10          // 越往下越斜
+            for (c, value) in ["SAT-\(r)", "甲站-北区\(r)", "2026-10-27 0\(r):00:00", "2026-10-27 0\(r):05:00"].enumerated() {
+                let x = columns[c].1
+                boxes.append(box(value, midX: x, midY: 0.15 + 0.03 * Double(r) + k * x))
+            }
+        }
+        let reading = PassPlan.read(boxes.shuffled())
+        XCTAssertEqual(reading.rows.count, 10)
+        for (r, row) in reading.rows.enumerated() {
+            let region = try! XCTUnwrap(row.region)
+            let k = 0.01 * Double(r) / 10
+            for x in [0.2, 0.8] {
+                XCTAssertEqual(region.y0 + region.slope * x, 0.15 + 0.03 * Double(r) + k * x, accuracy: 0.002)
+            }
+            XCTAssertEqual(region.height, 0.03, accuracy: 0.005, "一条和行距一样高")
+            XCTAssertLessThan(region.left, 0.15)
+            XCTAssertGreaterThan(region.right, 0.85)
+        }
+        let header = try! XCTUnwrap(reading.header)
+        XCTAssertEqual(header.y0 + header.slope * 0.5, 0.1, accuracy: 0.002)
+        XCTAssertEqual(header.left, reading.rows[0].region?.left)
+    }
+
     func testVocabularyForTextRecognition() {
         let words = PassPlan.vocabulary([PassPlan.OperatorRule(name: "甲", prefixes: ["甲站", "甲光北区"]),
                                          PassPlan.OperatorRule(name: "乙", prefixes: ["甲站"])])

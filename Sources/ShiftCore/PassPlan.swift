@@ -13,9 +13,12 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public var status: String
     /// 这一行每一列原来的字（和读到的那张表的列一一对应，见 PassPlan.Layout）：发出去的表照原样
     public var cells: [String]
+    /// 这一行在照片里的位置（发原图时从照片上裁这一条）；从表格文件读的、补的没有
+    public var region: PassPlan.Region?
 
     public init(orbit: String = "", satelliteID: String = "", satellite: String = "", station: String = "",
-                start: String = "", end: String = "", info: String = "", status: String = "", cells: [String] = []) {
+                start: String = "", end: String = "", info: String = "", status: String = "", cells: [String] = [],
+                region: PassPlan.Region? = nil) {
         self.orbit = orbit
         self.satelliteID = satelliteID
         self.satellite = satellite
@@ -25,6 +28,7 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
         self.info = info
         self.status = status
         self.cells = cells
+        self.region = region
     }
 }
 
@@ -126,14 +130,39 @@ public enum PassPlan {
         public var columns: Set<Column> { Set(slots.compactMap(\.column)) }
     }
 
-    /// 读一次的结果：每一行、读到的那张表的列（没认出表头时是 nil）
+    /// 照片里的一条（一行、表头那一行）：中线 y = y0 + slope·x，上下各占 height 的一半，左右从 left 到 right
+    /// （都是整张照片的 0–1，y 从上往下）。拍斜了每行斜得不一样，各行各算。page：第几张照片
+    public struct Region: Codable, Equatable, Hashable, Sendable {
+        public var page: Int
+        public var y0: Double
+        public var slope: Double
+        public var height: Double
+        public var left: Double
+        public var right: Double
+
+        public init(page: Int = 0, y0: Double, slope: Double, height: Double, left: Double, right: Double) {
+            self.page = page
+            self.y0 = y0
+            self.slope = slope
+            self.height = height
+            self.left = left
+            self.right = right
+        }
+    }
+
+    /// 读一次的结果：每一行、读到的那张表的列（没认出表头时是 nil）。
+    /// 从照片读的还有：表头那一条在照片里的位置，和每一条（表头、每一行）从照片上裁下来扶正的图（JPEG，发原图用）
     public struct Reading: Equatable, Sendable {
         public var rows: [PassPlanRow]
         public var layout: Layout?
+        public var header: Region?
+        public var strips: [Region: Data]
 
-        public init(rows: [PassPlanRow], layout: Layout?) {
+        public init(rows: [PassPlanRow], layout: Layout?, header: Region? = nil, strips: [Region: Data] = [:]) {
             self.rows = rows
             self.layout = layout
+            self.header = header
+            self.strips = strips
         }
     }
 
@@ -195,6 +224,7 @@ public enum PassPlan {
         let layout: Layout
         /// 每一列表头在照片里的高低（往下数每一行时，各列从这个高低差开始跟）；用前一张的列时不知道，当作一样高
         let headerY: [Double]?
+        var header: Region?
         if let top = headerRow(recognized) {
             let s = tilt(top.map(\.box))
             let headerLevel = top.map { $0.box.midY - s * $0.box.midX }.reduce(0, +) / Double(top.count)
@@ -204,6 +234,8 @@ public enum PassPlan {
             body = boxes.filter { b in b.midY - s * b.midX > headerLevel + tolerance && !headerBoxes.contains(b) }
             layout = Layout(labels: headerBoxes.map { ($0.text, $0.midX) })
             headerY = headerBoxes.map(\.midY)
+            let tallest = headerBoxes.map(\.height).max() ?? lineHeight
+            header = Region(y0: headerLevel, slope: s, height: max(tallest * 1.7, lineHeight * 2), left: 0, right: 1)
         } else if let fallback {
             body = boxes
             layout = fallback
@@ -211,14 +243,23 @@ public enum PassPlan {
         } else {
             return Reading(rows: [], layout: nil)
         }
-        return Reading(rows: assemble(body, layout: layout, headerY: headerY, lineHeight: lineHeight), layout: layout)
+        // 表的左右边：最左、最右两列再往外半列多一点（照片里表外面的字不算）
+        let xs = layout.slots.map(\.x).sorted()
+        let spacing = xs.count > 1 ? (xs[xs.count - 1] - xs[0]) / Double(xs.count - 1) : 0.1
+        let left = max(0, (xs.first ?? 0) - spacing * 0.65)
+        let right = min(1, (xs.last ?? 1) + spacing * 0.65)
+        header?.left = left
+        header?.right = right
+        let rows = assemble(body, layout: layout, headerY: headerY, lineHeight: lineHeight, span: (left, right))
+        return Reading(rows: rows, layout: layout, header: header)
     }
 
     /// 把表里的字拼成一行行。
     /// 手机拍屏幕会梯形变形：上面几行往一边斜、下面几行往另一边斜，用一个角度扶不正（密密麻麻的 Excel 下面几行会串行）。
     /// 所以先按左右分到各列，每列里按上下分成一格格；再以「地面站」那一列为准（每行都有），一列列往右对：
     /// 每往下一行，记下这一列比地面站高多少低多少，跟着慢慢变，斜度一点点变也跟得上
-    static func assemble(_ body: [TextBox], layout: Layout, headerY: [Double]?, lineHeight: Double) -> [PassPlanRow] {
+    static func assemble(_ body: [TextBox], layout: Layout, headerY: [Double]?, lineHeight: Double,
+                         span: (left: Double, right: Double) = (0, 1)) -> [PassPlanRow] {
         let slots = layout.slots
         guard !slots.isEmpty else { return [] }
         // 按左右分到最近的那一列
@@ -265,6 +306,13 @@ public enum PassPlan {
             }
         }
         return anchors.indices.compactMap { r -> PassPlanRow? in
+            // 这一行所有的字：算这一行在照片里的位置（发原图时裁这一条）
+            let rowBoxes = anchors[r].boxes + slots.indices.flatMap { s in matched[s][r].map { cells[s][$0].boxes } ?? [] }
+            let slope = tilt(rowBoxes)
+            let meanX = rowBoxes.map(\.midX).reduce(0, +) / Double(rowBoxes.count)
+            let meanY = rowBoxes.map(\.midY).reduce(0, +) / Double(rowBoxes.count)
+            let region = Region(y0: meanY - slope * meanX, slope: slope, height: max(pitch, lineHeight * 1.4),
+                                left: span.left, right: span.right)
             let values = slots.indices.map { s -> String in
                 let boxes: [TextBox]
                 if s == ref {
@@ -279,7 +327,9 @@ public enum PassPlan {
                 }
                 return boxes.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ")
             }
-            return row(cells: values, layout: layout)
+            var found = row(cells: values, layout: layout)
+            found?.region = region
+            return found
         }
     }
 
