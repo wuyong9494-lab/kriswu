@@ -225,6 +225,8 @@ jobs:
           grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log
           # 文字识别准确率（PlanReaderTests）：每种认法一行，做成注解
           grep -o "OCR|.*" test.log | sed 's/^/::notice::/' || true
+          # 认出的每块字、拼出的每行（虚构数据），查准确率时看
+          grep -oE "OCR(BOX|ROW|LAYOUT)\|.*" test.log || true
           if [ $status -ne 0 ]; then
             tail -80 test.log
             grep -E "error:" test.log | head -20 | sed 's/^/::error::/'
