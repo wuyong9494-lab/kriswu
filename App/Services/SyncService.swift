@@ -174,7 +174,7 @@ enum SyncService {
         return Outcome(result: try parser.parse(text), apiSignature: nil, roster: roster, groupNotes: notes, restBalance: rest)
     }
 
-    struct DesktopNotes {
+    struct DesktopNotes: Sendable {
         var notes: [String: String]
         /// 电脑版周表里的全员排班（往前翻了几周）
         var roster: Roster = [:]

@@ -4,7 +4,7 @@ import MetricKit
 /// 闪退、卡顿、CPU 占用过高、写盘过多、启动太慢：系统（MetricKit）记下来，下次打开 App 时交给我们。
 /// 存最近 30 条的摘要（records.json），原始记录（含调用栈）存成文件，「自检与诊断」里能看、能分享给帮你排查的人。
 /// 只在这台手机上，不会自己发出去
-final class CrashLog: NSObject, MXMetricManagerSubscriber {
+final class CrashLog: NSObject, MXMetricManagerSubscriber, @unchecked Sendable {
     static let shared = CrashLog()
     static let keep = 30
 

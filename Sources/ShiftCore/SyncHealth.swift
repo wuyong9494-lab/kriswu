@@ -2,7 +2,7 @@ import Foundation
 
 /// 网站改版自检：每次读到的全员排班和平时比，人数、天数、休息条数、组别条数突然少很多，多半是网站改版、App 读错了。
 public enum SyncHealth {
-    public struct Metrics: Codable, Equatable {
+    public struct Metrics: Codable, Equatable, Sendable {
         /// 读到几个人
         public var people: Int
         /// 读到几天

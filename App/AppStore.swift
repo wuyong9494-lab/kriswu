@@ -114,7 +114,7 @@ final class AppStore: ObservableObject {
             .appendingPathComponent("records.json")
     }()
 
-    private func saveSide<T: Encodable>(_ value: T, to url: URL, blocked: Bool) {
+    private func saveSide<T: Encodable & Sendable>(_ value: T, to url: URL, blocked: Bool) {
         if Self.isDemo || persistenceBlocked || blocked { return }
         StateWriter.shared.write(to: url) { try? JSONEncoder().encode(value) }
     }
@@ -1628,7 +1628,7 @@ final class AppStore: ObservableObject {
 
     // MARK: - 工作量统计
 
-    struct Workload {
+    struct Workload: Sendable {
         var days: [DayKey]
         var people: [PersonWorkload]
         var text: String
@@ -1657,8 +1657,8 @@ final class AppStore: ObservableObject {
 }
 
 
-/// 在后台串行写 state.json：按先后顺序写，后面的覆盖前面的
-final class StateWriter {
+/// 在后台串行写 state.json：按先后顺序写，后面的覆盖前面的（都在一个串行队列里，可以跨线程用）
+final class StateWriter: @unchecked Sendable {
     static let shared = StateWriter()
     private let queue = DispatchQueue(label: "state-writer", qos: .utility)
 
@@ -1675,7 +1675,7 @@ final class StateWriter {
     }
 
     /// 别的文件（全员排班、来源、变动历史）：在后台编码再写
-    func write(to url: URL, encode: @escaping () -> Data?) {
+    func write(to url: URL, encode: @escaping @Sendable () -> Data?) {
         queue.async {
             guard let data = encode() else { return }
             do {

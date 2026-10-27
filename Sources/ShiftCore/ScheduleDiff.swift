@@ -1,7 +1,7 @@
 import Foundation
 
 /// 同步前后排班的差异，用来推送「排班有变动」。
-public struct ScheduleChange: Hashable {
+public struct ScheduleChange: Hashable, Sendable {
     public var day: DayKey
     public var old: String?
     public var new: String?

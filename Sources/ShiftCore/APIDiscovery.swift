@@ -1,7 +1,7 @@
 import Foundation
 
 /// 网页向服务器取数据的一次请求（App 在内置浏览器里记录下来，只保存在手机内存中）。
-public struct CapturedRequest: Codable, Hashable {
+public struct CapturedRequest: Codable, Hashable, Sendable {
     public var url: String
     public var method: String
     public var headers: [String: String]
@@ -340,7 +340,7 @@ public enum JSONScheduleExtractor {
 
 /// 从记录下来的请求里挑出排班接口。
 public enum APIDiscovery {
-    public struct Found {
+    public struct Found: Sendable {
         public var request: CapturedRequest
         public var entries: [DayKey: String]
     }

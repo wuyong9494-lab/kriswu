@@ -24,12 +24,28 @@ public enum ChinaHolidays {
     ]
 
     /// 每年自动下载的安排（公开的节假日数据），优先级在自己录入的之后、App 自带的之前
-    @Locked public static var downloadedOff: Set<String> = []
-    @Locked public static var downloadedWork: Set<String> = []
+    public static var downloadedOff: Set<String> {
+        get { _downloadedOff.wrappedValue }
+        set { _downloadedOff.wrappedValue = newValue }
+    }
+    private static let _downloadedOff = Locked<Set<String>>(wrappedValue: [])
+    public static var downloadedWork: Set<String> {
+        get { _downloadedWork.wrappedValue }
+        set { _downloadedWork.wrappedValue = newValue }
+    }
+    private static let _downloadedWork = Locked<Set<String>>(wrappedValue: [])
 
     /// 用户在 App 里补充的安排（新的一年公布后自己录入，或者纠正）：优先于上面的表
-    @Locked public static var customOff: Set<String> = []
-    @Locked public static var customWork: Set<String> = []
+    public static var customOff: Set<String> {
+        get { _customOff.wrappedValue }
+        set { _customOff.wrappedValue = newValue }
+    }
+    private static let _customOff = Locked<Set<String>>(wrappedValue: [])
+    public static var customWork: Set<String> {
+        get { _customWork.wrappedValue }
+        set { _customWork.wrappedValue = newValue }
+    }
+    private static let _customWork = Locked<Set<String>>(wrappedValue: [])
 
     /// 已经录入节假日安排的年份（App 自带的加上自己录入的）
     public static var knownYears: Set<Int> {
@@ -47,7 +63,11 @@ public enum ChinaHolidays {
 
     /// 是否工作日：调休上班的周末算，法定假日不算，其余按周一到周五。
     /// 周六是不是正常工作日（法定节假日除外）。App 按设置写进来，默认（单元测试里）周六休息
-    @Locked public static var saturdayIsWorkday = false
+    public static var saturdayIsWorkday: Bool {
+        get { _saturdayIsWorkday.wrappedValue }
+        set { _saturdayIsWorkday.wrappedValue = newValue }
+    }
+    private static let _saturdayIsWorkday = Locked<Bool>(wrappedValue: false)
 
     public static func isWorkday(_ day: DayKey, calendar: Calendar) -> Bool {
         let key = day.description
@@ -84,7 +104,7 @@ public enum HolidayFeed {
 
 /// 把「2027-01-01 至 2027-01-03 放假」「2027-02-07 上班」这样一行一行的文字读成放假、上班的日子。
 public enum HolidayInput {
-    public struct Result: Equatable {
+    public struct Result: Equatable, Sendable {
         public var off: [DayKey]
         public var work: [DayKey]
         /// 看不懂的行

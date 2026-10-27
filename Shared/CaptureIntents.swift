@@ -37,9 +37,9 @@ extension Notification.Name {
 }
 
 struct CapturePhotoIntent: AppIntent {
-    static var title: LocalizedStringResource = "拍照留痕"
-    static var description = IntentDescription("打开值班提醒的相机，拍完存进工作留痕。")
-    static var openAppWhenRun = true
+    static let title: LocalizedStringResource = "拍照留痕"
+    static let description = IntentDescription("打开值班提醒的相机，拍完存进工作留痕。")
+    static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {
         PendingCapture.set(.photo)
@@ -48,9 +48,9 @@ struct CapturePhotoIntent: AppIntent {
 }
 
 struct CaptureRecordIntent: AppIntent {
-    static var title: LocalizedStringResource = "录音留痕"
-    static var description = IntentDescription("打开值班提醒马上开始录音，停下就存进工作留痕。")
-    static var openAppWhenRun = true
+    static let title: LocalizedStringResource = "录音留痕"
+    static let description = IntentDescription("打开值班提醒马上开始录音，停下就存进工作留痕。")
+    static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {
         PendingCapture.set(.record)
@@ -59,9 +59,9 @@ struct CaptureRecordIntent: AppIntent {
 }
 
 struct CaptureNoteIntent: AppIntent {
-    static var title: LocalizedStringResource = "记一笔留痕"
-    static var description = IntentDescription("打开值班提醒写一笔文字记录。")
-    static var openAppWhenRun = true
+    static let title: LocalizedStringResource = "记一笔留痕"
+    static let description = IntentDescription("打开值班提醒写一笔文字记录。")
+    static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {
         PendingCapture.set(.note)
@@ -105,8 +105,8 @@ enum PendingTaskToggles {
 
 @available(iOS 17.0, *)
 struct ToggleWidgetTaskIntent: AppIntent {
-    static var title: LocalizedStringResource = "勾选今天的任务"
-    static var isDiscoverable = false
+    static let title: LocalizedStringResource = "勾选今天的任务"
+    static let isDiscoverable = false
 
     @Parameter(title: "日期") var day: String
     @Parameter(title: "组") var group: String

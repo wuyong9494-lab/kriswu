@@ -2,7 +2,7 @@ import Foundation
 
 /// 一种班次的显示样式与识别规则。排班表里的原始文字（如 "白"、"D"、"早班"）
 /// 会通过 keywords / codes 匹配到某个班次类型，用于着色和显示图标。
-public struct ShiftType: Identifiable, Hashable, Codable {
+public struct ShiftType: Identifiable, Hashable, Codable, Sendable {
     public var id: String
     public var name: String
     public var emoji: String
@@ -42,7 +42,7 @@ public struct ShiftType: Identifiable, Hashable, Codable {
     ]
 }
 
-public struct ShiftMatcher {
+public struct ShiftMatcher: Sendable {
     public var types: [ShiftType] { didSet { index = Self.buildIndex(types); cache = MatchCache() } }
     /// 识别结果缓存：排班里的写法就那么几十种，统计、推算却要问几十万次。可以多线程用
     fileprivate(set) var cache = MatchCache()
@@ -142,8 +142,9 @@ public struct ShiftMatcher {
 }
 
 /// ShiftMatcher 的识别缓存（NSCache 自己加锁，多线程安全）
-final class MatchCache {
-    final class Hit {
+/// NSCache 本身可以多线程用，所以整个缓存可以跨线程共用
+final class MatchCache: @unchecked Sendable {
+    final class Hit: Sendable {
         let index: Int
         init(_ index: Int) { self.index = index }
     }

@@ -2,10 +2,10 @@ import Foundation
 
 /// 工作量均衡分析：有组别（组A–E）排班的人，这段时间工作量是否差不多，谁干得多、谁干得少。
 /// 工作量按 WorkloadCounter 的规则算（值班 + 节假日值班调休 + 日常 + 出差）。
-public struct BalanceReport: Equatable {
-    public enum Level: String { case more = "偏多", less = "偏少", normal = "正常" }
+public struct BalanceReport: Equatable, Sendable {
+    public enum Level: String, Sendable { case more = "偏多", less = "偏少", normal = "正常" }
 
-    public struct Row: Equatable {
+    public struct Row: Equatable, Sendable {
         public var name: String
         public var workload: PersonWorkload
         /// 日常班里有组别（组A–E）的天数（regularDays 的一部分）

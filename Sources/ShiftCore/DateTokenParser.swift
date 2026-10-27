@@ -4,7 +4,7 @@ import Foundation
 /// 支持：2026-10-09、2026/10/9、2026.10.9、2026年10月9日、20261009、
 ///       10-09、10/9、10月9日（年份按参考日期推断），以及在已知月份时的纯日号 "9" / "9日"。
 /// 会忽略附带的星期，例如 "10/9(周五)"、"10月9日 星期五"、"Fri 10/9"。
-public struct DateTokenParser {
+public struct DateTokenParser: Sendable {
     public var reference: DayKey
 
     public init(reference: DayKey) {

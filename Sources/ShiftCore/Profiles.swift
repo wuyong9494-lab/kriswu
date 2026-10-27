@@ -2,7 +2,7 @@ import Foundation
 
 /// 人员档案：每个人是什么角色（可以从某天起改），什么时候来、什么时候走。
 /// 有档案的按档案算；没有的按排班自动判断（见 PersonDirectory.suggest）。
-public enum PersonRole: String, Codable, CaseIterable, Identifiable {
+public enum PersonRole: String, Codable, CaseIterable, Identifiable, Sendable {
     /// 轮组别（组A–E）：没排岗位、没写休息的工作日是正常上班，算工作量
     case group = "轮组别"
     /// 不轮组别：没排岗位、没写休息的工作日也是正常上班，算工作量
@@ -15,7 +15,7 @@ public enum PersonRole: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
-public struct RoleSpan: Codable, Equatable, Hashable {
+public struct RoleSpan: Codable, Equatable, Hashable, Sendable {
     /// 从哪天起（nil = 一直）
     public var from: DayKey?
     public var role: PersonRole
@@ -26,7 +26,7 @@ public struct RoleSpan: Codable, Equatable, Hashable {
     }
 }
 
-public struct PersonProfile: Codable, Equatable {
+public struct PersonProfile: Codable, Equatable, Sendable {
     public var name: String
     /// 角色变化，按 from 排好；第一段一般是 from = nil
     public var spans: [RoleSpan]
@@ -76,7 +76,7 @@ public enum PersonDirectory {
 }
 
 /// 规则改动的历史：until 这天以前（不含）按 rules 算
-public struct RuleVersion: Codable, Equatable {
+public struct RuleVersion: Codable, Equatable, Sendable {
     public var until: DayKey
     public var rules: WorkloadRules
 

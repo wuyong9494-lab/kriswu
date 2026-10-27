@@ -10,7 +10,7 @@ extension Calendar {
 }
 
 /// 一个不带时区的“日历日”，例如 2026-10-09。
-public struct DayKey: Hashable, Comparable, Codable, CustomStringConvertible {
+public struct DayKey: Hashable, Comparable, Codable, CustomStringConvertible, Sendable {
     public let year: Int
     public let month: Int
     public let day: Int

@@ -1,7 +1,7 @@
 import Foundation
 
 /// 每条全员排班是从哪读来的、什么时候读的
-public struct Provenance: Codable, Equatable {
+public struct Provenance: Codable, Equatable, Sendable {
     /// 「sync」同步（手机版页面 + 数据接口）、「desktop」电脑版周表
     public var source: String
     public var at: Date
@@ -23,7 +23,7 @@ public struct Provenance: Codable, Equatable {
 public typealias RosterSources = [String: [DayKey: Provenance]]
 
 /// 一条排班变动（网站上某人某天的岗位变了）
-public struct RosterEdit: Codable, Equatable {
+public struct RosterEdit: Codable, Equatable, Sendable {
     public var at: Date
     public var day: DayKey
     public var name: String
@@ -42,7 +42,7 @@ public struct RosterEdit: Codable, Equatable {
 }
 
 public enum RosterMerger {
-    public struct Result {
+    public struct Result: Sendable {
         public var roster: Roster
         public var sources: RosterSources
         /// 以前读到过的日子里变了的（第一次读到的日子不算变动）
@@ -158,7 +158,7 @@ public enum RosterMerger {
 
 /// 网站一般什么时候排出新的一周：记下每次发现新排班的时间，找出常见的「星期几 + 几点」
 public enum PublishPattern {
-    public struct Slot: Equatable, Hashable {
+    public struct Slot: Equatable, Hashable, Sendable {
         /// 1 = 周日 … 7 = 周六
         public var weekday: Int
         public var hour: Int

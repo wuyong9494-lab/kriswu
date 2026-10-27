@@ -1,8 +1,8 @@
 import Foundation
 
 /// 周会文档里各组提的问题：每周导入一次，逐条对比上一周，看哪些解决了、哪些还挂着。
-public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
-    public enum Status: String, Codable, CaseIterable {
+public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public enum Status: String, Codable, CaseIterable, Sendable {
         case open = "未解决"
         case resolved = "已解决"
         /// 上一周还在提、这一周文档里没有了：多半解决了，等自己确认
@@ -92,7 +92,7 @@ public struct MeetingIssue: Codable, Equatable, Hashable, Identifiable {
 /// 把周会文档的文字拆成「组 → 问题」
 public enum MeetingNotes {
     /// 一条：文字、文档里是不是写了已经解决、补充说明（这一行属于什么、负责人、进展）
-    public struct Entry: Equatable {
+    public struct Entry: Equatable, Sendable {
         public var text: String
         public var done: Bool
         public var detail: String?
@@ -105,7 +105,7 @@ public enum MeetingNotes {
         }
     }
 
-    public struct Section: Equatable {
+    public struct Section: Equatable, Sendable {
         public var group: String
         public var entries: [Entry]
         public var items: [String] { entries.map(\.text) }

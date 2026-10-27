@@ -3,7 +3,7 @@ import Foundation
 /// 「查找网页排班代码」：在网站下载到手机上的网页脚本里，找和排班有关的代码片段。
 /// 只有网站在网页里（而不是服务器上）排班时才找得到；找到的片段给用户自己看、自己决定要不要发给别人。
 public enum ScriptScanner {
-    public struct Script: Equatable {
+    public struct Script: Equatable, Sendable {
         public var source: String
         public var text: String
         public init(source: String, text: String) {
@@ -12,7 +12,7 @@ public enum ScriptScanner {
         }
     }
 
-    public struct Snippet: Equatable {
+    public struct Snippet: Equatable, Sendable {
         public var source: String
         /// 片段在脚本里的位置（第几个字）
         public var offset: Int

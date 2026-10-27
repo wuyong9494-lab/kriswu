@@ -3,7 +3,7 @@ import Foundation
 /// 把推算遥测要用的数据导出成一个 JSON，交给开发者分析网站到底怎么排遥测。
 /// 人名全部换成代号（P01、P02…），岗位文字里出现的人名也换掉；不含组别说明、公告、网址、账号。
 public enum RotationExport {
-    public struct Person: Codable, Equatable {
+    public struct Person: Codable, Equatable, Sendable {
         public var code: String
         /// 是不是我自己
         public var me: Bool
@@ -16,7 +16,7 @@ public enum RotationExport {
         public var restHistory: [String: Int]
     }
 
-    public struct Day: Codable, Equatable {
+    public struct Day: Codable, Equatable, Sendable {
         public var date: String
         /// 1 = 周一 … 7 = 周日
         public var weekday: Int
@@ -30,7 +30,7 @@ public enum RotationExport {
         public var posts: [String: String]
     }
 
-    public struct File: Codable, Equatable {
+    public struct File: Codable, Equatable, Sendable {
         public var version = 1
         public var generated: String
         public var people: [Person]

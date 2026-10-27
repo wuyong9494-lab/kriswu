@@ -62,7 +62,7 @@ public enum MeetingInsights {
     // MARK: - 各组趋势
 
     /// 某一周某个组：那周还挂着几个、新提几个、解决几个
-    public struct WeekPoint: Equatable {
+    public struct WeekPoint: Equatable, Sendable {
         public var week: DayKey
         public var group: String
         public var open: Int
@@ -71,7 +71,7 @@ public enum MeetingInsights {
     }
 
     /// 一个组现在的样子：挂着几个、挂得最久的几周、解决一个平均用几周
-    public struct GroupStat: Equatable {
+    public struct GroupStat: Equatable, Sendable {
         public var group: String
         public var open: Int
         public var quiet: Int

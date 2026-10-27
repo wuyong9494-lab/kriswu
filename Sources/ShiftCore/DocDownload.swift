@@ -5,7 +5,7 @@ import Foundation
 /// 金山文档没有公开这几个接口：照网页版的做法「分享链接 → 文件编号 → 下载地址 → Excel 文件」，找的时候尽量宽松
 public enum DocDownload {
     /// 一个文件：所在的组（文件夹）编号、文件编号、文件名
-    public struct FileRef: Equatable {
+    public struct FileRef: Equatable, Sendable {
         public var group: String
         public var id: String
         public var name: String?

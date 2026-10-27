@@ -2,8 +2,8 @@ import Foundation
 
 /// 一年的统计存档：全员排班原始数据只留一年多，一年过完把全年工作量存一份，以后能和往年比。
 /// 存的是当时按当时的规则算出来的数，以后改了规则也不跟着变
-public struct YearArchive: Codable, Equatable, Identifiable {
-    public struct Person: Codable, Equatable {
+public struct YearArchive: Codable, Equatable, Identifiable, Sendable {
+    public struct Person: Codable, Equatable, Sendable {
         public var name: String
         public var workDays: Int
         public var presentDays: Int

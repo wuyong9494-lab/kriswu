@@ -4,7 +4,7 @@ import Foundation
 /// 改一条规则所有页面一起变。一格里有好几项时用「+」连着（「组A+出差」），一项一项判断。
 public enum DayRules {
     /// 一项是哪一类
-    public enum Part: String, CaseIterable {
+    public enum Part: String, CaseIterable, Sendable {
         /// 遥测、值班（「值班调休」「值班休息」「值班请假」「值班交接前」不算）
         case duty = "值班"
         /// 出差：算上班、算工作量

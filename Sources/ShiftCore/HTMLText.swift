@@ -111,13 +111,18 @@ public enum HTMLText {
     }
 
     /// 返回每个匹配的第 1 个捕获组。
-    /// 编译好的正则（解析一页网页要用几百次，每次都编译很慢）。NSCache 可以多线程用
-    private static let regexCache = NSCache<NSString, NSRegularExpression>()
+    /// 编译好的正则（解析一页网页要用几百次，每次都编译很慢）
+    private static let regexCache = RegexCache()
+
+    /// NSCache 本身可以多线程用（Linux 上没标 Sendable，包一层说明）
+    private final class RegexCache: @unchecked Sendable {
+        let cache = NSCache<NSString, NSRegularExpression>()
+    }
 
     static func regex(_ pattern: String) -> NSRegularExpression {
-        if let re = regexCache.object(forKey: pattern as NSString) { return re }
+        if let re = regexCache.cache.object(forKey: pattern as NSString) { return re }
         let re = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
-        regexCache.setObject(re, forKey: pattern as NSString)
+        regexCache.cache.setObject(re, forKey: pattern as NSString)
         return re
     }
 

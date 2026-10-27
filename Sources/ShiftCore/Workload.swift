@@ -12,7 +12,7 @@ import Foundation
 /// - 休息：其它写了休息、调休、请假、无分工的日子，以及周末没排岗位的日子
 /// 工作量 = 值班 + 值班调休 + 日常 + 出差；
 /// 上班天数 = 工作量 + 没排岗位的上班日。
-public struct PersonWorkload: Equatable {
+public struct PersonWorkload: Equatable, Sendable {
     public var name: String
     /// 值班（遥测）天数
     public var dutyDays: Int
@@ -45,7 +45,7 @@ public struct PersonWorkload: Equatable {
 }
 
 /// 工作量规则开关（设置里可以改）
-public struct WorkloadRules: Codable, Equatable {
+public struct WorkloadRules: Codable, Equatable, Sendable {
     /// 法定节假日值完遥测后，网站上写了休息、调休的也算工作量（值班调休）。
     /// 默认关：写了休息、调休、请假的，不管节假日还是平时都不算工作量
     public var holidayDutyRestCounts = false
@@ -79,18 +79,34 @@ public struct WorkloadRules: Codable, Equatable {
 
 public enum WorkloadCounter {
     /// 当前规则（App 启动和改设置时写进来）
-    @Locked public static var rules = WorkloadRules()
+    public static var rules: WorkloadRules {
+        get { _rules.wrappedValue }
+        set { _rules.wrappedValue = newValue }
+    }
+    private static let _rules = Locked<WorkloadRules>(wrappedValue: WorkloadRules())
     /// 规则改动历史：某天以前按当时的规则算
-    @Locked public static var ruleHistory: [RuleVersion] = []
+    public static var ruleHistory: [RuleVersion] {
+        get { _ruleHistory.wrappedValue }
+        set { _ruleHistory.wrappedValue = newValue }
+    }
+    private static let _ruleHistory = Locked<[RuleVersion]>(wrappedValue: [])
     /// 人员档案（管理员确认过的角色、来走日期）
-    @Locked public static var profiles: [String: PersonProfile] = [:]
+    public static var profiles: [String: PersonProfile] {
+        get { _profiles.wrappedValue }
+        set { _profiles.wrappedValue = newValue }
+    }
+    private static let _profiles = Locked<[String: PersonProfile]>(wrappedValue: [:])
 
     /// 某天用哪套规则
     public static func rules(on day: DayKey) -> WorkloadRules {
         RuleVersion.rules(on: day, versions: ruleHistory, current: rules)
     }
     /// 手动纠正：人名 → 日期 → 类别（Kind 的中文名，或「不算」表示这天不统计）
-    @Locked public static var overrides: [String: [DayKey: String]] = [:]
+    public static var overrides: [String: [DayKey: String]] {
+        get { _overrides.wrappedValue }
+        set { _overrides.wrappedValue = newValue }
+    }
+    private static let _overrides = Locked<[String: [DayKey: String]]>(wrappedValue: [:])
     public static let excluded = "不算"
 
     /// 休息、调休、请假、交接前、无分工都不算上班（规则在 DayRules：「节假日值班」「假期加班」仍是上班）
@@ -136,7 +152,7 @@ public enum WorkloadCounter {
     public static let activeAfter = 60
 
     /// 一天归到哪一类
-    public enum Kind: String {
+    public enum Kind: String, Sendable {
         case duty = "值班", dutyRest = "值班调休", regular = "日常", trip = "出差", holiday = "节假日", off = "休息",
              unassigned = "未排班", attendance = "上班"
 
@@ -198,7 +214,7 @@ public enum WorkloadCounter {
     }
 
     /// 某一天怎么算的：类别和原因
-    public struct DayExplanation: Equatable {
+    public struct DayExplanation: Equatable, Sendable {
         public var kind: Kind
         public var reason: String
     }

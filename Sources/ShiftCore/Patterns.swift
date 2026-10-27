@@ -31,14 +31,14 @@ public enum SchedulePatterns {
 
     // MARK: - 轮转（遥测、调度）
 
-    public struct Deferral: Equatable {
+    public struct Deferral: Equatable, Sendable {
         public var day: DayKey
         public var name: String
         /// 请假、出差、休息……
         public var reason: String
     }
 
-    public struct Exception: Equatable {
+    public struct Exception: Equatable, Sendable {
         public var day: DayKey
         /// 实际值班的人
         public var actual: String
@@ -46,12 +46,12 @@ public enum SchedulePatterns {
         public var expected: String
     }
 
-    public struct ForecastDay: Equatable {
+    public struct ForecastDay: Equatable, Sendable {
         public var day: DayKey
         public var name: String
     }
 
-    public struct Rotation: Equatable {
+    public struct Rotation: Equatable, Sendable {
         public var post: String
         /// 现在的顺序：排在最前面的是下一个
         public var order: [String]
@@ -534,7 +534,7 @@ public enum SchedulePatterns {
 
     // MARK: - 值完遥测休几天
 
-    public struct RestRow: Equatable {
+    public struct RestRow: Equatable, Sendable {
         /// 1 = 周日 … 7 = 周六
         public var weekday: Int
         public var duties: Int
@@ -547,14 +547,14 @@ public enum SchedulePatterns {
         public var typicalCount: Int
     }
 
-    public struct RestException: Equatable {
+    public struct RestException: Equatable, Sendable {
         public var day: DayKey
         public var name: String
         public var expected: String
         public var actual: String
     }
 
-    public struct RestRule: Equatable {
+    public struct RestRule: Equatable, Sendable {
         public var rows: [RestRow]
         public var exceptions: [RestException]
         public var duties: Int { rows.reduce(0) { $0 + $1.duties } }
@@ -634,21 +634,21 @@ public enum SchedulePatterns {
 
     // MARK: - 组A–E
 
-    public struct GroupModel: Equatable {
+    public struct GroupModel: Equatable, Sendable {
         public var title: String
         public var hits: Int
         public var total: Int
         public var rate: Double { total == 0 ? 0 : Double(hits) / Double(total) }
     }
 
-    public struct GroupAdjustment: Equatable {
+    public struct GroupAdjustment: Equatable, Sendable {
         public var day: DayKey
         public var name: String
         public var expected: String
         public var actual: String
     }
 
-    public struct GroupPattern: Equatable {
+    public struct GroupPattern: Equatable, Sendable {
         public var groups: [String]
         public var people: Int
         /// 各种可能的排法，按符合率从高到低
@@ -803,8 +803,8 @@ public enum SchedulePatterns {
 // MARK: - 排班预警
 
 extension SchedulePatterns {
-    public struct Warning: Equatable, Hashable {
-        public enum Kind: String { case assigned, unmarked }
+    public struct Warning: Equatable, Hashable, Sendable {
+        public enum Kind: String, Sendable { case assigned, unmarked }
         public var duty: DayKey
         public var day: DayKey
         public var kind: Kind
@@ -848,7 +848,7 @@ extension SchedulePatterns {
 /// 反推待休天数是怎么加减的：拿每个人记录里第一次和最后一次的待休，和这段时间排的遥测、加班、休息、调休、请假对比，
 /// 找一条最吻合的简单规则（比如「周五到周日值遥测 +1，调休 −1」），再列出对不上的人。
 public enum RestBalanceAudit {
-    public struct Rule: Equatable {
+    public struct Rule: Equatable, Sendable {
         /// 周五到周日、节假日（多休一天的）值遥测
         public var longDuty: Int
         /// 平时值遥测
@@ -867,7 +867,7 @@ public enum RestBalanceAudit {
         }
     }
 
-    public struct Row: Equatable {
+    public struct Row: Equatable, Sendable {
         public var name: String
         public var from: DayKey
         public var to: DayKey
@@ -878,7 +878,7 @@ public enum RestBalanceAudit {
         public var diff: Int { observed - expected }
     }
 
-    public struct Result: Equatable {
+    public struct Result: Equatable, Sendable {
         public var rule: Rule
         public var rows: [Row]
         public var matched: Int { rows.filter { $0.diff == 0 }.count }
@@ -946,7 +946,7 @@ public enum RestBalanceAudit {
 
 /// 网站还没排的日子：按反推的规律把遥测、值完遥测的休息、已经申请的请假出差先推演出来。
 public enum RosterPreview {
-    public struct Day: Equatable {
+    public struct Day: Equatable, Sendable {
         public var day: DayKey
         /// 推测的遥测
         public var telemetry: String?

@@ -2,8 +2,8 @@ import Foundation
 
 /// 「接口字段查看」：网站数据接口返回的每张表有哪些字段，各举几个例子（人名、长数字打码），
 /// 用来看接口里有没有排班顺序号、轮次这类字段。
-public struct APIFieldTable: Equatable, Codable {
-    public struct Field: Equatable, Codable {
+public struct APIFieldTable: Equatable, Codable, Sendable {
+    public struct Field: Equatable, Codable, Sendable {
         public var name: String
         /// 例子（最多 3 个不同的值，已打码）
         public var samples: [String]

@@ -57,7 +57,7 @@ public enum ShiftIcon {
 // MARK: - 微信什么时候发
 
 public enum WeChatSchedule {
-    public enum Daily: Equatable { case morning, evening }
+    public enum Daily: Equatable, Sendable { case morning, evening }
 
     /// 现在该补发哪条每天的微信（nil = 不用发）。
     /// 过了晚上提醒时间、今天还没发 → 晚上那条（说明天）；否则过了早上提醒时间、今天还没发 → 早上那条。

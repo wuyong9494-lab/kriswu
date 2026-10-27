@@ -24,8 +24,12 @@ enum AccentTheme: String, Codable, CaseIterable, Identifiable {
     case system, indigo, blue, teal, green, orange, pink, purple
     var id: String { rawValue }
 
-    /// 当前用的主题色（App 启动、改设置时写进来，设计系统从这里取）
-    static var current: AccentTheme = .system
+    /// 当前用的主题色（App 启动、改设置时写进来，设计系统从这里取；小组件、后台也会读，加锁）
+    static var current: AccentTheme {
+        get { _current.wrappedValue }
+        set { _current.wrappedValue = newValue }
+    }
+    private static let _current = Locked<AccentTheme>(wrappedValue: .system)
 
     var title: String {
         switch self {

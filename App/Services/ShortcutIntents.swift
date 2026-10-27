@@ -7,8 +7,8 @@ enum ReminderDay: String, AppEnum {
     case tomorrow
     case week
 
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "哪天")
-    static var caseDisplayRepresentations: [ReminderDay: DisplayRepresentation] = [
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "哪天")
+    static let caseDisplayRepresentations: [ReminderDay: DisplayRepresentation] = [
         .today: "今天",
         .tomorrow: "明天",
         .week: "下周",
@@ -17,8 +17,8 @@ enum ReminderDay: String, AppEnum {
 
 /// 在「快捷指令 › 自动化」里设成每天 7:00 运行，保证 7:30 的提醒用的是最新排班。
 struct SyncScheduleIntent: AppIntent {
-    static var title: LocalizedStringResource = "同步排班"
-    static var description = IntentDescription("从值班网站取最新排班，发现变动马上通知，并更新提醒、小组件。手机在后台运行 App 的时间不固定，在「快捷指令 › 自动化」里每天设几个时间（如 9:00、12:00、15:00、18:00）运行它，排班变动就能及时知道。")
+    static let title: LocalizedStringResource = "同步排班"
+    static let description = IntentDescription("从值班网站取最新排班，发现变动马上通知，并更新提醒、小组件。手机在后台运行 App 的时间不固定，在「快捷指令 › 自动化」里每天设几个时间（如 9:00、12:00、15:00、18:00）运行它，排班变动就能及时知道。")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -34,8 +34,8 @@ struct SyncScheduleIntent: AppIntent {
 }
 
 struct SendWeChatReminderIntent: AppIntent {
-    static var title: LocalizedStringResource = "发送值班提醒到微信"
-    static var description = IntentDescription("把今天、明天或接下来一周的分工发到微信（PushPlus）。在「快捷指令 › 自动化」里设成每天定时运行，就能准时收到。")
+    static let title: LocalizedStringResource = "发送值班提醒到微信"
+    static let description = IntentDescription("把今天、明天或接下来一周的分工发到微信（PushPlus）。在「快捷指令 › 自动化」里设成每天定时运行，就能准时收到。")
 
     @Parameter(title: "哪天", default: .today)
     var day: ReminderDay
@@ -63,8 +63,8 @@ struct SendWeChatReminderIntent: AppIntent {
 enum AskDay: String, AppEnum {
     case today, tomorrow, dayAfter
 
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "哪天")
-    static var caseDisplayRepresentations: [AskDay: DisplayRepresentation] = [
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "哪天")
+    static let caseDisplayRepresentations: [AskDay: DisplayRepresentation] = [
         .today: "今天",
         .tomorrow: "明天",
         .dayAfter: "后天",
@@ -76,8 +76,8 @@ enum AskDay: String, AppEnum {
 
 /// 「嘿 Siri，值班提醒明天什么班」
 struct AskShiftIntent: AppIntent {
-    static var title: LocalizedStringResource = "我什么班"
-    static var description = IntentDescription("说出今天、明天或后天你的分工和组别工作内容。")
+    static let title: LocalizedStringResource = "我什么班"
+    static let description = IntentDescription("说出今天、明天或后天你的分工和组别工作内容。")
 
     @Parameter(title: "哪天", default: .tomorrow)
     var day: AskDay
@@ -102,8 +102,8 @@ struct AskShiftIntent: AppIntent {
 
 /// 「值班提醒今天谁值遥测」
 struct WhoOnDutyIntent: AppIntent {
-    static var title: LocalizedStringResource = "谁值遥测"
-    static var description = IntentDescription("说出今天、明天或后天值遥测的人（来自全员排班）。")
+    static let title: LocalizedStringResource = "谁值遥测"
+    static let description = IntentDescription("说出今天、明天或后天值遥测的人（来自全员排班）。")
 
     @Parameter(title: "哪天", default: .today)
     var day: AskDay
@@ -123,8 +123,8 @@ struct WhoOnDutyIntent: AppIntent {
 
 /// 「值班提醒我下次遥测哪天」
 struct NextDutyIntent: AppIntent {
-    static var title: LocalizedStringResource = "我下次遥测"
-    static var description = IntentDescription("说出你下一次遥测：网站已经排好就说排好的日子，没排就按遥测顺序推算。")
+    static let title: LocalizedStringResource = "我下次遥测"
+    static let description = IntentDescription("说出你下一次遥测：网站已经排好就说排好的日子，没排就按遥测顺序推算。")
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
@@ -146,8 +146,8 @@ struct NextDutyIntent: AppIntent {
 
 /// 遥测下班后补觉：给「快捷指令 › 自动化」判断要不要打开勿扰 / 睡眠专注模式
 struct RestAfterDutyIntent: AppIntent {
-    static var title: LocalizedStringResource = "是不是遥测后补觉时间"
-    static var description = IntentDescription("昨天值了遥测、现在还没到设定的补觉结束时间时返回「是」。在自动化里每天 8:40 运行：如果是，就打开「勿扰模式」或「睡眠」专注模式。")
+    static let title: LocalizedStringResource = "是不是遥测后补觉时间"
+    static let description = IntentDescription("昨天值了遥测、现在还没到设定的补觉结束时间时返回「是」。在自动化里每天 8:40 运行：如果是，就打开「勿扰模式」或「睡眠」专注模式。")
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> & ProvidesDialog {
@@ -161,11 +161,11 @@ struct RestAfterDutyIntent: AppIntent {
 
 /// 「值班提醒记一笔」：不用打开 App，说完直接存进工作留痕
 struct AddWorkNoteIntent: AppIntent {
-    static var title: LocalizedStringResource = "记一笔工作留痕"
-    static var description = IntentDescription("把一句话存进工作留痕，带上日期和当天的班次。")
+    static let title: LocalizedStringResource = "记一笔工作留痕"
+    static let description = IntentDescription("把一句话存进工作留痕，带上日期和当天的班次。")
 
     /// 工作留痕加密存储，手机解锁后才能写
-    static var authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "内容", requestValueDialog: "要记什么？")
     var text: String

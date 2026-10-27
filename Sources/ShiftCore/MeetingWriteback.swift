@@ -2,7 +2,7 @@ import Foundation
 
 /// 一条问题在周会表格里的位置：第几行、内容在哪一列（一格里的第几条）、「完成情况」「负责人」在哪一列，
 /// 和导入时这几格的原文。写回金山文档时按它找格子、核对格子没被别人改过
-public struct MeetingSource: Codable, Equatable, Hashable {
+public struct MeetingSource: Codable, Equatable, Hashable, Sendable {
     /// 行、列都从 1 数
     public var row: Int
     public var contentColumn: Int
@@ -33,7 +33,7 @@ public struct MeetingSource: Codable, Equatable, Hashable {
 /// 在 App 里改一个组的问题，算出要改金山文档里哪几个格子、改成什么
 public enum MeetingWriteback {
     /// 编辑时的一条：问题、负责人、进展、解决了没有
-    public struct Draft: Equatable {
+    public struct Draft: Equatable, Sendable {
         public var text: String
         public var owner: String
         public var progress: String
@@ -60,7 +60,7 @@ public enum MeetingWriteback {
 
     /// 改一个格子：先按这一行内容那一格（anchor）找到这一行，表格上面插了行也能找到；
     /// 格子里还是导入时的内容（expect）才改成 value，别人刚改过的不动
-    public struct CellWrite: Codable, Equatable {
+    public struct CellWrite: Codable, Equatable, Sendable {
         public var anchorRow: Int
         public var anchorColumn: Int
         public var anchorText: String
@@ -88,7 +88,7 @@ public enum MeetingWriteback {
     }
 
     /// 新加的一条放在哪：这一行内容那一格里的第几条
-    public struct Addition: Equatable {
+    public struct Addition: Equatable, Sendable {
         public var text: String
         public var progress: String
         public var row: Int?
@@ -96,7 +96,7 @@ public enum MeetingWriteback {
         public var number: Int?
     }
 
-    public struct Plan: Equatable {
+    public struct Plan: Equatable, Sendable {
         public var writes: [CellWrite] = []
         public var additions: [Addition] = []
         /// 写不回表格、只改了手机上的

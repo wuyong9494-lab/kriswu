@@ -7,7 +7,7 @@ import Foundation
 /// - 公告表：网站上写的排班规则
 public enum SiteAPI {
     /// 一个人在网站上的设置
-    public struct Person: Codable, Equatable {
+    public struct Person: Codable, Equatable, Sendable {
         public var onDuty: Bool?
         /// 能值遥测的星期（1 = 周一 … 7 = 周日）
         public var telemetryWeekdays: Set<Int>?
@@ -23,14 +23,14 @@ public enum SiteAPI {
     }
 
     /// 网站标的「该休没休」：这天这个人本该休息（或在值班交接前那列），但还在上班
-    public struct NoRest: Equatable, Hashable {
+    public struct NoRest: Equatable, Hashable, Sendable {
         public var day: DayKey
         public var name: String
         /// 「休息」或「值班交接前」
         public var column: String
     }
 
-    public struct Result: Equatable {
+    public struct Result: Equatable, Sendable {
         public var roster: Roster = [:]
         public var noRest: [NoRest] = []
         /// 各组负责的星（组A → 「高分03D01、高分03D02」）

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ClockTime: Hashable, Codable {
+public struct ClockTime: Hashable, Codable, Sendable {
     public var hour: Int
     public var minute: Int
 
@@ -12,7 +12,7 @@ public struct ClockTime: Hashable, Codable {
     public var text: String { String(format: "%02d:%02d", hour, minute) }
 }
 
-public struct PlannedNotification: Hashable {
+public struct PlannedNotification: Hashable, Sendable {
     public var id: String
     public var day: DayKey
     public var time: ClockTime
@@ -25,7 +25,7 @@ public struct PlannedNotification: Hashable {
 /// 根据排班计算未来要发的本地通知。
 /// iPhone 不允许 App 在后台定时联网，但允许提前登记“到点就弹”的本地通知，
 /// 所以每次打开 App / 同步 / 修改排班后，都把接下来几周的提醒全部重新登记一遍。
-public struct NotificationPlanner {
+public struct NotificationPlanner: Sendable {
     public var morning: ClockTime?
     public var evening: ClockTime?
     /// 没有排班的日子是否也提醒（显示“未排班”）。

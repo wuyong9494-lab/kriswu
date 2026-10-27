@@ -14,8 +14,8 @@ public enum ScheduleParseError: Error, Equatable, LocalizedError {
     }
 }
 
-public struct ParseResult: Equatable {
-    public enum Format: String { case ics = "日历 (ICS)", json = "JSON", matrix = "月度排班表", column = "按列排班表", roster = "岗位排班表", list = "日期列表", api = "数据接口" }
+public struct ParseResult: Equatable, Sendable {
+    public enum Format: String, Sendable { case ics = "日历 (ICS)", json = "JSON", matrix = "月度排班表", column = "按列排班表", roster = "岗位排班表", list = "日期列表", api = "数据接口" }
 
     public var entries: [DayKey: String]
     public var format: Format
@@ -51,7 +51,7 @@ public struct ParseResult: Equatable {
 
 /// 把各种排班数据（ICS 日历、JSON、CSV/Excel 粘贴、随手写的文字）解析成「日期 → 班次」。
 /// 如果是多人排班表，用 aliases（例如 ["张伟", "zhangwei"]）找出属于自己的那一行/列。
-public struct ScheduleParser {
+public struct ScheduleParser: Sendable {
     public var aliases: [String]
     public var reference: DayKey
     public var timeZone: TimeZone

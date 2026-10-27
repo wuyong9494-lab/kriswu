@@ -5,7 +5,7 @@ import Foundation
 /// 改了代码没改说明（或者反过来）测试就不过。
 public enum RuleBook {
     /// 例子怎么算
-    public enum Check: Equatable, Hashable {
+    public enum Check: Equatable, Hashable, Sendable {
         /// 网站上这一项算哪一类
         case part
         /// 找人换班时这天能不能找他
@@ -16,7 +16,7 @@ public enum RuleBook {
         case workday, weekend, holiday
     }
 
-    public struct Example: Equatable, Hashable {
+    public struct Example: Equatable, Hashable, Sendable {
         /// 页面上显示的（「工作日什么都没写」）
         public var label: String
         public var input: String
@@ -25,13 +25,13 @@ public enum RuleBook {
         public var check: Check
     }
 
-    public struct Rule: Equatable, Identifiable {
+    public struct Rule: Equatable, Identifiable, Sendable {
         public var id: String { text }
         public var text: String
         public var examples: [Example]
     }
 
-    public struct Section: Equatable, Identifiable {
+    public struct Section: Equatable, Identifiable, Sendable {
         public var id: String { title }
         public var title: String
         public var rules: [Rule]

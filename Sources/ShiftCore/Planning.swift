@@ -1,7 +1,7 @@
 import Foundation
 
 /// 节假日值班统计：每个人在法定节假日里值了几次遥测、上了几天班（跨年累计）。
-public struct HolidayDuty: Equatable {
+public struct HolidayDuty: Equatable, Sendable {
     public var name: String
     /// 节假日遥测次数
     public var dutyDays: Int
@@ -53,7 +53,7 @@ public enum HolidayDutyStats {
 }
 
 /// 请假规划：想休的一段日子，要用几天、撞不撞遥测。
-public struct LeavePlan: Equatable {
+public struct LeavePlan: Equatable, Sendable {
     /// 要请假（用待休）的日子：排了岗位的，或者网站还没排、但是工作日的
     public var needDays: [DayKey]
     /// 本来就不用上班的：周末、法定假日、已经是休息的
@@ -112,7 +112,7 @@ public enum TaskList {
 }
 
 /// 一天的清单做了哪些。按当时的清单存档：以后组别工作内容改了，旧记录不变。
-public struct TaskDayRecord: Codable, Equatable, Hashable {
+public struct TaskDayRecord: Codable, Equatable, Hashable, Sendable {
     /// 那天的班（显示用）
     public var shift: String?
     public var done: [String]
@@ -148,8 +148,8 @@ public struct TaskDayRecord: Codable, Equatable, Hashable {
 }
 
 /// 数据核对：找出可能读漏、读错的地方
-public struct DataIssue: Hashable {
-    public enum Kind: String { case noRestAfterDuty = "遥测后没写休息", unknownPost = "认不出的岗位", thinDay = "这天人数偏少" }
+public struct DataIssue: Hashable, Sendable {
+    public enum Kind: String, Sendable { case noRestAfterDuty = "遥测后没写休息", unknownPost = "认不出的岗位", thinDay = "这天人数偏少" }
     public var kind: Kind
     public var day: DayKey?
     public var name: String?
@@ -219,7 +219,7 @@ public enum DataCheck {
 /// 然后询问是否有自愿报名的同事顶替（无人报名就按名单执行）」。
 /// 这里按这条规则排出下一个节假日的预留名单（不知道谁会自愿报名，所以只是参考）。
 public enum HolidayDutyPlanner {
-    public struct Candidate: Equatable {
+    public struct Candidate: Equatable, Sendable {
         public var name: String
         /// 上一个节假日值没值遥测
         public var servedLastHoliday: Bool
@@ -229,7 +229,7 @@ public enum HolidayDutyPlanner {
         public var duties: Int
     }
 
-    public struct Plan: Equatable {
+    public struct Plan: Equatable, Sendable {
         /// 下一个节假日（连续放假的日子）
         public var days: [DayKey]
         /// 上一个节假日

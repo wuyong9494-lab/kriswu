@@ -2,7 +2,7 @@ import Foundation
 
 /// 换班账本里的一条：某天谁替谁上了班。
 /// effect：+1 他欠我一天（我替他上了），-1 我欠他一天（他替我上了），0 当天对换、两清。
-public struct SwapRecord: Codable, Hashable, Identifiable {
+public struct SwapRecord: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var detected: Date
     public var day: DayKey
@@ -89,7 +89,7 @@ public enum SwapLedger {
 }
 
 /// 换班助手：我想把某天的班换出去，谁能替我。
-public struct SwapCandidate: Equatable {
+public struct SwapCandidate: Equatable, Sendable {
     public var name: String
     /// 他那天在干什么（没排班、休息、调休…）
     public var thatDay: String
@@ -165,7 +165,7 @@ public enum SwapFinder {
 }
 
 /// 全员排班里某天某个岗位换了人（谁和谁换了班）
-public struct TeamChange: Codable, Hashable, Identifiable {
+public struct TeamChange: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var detected: Date
     public var day: DayKey

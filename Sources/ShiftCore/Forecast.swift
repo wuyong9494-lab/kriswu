@@ -1,7 +1,7 @@
 import Foundation
 
 /// 遥测轮转预测：按每个人过去值遥测的间隔，推算下一次大概哪天。
-public struct DutyForecast: Equatable {
+public struct DutyForecast: Equatable, Sendable {
     public var name: String
     /// 记录里一共值了几次
     public var count: Int

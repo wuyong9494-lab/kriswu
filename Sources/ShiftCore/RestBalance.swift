@@ -54,7 +54,7 @@ public enum RestBalanceHistory {
     }
 
     /// 一次变化：从 from 天变成 to 天，以及上一次记录之后到这天之间排的遥测、休息、调休、请假、出差。
-    public struct Step: Equatable {
+    public struct Step: Equatable, Sendable {
         public var day: DayKey
         public var from: Int
         public var to: Int
@@ -63,7 +63,7 @@ public enum RestBalanceHistory {
         public var delta: Int { to - from }
     }
 
-    public struct Event: Equatable {
+    public struct Event: Equatable, Sendable {
         public var day: DayKey
         public var post: String
         /// 法定节假日 / 周末（工作日为 nil）
