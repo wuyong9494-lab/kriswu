@@ -2774,3 +2774,21 @@ final class MeetingInsightsTests: XCTestCase {
         XCTAssertEqual(MeetingInsights.groupStats(Array(issues.prefix(4)), week: w4).map(\.group), ["组A", "组B"])
     }
 }
+
+final class CardOrderTests: XCTestCase {
+    func testResolve() {
+        let defaults = ["week", "tasks", "meeting", "stats"]
+        XCTAssertEqual(CardOrder.resolve(stored: [], defaults: defaults), defaults)
+        XCTAssertEqual(CardOrder.resolve(stored: ["stats", "week", "tasks", "meeting"], defaults: defaults),
+                       ["stats", "week", "tasks", "meeting"])
+        // 已经没有的卡片、重复的去掉
+        XCTAssertEqual(CardOrder.resolve(stored: ["old", "meeting", "week", "meeting", "tasks", "stats"], defaults: defaults),
+                       ["meeting", "week", "tasks", "stats"])
+        // 新加的卡片（tasks）插在默认顺序里它前一张（week）后面
+        XCTAssertEqual(CardOrder.resolve(stored: ["stats", "meeting", "week"], defaults: defaults),
+                       ["stats", "meeting", "week", "tasks"])
+        // 新加的是第一张：放最前面
+        XCTAssertEqual(CardOrder.resolve(stored: ["meeting", "tasks", "stats"], defaults: defaults),
+                       ["week", "meeting", "tasks", "stats"])
+    }
+}

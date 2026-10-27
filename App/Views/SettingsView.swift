@@ -217,6 +217,11 @@ struct SettingsView: View {
 
     private var displaySection: some View {
         Section {
+            NavigationLink {
+                TodayLayoutView()
+            } label: {
+                Label("今天页的卡片", systemImage: "rectangle.stack")
+            }
             if store.canEdit {
                 NavigationLink {
                     ShiftTypesView()

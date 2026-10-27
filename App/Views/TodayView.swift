@@ -65,21 +65,18 @@ struct TodayView: View {
                             .staggered(1)
                         TodayDutyLine(today: today).staggered(1)
                         NoticeChangeCard().staggered(2)
-                        WeekStrip(from: today) { Haptics.tap(); editing = $0 }.staggered(2)
-                        WorkLogCard(day: today).staggered(2)
-                        DutyInsightCard(today: today).staggered(3)
-                        TaskChecklistCard(day: today).staggered(3)
-                        RecentChanges().staggered(3)
-                        MeetingCard(today: today).staggered(3)
-                        // 两列：左边本月数字，右边常用入口（高度不同，有节奏）
-                        HStack(alignment: .top, spacing: DS.Space.s) {
-                            MonthStatCard(today: today)
-                            QuickActions(today: today) { searching = true }
+                        // 下面的卡片按自己排的顺序（设置 › 显示 › 今天页的卡片），关掉的不显示
+                        let hidden = Set(store.settings.hiddenTodayCards)
+                        ForEach(Array(store.settings.todayCards.filter { !hidden.contains($0.rawValue) }.enumerated()),
+                                id: \.element) { i, card in
+                            todayCard(card, today: today).staggered(min(2 + i / 2, 7))
                         }
-                        .staggered(4)
-                        FavoritesCard(today: today).staggered(5)
-                        UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }.staggered(6)
-                        SyncStatus().staggered(7)
+                        NavigationLink { TodayLayoutView() } label: {
+                            Label("调整今天页的卡片", systemImage: "slider.horizontal.3")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, DS.Space.m)
                     .padding(.bottom, DS.Space.l)
@@ -111,6 +108,27 @@ struct TodayView: View {
             .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
             .task(id: "\(store.dataRevision)-\(DayKey.today)") { await store.warmRotation() }
+        }
+    }
+
+    @ViewBuilder
+    private func todayCard(_ card: TodayCard, today: DayKey) -> some View {
+        switch card {
+        case .week: WeekStrip(from: today) { Haptics.tap(); editing = $0 }
+        case .workLog: WorkLogCard(day: today)
+        case .dutyInsight: DutyInsightCard(today: today)
+        case .tasks: TaskChecklistCard(day: today)
+        case .changes: RecentChanges()
+        case .meeting: MeetingCard(today: today)
+        case .stats:
+            // 两列：左边本月数字，右边常用入口（高度不同，有节奏）
+            HStack(alignment: .top, spacing: DS.Space.s) {
+                MonthStatCard(today: today)
+                QuickActions(today: today) { searching = true }
+            }
+        case .favorites: FavoritesCard(today: today)
+        case .upcoming: UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }
+        case .syncStatus: SyncStatus()
         }
     }
 }

@@ -377,6 +377,7 @@ enum ScreenCatalog {
         case "meetingEdit": MeetingIssuesView(editing: "调度组")
         case "meetingSource": MeetingSourceView()
         case "meetingTrend": MeetingTrendView()
+        case "todayLayout": TodayLayoutView()
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         default: TodayView()

@@ -69,6 +69,7 @@ struct AllFeaturesView: View {
                 feature("自动同步设置向导", "让 App 在后台自己同步", "arrow.triangle.2.circlepath", keywords: "后台 快捷指令 自动化") { AutomationGuideView() },
                 feature("身份", "普通用户、管理者、管理员", "person.badge.key", keywords: "角色 管理员 权限") { RoleView() },
                 feature("备份与恢复", "换手机、重装前备份", "externaldrive", keywords: "备份 恢复 换手机") { BackupView() },
+                feature("今天页的卡片", "调顺序、关掉用不着的卡片", "rectangle.stack", keywords: "首页 排序 隐藏 布局") { TodayLayoutView() },
                 feature("工作量规则", "周六算不算工作日、没排岗位算不算上班", "slider.horizontal.3", keywords: "规则 设置 周六", access: .admin) { WorkloadRulesView() },
                 feature("人员档案", "谁是调度、谁轮组别、什么时候来走的", "person.text.rectangle", keywords: "档案 角色", access: .admin) { PeopleProfilesView() },
                 feature("法定节假日", "补录、改节假日安排", "calendar.badge.exclamationmark", keywords: "放假 调休上班", access: .admin) { HolidaysView() },

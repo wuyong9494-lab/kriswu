@@ -80,6 +80,9 @@ struct AppSettings: Codable, Equatable {
     /// 播报语速（0.3–0.6，系统默认 0.5）
     var voiceRate: Float = 0.47
     var appearance: Appearance = .system
+    /// 今天页卡片的顺序、藏起来的卡片（TodayCard 的名字；空 = 默认顺序）
+    var todayCardOrder: [String] = []
+    var hiddenTodayCards: [String] = []
     var accentTheme: AccentTheme = .system
     /// 主屏幕图标显示今天的组（A–E / 休），打开 App 时切换
     var dynamicIcon = true
@@ -427,6 +430,8 @@ extension AppSettings {
         a.weChatChanges = o.weChatChanges
         a.weChatTeam = o.weChatTeam
         a.meetingWeChat = o.meetingWeChat
+        a.todayCardOrder = o.todayCardOrder
+        a.hiddenTodayCards = o.hiddenTodayCards
         a.dutyHeadsUp = o.dutyHeadsUp
         a.syncState = o.syncState
         a.lastSyncAttempt = o.lastSyncAttempt
