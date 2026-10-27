@@ -83,29 +83,42 @@ enum PlanReader {
         return PassPlan.Reading(rows: rows, layout: layout, header: header, strips: strips)
     }
 
-    /// 分家只看地面站：每一行把地面站那一格单独裁下来再认一遍（一小格单独认，比一整张里一起认准得多）。
-    /// 再认的对得上对照表、或者原来那个对不上，就用再认的
+    /// 最要紧的两格再认一遍：每一行把「地面站」那一格（分家只看它）、没认出来的「是否应急」那一格（决定图下面那句话）
+    /// 单独裁下来、放大了再认（一小格单独认，比一整张里一起认准得多）。
+    /// 地面站：再认的对得上对照表、或者原来那个对不上，就用再认的；是否应急：再认出「是 / 不是」就填上
     static func rereadStations(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
                                rules: [PassPlan.OperatorRule], words: [String], settings: Settings) async -> [PassPlanRow] {
-        guard let s = layout.slots.firstIndex(where: { $0.column == .station }) else { return rows }
+        let station = layout.slots.firstIndex { $0.column == .station }
+        let urgent = layout.emergencyIndex
+        guard station != nil || urgent != nil else { return rows }
         let xs = layout.slots.map(\.x)
         return await Task.detached(priority: .userInitiated) {
-            rows.map { row in
-                guard let region = row.region else { return row }
+            /// 这一行第 s 列那一格单独认出的字
+            func reread(column s: Int, of region: PassPlan.Region) -> String? {
                 let left = s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left
                 let right = s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right
                 let center = (left + right) / 2
                 let cell = PassPlan.TextBox(text: "", x: left, y: region.y0 + region.slope * center - region.height * 0.45,
                                             width: right - left, height: region.height * 0.9)
-                guard let again = reread(cell, in: image, words: words, settings: settings)?.text
-                        .filter({ !$0.isWhitespace })
-                        .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-"),
-                      !again.isEmpty, again != row.station else { return row }
-                let matchesNow = PassPlan.operatorName(of: again, rules: rules) != nil
-                let matchedBefore = PassPlan.operatorName(of: row.station, rules: rules) != nil
-                guard matchesNow || !matchedBefore else { return row }
+                let text = Self.reread(cell, in: image, words: words, settings: settings)?.text.filter { !$0.isWhitespace }
+                return text?.isEmpty == false ? text : nil
+            }
+            return rows.map { row in
+                guard let region = row.region else { return row }
                 var fixed = row
-                fixed.station = again
+                if let s = station,
+                   let again = reread(column: s, of: region)?
+                       .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-"),
+                   again != row.station,
+                   PassPlan.operatorName(of: again, rules: rules) != nil || PassPlan.operatorName(of: row.station, rules: rules) == nil {
+                    fixed.station = again
+                }
+                if let e = urgent, PassPlan.emergency(fixed, layout: layout) == nil, let again = reread(column: e, of: region) {
+                    var trial = fixed
+                    while trial.cells.count <= e { trial.cells.append("") }
+                    trial.cells[e] = again
+                    if PassPlan.emergency(trial, layout: layout) != nil { fixed = trial }
+                }
                 return fixed
             }
         }.value
