@@ -23,9 +23,10 @@ enum ActivityShare {
     }
 }
 
-/// 分享面板最上面显示的标题（「甲站数传计划 → 发到 XX 群」），连着发几家时一眼看出这次发给谁
+/// 分享面板最上面显示的标题（「甲站数传计划 → 发到 XX 群」），连着发几家时一眼看出这次发给谁。
+/// 分享面板在主线程问这些（@preconcurrency：按主线程的代码对待）
 @MainActor
-final class SharePayload: NSObject, UIActivityItemSource {
+final class SharePayload: NSObject, @preconcurrency UIActivityItemSource {
     let item: Any
     let title: String
     let preview: UIImage?
