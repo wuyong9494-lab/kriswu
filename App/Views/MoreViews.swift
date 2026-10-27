@@ -170,7 +170,7 @@ struct AutomationGuideView: View {
 
     var body: some View {
         let dayAgo = Date().addingTimeInterval(-86_400)
-        let runs = store.settings.syncLog.filter { $0.date > dayAgo && $0.source.hasPrefix("快捷指令") }
+        let runs = store.records.syncLog.filter { $0.date > dayAgo && $0.source.hasPrefix("快捷指令") }
         List {
             Section {
                 LabeledContent("最近 24 小时快捷指令同步", value: "\(runs.count) 次")

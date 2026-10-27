@@ -142,8 +142,7 @@ struct AppSettings: Codable, Equatable {
     var swapRecords: [SwapRecord] = []
     /// 组别任务清单勾选：「yyyy-MM-dd|组A」→ 做完的事项
     var taskChecks: [String: [String]] = [:]
-    /// 每天的清单做完了哪些（yyyy-MM-dd → 当时的清单），存一年，工作留痕里看
-    var taskHistory: [String: TaskDayRecord] = [:]
+    // 清单历史、「排班有更新」、同步记录存在 records.json（RecordsState）；周会问题存在 meeting.json（MeetingState）
 
     // MARK: 管理员规则（只有管理员能改，见 keepingAdminFields）
 
@@ -158,23 +157,6 @@ struct AppSettings: Codable, Equatable {
     var customHolidayWork: [String] = []
     /// 周六是正常工作日（法定节假日除外）：没排岗位、没写休息的周六算上班、算工作量
     var saturdayIsWorkday = true
-    /// 周会文档（金山文档、腾讯文档的分享链接）：每周一更新，App 自动读，跟进各组提的问题
-    var meetingDocURL = ""
-    var meetingIssues: [MeetingIssue] = []
-    /// 上次导入的文档内容指纹（没变就不当成新的一周）、导入时间、哪一周、读取结果
-    var meetingFingerprint: String?
-    var meetingLastImport: Date?
-    var meetingWeek: DayKey?
-    var meetingLastAttempt: Date?
-    var meetingMessage: String?
-    /// 自动读不到（文档是在线表格）时，这一周已经提醒过去复制导入
-    var meetingNudgedWeek: DayKey?
-    /// 上次自动下载周会表格每一步的结果（没下载成功时看卡在哪一步）
-    var meetingDownloadLog: [String] = []
-    /// 周会表格里写回脚本的 webhook 链接（令牌在钥匙串里）
-    var meetingScriptURL: String = ""
-    /// 写回金山文档的记录（新的在前）
-    var meetingWriteLog: [String] = []
     /// 人员档案（管理员确认过的角色、来走日期）
     var profiles: [String: PersonProfile] = [:]
     /// 工作量规则开关
@@ -219,8 +201,6 @@ struct AppSettings: Codable, Equatable {
     var publishTimes: [Date] = []
     /// 全员换班记录
     var teamChanges: [TeamChange] = []
-    /// 最近的排班变动（首页显示）
-    var changeLog: [ChangeLogEntry] = []
     /// 排班预演：网站还没排的日子猜的遥测（日期 → 名字）；网站排出来后拿来对，结果记在 previewResults
     var previewGuesses: [String: String] = [:]
     var previewResults: [PreviewResult] = []
@@ -235,8 +215,6 @@ struct AppSettings: Codable, Equatable {
     var syncState: SyncState?
     var lastSyncAttempt: Date?
     var syncFailureCount = 0
-    /// 最近 30 次同步（诊断用）
-    var syncLog: [SyncLogEntry] = []
     /// 上次系统在后台唤醒 App 的时间
     var lastBackgroundWake: Date?
     /// 认出的网站数据接口（如 "GET http://…/api/duty"），同步时优先用它取多周数据
@@ -293,143 +271,22 @@ struct AppSettings: Codable, Equatable {
     init() {}
 
     // 逐项读取，新版本增加字段时旧存档也能正常打开
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        let d = AppSettings()
-        aliases = (try? c.decodeIfPresent([String].self, forKey: .aliases)) ?? d.aliases
-        morningEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .morningEnabled)) ?? d.morningEnabled
-        morning = (try? c.decodeIfPresent(ClockTime.self, forKey: .morning)) ?? d.morning
-        eveningEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .eveningEnabled)) ?? d.eveningEnabled
-        evening = (try? c.decodeIfPresent(ClockTime.self, forKey: .evening)) ?? d.evening
-        notifyWhenEmpty = (try? c.decodeIfPresent(Bool.self, forKey: .notifyWhenEmpty)) ?? d.notifyWhenEmpty
-        voiceEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .voiceEnabled)) ?? d.voiceEnabled
-        voiceIdentifier = (try? c.decodeIfPresent(String.self, forKey: .voiceIdentifier)) ?? d.voiceIdentifier
-        voiceRate = (try? c.decodeIfPresent(Float.self, forKey: .voiceRate)) ?? d.voiceRate
-        appearance = (try? c.decodeIfPresent(Appearance.self, forKey: .appearance)) ?? d.appearance
-        accentTheme = (try? c.decodeIfPresent(AccentTheme.self, forKey: .accentTheme)) ?? .system
-        sourceURL = (try? c.decodeIfPresent(String.self, forKey: .sourceURL)) ?? d.sourceURL
-        sourceUsername = (try? c.decodeIfPresent(String.self, forKey: .sourceUsername)) ?? d.sourceUsername
-        syncViaWeb = (try? c.decodeIfPresent(Bool.self, forKey: .syncViaWeb)) ?? d.syncViaWeb
-        notifyChanges = (try? c.decodeIfPresent(Bool.self, forKey: .notifyChanges)) ?? d.notifyChanges
-        loginExpiredNotified = (try? c.decodeIfPresent(Bool.self, forKey: .loginExpiredNotified)) ?? d.loginExpiredNotified
-        apiSignature = try? c.decodeIfPresent(String.self, forKey: .apiSignature)
-        weChatEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .weChatEnabled)) ?? d.weChatEnabled
-        weChatDaily = (try? c.decodeIfPresent(Bool.self, forKey: .weChatDaily)) ?? d.weChatDaily
-        weChatMorningSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatMorningSent)
-        weChatEveningSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatEveningSent)
-        weChatMessage = try? c.decodeIfPresent(String.self, forKey: .weChatMessage)
-        dynamicIcon = (try? c.decodeIfPresent(Bool.self, forKey: .dynamicIcon)) ?? d.dynamicIcon
-        calendarSync = (try? c.decodeIfPresent(Bool.self, forKey: .calendarSync)) ?? d.calendarSync
-        weChatChanges = (try? c.decodeIfPresent(Bool.self, forKey: .weChatChanges)) ?? d.weChatChanges
-        weChatTeam = (try? c.decodeIfPresent(Bool.self, forKey: .weChatTeam)) ?? d.weChatTeam
-        dayMemos = (try? c.decodeIfPresent([String: String].self, forKey: .dayMemos)) ?? [:]
-        lastWeChatChangeDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeChatChangeDigest)
-        autoGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .autoGroupNotes)) ?? [:]
-        manualGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .manualGroupNotes)) ?? [:]
-        rosterVersion = (try? c.decodeIfPresent(Int.self, forKey: .rosterVersion)) ?? 0
-        weeklyPreview = (try? c.decodeIfPresent(Bool.self, forKey: .weeklyPreview)) ?? d.weeklyPreview
-        weChatWeekSent = try? c.decodeIfPresent(DayKey.self, forKey: .weChatWeekSent)
-        favorites = (try? c.decodeIfPresent([String].self, forKey: .favorites)) ?? []
-        scheduleOnlyMembers = (try? c.decodeIfPresent([String].self, forKey: .scheduleOnlyMembers)) ?? []
-        swapRecords = (try? c.decodeIfPresent([SwapRecord].self, forKey: .swapRecords)) ?? []
-        customHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .customHolidayOff)) ?? []
-        customHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .customHolidayWork)) ?? []
-        saturdayIsWorkday = (try? c.decodeIfPresent(Bool.self, forKey: .saturdayIsWorkday)) ?? true
-        meetingDocURL = (try? c.decodeIfPresent(String.self, forKey: .meetingDocURL)) ?? ""
-        meetingIssues = (try? c.decodeIfPresent([MeetingIssue].self, forKey: .meetingIssues)) ?? []
-        meetingFingerprint = try? c.decodeIfPresent(String.self, forKey: .meetingFingerprint)
-        meetingLastImport = try? c.decodeIfPresent(Date.self, forKey: .meetingLastImport)
-        meetingWeek = try? c.decodeIfPresent(DayKey.self, forKey: .meetingWeek)
-        meetingLastAttempt = try? c.decodeIfPresent(Date.self, forKey: .meetingLastAttempt)
-        meetingMessage = try? c.decodeIfPresent(String.self, forKey: .meetingMessage)
-        meetingNudgedWeek = try? c.decodeIfPresent(DayKey.self, forKey: .meetingNudgedWeek)
-        meetingDownloadLog = (try? c.decodeIfPresent([String].self, forKey: .meetingDownloadLog)) ?? []
-        meetingScriptURL = (try? c.decodeIfPresent(String.self, forKey: .meetingScriptURL)) ?? ""
-        meetingWriteLog = (try? c.decodeIfPresent([String].self, forKey: .meetingWriteLog)) ?? []
-        restHistory = (try? c.decodeIfPresent([String: [RestPoint]].self, forKey: .restHistory)) ?? [:]
-        restAlertThreshold = (try? c.decodeIfPresent(Int.self, forKey: .restAlertThreshold)) ?? 5
-        restAlertNotified = try? c.decodeIfPresent(Int.self, forKey: .restAlertNotified)
-        warnedRestKeys = (try? c.decodeIfPresent([String].self, forKey: .warnedRestKeys)) ?? []
-        workLogAutoTranscribe = (try? c.decodeIfPresent(Bool.self, forKey: .workLogAutoTranscribe)) ?? d.workLogAutoTranscribe
-        speechOnDeviceOnly = (try? c.decodeIfPresent(Bool.self, forKey: .speechOnDeviceOnly)) ?? d.speechOnDeviceOnly
-        workLogLock = (try? c.decodeIfPresent(Bool.self, forKey: .workLogLock)) ?? d.workLogLock
-        syncHealth = (try? c.decodeIfPresent([String: [SyncHealth.Metrics]].self, forKey: .syncHealth)) ?? [:]
-        syncHealthWarning = try? c.decodeIfPresent(String.self, forKey: .syncHealthWarning)
-        syncHealthWarnedDay = try? c.decodeIfPresent(DayKey.self, forKey: .syncHealthWarnedDay)
-        profiles = (try? c.decodeIfPresent([String: PersonProfile].self, forKey: .profiles)) ?? [:]
-        ruleHistory = (try? c.decodeIfPresent([RuleVersion].self, forKey: .ruleHistory)) ?? []
-        leaveSources = (try? c.decodeIfPresent([String].self, forKey: .leaveSources)) ?? []
-        publishTimes = (try? c.decodeIfPresent([Date].self, forKey: .publishTimes)) ?? []
-        restLedgerNotified = try? c.decodeIfPresent(String.self, forKey: .restLedgerNotified)
+    /// 从存档读：每一项单独容错（见 TolerantCoding，新加的项只要有默认值），再做几项老版本的迁移。
+    /// stored 是存档里设置那一段（JSONSerialization 读出来的字典）
+    static func load(from stored: Any?, encoder: JSONEncoder = JSONEncoder(), decoder: JSONDecoder = JSONDecoder()) -> AppSettings {
+        var s = TolerantCoding.decode(AppSettings.self, from: stored, defaults: AppSettings(), encoder: encoder, decoder: decoder)
+        let keys = (stored as? [String: Any]).map { Set($0.keys) } ?? []
         // 老用户（已经填过网址）不再弹向导
-        let savedURL = (try? c.decodeIfPresent(String.self, forKey: .sourceURL)) ?? ""
-        onboardingDone = (try? c.decodeIfPresent(Bool.self, forKey: .onboardingDone)) ?? !savedURL.isEmpty
-        liveActivity = (try? c.decodeIfPresent(Bool.self, forKey: .liveActivity)) ?? true
-        workloadRules = (try? c.decodeIfPresent(WorkloadRules.self, forKey: .workloadRules)) ?? WorkloadRules()
-        workloadOverrides = (try? c.decodeIfPresent([String: [String: String]].self, forKey: .workloadOverrides)) ?? [:]
-        monthlyReport = (try? c.decodeIfPresent(Bool.self, forKey: .monthlyReport)) ?? true
-        lastMonthlyReport = try? c.decodeIfPresent(String.self, forKey: .lastMonthlyReport)
-        weeklyDigest = (try? c.decodeIfPresent(Bool.self, forKey: .weeklyDigest)) ?? true
-        lastWeeklyDigest = try? c.decodeIfPresent(String.self, forKey: .lastWeeklyDigest)
-        personalWeekly = (try? c.decodeIfPresent(Bool.self, forKey: .personalWeekly)) ?? true
-        lastPersonalWeekly = try? c.decodeIfPresent(String.self, forKey: .lastPersonalWeekly)
-        siteNoRestFlags = (try? c.decodeIfPresent([String].self, forKey: .siteNoRestFlags)) ?? []
-        notifyFavorites = (try? c.decodeIfPresent(Bool.self, forKey: .notifyFavorites)) ?? true
-        notifyAllChanges = (try? c.decodeIfPresent(Bool.self, forKey: .notifyAllChanges)) ?? true
-        teamChanges = (try? c.decodeIfPresent([TeamChange].self, forKey: .teamChanges)) ?? []
-        restFocusUntil = (try? c.decodeIfPresent(ClockTime.self, forKey: .restFocusUntil)) ?? ClockTime(hour: 14, minute: 0)
-        dutyStart = (try? c.decodeIfPresent(ClockTime.self, forKey: .dutyStart)) ?? ClockTime(hour: 8, minute: 30)
-        dutyLeadMinutes = (try? c.decodeIfPresent(Int.self, forKey: .dutyLeadMinutes)) ?? 0
-        taskChecks = (try? c.decodeIfPresent([String: [String]].self, forKey: .taskChecks)) ?? [:]
-        taskHistory = (try? c.decodeIfPresent([String: TaskDayRecord].self, forKey: .taskHistory)) ?? [:]
-        backupFolderBookmark = try? c.decodeIfPresent(Data.self, forKey: .backupFolderBookmark)
-        backupFolderName = try? c.decodeIfPresent(String.self, forKey: .backupFolderName)
-        lastAutoBackup = try? c.decodeIfPresent(Date.self, forKey: .lastAutoBackup)
-        autoBackupMessage = try? c.decodeIfPresent(String.self, forKey: .autoBackupMessage)
-        changeLog = (try? c.decodeIfPresent([ChangeLogEntry].self, forKey: .changeLog)) ?? []
-        syncStaleNotified = (try? c.decodeIfPresent(Bool.self, forKey: .syncStaleNotified)) ?? false
-        lastDesktopNotesFetch = try? c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesFetch)
-        lastDesktopNotesAttempt = try? c.decodeIfPresent(Date.self, forKey: .lastDesktopNotesAttempt)
-        desktopNotesMessage = try? c.decodeIfPresent(String.self, forKey: .desktopNotesMessage)
-        desktopNotesURL = (try? c.decodeIfPresent(String.self, forKey: .desktopNotesURL)) ?? ""
-        desktopRosterMessage = try? c.decodeIfPresent(String.self, forKey: .desktopRosterMessage)
-        restBalance = (try? c.decodeIfPresent([String: Int].self, forKey: .restBalance)) ?? [:]
-        sitePeople = (try? c.decodeIfPresent([String: SiteAPI.Person].self, forKey: .sitePeople)) ?? [:]
-        siteNotices = (try? c.decodeIfPresent([String].self, forKey: .siteNotices)) ?? []
-        siteNoticesChanged = try? c.decodeIfPresent(Date.self, forKey: .siteNoticesChanged)
-        siteNoticesNew = (try? c.decodeIfPresent([String].self, forKey: .siteNoticesNew)) ?? []
-        fixedTelemetryDays = (try? c.decodeIfPresent([String].self, forKey: .fixedTelemetryDays)) ?? []
-        groupSatellites = (try? c.decodeIfPresent([String: String].self, forKey: .groupSatellites)) ?? [:]
-        downloadedHolidayOff = (try? c.decodeIfPresent([String].self, forKey: .downloadedHolidayOff)) ?? []
-        downloadedHolidayWork = (try? c.decodeIfPresent([String].self, forKey: .downloadedHolidayWork)) ?? []
-        lastHolidayFetch = try? c.decodeIfPresent(Date.self, forKey: .lastHolidayFetch)
-        noRestNotified = (try? c.decodeIfPresent([String].self, forKey: .noRestNotified)) ?? []
-        dutyHeadsUp = (try? c.decodeIfPresent(Bool.self, forKey: .dutyHeadsUp)) ?? true
-        dutyHeadsUpSent = try? c.decodeIfPresent(Date.self, forKey: .dutyHeadsUpSent)
-        previewGuesses = (try? c.decodeIfPresent([String: String].self, forKey: .previewGuesses)) ?? [:]
-        previewResults = (try? c.decodeIfPresent([PreviewResult].self, forKey: .previewResults)) ?? []
-        restBalanceUpdated = try? c.decodeIfPresent(Date.self, forKey: .restBalanceUpdated)
-        nextSyncIsBaseline = (try? c.decodeIfPresent(Bool.self, forKey: .nextSyncIsBaseline)) ?? false
-        remindUnassigned = (try? c.decodeIfPresent(Bool.self, forKey: .remindUnassigned)) ?? true
-        pendingWeChatChange = try? c.decodeIfPresent(ChangeLogEntry.self, forKey: .pendingWeChatChange)
-        syncLog = (try? c.decodeIfPresent([SyncLogEntry].self, forKey: .syncLog)) ?? []
-        lastBackgroundWake = try? c.decodeIfPresent(Date.self, forKey: .lastBackgroundWake)
-        desktopGroupNotes = (try? c.decodeIfPresent([String: String].self, forKey: .desktopGroupNotes)) ?? [:]
-        lastSuccessMessage = try? c.decodeIfPresent(String.self, forKey: .lastSuccessMessage)
-        shiftTypes = (try? c.decodeIfPresent([ShiftType].self, forKey: .shiftTypes)) ?? d.shiftTypes
+        if !keys.contains("onboardingDone") { s.onboardingDone = !s.sourceURL.isEmpty }
         // 1.1 以前存的班次类型：「值班交接前」被认成值班（关键字「值」），给休息加上「交接」「交班」
-        if let i = shiftTypes.firstIndex(where: { $0.id == "off" }), !shiftTypes[i].keywords.contains("交接") {
-            shiftTypes[i].keywords += ["交接", "交班"]
+        if let i = s.shiftTypes.firstIndex(where: { $0.id == "off" }), !s.shiftTypes[i].keywords.contains("交接") {
+            s.shiftTypes[i].keywords += ["交接", "交班"]
         }
-        lastSync = try? c.decodeIfPresent(Date.self, forKey: .lastSync)
-        lastSyncMessage = try? c.decodeIfPresent(String.self, forKey: .lastSyncMessage)
-        syncState = try? c.decodeIfPresent(SyncState.self, forKey: .syncState)
-        lastSyncAttempt = try? c.decodeIfPresent(Date.self, forKey: .lastSyncAttempt)
-        syncFailureCount = (try? c.decodeIfPresent(Int.self, forKey: .syncFailureCount)) ?? 0
         // 1.1 以前只存了提示文字
-        if syncState == nil, let m = lastSyncMessage {
-            syncState = m.hasPrefix("同步成功") ? .ok : (m.hasPrefix("同步失败") ? .failed : (m.hasPrefix("同步结果异常") ? .anomaly : nil))
+        if s.syncState == nil, let m = s.lastSyncMessage {
+            s.syncState = m.hasPrefix("同步成功") ? .ok : (m.hasPrefix("同步失败") ? .failed : (m.hasPrefix("同步结果异常") ? .anomaly : nil))
         }
+        return s
     }
 }
 
@@ -460,14 +317,17 @@ struct ChangeLogEntry: Codable, Hashable {
     var text: String
 }
 
-/// 备份文件：设置、排班、全员排班。密码和 PushPlus token 存在钥匙串里，不在备份中。
-struct BackupFile: Codable {
-    var version = 1
+/// 备份文件：设置、排班、全员排班、周会、记录。密码、PushPlus token、写回脚本令牌存在钥匙串里，不在备份中。
+/// 只用来写；读备份时一段一段容错地读（AppStore.restore）
+struct BackupFile: Encodable {
+    var version = 2
     var created = Date()
     var settings: AppSettings
     var schedule: [String: String]
     var covered: [String]
     var roster: [String: [String: String]]
+    var meeting: MeetingState?
+    var records: RecordsState?
 }
 
 /// 上次同步的结果
@@ -496,19 +356,6 @@ extension AppSettings {
     /// 和 o 比，只有记账类的字段变了（同步记录、已发标记、提示文字、不影响手机提醒的开关）
     func onlyBookkeepingChanged(from o: AppSettings) -> Bool {
         var a = self
-        // 周会问题跟进：不影响提醒
-        a.meetingDocURL = o.meetingDocURL
-        a.meetingIssues = o.meetingIssues
-        a.meetingFingerprint = o.meetingFingerprint
-        a.meetingLastImport = o.meetingLastImport
-        a.meetingWeek = o.meetingWeek
-        a.meetingLastAttempt = o.meetingLastAttempt
-        a.meetingMessage = o.meetingMessage
-        a.meetingNudgedWeek = o.meetingNudgedWeek
-        a.meetingDownloadLog = o.meetingDownloadLog
-        a.meetingScriptURL = o.meetingScriptURL
-        a.meetingWriteLog = o.meetingWriteLog
-        a.syncLog = o.syncLog
         a.lastBackgroundWake = o.lastBackgroundWake
         a.weChatMessage = o.weChatMessage
         a.weChatMorningSent = o.weChatMorningSent
@@ -526,7 +373,6 @@ extension AppSettings {
         a.syncHealthWarning = o.syncHealthWarning
         a.syncHealthWarnedDay = o.syncHealthWarnedDay
         a.apiSignature = o.apiSignature
-        a.changeLog = o.changeLog
         a.teamChanges = o.teamChanges
         a.warnedRestKeys = o.warnedRestKeys
         a.noRestNotified = o.noRestNotified
@@ -577,7 +423,6 @@ extension AppSettings {
         a.syncFailureCount = o.syncFailureCount
         // 勾清单：小组件、实时活动由勾选的地方自己刷新，提醒不用重排
         a.taskChecks = o.taskChecks
-        a.taskHistory = o.taskHistory
         return a == o
     }
 

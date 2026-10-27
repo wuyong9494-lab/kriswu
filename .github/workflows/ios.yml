@@ -397,7 +397,10 @@ jobs:
     needs: testflight
     if: needs.testflight.outputs.uploaded == '1'
     runs-on: ubuntu-latest
-    # 一个一个来（不取消）：上一版的说明写完、标签挪好，下一版再算从哪开始
+    permissions:
+      contents: read
+      actions: read
+    # 一个一个来（不取消）：上一版的说明写完，下一版再算从哪开始
     concurrency:
       group: whats-new-${{ github.ref }}
       cancel-in-progress: false
@@ -411,10 +414,18 @@ jobs:
           fetch-depth: 200
 
       - name: 整理这版改了什么
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # 上次写过说明的提交打了 testflight-last 标签：从那以后的提交里，以「更新说明：」开头的行
-          git fetch -q origin "refs/tags/testflight-last:refs/tags/testflight-last" || true
-          if git merge-base --is-ancestor testflight-last HEAD 2>/dev/null; then RANGE="testflight-last..HEAD"; else RANGE="-1"; fi
+          # 从上一次写成了测试说明的那一版以后的提交里，找以「更新说明：」开头的行
+          PREV=""
+          for id in $(gh run list --workflow ios.yml --branch "$GITHUB_REF_NAME" --limit 20 --json databaseId --jq '.[].databaseId'); do
+            [ "$id" -ge "$GITHUB_RUN_ID" ] && continue
+            ok=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '.jobs[] | select(.name=="whats-new") | .conclusion' 2>/dev/null || true)
+            if [ "$ok" = "success" ]; then PREV=$(gh run view "$id" --json headSha --jq .headSha); break; fi
+          done
+          echo "上一次写过说明的提交：${PREV:-没有}"
+          if [ -n "$PREV" ] && git merge-base --is-ancestor "$PREV" HEAD 2>/dev/null; then RANGE="$PREV..HEAD"; else RANGE="-1"; fi
           git log --format=%B $RANGE | sed -nE 's/^更新说明(：|:)[[:space:]]*//p' | awk 'NF && !seen[$0]++' > notes.txt
           [ -s notes.txt ] || git log --format=%s $RANGE | head -8 > notes.txt
           cat notes.txt
@@ -429,7 +440,3 @@ jobs:
           python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography || python3 -m pip install --quiet --user pyjwt cryptography
           python3 .github/scripts/asc_whats_new.py "${{ github.run_number }}" notes.txt
 
-      - name: 记下这次写到哪个提交
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/testflight-last"

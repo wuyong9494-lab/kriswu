@@ -39,7 +39,7 @@ struct MeetingCard: View {
     let today: DayKey
 
     var body: some View {
-        let issues = store.settings.meetingIssues
+        let issues = store.meeting.issues
         let week = MeetingTracker.monday(of: today)
         let open = issues.filter { $0.status == .open }.sorted(by: meetingOrder)
         let quiet = issues.filter { $0.status == .quiet }.count
@@ -53,7 +53,7 @@ struct MeetingCard: View {
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                 }
-                if store.settings.meetingDocURL.isEmpty && issues.isEmpty {
+                if store.meeting.docURL.isEmpty && issues.isEmpty {
                     Text("导入每周一更新的周会文档，跟进各组提的问题有没有解决")
                         .font(DS.Font.body)
                         .foregroundStyle(.primary)
@@ -85,7 +85,7 @@ struct MeetingCard: View {
                             }
                         }
                     }
-                    if let date = store.settings.meetingLastImport {
+                    if let date = store.meeting.lastImport {
                         Text("文档 \(date.formatted(.dateTime.month().day())) 更新")
                             .font(DS.Font.caption).foregroundStyle(.secondary)
                     }
@@ -140,7 +140,7 @@ struct MeetingIssuesView: View {
     }
 
     var body: some View {
-        let issues = store.settings.meetingIssues
+        let issues = store.meeting.issues
         let matching = issues.filter(matchesQuery)
         let shown = matching.filter { $0.status == filter.status && (group == nil || $0.group == group) }
         let hasHistory = issues.contains { $0.firstWeek < week }
@@ -251,7 +251,7 @@ struct MeetingIssuesView: View {
 
     /// 在金山文档（WPS）App 里打开周会表格去改；没装就用浏览器打开
     private func openDocument() {
-        let link = store.settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = store.meeting.docURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: link), url.scheme?.hasPrefix("http") == true else {
             openSource(writeback: false)
             return
@@ -263,14 +263,14 @@ struct MeetingIssuesView: View {
     }
 
     private func refreshAfterEditing() {
-        guard let url = URL(string: store.settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+        guard let url = URL(string: store.meeting.docURL.trimmingCharacters(in: .whitespacesAndNewlines)),
               DocDownload.isSupported(url) else { return }
         Task {
             // 金山文档存盘要一会儿
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            let before = store.settings.meetingFingerprint
+            let before = store.meeting.fingerprint
             let result = await store.downloadMeeting(link: url)
-            if result.ok, store.settings.meetingFingerprint != before {
+            if result.ok, store.meeting.fingerprint != before {
                 ToastCenter.shared.show("读到了刚改的：" + result.message, style: .success)
             }
         }
@@ -297,7 +297,7 @@ struct MeetingIssuesView: View {
 
     /// 保存：算出要改表格里哪几格。设置好写回的先给看要改什么，确认了才写；没设置的问去设置还是只存手机上
     private func save(_ group: String) {
-        let plan = MeetingWriteback.plan(issues: store.settings.meetingIssues, drafts: drafts,
+        let plan = MeetingWriteback.plan(issues: store.meeting.issues, drafts: drafts,
                                          additions: additions.map(\.draft), group: group)
         guard plan.hasChanges else { stopEditing(); return }
         let pending = PendingMeetingWrite(group: group, plan: plan, drafts: drafts)
@@ -339,7 +339,7 @@ struct MeetingIssuesView: View {
                     } else if unplaced > 0 {
                         Button("去重新导入") { openSource(writeback: false) }
                     }
-                    if !store.settings.meetingDocURL.isEmpty {
+                    if !store.meeting.docURL.isEmpty {
                         Button("在金山文档里打开") { openDocument() }
                     }
                     Button("不改了", role: .cancel) { stopEditing() }
@@ -447,11 +447,11 @@ struct MeetingIssuesView: View {
                         }
                     }
                 }
-                if let date = store.settings.meetingLastImport {
+                if let date = store.meeting.lastImport {
                     Text("文档 \(date.formatted(.dateTime.month().day())) 更新 · 点一条看详情，左滑标解决")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if !store.settings.meetingDocURL.isEmpty {
+                if !store.meeting.docURL.isEmpty {
                     Button { openDocument() } label: {
                         Label("在金山文档里打开编辑", systemImage: "square.and.pencil")
                     }
@@ -813,8 +813,8 @@ struct MeetingSourceView: View {
             if showWriteback { writebackSection }
 
             Section {
-                DraftTextField("粘贴周会文档的分享链接（金山文档、腾讯文档）", value: store.settings.meetingDocURL) {
-                    store.settings.meetingDocURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                DraftTextField("粘贴周会文档的分享链接（金山文档、腾讯文档）", value: store.meeting.docURL) {
+                    store.meeting.docURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
@@ -824,9 +824,9 @@ struct MeetingSourceView: View {
                 } label: {
                     Label("打开文档（在这里登录金山文档）", systemImage: "safari")
                 }
-                .disabled(store.settings.meetingDocURL.isEmpty)
+                .disabled(store.meeting.docURL.isEmpty)
                 Button {
-                    guard let url = URL(string: store.settings.meetingDocURL) else { return }
+                    guard let url = URL(string: store.meeting.docURL) else { return }
                     downloading = true
                     Task {
                         let result = await store.downloadMeeting(link: url)
@@ -839,7 +839,7 @@ struct MeetingSourceView: View {
                         if downloading { Spacer(); ProgressView() }
                     }
                 }
-                .disabled(downloading || !(URL(string: store.settings.meetingDocURL).map(DocDownload.isSupported) ?? false))
+                .disabled(downloading || !(URL(string: store.meeting.docURL).map(DocDownload.isSupported) ?? false))
             } header: {
                 Text("自动下载")
             } footer: {
@@ -871,14 +871,14 @@ struct MeetingSourceView: View {
 
             if !showWriteback { writebackSection }
 
-            if store.settings.meetingMessage != nil || !store.settings.meetingDownloadLog.isEmpty || store.meetingPageText != nil {
+            if store.meeting.message != nil || !store.meeting.downloadLog.isEmpty || store.meetingPageText != nil {
                 Section("上次导入") {
-                    if let message = store.settings.meetingMessage {
+                    if let message = store.meeting.message {
                         Text(message).font(.footnote).foregroundStyle(.secondary)
                     }
-                    if !store.settings.meetingDownloadLog.isEmpty {
+                    if !store.meeting.downloadLog.isEmpty {
                         NavigationLink("查看上次自动下载的过程") {
-                            List(Array(store.settings.meetingDownloadLog.enumerated()), id: \.offset) { _, line in
+                            List(Array(store.meeting.downloadLog.enumerated()), id: \.offset) { _, line in
                                 Text(line).font(.footnote).textSelection(.enabled)
                             }
                             .appList()
@@ -945,8 +945,8 @@ struct MeetingSourceView: View {
             ShareLink(item: MeetingWriter.scriptFile) {
                 Label("把脚本存成文件发到电脑", systemImage: "square.and.arrow.up")
             }
-            DraftTextField("脚本的 webhook 链接", value: store.settings.meetingScriptURL) {
-                store.settings.meetingScriptURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            DraftTextField("脚本的 webhook 链接", value: store.meeting.scriptURL) {
+                store.meeting.scriptURL = $0.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             .keyboardType(.URL)
             .textInputAutocapitalization(.never)
@@ -969,16 +969,16 @@ struct MeetingSourceView: View {
                     if testing { Spacer(); ProgressView() }
                 }
             }
-            .disabled(testing || store.settings.meetingScriptURL.isEmpty)
+            .disabled(testing || store.meeting.scriptURL.isEmpty)
             if hasToken {
                 Button("删除脚本令牌", role: .destructive) {
                     Keychain.set("", for: .kdocsScriptToken)
                     hasToken = false
                 }
             }
-            if !store.settings.meetingWriteLog.isEmpty {
+            if !store.meeting.writeLog.isEmpty {
                 NavigationLink("查看写回记录") {
-                    List(Array(store.settings.meetingWriteLog.enumerated()), id: \.offset) { _, line in
+                    List(Array(store.meeting.writeLog.enumerated()), id: \.offset) { _, line in
                         Text(line).font(.footnote).textSelection(.enabled)
                     }
                     .appList()
@@ -1044,7 +1044,7 @@ struct MeetingDocBrowser: View {
                             defer { reading = false }
                             // 先用刚登录的账号下载 Excel；不是金山文档或下载不了，再读这一页上的字
                             var problem: String?
-                            if let url = URL(string: store.settings.meetingDocURL), DocDownload.isSupported(url) {
+                            if let url = URL(string: store.meeting.docURL), DocDownload.isSupported(url) {
                                 let result = await store.downloadMeeting(link: url)
                                 if result.ok {
                                     ToastCenter.shared.show(result.message, style: .success)
@@ -1067,7 +1067,7 @@ struct MeetingDocBrowser: View {
                     .disabled(reading)
                 }
             }
-            .onAppear { model.load(store.settings.meetingDocURL) }
+            .onAppear { model.load(store.meeting.docURL) }
         }
     }
 }

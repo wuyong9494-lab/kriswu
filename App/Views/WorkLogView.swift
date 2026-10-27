@@ -158,7 +158,7 @@ struct WorkLogView: View {
         let shown = log.entries.filter { (filter == nil || $0.kind == filter) && $0.matches(query) }
         let groups = Dictionary(grouping: shown) { DayKey(date: $0.date, calendar: .app) }
         // 勾过清单的日子：没有留痕也列出来（按类型筛选时不列；搜索时清单事项也能搜到）
-        let history = store.settings.taskHistory
+        let history = store.records.taskHistory
         let taskDays: [DayKey] = filter != nil ? [] : history.compactMap { key, record -> DayKey? in
             query.isEmpty || record.matches(query) ? DayKey(string: key) : nil
         }

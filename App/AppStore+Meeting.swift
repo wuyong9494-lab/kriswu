@@ -25,7 +25,7 @@ extension AppStore {
         }
         guard let text = board.string, !text.isEmpty else {
             let message = "剪贴板里没有文字：在金山文档里选中表格的格子，点「复制」再回来"
-            settings.meetingMessage = message
+            meeting.message = message
             return message
         }
         return importMeeting(text: text, source: "剪贴板")
@@ -69,10 +69,10 @@ extension AppStore {
     /// 用 App 里登录的金山文档账号下载周会表格（Excel）并导入；下载过程记在设置里，「周会问题」里能看
     func downloadMeeting(link: URL) async -> (message: String, ok: Bool) {
         let outcome = await MeetingDownloader.download(link)
-        settings.meetingDownloadLog = ["\(Date().formatted(date: .abbreviated, time: .shortened)) 下载周会表格"] + outcome.log
+        meeting.downloadLog = ["\(Date().formatted(date: .abbreviated, time: .shortened)) 下载周会表格"] + outcome.log
         guard let data = outcome.data else {
             let message = "自动下载没成功：" + (outcome.problem ?? "没拿到文件")
-            settings.meetingMessage = message
+            meeting.message = message
             return (message, false)
         }
         let message = importMeetingData(data, isExcel: true, source: "自动下载")
@@ -82,32 +82,32 @@ extension AppStore {
     private func applyMeeting(_ sections: [MeetingNotes.Section], fingerprintOf text: String, source: String) -> String {
         guard !sections.isEmpty else {
             let message = "没认出各组的内容（\(source)）：表格要有「分组」那一列，文字要有「组A」「研发组」这样的组名"
-            settings.meetingMessage = message
+            meeting.message = message
             return message
         }
-        var s = settings
+        var s = meeting
         let week = MeetingTracker.monday(of: .today)
         let print = MeetingTracker.fingerprint(text)
         // 文档还是上次那一版（周一还没更新）：不当成新的一周，免得把问题都算成「没再提」
-        guard print != s.meetingFingerprint else {
+        guard print != s.fingerprint else {
             // 同一版：补上表格位置（以前导入的没记，补上了就能写回金山文档）
-            let refreshed = MeetingTracker.refreshSources(s.meetingIssues, with: sections)
-            let filled = zip(refreshed, s.meetingIssues).filter { $0.0.source != $0.1.source }.count
-            s.meetingIssues = refreshed
-            s.meetingMessage = "文档还是上次那一版，没有新内容（\(source)，\(Date().formatted(date: .omitted, time: .shortened))）"
+            let refreshed = MeetingTracker.refreshSources(s.issues, with: sections)
+            let filled = zip(refreshed, s.issues).filter { $0.0.source != $0.1.source }.count
+            s.issues = refreshed
+            s.message = "文档还是上次那一版，没有新内容（\(source)，\(Date().formatted(date: .omitted, time: .shortened))）"
                 + (filled > 0 ? "；记下了 \(filled) 条在表格里的位置" : "")
-            settings = s
+            meeting = s
             return filled > 0 ? "文档没变，记下了 \(filled) 条在表格里的位置，可以写回金山文档了" : "文档还没更新"
         }
-        let before = s.meetingIssues
-        s.meetingIssues = MeetingTracker.update(before, with: sections, week: week)
-        s.meetingFingerprint = print
-        s.meetingLastImport = Date()
-        s.meetingWeek = week
-        let summary = Self.meetingSummary(before: before, after: s.meetingIssues, week: week)
+        let before = s.issues
+        s.issues = MeetingTracker.update(before, with: sections, week: week)
+        s.fingerprint = print
+        s.lastImport = Date()
+        s.week = week
+        let summary = Self.meetingSummary(before: before, after: s.issues, week: week)
         let count = sections.reduce(0) { $0 + $1.items.count }
-        s.meetingMessage = "\(source)读到 \(sections.count) 个组、\(count) 条（\(Date().formatted(date: .abbreviated, time: .shortened))）：\(summary)"
-        settings = s
+        s.message = "\(source)读到 \(sections.count) 个组、\(count) 条（\(Date().formatted(date: .abbreviated, time: .shortened))）：\(summary)"
+        meeting = s
         return summary
     }
 
@@ -129,13 +129,13 @@ extension AppStore {
     /// 这周还没读到新一版：3 小时试一次；读到了：半天看一次有没有再改
     func refreshMeetingIfDue() async {
         guard !Self.isDemo else { return }
-        let link = settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = meeting.docURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: link), url.scheme?.hasPrefix("http") == true else { return }
         let week = MeetingTracker.monday(of: .today)
-        let doneThisWeek = settings.meetingWeek.map { $0 >= week } ?? false
-        if let last = settings.meetingLastAttempt, Date().timeIntervalSince(last) < (doneThisWeek ? 12 : 3) * 3600 { return }
-        settings.meetingLastAttempt = Date()
-        let before = settings.meetingFingerprint
+        let doneThisWeek = meeting.week.map { $0 >= week } ?? false
+        if let last = meeting.lastAttempt, Date().timeIntervalSince(last) < (doneThisWeek ? 12 : 3) * 3600 { return }
+        meeting.lastAttempt = Date()
+        let before = meeting.fingerprint
         var result: String?
         var problem: String?
         if DocDownload.isSupported(url) {
@@ -149,10 +149,10 @@ extension AppStore {
         guard let result else {
             guard !doneThisWeek else { return }
             // 自动拿不到：每周提醒一次去复制导入
-            settings.meetingMessage = (problem.map { $0 + "。" } ?? "自动读不到周会文档的内容（在线表格读不出文字）。")
+            meeting.message = (problem.map { $0 + "。" } ?? "自动读不到周会文档的内容（在线表格读不出文字）。")
                 + "可以在金山文档里全选复制，回来点「从剪贴板导入」，或导出成 Excel 分享给值班提醒"
-            if settings.meetingNudgedWeek != week {
-                settings.meetingNudgedWeek = week
+            if meeting.nudgedWeek != week {
+                meeting.nudgedWeek = week
                 await NotificationService.notifyNow(id: "meeting-nudge-\(week)", title: "📝 这周的周会文档导入了吗",
                                                     body: (problem.map { $0 + "。" } ?? "")
                                                         + "在金山文档里打开周会表格，全选复制，回到值班提醒点「从剪贴板导入」，就能看各组的问题解决了没有。",
@@ -161,7 +161,7 @@ extension AppStore {
             return
         }
         // 读到了新的一版：通知一下
-        if settings.meetingWeek == week, settings.meetingFingerprint != before {
+        if meeting.week == week, meeting.fingerprint != before {
             await NotificationService.notifyNow(id: "meeting-\(week)", title: "📝 周会文档更新了", body: result, route: "meeting")
         }
     }
@@ -170,25 +170,25 @@ extension AppStore {
 
     /// 写回金山文档设置好了没有（脚本 webhook 链接 + 脚本令牌）
     var meetingWritebackReady: Bool {
-        MeetingWriter.isScriptURL(settings.meetingScriptURL) && !(Keychain.get(.kdocsScriptToken) ?? "").isEmpty
+        MeetingWriter.isScriptURL(meeting.scriptURL) && !(Keychain.get(.kdocsScriptToken) ?? "").isEmpty
     }
 
     /// 编辑完存到手机上；written：已经写进金山文档了
     func saveMeetingEdits(drafts: [String: MeetingWriteback.Draft], plan: MeetingWriteback.Plan, group: String, written: Bool) {
-        settings.meetingIssues = MeetingWriteback.applyLocally(issues: settings.meetingIssues, drafts: drafts, plan: plan, group: group,
+        meeting.issues = MeetingWriteback.applyLocally(issues: meeting.issues, drafts: drafts, plan: plan, group: group,
                                                                week: MeetingTracker.monday(of: .today), written: written)
     }
 
     /// 写进金山文档，写成了再存到手机上
     func writeMeeting(plan: MeetingWriteback.Plan, drafts: [String: MeetingWriteback.Draft], group: String) async -> (message: String, ok: Bool) {
-        guard let url = URL(string: settings.meetingScriptURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+        guard let url = URL(string: meeting.scriptURL.trimmingCharacters(in: .whitespacesAndNewlines)),
               let token = Keychain.get(.kdocsScriptToken), !token.isEmpty else {
             return ("还没设置写回金山文档", false)
         }
         let reply = await MeetingWriter.write(plan.writes, url: url, token: token)
         let entry = ["\(Date().formatted(date: .abbreviated, time: .shortened)) 写回「\(group)」"] + plan.writes.map { "· " + $0.summary }
             + [(reply.ok ? "✓ " : "✗ ") + reply.message]
-        settings.meetingWriteLog = Array((entry + settings.meetingWriteLog).prefix(60))
+        meeting.writeLog = Array((entry + meeting.writeLog).prefix(60))
         guard reply.ok else { return (reply.message, false) }
         saveMeetingEdits(drafts: drafts, plan: plan, group: group, written: true)
         return (reply.message, true)
@@ -196,7 +196,7 @@ extension AppStore {
 
     /// 测试写回脚本连不连得上
     func testMeetingScript() async -> (message: String, ok: Bool) {
-        let link = settings.meetingScriptURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = meeting.scriptURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard MeetingWriter.isScriptURL(link), let url = URL(string: link) else {
             return ("脚本链接不对：要金山文档脚本编辑器里复制的 webhook 链接", false)
         }
@@ -207,15 +207,15 @@ extension AppStore {
 
     /// 自己改一条问题的状态（标成解决了、还没解决）
     func setMeetingIssue(_ id: String, status: MeetingIssue.Status) {
-        guard let i = settings.meetingIssues.firstIndex(where: { $0.id == id }) else { return }
-        var s = settings
-        s.meetingIssues[i].status = status
-        s.meetingIssues[i].manual = true
-        s.meetingIssues[i].resolvedWeek = status == .resolved ? MeetingTracker.monday(of: .today) : nil
-        settings = s
+        guard let i = meeting.issues.firstIndex(where: { $0.id == id }) else { return }
+        var s = meeting
+        s.issues[i].status = status
+        s.issues[i].manual = true
+        s.issues[i].resolvedWeek = status == .resolved ? MeetingTracker.monday(of: .today) : nil
+        meeting = s
     }
 
     func deleteMeetingIssue(_ id: String) {
-        settings.meetingIssues.removeAll { $0.id == id }
+        meeting.issues.removeAll { $0.id == id }
     }
 }

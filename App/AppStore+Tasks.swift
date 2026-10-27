@@ -52,16 +52,18 @@ extension AppStore {
 
     /// 这天的清单情况：勾过的用存档（当时的清单），没勾过的按现在的清单
     func taskRecord(on day: DayKey) -> TaskDayRecord? {
-        settings.taskHistory[day.description] ?? liveTaskRecord(on: day)
+        records.taskHistory[day.description] ?? liveTaskRecord(on: day)
     }
 
-    /// 勾了清单就存一份这天的情况；一件都没勾就不存。只留一年。
+    /// 勾了清单就存一份这天的情况（存在 records.json）；一件都没勾就不存。只留一年。
     private func archiveTasks(on day: DayKey, into s: inout AppSettings) {
         let record = liveTaskRecord(on: day, checks: s.taskChecks)
-        s.taskHistory[day.description] = record.flatMap { $0.done.isEmpty ? nil : $0 }
-        if s.taskHistory.count > 370 {
-            s.taskHistory = TaskDayRecord.pruned(s.taskHistory, keepingFrom: DayKey.today.adding(days: -366))
+        var history = records.taskHistory
+        history[day.description] = record.flatMap { $0.done.isEmpty ? nil : $0 }
+        if history.count > 370 {
+            history = TaskDayRecord.pruned(history, keepingFrom: DayKey.today.adding(days: -366))
         }
+        records.taskHistory = history
     }
 
     /// 勾选变了：提醒不用重排，只刷新小组件和锁屏上的值班倒计时

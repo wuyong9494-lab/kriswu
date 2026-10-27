@@ -1,6 +1,7 @@
 import SwiftUI
 
-private struct PersistedState: Codable {
+/// state.json：设置、我的排班。只用来写；读的时候一段一段容错地读（AppStore.init）
+private struct PersistedState: Encodable {
     var settings: AppSettings
     var schedule: [String: String]
     /// 已经取到过排班结果的日子（包括没给我排班的日子）
@@ -88,6 +89,53 @@ final class AppStore: ObservableObject {
     /// 上次读周会文档读到的文字（没认出各组时给人看读到了什么）
     @Published var meetingPageText: String?
 
+    /// 周会问题跟进（单独存在 meeting.json）
+    @Published var meeting = MeetingState() {
+        didSet { if meeting != oldValue { saveSide(meeting, to: Self.meetingURL, blocked: meetingBlocked) } }
+    }
+    /// 同步记录、「排班有更新」、清单历史（单独存在 records.json）
+    @Published var records = RecordsState() {
+        didSet { if records != oldValue { saveSide(records, to: Self.recordsURL, blocked: recordsBlocked) } }
+    }
+    /// 这两份文件在、却读不出来（手机还没解锁过）：这次不写，免得用空的盖掉
+    private var meetingBlocked = false
+    private var recordsBlocked = false
+
+    private static let meetingURL: URL = {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("meeting.json")
+    }()
+    private static let recordsURL: URL = {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("records.json")
+    }()
+
+    private func saveSide<T: Encodable>(_ value: T, to url: URL, blocked: Bool) {
+        if Self.isDemo || persistenceBlocked || blocked { return }
+        StateWriter.shared.write(to: url) { try? JSONEncoder().encode(value) }
+    }
+
+    /// 读单独存的一份（周会、记录）。还没有这个文件、旧的设置存档里有这些字段时，从旧设置搬过来，马上写成文件
+    /// （写进去之前设置存档里的旧字段还在，写不进去就这次都不存盘，旧字段不会丢）。
+    /// 返回：读到的值、文件在却读不出来（这次不写）
+    private static func loadSide<T: Codable>(_ type: T.Type, url: URL, legacySettings: Any?, names: [String: String],
+                                             defaults: T, migrationFailed: inout Bool) -> (T, blocked: Bool) {
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        if exists {
+            guard let data = try? Data(contentsOf: url) else { return (defaults, true) }
+            return (TolerantCoding.decode(type, data: data, defaults: defaults), false)
+        }
+        guard let legacy = LegacySettings.extract(names, from: legacySettings) else { return (defaults, false) }
+        let value = TolerantCoding.decode(type, from: legacy, defaults: defaults)
+        // 演示模式下也写：搬的是手机上真实的旧数据（不写的话，退出演示后存设置会把旧字段丢掉）
+        do {
+            try JSONEncoder().encode(value).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        } catch {
+            migrationFailed = true
+        }
+        return (value, false)
+    }
+
     private static let rosterURL: URL = {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("roster.json")
@@ -161,7 +209,7 @@ final class AppStore: ObservableObject {
 
     private init() {
         let data = try? Data(contentsOf: Self.fileURL)
-        let state = data.flatMap { try? JSONDecoder().decode(PersistedState.self, from: $0) }
+        let state = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
         // 文件在、却读不出来（手机重启后还没解锁过，文件受保护）：这次不存盘，免得用空数据把真数据盖掉
         persistenceBlocked = data == nil && FileManager.default.fileExists(atPath: Self.fileURL.path)
         // 读出来了但解析不了：带时间另存一份（不覆盖以前存的），别让下次保存把它覆盖掉
@@ -169,13 +217,27 @@ final class AppStore: ObservableObject {
             let stamp = Int(Date().timeIntervalSince1970)
             try? data.write(to: Self.fileURL.deletingLastPathComponent().appendingPathComponent("state.bad-\(stamp).json"))
         }
-        settings = state?.settings ?? AppSettings()
+        // 设置一项一项容错地读：某一项坏了只有那一项用默认值
+        settings = state.map { AppSettings.load(from: $0["settings"]) } ?? AppSettings()
         var schedule: [DayKey: String] = [:]
-        for (k, v) in state?.schedule ?? [:] {
+        for (k, v) in state?["schedule"] as? [String: String] ?? [:] {
             if let day = DayKey(string: k) { schedule[day] = v }
         }
         self.schedule = schedule
-        if let saved = state?.covered {
+        // 周会、记录各存一份；以前在设置里的，第一次打开时搬过去
+        var migrationFailed = false
+        let legacy = state?["settings"]
+        let loadedMeeting = Self.loadSide(MeetingState.self, url: Self.meetingURL, legacySettings: legacy,
+                                          names: LegacySettings.meeting, defaults: MeetingState(), migrationFailed: &migrationFailed)
+        meeting = loadedMeeting.0
+        meetingBlocked = loadedMeeting.blocked
+        let loadedRecords = Self.loadSide(RecordsState.self, url: Self.recordsURL, legacySettings: legacy,
+                                          names: LegacySettings.records, defaults: RecordsState(), migrationFailed: &migrationFailed)
+        records = loadedRecords.0
+        recordsBlocked = loadedRecords.blocked
+        // 搬的时候没写进去：这次都不存盘（设置存档里的旧字段还在，下次再搬）
+        if migrationFailed { persistenceBlocked = true }
+        if let saved = state?["covered"] as? [String] {
             covered = Set(saved.compactMap(DayKey.init(string:)))
         } else if let lo = schedule.keys.min(), let hi = schedule.keys.max() {
             // 旧版本没记录：把已有排班的首尾之间都算作取到过
@@ -236,12 +298,21 @@ final class AppStore: ObservableObject {
     /// 退出演示：从手机上重新读回真实数据
     func exitDemo() {
         // 读回的过程中还算演示（不往手机上写），全部换回真实数据后才关掉，免得把虚构数据存进去
-        let state = (try? Data(contentsOf: Self.fileURL)).flatMap { try? JSONDecoder().decode(PersistedState.self, from: $0) }
-        settings = state?.settings ?? AppSettings()
+        let state = (try? Data(contentsOf: Self.fileURL)).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+        settings = state.map { AppSettings.load(from: $0["settings"]) } ?? AppSettings()
         var restored: [DayKey: String] = [:]
-        for (k, v) in state?.schedule ?? [:] { if let day = DayKey(string: k) { restored[day] = v } }
+        for (k, v) in state?["schedule"] as? [String: String] ?? [:] { if let day = DayKey(string: k) { restored[day] = v } }
         schedule = restored
-        covered = Set((state?.covered ?? []).compactMap(DayKey.init(string:)))
+        covered = Set((state?["covered"] as? [String] ?? []).compactMap(DayKey.init(string:)))
+        var migrationFailed = false
+        let loadedMeeting = Self.loadSide(MeetingState.self, url: Self.meetingURL, legacySettings: state?["settings"],
+                                          names: LegacySettings.meeting, defaults: MeetingState(), migrationFailed: &migrationFailed)
+        meetingBlocked = loadedMeeting.blocked
+        meeting = loadedMeeting.0
+        let loadedRecords = Self.loadSide(RecordsState.self, url: Self.recordsURL, legacySettings: state?["settings"],
+                                          names: LegacySettings.records, defaults: RecordsState(), migrationFailed: &migrationFailed)
+        recordsBlocked = loadedRecords.blocked
+        records = loadedRecords.0
         roster = Self.loadRoster()
         rosterSources = Self.loadSources()
         rosterLog = Self.loadLog()
@@ -288,16 +359,14 @@ final class AppStore: ObservableObject {
                               RestPoint(day: today.adding(days: -9), value: 4), RestPoint(day: today, value: 3)]]
         s.manualGroupNotes = ["组A": "1、巡检机房；2、填写运行日志；3、16:30 前交接", "组B": "数据处理与归档",
                               "组C": "设备维护", "组D": "值守监控", "组E": "外场保障"]
-        s.changeLog = [ChangeLogEntry(date: Date().addingTimeInterval(-3600),
-                                      text: "\(today.adding(days: 2).dateText)：组B → 组D（和周远对换：周远原来是组D，现在是组B）")]
+        records = RecordsState(changeLog: [ChangeLogEntry(date: Date().addingTimeInterval(-3600),
+                                                          text: "\(today.adding(days: 2).dateText)：组B → 组D（和周远对换：周远原来是组D，现在是组B）")])
         s.swapRecords = [SwapRecord(day: today.adding(days: -6), person: "林夏", myOld: "遥测", myNew: "休息", effect: -1)]
         s.teamChanges = [TeamChange(day: today.adding(days: 2), post: "组B", from: ["周远"], to: [me])]
         s.lastSync = Date().addingTimeInterval(-600)
         s.lastSyncMessage = "同步成功：30 天，没有变动，这次读到 9 人有排班（全年累计 12 人）"
-        s.meetingDocURL = "https://www.kdocs.cn/l/demo"
-        s.meetingLastImport = Date().addingTimeInterval(-3 * 3600)
-        s.meetingIssues = Self.demoMeetingIssues(week: MeetingTracker.monday(of: today))
-        s.meetingWeek = MeetingTracker.monday(of: today)
+        meeting = MeetingState(docURL: "https://www.kdocs.cn/l/demo", issues: Self.demoMeetingIssues(week: MeetingTracker.monday(of: today)),
+                               lastImport: Date().addingTimeInterval(-3 * 3600), week: MeetingTracker.monday(of: today))
         settings = s
         roster = r
         schedule = r[me] ?? [:]
@@ -357,7 +426,7 @@ final class AppStore: ObservableObject {
             s.apiSignature = nil
             // 只删假变动那几行，同一条里真的变动留着
             func isFake(_ line: Substring) -> Bool { wrongNames.contains { line.contains("→ \($0)") || line.contains("\($0) →") } }
-            s.changeLog = s.changeLog.compactMap { e in
+            records.changeLog = records.changeLog.compactMap { e in
                 let lines = e.text.split(separator: "\n").filter { !isFake($0) }
                 return lines.isEmpty ? nil : ChangeLogEntry(date: e.date, text: lines.joined(separator: "\n"))
             }
@@ -689,7 +758,7 @@ final class AppStore: ObservableObject {
             if self.canSync, !Task.isCancelled {
                 let entry = SyncLogEntry(date: start, source: source, ok: ok,
                                          message: self.settings.lastSyncMessage ?? "", seconds: Int(Date().timeIntervalSince(start)))
-                self.settings.syncLog = Array(([entry] + self.settings.syncLog).prefix(30))
+                self.records.syncLog = Array(([entry] + self.records.syncLog).prefix(30))
             }
             // 在任务里面清掉：所有在等它的人醒来时，都能看到「已经没有正在进行的同步」
             self.syncTask = nil
@@ -934,7 +1003,7 @@ final class AppStore: ObservableObject {
                 }
                 if records != settings.swapRecords { settings.swapRecords = Array(records.prefix(300)) }
                 // 首页「最近排班变动」总是记下；通知、微信看开关
-                settings.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + settings.changeLog).prefix(20))
+                records.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + records.changeLog).prefix(20))
                 if settings.notifyChanges {
                     // 每次变动一条，后一次不会把前一次顶掉
                     await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
@@ -1215,7 +1284,7 @@ final class AppStore: ObservableObject {
     var automationLooksMissing: Bool {
         guard canSync else { return false }
         let since = Date().addingTimeInterval(-2 * 86_400)
-        return !settings.syncLog.contains { $0.date > since && $0.source.hasPrefix("快捷指令") }
+        return !records.syncLog.contains { $0.date > since && $0.source.hasPrefix("快捷指令") }
     }
 
     /// 我在网站上的名字（全员排班里认出是我的那个）
@@ -1442,7 +1511,8 @@ final class AppStore: ObservableObject {
         let file = BackupFile(settings: settings,
                               schedule: Dictionary(uniqueKeysWithValues: schedule.map { ($0.key.description, $0.value) }),
                               covered: covered.map(\.description).sorted(),
-                              roster: roster.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) })
+                              roster: roster.mapValues { days in Dictionary(uniqueKeysWithValues: days.map { ($0.key.description, $0.value) }) },
+                              meeting: meeting, records: records)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -1460,18 +1530,32 @@ final class AppStore: ObservableObject {
     /// 从备份恢复：设置、排班、全员排班整体替换。返回恢复了多少天。
     func restore(from data: Data) throws -> Int {
         guard canEdit else { throw NSError(domain: "role", code: 1, userInfo: [NSLocalizedDescriptionKey: "只有管理员能从备份恢复"]) }
+        // 一段一段容错地读：哪一项坏了只有那一项用默认值（备份里的日期是 ISO 8601）
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let file = try decoder.decode(BackupFile.self, from: data)
+        guard let file = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], file["settings"] is [String: Any] else {
+            throw NSError(domain: "backup", code: 1, userInfo: [NSLocalizedDescriptionKey: "这不是值班提醒的备份文件"])
+        }
         var restored: [DayKey: String] = [:]
-        for (k, v) in file.schedule { if let d = DayKey(string: k) { restored[d] = v } }
+        for (k, v) in file["schedule"] as? [String: String] ?? [:] { if let d = DayKey(string: k) { restored[d] = v } }
         schedule = restored
-        covered = Set(file.covered.compactMap(DayKey.init(string:)))
-        roster = file.roster.mapValues { days in
+        covered = Set((file["covered"] as? [String] ?? []).compactMap(DayKey.init(string:)))
+        roster = (file["roster"] as? [String: [String: String]] ?? [:]).mapValues { days in
             Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
         }
         saveRoster()
-        var newSettings = file.settings
+        // 周会、记录：新备份单独一段；旧备份在设置那一段里
+        let meetingSource: Any? = file["meeting"] ?? LegacySettings.extract(LegacySettings.meeting, from: file["settings"])
+        let recordsSource: Any? = file["records"] ?? LegacySettings.extract(LegacySettings.records, from: file["settings"])
+        if let meetingSource {
+            meeting = TolerantCoding.decode(MeetingState.self, from: meetingSource, defaults: MeetingState(), encoder: encoder, decoder: decoder)
+        }
+        if let recordsSource {
+            records = TolerantCoding.decode(RecordsState.self, from: recordsSource, defaults: RecordsState(), encoder: encoder, decoder: decoder)
+        }
+        var newSettings = AppSettings.load(from: file["settings"], encoder: encoder, decoder: decoder)
         // 旧格式的全员排班可能读错过，清掉，同步时重新读
         if newSettings.rosterVersion < Self.rosterVersion { roster = [:]; saveRoster() }
         newSettings.rosterVersion = Self.rosterVersion

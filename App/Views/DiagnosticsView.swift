@@ -143,24 +143,24 @@ struct DiagnosticsView: View {
         list.append(Check(name: "全员排班", status: store.roster.isEmpty ? .warn : .ok,
                           detail: store.roster.isEmpty ? "还没读到全员排班（找人换班、工作量要用）" : rosterSummary))
 
-        let link = s.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = store.meeting.docURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if link.isEmpty {
             list.append(Check(name: "周会文档", status: .off, detail: "没设置（今天页「周会问题」里导入）"))
         } else {
-            let recent = s.meetingLastImport.map { Date().timeIntervalSince($0) < 8 * 86_400 } ?? false
+            let recent = store.meeting.lastImport.map { Date().timeIntervalSince($0) < 8 * 86_400 } ?? false
             list.append(Check(name: "周会文档", status: recent ? .ok : .warn,
-                              detail: s.meetingMessage ?? (recent ? "这周读到过" : "一周多没读到新的一版")))
+                              detail: store.meeting.message ?? (recent ? "这周读到过" : "一周多没读到新的一版")))
             if URL(string: link).map(DocDownload.isSupported) == true {
-                let last = s.meetingDownloadLog.last ?? ""
+                let last = store.meeting.downloadLog.last ?? ""
                 list.append(Check(name: "周会表格自动下载",
-                                  status: s.meetingDownloadLog.isEmpty ? .warn : (last.hasPrefix("✗") ? .fail : .ok),
-                                  detail: s.meetingDownloadLog.isEmpty ? "还没自动下载过" : last))
+                                  status: store.meeting.downloadLog.isEmpty ? .warn : (last.hasPrefix("✗") ? .fail : .ok),
+                                  detail: store.meeting.downloadLog.isEmpty ? "还没自动下载过" : last))
             }
         }
         if !store.meetingWritebackReady {
             list.append(Check(name: "写回金山文档", status: .off, detail: "没设置（周会问题 › 导入 › 写回金山文档）"))
         } else {
-            let last = s.meetingWriteLog.first(where: { $0.hasPrefix("✓") || $0.hasPrefix("✗") })
+            let last = store.meeting.writeLog.first(where: { $0.hasPrefix("✓") || $0.hasPrefix("✗") })
             list.append(Check(name: "写回金山文档", status: last?.hasPrefix("✗") == true ? .fail : .ok,
                               detail: last ?? "设置好了，还没写过"))
         }
@@ -188,7 +188,7 @@ struct DiagnosticsView: View {
         let ok = await store.sync(full: false, userInitiated: true, source: "自检")
         tested["值班网站"] = Check(name: "值班网站", status: ok ? .ok : .fail,
                                     detail: (ok ? "刚才同步成功：" : "刚才同步失败：") + (store.settings.lastSyncMessage ?? ""))
-        let link = store.settings.meetingDocURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = store.meeting.docURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if let url = URL(string: link), DocDownload.isSupported(url) {
             checking = "周会表格自动下载"
             let r = await store.downloadMeeting(link: url)
@@ -304,13 +304,13 @@ struct DiagnosticsView: View {
 
         // 后台同步到底有没有跑：系统多久唤醒一次、最近每次同步的结果
         let dayAgo = Date().addingTimeInterval(-86_400)
-        let backgroundRuns = s.syncLog.filter { $0.date > dayAgo && ($0.source.hasPrefix("后台") || $0.source.hasPrefix("快捷指令")) }
+        let backgroundRuns = store.records.syncLog.filter { $0.date > dayAgo && ($0.source.hasPrefix("后台") || $0.source.hasPrefix("快捷指令")) }
         var logRows = [
             Row(label: "上次后台唤醒", value: s.lastBackgroundWake.map(fmt) ?? "从未",
                 ok: s.lastBackgroundWake.map { Date().timeIntervalSince($0) < 6 * 3600 }),
             Row(label: "24 小时内后台/快捷指令同步", value: "\(backgroundRuns.count) 次", ok: !backgroundRuns.isEmpty),
         ]
-        logRows += s.syncLog.prefix(15).map { e in
+        logRows += store.records.syncLog.prefix(15).map { e in
             Row(label: "\(e.date.formatted(date: .numeric, time: .shortened)) \(e.source)",
                 value: "\(e.message.isEmpty ? (e.ok ? "成功" : "失败") : e.message)（\(e.seconds) 秒）", ok: e.ok)
         }

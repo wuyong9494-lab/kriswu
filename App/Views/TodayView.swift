@@ -536,12 +536,12 @@ private struct RecentChanges: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        let recent = store.settings.changeLog.filter { Date().timeIntervalSince($0.date) < 3 * 86_400 }
+        let recent = store.records.changeLog.filter { Date().timeIntervalSince($0.date) < 3 * 86_400 }
         if !recent.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 CardTitle(title: "最近排班变动", icon: "arrow.left.arrow.right", color: .orange) {
                     ConfirmButton(title: "清除", message: "最近的排班变动记录会从首页清掉（全员变动历史不受影响）。") {
-                        store.settings.changeLog = []
+                        store.records.changeLog = []
                     }
                         .font(.footnote)
                 }
