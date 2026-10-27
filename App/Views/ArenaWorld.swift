@@ -60,6 +60,8 @@ final class ArenaWorldView: SCNView {
     private var turretViews: [Int: TurretView] = [:]
     /// 上一帧每个人在哪（一下子挪得很远是闪现了，两头冒烟）
     private var lastPositions: [V2?] = []
+    /// 输赢的声音放过了
+    private var finished = false
 
     private struct TurretView {
         let node: SCNNode
@@ -106,6 +108,7 @@ final class ArenaWorldView: SCNView {
         if window == nil {
             stop()
         } else if link == nil {
+            ArenaSound.shared.begin()
             let target = DisplayTarget(view: self)
             let link = CADisplayLink(target: target, selector: #selector(DisplayTarget.tick(_:)))
             link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
@@ -118,6 +121,7 @@ final class ArenaWorldView: SCNView {
         link?.invalidate()
         link = nil
         lastTimestamp = nil
+        ArenaSound.shared.end()
     }
 
     override func layoutSubviews() {
@@ -531,6 +535,10 @@ final class ArenaWorldView: SCNView {
         }
 
         for event in controller.takeEvents() { effect(event, game: game) }
+        if !finished, let result = controller.hud.result {
+            finished = true
+            ArenaSound.shared.finish(won: controller.won(result))
+        }
         syncFloaters(view)
         syncAim(me)
     }
@@ -723,12 +731,16 @@ final class ArenaWorldView: SCNView {
         switch event {
         case .hit(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
+            // 毒圈这种一帧扣一点的不出声、不闪
+            guard amount >= 60 else { return }
+            ArenaSound.shared.play(.hit, volume: loudness(game.fighters[target].pos) * 0.8)
             avatars[target].flash(clock: clock)
             let at = avatars[target].node.simdPosition
             burst(at: at + SIMD3(0, 0.7, 0), color: .white, count: 10, speed: 2.5, size: 0.12, life: 0.25)
             floater("\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
                     color: game.fighters[target].team == myTeam ? UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1) : .white)
         case .explosion(let point, let radius):
+            ArenaSound.shared.play(.boom, volume: loudness(point))
             let at = SIMD3(Float(point.x), 0.05, Float(point.y))
             burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: 40, speed: 4 * CGFloat(radius), size: 0.45, life: 0.45)
             burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: 20, speed: 2.5 * CGFloat(radius), size: 0.3, life: 0.35)
@@ -744,31 +756,50 @@ final class ArenaWorldView: SCNView {
             node.runAction(.sequence([.group([.scale(to: 1, duration: 0.12), .fadeOut(duration: 0.4)]), .removeFromParentNode()]))
         case .knockout(let target, _):
             guard avatars.indices.contains(target) else { return }
+            ArenaSound.shared.play(.knockout, volume: target == controller.me ? 1 : loudness(game.fighters[target].pos))
             burst(at: avatars[target].node.simdPosition + SIMD3(0, 0.6, 0), color: UIColor(white: 0.9, alpha: 1),
                   count: 30, speed: 2, size: 0.4, life: 0.6)
             if target == controller.me { UINotificationFeedbackGenerator().notificationOccurred(.error) }
         case .special(let fighter):
             guard avatars.indices.contains(fighter) else { return }
+            ArenaSound.shared.play(game.fighters[fighter].brawler == .shade ? .blink : .power, volume: loudness(game.fighters[fighter].pos))
             avatars[fighter].special()
             ring(at: avatars[fighter].node.simdPosition, color: ArenaPalette.gold, to: 2.2)
             if fighter == controller.me { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
         case .attack(let fighter):
             guard avatars.indices.contains(fighter) else { return }
+            let sound: ArenaSound.Effect
+            switch game.fighters[fighter].brawler {
+            case .knight, .barbarian, .guardian: sound = .slash
+            case .mage, .necromancer: sound = .magic
+            default: sound = .shot
+            }
+            // 看不见的人开火也听得见一点（草丛里有人）
+            ArenaSound.shared.play(sound, volume: loudness(game.fighters[fighter].pos) * (fighter == controller.me ? 1 : 0.7))
             avatars[fighter].attack()
         case .heal(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
+            ArenaSound.shared.play(.heal, volume: loudness(game.fighters[target].pos) * 0.7)
             let at = avatars[target].node.simdPosition
             burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 10, speed: 1, size: 0.25, life: 0.5)
             floater("+\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
                     color: UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1))
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
+            ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos))
             burst(at: avatars[fighter].node.simdPosition + SIMD3(0, 0.8, 0), color: ArenaPalette.gold, count: 16, speed: 1.6, size: 0.18, life: 0.4)
         case .respawn(let fighter):
             guard avatars.indices.contains(fighter) else { return }
+            if fighter == controller.me { ArenaSound.shared.play(.respawn) }
             let color = game.fighters[fighter].team == myTeam ? ArenaPalette.blue : ArenaPalette.red
             ring(at: avatars[fighter].node.simdPosition, color: color, to: 1.8)
         }
+    }
+
+    /// 离自己越远声音越小
+    private func loudness(_ point: V2) -> Float {
+        let distance = Float(point.distance(to: controller.mine.pos))
+        return 1 / (1 + distance / 5)
     }
 
     /// 一下子炸开的一团光点

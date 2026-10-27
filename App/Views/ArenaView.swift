@@ -354,6 +354,7 @@ private struct ArenaMatchView: View {
     var onAgain: (() -> Void)?
     var onExit: () -> Void
     @State private var confirmingExit = false
+    @AppStorage(ArenaSound.muteKey) private var muted = false
 
     /// 在上边那一队的人：画面倒过来（自己的家总在下边），摇杆也跟着反过来
     private var flip: Double { controller.game.mode.isTeams && controller.mine.team == 1 ? -1 : 1 }
@@ -404,6 +405,14 @@ private struct ArenaMatchView: View {
                 if hud.result == nil { confirmingExit = true } else { onExit() }
             } label: {
                 Image(systemName: "xmark").font(.headline).foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.black.opacity(0.35), in: Circle())
+            }
+            Button {
+                muted.toggle()
+                ArenaSound.shared.muteChanged()
+            } label: {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.subheadline).foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(.black.opacity(0.35), in: Circle())
             }
