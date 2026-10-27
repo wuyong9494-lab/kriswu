@@ -426,7 +426,7 @@ final class AppStore: ObservableObject {
             s.apiSignature = nil
             // 只删假变动那几行，同一条里真的变动留着
             func isFake(_ line: Substring) -> Bool { wrongNames.contains { line.contains("→ \($0)") || line.contains("\($0) →") } }
-            records.changeLog = records.changeLog.compactMap { e in
+            self.records.changeLog = self.records.changeLog.compactMap { e in
                 let lines = e.text.split(separator: "\n").filter { !isFake($0) }
                 return lines.isEmpty ? nil : ChangeLogEntry(date: e.date, text: lines.joined(separator: "\n"))
             }
@@ -1003,7 +1003,7 @@ final class AppStore: ObservableObject {
                 }
                 if records != settings.swapRecords { settings.swapRecords = Array(records.prefix(300)) }
                 // 首页「最近排班变动」总是记下；通知、微信看开关
-                records.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + records.changeLog).prefix(20))
+                self.records.changeLog = Array(([ChangeLogEntry(date: Date(), text: body)] + self.records.changeLog).prefix(20))
                 if settings.notifyChanges {
                     // 每次变动一条，后一次不会把前一次顶掉
                     await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
@@ -1284,7 +1284,7 @@ final class AppStore: ObservableObject {
     var automationLooksMissing: Bool {
         guard canSync else { return false }
         let since = Date().addingTimeInterval(-2 * 86_400)
-        return !records.syncLog.contains { $0.date > since && $0.source.hasPrefix("快捷指令") }
+        return !self.records.syncLog.contains { $0.date > since && $0.source.hasPrefix("快捷指令") }
     }
 
     /// 我在网站上的名字（全员排班里认出是我的那个）
