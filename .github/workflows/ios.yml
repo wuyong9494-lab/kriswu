@@ -23,7 +23,16 @@ jobs:
       group: build-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      # 和传 TestFlight 用同一个 Xcode（26 或更新）：新系统才有的功能、新编译器才报的错在这一步就能发现
+      - name: 选用最新的 Xcode（26 或更新）
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || { echo "::error::这台云端电脑上没有 Xcode 26"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       - name: 核心逻辑单元测试
         shell: bash -eo pipefail {0}
@@ -149,6 +158,25 @@ jobs:
             gh release create app ShiftReminder.ipa sidestore.json --target "$GITHUB_SHA" --title "$title" --notes "$notes" --latest
           fi
 
+  # 核心逻辑（解析、规则、推算）在 Linux 上也跑一遍：几分钟出结果，不用排队等 Mac 机器
+  core-tests-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    concurrency:
+      group: linux-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: 核心逻辑单元测试（Linux）
+        shell: bash
+        run: |
+          set -o pipefail
+          swift --version
+          swift test 2>&1 | tee swift-test.log || {
+            grep -E "error:" swift-test.log | head -20 | sed 's/^/::error::/'
+            exit 1
+          }
+
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
     runs-on: macos-15
@@ -156,7 +184,7 @@ jobs:
       group: site-tests-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 启动仿值班网站
         run: |
@@ -204,7 +232,7 @@ jobs:
       cancel-in-progress: true
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 生成 Xcode 工程
         run: |
@@ -299,7 +327,7 @@ jobs:
             echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.check.outputs.skip != '1'
 
       - name: 选用最新的 Xcode（26 或更新）
@@ -409,7 +437,7 @@ jobs:
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       BUNDLE_ID: com.kriswu.shiftreminder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 200
 

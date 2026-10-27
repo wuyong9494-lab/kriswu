@@ -2,6 +2,9 @@ import Foundation
 #if canImport(Compression)
 import Compression
 #endif
+#if canImport(FoundationXML)
+import FoundationXML   // Linux 上 XMLParser 在这里
+#endif
 
 /// 周会文档是表格（金山 / 腾讯在线表格）时：按列读。
 /// 认这几列：分组（合并单元格，下面几行空着的算同一组）、项目或工作内容（这一行是「本周问题」还是「上周问题进展」）、
