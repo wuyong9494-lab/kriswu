@@ -359,6 +359,10 @@ public enum PassPlan {
                             start: normalizedTime(values[.start] ?? ""), end: normalizedTime(values[.end] ?? ""),
                             info: values[.info] ?? "", status: values[.status] ?? "")
         r.station = r.station.replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-")
+        // 拍 Excel 时左边的行号常和卫星编号拼成一块（「3XA102C」）：编号以字母开头，前面的数字去掉
+        for key in [\PassPlanRow.satellite, \PassPlanRow.satelliteID] {
+            r[keyPath: key] = r[keyPath: key].replacingOccurrences(of: #"^\d{1,4}(?=[A-Z]{2})"#, with: "", options: .regularExpression)
+        }
         guard !(r.satellite.isEmpty && r.satelliteID.isEmpty), !r.station.isEmpty, !r.start.isEmpty else { return nil }
         // 又出现一遍表头（翻页、拼接的表）
         if column(forHeader: r.station) == .station { return nil }
@@ -370,14 +374,22 @@ public enum PassPlan {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         s = s.replacingOccurrences(of: "：", with: ":").replacingOccurrences(of: "／", with: "/")
         let pattern = #"(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?\s*(\d{1,2})\s*[:.]\s*(\d{2})(?:\s*[:.]\s*(\d{2}))?"#
-        guard let re = try? NSRegularExpression(pattern: pattern),
-              let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return s }
-        func group(_ i: Int) -> Int? {
-            guard let r = Range(m.range(at: i), in: s) else { return nil }
-            return Int(s[r])
+        func format(_ p: [Int]) -> String? {
+            guard p.count == 6, (1...12).contains(p[1]), (1...31).contains(p[2]), p[3] < 24, p[4] < 60, p[5] < 60 else { return nil }
+            return String(format: "%04d-%02d-%02d %02d:%02d:%02d", p[0], p[1], p[2], p[3], p[4], p[5])
         }
-        guard let y = group(1), let mo = group(2), let d = group(3), let h = group(4), let mi = group(5) else { return s }
-        return String(format: "%04d-%02d-%02d %02d:%02d:%02d", y, mo, d, h, mi, group(6) ?? 0)
+        if let re = try? NSRegularExpression(pattern: pattern),
+           let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) {
+            let parts = (1...6).map { i in Range(m.range(at: i), in: s).flatMap { Int(s[$0]) } ?? (i == 6 ? 0 : -1) }
+            if let t = format(parts) { return t }
+        }
+        // 拍屏幕时「-」「:」常认丢（「2026 10-27 22:05:25」「2026-10 28 075658」）：只看数字，正好 14 位（或没有秒的 12 位）就按位拆开
+        let digits = s.filter { ("0"..."9").contains($0) }.compactMap(\.wholeNumberValue)
+        guard s.hasPrefix("20"), digits.count == 14 || digits.count == 12 else { return s }
+        func number(_ from: Int, _ count: Int) -> Int { digits[from..<(from + count)].reduce(0) { $0 * 10 + $1 } }
+        let parts = [number(0, 4), number(4, 2), number(6, 2), number(8, 2), number(10, 2), digits.count == 14 ? number(12, 2) : 0]
+        // 认出来不是有效的时间（「28:27:14」）：原样留着，页面上标黄让人核对
+        return format(parts) ?? s
     }
 
     // MARK: - 长图分段认、两种认法挑一个
@@ -492,7 +504,12 @@ public enum PassPlan {
         let has = { (c: Column) in layout.map { $0.columns.contains(c) } ?? true }
         var list: [String] = []
         let time = #"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"#
-        func isTime(_ s: String) -> Bool { s.range(of: time, options: .regularExpression) != nil }
+        func isTime(_ s: String) -> Bool {
+            guard s.range(of: time, options: .regularExpression) != nil else { return false }
+            // 格式对、数不对（「28:27:14」）也算没认全
+            let n = s.split(whereSeparator: { "- :".contains($0) }).compactMap { Int($0) }
+            return n.count == 6 && (1...12).contains(n[1]) && (1...31).contains(n[2]) && n[3] < 24 && n[4] < 60 && n[5] < 60
+        }
         if !isTime(r.start) { list.append("开始时间没认全") }
         if r.end.isEmpty {
             if has(.end) { list.append("没有结束时间") }

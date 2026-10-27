@@ -271,7 +271,7 @@ def main():
     # 2. 文档扫描（系统扫描会框出屏幕、扶正）：没有梯形，摩尔纹还在
     rows = plan(48)
     screen = excel_screen(rows)
-    scan = photograph(screen, (2400, 1350), [(0, 0), (2400, 0), (2400, 1350), (0, 1350)], blur=0.8, noise=3)
+    scan = photograph(screen, (3400, 1912), [(0, 0), (3400, 0), (3400, 1912), (0, 1912)], blur=0.9, noise=3)
     save("excel_scan", scan, rows, "excel", quality=78)
 
     # 3. 拍网页上的表：22 行，灰字，上宽下窄

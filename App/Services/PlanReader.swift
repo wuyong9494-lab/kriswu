@@ -122,7 +122,8 @@ enum PlanReader {
         if settings.languageCorrection { request.customWords = words }
         if settings.smallText { request.minimumTextHeight = minimumTextHeight(image.height) }
         try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])
-        return (request.results ?? []).flatMap(tokens)
+        let aspect = Double(image.width) / Double(max(image.height, 1))
+        return (request.results ?? []).flatMap { tokens($0, aspect: aspect) }
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算
@@ -152,18 +153,49 @@ enum PlanReader {
         return context.makeImage() ?? cgImage
     }
 
-    private static func tokens(_ observation: VNRecognizedTextObservation) -> [PassPlan.TextBox] {
+    /// 一块认出的字拆成一格格：按空格拆；中间空得很开的也拆（隔得远的几个表头格子常被认成一整块）。
+    /// aspect：图的宽比高（位置是按宽、高各自算的比例，比较空隙和字高要换成一样的单位）
+    private static func tokens(_ observation: VNRecognizedTextObservation, aspect: Double) -> [PassPlan.TextBox] {
         guard let candidate = observation.topCandidates(1).first else { return [] }
         let text = candidate.string
         func box(_ rect: CGRect, _ string: String) -> PassPlan.TextBox {
             // Vision 的坐标原点在左下，换成从上往下
             PassPlan.TextBox(text: string, x: rect.minX, y: 1 - rect.maxY, width: rect.width, height: rect.height)
         }
-        let parts = text.split(whereSeparator: \.isWhitespace)
-        guard parts.count > 1 else { return [box(observation.boundingBox, text)] }
-        return parts.compactMap { part in
-            guard let rect = try? candidate.boundingBox(for: part.startIndex..<part.endIndex)?.boundingBox else { return nil }
-            return box(rect, String(part))
+        // 每个字的位置；拿不到（有的语言只给整块的）就只按空格拆
+        var pieces: [(text: String, rect: CGRect)] = []
+        for i in text.indices where !text[i].isWhitespace {
+            guard let rect = try? candidate.boundingBox(for: i..<text.index(after: i))?.boundingBox else { pieces = []; break }
+            pieces.append((String(text[i]), rect))
+        }
+        let whole = observation.boundingBox
+        let perCharacter = pieces.count > 1 && pieces.contains { $0.rect.width < whole.width * 0.9 }
+        guard perCharacter else {
+            let parts = text.split(whereSeparator: \.isWhitespace)
+            guard parts.count > 1 else { return [box(whole, text)] }
+            return parts.compactMap { part in
+                guard let rect = try? candidate.boundingBox(for: part.startIndex..<part.endIndex)?.boundingBox else { return nil }
+                return box(rect, String(part))
+            }
+        }
+        // 相邻两个字之间：原文有空格，或者空出来比一个字高还宽，就是两格
+        let gapLimit = Double(whole.height) / aspect
+        var groups: [[(text: String, rect: CGRect)]] = []
+        var index = text.startIndex
+        var previousEnd = text.startIndex
+        var k = 0
+        while index < text.endIndex {
+            if text[index].isWhitespace { index = text.index(after: index); continue }
+            let piece = pieces[k]
+            let spaced = k > 0 && text[previousEnd..<index].contains(where: \.isWhitespace)
+            let gap = k > 0 ? Double(piece.rect.minX - pieces[k - 1].rect.maxX) : 0
+            if k == 0 || spaced || gap > gapLimit { groups.append([piece]) } else { groups[groups.count - 1].append(piece) }
+            previousEnd = text.index(after: index)
+            index = previousEnd
+            k += 1
+        }
+        return groups.map { group in
+            box(group.dropFirst().reduce(group[0].rect) { $0.union($1.rect) }, group.map(\.text).joined())
         }
     }
 }

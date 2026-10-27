@@ -3241,6 +3241,22 @@ final class PassPlanTests: XCTestCase {
         XCTAssertGreaterThan(PassPlan.score(garbled, rules: rules), PassPlan.score(PassPlan.Reading(rows: [], layout: nil)))
     }
 
+    /// 拍屏幕认丢了「-」「:」也认得出时间；认出来不是有效时间的原样留着（标黄）；行号拼到卫星编号前面的去掉
+    func testTimesWithLostSeparatorsAndGluedRowNumbers() {
+        XCTAssertEqual(PassPlan.normalizedTime("2026 10-27 22:05:25"), "2026-10-27 22:05:25")
+        XCTAssertEqual(PassPlan.normalizedTime("2026-10 28 075658"), "2026-10-28 07:56:58")
+        XCTAssertEqual(PassPlan.normalizedTime("2026-10-27 22:57"), "2026-10-27 22:57:00")
+        XCTAssertEqual(PassPlan.normalizedTime("2026-10-27 28:27:14"), "2026-10-27 28:27:14")
+        let row = PassPlanRow(satellite: "SAT-A", station: "甲站-北区01", start: "2026-10-27 28:27:14")
+        XCTAssertTrue(PassPlan.problems(row).contains("开始时间没认全"))
+        let reading = PassPlan.readTable([
+            ["卫星", "地面站", "数传开始"],
+            ["3XA102C", "甲站-北区01", "2026-10-27 01:00:00"],
+            ["4243XB7", "甲站-北区02", "2026-10-27 02:00:00"],
+        ])
+        XCTAssertEqual(reading.rows.map(\.satellite), ["XA102C", "XB7"])
+    }
+
     func testVocabularyForTextRecognition() {
         let words = PassPlan.vocabulary([PassPlan.OperatorRule(name: "甲", prefixes: ["甲站", "甲光北区"]),
                                          PassPlan.OperatorRule(name: "乙", prefixes: ["甲站"])])
