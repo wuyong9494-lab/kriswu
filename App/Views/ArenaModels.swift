@@ -167,12 +167,12 @@ final class ArenaPortraits: ObservableObject {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 520
+        ambient.light?.intensity = 450
         scene.rootNode.addChildNode(ambient)
         let key = SCNNode()
         key.light = SCNLight()
         key.light?.type = .directional
-        key.light?.intensity = 850
+        key.light?.intensity = 700
         key.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.5, -0.6, -1)))
         scene.rootNode.addChildNode(key)
         let renderer = SCNRenderer(device: device, options: nil)

@@ -155,12 +155,12 @@ final class ArenaWorldView: SCNView {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 520
+        ambient.light?.intensity = 450
         ambient.light?.color = UIColor(red: 0.93, green: 0.95, blue: 1.0, alpha: 1)
         root.addChildNode(ambient)
         let sun = SCNLight()
         sun.type = .directional
-        sun.intensity = 850
+        sun.intensity = 650
         sun.color = UIColor(red: 1.0, green: 0.97, blue: 0.9, alpha: 1)
         sun.castsShadow = true
         sun.shadowMapSize = CGSize(width: 2048, height: 2048)
@@ -290,7 +290,7 @@ final class ArenaWorldView: SCNView {
     /// 场地的地面：浅浅的棋盘格，两队家门口带一点队伍的颜色
     private func groundImage(_ game: ArenaGame) -> UIImage {
         let map = game.map
-        let cell: CGFloat = 32
+        let cell: CGFloat = 64
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
@@ -320,8 +320,8 @@ final class ArenaWorldView: SCNView {
                 }
             }
             cg.setStrokeColor(UIColor(white: 0, alpha: 0.18).cgColor)
-            cg.setLineWidth(3)
-            cg.stroke(CGRect(origin: .zero, size: size).insetBy(dx: 1.5, dy: 1.5))
+            cg.setLineWidth(6)
+            cg.stroke(CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3))
         }
     }
 
