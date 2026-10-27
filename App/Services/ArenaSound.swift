@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 final class ArenaSound {
     static let shared = ArenaSound()
-    static let muteKey = "arena.mute"
+    nonisolated static let muteKey = "arena.mute"
 
     enum Effect: String, CaseIterable {
         case shot, slash, magic, boom, hit, knockout = "ko", power = "super", pickup, heal, respawn, blink, win, lose
