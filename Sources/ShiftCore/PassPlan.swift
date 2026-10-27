@@ -285,8 +285,8 @@ public enum PassPlan {
         }
     }
 
-    /// 对照表里认不出、站名里也没有「-」的，归到这一组，页面上让人指定是哪家
-    public static let unassigned = "没分到运营商"
+    /// 分不出是哪家的归到这一组，页面上让人指定（对照表里没有这个站；对照表没填时是站名里没有「-」的）
+    public static let unassigned = "分不出是哪家"
 
     /// 地面站「-」前面的名字（「甲站-北区01」→「甲站」）；没有「-」返回 nil
     public static func operatorName(of station: String) -> String? {
@@ -296,13 +296,14 @@ public enum PassPlan {
         return name.isEmpty ? nil : name
     }
 
-    /// 是哪家：先按对照表（站名开头对上最长的那个前缀），没有再按「-」前面的名字，都没有返回 nil
+    /// 是哪家：按对照表（站名开头对上最长的那个前缀）。对照表还没填时先按「-」前面的名字分；
+    /// 填了以后对不上的就是 nil（不去猜，页面上提示「分不出是哪家」，免得「某某-测试」这种站被当成一家新的）
     public static func operatorName(of station: String, rules: [OperatorRule]) -> String? {
+        guard !rules.isEmpty else { return operatorName(of: station) }
         let s = station.filter { !$0.isWhitespace }
-        let best = rules.flatMap { rule in rule.prefixes.map { (rule.name, $0.filter { !$0.isWhitespace }) } }
+        return rules.flatMap { rule in rule.prefixes.map { (rule.name, $0.filter { !$0.isWhitespace }) } }
             .filter { !$0.1.isEmpty && s.hasPrefix($0.1) }
-            .max { $0.1.count < $1.1.count }
-        return best?.0 ?? operatorName(of: station)
+            .max { $0.1.count < $1.1.count }?.0
     }
 
     /// 给一个对不上的站记前缀用：「-」前面的名字，没有「-」就去掉末尾的编号（「丙光北区03」→「丙光北区」）

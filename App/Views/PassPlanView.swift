@@ -88,6 +88,16 @@ struct PassPlanView: View {
                         Label("有 \(doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote).foregroundStyle(DS.Palette.warning)
                     }
+                    let lostCount = all.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
+                    if lostCount > 0 {
+                        Label("有 \(lostCount) 条分不出是哪家（在下面最上面），点「分给哪家」记下来，记一次以后自动分",
+                              systemImage: "questionmark.circle.fill")
+                            .font(.footnote.weight(.semibold)).foregroundStyle(DS.Palette.warning)
+                    }
+                    if rules.isEmpty {
+                        Text("还没填运营商对照表，现在先按站名「-」前面的名字分。到下面「运营商对照表」里粘贴导入一次就准了。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     if !idle.isEmpty {
                         Text("今天没有计划：\(idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
                     }
@@ -103,18 +113,18 @@ struct PassPlanView: View {
                 } footer: {
                     Text("依次发：发完一家自动弹出下一家，分享面板最上面写着这次发给谁、该选哪个群。")
                 }
-                ForEach(all, id: \.name) { group in
-                    if group.name == PassPlan.unassigned {
-                        unassignedSection(group.rows, known: groups.map(\.name))
-                    } else {
-                        Section {
-                            ForEach(group.rows, id: \.self) { row in
-                                rowButton(row)
-                            }
-                            sendButtons(group.name, rows: group.rows)
-                        } header: {
-                            header(group.name, count: group.rows.count)
+                // 分不出是哪家的放最上面：先分好再发
+                if let lost = all.first(where: { $0.name == PassPlan.unassigned }) {
+                    unassignedSection(lost.rows, known: groups.map(\.name))
+                }
+                ForEach(groups, id: \.name) { group in
+                    Section {
+                        ForEach(group.rows, id: \.self) { row in
+                            rowButton(row)
                         }
+                        sendButtons(group.name, rows: group.rows)
+                    } header: {
+                        header(group.name, count: group.rows.count)
                     }
                 }
                 Section {
@@ -255,9 +265,10 @@ struct PassPlanView: View {
             }
             ForEach(rows, id: \.self) { row in rowButton(row) }
         } header: {
-            Text("\(PassPlan.unassigned) · \(rows.count) 条")
+            Label("\(PassPlan.unassigned) · \(rows.count) 条", systemImage: "questionmark.circle.fill")
+                .foregroundStyle(DS.Palette.warning)
         } footer: {
-            Text("对照表里没有这些站。点「分给哪家」记下来（记的是站名开头，比如「\(PassPlan.suggestedPrefix(of: stations.first ?? ""))」），以后同样开头的站自动分过去；也可以去「运营商对照表」里改。")
+            Text("运营商对照表里没有这些站，没法发。点「分给哪家」记下来（记的是站名开头，比如「\(PassPlan.suggestedPrefix(of: stations.first ?? ""))」），以后同样开头的站自动分过去；记错了到「运营商对照表」里改。也可能是站名认错了字：点下面那一行改。")
         }
     }
 
@@ -335,8 +346,12 @@ struct PassPlanView: View {
                 let found = try await work()
                 withAnimation { store.passPlan = PassPlanSession(rows: found) }
                 let doubtful = found.filter { !PassPlan.problems($0, rules: rules).isEmpty }.count
-                ToastCenter.shared.show("认出 \(found.count) 条，分成 \(PassPlan.grouped(found, rules: rules).count) 家"
-                                        + (doubtful > 0 ? "，\(doubtful) 条要核对" : ""), style: doubtful > 0 ? .warning : .success)
+                let grouped = PassPlan.grouped(found, rules: rules)
+                let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
+                let families = grouped.filter { $0.name != PassPlan.unassigned }.count
+                var message = "认出 \(found.count) 条，分成 \(families) 家"
+                if lost > 0 { message += "；\(lost) 条分不出是哪家，在最上面" } else if doubtful > 0 { message += "，\(doubtful) 条要核对" }
+                ToastCenter.shared.show(message, style: doubtful > 0 || lost > 0 ? .warning : .success)
             } catch {
                 problem = error.localizedDescription
             }

@@ -2969,8 +2969,10 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(PassPlan.operatorName(of: "甲站-北区01", rules: rules), "甲")
         XCTAssertEqual(PassPlan.operatorName(of: "乙光南区03", rules: rules), "乙", "站名没有「-」，按前缀")
         XCTAssertEqual(PassPlan.operatorName(of: "丁站02", rules: rules), "乙", "一家可以有几种前缀")
-        XCTAssertEqual(PassPlan.operatorName(of: "戊站-东区01", rules: rules), "戊站", "表里没有，按「-」前面的")
+        XCTAssertNil(PassPlan.operatorName(of: "戊站-东区01", rules: rules), "填了对照表：表里没有就分不出，不按「-」去猜")
+        XCTAssertEqual(PassPlan.operatorName(of: "戊站-东区01", rules: []), "戊站", "还没填对照表：按「-」前面的")
         XCTAssertNil(PassPlan.operatorName(of: "己光03", rules: rules))
+        XCTAssertNil(PassPlan.operatorName(of: "己光03", rules: []))
         // 前缀有长有短：对上最长的
         let overlap = [PassPlan.OperatorRule(name: "短", prefixes: ["乙光"]), PassPlan.OperatorRule(name: "长", prefixes: ["乙光北区"])]
         XCTAssertEqual(PassPlan.operatorName(of: "乙光北区01", rules: overlap), "长")
@@ -2988,7 +2990,10 @@ final class PassPlanTests: XCTestCase {
         let rows = [row("己光01", "08:00:00"), row("戊站-东区01", "09:00:00"), row("乙光北区02", "10:00:00"),
                     row("甲站-北区01", "12:00:00"), row("甲站-北区05", "11:00:00")]
         let groups = PassPlan.grouped(rows, rules: rules)
-        XCTAssertEqual(groups.map(\.name), ["甲", "乙", "戊站", PassPlan.unassigned], "按对照表的顺序，认不出的放最后")
+        XCTAssertEqual(groups.map(\.name), ["甲", "乙", PassPlan.unassigned], "按对照表的顺序，分不出的放最后")
+        XCTAssertEqual(groups[2].rows.map(\.station), ["己光01", "戊站-东区01"])
+        XCTAssertEqual(PassPlan.grouped(rows).map(\.name), ["戊站", "甲站", PassPlan.unassigned],
+                       "没填对照表：按「-」前面的，没有「-」的分不出")
         XCTAssertEqual(groups[0].rows.map(\.station), ["甲站-北区05", "甲站-北区01"], "按开始时间")
         XCTAssertEqual(PassPlan.idle(rows, rules: rules), ["丙"], "今天没有计划的")
     }

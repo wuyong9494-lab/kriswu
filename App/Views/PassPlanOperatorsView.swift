@@ -35,15 +35,22 @@ struct PassPlanOperatorsView: View {
                 Text("比如「乙：乙光、丁站」：站名以「乙光」或「丁站」开头的都算乙。几个前缀都对得上时按最长的那个。站名带「-」的（「甲站-北区01」）表里没有也会按「-」前面的名字分。发计划时遇到对不上的站，在那一页点一下就能加进来。")
             }
             Section {
-                Button {
-                    pasted = PassPlan.parseRules(UIPasteboard.general.string ?? "")
-                    if pasted.isEmpty {
-                        ToastCenter.shared.show("剪贴板里没有对照表：一行一家，写成「名字：前缀、前缀」", style: .error)
-                    } else {
-                        confirmingPaste = true
+                // 系统的粘贴按钮：不会弹「是否允许粘贴」
+                HStack {
+                    Text("粘贴导入")
+                    Spacer()
+                    PasteButton(payloadType: String.self) { strings in
+                        let found = PassPlan.parseRules(strings.joined(separator: "\n"))
+                        Task { @MainActor in
+                            if found.isEmpty {
+                                ToastCenter.shared.show("剪贴板里没有对照表：一行一家，写成「名字：前缀、前缀」", style: .error)
+                            } else {
+                                pasted = found
+                                confirmingPaste = true
+                            }
+                        }
                     }
-                } label: {
-                    Label("粘贴导入", systemImage: "doc.on.clipboard")
+                    .labelStyle(.titleAndIcon)
                 }
                 Button {
                     UIPasteboard.general.string = PassPlan.rulesText(store.settings.passPlanOperators)
