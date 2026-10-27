@@ -3317,6 +3317,10 @@ final class PassPlanTests: XCTestCase {
         XCTAssertNil(PassPlan.neighborOperator(of: "庚庚01", in: rows, rules: rules), "最后一条，下面没有")
         let mixed = ["甲站01", "戊戊01", "乙站01"].map { PassPlanRow(satellite: "A", station: $0, start: "2026-10-27 01:00:00") }
         XCTAssertNil(PassPlan.neighborOperator(of: "戊戊01", in: mixed, rules: rules), "上下不是同一家不猜")
+        // 没按地面站排序的表（各家穿插）：上下碰巧是同一家也不猜
+        let unsorted = ["甲站01", "乙站01", "甲站02", "戊戊01", "甲站03", "乙站02", "甲站04", "乙站03"]
+            .map { PassPlanRow(satellite: "A", station: $0, start: "2026-10-27 01:00:00") }
+        XCTAssertNil(PassPlan.neighborOperator(of: "戊戊01", in: unsorted, rules: rules))
     }
 
     /// 系统按格子认的表核对站名：同一行（开始时间一样）它的对得上对照表、这边的对不上才换

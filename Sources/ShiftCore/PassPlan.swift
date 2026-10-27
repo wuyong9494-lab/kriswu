@@ -533,6 +533,10 @@ public enum PassPlan {
     public static func neighborOperator(of station: String, in rows: [PassPlanRow], rules: [OperatorRule]) -> String? {
         guard !rules.isEmpty else { return nil }
         let names = rows.map { operatorName(of: $0.station, rules: rules) }
+        // 表得真是按地面站排过序的：分得出的行里，挨着的大多是同一家（没排序的表各家穿插着，上下是同一家只是碰巧）
+        let known = names.compactMap { $0 }
+        let pairs = zip(known, known.dropFirst())
+        guard known.count >= 5, Double(pairs.filter { $0 == $1 }.count) >= Double(known.count - 1) * 0.75 else { return nil }
         var answer: String?
         for i in rows.indices where rows[i].station == station {
             guard let above = names[..<i].compactMap({ $0 }).last,
