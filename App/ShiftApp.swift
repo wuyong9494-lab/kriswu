@@ -411,6 +411,7 @@ enum ScreenCatalog {
         case "meetingSource": MeetingSourceView()
         case "meetingTrend": MeetingTrendView()
         case "todayLayout": TodayLayoutView()
+        case "years": MultiYearStatsView()
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         default: TodayView()

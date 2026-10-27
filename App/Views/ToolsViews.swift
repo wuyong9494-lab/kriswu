@@ -227,6 +227,9 @@ struct YearStatsView: View {
                 NavigationLink { YearSummaryView(year: year) } label: {
                     Label("我的 \(String(year)) 年度总结（可存图片）", systemImage: "star.circle")
                 }
+                NavigationLink { MultiYearStatsView() } label: {
+                    Label("历年对比", systemImage: "calendar.badge.clock")
+                }
                 Button {
                     Task { await store.readHistory(since: year) }
                 } label: {

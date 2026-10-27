@@ -31,6 +31,8 @@ struct RecordsState: Codable, Equatable {
     var taskHistory: [String: TaskDayRecord] = [:]
     /// 系统交过来的闪退、卡顿记录（新的在前，最多 30 条）
     var crashes: [CrashLog.Entry] = []
+    /// 往年的统计存档（一年过完存一份，新的在前）
+    var yearArchives: [YearArchive] = []
 }
 
 /// 以前存在设置里、现在搬到单独文件的字段：旧名 → 新名

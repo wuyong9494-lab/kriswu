@@ -2792,3 +2792,44 @@ final class CardOrderTests: XCTestCase {
                        ["week", "meeting", "tasks", "stats"])
     }
 }
+
+final class YearArchiveTests: XCTestCase {
+    private func person(_ name: String, duty: Int, regular: Int) -> PersonWorkload {
+        PersonWorkload(name: name, dutyDays: duty, dutyRestDays: 0, regularDays: regular, offDays: 100, holidayDays: 10,
+                       tripDays: 0, holidayWorkedDays: 2, posts: [:])
+    }
+
+    func testArchiveSortsAndFindsPeople() {
+        let days = [DayKey(year: 2025, month: 3, day: 1), DayKey(year: 2025, month: 1, day: 2)]
+        let a = YearArchive(year: 2025, days: days, people: [person("乙", duty: 5, regular: 100), person("甲", duty: 10, regular: 200)])
+        XCTAssertEqual(a.days, 2)
+        XCTAssertEqual(a.first, DayKey(year: 2025, month: 1, day: 2))
+        XCTAssertEqual(a.last, DayKey(year: 2025, month: 3, day: 1))
+        XCTAssertEqual(a.people.map(\.name), ["甲", "乙"], "工作量多的在前")
+        XCTAssertEqual(a.person(["丙", "甲"])?.workDays, 210)
+        XCTAssertNil(a.person(["丙"]))
+    }
+
+    func testNeedsSaving() {
+        let today = DayKey(year: 2026, month: 1, day: 5)
+        let saved = YearArchive(year: 2025, days: Array(repeating: today, count: 300), people: [])
+        XCTAssertTrue(YearArchive.needsSaving(year: 2025, availableDays: 300, existing: nil, today: today))
+        XCTAssertFalse(YearArchive.needsSaving(year: 2025, availableDays: 300, existing: saved, today: today))
+        XCTAssertTrue(YearArchive.needsSaving(year: 2025, availableDays: 360, existing: saved, today: today), "读到了更多天")
+        XCTAssertFalse(YearArchive.needsSaving(year: 2025, availableDays: 200, existing: saved, today: today), "排班删掉了一部分，不覆盖")
+        XCTAssertFalse(YearArchive.needsSaving(year: 2026, availableDays: 5, existing: nil, today: today), "今年还没过完")
+        XCTAssertFalse(YearArchive.needsSaving(year: 2024, availableDays: 0, existing: nil, today: today))
+    }
+
+    func testMerging() {
+        let a = YearArchive(year: 2024, days: [], people: [])
+        var b = YearArchive(year: 2025, days: [], people: [])
+        var list = YearArchive.merging(a, into: [])
+        list = YearArchive.merging(b, into: list)
+        XCTAssertEqual(list.map(\.year), [2025, 2024])
+        b.days = 9
+        list = YearArchive.merging(b, into: list)
+        XCTAssertEqual(list.map(\.year), [2025, 2024])
+        XCTAssertEqual(list.first?.days, 9)
+    }
+}

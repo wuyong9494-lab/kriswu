@@ -51,6 +51,7 @@ struct AllFeaturesView: View {
                 feature("工作量", "这个月每个人上了几天、算不算工作量", "chart.bar", keywords: "上班天数 统计 加班") { WorkloadView() },
                 feature("全年统计", "一年的工作量、节假日上班", "calendar.badge.clock", keywords: "年度 一年") { YearStatsView() },
                 feature("年度总结", "这一年值了几次遥测、休了几天", "sparkles", keywords: "总结 回顾") { YearSummaryView(year: today.year) },
+                feature("历年统计", "每年过完存一份，和往年比", "chart.bar.xaxis", keywords: "往年 去年 历年 对比 存档") { MultiYearStatsView() },
                 feature("均衡分析", "大家的活多活少是不是均衡", "scalemass", keywords: "公平 均衡 多少") { FairnessView() },
                 feature("数据核对", "网站数据有没有漏读、对不上", "checkmark.seal", keywords: "核对 检查 漏") { DataCheckView() },
                 feature("排班规律", "网站怎么排遥测、推算准不准", "wand.and.stars", keywords: "规律 推法", access: .manager) { SchedulePatternsView() },

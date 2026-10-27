@@ -369,12 +369,31 @@ final class AppStore: ObservableObject {
         s.teamChanges = [TeamChange(day: today.adding(days: 2), post: "组B", from: ["周远"], to: [me])]
         s.lastSync = Date().addingTimeInterval(-600)
         s.lastSyncMessage = "同步成功：30 天，没有变动，这次读到 9 人有排班（全年累计 12 人）"
+        records.yearArchives = Self.demoYearArchives(people: people, today: today)
         meeting = MeetingState(docURL: "https://www.kdocs.cn/l/demo", issues: Self.demoMeetingIssues(week: MeetingTracker.monday(of: today)),
                                lastImport: Date().addingTimeInterval(-3 * 3600), week: MeetingTracker.monday(of: today))
         settings = s
         roster = r
         schedule = r[me] ?? [:]
         covered = Set((-40...14).map { today.adding(days: $0) })
+    }
+
+    /// 演示用的往年统计（虚构）：前两年，每人数字有高有低
+    private static func demoYearArchives(people: [String], today: DayKey) -> [YearArchive] {
+        (1...2).map { back in
+            let year = today.year - back
+            let days = [DayKey(year: year, month: 1, day: 1), DayKey(year: year, month: 12, day: 31)]
+            let workloads = people.enumerated().map { i, name in
+                let duty = 38 + (i * 5 + back * 3) % 9
+                let regular = 190 + (i * 7 + back * 11) % 25
+                return PersonWorkload(name: name, dutyDays: duty, dutyRestDays: 0, regularDays: regular,
+                                      offDays: 365 - duty - regular - 12, holidayDays: 9, tripDays: (i + back) % 4,
+                                      holidayWorkedDays: 2 + (i + back) % 3, posts: [:])
+            }
+            var archive = YearArchive(year: year, days: days, people: workloads)
+            archive.days = 365
+            return archive
+        }
     }
 
     /// 演示用的周会问题（虚构）：三个组，没解决、本周新提、待确认、已解决各有

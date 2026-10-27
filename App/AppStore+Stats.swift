@@ -16,6 +16,22 @@ extension AppStore {
                            matcher: matcher, members: rotationMembers, restBalance: settings.restBalance)
     }
 
+    /// 过完了的年份：全员排班还在的时候把全年统计存一份（原始数据只留一年多），以后能和往年比。
+    /// 数据变了、过了零点时检查；这一年存过、天数没变多就不重算
+    func archivePastYears() async {
+        guard !Self.isDemo else { return }
+        let today = DayKey.today
+        let byYear = Dictionary(grouping: publishedDays.filter { $0 <= today }, by: \.year)
+        for (year, days) in byYear.sorted(by: { $0.key < $1.key }) {
+            let existing = records.yearArchives.first { $0.year == year }
+            guard YearArchive.needsSaving(year: year, availableDays: days.count, existing: existing, today: today) else { continue }
+            let report = await workloadInBackground(year: year, month: nil)
+            guard !report.days.isEmpty else { continue }
+            records.yearArchives = YearArchive.merging(YearArchive(year: year, days: report.days, people: report.people),
+                                                       into: records.yearArchives)
+        }
+    }
+
     /// 全年这种大统计：在后台算，算好放进缓存（数据在算的时候变了就不放）
     func workloadInBackground(year: Int, month: Int?) async -> Workload {
         let key = "\(year)-\(month ?? 0)-\(DayKey.today)"

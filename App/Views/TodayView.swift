@@ -107,7 +107,10 @@ struct TodayView: View {
             .sheet(isPresented: $searching) { MemberSearchView() }
             .fullScreenCover(isPresented: $loggingIn) { WebLoginView() }
             // 「下次遥测」的推算在后台算好（数据变了、过了零点都重算）
-            .task(id: "\(store.dataRevision)-\(DayKey.today)") { await store.warmRotation() }
+            .task(id: "\(store.dataRevision)-\(DayKey.today)") {
+                await store.warmRotation()
+                await store.archivePastYears()
+            }
         }
     }
 
