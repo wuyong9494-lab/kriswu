@@ -88,6 +88,8 @@ final class AppStore: ObservableObject {
     @Published var desktopPageText: String?
     /// 上次读周会文档读到的文字（没认出各组时给人看读到了什么）
     @Published var meetingPageText: String?
+    /// 发数传计划：这次打开 App 读到的计划、哪几家已经发了（只在内存里，不存）
+    @Published var passPlan = PassPlanSession()
 
     /// 周会问题跟进（单独存在 meeting.json）
     @Published var meeting = MeetingState() {

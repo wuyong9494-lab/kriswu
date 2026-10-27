@@ -14,11 +14,20 @@ enum PlanReader {
         }
     }
 
-    /// 照片 → 每一行
-    static func rows(in image: UIImage) async throws -> [PassPlanRow] {
-        let boxes = try await textBoxes(in: image)
-        guard !boxes.isEmpty else { throw Failure.noText }
-        let rows = PassPlan.rows(fromBoxes: boxes)
+    /// 几张照片（计划长、往下翻着拍的）→ 合成一份。第一张要拍到表头；后面几张没拍到表头的，按前一张的列位置分
+    static func rows(inPages images: [UIImage]) async throws -> [PassPlanRow] {
+        var pages: [[PassPlanRow]] = []
+        var sawText = false
+        var layout: PassPlan.ColumnLayout?
+        for image in images {
+            let boxes = try await textBoxes(in: image)
+            sawText = sawText || !boxes.isEmpty
+            let result = PassPlan.read(boxes, fallback: layout)
+            layout = result.layout ?? layout
+            pages.append(result.rows)
+        }
+        guard sawText else { throw Failure.noText }
+        let rows = PassPlan.merge(pages)
         guard !rows.isEmpty else { throw Failure.noTable }
         return rows
     }

@@ -2,21 +2,30 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 发数传计划：拍一张计划（或导入导出的 Excel、粘贴复制的表格），按运营商（地面站「-」前面的名字）分开，
-/// 每家生成一张清楚的表格图 / 一段文字，点一下发到那家的微信群。读出来的东西只在这一页，不存、不上传
+/// 发数传计划这一次的状态：读到的计划、哪几家已经发了。只在内存里（离开这一页再回来还在，关掉 App 就没了）
+struct PassPlanSession: Equatable {
+    var rows: [PassPlanRow] = []
+    var sent: Set<String> = []
+}
+
+/// 发数传计划：对着电脑屏幕拍计划（系统文档扫描自动框出屏幕、扶正，长的可以连拍几张），
+/// 按运营商（地面站「-」前面的名字）分开，每家生成一张清楚的表格图 / 一段文字，发到那家的微信群。
+/// 读出来的东西不存、不上传
 struct PassPlanView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var rows: [PassPlanRow]
+    /// 打开时带进来的计划（分享过来的 Excel、截图演示）
+    private let initialRows: [PassPlanRow]
     @State private var reading = false
     @State private var problem: String?
+    @State private var scanning = false
     @State private var showingCamera = false
-    @State private var photoItem: PhotosPickerItem?
+    @State private var photoItems: [PhotosPickerItem] = []
     @State private var importing = false
     @State private var editing: EditingRow?
     @State private var naming: String?
     @State private var groupName = ""
     /// 每家的图（读完、改完重新画）
-    @State private var images: [String: Image] = [:]
+    @State private var images: [String: UIImage] = [:]
 
     private struct EditingRow: Identifiable {
         let id = UUID()
@@ -25,24 +34,28 @@ struct PassPlanView: View {
     }
 
     init(rows: [PassPlanRow] = []) {
-        _rows = State(initialValue: rows)
+        initialRows = rows
     }
+
+    private var rows: [PassPlanRow] { store.passPlan.rows }
 
     var body: some View {
         let groups = PassPlan.grouped(rows)
+        let doubtful = rows.filter { !PassPlan.problems($0).isEmpty }.count
         List {
             Section {
-                Button { showingCamera = true } label: {
-                    Label("拍计划", systemImage: "camera.viewfinder")
+                Button { if DocumentScanner.isSupported { scanning = true } else { showingCamera = true } } label: {
+                    Label("拍计划", systemImage: "doc.viewfinder").font(.headline)
                 }
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("从相册选一张", systemImage: "photo.on.rectangle")
+                PhotosPicker(selection: $photoItems, maxSelectionCount: 5, matching: .images) {
+                    Label("从相册选（可以选几张）", systemImage: "photo.on.rectangle")
                 }
-                Button { importing = true } label: {
-                    Label("导入导出的 Excel", systemImage: "tablecells")
-                }
-                Button { read { try PlanReader.rowsFromClipboard() } } label: {
-                    Label("粘贴复制的表格", systemImage: "doc.on.clipboard")
+                DisclosureGroup("其他方式") {
+                    Button { showingCamera = true } label: { Label("普通拍照", systemImage: "camera") }
+                    Button { importing = true } label: { Label("导入 Excel", systemImage: "tablecells") }
+                    Button { read { try PlanReader.rowsFromClipboard() } } label: {
+                        Label("粘贴复制的表格", systemImage: "doc.on.clipboard")
+                    }
                 }
                 if reading {
                     HStack(spacing: DS.Space.xs) { DSSpinner(size: 14); Text("正在认…").foregroundStyle(.secondary) }
@@ -51,58 +64,63 @@ struct PassPlanView: View {
                     Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
                 }
             } footer: {
-                Text("对着电脑屏幕拍，表头那一行要拍进去。按地面站「-」前面的名字分到各家；读出来的先核对一下，认错的点一行改。照片和计划只在这一页，不存、不上传。")
+                Text("对着电脑屏幕拍，会自动框出屏幕、扶正；表头那一行要拍进去，计划长就往下翻着连拍几张，会合成一份。照片和计划不存、不上传。")
             }
             if !rows.isEmpty {
+                Section {
+                    LabeledContent("一共", value: "\(rows.count) 条，\(groups.count) 家")
+                    LabeledContent("已经发了", value: "\(groups.filter { store.passPlan.sent.contains($0.name) }.count) / \(groups.count) 家")
+                    if doubtful > 0 {
+                        Label("有 \(doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(DS.Palette.warning)
+                    }
+                }
                 ForEach(groups, id: \.name) { group in
                     Section {
                         ForEach(group.rows, id: \.self) { row in
                             Button { edit(row) } label: { rowView(row) }
                                 .buttonStyle(.plain)
+                                // 可能认错的标黄
+                                .listRowBackground(PassPlan.problems(row).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
                                 .swipeActions {
-                                    Button("删掉", role: .destructive) { rows.removeAll { $0 == row } }
+                                    Button("删掉", role: .destructive) { store.passPlan.rows.removeAll { $0 == row } }
                                 }
                         }
                         sendButtons(group.name, rows: group.rows)
                     } header: {
-                        HStack {
-                            Text("\(group.name) · \(group.rows.count) 条")
-                            Spacer()
-                            Button {
-                                groupName = store.settings.passPlanGroups[group.name] ?? ""
-                                naming = group.name
-                            } label: {
-                                Label(store.settings.passPlanGroups[group.name].map { "发到：\($0)" } ?? "记一下发哪个群",
-                                      systemImage: "person.3")
-                            }
-                            .font(.caption.weight(.semibold))
-                            .buttonStyle(.borderless)
-                        }
+                        header(group.name, count: group.rows.count)
                     }
                 }
                 Section {
                     Button { editing = EditingRow(index: nil, row: PassPlanRow()) } label: {
                         Label("补一条", systemImage: "plus")
                     }
-                    Button("全部清掉", role: .destructive) { rows = []; problem = nil }
+                    Button("全部清掉", role: .destructive) { store.passPlan = PassPlanSession(); problem = nil }
                 }
             }
         }
         .appList()
         .navigationTitle("发数传计划")
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraPicker { image in read { try await PlanReader.rows(in: image) } }
+        .fullScreenCover(isPresented: $scanning) {
+            DocumentScanner { pages in read { try await PlanReader.rows(inPages: pages) } }
                 .ignoresSafeArea()
         }
-        .onChange(of: photoItem) { item in
-            guard let item else { return }
-            photoItem = nil
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraPicker { image in read { try await PlanReader.rows(inPages: [image]) } }
+                .ignoresSafeArea()
+        }
+        .onChange(of: photoItems) { items in
+            guard !items.isEmpty else { return }
+            photoItems = []
             read {
-                guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
-                    throw PlanReader.Failure.noText
+                var pages: [UIImage] = []
+                for item in items {
+                    if let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        pages.append(image)
+                    }
                 }
-                return try await PlanReader.rows(in: image)
+                return try await PlanReader.rows(inPages: pages)
             }
         }
         .fileImporter(isPresented: $importing,
@@ -113,10 +131,10 @@ struct PassPlanView: View {
         .sheet(item: $editing) { target in
             NavigationStack {
                 PassPlanRowEditor(row: target.row, isNew: target.index == nil) { saved in
-                    if let i = target.index, rows.indices.contains(i) {
-                        if let saved { rows[i] = saved } else { rows.remove(at: i) }
+                    if let i = target.index, store.passPlan.rows.indices.contains(i) {
+                        if let saved { store.passPlan.rows[i] = saved } else { store.passPlan.rows.remove(at: i) }
                     } else if let saved {
-                        rows.append(saved)
+                        store.passPlan.rows.append(saved)
                     }
                 }
             }
@@ -134,13 +152,37 @@ struct PassPlanView: View {
         } message: {
             Text("微信不让别的 App 直接发到群里：点「发图片」以后在微信里选这个群。记下来按钮上就写着该发哪个群。")
         }
-        .task(id: rows) { await renderImages() }
+        .onAppear {
+            if !initialRows.isEmpty { store.passPlan = PassPlanSession(rows: initialRows) }
+        }
+        .task(id: rows) { renderImages() }
     }
 
-    // MARK: - 一行
+    // MARK: - 一家的标题、一行
+
+    private func header(_ name: String, count: Int) -> some View {
+        HStack {
+            Text("\(name) · \(count) 条")
+            if store.passPlan.sent.contains(name) {
+                Label("已发", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(DS.Palette.success)
+            }
+            Spacer()
+            Button {
+                groupName = store.settings.passPlanGroups[name] ?? ""
+                naming = name
+            } label: {
+                Label(store.settings.passPlanGroups[name].map { "发到：\($0)" } ?? "记一下发哪个群", systemImage: "person.3")
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.borderless)
+        }
+    }
 
     private func rowView(_ row: PassPlanRow) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let problems = PassPlan.problems(row)
+        return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
                 Text([PassPlan.shortTime(row.start), PassPlan.shortTime(row.end)].filter { !$0.isEmpty }.joined(separator: "–"))
                     .font(.subheadline.weight(.semibold)).monospacedDigit()
@@ -150,24 +192,30 @@ struct PassPlanView: View {
             Text([row.station, row.orbit.isEmpty ? "" : "圈号 \(row.orbit)", row.satelliteID, row.info]
                 .filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.caption).foregroundStyle(.secondary)
+            if !problems.isEmpty {
+                Label(problems.joined(separator: "；"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(DS.Palette.warning)
+            }
         }
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
     }
 
     private func sendButtons(_ name: String, rows: [PassPlanRow]) -> some View {
-        let text = PassPlan.message(name: name, rows: rows)
         let target = store.settings.passPlanGroups[name]
+        let sent = store.passPlan.sent.contains(name)
         return HStack(spacing: DS.Space.s) {
-            if let image = images[name] {
-                ShareLink(item: image, preview: SharePreview("\(name)数传计划", image: image)) {
-                    Label(target.map { "发图片到\($0)" } ?? "发图片", systemImage: "photo")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                ProgressView().frame(maxWidth: .infinity)
+            Button {
+                guard let image = images[name] else { return }
+                share([image], name: name)
+            } label: {
+                Label(sent ? "再发一次图片" : (target.map { "发图片到\($0)" } ?? "发图片"), systemImage: "photo")
+                    .frame(maxWidth: .infinity)
             }
-            ShareLink(item: text) {
+            .buttonStyle(.borderedProminent)
+            .tint(sent ? DS.Palette.success : DS.Palette.accent)
+            .disabled(images[name] == nil)
+            Button { share([PassPlan.message(name: name, rows: rows)], name: name) } label: {
                 Label("发文字", systemImage: "text.alignleft").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -176,7 +224,7 @@ struct PassPlanView: View {
         .padding(.vertical, DS.Space.xxs)
     }
 
-    // MARK: - 读、改
+    // MARK: - 读、改、发
 
     private func read(_ work: @escaping @MainActor () async throws -> [PassPlanRow]) {
         reading = true
@@ -184,8 +232,10 @@ struct PassPlanView: View {
         Task {
             do {
                 let found = try await work()
-                withAnimation { rows = found }
-                ToastCenter.shared.show("认出 \(found.count) 条，分成 \(PassPlan.grouped(found).count) 家，先核对一下", style: .success)
+                withAnimation { store.passPlan = PassPlanSession(rows: found) }
+                let doubtful = found.filter { !PassPlan.problems($0).isEmpty }.count
+                ToastCenter.shared.show("认出 \(found.count) 条，分成 \(PassPlan.grouped(found).count) 家"
+                                        + (doubtful > 0 ? "，\(doubtful) 条要核对" : ""), style: doubtful > 0 ? .warning : .success)
             } catch {
                 problem = error.localizedDescription
             }
@@ -197,13 +247,19 @@ struct PassPlanView: View {
         editing = EditingRow(index: rows.firstIndex(of: row), row: row)
     }
 
-    @MainActor
-    private func renderImages() async {
-        var made: [String: Image] = [:]
+    /// 发出去（在微信里选群）；真的发了就标「已发」
+    private func share(_ items: [Any], name: String) {
+        ActivityShare.present(items) { completed in
+            if completed { store.passPlan.sent.insert(name) }
+        }
+    }
+
+    private func renderImages() {
+        var made: [String: UIImage] = [:]
         for group in PassPlan.grouped(rows) {
             let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows))
             renderer.scale = 3
-            if let image = renderer.uiImage { made[group.name] = Image(uiImage: image) }
+            if let image = renderer.uiImage { made[group.name] = image }
         }
         images = made
     }

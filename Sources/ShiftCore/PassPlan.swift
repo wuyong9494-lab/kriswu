@@ -101,29 +101,50 @@ public enum PassPlan {
         var midY: Double { y + height / 2 }
     }
 
+    /// 每列在照片里的左右位置（0–1）：往下翻着连拍时，后面几张拍不到表头，就用前一张的
+    public struct ColumnLayout: Equatable, Sendable {
+        public var centers: [Column: Double]
+        public init(centers: [Column: Double]) { self.centers = centers }
+    }
+
     /// 拍屏幕常常是斜的：用表头那一排的位置算出倾斜，扶正以后按上下分行、按表头的左右位置分列
     public static func rows(fromBoxes boxes: [TextBox]) -> [PassPlanRow] {
+        read(boxes).rows
+    }
+
+    /// 同上，另外返回这张认出的列位置；这张没拍到表头时用 fallback（前一张的列位置，当作没有倾斜）
+    public static func read(_ boxes: [TextBox], fallback: ColumnLayout? = nil) -> (rows: [PassPlanRow], layout: ColumnLayout?) {
         let headers = boxes.compactMap { b in column(forHeader: b.text).map { (box: b, column: $0) } }
-        // 表头里每列只认一个（最靠上的那排）
-        guard let top = headerRow(headers) else { return [] }
-        let slope = tilt(top.map(\.box))
-        func level(_ b: TextBox) -> Double { b.midY - slope * b.midX }
-        let headerLevel = top.map { level($0.box) }.reduce(0, +) / Double(top.count)
         let heights = boxes.map(\.height).sorted()
         let lineHeight = heights.isEmpty ? 0.02 : heights[heights.count / 2]
-        let body = boxes.filter { b in level(b) > headerLevel + lineHeight * 0.6 && !top.contains { $0.box == b } }
-            .sorted { level($0) < level($1) }
+        let slope: Double
+        let body: [TextBox]
+        let layout: ColumnLayout
+        if let top = headerRow(headers) {
+            let s = tilt(top.map(\.box))
+            let headerLevel = top.map { $0.box.midY - s * $0.box.midX }.reduce(0, +) / Double(top.count)
+            slope = s
+            body = boxes.filter { b in b.midY - s * b.midX > headerLevel + lineHeight * 0.6 && !top.contains { $0.box == b } }
+            layout = ColumnLayout(centers: Dictionary(top.map { ($0.column, $0.box.midX) }, uniquingKeysWith: { a, _ in a }))
+        } else if let fallback {
+            slope = 0
+            body = boxes
+            layout = fallback
+        } else {
+            return ([], nil)
+        }
+        func level(_ b: TextBox) -> Double { b.midY - slope * b.midX }
         // 上下挨得近的算一行
         var lines: [[TextBox]] = []
-        for b in body {
+        for b in body.sorted(by: { level($0) < level($1) }) {
             if let last = lines.last?.last, abs(level(b) - level(last)) < lineHeight * 0.7 {
                 lines[lines.count - 1].append(b)
             } else {
                 lines.append([b])
             }
         }
-        let centers = top.map { (column: $0.column, x: $0.box.midX) }
-        return lines.compactMap { line in
+        let centers = layout.centers.map { (column: $0.key, x: $0.value) }
+        let rows = lines.compactMap { line -> PassPlanRow? in
             var parts: [Column: [TextBox]] = [:]
             for b in line {
                 guard let nearest = centers.min(by: { abs($0.x - b.midX) < abs($1.x - b.midX) }) else { continue }
@@ -132,6 +153,7 @@ public enum PassPlan {
             let values = parts.mapValues { $0.sorted { $0.x < $1.x }.map(\.text).joined(separator: " ") }
             return row(from: values)
         }
+        return (rows, layout)
     }
 
     /// 表头那一排：每个认得出的表头格子和它上下差不多高的（允许屏幕拍斜）算一排，
@@ -193,6 +215,50 @@ public enum PassPlan {
         }
         guard let y = group(1), let mo = group(2), let d = group(3), let h = group(4), let mi = group(5) else { return s }
         return String(format: "%04d-%02d-%02d %02d:%02d:%02d", y, mo, d, h, mi, group(6) ?? 0)
+    }
+
+    // MARK: - 几张照片合起来、检查
+
+    /// 计划长、拍了几张：合成一份。同一颗星、同一个站、同一个开始时间的算同一条（上下两张重叠的部分），
+    /// 留认出字段多的那条
+    public static func merge(_ pages: [[PassPlanRow]]) -> [PassPlanRow] {
+        var order: [String] = []
+        var best: [String: PassPlanRow] = [:]
+        func key(_ r: PassPlanRow) -> String {
+            [r.satelliteID.isEmpty ? r.satellite : r.satelliteID, r.station, r.start].joined(separator: "|")
+        }
+        func filled(_ r: PassPlanRow) -> Int {
+            [r.orbit, r.satelliteID, r.satellite, r.station, r.start, r.end, r.info, r.status].filter { !$0.isEmpty }.count
+        }
+        for row in pages.joined() {
+            let k = key(row)
+            if let old = best[k] {
+                if filled(row) > filled(old) { best[k] = row }
+            } else {
+                order.append(k)
+                best[k] = row
+            }
+        }
+        return order.compactMap { best[$0] }
+    }
+
+    /// 这一条可能认错的地方（页面上标出来，让人核对）；没有返回空
+    public static func problems(_ r: PassPlanRow) -> [String] {
+        var list: [String] = []
+        let time = #"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"#
+        func isTime(_ s: String) -> Bool { s.range(of: time, options: .regularExpression) != nil }
+        if !isTime(r.start) { list.append("开始时间没认全") }
+        if r.end.isEmpty {
+            list.append("没有结束时间")
+        } else if !isTime(r.end) {
+            list.append("结束时间没认全")
+        } else if isTime(r.start), r.end <= r.start {
+            list.append("结束比开始还早")
+        }
+        if !r.station.contains("-") { list.append("地面站里没有「-」，分不出是哪家") }
+        if !r.orbit.isEmpty, !r.orbit.allSatisfy(\.isNumber) { list.append("圈号不全是数字") }
+        if r.satellite.isEmpty { list.append("没认出卫星名称") }
+        return list
     }
 
     // MARK: - 按运营商分开

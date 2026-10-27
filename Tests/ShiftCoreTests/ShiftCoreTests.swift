@@ -2902,6 +2902,57 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(PassPlan.rows(fromBoxes: [box("随便", 0.1, 0.1)]), [], "没有表头")
     }
 
+    /// 往下翻着连拍：第二张没拍到表头，用第一张的列位置
+    func testPageWithoutHeaderUsesPreviousColumns() {
+        func box(_ text: String, _ x: Double, _ y: Double) -> PassPlan.TextBox {
+            PassPlan.TextBox(text: text, x: x, y: y, width: 0.08, height: 0.02)
+        }
+        let columns: [(String, Double)] = [("卫星名称", 0.1), ("地面站", 0.3), ("数传开始时间", 0.5), ("数传结束时间", 0.7)]
+        let first = columns.map { box($0.0, $0.1, 0.05) }
+            + [box("试验一号", 0.1, 0.1), box("甲站-北区01", 0.3, 0.1), box("2026-10-27 08:00:00", 0.5, 0.1), box("2026-10-27 08:07:00", 0.7, 0.1)]
+        let page1 = PassPlan.read(first)
+        XCTAssertEqual(page1.rows.count, 1)
+        XCTAssertNotNil(page1.layout)
+        let second = [box("试验二号", 0.11, 0.3), box("乙站-南区02", 0.29, 0.3), box("2026-10-27 21:00:00", 0.5, 0.3), box("2026-10-27 21:07:00", 0.71, 0.3)]
+        XCTAssertEqual(PassPlan.read(second).rows, [], "没有表头又没有前一张的：认不出")
+        let page2 = PassPlan.read(second, fallback: page1.layout)
+        XCTAssertEqual(page2.rows.map(\.station), ["乙站-南区02"])
+        XCTAssertEqual(page2.rows.first?.end, "2026-10-27 21:07:00")
+    }
+
+    func testMergePagesDropsOverlap() {
+        let a = PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
+                            start: "2026-10-27 08:00:00", end: "2026-10-27 08:07:00")
+        var aFuller = a
+        aFuller.info = "通道1"
+        let b = PassPlanRow(orbit: "102", satelliteID: "SAT-B", satellite: "试验二号", station: "乙站-南区02",
+                            start: "2026-10-27 09:00:00", end: "2026-10-27 09:07:00")
+        let c = PassPlanRow(orbit: "103", satelliteID: "SAT-B", satellite: "试验二号", station: "乙站-南区02",
+                            start: "2026-10-27 21:00:00", end: "2026-10-27 21:07:00")
+        // 第二张和第一张重叠了一条（这次多认出了数传信息）
+        let merged = PassPlan.merge([[a, b], [b, aFuller, c]])
+        XCTAssertEqual(merged.map(\.orbit), ["101", "102", "103"])
+        XCTAssertEqual(merged[0].info, "通道1", "留认出得多的那条")
+    }
+
+    func testProblems() {
+        let good = PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
+                               start: "2026-10-27 08:00:00", end: "2026-10-27 08:07:00")
+        XCTAssertEqual(PassPlan.problems(good), [])
+        var bad = good
+        bad.start = "2026-10-2 08:00"
+        bad.orbit = "1O1"
+        bad.station = "甲站北区01"
+        XCTAssertEqual(PassPlan.problems(bad), ["开始时间没认全", "地面站里没有「-」，分不出是哪家", "圈号不全是数字"])
+        var backwards = good
+        backwards.end = "2026-10-27 07:59:00"
+        XCTAssertEqual(PassPlan.problems(backwards), ["结束比开始还早"])
+        var noEnd = good
+        noEnd.end = ""
+        noEnd.satellite = ""
+        XCTAssertEqual(PassPlan.problems(noEnd), ["没有结束时间", "没认出卫星名称"])
+    }
+
     func testGroupedByOperatorAndMessage() {
         let rows = [
             PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
