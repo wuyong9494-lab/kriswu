@@ -108,6 +108,81 @@ final class ArenaTests: XCTestCase {
         }
     }
 
+    /// 骨盾卫的大招：回一口血，4 秒里受到的伤害少六成
+    func testGuardianShieldCutsDamage() {
+        var game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "骨盾卫", brawler: .guardian, isBot: false, team: 0),
+            .init(name: "游侠", brawler: .ranger, isBot: true, team: 1),
+        ], seed: 3)
+        game.adjust(0) { $0.pos = V2(3.5, 14.5); $0.superCharge = 1; $0.health = 3000 }
+        game.adjust(1) { $0.pos = V2(3.5, 20.5) }
+        game.step(dt, inputs: [0: ArenaInput(special: V2(0, 1))])
+        XCTAssertEqual(game.fighters[0].health, 4200)
+        XCTAssertEqual(game.fighters[0].shield, 4)
+        game.step(dt, inputs: [1: ArenaInput(attack: V2(0, -1))])
+        run(&game, seconds: 0.6)
+        XCTAssertEqual(game.fighters[0].health, 4200 - 520, "1300 只受四成")
+        run(&game, seconds: 4)
+        XCTAssertEqual(game.fighters[0].shield, 0)
+    }
+
+    /// 亡灵巫师的大招：圈里的队友每 0.5 秒回血、敌人掉血，5 秒后没了
+    func testNecromancerZoneHealsAndHurts() {
+        var game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "巫师", brawler: .necromancer, isBot: false, team: 0),
+            .init(name: "友", brawler: .knight, isBot: true, team: 0),
+            .init(name: "敌", brawler: .barbarian, isBot: true, team: 1),
+        ], seed: 4)
+        game.adjust(0) { $0.pos = V2(7.5, 20.5); $0.superCharge = 1 }
+        game.adjust(1) { $0.pos = V2(7.5, 17.0); $0.health = 1000; $0.lastHurt = 0 }
+        game.adjust(2) { $0.pos = V2(8.0, 17.5) }
+        game.step(dt, inputs: [0: ArenaInput(special: V2(0, -3))])
+        XCTAssertEqual(game.zones.count, 1)
+        XCTAssertEqual(game.zones[0].center, V2(7.5, 17.5))
+        run(&game, seconds: 1.1)
+        XCTAssertEqual(game.fighters[1].health, 1700, "两次各回 350")
+        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth - 350, "两次各扣 175")
+        run(&game, seconds: 5)
+        XCTAssertTrue(game.zones.isEmpty)
+    }
+
+    /// 幽影的大招：隔着墙也闪得过去，落地炸伤旁边的敌人
+    func testShadeBlinksThroughWalls() {
+        var game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "幽影", brawler: .shade, isBot: false, team: 0),
+            .init(name: "敌", brawler: .barbarian, isBot: true, team: 1),
+        ], seed: 5)
+        XCTAssertEqual(game.map.tile(7, 16), .wall, "中间那列有墙")
+        game.adjust(0) { $0.pos = V2(7.5, 18.5); $0.superCharge = 1 }
+        game.adjust(1) { $0.pos = V2(7.5, 13.5) }
+        game.step(dt, inputs: [0: ArenaInput(special: V2(0, -5))])
+        XCTAssertEqual(game.fighters[0].pos.y, 13.5, accuracy: 0.6)
+        XCTAssertEqual(game.fighters[1].health, Brawler.barbarian.maxHealth - 1400)
+    }
+
+    /// 骨灵的大招：骨塔自动打够得着的敌人（伤害算骨灵的），被打掉了就没了
+    func testSummonerTurretShootsAndCanBeDestroyed() {
+        var game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "骨灵", brawler: .summoner, isBot: false, team: 0),
+            .init(name: "敌", brawler: .barbarian, isBot: true, team: 1),
+        ], seed: 6)
+        game.adjust(0) { $0.pos = V2(3.5, 20.5); $0.superCharge = 1 }
+        game.adjust(1) { $0.pos = V2(3.5, 15.5) }
+        game.step(dt, inputs: [0: ArenaInput(special: V2(0, -2))])
+        XCTAssertEqual(game.turrets.count, 1)
+        run(&game, seconds: 2)
+        XCTAssertLessThan(game.fighters[1].health, Brawler.barbarian.maxHealth, "骨塔打中了")
+        XCTAssertEqual(game.fighters[0].damageDealt, Brawler.barbarian.maxHealth - game.fighters[1].health)
+        let spot = game.turrets[0].pos
+        game.adjust(1) { $0.pos = spot + V2(0, -2); $0.health = $0.maxHealth }
+        for _ in 0..<8 where !game.turrets.isEmpty {
+            let aim = spot - game.fighters[1].pos
+            game.step(dt, inputs: [1: ArenaInput(attack: aim)])
+            run(&game, seconds: 0.5)
+        }
+        XCTAssertTrue(game.turrets.isEmpty, "骨塔被拆了")
+    }
+
     func testWallsStopWalking() {
         var game = ArenaGame(mode: .teamFight, entrants: entrants(2), seed: 1)
         for direction in [V2(0, -1), V2(1, 0), V2(-1, 0.3), V2(0, 1)] {
@@ -281,6 +356,43 @@ final class ArenaNetTests: XCTestCase {
             XCTAssertEqual(decoded, snapshot)
         }
         XCTAssertNil(ArenaSnapshot(data: Data([1, 2, 3])), "坏包不认")
+    }
+
+    /// 新的包带着亡灵之地、骨塔、骨盾；老版本的包（到事件为止）也读得出来
+    func testZonesTurretsAndShieldsSurviveEncoding() throws {
+        var game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "巫师", brawler: .necromancer, isBot: false, team: 0),
+            .init(name: "骨灵", brawler: .summoner, isBot: false, team: 0),
+            .init(name: "骨盾卫", brawler: .guardian, isBot: false, team: 1),
+        ], seed: 2)
+        for k in 0..<3 { game.adjust(k) { $0.superCharge = 1 } }
+        game.step(dt, inputs: [0: ArenaInput(special: V2(0, -3)), 1: ArenaInput(special: V2(1, -2)), 2: ArenaInput(special: V2(0, 1))])
+        let snapshot = game.snapshot(events: game.events)
+        XCTAssertEqual(snapshot.zones.count, 1)
+        XCTAssertEqual(snapshot.turrets.count, 1)
+        let decoded = try XCTUnwrap(ArenaSnapshot(data: snapshot.encoded()))
+        XCTAssertEqual(decoded.zones.count, 1)
+        XCTAssertEqual(decoded.zones[0].center.x, snapshot.zones[0].center.x, accuracy: 0.01)
+        XCTAssertEqual(decoded.zones[0].heal, snapshot.zones[0].heal)
+        XCTAssertEqual(decoded.turrets.map(\.id), snapshot.turrets.map(\.id))
+        XCTAssertEqual(decoded.turrets[0].health, snapshot.turrets[0].health)
+        XCTAssertEqual(decoded.fighters[2].shield, 4, accuracy: 0.03)
+        var client = ArenaGame(mode: .teamFight, entrants: game.fighters.map {
+            ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: false, team: $0.team)
+        }, seed: 2)
+        client.apply(decoded)
+        XCTAssertEqual(client.zones.count, 1)
+        XCTAssertEqual(client.turrets.count, 1)
+        XCTAssertEqual(client.fighters[2].shield, 4, accuracy: 0.03)
+        // 老版本的包：去掉后加的那几段（没有圈、没有塔时是 0、0、人数、每人一个字节）
+        var plain = snapshot
+        plain.zones = []
+        plain.turrets = []
+        let old = Data(plain.encoded().dropLast(3 + plain.fighters.count))
+        let fromOld = try XCTUnwrap(ArenaSnapshot(data: old))
+        XCTAssertTrue(fromOld.zones.isEmpty)
+        XCTAssertEqual(fromOld.fighters[2].shield, 0)
+        XCTAssertEqual(fromOld.events, snapshot.events)
     }
 
     /// 两包之间自己往前推：子弹照直飞、扔的炸弹接着飞，飞到头就没了

@@ -24,6 +24,8 @@ public struct ArenaSnapshot: Equatable, Sendable {
         public var dashing: Bool
         /// 房主收到这个人的第几次摇杆了（这个人自己的手机按这个把还没算到的那几步补上）
         public var ack: Int
+        /// 骨盾还剩几秒
+        public var shield: Double = 0
     }
 
     public var time: Double
@@ -36,6 +38,9 @@ public struct ArenaSnapshot: Equatable, Sendable {
     public var safeRadius: Double
     public var result: ArenaGame.Result?
     public var events: [ArenaGame.Event]
+    /// 亡灵之地、骨塔（老版本的包里没有，读出来是空的）
+    public var zones: [ArenaGame.Zone] = []
+    public var turrets: [ArenaGame.Turret] = []
 }
 
 extension ArenaGame {
@@ -48,10 +53,10 @@ extension ArenaGame {
                                            superCharge: f.superCharge, alive: f.alive, respawnIn: f.respawnIn, stars: f.stars,
                                            kills: f.kills, deaths: f.deaths, damageDealt: f.damageDealt, place: f.place,
                                            attackedRecently: time - f.lastAttack < 1, leap: f.leap, dashing: f.dash != nil,
-                                           ack: acks[f.id] ?? 0)
+                                           ack: acks[f.id] ?? 0, shield: f.shield)
             },
             projectiles: projectiles, stars: stars, teamKills: teamKills, zoneProgress: zoneProgress,
-            countdown: countdown, safeRadius: safeRadius, result: result, events: events)
+            countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets)
     }
 
     /// 收到房主的一帧：照着改（名字、角色、队伍这些开局定下的不变）
@@ -74,7 +79,10 @@ extension ArenaGame {
             fighters[i].lastAttack = state.attackedRecently ? time : time - 10
             fighters[i].leap = state.leap
             fighters[i].dash = state.dashing ? Fighter.Dash(direction: state.moving.normalized, remaining: 1, hit: []) : nil
+            fighters[i].shield = state.shield
         }
+        zones = snapshot.zones
+        turrets = snapshot.turrets
         projectiles = snapshot.projectiles
         stars = snapshot.stars
         teamKills = snapshot.teamKills
@@ -98,6 +106,10 @@ extension ArenaGame {
                 fighters[i].pos = ArenaGame.walk(from: fighters[i].pos, by: fighters[i].moving * dt, on: map)
             }
         }
+        for k in zones.indices { zones[k].left -= dt }
+        zones.removeAll { $0.left <= 0 }
+        for k in turrets.indices { turrets[k].left -= dt }
+        turrets.removeAll { $0.left <= 0 }
         var kept: [Projectile] = []
         for var p in projectiles {
             if var lob = p.lob {
@@ -213,8 +225,33 @@ extension ArenaSnapshot {
             case .respawn(let fighter): w.u8(5); w.u8(fighter)
             case .special(let fighter): w.u8(6); w.u8(fighter)
             case .attack(let fighter): w.u8(7); w.u8(fighter)
+            case .heal(let target, let amount): w.u8(8); w.u8(target); w.u16(min(amount, 65535))
             }
         }
+        // 后加的：亡灵之地、骨塔、每个人的骨盾（老版本读到这里就不往下读了）
+        w.u8(zones.count)
+        for zone in zones {
+            w.v2(zone.center)
+            w.u8(Int((zone.radius * 20).rounded()))
+            w.u8(zone.team)
+            w.u8(zone.owner)
+            w.u8(Int((max(zone.left, 0) * 20).rounded()))
+            w.u16(zone.heal)
+            w.u16(zone.damage)
+        }
+        w.u8(turrets.count)
+        for turret in turrets {
+            w.u16(turret.id & 0xFFFF)
+            w.u8(turret.owner)
+            w.u8(turret.team)
+            w.v2(turret.pos)
+            w.dir(turret.facing)
+            w.u16(max(turret.health, 0))
+            w.u16(turret.maxHealth)
+            w.u8(Int((max(turret.left, 0) * 10).rounded()))
+        }
+        w.u8(fighters.count)
+        for f in fighters { w.u8(Int((f.shield * 40).rounded())) }
         return w.data
     }
 
@@ -287,11 +324,35 @@ extension ArenaSnapshot {
             case 5: guard let f = r.u8() else { return nil }; events.append(.respawn(fighter: f))
             case 6: guard let f = r.u8() else { return nil }; events.append(.special(fighter: f))
             case 7: guard let f = r.u8() else { return nil }; events.append(.attack(fighter: f))
+            case 8: guard let t = r.u8(), let a = r.u16() else { return nil }; events.append(.heal(target: t, amount: a))
             default: return nil
             }
         }
+        var zones: [ArenaGame.Zone] = []
+        var turrets: [ArenaGame.Turret] = []
+        if r.remaining > 0 {
+            guard let zoneCount = r.u8() else { return nil }
+            for _ in 0..<zoneCount {
+                guard let center = r.v2(), let radius = r.u8(), let team = r.u8(), let owner = r.u8(), let left = r.u8(),
+                      let heal = r.u16(), let damage = r.u16() else { return nil }
+                zones.append(ArenaGame.Zone(center: center, radius: Double(radius) / 20, team: team, owner: owner,
+                                            left: Double(left) / 20, heal: heal, damage: damage))
+            }
+            guard let turretCount = r.u8() else { return nil }
+            for _ in 0..<turretCount {
+                guard let id = r.u16(), let owner = r.u8(), let team = r.u8(), let pos = r.v2(), let facing = r.dir(),
+                      let health = r.u16(), let maxHealth = r.u16(), let left = r.u8() else { return nil }
+                turrets.append(ArenaGame.Turret(id: id, owner: owner, team: team, pos: pos, facing: facing, health: health,
+                                                maxHealth: maxHealth, left: Double(left) / 10))
+            }
+            guard let shieldCount = r.u8() else { return nil }
+            for k in 0..<shieldCount {
+                guard let shield = r.u8() else { return nil }
+                if fighters.indices.contains(k) { fighters[k].shield = Double(shield) / 40 }
+            }
+        }
         self.init(time: time, fighters: fighters, projectiles: projectiles, stars: stars, teamKills: kills, zoneProgress: zone,
-                  countdown: countdown, safeRadius: safeRadius, result: result, events: events)
+                  countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets)
     }
 }
 
@@ -341,6 +402,9 @@ struct ByteReader {
     private var index = 0
 
     init(_ data: Data) { bytes = Array(data) }
+
+    /// 还剩几个字节没读
+    var remaining: Int { bytes.count - index }
 
     mutating func u8() -> Int? {
         guard index < bytes.count else { return nil }

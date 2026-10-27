@@ -39,7 +39,7 @@ public struct ArenaBot: Sendable {
             let range = me.brawler.attackRange
             let away = (me.pos - target.pos).normalized
             let low = Double(me.health) < Double(me.maxHealth) * 0.3
-            let ideal = range * (me.brawler == .barbarian || me.brawler == .knight ? 0.55 : 0.75)
+            let ideal = range * ([.barbarian, .knight, .guardian].contains(me.brawler) ? 0.55 : 0.75)
             let clear = me.brawler == .mage || game.map.lineOfSight(me.pos, target.pos)
             if low && distance < range + 2.5 {
                 // 血少了：往反方向跑，等着回血
@@ -58,10 +58,34 @@ public struct ArenaBot: Sendable {
                 let noise = (Double(random.below(21)) - 10) / 100
                 input.attack = (lead - me.pos).rotated(by: noise)
             }
-            if me.superCharge >= 1, distance <= me.brawler.superRange * 0.85,
-               clear || me.brawler == .barbarian || me.brawler == .mage {
-                input.special = target.pos - me.pos
+            if me.superCharge >= 1 {
+                switch me.brawler {
+                case .guardian:
+                    // 挨打了、敌人在跟前才举盾
+                    if distance < 5, Double(me.health) < Double(me.maxHealth) * 0.7 { input.special = me.facing }
+                case .summoner:
+                    // 骨塔放在自己和敌人中间
+                    if distance < 8 { input.special = (target.pos - me.pos) * 0.5 }
+                case .shade:
+                    // 血多的时候闪到敌人身边
+                    if !low, distance > 2.5, distance <= me.brawler.superRange { input.special = target.pos - me.pos }
+                case .necromancer:
+                    if distance <= me.brawler.superRange * 0.9 { input.special = target.pos - me.pos }
+                default:
+                    if distance <= me.brawler.superRange * 0.85, clear || me.brawler == .barbarian || me.brawler == .mage {
+                        input.special = target.pos - me.pos
+                    }
+                }
             }
+        }
+        // 附近有对面的骨塔、又没有更近的敌人：先拆塔
+        if input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
+           let turret = game.turrets.filter({ $0.team != me.team }).min(by: { $0.pos.distance(to: me.pos) < $1.pos.distance(to: me.pos) }),
+           turret.pos.distance(to: me.pos) <= me.brawler.attackRange * 0.95,
+           me.brawler == .mage || game.map.lineOfSight(me.pos, turret.pos),
+           target.map({ $0.pos.distance(to: me.pos) > turret.pos.distance(to: me.pos) }) ?? true {
+            trigger = 0.3
+            input.attack = turret.pos - me.pos
         }
         input.move = steer(me, to: goal, in: game)
         return input

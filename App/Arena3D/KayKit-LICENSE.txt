@@ -38,3 +38,5 @@
 	- 角色（Knight、Rogue、Rogue_Hooded、Barbarian、Mage）：KayKit Adventurers Character Pack
 	- 墙（box_large、barrel_large、crates_stacked）：KayKit Dungeon Remastered Pack
 	- 场地外的树、石头、旗子（trees_*、rock_single_*、flag_*、hexagons_medieval.png）：KayKit Medieval Hexagon Pack
+	- 骷髅角色（Skeleton_Warrior、Skeleton_Mage、Skeleton_Rogue、Skeleton_Minion）和它们的武器（Skeleton_*.gltf、skeleton_texture.png）：KayKit Character Pack: Skeletons
+	角色模型只留了游戏里用到的几段动作（其余删掉以减小 App 体积），其他没有改动

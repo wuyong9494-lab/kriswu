@@ -55,6 +55,18 @@ final class ArenaWorldView: SCNView {
     private var zone: (disc: SCNNode, rim: SCNNode, state: Int)?
     private var poison: (wall: SCNTube, edge: SCNTube, radius: Double)?
     private var geometries: [String: SCNGeometry] = [:]
+    /// 亡灵之地（按顺序一一对上）、骨塔（按编号）
+    private var zoneNodes: [SCNNode] = []
+    private var turretViews: [Int: TurretView] = [:]
+    /// 上一帧每个人在哪（一下子挪得很远是闪现了，两头冒烟）
+    private var lastPositions: [V2?] = []
+
+    private struct TurretView {
+        let node: SCNNode
+        let head: SCNNode
+        let bar: SKNode
+        let fill: SKSpriteNode
+    }
 
     private struct ProjectileView {
         let root: SCNNode
@@ -477,7 +489,15 @@ final class ArenaWorldView: SCNView {
             default: return false
             }
         }
+        if lastPositions.count != game.fighters.count { lastPositions = game.fighters.map { $0.alive ? $0.pos : nil } }
         for fighter in game.fighters where avatars.indices.contains(fighter.id) {
+            // 闪现：上一帧还在别处
+            if fighter.alive, fighter.leap == nil, fighter.dash == nil, let last = lastPositions[fighter.id], last.distance(to: fighter.pos) > 2 {
+                let from = SIMD3(Float(last.x), 0.6, Float(last.y)), to = SIMD3(Float(fighter.pos.x), 0.6, Float(fighter.pos.y))
+                burst(at: from, color: UIColor(red: 0.6, green: 0.4, blue: 1, alpha: 1), count: 24, speed: 1.5, size: 0.35, life: 0.5)
+                burst(at: to, color: UIColor(red: 0.6, green: 0.4, blue: 1, alpha: 1), count: 24, speed: 2, size: 0.35, life: 0.5)
+            }
+            lastPositions[fighter.id] = fighter.alive ? fighter.pos : nil
             let avatar = avatars[fighter.id]
             let visible = game.isVisible(fighter, to: myTeam)
             let hidden = fighter.team == myTeam && game.map.inBush(fighter.pos)
@@ -499,6 +519,8 @@ final class ArenaWorldView: SCNView {
         syncProjectiles(game)
         syncStars(game)
         syncZone(game)
+        syncHealZones(game)
+        syncTurrets(game, view: view)
         if var current = poison, abs(current.radius - game.safeRadius) > 0.02 {
             current.radius = game.safeRadius
             current.wall.outerRadius = CGFloat(current.radius + 80)
@@ -601,11 +623,19 @@ final class ArenaWorldView: SCNView {
             world.rootNode.addChildNode(root)
             return ProjectileView(root: root, ball: ball, shadow: shadow)
         }
-        // 直着飞的：剑气、斧风是扁的一道，弩箭、飞刀是细长的
+        // 直着飞的：剑气、斧风是扁的一道，魂火是一团，弩箭、飞刀是细长的
         let piece = SCNNode()
         switch owner {
-        case .knight, .barbarian:
-            let wide: CGFloat = owner == .knight ? 0.55 : 0.8
+        case .necromancer:
+            piece.geometry = shared("soul-\(tintKey)") {
+                let sphere = SCNSphere(radius: 0.3)
+                sphere.segmentCount = 14
+                sphere.firstMaterial = ArenaAvatar.material(tint, lit: false)
+                return sphere
+            }
+            piece.addParticleSystem(trail(UIColor(red: 0.5, green: 1, blue: 0.6, alpha: 1), size: 0.35))
+        case .knight, .barbarian, .guardian:
+            let wide: CGFloat = owner == .knight ? 0.55 : (owner == .guardian ? 1.0 : 0.8)
             piece.geometry = shared("slash-\(owner.rawValue)-\(tintKey)") {
                 let box = SCNBox(width: wide, height: 0.06, length: 0.16, chamferRadius: 0.03)
                 box.firstMaterial = ArenaAvatar.material(tint, lit: false)
@@ -725,6 +755,12 @@ final class ArenaWorldView: SCNView {
         case .attack(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             avatars[fighter].attack()
+        case .heal(let target, let amount):
+            guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
+            let at = avatars[target].node.simdPosition
+            burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 10, speed: 1, size: 0.25, life: 0.5)
+            floater("+\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
+                    color: UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1))
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             burst(at: avatars[fighter].node.simdPosition + SIMD3(0, 0.8, 0), color: ArenaPalette.gold, count: 16, speed: 1.6, size: 0.18, life: 0.4)
@@ -809,6 +845,127 @@ final class ArenaWorldView: SCNView {
         }
     }()
 
+    // MARK: - 亡灵之地、骨塔
+
+    /// 亡灵之地：地上一个发光的圈，自己这边绿、对面紫，冒着光点
+    private func syncHealZones(_ game: ArenaGame) {
+        while zoneNodes.count < game.zones.count {
+            let node = SCNNode()
+            let disc = SCNNode(geometry: SCNCylinder(radius: 1, height: 0.01))
+            disc.castsShadow = false
+            disc.renderingOrder = 3
+            disc.name = "disc"
+            let rim = SCNNode(geometry: SCNTube(innerRadius: 0.95, outerRadius: 1, height: 0.02))
+            rim.castsShadow = false
+            rim.renderingOrder = 3
+            rim.name = "rim"
+            node.addChildNode(disc)
+            node.addChildNode(rim)
+            let motes = SCNParticleSystem()
+            motes.birthRate = 40
+            motes.particleLifeSpan = 0.9
+            motes.particleVelocity = 1
+            motes.emittingDirection = SCNVector3(0, 1, 0)
+            motes.spreadingAngle = 10
+            motes.particleSize = 0.12
+            motes.particleImage = Self.dot
+            motes.blendMode = .additive
+            motes.emitterShape = SCNCylinder(radius: 1, height: 0.01)
+            motes.birthLocation = .surface
+            motes.propertyControllers = [.opacity: Self.fadeOut]
+            node.addParticleSystem(motes)
+            world.rootNode.addChildNode(node)
+            zoneNodes.append(node)
+        }
+        while zoneNodes.count > game.zones.count {
+            zoneNodes.removeLast().removeFromParentNode()
+        }
+        for (k, zone) in game.zones.enumerated() {
+            let node = zoneNodes[k]
+            let radius = Float(zone.radius)
+            node.simdPosition = SIMD3(Float(zone.center.x), 0.03, Float(zone.center.y))
+            node.simdScale = SIMD3(radius, 1, radius)
+            let color = zone.team == myTeam ? UIColor(red: 0.35, green: 0.95, blue: 0.5, alpha: 1) : UIColor(red: 0.75, green: 0.35, blue: 1, alpha: 1)
+            let key = zone.team == myTeam ? "ally" : "enemy"
+            if node.name != key {
+                node.name = key
+                node.childNode(withName: "disc", recursively: false)?.geometry?.firstMaterial = ArenaAvatar.decal(color.withAlphaComponent(0.25))
+                node.childNode(withName: "rim", recursively: false)?.geometry?.firstMaterial = ArenaAvatar.decal(color.withAlphaComponent(0.85))
+                node.particleSystems?.first?.particleColor = color
+            }
+            // 快没了的时候淡出
+            node.opacity = CGFloat(min(1, zone.left / 0.5))
+        }
+    }
+
+    /// 骨塔：插在地上的骨杖，顶上一团光，头顶一条血
+    private func syncTurrets(_ game: ArenaGame, view: simd_float4x4) {
+        var seen = Set<Int>()
+        for turret in game.turrets {
+            seen.insert(turret.id)
+            let item = turretViews[turret.id] ?? makeTurret(turret)
+            turretViews[turret.id] = item
+            item.node.simdPosition = SIMD3(Float(turret.pos.x), 0, Float(turret.pos.y))
+            let bob = Float(sin(clock * 3 + Double(turret.id))) * 0.06
+            item.head.simdPosition = SIMD3(0, 2.0 + bob, 0)
+            if let point = project(item.node.simdPosition + SIMD3(0, 2.4, 0), view) {
+                item.bar.isHidden = false
+                item.bar.position = point
+                item.fill.xScale = CGFloat(max(0, min(1, Double(turret.health) / Double(max(turret.maxHealth, 1)))))
+            } else {
+                item.bar.isHidden = true
+            }
+        }
+        for (id, item) in turretViews where !seen.contains(id) {
+            burst(at: item.node.simdPosition + SIMD3(0, 0.8, 0), color: UIColor(white: 0.9, alpha: 1), count: 20, speed: 1.5, size: 0.3, life: 0.5)
+            item.node.removeFromParentNode()
+            item.bar.removeFromParent()
+            turretViews[id] = nil
+        }
+    }
+
+    private func makeTurret(_ turret: ArenaGame.Turret) -> TurretView {
+        let ally = turret.team == myTeam
+        let color = ally ? ArenaPalette.blue : ArenaPalette.red
+        let node = SCNNode()
+        if let staff = ArenaModels.shared.prop("Skeleton_Staff.gltf") {
+            // 骨杖竖着插在地上（模型握把在原点，往下 0.85、往上 1.26），骷髅头朝上
+            let piece = staff.instantiate(shareMaterials: true).root
+            piece.simdScale = SIMD3(repeating: 0.85)
+            piece.simdPosition = SIMD3(0, 0.72, 0)
+            node.addChildNode(piece)
+        } else {
+            let pole = SCNNode(geometry: SCNCylinder(radius: 0.08, height: 1.4))
+            pole.geometry?.firstMaterial = ArenaAvatar.material(UIColor(red: 0.85, green: 0.8, blue: 0.7, alpha: 1), lit: true)
+            pole.simdPosition = SIMD3(0, 0.7, 0)
+            node.addChildNode(pole)
+        }
+        let orb = SCNSphere(radius: 0.18)
+        orb.segmentCount = 12
+        orb.firstMaterial = ArenaAvatar.material(ally ? UIColor(red: 0.5, green: 0.85, blue: 1, alpha: 1) : UIColor(red: 1, green: 0.5, blue: 0.4, alpha: 1), lit: false)
+        let head = SCNNode(geometry: orb)
+        head.castsShadow = false
+        head.addParticleSystem(trail(ally ? ArenaPalette.allyShot : ArenaPalette.enemyShot, size: 0.25))
+        node.addChildNode(head)
+        let base = SCNNode(geometry: SCNTube(innerRadius: 0.36, outerRadius: 0.46, height: 0.012))
+        base.geometry?.firstMaterial = ArenaAvatar.decal(color.withAlphaComponent(0.85))
+        base.simdPosition = SIMD3(0, 0.03, 0)
+        base.castsShadow = false
+        node.addChildNode(base)
+        world.rootNode.addChildNode(node)
+        burst(at: SIMD3(Float(turret.pos.x), 0.5, Float(turret.pos.y)), color: color, count: 20, speed: 1.5, size: 0.3, life: 0.5)
+        let bar = SKNode()
+        let back = SKSpriteNode(color: UIColor.black.withAlphaComponent(0.6), size: CGSize(width: 38, height: 7))
+        let fill = SKSpriteNode(color: color, size: CGSize(width: 36, height: 5))
+        fill.anchorPoint = CGPoint(x: 0, y: 0.5)
+        fill.position = CGPoint(x: -18, y: 0)
+        bar.addChild(back)
+        bar.addChild(fill)
+        bar.isHidden = true
+        overlay.addChild(bar)
+        return TurretView(node: node, head: head, bar: bar, fill: fill)
+    }
+
     // MARK: - 伤害数字
 
     private func floater(_ text: String, at point: SIMD3<Float>, color: UIColor) {
@@ -861,11 +1018,21 @@ final class ArenaWorldView: SCNView {
         // 路径画在 x、-z 平面上（节点转了 -90 度躺平）
         func flat(_ v: V2) -> CGPoint { CGPoint(x: v.x, y: -v.y) }
         let path = UIBezierPath()
-        let lobbing = brawler == .mage || (isSuper && brawler == .barbarian)
-        if lobbing {
+        // 落在一个点上的（扔火球、跳、亡灵之地、闪现、骨塔）画落点的圈和一条线
+        let lobbing = brawler == .mage || (isSuper && [.barbarian, .necromancer, .shade, .summoner].contains(brawler))
+        if isSuper && brawler == .guardian {
+            // 骨盾是给自己的：脚下一圈
+            path.append(UIBezierPath(ovalIn: CGRect(x: -0.9, y: -0.9, width: 1.8, height: 1.8)))
+        } else if lobbing {
             let distance = max(drag.length, 0.35) * range
             let target = direction * distance
-            let blast = brawler == .mage ? (isSuper ? 2.2 : 1.2) : 1.6
+            let blast: Double
+            switch brawler {
+            case .mage: blast = isSuper ? 2.2 : 1.2
+            case .necromancer: blast = 2.2
+            case .summoner: blast = 0.6
+            default: blast = 1.6
+            }
             path.append(UIBezierPath(ovalIn: CGRect(x: target.x - blast, y: -target.y - blast, width: blast * 2, height: blast * 2)))
             let side = V2(-direction.y, direction.x) * 0.06
             let line = UIBezierPath()
@@ -882,6 +1049,7 @@ final class ArenaWorldView: SCNView {
             case (.knight, false): spread = 0.3
             case (.barbarian, false): spread = 0.5
             case (.assassin, true): spread = 0.56
+            case (.summoner, false): spread = 0.17
             default: spread = 0
             }
             if spread > 0 {
@@ -892,7 +1060,13 @@ final class ArenaWorldView: SCNView {
                 }
                 path.close()
             } else {
-                let half = brawler == .knight ? ArenaGame.fighterRadius : (isSuper ? 0.35 : 0.22)
+                let half: Double
+                switch brawler {
+                case .knight: half = ArenaGame.fighterRadius
+                case .guardian: half = 0.5
+                case .necromancer: half = 0.32
+                default: half = isSuper ? 0.35 : 0.22
+                }
                 let side = V2(-direction.y, direction.x) * half
                 let end = direction * range
                 path.move(to: flat(side))

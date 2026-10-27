@@ -137,6 +137,10 @@ final class GLTFModel: @unchecked Sendable {
             } else if let factor = pbr["baseColorFactor"] as? [Double], factor.count == 4 {
                 material.diffuse.contents = UIColor(red: factor[0], green: factor[1], blue: factor[2], alpha: factor[3])
             }
+            // 自己发光的部分（骷髅的眼睛）
+            if let glow = info["emissiveFactor"] as? [Double], glow.count == 3, glow.contains(where: { $0 > 0 }) {
+                material.emission.contents = UIColor(red: glow[0], green: glow[1], blue: glow[2], alpha: 1)
+            }
             return material
         }
 

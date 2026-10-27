@@ -3,6 +3,7 @@ import Metal
 import SceneKit
 import SwiftUI
 import UIKit
+import simd
 
 // 乱斗的 3D 素材：角色、箱子、树这些模型从 App 里读（KayKit 的免费素材，CC0 授权，见 App/Arena3D/KayKit-LICENSE.txt）。
 // 以后换成买的素材：同名文件放进私有仓库，打包时覆盖这里的就行
@@ -33,6 +34,14 @@ struct BrawlerLook {
         let seconds: Float
     }
 
+    /// 挂到手上的武器（骷髅的武器是单独的模型）：哪个文件、挂在哪根骨头上、相对那根骨头的位置和朝向
+    struct Weapon {
+        let file: String
+        let bone: String
+        let position: SIMD3<Float>
+        let rotation: simd_quatf
+    }
+
     let file: String
     /// 模型自带、这个角色不用的武器和配件
     let hidden: [String]
@@ -40,6 +49,7 @@ struct BrawlerLook {
     let run: String
     let attack: Move
     let special: Move
+    var weapons: [Weapon] = []
 
     static let death = Move(clip: "Death_A", seconds: 0.8)
     static let cheer = "Cheer"
@@ -71,8 +81,34 @@ struct BrawlerLook {
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
                                special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.1, to: 0.75, seconds: 0.5))
+        case .guardian:
+            return BrawlerLook(file: "Skeleton_Warrior.glb", hidden: [], idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "1H_Melee_Attack_Chop", from: 0.2, to: 0.75, seconds: 0.42),
+                               special: Move(clip: "Block", from: 0, to: 0.6, seconds: 0.6),
+                               weapons: [Weapon(file: "Skeleton_Axe.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned),
+                                         Weapon(file: "Skeleton_Shield_Large_A.gltf", bone: "handslot.l", position: SIMD3(0, 0.017, 0.156),
+                                                rotation: simd_quatf(ix: 0, iy: 0, iz: 0, r: 1))])
+        case .necromancer:
+            return BrawlerLook(file: "Skeleton_Mage.glb", hidden: [], idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "Spellcast_Shoot", from: 0.15, to: 0.8, seconds: 0.5),
+                               special: Move(clip: "Spellcast_Summon", from: 0.1, to: 0.35, seconds: 0.9),
+                               weapons: [Weapon(file: "Skeleton_Staff.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned)])
+        case .shade:
+            return BrawlerLook(file: "Skeleton_Rogue.glb", hidden: [], idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.1, to: 0.7, seconds: 0.4),
+                               special: Move(clip: "Dodge_Forward", seconds: 0.4),
+                               weapons: [Weapon(file: "Skeleton_Crossbow.gltf", bone: "handslot.r", position: SIMD3(-0.105, -0.01, 0),
+                                                rotation: simd_quatf(ix: 0, iy: 0.7071068, iz: 0, r: 0.7071068))])
+        case .summoner:
+            return BrawlerLook(file: "Skeleton_Minion.glb", hidden: [], idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
+                               special: Move(clip: "Use_Item", from: 0.1, to: 0.6, seconds: 0.7),
+                               weapons: [Weapon(file: "Skeleton_Blade.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned)])
         }
     }
+
+    /// 绕竖轴转半圈（武器挂在右手上的朝向，和冒险者模型里自带的一样）
+    private static let turned = simd_quatf(ix: 0, iy: -1, iz: 0, r: 0)
 
     /// 要从模型里读的动画
     var clips: Set<String> { [idle, run, attack.clip, special.clip, Self.death.clip, Self.cheer] }
@@ -82,8 +118,9 @@ struct BrawlerLook {
 final class ArenaModels: @unchecked Sendable {
     static let shared = ArenaModels()
 
-    /// 墙用的箱子、桶，场地外的树、石头、旗子
+    /// 墙用的箱子、桶，场地外的树、石头、旗子，骷髅的武器
     static let props = ["box_large.glb", "barrel_large.glb", "crates_stacked.glb",
+                        "Skeleton_Axe.gltf", "Skeleton_Shield_Large_A.gltf", "Skeleton_Staff.gltf", "Skeleton_Crossbow.gltf", "Skeleton_Blade.gltf",
                         "trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
                         "trees_B_small.gltf", "trees_B_medium.gltf", "trees_B_large.gltf",
                         "rock_single_A.gltf", "rock_single_B.gltf", "rock_single_C.gltf",

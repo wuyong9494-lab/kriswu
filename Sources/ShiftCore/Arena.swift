@@ -44,33 +44,40 @@ public struct V2: Equatable, Hashable, Codable, Sendable {
 
 // MARK: - 角色
 
-/// 能选的角色：各有各的普通攻击和大招（3D 模型用 KayKit 的冒险者，CC0 授权）
+/// 能选的角色：各有各的普通攻击和大招（3D 模型用 KayKit 的冒险者、骷髅，CC0 授权）。
+/// 后四个要攒奖杯解锁，各带一样新本事：护盾、亡灵之地（回血 + 伤人）、闪现、召唤骨塔
 public enum Brawler: Int, CaseIterable, Codable, Sendable {
-    case knight, ranger, barbarian, mage, assassin
+    case knight, ranger, barbarian, mage, assassin, guardian, necromancer, shade, summoner
 
-    public var name: String { ["骑士", "游侠", "蛮王", "法师", "刺客"][rawValue] }
-    public var emoji: String { ["🛡️", "🏹", "🪓", "🔮", "🗡️"][rawValue] }
-    public var role: String { ["近身剑气", "远程弩箭", "肉盾斧劈", "隔墙火球", "连掷飞刀"][rawValue] }
+    public var name: String { ["骑士", "游侠", "蛮王", "法师", "刺客", "骨盾卫", "亡灵巫师", "幽影", "骨灵"][rawValue] }
+    public var emoji: String { ["🛡️", "🏹", "🪓", "🔮", "🗡️", "💀", "🕯️", "👻", "🦴"][rawValue] }
+    public var role: String {
+        ["近身剑气", "远程弩箭", "肉盾斧劈", "隔墙火球", "连掷飞刀", "护盾坦克", "回血辅助", "闪现突袭", "召唤骨塔"][rawValue]
+    }
     public var attackNote: String {
-        ["一剑挥出五道散开的剑气，贴脸打最疼", "一支又快又远的弩箭", "近身连劈三斧，血厚", "扔火球，能越过墙，落地炸一片", "一口气连掷四把飞刀"][rawValue]
+        ["一剑挥出五道散开的剑气，贴脸打最疼", "一支又快又远的弩箭", "近身连劈三斧，血厚", "扔火球，能越过墙，落地炸一片", "一口气连掷四把飞刀",
+         "斧子劈出一道宽宽的冲击波，能穿过一排人", "射出一团慢慢飞的魂火，能穿过好几个人", "连射两支短弩", "扔出三把散开的骨刃"][rawValue]
     }
     public var superNote: String {
-        ["大招：举盾往前冲锋，撞到的人都受伤", "大招：能穿透好几个人的重弩", "大招：跳过去砸一片（能跳过墙）", "大招：召唤一颗大陨石", "大招：一大片扇形飞刀"][rawValue]
+        ["大招：举盾往前冲锋，撞到的人都受伤", "大招：能穿透好几个人的重弩", "大招：跳过去砸一片（能跳过墙）", "大招：召唤一颗大陨石", "大招：一大片扇形飞刀",
+         "大招：举起骨盾，4 秒里受到的伤害少六成，还回一口血", "大招：放下一片亡灵之地，5 秒里队友在里面回血、敌人掉血",
+         "大招：一下闪到远处（能穿墙），落地炸伤旁边的敌人", "大招：召唤一座骨塔，12 秒里自动打附近的敌人"][rawValue]
     }
 
-    public var maxHealth: Int { [5600, 3200, 7800, 3800, 4400][rawValue] }
+    public var maxHealth: Int { [5600, 3200, 7800, 3800, 4400, 6800, 3600, 3700, 4000][rawValue] }
     /// 每秒走几格
-    public var speed: Double { [2.45, 2.4, 2.55, 2.3, 2.4][rawValue] }
+    public var speed: Double { [2.45, 2.4, 2.55, 2.3, 2.4, 2.35, 2.4, 2.65, 2.45][rawValue] }
     /// 装一发弹要几秒（最多存 3 发）
-    public var reload: Double { [1.5, 2.0, 1.2, 1.7, 1.4][rawValue] }
-    public var attackRange: Double { [4.5, 9, 2.6, 7, 7][rawValue] }
-    public var superRange: Double { [5.5, 11, 6, 8, 7][rawValue] }
+    public var reload: Double { [1.5, 2.0, 1.2, 1.7, 1.4, 1.5, 1.6, 1.3, 1.5][rawValue] }
+    public var attackRange: Double { [4.5, 9, 2.6, 7, 7, 3.2, 7.5, 6.5, 5.5][rawValue] }
+    /// 大招打多远（骨盾卫的护盾是给自己的，只是一点点）
+    public var superRange: Double { [5.5, 11, 6, 8, 7, 1, 6, 6.5, 5][rawValue] }
     /// 打出多少伤害攒满一次大招
-    public var superCost: Double { [7200, 3900, 8400, 4800, 6000][rawValue] }
+    public var superCost: Double { [7200, 3900, 8400, 4800, 6000, 6400, 4600, 4400, 5200][rawValue] }
     /// 子弹飞多快（电脑瞄准提前量用）
-    public var bulletSpeed: Double { [13, 17, 14, 10, 14][rawValue] }
+    public var bulletSpeed: Double { [13, 17, 14, 10, 14, 12, 9, 18, 14][rawValue] }
     /// 总奖杯到多少解锁（一开始就有的是 0）
-    public var unlockAt: Int { 0 }
+    public var unlockAt: Int { [0, 0, 0, 0, 0, 70, 140, 230, 340][rawValue] }
 
     /// 等级加成：每升一级血量、伤害多 6%（1 级不加）
     public static func boost(_ level: Int) -> Double {
@@ -387,6 +394,8 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var dash: Dash?
     public var leap: Leap?
     public var burst: Burst?
+    /// 骨盾还剩几秒（这段时间受到的伤害少六成）
+    public var shield: Double = 0
     /// 这一帧走的速度（电脑瞄准算提前量、画面上用）
     public var moving: V2 = .zero
     public var kills = 0
@@ -490,6 +499,38 @@ public struct ArenaGame: Sendable {
         case special(fighter: Int)
         /// 开了一枪（普通攻击），画面上放出手的动作
         case attack(fighter: Int)
+        /// 回了血（骨盾、亡灵之地）
+        case heal(target: Int, amount: Int)
+    }
+
+    /// 亡灵之地：圈里的队友回血、敌人掉血，每 0.5 秒结一次
+    public struct Zone: Equatable, Sendable {
+        public var center: V2
+        public var radius: Double
+        public var team: Int
+        public var owner: Int
+        public var left: Double
+        /// 每秒回多少血、扣多少血
+        public var heal: Int
+        public var damage: Int
+        public var tick: Double = 0.25
+        public static let duration = 5.0
+    }
+
+    /// 骨灵召唤的骨塔：站在原地，自动打看得见、够得着的最近的敌人
+    public struct Turret: Equatable, Sendable {
+        public var id: Int
+        public var owner: Int
+        public var team: Int
+        public var pos: V2
+        public var facing: V2
+        public var health: Int
+        public var maxHealth: Int
+        public var left: Double
+        public var cooldown: Double = 0.4
+        public static let duration = 12.0
+        public static let range = 6.5
+        public static let radius = 0.45
     }
 
     public struct Countdown: Equatable, Sendable {
@@ -543,8 +584,12 @@ public struct ArenaGame: Sendable {
     /// 毒圈半径（各自为战）
     public internal(set) var safeRadius: Double
     public internal(set) var result: Result?
+    /// 地上的亡灵之地、骨塔
+    public internal(set) var zones: [Zone] = []
+    public internal(set) var turrets: [Turret] = []
     public var events: [Event] = []
     private var nextProjectile = 1
+    private var nextTurret = 1
     private var starTimer = 0.0
     private var random: SeededRandom
 
@@ -599,6 +644,8 @@ public struct ArenaGame: Sendable {
             update(i, inputs[i] ?? ArenaInput(), dt)
         }
         moveProjectiles(dt)
+        updateZones(dt)
+        updateTurrets(dt)
         switch mode {
         case .stars: updateStars(dt)
         case .zone: updateZone(dt)
@@ -617,6 +664,7 @@ public struct ArenaGame: Sendable {
         }
         fighters[i].cooldown -= dt
         fighters[i].ammo = min(3, fighters[i].ammo + dt / fighters[i].brawler.reload)
+        if fighters[i].shield > 0 { fighters[i].shield = max(0, fighters[i].shield - dt) }
         if fighters[i].leap != nil {
             updateLeap(i, dt)
             return
@@ -634,9 +682,9 @@ public struct ArenaGame: Sendable {
         if var burst = fighters[i].burst {
             burst.timer -= dt
             while burst.timer <= 0 && burst.left > 0 {
-                shoot(i, burst.direction.rotated(by: (random.chance(0.5) ? 1 : -1) * 0.03), speed: 14, range: 7, damage: 380, radius: 0.2)
+                burstShot(i, burst.direction)
                 burst.left -= 1
-                burst.timer += 0.08
+                burst.timer += fighters[i].brawler == .shade ? 0.14 : 0.08
             }
             fighters[i].burst = burst.left > 0 ? burst : nil
         }
@@ -667,6 +715,7 @@ public struct ArenaGame: Sendable {
         fighters[i].alive = true
         fighters[i].lastHurt = time
         fighters[i].moving = .zero
+        fighters[i].shield = 0
         events.append(.respawn(fighter: i))
     }
 
@@ -692,6 +741,24 @@ public struct ArenaGame: Sendable {
                 duration: 0.7, blast: 1.2, damage: 1200, isSuper: false)
         case .assassin:
             fighters[i].burst = Fighter.Burst(left: 4, timer: 0, direction: direction)
+        case .guardian:
+            shoot(i, direction, speed: 12, range: 3.2, damage: 1100, radius: 0.5, pierce: true)
+        case .necromancer:
+            shoot(i, direction, speed: 9, range: 7.5, damage: 900, radius: 0.32, pierce: true)
+        case .shade:
+            fighters[i].burst = Fighter.Burst(left: 2, timer: 0, direction: direction)
+        case .summoner:
+            spread(i, direction, count: 3, angle: 0.3, speed: 14, range: 5.5, damage: 420, radius: 0.2)
+        }
+    }
+
+    /// 连发的一发：刺客的飞刀、幽影的短弩
+    private mutating func burstShot(_ i: Int, _ direction: V2) {
+        let wobble = (random.chance(0.5) ? 1.0 : -1.0) * 0.03
+        if fighters[i].brawler == .shade {
+            shoot(i, direction.rotated(by: wobble), speed: 18, range: 6.5, damage: 650, radius: 0.22)
+        } else {
+            shoot(i, direction.rotated(by: wobble), speed: 14, range: 7, damage: 380, radius: 0.2)
         }
     }
 
@@ -715,6 +782,31 @@ public struct ArenaGame: Sendable {
                 duration: 0.9, blast: 2.2, damage: 2600, isSuper: true)
         case .assassin:
             spread(i, direction, count: 12, angle: 1.05, speed: 14, range: 7, damage: 500, radius: 0.2, isSuper: true)
+        case .guardian:
+            fighters[i].shield = 4
+            let healed = min(power(i, 1200), fighters[i].maxHealth - fighters[i].health)
+            if healed > 0 {
+                fighters[i].health += healed
+                events.append(.heal(target: i, amount: healed))
+            }
+        case .necromancer:
+            let center = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.superRange), radius: 0.2)
+            zones.append(Zone(center: center, radius: 2.2, team: fighter.team, owner: i, left: Zone.duration,
+                              heal: power(i, 700), damage: power(i, 350)))
+        case .shade:
+            // 一下闪过去（能穿墙），落地炸一下
+            let target = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
+            fighters[i].pos = target
+            fighters[i].moving = .zero
+            blast(at: target, radius: 1.6, damage: power(i, 1400), by: i, team: fighter.team, charges: false)
+        case .summoner:
+            // 同时只有一座：再召唤就换掉旧的
+            let spot = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.2), fighter.brawler.superRange))
+            let health = power(i, 2800)
+            turrets.removeAll { $0.owner == i }
+            turrets.append(Turret(id: nextTurret, owner: i, team: fighter.team, pos: spot, facing: direction,
+                                  health: health, maxHealth: health, left: Turret.duration))
+            nextTurret += 1
         }
     }
 
@@ -809,6 +901,19 @@ public struct ArenaGame: Sendable {
                     break
                 }
             }
+            // 打到对面的骨塔（穿透的记一下打过哪座：骨塔用负的编号，和人分开）
+            if !consumed {
+                for t in turrets.indices where turrets[t].team != p.team && turrets[t].health > 0 && !p.hit.contains(-turrets[t].id)
+                    && turrets[t].pos.distance(to: p.pos) < Turret.radius + p.radius {
+                    turrets[t].health -= p.damage
+                    if p.pierce {
+                        p.hit.append(-turrets[t].id)
+                    } else {
+                        consumed = true
+                        break
+                    }
+                }
+            }
             if !consumed { kept.append(p) }
         }
         projectiles = kept
@@ -819,10 +924,67 @@ public struct ArenaGame: Sendable {
         for j in fighters.indices where fighters[j].alive && fighters[j].team != team && fighters[j].pos.distance(to: point) < radius + Self.fighterRadius {
             hurt(j, damage, by: owner, charges: charges)
         }
+        for t in turrets.indices where turrets[t].team != team && turrets[t].pos.distance(to: point) < radius + Turret.radius {
+            turrets[t].health -= damage
+        }
     }
 
-    private mutating func hurt(_ j: Int, _ amount: Int, by attacker: Int?, charges: Bool) {
-        guard fighters[j].alive, amount > 0 else { return }
+    /// 亡灵之地：每 0.5 秒给圈里的队友回血、敌人扣血，时间到了消失
+    private mutating func updateZones(_ dt: Double) {
+        guard !zones.isEmpty else { return }
+        for k in zones.indices {
+            zones[k].left -= dt
+            zones[k].tick -= dt
+            guard zones[k].tick <= 0 else { continue }
+            zones[k].tick += 0.5
+            let zone = zones[k]
+            for j in fighters.indices where fighters[j].alive && fighters[j].pos.distance(to: zone.center) < zone.radius {
+                if fighters[j].team == zone.team {
+                    let amount = min(zone.heal / 2, fighters[j].maxHealth - fighters[j].health)
+                    if amount > 0 {
+                        fighters[j].health += amount
+                        events.append(.heal(target: j, amount: amount))
+                    }
+                } else {
+                    hurt(j, zone.damage / 2, by: zone.owner, charges: false)
+                }
+            }
+        }
+        zones.removeAll { $0.left <= 0 }
+    }
+
+    /// 骨塔：每 0.7 秒朝看得见、够得着的最近的敌人打一发；被打掉了炸一下，时间到了消失
+    private mutating func updateTurrets(_ dt: Double) {
+        guard !turrets.isEmpty else { return }
+        for k in turrets.indices {
+            turrets[k].left -= dt
+            turrets[k].cooldown -= dt
+            let turret = turrets[k]
+            guard turret.cooldown <= 0, turret.health > 0 else { continue }
+            let targets = fighters.filter {
+                $0.alive && $0.team != turret.team && isVisible($0, to: turret.team)
+                    && $0.pos.distance(to: turret.pos) < Turret.range && map.lineOfSight(turret.pos, $0.pos)
+            }
+            guard let target = targets.min(by: { $0.pos.distance(to: turret.pos) < $1.pos.distance(to: turret.pos) }) else { continue }
+            let direction = (target.pos - turret.pos).normalized
+            turrets[k].cooldown = 0.7
+            turrets[k].facing = direction
+            let damage = fighters.indices.contains(turret.owner) ? power(turret.owner, 320) : 320
+            projectiles.append(Projectile(id: nextProjectile, owner: turret.owner, team: turret.team, pos: turret.pos + direction * 0.4,
+                                          velocity: direction * 13, rangeLeft: Turret.range + 0.5, damage: damage, radius: 0.2,
+                                          charges: false))
+            nextProjectile += 1
+        }
+        for turret in turrets where turret.health <= 0 {
+            events.append(.explosion(at: turret.pos, radius: 0.8))
+        }
+        turrets.removeAll { $0.left <= 0 || $0.health <= 0 }
+    }
+
+    private mutating func hurt(_ j: Int, _ raw: Int, by attacker: Int?, charges: Bool) {
+        guard fighters[j].alive, raw > 0 else { return }
+        // 骨盾：少受六成
+        let amount = fighters[j].shield > 0 ? max(1, Int((Double(raw) * 0.4).rounded())) : raw
         let dealt = min(amount, fighters[j].health)
         fighters[j].health -= amount
         fighters[j].lastHurt = time
@@ -845,6 +1007,7 @@ public struct ArenaGame: Sendable {
         fighters[j].dash = nil
         fighters[j].leap = nil
         fighters[j].burst = nil
+        fighters[j].shield = 0
         fighters[j].moving = .zero
         if let attacker, attacker != j {
             fighters[attacker].kills += 1

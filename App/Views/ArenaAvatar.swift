@@ -20,6 +20,10 @@ final class ArenaAvatar {
     private let body = SCNNode()
     private let ring = SCNNode()
     private let glow = SCNNode()
+    /// 骨盾：罩在身上的一层金光
+    private let bubble = SCNNode()
+    /// 材质本来的自发光（骷髅的眼睛），挨打闪白后改回去
+    private var glows: [Any?] = []
     /// 上半身的骨骼（跑着出手只换这些）
     private let upper: [Int]
 
@@ -69,6 +73,15 @@ final class ArenaAvatar {
             for name in look.hidden {
                 instance.root.childNode(withName: name, recursively: true)?.isHidden = true
             }
+            for weapon in look.weapons {
+                guard let piece = ArenaModels.shared.prop(weapon.file),
+                      let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else { continue }
+                let held = piece.instantiate(shareMaterials: true).root
+                held.simdPosition = weapon.position
+                held.simdOrientation = weapon.rotation
+                bone.addChildNode(held)
+            }
+            glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             body.simdScale = SIMD3(repeating: ArenaAvatar.scale)
         } else {
@@ -111,6 +124,18 @@ final class ArenaAvatar {
         glow.renderingOrder = 6
         glow.isHidden = true
         node.addChildNode(glow)
+        let shell = SCNSphere(radius: 0.78)
+        shell.segmentCount = 24
+        let shine = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.22))
+        shine.isDoubleSided = false
+        shell.firstMaterial = shine
+        bubble.geometry = shell
+        bubble.simdPosition = SIMD3(0, 0.7, 0)
+        bubble.simdScale = SIMD3(1, 1.05, 1)
+        bubble.castsShadow = false
+        bubble.renderingOrder = 12
+        bubble.isHidden = true
+        node.addChildNode(bubble)
         node.opacity = 0
     }
 
@@ -174,6 +199,7 @@ final class ArenaAvatar {
         node.isHidden = opacity < 0.02
         ring.isHidden = !fighter.alive
         glow.isHidden = !(fighter.alive && fighter.superCharge >= 1)
+        bubble.isHidden = !(fighter.alive && fighter.shield > 0)
         if !glow.isHidden {
             let pulse = 1 + 0.07 * Float(sin(clock * 6))
             glow.simdScale = SIMD3(pulse, 1, pulse)
@@ -181,7 +207,9 @@ final class ArenaAvatar {
 
         if flashing && clock >= flashUntil {
             flashing = false
-            instance?.materials.forEach { $0.emission.contents = UIColor.black }
+            for (material, original) in zip(instance?.materials ?? [], glows) {
+                material.emission.contents = original ?? UIColor.black
+            }
         }
 
         guard !node.isHidden else { return }
