@@ -1021,7 +1021,12 @@ struct ArenaHomeView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 TextField("好友的名字", text: $friendName)
-                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 44)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(red: 0.1, green: 0.18, blue: 0.36)))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black, lineWidth: 3))
                 Button {
                     let trimmed = friendName.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { return }
@@ -1072,9 +1077,25 @@ struct ArenaHomeView: View {
                 partySizeButton("多人对战", size: max(partySize, 3) == partySize && partySize > 2 ? partySize : 3)
             }
             if partySize > 2 {
-                Stepper("\(partySize) 个人", value: $partySize, in: 3...6)
-                    .font(.system(size: 16, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
+                HStack(spacing: 8) {
+                    Button {
+                        partySize = max(3, partySize - 1)
+                    } label: {
+                        Text("−").frame(width: 52)
+                    }
+                    .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face, edge: ArenaGameButton.blue.edge, height: 44))
+                    Text("\(partySize) 个人")
+                        .font(.system(size: 18, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .arenaOutline(1.2)
+                        .frame(maxWidth: .infinity)
+                    Button {
+                        partySize = min(6, partySize + 1)
+                    } label: {
+                        Text("+").frame(width: 52)
+                    }
+                    .buttonStyle(ArenaGameButton(face: ArenaGameButton.green.face, edge: ArenaGameButton.green.edge, height: 44))
+                }
             }
             roomActions(players: partySize)
         }
