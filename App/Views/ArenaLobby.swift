@@ -64,7 +64,8 @@ struct ArenaHomeView: View {
             let wide = geo.size.width > geo.size.height
             ZStack {
                 ArenaLobbyBackground()
-                ArenaShowcase(brawler: chosen, skin: progress.skin(chosen))
+                ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
+                              live: playing == nil && lobby == nil && !adventure && sheet == nil)
                     .frame(width: min(geo.size.width * (wide ? 0.4 : 0.9), 420), height: geo.size.height * (wide ? 0.78 : 0.5))
                     .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.47 : 0.38))
                 VStack(spacing: 0) {
@@ -943,6 +944,8 @@ struct ArenaShowcase: UIViewRepresentable {
     let brawler: Brawler
     /// 穿第几套皮肤
     var skin = 0
+    /// 大厅被盖住（进对局、开房间、冒险、二级菜单）时停掉，避免两套 SceneKit 一起画
+    var live = true
 
     func makeUIView(context: Context) -> ArenaShowcaseView {
         ArenaShowcaseView(brawler: brawler, skin: skin)
@@ -950,6 +953,7 @@ struct ArenaShowcase: UIViewRepresentable {
 
     func updateUIView(_ view: ArenaShowcaseView, context: Context) {
         view.show(brawler, skin: skin)
+        if live { view.start() } else { view.stop() }
     }
 
     static func dismantleUIView(_ view: ArenaShowcaseView, coordinator: ()) {
@@ -1079,21 +1083,27 @@ final class ArenaShowcaseView: SCNView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil {
-            stop()
-        } else if link == nil {
-            let target = ShowcaseTarget(view: self)
-            let link = CADisplayLink(target: target, selector: #selector(ShowcaseTarget.tick(_:)))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
-            link.add(to: .main, forMode: .common)
-            self.link = link
-        }
+        if window == nil { stop() } else { start() }
+    }
+
+    func start() {
+        guard window != nil else { return }
+        rendersContinuously = true
+        isPlaying = true
+        guard link == nil else { return }
+        let target = ShowcaseTarget(view: self)
+        let link = CADisplayLink(target: target, selector: #selector(ShowcaseTarget.tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        self.link = link
     }
 
     func stop() {
         link?.invalidate()
         link = nil
         lastTimestamp = nil
+        rendersContinuously = false
+        isPlaying = false
     }
 
     fileprivate func tick(_ timestamp: CFTimeInterval) {

@@ -1,5 +1,4 @@
 import SceneKit
-import SpriteKit
 import UIKit
 import simd
 
@@ -695,10 +694,10 @@ enum ArenaArt {
     }
 }
 
-/// 一行粗边字（现画成贴图）：文字、颜色变了才重画
+/// 一行粗边字（现画成贴图，贴在场景里的一块牌子上，不进 SpriteKit）
 @MainActor
 final class ArenaText {
-    let node = SKSpriteNode()
+    let node = SCNNode()
     private let size: CGFloat
     private var color: UIColor
     private var shown: String?
@@ -707,6 +706,7 @@ final class ArenaText {
         self.size = size
         self.color = color
         node.isHidden = true
+        node.castsShadow = false
     }
 
     func set(_ text: String, color newColor: UIColor? = nil) {
@@ -721,54 +721,80 @@ final class ArenaText {
             return
         }
         let image = ArenaArt.text(text, size: size, color: color)
-        node.texture = SKTexture(image: image)
-        node.size = image.size
+        let height = size / 48
+        let aspect = image.size.width / max(image.size.height, 1)
+        let plane = SCNPlane(width: height * aspect, height: height)
+        plane.firstMaterial = ArenaArt.flat(image)
+        node.geometry = plane
         node.isHidden = false
     }
 }
 
-/// 圆头的粗条（血条、弹药）：深色的底，上面彩色的条按比例缩短
+/// 圆头的粗条（血条、弹药）：深色的底，上面彩色的条从左往右缩短。单位是屏幕上的点，放进场景时按大约 55 点 1 米
 @MainActor
 final class ArenaBar {
-    let node = SKNode()
-    private let fill: SKSpriteNode
-    private let length: CGFloat
-    private let pillWidth: CGFloat
+    let node = SCNNode()
+    private let fillNode = SCNNode()
+    private let fillMaterial: SCNMaterial
+    private let length: Float
 
     init(width: CGFloat, height: CGFloat, color: UIColor, border: CGFloat = 1.5) {
-        let outer = height + border * 2
-        let back = SKSpriteNode(texture: SKTexture(image: ArenaArt.pill(height: outer)))
-        back.size = CGSize(width: outer * 2, height: outer)
-        back.centerRect = CGRect(x: 0.3, y: 0, width: 0.4, height: 1)
-        back.color = UIColor(white: 0.07, alpha: 1)
-        back.colorBlendFactor = 1
-        back.xScale = (width + border * 2) / (outer * 2)
-        let bar = SKSpriteNode(texture: SKTexture(image: ArenaArt.pill(height: height)))
-        bar.size = CGSize(width: height * 2, height: height)
-        bar.centerRect = CGRect(x: 0.3, y: 0, width: 0.4, height: 1)
-        bar.color = color
-        bar.colorBlendFactor = 1
-        bar.anchorPoint = CGPoint(x: 0, y: 0.5)
-        bar.position = CGPoint(x: -width / 2, y: 0)
-        fill = bar
-        length = width
-        pillWidth = height * 2
-        node.addChild(back)
-        node.addChild(bar)
+        let length = Float(width / 55)
+        let thick = Float(height / 55)
+        let outer = Float((height + border * 2) / 55)
+        self.length = length
+        let back = SCNPlane(width: CGFloat(length + Float(border / 28)), height: CGFloat(outer))
+        let backMaterial = ArenaArt.flat(ArenaArt.pill(height: height + border * 2))
+        backMaterial.multiply.contents = UIColor(white: 0.07, alpha: 1)
+        back.firstMaterial = backMaterial
+        let backNode = SCNNode(geometry: back)
+        backNode.castsShadow = false
+        node.addChildNode(backNode)
+        let fill = SCNPlane(width: CGFloat(length), height: CGFloat(thick))
+        fillMaterial = ArenaArt.flat(ArenaArt.pill(height: height))
+        fillMaterial.multiply.contents = color
+        fill.firstMaterial = fillMaterial
+        fillNode.geometry = fill
+        fillNode.castsShadow = false
+        fillNode.pivot = SCNMatrix4MakeTranslation(-length / 2, 0, 0)
+        fillNode.simdPosition = SIMD3(-length / 2, 0, 0.002)
+        node.addChildNode(fillNode)
+        node.castsShadow = false
         set(1)
     }
 
     var color: UIColor {
-        get { fill.color }
-        set { fill.color = newValue }
+        get { (fillMaterial.multiply.contents as? UIColor) ?? .white }
+        set { fillMaterial.multiply.contents = newValue }
     }
 
     /// fraction：0–1；dim：没攒满的（弹药）暗一点
     func set(_ fraction: CGFloat, dim: Bool = false) {
         let part = max(0, min(1, fraction))
-        fill.isHidden = part <= 0.001
-        fill.xScale = part * length / pillWidth
-        fill.alpha = dim ? 0.5 : 1
+        fillNode.isHidden = part <= 0.001
+        fillNode.simdScale = SIMD3(Float(part), 1, 1)
+        fillNode.opacity = dim ? 0.5 : 1
+    }
+}
+
+extension SCNNode {
+    /// 牌子正对镜头。血条、名字、数字都用这个，不再挂 SpriteKit
+    func faceCamera() {
+        constraints = [SCNBillboardConstraint()]
+        castsShadow = false
+        renderingOrder = 50
+    }
+}
+
+extension ArenaArt {
+    /// 不受光、不写深度：贴在人头顶上也不会被身子挡住一半
+    static func flat(_ contents: Any) -> SCNMaterial {
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = contents
+        material.isDoubleSided = true
+        material.writesToDepthBuffer = false
+        return material
     }
 }
 

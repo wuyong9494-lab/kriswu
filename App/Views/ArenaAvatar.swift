@@ -1,5 +1,4 @@
 import SceneKit
-import SpriteKit
 import UIKit
 import simd
 
@@ -134,6 +133,7 @@ final class ArenaAvatar {
                 instance.materials.forEach { $0.multiply.contents = tint }
                 baseTint = tint
             }
+            instance.materials.forEach { ArenaArt.grade($0, ArenaArt.characterSurface) }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size * look.scale)
@@ -380,9 +380,7 @@ final class ArenaAvatar {
         guard let model, let instance, let clip = model.clips[name] else { return }
         var pose = model.restPose
         clip.sample(at: time, into: &pose)
-        for i in model.animated where instance.nodes.indices.contains(i) && pose.rotation.indices.contains(i) {
-            instance.nodes[i].simdTransform = pose.transform(i)
-        }
+        apply(pose, to: instance, nodes: model.animated)
     }
 
     func turn(to angle: Float) {
@@ -446,8 +444,23 @@ final class ArenaAvatar {
                 }
             }
         }
-        for i in model.animated where instance.nodes.indices.contains(i) && pose.rotation.indices.contains(i) {
-            instance.nodes[i].simdTransform = pose.transform(i)
+        apply(pose, to: instance, nodes: model.animated)
+    }
+
+    /// 只在主线程写，而且这根骨骼得在、变换得是有限数。半初始化的骨头不写，避免和渲染线程抢着 retain
+    private func apply(_ pose: GLTFModel.Pose, to instance: GLTFModel.Instance, nodes: [Int]) {
+        guard Thread.isMainThread else { return }
+        for i in nodes {
+            guard instance.nodes.indices.contains(i),
+                  pose.rotation.indices.contains(i),
+                  pose.translation.indices.contains(i),
+                  pose.scale.indices.contains(i) else { continue }
+            let node = instance.nodes[i]
+            guard node.parent != nil else { continue }
+            let m = pose.transform(i)
+            guard m.columns.0.x.isFinite, m.columns.0.y.isFinite, m.columns.0.z.isFinite,
+                  m.columns.3.x.isFinite, m.columns.3.y.isFinite, m.columns.3.z.isFinite else { continue }
+            node.simdTransform = m
         }
     }
 
@@ -506,10 +519,10 @@ final class ArenaAvatar {
 }
 
 /// 一个人头顶上的东西：名字（自己绿、队友蓝、对面红）、圆头粗血条（血量写在条上），自己的再加一排橙色弹药。
-/// 字是粗圆体描黑边的，画在 3D 画面上面那层
+/// 贴在角色头顶，正对镜头（场景里的牌子，不走 SpriteKit）
 @MainActor
 final class ArenaTag {
-    let node = SKNode()
+    let node = SCNNode()
     private let name: ArenaText
     private let bar: ArenaBar
     private let number = ArenaText(size: 11, color: .white)
@@ -526,38 +539,41 @@ final class ArenaTag {
         name = ArenaText(size: boss ? 15 : 12, color: isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName))
         bar = ArenaBar(width: width, height: barHeight, color: isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red))
         name.set(isMe ? "我" : fighter.name)
-        name.node.position = CGPoint(x: 0, y: barHeight / 2 + 10)
-        starText.node.position = CGPoint(x: 0, y: barHeight / 2 + 26)
-        number.node.position = CGPoint(x: 0, y: 0.5)
-        [bar.node, number.node, name.node, starText.node].forEach(node.addChild)
+        let barH = Float(barHeight / 55)
+        name.node.simdPosition = SIMD3(0, barH / 2 + 0.18, 0.01)
+        starText.node.simdPosition = SIMD3(0, barH / 2 + 0.42, 0.01)
+        number.node.simdPosition = SIMD3(0, 0, 0.02)
+        node.addChildNode(bar.node)
+        node.addChildNode(number.node)
+        node.addChildNode(name.node)
+        node.addChildNode(starText.node)
         if isMe {
-            let gap: CGFloat = 3
-            let segment = (width - gap * 2) / 3
+            let gap: Float = 3 / 55
+            let segment = (Float(width) / 55 - gap * 2) / 3
             for k in 0..<3 {
-                let piece = ArenaBar(width: segment, height: 5, color: ArenaPalette.ammo, border: 1.2)
-                piece.node.position = CGPoint(x: -width / 2 + segment / 2 + CGFloat(k) * (segment + gap), y: -barHeight / 2 - 7)
-                node.addChild(piece.node)
+                let piece = ArenaBar(width: CGFloat(segment * 55), height: 5, color: ArenaPalette.ammo, border: 1.2)
+                piece.node.simdPosition = SIMD3(-Float(width) / 55 / 2 + segment / 2 + Float(k) * (segment + gap), -barH / 2 - 0.12, 0)
+                node.addChildNode(piece.node)
                 ammo.append(piece)
             }
         }
+        node.faceCamera()
         node.isHidden = true
     }
 
-    /// point：头顶在屏幕上的位置（nil：在镜头后面）
-    func update(_ fighter: Fighter, at point: CGPoint?, opacity: Float) {
-        guard let point, fighter.alive, opacity > 0.05 else {
+    /// 人还活着、看得到才显示。牌子跟着角色走，不用再换算屏幕坐标
+    func update(_ fighter: Fighter, opacity: Float) {
+        guard fighter.alive, opacity > 0.05 else {
             node.isHidden = true
             return
         }
         node.isHidden = false
-        node.position = point
-        node.alpha = CGFloat(min(1, opacity * 1.4))
+        node.opacity = CGFloat(min(1, opacity * 1.4))
         bar.set(CGFloat(fighter.health) / CGFloat(max(fighter.maxHealth, 1)))
         if fighter.health != shownHealth {
             shownHealth = fighter.health
             number.set("\(max(fighter.health, 0))")
         }
-        // 头顶的星星（悬赏、抢星星）；大乱斗是捡到的能量块
         let mark = fighter.stars > 0 ? fighter.stars : -fighter.cubes
         if mark != shownStars {
             shownStars = mark

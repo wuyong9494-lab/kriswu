@@ -1,5 +1,4 @@
 import SceneKit
-import SpriteKit
 import SwiftUI
 import UIKit
 import simd
@@ -20,7 +19,7 @@ struct ArenaWorld: UIViewRepresentable {
 }
 
 /// 乱斗的 3D 画面（SceneKit）：斜着往下看的镜头跟着自己走；地图、每个人、子弹、星星、圈、毒圈、特效每帧按 ArenaGame 摆一遍。
-/// 名字、血条、伤害数字画在上面一层（SpriteKit），按 3D 位置算出在屏幕上的哪里。
+/// 名字、血条、伤害数字是场景里正对镜头的牌子，不挂 SpriteKit（挂 overlay 会在渲染线程上拿野纹理，直接 SIGSEGV）。
 /// 卡通的样子：亮绿的草地、浅色木箱木桶、蓬松的草丛，东西都描深色的边（见 ArenaArt）。iPhone 上横着打。
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
@@ -36,7 +35,6 @@ final class ArenaWorldView: SCNView {
 
     private let controller: ArenaController
     private let world = SCNScene()
-    private let overlay = SKScene(size: CGSize(width: 390, height: 844))
     private let rig = SCNNode()
     private let cameraNode = SCNNode()
     private let aimNode = SCNNode()
@@ -78,7 +76,7 @@ final class ArenaWorldView: SCNView {
     /// 输赢的声音放过了
     private var finished = false
     /// 伤害数字的贴图（同样的数字、颜色画一次）
-    private var numberTextures: [String: (texture: SKTexture, size: CGSize)] = [:]
+    private var numberImages: [String: UIImage] = [:]
     /// 足球：球、地上的影子、转到哪了（滚动）、上一帧在哪
     private var ballNode: SCNNode?
     private var ballShadow: SCNNode?
@@ -102,7 +100,7 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 头顶冒的表情（跟着人走，2 秒多一点消失）
-    private var bubbles: [(node: SKSpriteNode, fighter: Int, born: Double)] = []
+    private var bubbles: [(node: SCNNode, fighter: Int, born: Double)] = []
     /// 震屏：越大晃得越厉害，很快就停
     private var shake: Float = 0
     /// 打完了镜头凑到自己跟前（0–1）
@@ -132,7 +130,7 @@ final class ArenaWorldView: SCNView {
 
     /// 飘起来的伤害数字
     private struct Floater {
-        let label: SKSpriteNode
+        let node: SCNNode
         let at: SIMD3<Float>
         let born: Double
     }
@@ -147,9 +145,6 @@ final class ArenaWorldView: SCNView {
         rendersContinuously = true
         isPlaying = true
         isUserInteractionEnabled = false
-        overlay.scaleMode = .resizeFill
-        overlay.backgroundColor = .clear
-        overlaySKScene = overlay
         scene = world
         build()
         pointOfView = cameraNode
@@ -200,7 +195,6 @@ final class ArenaWorldView: SCNView {
         reach = (side: tanX * simd_length(Self.cameraOffset),
                  above: lift / tan(pitch - spread) - back,
                  below: back - lift / tan(pitch + spread))
-        overlay.size = bounds.size
     }
 
     fileprivate func tick(_ timestamp: CFTimeInterval) {
@@ -357,9 +351,11 @@ final class ArenaWorldView: SCNView {
                 root.addChildNode(made.node)
                 let bar = ArenaBar(width: 96, height: 13, color: chest.team == myTeam ? ArenaPalette.blue : ArenaPalette.red)
                 let number = ArenaText(size: 11, color: .white)
-                bar.node.addChild(number.node)
+                bar.node.addChildNode(number.node)
+                bar.node.simdPosition = SIMD3(0, 2.6, 0)
+                bar.node.faceCamera()
                 bar.node.isHidden = true
-                overlay.addChild(bar.node)
+                made.node.addChildNode(bar.node)
                 chestViews.append(ChestView(node: made.node, bar: bar, number: number, glow: made.glow))
             }
         case .showdown, .duo:
@@ -368,8 +364,10 @@ final class ArenaWorldView: SCNView {
                 made.node.simdPosition = SIMD3(Float(box.pos.x), 0, Float(box.pos.y))
                 root.addChildNode(made.node)
                 let bar = ArenaBar(width: 44, height: 7, color: ArenaPalette.gadget, border: 1.2)
+                bar.node.simdPosition = SIMD3(0, 1.35, 0)
+                bar.node.faceCamera()
                 bar.node.isHidden = true
-                overlay.addChild(bar.node)
+                made.node.addChildNode(bar.node)
                 boxViews.append(BoxView(node: made.node, wood: made.wood, bar: bar, shownHealth: box.health))
             }
         case .teamFight, .bounty, .knockout, .duel, .boss:
@@ -407,7 +405,8 @@ final class ArenaWorldView: SCNView {
             root.addChildNode(avatar.node)
             avatars.append(avatar)
             let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
-            overlay.addChild(tag.node)
+            tag.node.simdPosition = SIMD3(0, ArenaAvatar.headHeight * avatar.size, 0)
+            avatar.node.addChildNode(tag.node)
             tags.append(tag)
         }
 
@@ -430,6 +429,7 @@ final class ArenaWorldView: SCNView {
         material.multiply.mipFilter = .linear
         material.multiply.maxAnisotropy = 4
         material.multiply.contentsTransform = SCNMatrix4MakeScale(repeats.x, repeats.y, 1)
+        ArenaArt.grade(material, ArenaArt.groundSurface)
         return material
     }
 
@@ -634,7 +634,6 @@ final class ArenaWorldView: SCNView {
     private func sync(dt: Float) {
         let game = controller.game
         moveCamera(dt: dt, game: game)
-        let view = cameraNode.simdWorldTransform.inverse
         let events = controller.takeEvents()
         // 进球、一局打完大家回到出发的地方：不算闪现
         if events.contains(.reset) { lastPositions = [] }
@@ -663,6 +662,9 @@ final class ArenaWorldView: SCNView {
                 let replacement = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red,
                                               isMe: fighter.id == controller.me, skin: fighter.skin)
                 world.rootNode.addChildNode(replacement.node)
+                let tag = tags[fighter.id]
+                tag.node.removeFromParentNode()
+                replacement.node.addChildNode(tag.node)
                 avatars[fighter.id] = replacement
             }
             let avatar = avatars[fighter.id]
@@ -670,8 +672,7 @@ final class ArenaWorldView: SCNView {
             // 自己这边躲在草丛里的、隐身的（对面贴近了才看得见）：半透明
             let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock)
-            let head = avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight * avatar.size, 0)
-            tags[fighter.id].update(fighter, at: project(head, view), opacity: avatar.opacity)
+            tags[fighter.id].update(fighter, opacity: avatar.opacity)
         }
 
         // 自己旁边的草丛变透明，看得见自己
@@ -688,11 +689,11 @@ final class ArenaWorldView: SCNView {
         syncStars(game)
         syncZone(game)
         syncHealZones(game)
-        syncTurrets(game, view: view)
+        syncTurrets(game)
         syncBall(game)
-        syncChests(game, view: view)
+        syncChests(game)
         syncWarnings(game)
-        syncPower(game, view: view)
+        syncPower(game)
         if var current = poison, abs(current.radius - game.safeRadius) > 0.02 {
             current.radius = game.safeRadius
             current.wall.outerRadius = CGFloat(current.radius) + Self.gasBand
@@ -704,13 +705,21 @@ final class ArenaWorldView: SCNView {
 
         for event in events { effect(event, game: game) }
         // 结算时镜头凑近自己，头顶的名字、血条、数字都收起来
-        overlay.isHidden = controller.hud.result != nil
+        if controller.hud.result != nil {
+            for tag in tags { tag.node.isHidden = true }
+            for item in chestViews { item.bar.node.isHidden = true }
+            for item in boxViews { item.bar.node.isHidden = true }
+            for item in turretViews.values { item.bar.node.isHidden = true }
+            for label in cubeLabels { label.node.isHidden = true }
+            for floater in floaters { floater.node.isHidden = true }
+            for bubble in bubbles { bubble.node.isHidden = true }
+        }
         if !finished, let result = controller.hud.result {
             finished = true
             ArenaSound.shared.finish(won: controller.won(result))
         }
-        syncFloaters(view)
-        syncBubbles(view)
+        syncFloaters()
+        syncBubbles()
         syncAim(me)
     }
 
@@ -768,17 +777,6 @@ final class ArenaWorldView: SCNView {
         shake = min(0.9, max(shake, amount))
     }
 
-    /// 3D 里的一点在上面那层（SpriteKit，左下角是原点）的哪里；在镜头后面返回 nil
-    private func project(_ point: SIMD3<Float>, _ view: simd_float4x4) -> CGPoint? {
-        let c = view * SIMD4(point, 1)
-        guard c.z < -0.5 else { return nil }
-        let x = c.x / -c.z / tanX
-        let y = c.y / -c.z / tanY
-        return CGPoint(x: CGFloat(x + 1) / 2 * bounds.width, y: CGFloat(y + 1) / 2 * bounds.height)
-    }
-
-    // MARK: - 足球、宝箱、红圈
-
     /// 球：有人带着画在他脚前（跳起来也跟着），没人带画在地上；按走了多远滚着转
     private func syncBall(_ game: ArenaGame) {
         guard let node = ballNode else { return }
@@ -810,19 +808,14 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 宝箱头顶的血条（数字写在条上）；挨打白一下
-    private func syncChests(_ game: ArenaGame, view: simd_float4x4) {
+    private func syncChests(_ game: ArenaGame) {
         for (k, chest) in game.chests.enumerated() where chestViews.indices.contains(k) {
             let item = chestViews[k]
-            if let point = project(SIMD3(Float(chest.center.x), 2.6, Float(chest.center.y)), view) {
-                item.bar.node.isHidden = chest.health <= 0
-                item.bar.node.position = point
-                item.bar.set(CGFloat(chest.health) / CGFloat(max(chest.maxHealth, 1)))
-                if chest.health != item.shownHealth {
-                    chestViews[k].shownHealth = chest.health
-                    item.number.set("\(max(chest.health, 0))")
-                }
-            } else {
-                item.bar.node.isHidden = true
+            item.bar.node.isHidden = chest.health <= 0
+            item.bar.set(CGFloat(chest.health) / CGFloat(max(chest.maxHealth, 1)))
+            if chest.health != item.shownHealth {
+                chestViews[k].shownHealth = chest.health
+                item.number.set("\(max(chest.health, 0))")
             }
             if item.flashUntil > 0, clock >= item.flashUntil {
                 chestViews[k].flashUntil = 0
@@ -832,7 +825,7 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 能量箱：挨打闪白、飘伤害数字，打了就露出血条，碎了收起来冒一阵绿光；地上的能量块转着上下浮，叠了几块写着几
-    private func syncPower(_ game: ArenaGame, view: simd_float4x4) {
+    private func syncPower(_ game: ArenaGame) {
         for (k, box) in game.boxes.enumerated() where boxViews.indices.contains(k) {
             let item = boxViews[k]
             if box.health != item.shownHealth {
@@ -858,9 +851,8 @@ final class ArenaWorldView: SCNView {
             }
             guard box.health > 0 else { continue }
             item.node.childNode(withName: "gem", recursively: false)?.simdEulerAngles = SIMD3(0.6, Float(clock * 1.5), 0)
-            if box.health < ArenaGame.PowerBox.fullHealth, let point = project(SIMD3(Float(box.pos.x), 1.35, Float(box.pos.y)), view) {
+            if box.health < ArenaGame.PowerBox.fullHealth {
                 item.bar.node.isHidden = false
-                item.bar.node.position = point
                 item.bar.set(CGFloat(box.health) / CGFloat(ArenaGame.PowerBox.fullHealth))
             } else {
                 item.bar.node.isHidden = true
@@ -873,12 +865,13 @@ final class ArenaWorldView: SCNView {
             world.rootNode.addChildNode(node)
             cubeNodes.append(node)
             let label = ArenaText(size: 13, color: ArenaPalette.myName)
-            overlay.addChild(label.node)
+            label.node.faceCamera()
+            world.rootNode.addChildNode(label.node)
             cubeLabels.append(label)
         }
         while cubeNodes.count > game.cubes.count {
             cubeNodes.removeLast().removeFromParentNode()
-            cubeLabels.removeLast().node.removeFromParent()
+            cubeLabels.removeLast().node.removeFromParentNode()
         }
         for (k, cube) in game.cubes.enumerated() {
             let bob = Float(sin(clock * 3 + Double(k))) * 0.08
@@ -887,9 +880,9 @@ final class ArenaWorldView: SCNView {
             cubeNodes[k].simdEulerAngles = SIMD3(0.5, Float(clock * 1.8) + Float(k), 0.3)
             let scale = Float(min(1 + 0.12 * Double(cube.count - 1), 1.6))
             cubeNodes[k].simdScale = SIMD3(repeating: scale)
-            if cube.count > 1, let point = project(at + SIMD3(0, 0.55, 0), view) {
+            if cube.count > 1 {
                 cubeLabels[k].node.isHidden = false
-                cubeLabels[k].node.position = point
+                cubeLabels[k].node.simdPosition = at + SIMD3(0, 0.55, 0)
                 cubeLabels[k].set("×\(cube.count)")
             } else {
                 cubeLabels[k].node.isHidden = true
@@ -1270,14 +1263,15 @@ final class ArenaWorldView: SCNView {
         case .emote(let fighter, let emote):
             guard avatars.indices.contains(fighter), let symbol = ArenaEmote.find(emote)?.symbol else { return }
             // 同一个人的上一个表情收起来
-            for item in bubbles where item.fighter == fighter { item.node.removeFromParent() }
+            for item in bubbles where item.fighter == fighter { item.node.removeFromParentNode() }
             bubbles.removeAll { $0.fighter == fighter }
-            let node = SKSpriteNode(texture: SKTexture(image: ArenaArt.bubble(symbol)))
-            node.size = CGSize(width: 60, height: 60)
-            node.isHidden = true
-            node.setScale(0.3)
-            node.run(.scale(to: 1, duration: 0.16))
-            overlay.addChild(node)
+            let plane = SCNPlane(width: 0.85, height: 0.85)
+            plane.firstMaterial = ArenaArt.flat(ArenaArt.bubble(symbol))
+            let node = SCNNode(geometry: plane)
+            node.faceCamera()
+            node.simdScale = SIMD3(repeating: 0.3)
+            node.simdPosition = SIMD3(0, ArenaAvatar.headHeight * avatars[fighter].size + 0.75, 0)
+            avatars[fighter].node.addChildNode(node)
             bubbles.append((node: node, fighter: fighter, born: clock))
             if avatars[fighter].opacity > 0.1 {
                 ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos) * 0.5)
@@ -1376,21 +1370,21 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 表情跟着头顶走，最后 0.4 秒淡掉；人看不见了表情也藏起来
-    private func syncBubbles(_ view: simd_float4x4) {
+    private func syncBubbles() {
         for k in bubbles.indices.reversed() {
             let item = bubbles[k]
             let age = clock - item.born
             guard age < 2.4, avatars.indices.contains(item.fighter) else {
-                item.node.removeFromParent()
+                item.node.removeFromParentNode()
                 bubbles.remove(at: k)
                 continue
             }
             let avatar = avatars[item.fighter]
-            let head = avatar.node.simdPosition + SIMD3(0, (ArenaAvatar.headHeight + 0.8) * avatar.size, 0)
-            if avatar.opacity > 0.1, let point = project(head, view) {
+            let grown = min(1, 0.3 + age * 4)
+            item.node.simdScale = SIMD3(repeating: Float(grown))
+            if avatar.opacity > 0.1 {
                 item.node.isHidden = false
-                item.node.position = point
-                item.node.alpha = age > 2 ? CGFloat((2.4 - age) / 0.4) : 1
+                item.node.opacity = age > 2 ? CGFloat((2.4 - age) / 0.4) : 1
             } else {
                 item.node.isHidden = true
             }
@@ -1536,7 +1530,7 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 骨塔：插在地上的骨杖，顶上一团光，头顶一条血
-    private func syncTurrets(_ game: ArenaGame, view: simd_float4x4) {
+    private func syncTurrets(_ game: ArenaGame) {
         var seen = Set<Int>()
         for turret in game.turrets {
             seen.insert(turret.id)
@@ -1545,18 +1539,12 @@ final class ArenaWorldView: SCNView {
             item.node.simdPosition = SIMD3(Float(turret.pos.x), 0, Float(turret.pos.y))
             let bob = Float(sin(clock * 3 + Double(turret.id))) * 0.06
             item.head.simdPosition = SIMD3(0, 2.0 + bob, 0)
-            if let point = project(item.node.simdPosition + SIMD3(0, 2.4, 0), view) {
-                item.bar.node.isHidden = false
-                item.bar.node.position = point
-                item.bar.set(CGFloat(turret.health) / CGFloat(max(turret.maxHealth, 1)))
-            } else {
-                item.bar.node.isHidden = true
-            }
+            item.bar.node.isHidden = false
+            item.bar.set(CGFloat(turret.health) / CGFloat(max(turret.maxHealth, 1)))
         }
         for (id, item) in turretViews where !seen.contains(id) {
             burst(at: item.node.simdPosition + SIMD3(0, 0.8, 0), color: UIColor(white: 0.9, alpha: 1), count: 20, speed: 1.5, size: 0.3, life: 0.5)
             item.node.removeFromParentNode()
-            item.bar.node.removeFromParent()
             turretViews[id] = nil
         }
     }
@@ -1592,48 +1580,48 @@ final class ArenaWorldView: SCNView {
         world.rootNode.addChildNode(node)
         burst(at: SIMD3(Float(turret.pos.x), 0.5, Float(turret.pos.y)), color: color, count: 20, speed: 1.5, size: 0.3, life: 0.5)
         let bar = ArenaBar(width: 40, height: 7, color: color, border: 1.2)
-        bar.node.isHidden = true
-        overlay.addChild(bar.node)
+        bar.node.simdPosition = SIMD3(0, 2.5, 0)
+        bar.node.faceCamera()
+        node.addChildNode(bar.node)
         return TurretView(node: node, head: head, bar: bar)
     }
 
     // MARK: - 伤害数字
 
     private func floater(_ text: String, at point: SIMD3<Float>, color: UIColor) {
-        // 同样的数字、颜色只画一次
         let key = "\(text)-\(color.hash)"
-        let made: (texture: SKTexture, size: CGSize)
-        if let cached = numberTextures[key] {
-            made = cached
+        let image: UIImage
+        if let cached = numberImages[key] {
+            image = cached
         } else {
-            let image = ArenaArt.text(text, size: 17, color: color)
-            made = (SKTexture(image: image), image.size)
-            if numberTextures.count > 150 { numberTextures.removeAll() }
-            numberTextures[key] = made
+            image = ArenaArt.text(text, size: 17, color: color)
+            if numberImages.count > 150 { numberImages.removeAll() }
+            numberImages[key] = image
         }
-        let label = SKSpriteNode(texture: made.texture, color: .white, size: made.size)
-        label.isHidden = true
-        overlay.addChild(label)
-        floaters.append(Floater(label: label, at: point, born: clock))
-        if floaters.count > 24 { floaters.removeFirst().label.removeFromParent() }
+        let height: CGFloat = 0.42
+        let aspect = image.size.width / max(image.size.height, 1)
+        let plane = SCNPlane(width: height * aspect, height: height)
+        plane.firstMaterial = ArenaArt.flat(image)
+        let node = SCNNode(geometry: plane)
+        node.faceCamera()
+        node.simdPosition = point
+        world.rootNode.addChildNode(node)
+        floaters.append(Floater(node: node, at: point, born: clock))
+        if floaters.count > 24 { floaters.removeFirst().node.removeFromParentNode() }
     }
 
-    private func syncFloaters(_ view: simd_float4x4) {
+    private func syncFloaters() {
         floaters.removeAll { floater in
             let age = clock - floater.born
             guard age < 0.75 else {
-                floater.label.removeFromParent()
+                floater.node.removeFromParentNode()
                 return true
             }
             let rise = Float(age) * 1.1
-            if let point = project(floater.at + SIMD3(0, rise, 0), view) {
-                floater.label.isHidden = false
-                floater.label.position = point
-                floater.label.alpha = CGFloat(age < 0.4 ? 1 : 1 - (age - 0.4) / 0.35)
-                floater.label.setScale(age < 0.08 ? CGFloat(0.6 + age * 5) : 1)
-            } else {
-                floater.label.isHidden = true
-            }
+            floater.node.simdPosition = floater.at + SIMD3(0, rise, 0)
+            floater.node.opacity = CGFloat(age < 0.4 ? 1 : 1 - (age - 0.4) / 0.35)
+            let scale: Float = age < 0.08 ? Float(0.6 + age * 5) : 1
+            floater.node.simdScale = SIMD3(repeating: scale)
             return false
         }
     }
