@@ -42,7 +42,7 @@ enum ArenaArt {
         float shade = wrap > 0.58 ? 1.0 : 0.78;
         float3 c = _surface.diffuse.rgb;
         float luma = dot(c, float3(0.3, 0.59, 0.11));
-        c = mix(float3(luma), c, 1.28);
+        c = mix(float3(luma), c, 1.42);
         _surface.diffuse.rgb = min(c * shade, float3(1.0));
         float fres = 1.0 - saturate(dot(n, normalize(_surface.view)));
         fres = fres * fres;
@@ -600,10 +600,10 @@ enum ArenaArt {
 
     /// 草丛的叶子：深绿底上一片片深浅不一的叶子（无缝）
     static let leaves: UIImage = draw(CGSize(width: 256, height: 256)) { cg in
-        cg.setFillColor(rgb(0.19, 0.53, 0.24).cgColor)
+        cg.setFillColor(rgb(0.08, 0.34, 0.13).cgColor)
         cg.fill(CGRect(x: 0, y: 0, width: 256, height: 256))
         var random = SeededRandom(seed: 5)
-        let colors = [rgb(0.15, 0.45, 0.20), rgb(0.25, 0.64, 0.30), rgb(0.32, 0.73, 0.34), rgb(0.46, 0.84, 0.42)]
+        let colors = [rgb(0.05, 0.26, 0.1), rgb(0.1, 0.42, 0.16), rgb(0.14, 0.5, 0.18), rgb(0.22, 0.62, 0.24)]
         let total = 170
         for k in 0..<total {
             let center = CGPoint(x: unit(&random) * 256, y: unit(&random) * 256)
