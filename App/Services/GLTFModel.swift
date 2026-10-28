@@ -7,7 +7,7 @@ import simd
 /// 网格、贴图、动画读一次大家共用；每次 instantiate() 做一套新的节点、骨骼和材质（几个人用同一个角色互不影响）。
 /// 动画不交给 SceneKit 播：每帧按时间自己算出每根骨骼的姿势摆上去，这样走路和出手能上下半身分开混着放
 final class GLTFModel: @unchecked Sendable {
-    enum LoadError: Error { case unreadable, badFormat }
+    enum LoadError: Error { case unreadable, badFormat, offMain }
 
     /// 一段动画
     struct Clip {
@@ -80,6 +80,8 @@ final class GLTFModel: @unchecked Sendable {
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
     /// maxTexture：贴图最大边长，大了缩小（这些模型的贴图是一格格的纯色，缩小看不出来，省显存）
     init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512) throws {
+        // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
+        guard Thread.isMainThread else { throw LoadError.offMain }
         guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
         let json: [String: Any]
         var binary: Data?
@@ -207,7 +209,7 @@ final class GLTFModel: @unchecked Sendable {
             let r = node["rotation"] as? [Double] ?? []
             let s = node["scale"] as? [Double] ?? []
             restTranslation.append(t.count == 3 ? SIMD3(Float(t[0]), Float(t[1]), Float(t[2])) : .zero)
-            restRotation.append(r.count == 4 ? simd_normalize(simd_quatf(ix: Float(r[0]), iy: Float(r[1]), iz: Float(r[2]), r: Float(r[3])))
+            restRotation.append(r.count == 4 ? Self.unit(simd_quatf(ix: Float(r[0]), iy: Float(r[1]), iz: Float(r[2]), r: Float(r[3])))
                                              : simd_quatf(ix: 0, iy: 0, iz: 0, r: 1))
             restScale.append(s.count == 3 ? SIMD3(Float(s[0]), Float(s[1]), Float(s[2])) : SIMD3(repeating: 1))
             info.mesh = node["mesh"] as? Int
@@ -359,7 +361,8 @@ final class GLTFModel: @unchecked Sendable {
                     shells.append(shell)
                 }
                 for (part, partGeometry) in parts {
-                    if let skin, !skin.joints.isEmpty, let indices = primitive.boneIndices, let weights = primitive.boneWeights {
+                    if let skin, !skin.joints.isEmpty, skin.joints.allSatisfy({ made.indices.contains($0) }),
+                       let indices = primitive.boneIndices, let weights = primitive.boneWeights {
                         let skinner = SCNSkinner(baseGeometry: partGeometry, bones: skin.joints.map { made[$0] },
                                                  boneInverseBindTransforms: skin.inverseBinds, boneWeights: weights, boneIndices: indices)
                         // glTF 里蒙皮按网格所在节点的坐标算
@@ -419,6 +422,13 @@ final class GLTFModel: @unchecked Sendable {
                           vectorCount: values.count / width, usesFloatComponents: true, componentsPerVector: width,
                           bytesPerComponent: MemoryLayout<Float>.size, dataOffset: 0, dataStride: MemoryLayout<Float>.size * width)
     }
+
+    /// 零长度的四元数归一化会得到 NaN，蒙皮算到渲染线程上会直接断
+    static func unit(_ q: simd_quatf) -> simd_quatf {
+        let length = simd_length(q.vector)
+        guard length.isFinite, length > 1e-6 else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
+        return simd_quatf(ix: q.vector.x / length, iy: q.vector.y / length, iz: q.vector.z / length, r: q.vector.w / length)
+    }
 }
 
 extension GLTFModel.Clip {
@@ -448,14 +458,16 @@ extension GLTFModel.Clip {
             let v = channel.values
             switch channel.path {
             case .rotation:
-                let a = simd_quatf(ix: v[k0 * 4], iy: v[k0 * 4 + 1], iz: v[k0 * 4 + 2], r: v[k0 * 4 + 3])
+                guard v.count >= (max(k0, k1) + 1) * 4, pose.rotation.indices.contains(channel.node) else { continue }
+                let a = GLTFModel.unit(simd_quatf(ix: v[k0 * 4], iy: v[k0 * 4 + 1], iz: v[k0 * 4 + 2], r: v[k0 * 4 + 3]))
                 if fraction > 0 {
-                    let b = simd_quatf(ix: v[k1 * 4], iy: v[k1 * 4 + 1], iz: v[k1 * 4 + 2], r: v[k1 * 4 + 3])
+                    let b = GLTFModel.unit(simd_quatf(ix: v[k1 * 4], iy: v[k1 * 4 + 1], iz: v[k1 * 4 + 2], r: v[k1 * 4 + 3]))
                     pose.rotation[channel.node] = simd_slerp(a, b, fraction)
                 } else {
                     pose.rotation[channel.node] = a
                 }
             case .translation, .scale:
+                guard v.count >= (max(k0, k1) + 1) * 3, pose.translation.indices.contains(channel.node) else { continue }
                 var value = SIMD3(v[k0 * 3], v[k0 * 3 + 1], v[k0 * 3 + 2])
                 if fraction > 0 {
                     let b = SIMD3(v[k1 * 3], v[k1 * 3 + 1], v[k1 * 3 + 2])
@@ -479,7 +491,7 @@ extension GLTFModel.Pose {
         for i in nodes {
             translation[i] += (other.translation[i] - translation[i]) * w
             scale[i] += (other.scale[i] - scale[i]) * w
-            rotation[i] = w >= 1 ? other.rotation[i] : simd_slerp(rotation[i], other.rotation[i], w)
+            rotation[i] = w >= 1 ? GLTFModel.unit(other.rotation[i]) : simd_slerp(GLTFModel.unit(rotation[i]), GLTFModel.unit(other.rotation[i]), w)
         }
     }
 

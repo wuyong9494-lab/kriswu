@@ -189,7 +189,6 @@ final class ArenaModels: @unchecked Sendable {
                         "rock_single_A.gltf", "rock_single_B.gltf", "rock_single_C.gltf",
                         "flag_blue.gltf", "flag_red.gltf"]
 
-    private let lock = NSLock()
     private var models: [String: GLTFModel] = [:]
     private var missing: Set<String> = []
 
@@ -203,41 +202,32 @@ final class ArenaModels: @unchecked Sendable {
     }
 
     private func model(_ file: String, animations: Set<String>) -> GLTFModel? {
-        lock.lock()
-        if let model = models[file] {
-            lock.unlock()
-            return model
+        if !Thread.isMainThread {
+            return DispatchQueue.main.sync { self.model(file, animations: animations) }
         }
-        if missing.contains(file) {
-            lock.unlock()
-            return nil
-        }
-        lock.unlock()
-        // 解析不占着锁。进对局如果还在后台读，主线程不用等整包读完
+        if let model = models[file] { return model }
+        if missing.contains(file) { return nil }
         let name = (file as NSString).deletingPathExtension
         let type = (file as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: type),
               let parsed = try? GLTFModel(url: url, animations: animations) else {
-            lock.lock()
             missing.insert(file)
-            lock.unlock()
             return nil
         }
-        lock.lock()
-        if models[file] == nil { models[file] = parsed }
-        let stored = models[file]
-        lock.unlock()
-        return stored
+        models[file] = parsed
+        return parsed
     }
 
-    /// 在后台把全部模型读好（进乱斗首页时就开始，开打时不用等）
+    /// 在主线程把模型一个一个读好（SceneKit 不能在后台建网格，后台建会在渲染线程上断）。
+    /// 每个文件之间让出主线程，大厅不会被整包卡住。
     static func loadAll() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                for brawler in Brawler.allCases { _ = shared.character(brawler) }
-                for file in props { _ = shared.prop(file) }
-                continuation.resume()
-            }
+        for brawler in Brawler.allCases {
+            _ = shared.character(brawler)
+            await Task.yield()
+        }
+        for file in props {
+            _ = shared.prop(file)
+            await Task.yield()
         }
     }
 }
@@ -291,9 +281,9 @@ final class ArenaPortraits: ObservableObject {
         let renderer = SCNRenderer(device: device, options: nil)
         renderer.scene = scene
         renderer.pointOfView = cameraNode
-        // 刚摆好的姿势马上生效再画
-        SCNTransaction.flush()
-        return renderer.snapshot(atTime: 0, with: CGSize(width: 200, height: 200), antialiasingMode: .none)
+        let image = renderer.snapshot(atTime: 0, with: CGSize(width: 200, height: 200), antialiasingMode: .none)
+        renderer.scene = nil
+        return image
     }
 }
 
