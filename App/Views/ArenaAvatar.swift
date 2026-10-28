@@ -73,6 +73,8 @@ final class ArenaAvatar {
     private let chestBone: Int?
     /// 跑起来身子前倾，停下来再立直
     private var lean: Float = 0
+    /// 挨打时往后仰一下，很快回到前倾
+    private var recoil: Float = 0
 
     private struct Playing {
         let clip: GLTFModel.Clip
@@ -294,7 +296,8 @@ final class ArenaAvatar {
         let leaning = fighter.alive && speed > 0.6
         let leanTarget: Float = leaning ? -0.16 : 0
         lean += (leanTarget - lean) * min(1, dt * 6)
-        body.simdEulerAngles = SIMD3(lean, angle, 0)
+        if recoil > 0 { recoil = max(0, recoil - dt * 2.2) }
+        body.simdEulerAngles = SIMD3(lean + recoil, angle, 0)
 
         // 倒下、复活
         if fighter.alive {
@@ -395,13 +398,11 @@ final class ArenaAvatar {
         cloth.firstMaterial = Self.material(Self.clothColor(brawler, skeleton: skeleton), lit: false)
         for name in ["upperarm.l", "upperarm.r"] {
             guard let bone = root.childNode(withName: name, recursively: true) else { continue }
-            let node = SCNNode(geometry: cloth)
-            node.simdScale = SIMD3(1.35, 0.65, 1.05)
+            let node = inked(cloth, scale: SIMD3(1.35, 0.65, 1.05))
             bone.addChildNode(node)
         }
         if let hips = root.childNode(withName: "hips", recursively: true) {
-            let node = SCNNode(geometry: cloth)
-            node.simdScale = SIMD3(1.35, 0.32, 1.05)
+            let node = inked(cloth, scale: SIMD3(1.35, 0.32, 1.05))
             hips.addChildNode(node)
         }
         let neck = SCNSphere(radius: 0.042)
@@ -411,8 +412,7 @@ final class ArenaAvatar {
             : UIColor(red: 1, green: 0.74, blue: 0.55, alpha: 1)
         neck.firstMaterial = Self.material(skin, lit: false)
         if let head = root.childNode(withName: "head", recursively: true) {
-            let node = SCNNode(geometry: neck)
-            node.simdPosition = SIMD3(0, -0.05, 0)
+            let node = inked(neck, at: SIMD3(0, -0.05, 0))
             head.addChildNode(node)
         }
     }
@@ -428,31 +428,27 @@ final class ArenaAvatar {
                 let horn = SCNCone(topRadius: 0.01, bottomRadius: 0.035, height: 0.16)
                 horn.radialSegmentCount = 6
                 horn.firstMaterial = material
-                let node = SCNNode(geometry: horn)
-                node.simdPosition = SIMD3(0.06 * side, 0.14, 0)
+                let node = inked(horn, at: SIMD3(0.06 * side, 0.14, 0))
                 node.simdEulerAngles = SIMD3(0, 0, -0.5 * side)
                 head.addChildNode(node)
             }
         case .knight, .guardian, .swordsman:
             let fin = SCNBox(width: 0.04, height: 0.16, length: 0.1, chamferRadius: 0.01)
             fin.firstMaterial = material
-            let node = SCNNode(geometry: fin)
-            node.simdPosition = SIMD3(0, 0.16, 0)
+            let node = inked(fin, at: SIMD3(0, 0.16, 0))
             head.addChildNode(node)
         case .mage, .scholar, .necromancer:
             let tip = SCNCone(topRadius: 0, bottomRadius: 0.05, height: 0.2)
             tip.radialSegmentCount = 8
             tip.firstMaterial = material
-            let node = SCNNode(geometry: tip)
-            node.simdPosition = SIMD3(0, 0.16, 0)
+            let node = inked(tip, at: SIMD3(0, 0.16, 0))
             head.addChildNode(node)
         default:
             let ear = SCNSphere(radius: 0.045)
             ear.segmentCount = 6
             ear.firstMaterial = material
             for side: Float in [-1, 1] {
-                let node = SCNNode(geometry: ear)
-                node.simdPosition = SIMD3(0.1 * side, 0.08, 0)
+                let node = inked(ear, at: SIMD3(0.1 * side, 0.08, 0))
                 head.addChildNode(node)
             }
         }
@@ -477,16 +473,28 @@ final class ArenaAvatar {
         let fist = skeleton ? Self.boneFist : Self.fist
         for name in ["hand.l", "hand.r"] {
             guard let bone = root.childNode(withName: name, recursively: true) else { continue }
-            let node = SCNNode(geometry: fist)
-            node.simdPosition = SIMD3(0, 0.04, 0)
+            let node = inked(fist, at: SIMD3(0, 0.04, 0))
             bone.addChildNode(node)
         }
         for name in ["foot.l", "foot.r"] {
             guard let bone = root.childNode(withName: name, recursively: true) else { continue }
-            let node = SCNNode(geometry: Self.boot)
-            node.simdScale = SIMD3(1.2, 0.5, 1.45)
+            let node = inked(Self.boot, scale: SIMD3(1.2, 0.5, 1.45))
             bone.addChildNode(node)
         }
+    }
+
+    /// 色块外面再套一圈和身体一样的描边，远看才是一块完整的人
+    private func inked(_ geometry: SCNGeometry, scale: SIMD3<Float> = SIMD3(repeating: 1), at position: SIMD3<Float> = .zero) -> SCNNode {
+        let node = SCNNode(geometry: geometry)
+        node.simdScale = scale
+        node.simdPosition = position
+        if let shell = geometry.copy() as? SCNGeometry {
+            shell.materials = [ArenaArt.outline]
+            let rim = SCNNode(geometry: shell)
+            node.addChildNode(rim)
+            outlines.append(rim)
+        }
+        return node
     }
 
     private static let fist: SCNGeometry = {
@@ -560,8 +568,9 @@ final class ArenaAvatar {
 
     /// 挨打：白一下。打得重、而且这一下没在出招，才缩一下身子
     func flash(clock: Double, flinch: Bool = false) {
-        flashUntil = clock + 0.09
+        flashUntil = clock + 0.14
         punch = 0.28
+        recoil = 0.2
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
             start(BrawlerLook.Move(clip: "Hit_A", from: 0.05, to: 0.5, seconds: 0.2), hold: false, fullBody: false)
         }
