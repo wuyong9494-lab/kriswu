@@ -258,7 +258,7 @@ final class ArenaPortraits: ObservableObject {
         renderer.pointOfView = cameraNode
         // 刚摆好的姿势马上生效再画
         SCNTransaction.flush()
-        return renderer.snapshot(atTime: 0, with: CGSize(width: 160, height: 160), antialiasingMode: .none)
+        return renderer.snapshot(atTime: 0, with: CGSize(width: 200, height: 200), antialiasingMode: .none)
     }
 }
 

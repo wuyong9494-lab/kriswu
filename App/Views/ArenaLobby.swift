@@ -776,8 +776,8 @@ final class ArenaShowcaseView: SCNView {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
-        antialiasingMode = .none
-        preferredFramesPerSecond = 30
+        antialiasingMode = .multisampling2X
+        preferredFramesPerSecond = 60
         rendersContinuously = true
         isPlaying = true
         world.background.contents = UIColor.clear

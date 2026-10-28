@@ -29,7 +29,7 @@ enum ArenaArt {
         material.cullMode = .front
         material.shaderModifiers = [.geometry: """
             float outlineScale = max(length(scn_node.modelTransform[0].xyz), 0.0001);
-            _geometry.position.xyz += normalize(_geometry.normal) * (0.035 / outlineScale);
+            _geometry.position.xyz += normalize(_geometry.normal) * (0.042 / outlineScale);
             """]
         return material
     }()

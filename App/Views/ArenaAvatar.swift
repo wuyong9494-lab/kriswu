@@ -12,6 +12,25 @@ final class ArenaAvatar {
     /// 血条画在离地多高
     static let headHeight: Float = 1.6
 
+    /// 脚下的软影子，所有人共用一张
+    private static let blobShadow: SCNMaterial = {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: format).image { renderer in
+            let colors = [UIColor.black.withAlphaComponent(0.5).cgColor, UIColor.black.withAlphaComponent(0).cgColor] as CFArray
+            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.15, 1]) else { return }
+            renderer.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: 32, y: 32), startRadius: 1,
+                                                  endCenter: CGPoint(x: 32, y: 32), endRadius: 32, options: [])
+        }
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = image
+        material.isDoubleSided = true
+        material.writesToDepthBuffer = false
+        return material
+    }()
+
     let node = SCNNode()
     let brawler: Brawler
     /// 个子多大（骷髅王 2.2 倍）
@@ -130,6 +149,16 @@ final class ArenaAvatar {
             opacity = 1
             return
         }
+        // 脚下一块软影子（往镜头那边扁一点）。不靠整屏阴影贴图，手机扛得住，人也立在地上
+        let blob = SCNPlane(width: 1.35, height: 0.82)
+        blob.firstMaterial = Self.blobShadow
+        let blobNode = SCNNode(geometry: blob)
+        blobNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
+        blobNode.simdPosition = SIMD3(0, 0.015, 0.08)
+        blobNode.simdScale = SIMD3(size, 1, size)
+        blobNode.castsShadow = false
+        blobNode.renderingOrder = 1
+        node.addChildNode(blobNode)
         // 脚下的圈：自己这边蓝、对面红，自己的描白边
         let disc = SCNCylinder(radius: 0.46, height: 0.01)
         disc.radialSegmentCount = 40
