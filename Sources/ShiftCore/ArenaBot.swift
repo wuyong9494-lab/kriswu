@@ -109,7 +109,7 @@ public struct ArenaBot: Sendable {
             input.attack = turret.pos - me.pos
         }
         // 大乱斗：够得着能量箱、附近又没有敌人就打箱子
-        if (game.mode == .showdown || game.mode == .duo), input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
+        if (game.mode == .showdown || game.mode == .duo), !game.map.inBush(me.pos), input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
            target.map({ $0.pos.distance(to: me.pos) > 6 }) ?? true,
            let box = game.nearestBox(to: me.pos), box.pos.distance(to: me.pos) <= me.brawler.attackRange * 0.95,
            me.brawler == .mage || game.map.lineOfSight(me.pos, box.pos) {
@@ -130,6 +130,10 @@ public struct ArenaBot: Sendable {
         // 小道具：看情况用（逃跑、补血、近身的震开冻住）
         if me.gadgetUses > 0, me.gadgetCooldown <= 0, wantsGadget(me, target: target) {
             input.gadget = true
+        }
+        // 草丛：血少了钻进去；已经在草里、对面没进来，就蹲着打，不走出去暴露
+        if !carrying {
+            goal = cover(me, target: target, fallback: goal, in: game)
         }
         // 毒圈快到了：往中间走
         if game.mode.hasPoison, me.pos.distance(to: game.map.center) > game.safeRadius - 1.2 {
@@ -172,6 +176,43 @@ public struct ArenaBot: Sendable {
         trigger = 0.4
         let noise = (Double(random.below(21)) - 10) / 150
         return toGoal.rotated(by: noise)
+    }
+
+    /// 血少了去旁边的草里躲。已经在草里、对面没走进来：人在射程里就蹲着打，不自己走出去
+    private func cover(_ me: Fighter, target: Fighter?, fallback: V2, in game: ArenaGame) -> V2 {
+        let ratio = Double(me.health) / Double(max(me.maxHealth, 1))
+        if game.map.inBush(me.pos) {
+            if let target, !game.map.sameBush(me.pos, target.pos) {
+                let distance = target.pos.distance(to: me.pos)
+                if distance <= me.brawler.attackRange || ratio < 0.45 { return me.pos }
+            }
+            return fallback
+        }
+        if ratio < 0.4, let bush = nearestBush(to: me.pos, map: game.map, within: 7) {
+            return bush
+        }
+        return fallback
+    }
+
+    /// 附近最近的一格草（within 是最远找多远）
+    private func nearestBush(to pos: V2, map: ArenaMap, within: Double) -> V2? {
+        let x0 = max(0, Int((pos.x - within).rounded(.down)))
+        let x1 = min(map.width - 1, Int((pos.x + within).rounded(.down)))
+        let y0 = max(0, Int((pos.y - within).rounded(.down)))
+        let y1 = min(map.height - 1, Int((pos.y + within).rounded(.down)))
+        var best: V2?
+        var bestDistance = within
+        for y in y0...y1 {
+            for x in x0...x1 where map.tile(x, y) == .bush {
+                let spot = V2(Double(x) + 0.5, Double(y) + 0.5)
+                let distance = spot.distance(to: pos)
+                if distance < bestDistance {
+                    bestDistance = distance
+                    best = spot
+                }
+            }
+        }
+        return best
     }
 
     /// 没在打架时去哪

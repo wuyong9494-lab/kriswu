@@ -101,6 +101,22 @@ final class ArenaPowerTests: XCTestCase {
         XCTAssertFalse(game.isVisible(game.fighters[0], to: 1), "隔开的两丛，站得近也看不见")
     }
 
+    /// 血少了、旁边有草：电脑会往草里走，而不是站在空地上
+    func testHurtBotStepsTowardABush() {
+        let map = ArenaMap(rows: [
+            "o.........",
+            "..........",
+            "..**......",
+        ])
+        var game = ArenaGame(mode: .showdown, entrants: [
+            ArenaGame.Entrant(name: "甲", brawler: .knight, isBot: true, team: 0),
+        ], seed: 1, map: map)
+        game.adjust(0) { $0.pos = V2(7.5, 1.5); $0.health = 200 }
+        var bot = ArenaBot(id: 0, seed: 1)
+        let input = bot.input(in: game, dt: 0.05)
+        XCTAssertLessThan(input.move.x, -0.3, "往左边的草走")
+    }
+
     /// 子弹、爆炸都打得到能量箱；人走不进箱子里
     func testBoxesTakeHitsAndBlockWalking() throws {
         var game = showdown(seed: 9)
