@@ -363,6 +363,37 @@ jobs:
           fi
           ls -la shots
 
+      - name: 截图时的闪退记录
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          files = sorted(glob.glob(os.path.expanduser('~/Library/Logs/DiagnosticReports/ShiftReminder*.ips')))
+          if not files:
+              print('截图时没有闪退')
+          for path in files[:3]:
+              print('==', os.path.basename(path))
+              with open(path) as f:
+                  f.readline()
+                  try:
+                      body = json.load(f)
+                  except Exception as error:
+                      print('读不出来', error)
+                      continue
+              for key in ('exception', 'termination', 'asi'):
+                  if body.get(key):
+                      print(key + ':', json.dumps(body[key], ensure_ascii=False)[:1500])
+              images = body.get('usedImages', [])
+              threads = body.get('threads', [])
+              k = body.get('faultingThread', 0)
+              if k < len(threads):
+                  for i, frame in enumerate(threads[k].get('frames', [])[:40]):
+                      index = frame.get('imageIndex', -1)
+                      image = images[index].get('name', '?') if 0 <= index < len(images) else '?'
+                      where = f" {frame.get('sourceFile')}:{frame.get('sourceLine')}" if frame.get('sourceFile') else ''
+                      print(f"{i:2} {image} {frame.get('symbol', '?')}{where}")
+          PY
+
       - name: 和上一版截图比
         env:
           GH_TOKEN: ${{ github.token }}
