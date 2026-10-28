@@ -286,23 +286,27 @@ struct BrawlerBadge: View {
     let brawler: Brawler
     var size: CGFloat = 52
     var selected = false
-    @ObservedObject private var portraits = ArenaPortraits.shared
 
     var body: some View {
         ZStack {
-            Circle().fill(selected ? DS.Palette.accentSoft : DS.Palette.surfaceSunken)
-            if let image = portraits.images[brawler] {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                Text(String(brawler.name.prefix(1)))
-                    .font(.system(size: size * 0.42, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-            }
+            Circle().fill(rim)
+            Text(String(brawler.name.prefix(1)))
+                .font(.system(size: size * 0.42, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .arenaOutline(max(1, size * 0.04))
         }
         .frame(width: size, height: size)
-        .clipShape(Circle())
-        .overlay(Circle().strokeBorder(selected ? DS.Palette.accent : .clear, lineWidth: 2))
+        .overlay(Circle().strokeBorder(.black, lineWidth: max(2, size * 0.06)))
+        .overlay(Circle().strokeBorder(selected ? Color(red: 1, green: 0.86, blue: 0.2) : rim.opacity(0.9), lineWidth: selected ? 4 : 0))
+    }
+
+    /// 解锁门槛当稀有度色：一开始就有的蓝，往后绿、紫、金
+    private var rim: Color {
+        switch brawler.unlockAt {
+        case 0: return Color(red: 0.25, green: 0.55, blue: 1)
+        case ..<250: return Color(red: 0.2, green: 0.72, blue: 0.38)
+        case ..<500: return Color(red: 0.58, green: 0.36, blue: 0.92)
+        default: return Color(red: 0.95, green: 0.72, blue: 0.18)
+        }
     }
 }

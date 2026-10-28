@@ -26,6 +26,7 @@ struct ArenaHomeView: View {
     @State private var partySize = 2
     @State private var friends = ArenaFriends.load()
     @State private var friendName = ""
+    @State private var roomCode = ""
     /// 排位赛（只打 3v3，按段位加减排位分）
     @AppStorage("arena.ranked") private var ranked = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
@@ -70,8 +71,8 @@ struct ArenaHomeView: View {
                 ArenaLobbyBackground()
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                               live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                    .frame(width: min(geo.size.width * (wide ? 0.42 : 0.86), 460), height: geo.size.height * (wide ? 0.7 : 0.42))
-                    .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.54 : 0.48))
+                    .frame(width: min(geo.size.width * (wide ? 0.46 : 0.92), 520), height: geo.size.height * (wide ? 0.62 : 0.4))
+                    .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.5 : 0.46))
                 VStack(spacing: 0) {
                     topBar
                     Spacer(minLength: 0)
@@ -158,10 +159,8 @@ struct ArenaHomeView: View {
             }
             .accessibilityLabel("游戏设置")
             trophyPill
-            pill {
-                Image(systemName: "dollarsign.circle.fill").foregroundStyle(.yellow)
-                Text("\(progress.coins)")
-            }
+            coinPill
+            gemPill
             seasonPill
             Spacer()
             pill {
@@ -191,16 +190,63 @@ struct ArenaHomeView: View {
                     }
                 }
             }
-            .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
+            .font(.system(size: 28, weight: .black, design: .rounded).monospacedDigit())
             .foregroundStyle(.white)
-            .arenaInk()
-            .padding(.horizontal, 14)
-            .frame(height: 46)
-            .background(.black.opacity(0.45), in: Capsule())
-            .overlay(Capsule().strokeBorder(.black, lineWidth: 3))
+            .arenaOutline(3)
+            .padding(.horizontal, 16)
+            .frame(height: 54)
+            .background(Color(red: 0.18, green: 0.22, blue: 0.38), in: Capsule())
+            .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("奖杯 \(progress.totalTrophies)，看奖杯之路")
+    }
+
+    /// 金币：大号黑边，点一下进商店
+    private var coinPill: some View {
+        Button {
+            sheet = .shop
+        } label: {
+            HStack(spacing: 6) {
+                Text("币")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(Color(red: 0.35, green: 0.18, blue: 0))
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color(red: 1, green: 0.82, blue: 0.2)))
+                    .overlay(Circle().strokeBorder(.black, lineWidth: 2))
+                Text("\(progress.coins)")
+            }
+            .font(.system(size: 28, weight: .black, design: .rounded).monospacedDigit())
+            .foregroundStyle(.white)
+            .arenaOutline(3)
+            .padding(.horizontal, 14)
+            .frame(height: 54)
+            .background(Color(red: 0.42, green: 0.28, blue: 0.05), in: Capsule())
+            .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("金币 \(progress.coins)，打开商店")
+    }
+
+    /// 宝石先占位，和金币对齐，还不能花
+    private var gemPill: some View {
+        HStack(spacing: 6) {
+            Text("宝")
+                .font(.system(size: 16, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color(red: 0.2, green: 0.85, blue: 0.95)))
+                .overlay(Circle().strokeBorder(.black, lineWidth: 2))
+            Text("0")
+        }
+        .font(.system(size: 22, weight: .black, design: .rounded).monospacedDigit())
+        .foregroundStyle(.white.opacity(0.7))
+        .arenaOutline(2)
+        .padding(.horizontal, 12)
+        .frame(height: 54)
+        .background(Color(red: 0.08, green: 0.28, blue: 0.34), in: Capsule())
+        .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
+        .accessibilityLabel("宝石还没开放")
     }
 
     /// 赛季：几级，下面一条到下一级的经验；有能领的奖励、没做完的任务冒个点
@@ -255,7 +301,10 @@ struct ArenaHomeView: View {
     private var leftMenu: some View {
         VStack(spacing: 6) {
             tile("冒险", face: Color(red: 0.86, green: 0.3, blue: 0.3), edge: Color(red: 0.55, green: 0.12, blue: 0.12)) {
-                Image(systemName: "map.fill").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
+                Text("险")
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1.2)
                     .overlay(alignment: .topTrailing) {
                         if ArenaStory.levels.contains(where: { progress.isOpen($0.id) && progress.stars($0.id) == 0 }) {
                             Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: 6, y: -4)
@@ -265,25 +314,33 @@ struct ArenaHomeView: View {
                 adventure = true
             }
             tile("角色", face: Color(red: 0.25, green: 0.55, blue: 1), edge: Color(red: 0.1, green: 0.3, blue: 0.7)) {
-                BrawlerBadge(brawler: chosen, size: 34)
-                    .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                Text(String(chosen.name.prefix(1)))
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1.2)
             } action: {
                 sheet = .brawlers
             }
             tile("赛季", face: Color(red: 0.6, green: 0.4, blue: 0.95), edge: Color(red: 0.36, green: 0.2, blue: 0.66)) {
-                Image(systemName: "medal.fill").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
+                Text("季")
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1.2)
             } action: {
                 sheet = .season
             }
-            tile("和同事打", face: Color(red: 0.3, green: 0.78, blue: 0.4), edge: Color(red: 0.12, green: 0.48, blue: 0.18)) {
-                Image(systemName: "person.3.fill").font(.system(size: 19, weight: .black)).foregroundStyle(.white)
+            tile("设置", face: Color(red: 0.45, green: 0.52, blue: 0.62), edge: Color(red: 0.22, green: 0.26, blue: 0.34)) {
+                Text("设")
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1.2)
             } action: {
-                sheet = .together
+                sheet = .settings
             }
             HStack(spacing: 6) {
-                miniTile("商店", icon: "bag.fill", face: Color(red: 0.95, green: 0.62, blue: 0.15)) { sheet = .shop }
-                miniTile("好友", icon: "person.2.fill", face: Color(red: 0.25, green: 0.55, blue: 0.95)) { sheet = .friends }
-                miniTile("组队", icon: "plus", face: Color(red: 0.2, green: 0.72, blue: 0.45)) { sheet = .party }
+                miniTile("商店", mark: "店", face: Color(red: 0.95, green: 0.62, blue: 0.15)) { sheet = .shop }
+                miniTile("好友", mark: "友", face: Color(red: 0.25, green: 0.55, blue: 0.95)) { sheet = .friends }
+                miniTile("组队", mark: "队", face: Color(red: 0.2, green: 0.72, blue: 0.45)) { sheet = .party }
             }
         }
         .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
@@ -309,17 +366,26 @@ struct ArenaHomeView: View {
         .buttonStyle(ArenaTileButton(face: face, edge: edge))
     }
 
-    private func miniTile(_ title: String, icon: String, face: Color, action: @escaping () -> Void) -> some View {
+    private func miniTile(_ title: String, mark: String, face: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 1) {
-                Image(systemName: icon).font(.system(size: 16, weight: .black)).foregroundStyle(.white)
+                Text(mark)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
                     .frame(height: 22)
                 Text(title)
                     .font(.system(size: 10, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
             }
-            .frame(width: 52, height: 46)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(face))
+            .frame(width: 58, height: 52)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(face)
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.22))
+                            .frame(height: 12).padding(.horizontal, 4).padding(.top, 3)
+                    }
+            )
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black, lineWidth: 3))
         }
         .buttonStyle(.plain)
@@ -402,9 +468,9 @@ struct ArenaHomeView: View {
             Button {
                 start()
             } label: {
-                Text("开打").frame(width: 210)
+                Text("开打").frame(width: 248)
             }
-            .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 64))
+            .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 78))
         }
     }
 
@@ -499,9 +565,9 @@ struct ArenaHomeView: View {
                 Image(systemName: "map.fill").font(.system(size: 13, weight: .black)).foregroundStyle(.white.opacity(0.9))
             }
             .padding(.horizontal, 10)
-            .frame(width: 244, height: 68)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(playMode.tint))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: 3))
+            .frame(width: 260, height: 78)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(playMode.tint))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.black, lineWidth: 4))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("玩法：\(playMode.title)，点一下换")
@@ -747,8 +813,8 @@ struct ArenaHomeView: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, minHeight: 168, alignment: .top)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.black.opacity(chosen == item ? 0.28 : 0.45)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(chosen == item ? Color(red: 1, green: 0.86, blue: 0.2) : .white.opacity(0.16), lineWidth: chosen == item ? 3 : 2))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(chosen == item ? Color(red: 0.16, green: 0.28, blue: 0.5) : Color(red: 0.08, green: 0.12, blue: 0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(chosen == item ? Color(red: 1, green: 0.86, blue: 0.2) : .black, lineWidth: 4))
     }
 
     private var modeList: some View {
@@ -805,8 +871,8 @@ struct ArenaHomeView: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(item.tint.opacity(0.92)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.7), lineWidth: 2))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(item.tint.opacity(mode == item ? 1 : 0.88)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(mode == item ? Color(red: 1, green: 0.86, blue: 0.2) : .black, lineWidth: mode == item ? 4 : 3))
     }
 
     private var loadoutList: some View {
@@ -843,14 +909,12 @@ struct ArenaHomeView: View {
     }
 
     private var togetherList: some View {
-        List {
-            GameRoomButtons(kind: .arena, remotePlayers: 2...6, nearbyCapacity: 6) { room in
-                pendingRoom = room
-                sheet = nil
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("和同事开一局。面对面，或者用同一个 4 位房间号。")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+            roomActions(players: 2)
         }
-        .scrollContentBackground(.hidden)
-        .environment(\.colorScheme, .dark)
     }
 
     /// 普攻、大招、小道具、星徽。选了就带上，没解锁的锁着
@@ -956,8 +1020,9 @@ struct ArenaHomeView: View {
                             .buttonStyle(ArenaGameButton(face: Color(red: 0.85, green: 0.22, blue: 0.22),
                                                              edge: Color(red: 0.5, green: 0.08, blue: 0.08), height: 36))
                         }
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black.opacity(0.28)))
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(red: 0.18, green: 0.4, blue: 0.85)))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: 3))
                     }
                 }
             }
@@ -975,16 +1040,7 @@ struct ArenaHomeView: View {
                     .font(.system(size: 16, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
             }
-            List {
-                GameRoomButtons(kind: .arena, remotePlayers: partySize...partySize, nearbyCapacity: partySize) { room in
-                    pendingRoom = room
-                    sheet = nil
-                }
-                .id(partySize)
-            }
-            .frame(maxHeight: .infinity)
-            .scrollContentBackground(.hidden)
-            .environment(\.colorScheme, .dark)
+            roomActions(players: partySize)
         }
     }
 
@@ -1004,6 +1060,43 @@ struct ArenaHomeView: View {
         let code = RoomCode.make(players: players)
         pendingRoom = GameRoom(kind: .arena, mode: .remote(code: code), name: nick, capacity: players)
         sheet = nil
+    }
+
+    /// 组队、和同事打：厚色块，不用系统列表
+    private func roomActions(players: Int) -> some View {
+        let nick = GameProfile.nickname.isEmpty ? name : GameProfile.nickname
+        return VStack(spacing: 8) {
+            Button {
+                pendingRoom = GameRoom(kind: .arena, mode: .nearbyHost, name: nick, capacity: players)
+                sheet = nil
+            } label: {
+                Text("开房间").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ArenaGameButton(face: ArenaGameButton.green.face, edge: ArenaGameButton.green.edge, height: 48))
+            Button {
+                pendingRoom = GameRoom(kind: .arena, mode: .nearbyGuest, name: nick, capacity: players)
+                sheet = nil
+            } label: {
+                Text("加入身边的人").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face, edge: ArenaGameButton.blue.edge, height: 48))
+            HStack(spacing: 8) {
+                TextField("4 位房间号", text: $roomCode)
+                    .keyboardType(.numberPad)
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white))
+                Button("进房间") {
+                    guard let room = RoomCode.parse(roomCode) else {
+                        ToastCenter.shared.show("房间号是 4 位数", style: .warning)
+                        return
+                    }
+                    let count = RoomCode.players(of: room)
+                    pendingRoom = GameRoom(kind: .arena, mode: .remote(code: room), name: nick, capacity: count)
+                    sheet = nil
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 44))
+            }
+        }
     }
 
     /// 商店：金币、每天三件特惠、全部皮肤和表情。特惠到午夜换一批
@@ -1079,9 +1172,9 @@ struct ArenaHomeView: View {
                 .disabled(progress.coins < price)
             }
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black.opacity(0.28)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: 2))
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(skin.color.opacity(owned ? 0.55 : 0.92)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.black, lineWidth: wearing ? 4 : 3))
     }
 
     private func shopEmote(_ emote: ArenaEmote) -> some View {
@@ -1324,28 +1417,28 @@ final class ArenaShowcaseView: SCNView {
 
     private func build() {
         let camera = SCNCamera()
-        camera.fieldOfView = 32
-        camera.zNear = 0.1
-        camera.zFar = 30
+        camera.fieldOfView = 28
+        camera.zNear = 0.08
+        camera.zFar = 40
         let eye = SCNNode()
         eye.camera = camera
-        // 从侧前上方看，大约 25 度。看得到脸、肩膀和整个人，不是平视肚子
-        eye.simdPosition = SIMD3(0.7, 2.45, 4.3)
-        eye.simdEulerAngles = SIMD3(-0.42, 0.18, 0)
+        // 侧前上方大约 28 度，整个人落在台子中下，头和武器都在画面里
+        eye.simdPosition = SIMD3(0.85, 2.15, 5.4)
+        eye.simdEulerAngles = SIMD3(-0.32, 0.16, 0)
         world.rootNode.addChildNode(eye)
         pointOfView = eye
 
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 280
+        ambient.light?.intensity = 220
         ambient.light?.color = UIColor(red: 0.85, green: 0.88, blue: 1, alpha: 1)
         world.rootNode.addChildNode(ambient)
         // 主光：暖的，从左前上方打，脸上有明暗
         let key = SCNNode()
         key.light = SCNLight()
         key.light?.type = .directional
-        key.light?.intensity = 760
+        key.light?.intensity = 980
         key.light?.color = UIColor(red: 1, green: 0.94, blue: 0.82, alpha: 1)
         key.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(-0.55, -0.85, -1)))
         world.rootNode.addChildNode(key)
@@ -1353,7 +1446,7 @@ final class ArenaShowcaseView: SCNView {
         let fill = SCNNode()
         fill.light = SCNLight()
         fill.light?.type = .omni
-        fill.light?.intensity = 260
+        fill.light?.intensity = 380
         fill.light?.color = UIColor(red: 0.7, green: 0.82, blue: 1, alpha: 1)
         fill.simdPosition = SIMD3(1.6, 1.5, 2.4)
         world.rootNode.addChildNode(fill)
@@ -1361,7 +1454,7 @@ final class ArenaShowcaseView: SCNView {
         let rim = SCNNode()
         rim.light = SCNLight()
         rim.light?.type = .directional
-        rim.light?.intensity = 420
+        rim.light?.intensity = 640
         rim.light?.color = UIColor(red: 0.55, green: 0.72, blue: 1, alpha: 1)
         rim.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.25, -0.35, 1)))
         world.rootNode.addChildNode(rim)
@@ -1450,7 +1543,7 @@ final class ArenaShowcaseView: SCNView {
         avatar?.update(fighter, visible: true, translucent: false, cheering: clock < cheerUntil, dt: dt, clock: clock)
         if !dragging, clock > cheerUntil, clock > nextSwing {
             avatar?.attack()
-            nextSwing = clock + 5.5
+            nextSwing = clock + 5
         }
     }
 
