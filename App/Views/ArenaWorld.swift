@@ -25,12 +25,12 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 镜头在看的那一点的斜上方多远（高 18、往屏幕下方 11，往下看大约 59 度）
-    private static let cameraOffset = SIMD3<Float>(0, 18, 11)
+    /// 镜头在看的那一点的斜上方。高 15、往屏幕下方 14.5，大约 46 度，能看见身子和挥砍
+    private static let cameraOffset = SIMD3<Float>(0, 15, 14.5)
     /// 竖屏时自己这一排左右看得到多宽：tan(半个视角)，自己身边左右各大约 5 格
     private static let sideView: Float = 0.267
-    /// 横屏时镜头看着的那一排左右各看得到几格（场地 15 格宽，两边再露一点场外）
-    private static let landscapeHalfWidth: Float = 9
+    /// 横屏时镜头看着的那一排左右各看得到几格（比原来近，人更大）
+    private static let landscapeHalfWidth: Float = 7
     /// 毒圈外的绿雾有多厚。做成一圈墙，不要铺满整屏（整屏透明的面会把手机画死）
     private static let gasBand: CGFloat = 7
 
