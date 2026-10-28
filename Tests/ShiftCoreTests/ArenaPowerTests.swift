@@ -50,6 +50,32 @@ final class ArenaPowerTests: XCTestCase {
         XCTAssertEqual(dropped.pos, spot)
     }
 
+    /// 草外看不见草里的人；自己走进去，或者对方开火，才露出来
+    func testBushHidesUntilYouEnterOrTheyShoot() {
+        var game = showdown(seed: 2)
+        var bush: V2?
+        var outside: V2?
+        for y in 0..<game.map.height {
+            for x in 0..<game.map.width {
+                let spot = V2(Double(x) + 0.5, Double(y) + 0.5)
+                if game.map.tile(x, y) == .bush, bush == nil { bush = spot }
+                if game.map.tile(x, y) == .floor, !game.map.collides(spot, radius: 0.4), outside == nil { outside = spot }
+            }
+        }
+        let bushSpot = bush, outsideSpot = outside
+        XCTAssertNotNil(bushSpot)
+        XCTAssertNotNil(outsideSpot)
+        guard let bushSpot, let outsideSpot else { return }
+        game.adjust(0) { $0.pos = bushSpot; $0.lastAttack = -10 }
+        game.adjust(1) { $0.pos = outsideSpot }
+        XCTAssertFalse(game.isVisible(game.fighters[0], to: 1), "站在草外看不见")
+        game.adjust(1) { $0.pos = bushSpot }
+        XCTAssertTrue(game.isVisible(game.fighters[0], to: 1), "走进同一丛草就看得见")
+        game.adjust(1) { $0.pos = outsideSpot }
+        game.adjust(0) { $0.lastAttack = game.time }
+        XCTAssertTrue(game.isVisible(game.fighters[0], to: 1), "开火就露出来")
+    }
+
     /// 子弹、爆炸都打得到能量箱；人走不进箱子里
     func testBoxesTakeHitsAndBlockWalking() throws {
         var game = showdown(seed: 9)

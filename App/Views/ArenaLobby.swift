@@ -187,12 +187,13 @@ struct ArenaHomeView: View {
                     }
                 }
             }
-            .font(.system(size: 16, weight: .black, design: .rounded).monospacedDigit())
+            .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
             .foregroundStyle(.white)
             .arenaInk()
-            .padding(.horizontal, 12)
-            .frame(height: 40)
-            .background(.black.opacity(0.3), in: Capsule())
+            .padding(.horizontal, 14)
+            .frame(height: 46)
+            .background(.black.opacity(0.45), in: Capsule())
+            .overlay(Capsule().strokeBorder(.black, lineWidth: 3))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("奖杯 \(progress.totalTrophies)，看奖杯之路")
@@ -236,12 +237,13 @@ struct ArenaHomeView: View {
 
     private func pill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: 6, content: content)
-            .font(.system(size: 16, weight: .black, design: .rounded).monospacedDigit())
+            .font(.system(size: 18, weight: .black, design: .rounded).monospacedDigit())
             .foregroundStyle(.white)
             .arenaInk()
-            .padding(.horizontal, 12)
-            .frame(height: 40)
-            .background(.black.opacity(0.3), in: Capsule())
+            .padding(.horizontal, 14)
+            .frame(height: 46)
+            .background(.black.opacity(0.45), in: Capsule())
+            .overlay(Capsule().strokeBorder(.black, lineWidth: 3))
     }
 
     // MARK: 左边
@@ -274,6 +276,11 @@ struct ArenaHomeView: View {
             } action: {
                 sheet = .together
             }
+            HStack(spacing: 6) {
+                placeholder("商店", icon: "bag.fill")
+                placeholder("好友", icon: "person.2.fill")
+                placeholder("组队", icon: "plus")
+            }
         }
         .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
             ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
@@ -293,9 +300,24 @@ struct ArenaHomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(width: 74, height: 60)
+            .frame(width: 74, height: 64)
         }
         .buttonStyle(ArenaTileButton(face: face, edge: edge))
+    }
+
+    /// 还没做的入口：灰的，点了没反应
+    private func placeholder(_ title: String, icon: String) -> some View {
+        VStack(spacing: 1) {
+            Image(systemName: icon).font(.system(size: 16, weight: .black)).foregroundStyle(.white.opacity(0.7))
+                .frame(height: 22)
+            Text(title)
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.75))
+        }
+        .frame(width: 52, height: 46)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(white: 0.35)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black.opacity(0.75), lineWidth: 3))
+        .accessibilityLabel("\(title)，还没开放")
     }
 
     // MARK: 中间：角色的名字、等级、升级
@@ -316,6 +338,13 @@ struct ArenaHomeView: View {
                     .font(.system(size: 26, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .arenaOutline(2)
+                Text("+")
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(Color(white: 0.35)))
+                    .overlay(Circle().strokeBorder(.black.opacity(0.75), lineWidth: 3))
+                    .accessibilityLabel("组队，还没开放")
             }
             HStack(spacing: 8) {
                 Label("\(progress.trophies(chosen))", systemImage: "trophy.fill")
@@ -362,9 +391,9 @@ struct ArenaHomeView: View {
             Button {
                 start()
             } label: {
-                Text("开打").frame(width: 196)
+                Text("开打").frame(width: 210)
             }
-            .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 58))
+            .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 64))
         }
     }
 
@@ -376,7 +405,8 @@ struct ArenaHomeView: View {
         } label: {
             HStack(spacing: 6) {
                 chip(color: ArenaPalette.gadget, locked: loadout.gadget == nil) {
-                    Text(loadout.gadget?.emoji ?? "🔒").font(.system(size: 17))
+                    Image(systemName: loadout.gadget == nil ? "lock.fill" : "sparkles")
+                        .font(.system(size: 15, weight: .black)).foregroundStyle(.white)
                 }
                 chip(color: ArenaPalette.gold, locked: loadout.starPower == nil) {
                     Image(systemName: loadout.starPower == nil ? "lock.fill" : "star.fill")
@@ -450,14 +480,17 @@ struct ArenaHomeView: View {
                     Text(subtitle)
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
+                    Text(dayLeft)
+                        .font(.system(size: 10, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.85))
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 14, weight: .black)).foregroundStyle(.white.opacity(0.9))
+                Image(systemName: "map.fill").font(.system(size: 13, weight: .black)).foregroundStyle(.white.opacity(0.9))
             }
             .padding(.horizontal, 10)
-            .frame(width: 244, height: 58)
+            .frame(width: 244, height: 68)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(playMode.tint))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.65), lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: 3))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("玩法：\(playMode.title)，点一下换")
@@ -469,7 +502,15 @@ struct ArenaHomeView: View {
             let tier = ArenaRank.tiers[ArenaRank.tier(points)]
             return ArenaRank.allows(mode) ? "\(tier.name) \(points) 分 · 电脑 \(tier.botLevel) 级" : "排位只打 3v3 · \(tier.name) \(points) 分"
         }
-        return records.tally.played[mode.rawValue].map { "赢了 \(records.tally.won[mode.rawValue] ?? 0)/\($0) 局" } ?? "点一下换玩法"
+        return records.tally.played[mode.rawValue].map { "赢了 \(records.tally.won[mode.rawValue] ?? 0)/\($0) 局" } ?? "点一下看地图"
+    }
+
+    /// 玩法卡上的倒计时：到今晚零点还剩多久（不是新玩法）
+    private var dayLeft: String {
+        let now = Date()
+        let end = Calendar.current.nextDate(after: now, matching: DateComponents(hour: 0, minute: 0), matchingPolicy: .nextTime) ?? now
+        let left = max(0, Int(end.timeIntervalSince(now)))
+        return String(format: "今日还剩 %d:%02d", left / 3600, (left / 60) % 60)
     }
 
     private func start() {
@@ -847,10 +888,10 @@ struct ArenaTileButton: ButtonStyle {
                             .frame(height: 18).padding(.horizontal, 5).padding(.top, 4)
                     }
             )
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.7), lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.85), lineWidth: 3))
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous).fill(edge)
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.7), lineWidth: 2))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.85), lineWidth: 3))
                     .offset(y: configuration.isPressed ? 1 : 5)
             )
             .offset(y: configuration.isPressed ? 4 : 0)
@@ -976,6 +1017,8 @@ final class ArenaShowcaseView: SCNView {
     private var spin: Float = 0
     private var dragging = false
     private var cheerUntil = 0.0
+    /// 站着的时候隔几秒挥一下，不靠点屏幕
+    private var nextSwing = 4.0
     private var taps = 0
     /// 现在穿的第几套皮肤
     private var wearing = 0
@@ -1015,22 +1058,32 @@ final class ArenaShowcaseView: SCNView {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 480
-        ambient.light?.color = UIColor(red: 1, green: 0.97, blue: 0.92, alpha: 1)
+        ambient.light?.intensity = 280
+        ambient.light?.color = UIColor(red: 0.85, green: 0.88, blue: 1, alpha: 1)
         world.rootNode.addChildNode(ambient)
+        // 主光：暖的，从左前上方打，脸上有明暗
         let key = SCNNode()
         key.light = SCNLight()
         key.light?.type = .directional
-        key.light?.intensity = 820
-        key.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(-0.5, -0.7, -1)))
+        key.light?.intensity = 760
+        key.light?.color = UIColor(red: 1, green: 0.94, blue: 0.82, alpha: 1)
+        key.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(-0.55, -0.85, -1)))
         world.rootNode.addChildNode(key)
-        // 背后一道偏蓝的光，勾出轮廓
+        // 补光：冷一点，从右前把阴影托起来，别发灰
+        let fill = SCNNode()
+        fill.light = SCNLight()
+        fill.light?.type = .omni
+        fill.light?.intensity = 260
+        fill.light?.color = UIColor(red: 0.7, green: 0.82, blue: 1, alpha: 1)
+        fill.simdPosition = SIMD3(1.6, 1.5, 2.4)
+        world.rootNode.addChildNode(fill)
+        // 轮廓光：从背后勾边
         let rim = SCNNode()
         rim.light = SCNLight()
         rim.light?.type = .directional
-        rim.light?.intensity = 450
-        rim.light?.color = UIColor(red: 0.6, green: 0.75, blue: 1, alpha: 1)
-        rim.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.3, -0.4, 1)))
+        rim.light?.intensity = 420
+        rim.light?.color = UIColor(red: 0.55, green: 0.72, blue: 1, alpha: 1)
+        rim.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.25, -0.35, 1)))
         world.rootNode.addChildNode(rim)
 
         // 台子：金边的圆台，描一圈深色的边，上面一块影子
@@ -1111,9 +1164,14 @@ final class ArenaShowcaseView: SCNView {
         lastTimestamp = timestamp
         clock += Double(dt)
         if !dragging { spin *= max(0, 1 - dt * 1.5) }
+        spin = min(1.6, max(-1.6, spin))
         let angle = 0.35 * Float(sin(clock * 0.6)) + spin
         fighter.facing = V2(Double(sin(angle)), Double(cos(angle)))
         avatar?.update(fighter, visible: true, translucent: false, cheering: clock < cheerUntil, dt: dt, clock: clock)
+        if !dragging, clock > cheerUntil, clock > nextSwing {
+            avatar?.attack()
+            nextSwing = clock + 5.5
+        }
     }
 
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {

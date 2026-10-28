@@ -296,7 +296,9 @@ struct BrawlerBadge: View {
                     .resizable()
                     .scaledToFit()
             } else {
-                Text(brawler.emoji).font(.system(size: size * 0.6))
+                Text(String(brawler.name.prefix(1)))
+                    .font(.system(size: size * 0.42, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
             }
         }
         .frame(width: size, height: size)

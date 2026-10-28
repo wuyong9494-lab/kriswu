@@ -89,6 +89,11 @@ final class ArenaWorldView: SCNView {
     private var boxViews: [BoxView] = []
     private var cubeNodes: [SCNNode] = []
     private var cubeLabels: [ArenaText] = []
+    /// 上一帧自己在不在草里（刚走进去闪一下）
+    private var wasInBush = false
+    /// 脱战回血的绿字隔一会儿冒一次，不每帧都画
+    private var regenAt: [Int: Double] = [:]
+    private var seenHealth: [Int: Int] = [:]
 
     private struct BoxView {
         let node: SCNNode
@@ -654,10 +659,27 @@ final class ArenaWorldView: SCNView {
             let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock)
             tags[fighter.id].update(fighter, opacity: avatar.opacity)
+            let before = seenHealth[fighter.id] ?? fighter.health
+            if fighter.alive, fighter.health > before, game.time - max(fighter.lastHurt, fighter.lastAttack) > 3,
+               clock - (regenAt[fighter.id] ?? -1) > 0.55 {
+                floater("+\(fighter.health - before)",
+                        at: avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight + 0.2, 0),
+                        color: UIColor(red: 0.45, green: 1, blue: 0.45, alpha: 1))
+                regenAt[fighter.id] = clock
+                seenHealth[fighter.id] = fighter.health
+            } else if fighter.health <= before || !fighter.alive {
+                seenHealth[fighter.id] = fighter.health
+            }
         }
 
         // 自己旁边的草丛变透明，看得见自己
         let me = controller.mine
+        let inside = me.alive && game.map.inBush(me.pos)
+        if inside, !wasInBush {
+            ring(at: SIMD3(Float(me.pos.x), 0.05, Float(me.pos.y)),
+                 color: UIColor(red: 0.45, green: 0.95, blue: 0.4, alpha: 1), to: 1.7)
+        }
+        wasInBush = inside
         for k in bushes.indices {
             let fade = me.alive && bushes[k].at.distance(to: me.pos) < 1.45
             if fade != bushes[k].faded {
@@ -684,6 +706,11 @@ final class ArenaWorldView: SCNView {
                 poison = current
             }
             layPoison(current, radius: Float(radius), center: SIMD3(Float(game.map.center.x), 0, Float(game.map.center.y)))
+            let hot = game.poisonShrinking
+            let pulse = hot ? CGFloat(0.55 + 0.45 * abs(sin(clock * 5))) : 0.8
+            current.edge.firstMaterial?.diffuse.contents = UIColor(red: hot ? 1 : 0.72, green: hot ? 0.22 : 0.35, blue: 1, alpha: pulse)
+            let lift: Float = hot ? 1 + 0.7 * abs(Float(sin(clock * 4))) : 1
+            current.edgeNode.simdScale = SIMD3(1, lift, 1)
         }
 
         for event in events { effect(event, game: game) }
@@ -781,7 +808,7 @@ final class ArenaWorldView: SCNView {
             world.rootNode.addChildNode(node)
             puffs.append(node)
         }
-        let field = PoisonField(edge: edge, puffs: puffs, radius: radius)
+        let field = PoisonField(edge: edge, edgeNode: edgeNode, puffs: puffs, radius: radius)
         layPoison(field, radius: Float(radius), center: center)
         return field
     }
@@ -1328,8 +1355,11 @@ final class ArenaWorldView: SCNView {
             }
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
-            ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos))
-            burst(at: avatars[fighter].node.simdPosition + SIMD3(0, 0.8, 0), color: ArenaPalette.gold, count: 16, speed: 1.6, size: 0.18, life: 0.4)
+            let ours = game.fighters[fighter].team == myTeam
+            ArenaSound.shared.play(ours ? .pickup : .power, volume: ours ? 1 : 0.45)
+            let tint = ours ? ArenaPalette.gold : ArenaPalette.red
+            burst(at: avatars[fighter].node.simdPosition + SIMD3(0, 0.8, 0), color: tint, count: 18, speed: 1.8, size: 0.22, life: 0.45)
+            floater(ours ? "能量" : "对方能量", at: avatars[fighter].node.simdPosition + SIMD3(0, ArenaAvatar.headHeight + 0.15, 0), color: tint)
         case .respawn(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             if fighter == controller.me { ArenaSound.shared.play(.respawn) }
@@ -1777,6 +1807,7 @@ final class ArenaWorldView: SCNView {
 /// 每种地图的样子：都是亮绿的草地，主题换的是地上一块块的颜色（沙土、石板、深一点的草）、阳光、墙用哪几种（各占几成）
 private struct PoisonField {
     let edge: SCNTube
+    let edgeNode: SCNNode
     let puffs: [SCNNode]
     var radius: Double
 }

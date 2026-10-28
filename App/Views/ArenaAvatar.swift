@@ -32,6 +32,9 @@ final class ArenaAvatar {
 
     let node = SCNNode()
     let brawler: Brawler
+    /// 是不是自己（大招攒满时自己是金边，队友蓝、对面红）
+    private let mine: Bool
+    private let teamColor: UIColor
     /// 个子多大（骷髅王 2.2 倍）
     let size: Float
     private let look: BrawlerLook
@@ -49,6 +52,8 @@ final class ArenaAvatar {
     private var streak: SCNParticleSystem?
     /// 被冰霜减速：身上发蓝
     private var frosted = false
+    /// 大招攒满：身上加一圈高对比的光，敌我颜色不一样
+    private var superLit = false
     /// 大招和超级充能都满了：脚下的光圈变紫
     private var hyperReady = false
     /// 皮肤的颜色（冻住时换成冰蓝，好了换回来）
@@ -101,6 +106,8 @@ final class ArenaAvatar {
     /// skin：穿第几套皮肤（0 原来的样子）
     init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0) {
         self.brawler = brawler
+        self.mine = isMe
+        self.teamColor = color
         self.size = size
         look = BrawlerLook.of(brawler)
         model = ArenaModels.shared.character(brawler)
@@ -307,7 +314,7 @@ final class ArenaAvatar {
         glow.isHidden = !(fighter.alive && fighter.superCharge >= 1)
         bubble.isHidden = !(fighter.alive && fighter.shield > 0)
         if !glow.isHidden {
-            let pulse = (1 + 0.07 * Float(sin(clock * 6))) * size
+            let pulse = (1 + 0.18 * Float(sin(clock * 6))) * size
             glow.simdScale = SIMD3(pulse, 1, pulse)
         }
         // 大招满了、超级充能也满了：光圈变紫（这一下放出去是加强版）
@@ -334,12 +341,15 @@ final class ArenaAvatar {
             frosted = frozen
             instance.materials.forEach { $0.multiply.contents = frozen ? ArenaPalette.frost : baseTint }
         }
+        let charged = fighter.alive && fighter.superCharge >= 1 && !frosted && !flashing
+        if charged != superLit {
+            superLit = charged
+            paintCharge(charged)
+        }
 
         if flashing && clock >= flashUntil {
             flashing = false
-            for (material, original) in zip(instance?.materials ?? [], glows) {
-                material.emission.contents = original ?? UIColor.black
-            }
+            if superLit { paintCharge(true) } else { restoreGlow() }
         }
 
         let pips = Int(fighter.ammo.rounded(.down))
@@ -359,6 +369,23 @@ final class ArenaAvatar {
         let moving = fighter.alive && speed > 0.6
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
         animate(dt: dt, moving: moving, base: wanted)
+    }
+
+    /// 大招攒满时给身上打一层亮光；关掉就回到原来的眼睛光
+    private func paintCharge(_ on: Bool) {
+        guard let instance else { return }
+        if on {
+            let glow = (mine ? ArenaPalette.gold : teamColor).withAlphaComponent(1)
+            instance.materials.forEach { $0.emission.contents = glow }
+        } else {
+            restoreGlow()
+        }
+    }
+
+    private func restoreGlow() {
+        for (material, original) in zip(instance?.materials ?? [], glows) {
+            material.emission.contents = original ?? UIColor.black
+        }
     }
 
     /// 开了一枪

@@ -799,16 +799,16 @@ public struct ArenaGame: Sendable {
 
     public var aliveCount: Int { fighters.filter(\.alive).count }
 
-    /// 这个人现在看不看得见：在草丛里的，敌人走近（2.5 格内）或者他刚开过火才看得见
+    /// 这个人现在看不看得见。草丛里的：草外看不见，自己也走进那丛草、或者他刚开过火，才露出来
     public func isVisible(_ fighter: Fighter, to team: Int) -> Bool {
         guard fighter.alive else { return false }
-        if fighter.isBoss || fighter.team == team || time - fighter.lastAttack < 1 { return true }
-        // 隐身：贴得很近才看得见；草丛里：走近才看得见
+        if fighter.isBoss || fighter.team == team { return true }
+        if time - fighter.lastAttack < 1 { return true }
         if fighter.invisible > 0 {
             return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 1.5 }
         }
         if !map.inBush(fighter.pos) { return true }
-        return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 2.5 }
+        return fighters.contains { $0.alive && $0.team == team && map.inBush($0.pos) && $0.pos.distance(to: fighter.pos) < 3.2 }
     }
 
     // MARK: 一帧
