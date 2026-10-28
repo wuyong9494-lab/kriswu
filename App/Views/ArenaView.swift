@@ -1,222 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - 选玩法、选角色
-
-/// 勇者乱斗：斜着往下看的 3D 小地图，左手摇杆走、右手摇杆瞄准开火（点一下自动瞄最近的敌人），大招攒满了上面那个钮亮起来
-struct ArenaHomeView: View {
-    @ObservedObject private var records = ArenaRecords.shared
-    @ObservedObject private var growth = ArenaProgressStore.shared
-    @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
-    @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .knight
-    @State private var playing: ArenaEntry?
-    @State private var lobby: LobbyEntry?
-    @EnvironmentObject private var store: AppStore
-
-    struct LobbyEntry: Identifiable {
-        let id = UUID()
-        let lobby: ArenaLobby
-    }
-
-    struct ArenaEntry: Identifiable {
-        let id = UUID()
-        let setup: ArenaController.Setup
-    }
-
-    private var progress: ArenaProgress { growth.progress }
-
-    /// 一对一另外带的两个：解锁了的里面奖杯最多的
-    private var duelPartners: [Brawler] {
-        let others = Brawler.allCases.filter { $0 != chosen && progress.isUnlocked($0) }
-        return Array(others.sorted {
-            progress.trophies($0) != progress.trophies($1) ? progress.trophies($0) > progress.trophies($1) : $0.rawValue < $1.rawValue
-        }.prefix(2))
-    }
-
-    /// 选的角色还没解锁（比如换了一台手机）就用第一个
-    private var chosen: Brawler { progress.isUnlocked(brawler) ? brawler : .knight }
-
-    var body: some View {
-        List {
-            progressSection
-            Section {
-                ForEach(ArenaGame.Mode.allCases, id: \.self) { item in
-                    Button {
-                        mode = item
-                        UserDefaults.standard.set(item.rawValue, forKey: "arena.mode")
-                    } label: {
-                        modeRow(item)
-                    }
-                }
-            } header: {
-                Text("玩法")
-            }
-            Section {
-                ForEach(Brawler.allCases, id: \.self) { item in
-                    Button {
-                        brawler = item
-                        UserDefaults.standard.set(item.rawValue, forKey: "arena.brawler")
-                    } label: {
-                        brawlerRow(item)
-                    }
-                    .disabled(!progress.isUnlocked(item))
-                }
-            } header: {
-                Text("角色")
-            } footer: {
-                Text("每升一级血量、伤害多 6%，最高 \(ArenaProgress.maxLevel) 级；联机时电脑补位的按大家的平均等级。")
-            }
-            upgradeSection
-            ArenaLoadoutSection(brawler: chosen)
-            Section {
-                Button {
-                    playing = ArenaEntry(setup: ArenaController.Setup(mode: mode, brawler: chosen, name: store.settings.aliases.first ?? "我",
-                                                                      level: progress.level(chosen), lineup: duelPartners,
-                                                                      loadout: progress.loadout(for: chosen)))
-                } label: {
-                    Label("开打（人不够电脑补位）", systemImage: "play.fill")
-                        .font(DS.Font.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .listRowBackground(Color.clear)
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    if mode == .duel {
-                        Text("一对一带：" + ([chosen] + duelPartners).map(\.name).joined(separator: "、") + "（按这个顺序上场）")
-                    }
-                    Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；黄圈满了放大招，绿钮是小道具。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
-                }
-            }
-            GameRoomButtons(kind: .arena, remotePlayers: 2...6, nearbyCapacity: 6) { room in
-                lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: chosen))
-            }
-        }
-        .appList()
-        .navigationTitle("勇者乱斗")
-        // 先在后台把 3D 模型读好、画好头像，开打时不用等
-        .task { await ArenaPortraits.shared.prepare() }
-        .fullScreenCover(item: $playing) { entry in
-            ArenaPlayView(setup: entry.setup)
-        }
-        .fullScreenCover(item: $lobby) { entry in
-            ArenaRoomView(lobby: entry.lobby)
-        }
-    }
-
-    private func modeRow(_ item: ArenaGame.Mode) -> some View {
-        HStack(alignment: .top, spacing: DS.Space.s) {
-            Image(systemName: mode == item ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(mode == item ? DS.Palette.accent : .secondary)
-                .font(.title3)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(item.title).font(DS.Font.headline).foregroundStyle(.primary)
-                    Spacer()
-                    if let played = records.tally.played[item.rawValue] {
-                        Text("赢了 \(records.tally.won[item.rawValue] ?? 0)/\(played)").font(DS.Font.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Text(item.rules).font(DS.Font.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func brawlerRow(_ item: Brawler) -> some View {
-        let unlocked = progress.isUnlocked(item)
-        let level = progress.level(item)
-        return HStack(spacing: DS.Space.s) {
-            BrawlerBadge(brawler: item, size: 56, selected: chosen == item)
-                .overlay(alignment: .bottomTrailing) {
-                    if !unlocked {
-                        Image(systemName: "lock.fill").font(.caption.weight(.bold)).foregroundStyle(.white)
-                            .padding(5).background(Circle().fill(.black.opacity(0.6)))
-                    }
-                }
-                .opacity(unlocked ? 1 : 0.55)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(item.name).font(DS.Font.headline).foregroundStyle(.primary)
-                    Text(item.role).font(DS.Font.caption.weight(.semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(DS.Palette.surfaceSunken))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if unlocked {
-                        Text("\(level) 级").font(DS.Font.caption.weight(.semibold).monospacedDigit()).foregroundStyle(DS.Palette.accent)
-                    }
-                }
-                if unlocked {
-                    HStack(spacing: DS.Space.s) {
-                        Label("\(progress.trophies(item))", systemImage: "trophy.fill").foregroundStyle(.orange)
-                        Text("血 \(item.health(level: level))").foregroundStyle(.secondary)
-                    }
-                    .font(DS.Font.caption.monospacedDigit())
-                } else {
-                    Text("总奖杯到 \(item.unlockAt) 解锁").font(DS.Font.caption).foregroundStyle(.secondary)
-                }
-                Text(item.attackNote + "。" + item.superNote).font(DS.Font.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    // MARK: 奖杯、金币、升级
-
-    private var progressSection: some View {
-        Section {
-            HStack(spacing: DS.Space.l) {
-                Label("\(progress.totalTrophies)", systemImage: "trophy.fill")
-                    .foregroundStyle(.orange)
-                Label("\(progress.coins)", systemImage: "dollarsign.circle.fill")
-                    .foregroundStyle(.yellow)
-                Spacer()
-            }
-            .font(DS.Font.title.monospacedDigit())
-            if let next = progress.nextMilestone {
-                let start = ArenaProgress.road.last { $0.trophies <= max(progress.totalTrophies, progress.reached) }?.trophies ?? 0
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(next.brawler.map { "总奖杯到 \(next.trophies) 解锁\($0.name)" } ?? "总奖杯到 \(next.trophies) 得 \(next.coins) 金币")
-                        .font(DS.Font.caption)
-                        .foregroundStyle(.secondary)
-                    ProgressView(value: Double(min(max(progress.totalTrophies - start, 0), next.trophies - start)),
-                                 total: Double(max(next.trophies - start, 1)))
-                        .tint(.orange)
-                }
-            }
-            NavigationLink {
-                ArenaTrophyRoad()
-            } label: {
-                Label("奖杯之路", systemImage: "flag.checkered")
-            }
-        } footer: {
-            Text("赢一局这个角色 +8 杯，输了 -3（不到 30 杯不扣）；大乱斗按名次。每局都给金币，金币用来升级角色。")
-        }
-    }
-
-    @ViewBuilder private var upgradeSection: some View {
-        let level = progress.level(chosen)
-        Section {
-            if let cost = progress.upgradeCost(chosen) {
-                Button {
-                    growth.upgrade(chosen)
-                } label: {
-                    HStack {
-                        Label("\(chosen.name)升到 \(level + 1) 级", systemImage: "arrow.up.circle.fill")
-                        Spacer()
-                        Label("\(cost)", systemImage: "dollarsign.circle.fill")
-                            .foregroundStyle(progress.coins >= cost ? Color.yellow : Color.secondary)
-                    }
-                }
-                .disabled(progress.coins < cost)
-            } else {
-                Label("\(chosen.name)已经满级了", systemImage: "checkmark.seal.fill").foregroundStyle(.secondary)
-            }
-        } footer: {
-            Text("升级后血 \(chosen.health(level: level)) → \(chosen.health(level: min(level + 1, ArenaProgress.maxLevel)))，伤害同样多 6%。")
-        }
-    }
-}
-
 /// 奖杯之路：总奖杯到了哪个点给什么
 struct ArenaTrophyRoad: View {
     @ObservedObject private var growth = ArenaProgressStore.shared
@@ -270,7 +54,6 @@ struct ArenaPlayView: View {
             controller = ArenaController(setup: setup)
             round += 1
         }, onExit: {
-            ArenaOrientation.releaseAll()
             dismiss()
         })
         .id(round)
@@ -319,7 +102,7 @@ enum ArenaOrientation {
     }
 }
 
-private struct ArenaLandscape: ViewModifier {
+struct ArenaLandscape: ViewModifier {
     @State private var id = UUID()
 
     func body(content: Content) -> some View {
@@ -427,7 +210,6 @@ struct ArenaRoomView: View {
         .onAppear { room.start() }
         .fullScreenCover(item: $lobby.playing) { playing in
             ArenaMatchView(controller: playing.controller, onAgain: nil, onExit: {
-                ArenaOrientation.releaseAll()
                 lobby.playing = nil
             })
             .modifier(ArenaLandscape())
@@ -441,6 +223,7 @@ private struct ArenaMatchView: View {
     var onAgain: (() -> Void)?
     var onExit: () -> Void
     @State private var confirmingExit = false
+    @State private var resultShown = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -479,7 +262,18 @@ private struct ArenaMatchView: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl))
             }
             if let result = hud.result { resultCard(result) }
+            if controller.showingIntro {
+                ArenaVersus(game: controller.game, me: controller.me)
+                    .transition(.opacity)
+            }
         }
+        .overlay(alignment: .topTrailing) {
+            // 右上角：谁打倒了谁
+            if hud.result == nil && !controller.showingIntro {
+                killFeed.padding(.top, 54).padding(.trailing, DS.Space.m)
+            }
+        }
+        .animation(.easeOut(duration: 0.3), value: controller.showingIntro)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .confirmationDialog("退出这一局？", isPresented: $confirmingExit, titleVisibility: .visible) {
@@ -686,58 +480,100 @@ private struct ArenaMatchView: View {
                    })
     }
 
+    // MARK: 击倒提示
+
+    private var killFeed: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            ForEach(controller.feed) { note in
+                HStack(spacing: 6) {
+                    if let killer = note.killer, controller.game.fighters.indices.contains(killer) {
+                        feedName(killer)
+                    }
+                    Image(systemName: "burst.fill")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(Color(uiColor: ArenaPalette.gold))
+                    feedName(note.victim)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.black.opacity(0.42), in: Capsule())
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: controller.feed)
+    }
+
+    @ViewBuilder private func feedName(_ id: Int) -> some View {
+        if controller.game.fighters.indices.contains(id) {
+            let fighter = controller.game.fighters[id]
+            let color = id == controller.me ? ArenaPalette.myName
+                : (fighter.team == controller.mine.team ? ArenaPalette.allyName : ArenaPalette.enemyName)
+            HStack(spacing: 3) {
+                BrawlerBadge(brawler: fighter.brawler, size: 22)
+                Text(id == controller.me ? "我" : fighter.name)
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color(uiColor: color))
+                    .lineLimit(1)
+            }
+        }
+    }
+
     // MARK: 结果
 
+    /// 结算：大字写输赢，下面是奖杯金币、全场最佳、这局的数；横屏时放在右边，左边镜头凑近自己（赢了在欢呼）
     private func resultCard(_ result: ArenaGame.Result) -> some View {
         let mine = controller.mine
-        let title: String
-        let tint: Color
+        let (title, tint) = resultTitle(result, mine: mine)
+        return ZStack(alignment: wide ? .trailing : .center) {
+            if wide {
+                LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .trailing)
+                    .ignoresSafeArea()
+            } else {
+                Color.black.opacity(0.45).ignoresSafeArea()
+            }
+            VStack(spacing: DS.Space.m) {
+                Text(title)
+                    .font(.system(size: wide ? 46 : 52, weight: .black, design: .rounded))
+                    .foregroundStyle(tint)
+                    .arenaOutline(2.5)
+                    .scaleEffect(resultShown ? 1 : 2.4)
+                    .opacity(resultShown ? 1 : 0)
+                resultDetails(mine)
+            }
+            .padding(DS.Space.l)
+            .frame(width: wide ? 400 : nil)
+            .frame(maxWidth: wide ? nil : 380)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color(red: 0.08, green: 0.1, blue: 0.2).opacity(0.82))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 2))
+            )
+            .padding(wide ? .trailing : .horizontal, DS.Space.l)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.62).delay(0.15)) { resultShown = true }
+        }
+    }
+
+    private func resultTitle(_ result: ArenaGame.Result, mine: Fighter) -> (String, Color) {
+        let gold = Color(uiColor: ArenaPalette.gold)
+        let lost = Color(red: 1, green: 0.42, blue: 0.38)
         switch result {
         case .team(let team):
             switch controller.game.mode {
             case .duo:
                 let place = controller.place ?? (team == mine.team ? 1 : 3)
-                title = place == 1 ? "你们活到了最后！" : "第 \(place) 名"
-                tint = place == 1 ? DS.Palette.success : (place == 2 ? DS.Palette.warning : DS.Palette.danger)
+                return (place == 1 ? "第 1 名！" : "第 \(place) 名", place == 1 ? gold : (place == 2 ? .white : lost))
             case .boss:
-                title = team == mine.team ? "打倒了骷髅王！" : "没打倒骷髅王"
-                tint = team == mine.team ? DS.Palette.success : DS.Palette.danger
+                return team == mine.team ? ("打倒了骷髅王！", gold) : ("没打倒骷髅王", lost)
             default:
-                title = team == mine.team ? "胜利！" : "输了"
-                tint = team == mine.team ? DS.Palette.success : DS.Palette.danger
+                return team == mine.team ? ("胜利！", gold) : ("失败", lost)
             }
         case .draw:
-            title = "平局"
-            tint = DS.Palette.warning
+            return ("平局", .white)
         case .survivor:
             let place = controller.place ?? 1
-            title = place == 1 ? "你活到了最后！" : "第 \(place) 名"
-            tint = place == 1 ? DS.Palette.success : (place <= 3 ? DS.Palette.warning : DS.Palette.danger)
-        }
-        let heading = VStack(spacing: DS.Space.s) {
-            BrawlerBadge(brawler: mine.brawler, size: wide ? 96 : 84)
-            Text(title).font(DS.Font.display).foregroundStyle(tint)
-        }
-        return ZStack {
-            Color.black.opacity(0.45).ignoresSafeArea()
-            Group {
-                // 横屏矮：头像、输赢在左边，奖励、按钮在右边
-                if wide {
-                    HStack(spacing: DS.Space.xl) {
-                        heading
-                        resultDetails(mine)
-                    }
-                } else {
-                    VStack(spacing: DS.Space.m) {
-                        heading
-                        resultDetails(mine)
-                    }
-                }
-            }
-            .padding(DS.Space.l)
-            .frame(maxWidth: wide ? 600 : 360)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
-            .padding(DS.Space.l)
+            return (place == 1 ? "第 1 名！" : "第 \(place) 名", place == 1 ? gold : (place <= 3 ? .white : lost))
         }
     }
 
@@ -745,17 +581,27 @@ private struct ArenaMatchView: View {
         VStack(spacing: DS.Space.m) {
             if let reward = controller.reward {
                 HStack(spacing: DS.Space.l) {
-                    Label(reward.trophies >= 0 ? "+\(reward.trophies)" : "\(reward.trophies)", systemImage: "trophy.fill")
-                        .foregroundStyle(.orange)
-                    Label("+\(reward.coins)", systemImage: "dollarsign.circle.fill")
-                        .foregroundStyle(.yellow)
+                    HStack(spacing: 6) {
+                        Image(systemName: "trophy.fill").foregroundStyle(.orange)
+                        ArenaCountUp(value: reward.trophies, signed: true)
+                    }
+                    HStack(spacing: 6) {
+                        Image(systemName: "dollarsign.circle.fill").foregroundStyle(.yellow)
+                        ArenaCountUp(value: reward.coins, signed: true)
+                    }
                 }
-                .font(DS.Font.headline.monospacedDigit())
+                .font(.system(size: 22, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(.white)
+                .arenaOutline(1.2)
                 if !reward.unlocked.isEmpty {
                     Text("解锁了" + reward.unlocked.map(\.name).joined(separator: "、") + "！")
-                        .font(DS.Font.headline)
-                        .foregroundStyle(DS.Palette.success)
+                        .font(.system(size: 17, weight: .black, design: .rounded))
+                        .foregroundStyle(Color(uiColor: ArenaPalette.myName))
+                        .arenaOutline(1)
                 }
+            }
+            if let star = controller.starPlayer, controller.game.fighters.indices.contains(star) {
+                starPlayer(controller.game.fighters[star])
             }
             HStack(spacing: DS.Space.l) {
                 stat("打倒", mine.kills)
@@ -765,30 +611,259 @@ private struct ArenaMatchView: View {
             HStack(spacing: DS.Space.s) {
                 if let onAgain {
                     Button("再来一局") { onAgain() }
-                        .buttonStyle(.borderedProminent)
-                    Button("换玩法、角色") { onExit() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ArenaGameButton.yellow)
+                    Button("回大厅") { onExit() }
+                        .buttonStyle(ArenaGameButton.blue)
                 } else {
                     Button("回房间") { onExit() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(ArenaGameButton.yellow)
                 }
             }
         }
     }
 
+    /// 全场最佳：头像、名字、打倒几个、伤害（是自己就金边）
+    private func starPlayer(_ fighter: Fighter) -> some View {
+        let isMe = fighter.id == controller.me
+        return HStack(spacing: DS.Space.s) {
+            BrawlerBadge(brawler: fighter.brawler, size: 44)
+                .overlay(Circle().strokeBorder(Color(uiColor: ArenaPalette.gold), lineWidth: 3))
+                .overlay(alignment: .top) { Text("👑").font(.system(size: 16)).offset(y: -12) }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("全场最佳")
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(Color(uiColor: ArenaPalette.gold))
+                Text(isMe ? "我" : fighter.name)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("打倒 \(fighter.kills) · 伤害 \(fighter.damageDealt)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.Space.s)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(isMe ? 0.16 : 0.08)))
+    }
+
     private func stat(_ name: String, _ value: Int) -> some View {
         VStack(spacing: 2) {
-            Text("\(value)").font(DS.Font.number)
-            Text(name).font(DS.Font.caption).foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(.white)
+            Text(name).font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.7))
         }
     }
 }
 
-private extension View {
+extension View {
     /// 卡通游戏里那种粗字：底下一道硬黑影，外面一圈淡淡的黑边
     func arenaInk() -> some View {
         shadow(color: .black.opacity(0.85), radius: 0, x: 0, y: 1.5)
             .shadow(color: .black.opacity(0.6), radius: 1)
+    }
+
+    /// 大标题：四面一圈黑边，底下再压一道黑影
+    func arenaOutline(_ width: CGFloat = 2) -> some View {
+        shadow(color: .black, radius: 0, x: width, y: width)
+            .shadow(color: .black, radius: 0, x: -width, y: -width)
+            .shadow(color: .black, radius: 0, x: width, y: -width)
+            .shadow(color: .black, radius: 0, x: -width, y: width)
+            .shadow(color: .black.opacity(0.55), radius: 0, x: 0, y: width * 1.6)
+    }
+}
+
+/// 游戏里那种厚按钮：底下一条深色的边，按下去往下沉
+struct ArenaGameButton: ButtonStyle {
+    let face: Color
+    let edge: Color
+    var height: CGFloat = 46
+
+    /// 黄色（开打、再来一局）、蓝色、绿色（升级）
+    static let yellow = ArenaGameButton(face: Color(red: 1, green: 0.76, blue: 0.12), edge: Color(red: 0.72, green: 0.45, blue: 0.02))
+    static let blue = ArenaGameButton(face: Color(red: 0.26, green: 0.6, blue: 1), edge: Color(red: 0.1, green: 0.33, blue: 0.72))
+    static let green = ArenaGameButton(face: Color(red: 0.36, green: 0.82, blue: 0.24), edge: Color(red: 0.16, green: 0.5, blue: 0.1))
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: height * 0.39, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .arenaOutline(height > 50 ? 1.8 : 1.2)
+            .padding(.horizontal, 22)
+            .frame(height: height)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(face)
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.28))
+                            .frame(height: 14).padding(.horizontal, 5).padding(.top, 4)
+                    }
+            )
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black.opacity(0.75), lineWidth: 2))
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(edge)
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black.opacity(0.75), lineWidth: 2))
+                    .offset(y: configuration.isPressed ? 1 : 5)
+            )
+            .offset(y: configuration.isPressed ? 4 : 0)
+            .padding(.bottom, 5)
+    }
+}
+
+/// 数字从 0 涨到这个数（奖杯、金币）
+private struct ArenaCountUp: View {
+    let value: Int
+    var signed = false
+    @State private var shown = 0
+
+    var body: some View {
+        Text((signed && value >= 0 ? "+" : "") + "\(shown)")
+            .task(id: value) {
+                let steps = 18
+                for k in 1...steps {
+                    try? await Task.sleep(nanoseconds: 45_000_000)
+                    shown = Int((Double(value) * Double(k) / Double(steps)).rounded())
+                }
+            }
+    }
+}
+
+// MARK: - 开场对阵
+
+/// 开场对阵：自己这队在左边（竖着的在上边）、对面在右边，蓝红斜着分开，中间一个大 VS，上面写玩法和地图
+private struct ArenaVersus: View {
+    let game: ArenaGame
+    let me: Int
+    @State private var shown = false
+
+    var body: some View {
+        let team = game.fighters[me].team
+        let allies = game.fighters.filter { $0.team == team }
+        let enemies = game.fighters.filter { $0.team != team }
+        GeometryReader { geo in
+            let wide = geo.size.width > geo.size.height
+            let size: CGFloat = max(allies.count, enemies.count) > 3 ? 48 : 62
+            ZStack {
+                Color(uiColor: ArenaPalette.red)
+                VersusSlant(wide: wide, edgeOnly: false).fill(Color(uiColor: ArenaPalette.blue))
+                VersusSlant(wide: wide, edgeOnly: true).stroke(.white.opacity(0.9), lineWidth: 7)
+                VStack(spacing: 2) {
+                    Text(game.mode.title)
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaOutline(2)
+                    Text(game.map.title)
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .arenaOutline(1)
+                    Spacer()
+                }
+                .padding(.top, wide ? 14 : 60)
+                if wide {
+                    HStack(spacing: 0) {
+                        side(allies, columns: true, size: size)
+                            .frame(maxWidth: .infinity)
+                            .offset(x: shown ? 0 : -geo.size.width / 2)
+                        versus
+                        side(enemies, columns: true, size: size)
+                            .frame(maxWidth: .infinity)
+                            .offset(x: shown ? 0 : geo.size.width / 2)
+                    }
+                    .padding(.top, 40)
+                } else {
+                    VStack(spacing: DS.Space.l) {
+                        side(allies, columns: false, size: size)
+                            .offset(y: shown ? 0 : -geo.size.height / 2)
+                        versus
+                        side(enemies, columns: false, size: size)
+                            .offset(y: shown ? 0 : geo.size.height / 2)
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.74)) { shown = true }
+        }
+    }
+
+    private var versus: some View {
+        Text("VS")
+            .font(.system(size: 88, weight: .black, design: .rounded))
+            .foregroundStyle(Color(uiColor: ArenaPalette.gold))
+            .arenaOutline(3.5)
+            .rotationEffect(.degrees(-8))
+            .scaleEffect(shown ? 1 : 2.8)
+            .opacity(shown ? 1 : 0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.5).delay(0.25), value: shown)
+    }
+
+    /// 一边的人：横屏一列 3 个（多了排两列），竖屏一行 3 个
+    @ViewBuilder private func side(_ list: [Fighter], columns: Bool, size: CGFloat) -> some View {
+        let groups = stride(from: 0, to: list.count, by: 3).map { Array(list[$0..<min($0 + 3, list.count)]) }
+        if columns {
+            HStack(alignment: .top, spacing: DS.Space.m) {
+                ForEach(groups.indices, id: \.self) { k in
+                    VStack(spacing: DS.Space.s) {
+                        ForEach(groups[k]) { card($0, size: size) }
+                    }
+                }
+            }
+        } else {
+            VStack(spacing: DS.Space.s) {
+                ForEach(groups.indices, id: \.self) { k in
+                    HStack(spacing: DS.Space.m) {
+                        ForEach(groups[k]) { card($0, size: size) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func card(_ fighter: Fighter, size: CGFloat) -> some View {
+        VStack(spacing: 1) {
+            BrawlerBadge(brawler: fighter.brawler, size: size)
+                .overlay(Circle().strokeBorder(.white, lineWidth: 3))
+                .shadow(color: .black.opacity(0.4), radius: 3, y: 2)
+            Text(fighter.id == me ? "我" : fighter.name)
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(fighter.id == me ? Color(uiColor: ArenaPalette.myName) : .white)
+                .arenaOutline(1)
+                .lineLimit(1)
+            Text(fighter.isBoss ? "首领" : "\(fighter.level) 级")
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white.opacity(0.9))
+        }
+        .frame(width: size + 34)
+    }
+}
+
+/// 对阵画面蓝红分开的那道斜线（edgeOnly：只要那条线）
+private struct VersusSlant: Shape {
+    let wide: Bool
+    let edgeOnly: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let a = wide ? CGPoint(x: rect.width * 0.56, y: 0) : CGPoint(x: rect.width, y: rect.height * 0.46)
+        let b = wide ? CGPoint(x: rect.width * 0.44, y: rect.height) : CGPoint(x: 0, y: rect.height * 0.54)
+        if edgeOnly {
+            path.move(to: a)
+            path.addLine(to: b)
+            return path
+        }
+        path.move(to: .zero)
+        if wide {
+            path.addLine(to: a)
+            path.addLine(to: b)
+            path.addLine(to: CGPoint(x: 0, y: rect.height))
+        } else {
+            path.addLine(to: CGPoint(x: rect.width, y: 0))
+            path.addLine(to: a)
+            path.addLine(to: b)
+        }
+        path.closeSubpath()
+        return path
     }
 }
 

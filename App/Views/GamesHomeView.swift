@@ -12,12 +12,23 @@ enum GameProfile {
 
 /// 小游戏：各个游戏的入口
 struct GamesHomeView: View {
+    /// 勇者乱斗的大厅是全屏横着的
+    @State private var showingArena = false
+
     var body: some View {
         List {
             Section {
-                NavigationLink { ArenaHomeView() } label: {
-                    row("勇者乱斗", "3D 小地图双摇杆对战：3v3 团战、抢星星、大乱斗、占点，电脑补位", "flame.fill", 3)
+                Button {
+                    showingArena = true
+                } label: {
+                    HStack {
+                        row("勇者乱斗", "3D 横屏双摇杆对战：11 种玩法、9 个角色、小道具和星徽，电脑补位，也能和同事一起打", "flame.fill", 3)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
                 }
+                .foregroundStyle(.primary)
                 NavigationLink { TileGameHomeView() } label: {
                     row("叠叠消", "三张一样的凑一起消掉；今日挑战、挑战码、和同事比谁先消完", "square.stack.3d.up.fill", 6)
                 }
@@ -30,6 +41,9 @@ struct GamesHomeView: View {
         }
         .appList()
         .navigationTitle("小游戏")
+        .fullScreenCover(isPresented: $showingArena) {
+            ArenaHomeView()
+        }
     }
 
     private func row(_ title: String, _ note: String, _ icon: String, _ color: Int) -> some View {

@@ -459,6 +459,10 @@ enum ScreenCatalog {
         case "arenaHeist": ArenaPlayView(setup: ArenaController.Setup(mode: .heist, brawler: .mage, name: "我"))
         case "arenaBoss": ArenaPlayView(setup: ArenaController.Setup(mode: .boss, brawler: .knight, name: "我", level: 9,
                                                                      loadout: ArenaLoadout.basic(.knight, level: 9)))
+        case "arenaVersus": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .knight, name: "我", level: 7,
+                                                                       loadout: ArenaLoadout.basic(.knight, level: 7), demo: .versus))
+        case "arenaResult": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .ranger, name: "我", level: 4,
+                                                                       loadout: ArenaLoadout.basic(.ranger, level: 4), demo: .result))
         case "gomoku": GomokuHomeView()
         case "gomokuBoard":
             GomokuLocalScreen(mode: .computer(.normal, .black),

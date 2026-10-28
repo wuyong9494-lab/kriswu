@@ -88,6 +88,10 @@ final class ArenaController: ObservableObject {
         var lineup: [Brawler] = []
         /// 带的小道具、星徽、超级充能
         var loadout = ArenaLoadout()
+        /// 截图用：停在开场对阵画面、直接到结算
+        var demo: Demo?
+
+        enum Demo { case versus, result }
     }
 
     static let step = 1.0 / 60
@@ -113,6 +117,22 @@ final class ArenaController: ObservableObject {
         let good: Bool
         let at: Double
     }
+
+    /// 开场对阵画面放多久（这段时间不开打）
+    static let introLength = 2.8
+    /// 正在放开场对阵画面
+    @Published private(set) var showingIntro = true
+    private var introLeft = ArenaController.introLength
+
+    /// 右上角的击倒提示：谁打倒了谁（最多 3 条，4 秒后消失）
+    struct KillNote: Identifiable, Equatable {
+        let id: Int
+        let killer: Int?
+        let victim: Int
+        let at: Double
+    }
+    @Published private(set) var feed: [KillNote] = []
+    private var notes = 0
     /// 走的摇杆（长度 0–1）
     var move = V2.zero
     /// 正在拖的攻击 / 大招摇杆（画瞄准线用；长度 0–1，占射程的比例）
@@ -157,6 +177,20 @@ final class ArenaController: ObservableObject {
                                               level: setup.level, loadout: ArenaLoadout.basic(brawler, level: setup.level)))
         }
         self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map), me: 0, room: nil, seed: seed)
+        switch setup.demo {
+        case .versus?:
+            introLeft = .infinity
+        case .result?:
+            // 截图用：打完了，自己这队赢、自己是全场最佳
+            introLeft = 0
+            showingIntro = false
+            game.adjust(0) { $0.kills = 6; $0.damageDealt = 14_200 }
+            game.adjust(1) { $0.kills = 3; $0.damageDealt = 8_900 }
+            game.result = .team(game.fighters[0].team)
+            refreshHUD()
+        case nil:
+            break
+        }
     }
 
     /// 联机：房主开的这一局
@@ -184,6 +218,12 @@ final class ArenaController: ObservableObject {
 
     /// 画面每帧调：按真实过去的时间往前算
     func advance(_ elapsed: Double) {
+        // 开场对阵画面放着的时候不开打（联机时房主也一样等，别人收到的是开场那一帧）
+        if introLeft > 0 {
+            introLeft -= max(elapsed, 0)
+            if introLeft <= 0 { showingIntro = false }
+            return
+        }
         switch role {
         case .solo, .host:
             if game.result == nil {
@@ -441,6 +481,9 @@ final class ArenaController: ObservableObject {
             hud.result = game.result
         }
         if let current = announcement, game.time - current.at > 2.2 || game.time < current.at { announcement = nil }
+        if feed.contains(where: { game.time - $0.at > 4 || game.time < $0.at }) {
+            feed.removeAll { game.time - $0.at > 4 || game.time < $0.at }
+        }
         if hud.result != nil, !recorded {
             recorded = true
             ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
@@ -462,6 +505,10 @@ final class ArenaController: ObservableObject {
                 announcement = Announcement(text: text, good: winner == mine.team, at: game.time)
             case .reset where game.mode == .knockout:
                 announcement = Announcement(text: "第 \(game.round) 局", good: true, at: game.time)
+            case .knockout(let target, let by):
+                notes += 1
+                feed.append(KillNote(id: notes, killer: by, victim: target, at: game.time))
+                if feed.count > 3 { feed.removeFirst(feed.count - 3) }
             default:
                 break
             }
@@ -494,6 +541,17 @@ final class ArenaController: ObservableObject {
 
     /// 大乱斗第几名
     var place: Int? { mine.place }
+
+    /// 全场最佳：赢的那一队里（没分出输赢就全场）打倒的人多、伤害高的那个
+    var starPlayer: Int? {
+        let pool: [Fighter]
+        switch hud.result {
+        case .team(let team)? where team >= 0: pool = game.fighters.filter { $0.team == team && !$0.isBoss }
+        case .survivor(let id)? where game.fighters.indices.contains(id): pool = [game.fighters[id]]
+        default: pool = game.fighters.filter { !$0.isBoss }
+        }
+        return pool.max { ($0.kills, $0.damageDealt) < ($1.kills, $1.damageDealt) }?.id
+    }
 }
 
 /// 乱斗战绩：每种玩法玩了几局、赢了几局（只存在这台手机上）

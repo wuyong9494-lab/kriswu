@@ -78,6 +78,10 @@ final class ArenaWorldView: SCNView {
     private var chestViews: [ChestView] = []
     /// 地上快要炸的红圈
     private var warningNodes: [SCNNode] = []
+    /// 震屏：越大晃得越厉害，很快就停
+    private var shake: Float = 0
+    /// 打完了镜头凑到自己跟前（0–1）
+    private var closeUp: Float = 0
 
     private struct ChestView {
         let node: SCNNode
@@ -647,6 +651,8 @@ final class ArenaWorldView: SCNView {
         }
 
         for event in events { effect(event, game: game) }
+        // 结算时镜头凑近自己，头顶的名字、血条、数字都收起来
+        overlay.isHidden = controller.hud.result != nil
         if !finished, let result = controller.hud.result {
             finished = true
             ArenaSound.shared.finish(won: controller.won(result))
@@ -668,13 +674,39 @@ final class ArenaWorldView: SCNView {
         let top = Double(reach.above) - margin, bottom = height + margin - Double(reach.below)
         screen.y = top <= bottom ? min(max(screen.y - lookAhead, top), bottom) : (top + bottom) / 2
         let target = flipped ? V2(width - screen.x, height - screen.y) : screen
-        let goal = SIMD3(Float(target.x), 0, Float(target.y))
+        var goal = SIMD3(Float(target.x), 0, Float(target.y))
+        // 打完了：镜头凑到自己跟前（横屏时自己在画面左边，右边放结算）
+        let ending = controller.hud.result != nil
+        closeUp = ending ? min(1, closeUp + dt * 0.9) : 0
+        if ending {
+            let me = controller.mine.pos
+            let shift: Float = bounds.width > bounds.height ? 1.4 : 0
+            goal = SIMD3(Float(me.x) + (flipped ? -shift : shift), 0, Float(me.y))
+        }
         if cameraPlaced {
-            rig.simdPosition += (goal - rig.simdPosition) * min(1, dt * 7)
+            rig.simdPosition += (goal - rig.simdPosition) * min(1, dt * (ending ? 3 : 7))
         } else {
             rig.simdPosition = goal
             cameraPlaced = true
         }
+        let t = closeUp * closeUp * (3 - 2 * closeUp)
+        let offset = Self.cameraOffset + (Self.closeOffset(tanY: tanY) - Self.cameraOffset) * t
+        let look = 0.8 * t
+        shake = max(0, shake - dt * 2.2)
+        let jitter = shake > 0 ? SIMD3(Float.random(in: -1...1), Float.random(in: -1...1), 0) * (shake * shake * 0.5) : .zero
+        cameraNode.simdPosition = offset + jitter
+        cameraNode.simdEulerAngles = SIMD3(-atan2(offset.y - look, offset.z), 0, 0)
+    }
+
+    /// 结算时镜头凑多近：画面上下大约 3.2 米，还是斜着往下看，对着自己胸口
+    private static func closeOffset(tanY: Float) -> SIMD3<Float> {
+        simd_normalize(SIMD3<Float>(0, 0.55, 0.835)) * (3.2 / (2 * max(tanY, 0.05))) + SIMD3(0, 0.8, 0)
+    }
+
+    /// 晃一下镜头（几下叠在一起取最大的）
+    private func addShake(_ amount: Float) {
+        guard amount > 0 else { return }
+        shake = min(0.9, max(shake, amount))
     }
 
     /// 3D 里的一点在上面那层（SpriteKit，左下角是原点）的哪里；在镜头后面返回 nil
@@ -803,15 +835,17 @@ final class ArenaWorldView: SCNView {
 
     private func makeProjectile(_ p: Projectile, _ game: ArenaGame) -> ProjectileView {
         let owner = game.fighters.indices.contains(p.owner) ? game.fighters[p.owner].brawler : .ranger
-        let tint = p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot)
-        let tintKey = p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy")
+        // 超级充能开着放的大招：紫的
+        let hyper = p.isSuper && game.fighters.indices.contains(p.owner) && game.fighters[p.owner].hyperTime > 0
+        let tint = hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
+        let tintKey = hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
         // 子弹芯是偏白的亮色，外面一圈光晕，后面拖一条尾巴
         let core = Self.lighter(tint, 0.5)
         if let lob = p.lob {
             // 扔出去的火球：天上的球、地上的影子、落点的圈
             let root = SCNNode()
             let radius: CGFloat = p.isSuper ? 0.45 : 0.25
-            let fire = p.isSuper ? UIColor.orange : tint
+            let fire = hyper ? ArenaPalette.hyper : (p.isSuper ? UIColor.orange : tint)
             let ball = SCNNode(geometry: shared("ball-\(tintKey)-\(p.isSuper)") {
                 let sphere = SCNSphere(radius: radius)
                 sphere.segmentCount = 14
@@ -819,7 +853,7 @@ final class ArenaWorldView: SCNView {
                 return sphere
             })
             ball.castsShadow = false
-            ball.addChildNode(halo(p.isSuper ? "fire" : tintKey, fire, size: radius * 5))
+            ball.addChildNode(halo(hyper ? "hyperfire" : (p.isSuper ? "fire" : tintKey), fire, size: radius * 5))
             ball.addParticleSystem(trail(fire, size: p.isSuper ? 0.5 : 0.3))
             let shadow = SCNNode(geometry: shared("shadow-\(p.isSuper)") {
                 let disc = SCNCylinder(radius: radius * 0.9, height: 0.005)
@@ -972,12 +1006,14 @@ final class ArenaWorldView: SCNView {
             guard amount >= 60 else { return }
             ArenaSound.shared.play(.hit, volume: loudness(game.fighters[target].pos) * 0.8)
             avatars[target].flash(clock: clock)
+            if target == controller.me, amount >= 900 { addShake(0.22) }
             let at = avatars[target].node.simdPosition
             spark(at: at + SIMD3(0, 0.7, 0))
             floater("\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
                     color: game.fighters[target].team == myTeam ? UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1) : .white)
         case .explosion(let point, let radius):
             ArenaSound.shared.play(.boom, volume: loudness(point))
+            addShake(Float(radius) * 0.16 * max(0, 1 - Float(point.distance(to: controller.mine.pos)) / 9))
             let at = SIMD3(Float(point.x), 0.05, Float(point.y))
             burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: 40, speed: 4 * CGFloat(radius), size: 0.45, life: 0.45)
             burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: 20, speed: 2.5 * CGFloat(radius), size: 0.3, life: 0.35)
@@ -996,13 +1032,23 @@ final class ArenaWorldView: SCNView {
             ArenaSound.shared.play(.knockout, volume: target == controller.me ? 1 : loudness(game.fighters[target].pos))
             burst(at: avatars[target].node.simdPosition + SIMD3(0, 0.6, 0), color: UIColor(white: 0.9, alpha: 1),
                   count: 30, speed: 2, size: 0.4, life: 0.6)
-            if target == controller.me { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+            if target == controller.me {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                addShake(0.5)
+            }
         case .special(let fighter):
             guard avatars.indices.contains(fighter) else { return }
-            ArenaSound.shared.play(game.fighters[fighter].brawler == .shade ? .blink : .power, volume: loudness(game.fighters[fighter].pos))
+            let caster = game.fighters[fighter]
+            ArenaSound.shared.play(caster.brawler == .shade ? .blink : .power, volume: loudness(caster.pos))
             avatars[fighter].special()
-            ring(at: avatars[fighter].node.simdPosition, color: ArenaPalette.gold, to: 2.2)
-            if fighter == controller.me { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            // 草丛里看不见的对面放大招不出光（免得暴露）
+            if avatars[fighter].opacity > 0.1 || caster.team == myTeam {
+                superFlash(caster, at: avatars[fighter].node.simdPosition, size: avatars[fighter].size)
+            }
+            if fighter == controller.me {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                addShake(0.15)
+            }
         case .attack(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             let sound: ArenaSound.Effect
@@ -1036,6 +1082,7 @@ final class ArenaWorldView: SCNView {
                 burst(at: at, color: ours ? ArenaPalette.blue : ArenaPalette.red, count: 50, speed: 4, size: 0.3, life: 0.8)
             }
             if ours { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            addShake(0.3)
         case .round(let winner):
             ArenaSound.shared.play(winner == myTeam ? .win : .lose, volume: 0.7)
         case .reset:
@@ -1082,7 +1129,10 @@ final class ArenaWorldView: SCNView {
             ring(at: at, color: .white, to: 2.2)
             burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.hyper, count: 70, speed: 4, size: 0.4, life: 0.6)
             burst(at: at + SIMD3(0, 0.8, 0), color: .white, count: 24, speed: 2.5, size: 0.25, life: 0.4)
-            if fighter == controller.me { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            if fighter == controller.me {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                addShake(0.35)
+            }
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos))
@@ -1092,6 +1142,48 @@ final class ArenaWorldView: SCNView {
             if fighter == controller.me { ArenaSound.shared.play(.respawn) }
             let color = game.fighters[fighter].team == myTeam ? ArenaPalette.blue : ArenaPalette.red
             ring(at: avatars[fighter].node.simdPosition, color: color, to: 1.8)
+        }
+    }
+
+    /// 放大招：脚下一圈这个角色的颜色往外扩，身上冲起一道光柱、往外蹦光点（超级充能的是紫的）
+    private func superFlash(_ caster: Fighter, at point: SIMD3<Float>, size: Float) {
+        let color = caster.hyperTime > 0 ? ArenaPalette.hyper : Self.superColor(caster.brawler)
+        ring(at: point, color: color, to: CGFloat(2.6 * size))
+        ring(at: point, color: .white, to: CGFloat(1.6 * size))
+        let tube = SCNCylinder(radius: CGFloat(0.55 * size), height: CGFloat(3.4 * size))
+        tube.radialSegmentCount = 24
+        let glow = SCNMaterial()
+        glow.lightingModel = .constant
+        glow.diffuse.contents = ArenaArt.beam
+        glow.multiply.contents = color
+        glow.blendMode = .add
+        glow.writesToDepthBuffer = false
+        glow.isDoubleSided = true
+        let cap = SCNMaterial()
+        cap.transparency = 0
+        tube.materials = [glow, cap, cap]
+        let beam = SCNNode(geometry: tube)
+        beam.simdPosition = point + SIMD3(0, 1.7 * size, 0)
+        beam.castsShadow = false
+        beam.renderingOrder = 30
+        beam.simdScale = SIMD3(0.6, 0.2, 0.6)
+        world.rootNode.addChildNode(beam)
+        beam.runAction(.sequence([.group([.scale(to: 1, duration: 0.14), .fadeOut(duration: 0.45)]), .removeFromParentNode()]))
+        burst(at: point + SIMD3(0, size, 0), color: color, count: 40, speed: 3.5, size: 0.3, life: 0.5)
+    }
+
+    /// 每个角色大招的颜色
+    static func superColor(_ brawler: Brawler) -> UIColor {
+        switch brawler {
+        case .knight: return ArenaPalette.gold
+        case .ranger: return UIColor(red: 0.45, green: 0.9, blue: 1, alpha: 1)
+        case .barbarian: return UIColor(red: 1, green: 0.55, blue: 0.2, alpha: 1)
+        case .mage: return UIColor(red: 1, green: 0.42, blue: 0.2, alpha: 1)
+        case .assassin: return UIColor(red: 0.85, green: 0.9, blue: 1, alpha: 1)
+        case .guardian: return UIColor(red: 1, green: 0.9, blue: 0.5, alpha: 1)
+        case .necromancer: return UIColor(red: 0.45, green: 1, blue: 0.55, alpha: 1)
+        case .shade: return UIColor(red: 0.62, green: 0.42, blue: 1, alpha: 1)
+        case .summoner: return UIColor(red: 0.4, green: 1, blue: 0.85, alpha: 1)
         }
     }
 

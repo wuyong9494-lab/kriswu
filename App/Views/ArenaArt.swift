@@ -544,6 +544,13 @@ enum ArenaArt {
                               endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
     }
 
+    /// 大招的光柱：下面亮、往上淡掉（贴在圆柱侧面，图的上边对着圆柱的顶）
+    static let beam: UIImage = draw(CGSize(width: 8, height: 64), opaque: false) { cg in
+        let colors = [UIColor.white.withAlphaComponent(0).cgColor, UIColor.white.withAlphaComponent(0.9).cgColor] as CFArray
+        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) else { return }
+        cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: 64), options: [])
+    }
+
     /// 发光的软圆点：中间白、往外是这个颜色、边上透明（子弹的光晕、打中的闪光）
     static func glow(_ color: UIColor) -> UIImage {
         draw(CGSize(width: 64, height: 64), opaque: false) { cg in

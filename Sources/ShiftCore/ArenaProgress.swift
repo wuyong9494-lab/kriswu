@@ -123,10 +123,10 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
 
     /// 上场带的：选过的（还得是解锁了的），没选过的带第一个
     public func loadout(for brawler: Brawler) -> ArenaLoadout {
-        let open = self.gadgets(brawler), stars = self.starPowers(brawler)
-        let gadget = gadgetTable[brawler.rawValue].flatMap(Gadget.init(rawValue:)).flatMap { open.contains($0) ? $0 : nil }
+        let owned = self.gadgets(brawler), stars = self.starPowers(brawler)
+        let gadget = gadgetTable[brawler.rawValue].flatMap(Gadget.init(rawValue:)).flatMap { owned.contains($0) ? $0 : nil }
         let star = starTable[brawler.rawValue].flatMap(StarPower.init(rawValue:)).flatMap { stars.contains($0) ? $0 : nil }
-        return ArenaLoadout(gadget: gadget ?? open.first, starPower: star ?? stars.first, hypercharge: hasHypercharge(brawler))
+        return ArenaLoadout(gadget: gadget ?? owned.first, starPower: star ?? stars.first, hypercharge: hasHypercharge(brawler))
     }
 
     /// 选这个角色带的小道具（没解锁的不让选）
