@@ -381,7 +381,9 @@ final class ArenaAvatar {
         guard let model, let instance, let clip = model.clips[name] else { return }
         var pose = model.restPose
         clip.sample(at: time, into: &pose)
-        for i in model.animated { instance.nodes[i].simdTransform = pose.transform(i) }
+        for i in model.animated where instance.nodes.indices.contains(i) && pose.rotation.indices.contains(i) {
+            instance.nodes[i].simdTransform = pose.transform(i)
+        }
     }
 
     func turn(to angle: Float) {
@@ -445,7 +447,9 @@ final class ArenaAvatar {
                 }
             }
         }
-        for i in model.animated { instance.nodes[i].simdTransform = pose.transform(i) }
+        for i in model.animated where instance.nodes.indices.contains(i) && pose.rotation.indices.contains(i) {
+            instance.nodes[i].simdTransform = pose.transform(i)
+        }
     }
 
     private static func looped(_ time: Float, _ duration: Float) -> Float {

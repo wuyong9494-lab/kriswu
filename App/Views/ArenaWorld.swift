@@ -209,7 +209,10 @@ final class ArenaWorldView: SCNView {
         controller.advance(elapsed)
         let dt = Float(min(max(elapsed, 0), 0.1))
         clock += Double(dt)
+        // 渲染线程会同时读这些节点。锁住再改，避免它读到写了一半的变换（真机上是 SIGBUS）
+        SCNTransaction.lock()
         sync(dt: dt)
+        SCNTransaction.unlock()
     }
 
     // MARK: - 搭场景

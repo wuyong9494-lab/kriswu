@@ -423,11 +423,30 @@ final class GLTFModel: @unchecked Sendable {
                           bytesPerComponent: MemoryLayout<Float>.size, dataOffset: 0, dataStride: MemoryLayout<Float>.size * width)
     }
 
-    /// 零长度的四元数归一化会得到 NaN，蒙皮算到渲染线程上会直接断
+    /// 零长度或带 NaN 的四元数归一化会得到非法值。simd_slerp 在 iOS 27 上碰到这种值会进 atan2，然后按坏下标去读内存（SIGBUS）
     static func unit(_ q: simd_quatf) -> simd_quatf {
-        let length = simd_length(q.vector)
+        let x = q.vector.x, y = q.vector.y, z = q.vector.z, w = q.vector.w
+        guard x.isFinite, y.isFinite, z.isFinite, w.isFinite else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
+        let length = (x * x + y * y + z * z + w * w).squareRoot()
         guard length.isFinite, length > 1e-6 else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
-        return simd_quatf(ix: q.vector.x / length, iy: q.vector.y / length, iz: q.vector.z / length, r: q.vector.w / length)
+        return simd_quatf(ix: x / length, iy: y / length, iz: z / length, r: w / length)
+    }
+
+    /// 自己插值，不调用 simd_slerp（那个在真机上会 SIGBUS）
+    static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf {
+        let from = unit(a)
+        var to = unit(b)
+        guard t.isFinite else { return from }
+        if t <= 0 { return from }
+        if t >= 1 { return to }
+        if from.vector.x * to.vector.x + from.vector.y * to.vector.y + from.vector.z * to.vector.z + from.vector.w * to.vector.w < 0 {
+            to = simd_quatf(vector: -to.vector)
+        }
+        let s = 1 - t
+        return unit(simd_quatf(ix: from.vector.x * s + to.vector.x * t,
+                               iy: from.vector.y * s + to.vector.y * t,
+                               iz: from.vector.z * s + to.vector.z * t,
+                               r: from.vector.w * s + to.vector.w * t))
     }
 }
 
@@ -456,22 +475,17 @@ extension GLTFModel.Clip {
                 }
             }
             let v = channel.values
+            if !fraction.isFinite { fraction = 0 }
+            fraction = min(max(fraction, 0), 1)
             switch channel.path {
             case .rotation:
-                guard v.count >= (max(k0, k1) + 1) * 4, pose.rotation.indices.contains(channel.node) else { continue }
-                let a = GLTFModel.unit(simd_quatf(ix: v[k0 * 4], iy: v[k0 * 4 + 1], iz: v[k0 * 4 + 2], r: v[k0 * 4 + 3]))
-                if fraction > 0 {
-                    let b = GLTFModel.unit(simd_quatf(ix: v[k1 * 4], iy: v[k1 * 4 + 1], iz: v[k1 * 4 + 2], r: v[k1 * 4 + 3]))
-                    pose.rotation[channel.node] = simd_slerp(a, b, fraction)
-                } else {
-                    pose.rotation[channel.node] = a
-                }
+                guard let a = Self.quat(v, k0), let b = Self.quat(v, k1), pose.rotation.indices.contains(channel.node) else { continue }
+                pose.rotation[channel.node] = fraction > 0 ? GLTFModel.mix(a, b, fraction) : GLTFModel.unit(a)
             case .translation, .scale:
-                guard v.count >= (max(k0, k1) + 1) * 3, pose.translation.indices.contains(channel.node) else { continue }
-                var value = SIMD3(v[k0 * 3], v[k0 * 3 + 1], v[k0 * 3 + 2])
-                if fraction > 0 {
-                    let b = SIMD3(v[k1 * 3], v[k1 * 3 + 1], v[k1 * 3 + 2])
-                    value += (b - value) * fraction
+                guard let value0 = Self.vec3(v, k0), pose.translation.indices.contains(channel.node), pose.scale.indices.contains(channel.node) else { continue }
+                var value = value0
+                if fraction > 0, let value1 = Self.vec3(v, k1) {
+                    value += (value1 - value) * fraction
                 }
                 if channel.path == .translation {
                     pose.translation[channel.node] = value
@@ -481,6 +495,22 @@ extension GLTFModel.Clip {
             }
         }
     }
+
+    private static func quat(_ v: [Float], _ key: Int) -> simd_quatf? {
+        guard key >= 0, key < 1_000_000 else { return nil }
+        let base = key * 4
+        guard base >= 0, base + 3 < v.count else { return nil }
+        return simd_quatf(ix: v[base], iy: v[base + 1], iz: v[base + 2], r: v[base + 3])
+    }
+
+    private static func vec3(_ v: [Float], _ key: Int) -> SIMD3<Float>? {
+        guard key >= 0, key < 1_000_000 else { return nil }
+        let base = key * 3
+        guard base >= 0, base + 2 < v.count else { return nil }
+        let value = SIMD3(v[base], v[base + 1], v[base + 2])
+        guard value.x.isFinite, value.y.isFinite, value.z.isFinite else { return nil }
+        return value
+    }
 }
 
 extension GLTFModel.Pose {
@@ -489,9 +519,12 @@ extension GLTFModel.Pose {
         guard weight > 0 else { return }
         let w = min(weight, 1)
         for i in nodes {
+            guard translation.indices.contains(i), other.translation.indices.contains(i),
+                  scale.indices.contains(i), other.scale.indices.contains(i),
+                  rotation.indices.contains(i), other.rotation.indices.contains(i) else { continue }
             translation[i] += (other.translation[i] - translation[i]) * w
             scale[i] += (other.scale[i] - scale[i]) * w
-            rotation[i] = w >= 1 ? GLTFModel.unit(other.rotation[i]) : simd_slerp(GLTFModel.unit(rotation[i]), GLTFModel.unit(other.rotation[i]), w)
+            rotation[i] = w >= 1 ? GLTFModel.unit(other.rotation[i]) : GLTFModel.mix(rotation[i], other.rotation[i], w)
         }
     }
 
