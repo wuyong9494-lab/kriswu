@@ -40,8 +40,10 @@ final class ArenaWorldView: SCNView {
     private let rig = SCNNode()
     private let cameraNode = SCNNode()
     private let aimNode = SCNNode()
-    /// 瞄准的形状没变就别重做（每帧新建 SCNShape 会把手机卡死，严重时渲染线程直接断）
+    /// 瞄准的形状没变就别重做。形状本身也只建一次：拖着摇杆每帧换一块新网格，渲染线程会断
     private var aimKey = ""
+    private let aimFill = ArenaAvatar.decal(UIColor.white.withAlphaComponent(0.3))
+    private let aimSuperFill = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.3))
     /// 同一时刻场上的爆炸光点，太多就先不生，免得一下子把内存打满闪退
     private var bursts = 0
     private var link: CADisplayLink?
@@ -54,6 +56,8 @@ final class ArenaWorldView: SCNView {
     private var tanY: Float = 0.58
     /// 镜头往自己前面（屏幕上方）多看几格
     private var lookAhead = 3.0
+    /// 再顺着正在走的方向偏一截，站住就收回来
+    private var lead = V2.zero
     /// 屏幕四边落在地上离镜头看着的那点多远：左右、往上、往下（镜头走到场地边上就不再往外跟）
     private var reach: (side: Float, above: Float, below: Float) = (5.6, 15, 8.6)
 
@@ -715,8 +719,14 @@ final class ArenaWorldView: SCNView {
         let map = game.map
         let width = Double(map.width), height = Double(map.height)
         let me = controller.mine.pos
+        let moving = controller.mine.moving
+        let wanted = moving.length > 0.35 ? moving.normalized * 1.35 : .zero
+        lead = lead + (wanted - lead) * Double(min(1, dt * 3.5))
         // 换成“屏幕上的方向”算：上边那一队的人看到的整个倒过来
         var screen = flipped ? V2(width - me.x, height - me.y) : me
+        let screenLead = flipped ? V2(-lead.x, -lead.y) : lead
+        screen.x += screenLead.x
+        screen.y += screenLead.y
         let margin = 1.5
         let side = Double(reach.side) - margin
         screen.x = width > side * 2 ? min(max(screen.x, side), width - side) : width / 2
@@ -1714,9 +1724,15 @@ final class ArenaWorldView: SCNView {
         aimNode.isHidden = false
         guard key != aimKey else { return }
         aimKey = key
-        let shape = SCNShape(path: path, extrusionDepth: 0)
-        shape.firstMaterial = ArenaAvatar.decal((isSuper ? ArenaPalette.gold : UIColor.white).withAlphaComponent(0.3))
-        aimNode.geometry = shape
+        let shape: SCNShape
+        if let existing = aimNode.geometry as? SCNShape {
+            shape = existing
+        } else {
+            shape = SCNShape(path: path, extrusionDepth: 0)
+            aimNode.geometry = shape
+        }
+        shape.firstMaterial = isSuper ? aimSuperFill : aimFill
+        shape.path = path
     }
 }
 
