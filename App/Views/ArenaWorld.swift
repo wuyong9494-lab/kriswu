@@ -24,13 +24,13 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 斜着从后上方看，大约 42 度。不是贴地，也不是正俯视。
-    /// 高 7.4、往后 8.2：atan(7.4/8.2) ≈ 42 度。竖向张角大约 30 度，近大远小，墙的侧面看得到。
-    private static let cameraOffset = SIMD3<Float>(0, 7.4, 8.2)
+    /// 斜着从后上方看，大约 42 度。镜头拉远，人不再贴在镜头前变成巨人。
+    /// 高 14、往后 15.6：atan(14/15.6) ≈ 42 度。横屏左右各 9.4 格。
+    private static let cameraOffset = SIMD3<Float>(0, 14, 15.6)
     /// 竖屏时自己这一排左右各看得到几米
-    private static let portraitHalfWidth: Float = 3.6
-    /// 横屏左右各 6.2 格，自己在画面偏下，前面留得下要打的人
-    private static let landscapeHalfWidth: Float = 6.2
+    private static let portraitHalfWidth: Float = 5.2
+    /// 横屏左右各 9.4 格，人大约占屏幕高度两成
+    private static let landscapeHalfWidth: Float = 9.4
 
     /// 竖向张角（度）。aspect 是宽除以高
     private static func verticalField(aspect: Float) -> Float {

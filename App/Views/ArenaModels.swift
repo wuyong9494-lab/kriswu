@@ -240,8 +240,16 @@ final class ArenaPortraits: ObservableObject {
     private var preparing = false
 
     func prepare() async {
-        // 大厅和对局自己就有 SceneKit。再开一套 SCNRenderer 给每个角色拍头像，两套同时画，iOS 27 上进游戏大约两秒就在渲染线程上断。
-        // 头像先用表情。
+        guard !preparing else { return }
+        preparing = true
+        defer { preparing = false }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        for brawler in Brawler.allCases where images[brawler] == nil {
+            if let image = render(brawler) {
+                images[brawler] = image
+            }
+            await Task.yield()
+        }
     }
 
     private func render(_ brawler: Brawler) -> UIImage? {
@@ -286,14 +294,22 @@ struct BrawlerBadge: View {
     let brawler: Brawler
     var size: CGFloat = 52
     var selected = false
+    @ObservedObject private var portraits = ArenaPortraits.shared
 
     var body: some View {
         ZStack {
             Circle().fill(rim)
-            Text(String(brawler.name.prefix(1)))
-                .font(.system(size: size * 0.42, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .arenaOutline(max(1, size * 0.04))
+            if let image = portraits.images[brawler] {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(size * 0.06)
+            } else {
+                Text(String(brawler.name.prefix(1)))
+                    .font(.system(size: size * 0.42, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(max(1, size * 0.04))
+            }
         }
         .frame(width: size, height: size)
         .overlay(Circle().strokeBorder(.black, lineWidth: max(2, size * 0.06)))

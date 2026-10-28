@@ -71,8 +71,8 @@ struct ArenaHomeView: View {
                 ArenaLobbyBackground()
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                               live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                    .frame(width: min(geo.size.width * (wide ? 0.46 : 0.92), 520), height: geo.size.height * (wide ? 0.62 : 0.4))
-                    .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.5 : 0.46))
+                    .frame(width: min(geo.size.width * (wide ? 0.4 : 0.72), 420), height: geo.size.height * (wide ? 0.52 : 0.34))
+                    .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.46 : 0.4))
                 VStack(spacing: 0) {
                     topBar
                     Spacer(minLength: 0)
@@ -190,10 +190,10 @@ struct ArenaHomeView: View {
                     }
                 }
             }
-            .font(.system(size: 28, weight: .black, design: .rounded).monospacedDigit())
+            .font(.system(size: 18, weight: .black, design: .rounded).monospacedDigit())
             .foregroundStyle(.white)
-            .arenaOutline(3)
-            .padding(.horizontal, 16)
+            .arenaOutline(2)
+            .padding(.horizontal, 14)
             .frame(height: 54)
             .background(Color(red: 0.18, green: 0.22, blue: 0.38), in: Capsule())
             .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
@@ -258,9 +258,14 @@ struct ArenaHomeView: View {
             sheet = .season
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "medal.fill").foregroundStyle(Color(red: 0.78, green: 0.6, blue: 1))
+                Text("季")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color(red: 0.55, green: 0.32, blue: 0.95)))
+                    .overlay(Circle().strokeBorder(.black, lineWidth: 2))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("赛季 \(state.tier) 级")
+                    Text("\(state.tier)级")
                     Capsule().fill(.black.opacity(0.45))
                         .frame(width: 70, height: 5)
                         .overlay(alignment: .leading) {
@@ -733,6 +738,7 @@ struct ArenaHomeView: View {
                 }
                 .padding(.bottom, inspected == nil ? 8 : 150)
             }
+            .task { await ArenaPortraits.shared.prepare() }
             if let inspected {
                 brawlerDetail(inspected)
             }
@@ -1423,8 +1429,8 @@ final class ArenaShowcaseView: SCNView {
         let eye = SCNNode()
         eye.camera = camera
         // 侧前上方大约 28 度，整个人落在台子中下，头和武器都在画面里
-        eye.simdPosition = SIMD3(0.85, 2.15, 5.4)
-        eye.simdEulerAngles = SIMD3(-0.32, 0.16, 0)
+        eye.simdPosition = SIMD3(0.7, 1.9, 6.4)
+        eye.simdEulerAngles = SIMD3(-0.28, 0.14, 0)
         world.rootNode.addChildNode(eye)
         pointOfView = eye
 
@@ -1499,7 +1505,7 @@ final class ArenaShowcaseView: SCNView {
     func show(_ brawler: Brawler, skin: Int = 0) {
         guard avatar?.brawler != brawler || skin != wearing else { return }
         avatar?.node.removeFromParentNode()
-        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.72, skin: skin)
+        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.58, skin: skin)
         stage.addChildNode(made.node)
         avatar = made
         wearing = skin
