@@ -28,7 +28,7 @@ enum ArenaArt {
         material.cullMode = .front
         material.shaderModifiers = [.geometry: """
             float outlineScale = max(length(scn_node.modelTransform[0].xyz), 0.0001);
-            _geometry.position.xyz += normalize(_geometry.normal) * (0.042 / outlineScale);
+            _geometry.position.xyz += normalize(_geometry.normal) * (0.05 / outlineScale);
             """]
         return material
     }()
@@ -46,6 +46,16 @@ enum ArenaArt {
         _surface.diffuse.rgb = mix(float3(luma), c, 1.22);
         """
 
+    /// 角色身上的光分成三档（亮、中间、暗），颜色还是原来的色相。不走相机后处理
+    static let characterBands = """
+        #pragma body
+        float3 col = _output.color.rgb;
+        float l = dot(col, float3(0.299, 0.587, 0.114));
+        float stepped = l > 0.62 ? 1.0 : (l > 0.34 ? 0.78 : 0.55);
+        float scale = stepped / max(l, 0.08);
+        _output.color.rgb = min(col * scale, float3(1.6));
+        """
+
     /// 地面只提一点饱和，不描边光（平地描边光会发灰）
     static let groundSurface = """
         #pragma body
@@ -54,10 +64,13 @@ enum ArenaArt {
         _surface.diffuse.rgb = mix(float3(luma), c, 1.16);
         """
 
-    static func grade(_ material: SCNMaterial, _ surface: String) {
+    static func grade(_ material: SCNMaterial, _ surface: String, fragment: String? = nil) {
         var modifiers = material.shaderModifiers ?? [:]
         guard modifiers[.surface] == nil else { return }
         modifiers[.surface] = surface
+        if let fragment, modifiers[.fragment] == nil {
+            modifiers[.fragment] = fragment
+        }
         material.shaderModifiers = modifiers
     }
 

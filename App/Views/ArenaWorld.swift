@@ -24,12 +24,12 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 镜头在看的那一点的斜上方。高 13.6、往回 8.5，大约 58 度：看得到格子的顶，也看得到人的肩，和录像同一个俯角
-    private static let cameraOffset = SIMD3<Float>(0, 13.6, 8.5)
-    /// 竖屏时自己这一排左右看得到多宽：tan(半个视角)
-    private static let sideView: Float = 0.267
-    /// 横屏时镜头看着的那一排左右各看得到几格。收近一点，人在画面里够大
-    private static let landscapeHalfWidth: Float = 5.2
+    /// 镜头离看的那一点大约 38 米、俯角 60 度。视角压到大约 8 度，近处远处的格子几乎一样大（原版就是这种长焦，不是广角）
+    private static let cameraOffset = SIMD3<Float>(0, 32.9, 19.0)
+    /// 竖屏时自己这一排左右各看得到几米
+    private static let portraitHalfWidth: Float = 4.4
+    /// 横屏时镜头看着的那一排左右各看得到几格。人要够大，又要看得到身边的墙
+    private static let landscapeHalfWidth: Float = 5.6
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -177,15 +177,15 @@ final class ArenaWorldView: SCNView {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Float(bounds.width / bounds.height)
         if aspect >= 1 {
-            // 横屏：看着的那一排左右各大约 5.2 格，自己在画面中间偏下
+            // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 2.3
+            lookAhead = 1.8
         } else {
-            // 竖屏（iPad 竖着）：左右看得到的宽度固定，往前多看几格
-            tanY = Self.sideView / min(max(aspect, 0.3), 0.6)
-            tanX = tanY * aspect
-            lookAhead = 3
+            // 竖屏：左右宽度按米算，不跟着镜头远近放大（镜头拉远了还用旧的角度，人会缩成一点）
+            tanX = Self.portraitHalfWidth / simd_length(Self.cameraOffset)
+            tanY = tanX / max(aspect, 0.3)
+            lookAhead = 2.4
         }
         cameraNode.camera?.fieldOfView = CGFloat(2 * atan(tanY) * 180 / .pi)
         let lift = Self.cameraOffset.y, back = Self.cameraOffset.z
@@ -235,12 +235,12 @@ final class ArenaWorldView: SCNView {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 520
+        ambient.light?.intensity = 420
         ambient.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.95, alpha: 1)
         root.addChildNode(ambient)
         let sun = SCNLight()
         sun.type = .directional
-        sun.intensity = 640
+        sun.intensity = 860
         sun.color = look.sunlight
         sun.castsShadow = false
         let sunNode = SCNNode()
@@ -810,14 +810,19 @@ final class ArenaWorldView: SCNView {
         format.opaque = false
         format.scale = 1
         let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { ctx in
-            let colors = [
-                UIColor(red: 0.64, green: 0.24, blue: 0.98, alpha: 0.72).cgColor,
-                UIColor(red: 0.52, green: 0.16, blue: 0.86, alpha: 0.34).cgColor,
-                UIColor(red: 0.4, green: 0.08, blue: 0.7, alpha: 0).cgColor
-            ] as CFArray
-            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.42, 1]) else { return }
-            ctx.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: side / 2, y: side / 2), startRadius: 0,
-                                              endCenter: CGPoint(x: side / 2, y: side / 2), endRadius: side / 2, options: [])
+            let c = ctx.cgContext
+            c.clear(CGRect(x: 0, y: 0, width: side, height: side))
+            // 几团硬边的圆叠成一朵云。原版的烟雾是一块一块的，不是一团糊掉的渐变
+            let blobs: [(CGFloat, CGFloat, CGFloat)] = [(32, 34, 16), (16, 30, 11), (48, 28, 12), (22, 46, 10), (44, 46, 11)]
+            c.setFillColor(UIColor(red: 0.22, green: 0.04, blue: 0.38, alpha: 0.95).cgColor)
+            for blob in blobs {
+                let r = blob.2 + 3
+                c.fillEllipse(in: CGRect(x: blob.0 - r, y: blob.1 - r, width: r * 2, height: r * 2))
+            }
+            c.setFillColor(UIColor(red: 0.75, green: 0.32, blue: 1, alpha: 0.94).cgColor)
+            for blob in blobs {
+                c.fillEllipse(in: CGRect(x: blob.0 - blob.2, y: blob.1 - blob.2, width: blob.2 * 2, height: blob.2 * 2))
+            }
         }
         return ArenaArt.flat(image)
     }()
