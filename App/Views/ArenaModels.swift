@@ -70,14 +70,14 @@ struct BrawlerLook {
         case .knight:
             return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "2H_Sword"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0.2, to: 0.75, seconds: 0.42),
-                               special: Move(clip: "1H_Melee_Attack_Stab", from: 0.15, to: 0.7, seconds: 0.5),
+                               attack: Move(clip: "1H_Melee_Attack_Slice_Diagonal", from: 0.12, to: 0.82, seconds: 0.38),
+                               special: Move(clip: "1H_Melee_Attack_Stab", from: 0.12, to: 0.72, seconds: 0.42),
                                scale: 1.05)
         case .ranger:
             return BrawlerLook(file: "Rogue.glb", hidden: ["Knife_Offhand", "2H_Crossbow", "Knife", "Throwable"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.1, to: 0.7, seconds: 0.36),
-                               special: Move(clip: "1H_Ranged_Shoot", from: 0, to: 1, seconds: 0.7),
+                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.15, to: 0.7, seconds: 0.32),
+                               special: Move(clip: "2H_Ranged_Shoot", from: 0.1, to: 0.85, seconds: 0.62),
                                scale: 0.96)
         case .barbarian:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
@@ -88,14 +88,14 @@ struct BrawlerLook {
         case .mage:
             return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "Spellbook_open", "1H_Wand"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Spellcast_Shoot", from: 0.15, to: 0.8, seconds: 0.5),
-                               special: Move(clip: "Spellcast_Raise", from: 0.2, to: 0.7, seconds: 0.8),
+                               attack: Move(clip: "Spellcast_Shoot", from: 0.12, to: 0.8, seconds: 0.46),
+                               special: Move(clip: "Spellcast_Long", from: 0.1, to: 0.85, seconds: 0.85),
                                scale: 0.98)
         case .assassin:
             return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Throwable"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.34),
-                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.1, to: 0.75, seconds: 0.5),
+                               attack: Move(clip: "Throw", from: 0.2, to: 0.72, seconds: 0.3),
+                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.08, to: 0.8, seconds: 0.46),
                                scale: 0.94)
         case .guardian:
             return BrawlerLook(file: "Skeleton_Warrior.glb", hidden: [], idle: "Idle", run: "Running_A",
@@ -128,26 +128,26 @@ struct BrawlerLook {
         case .swordsman:
             return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0, to: 1, seconds: 0.32),
-                               special: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0, to: 1, seconds: 0.55),
+                               attack: Move(clip: "2H_Melee_Attack_Spin", from: 0.05, to: 0.95, seconds: 0.5),
+                               special: Move(clip: "2H_Melee_Attack_Spinning", from: 0, to: 1, seconds: 0.62),
                                scale: 1.1)
         case .brewer:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe"],
                                idle: "2H_Melee_Idle", run: "Running_A",
-                               attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.15, to: 0.85, seconds: 0.5),
-                               special: Move(clip: "2H_Melee_Attack_Chop", from: 0.05, to: 0.4, seconds: 0.75),
+                               attack: Move(clip: "Throw", from: 0.18, to: 0.78, seconds: 0.42),
+                               special: Move(clip: "Use_Item", from: 0.08, to: 0.62, seconds: 0.7),
                                scale: 1.12)
         case .scholar:
             return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "1H_Wand", "2H_Staff"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Spellcast_Shoot", from: 0.1, to: 0.85, seconds: 0.45),
-                               special: Move(clip: "Spellcast_Raise", from: 0, to: 1, seconds: 0.9),
+                               attack: Move(clip: "Spellcast_Shoot", from: 0.1, to: 0.8, seconds: 0.42),
+                               special: Move(clip: "Spellcasting", from: 0.05, to: 0.9, seconds: 0.85),
                                scale: 0.97)
         case .darter:
             return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Knife_Offhand"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Throw", from: 0.15, to: 0.85, seconds: 0.3),
-                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0, to: 0.45, seconds: 0.35),
+                               attack: Move(clip: "Throw", from: 0.12, to: 0.7, seconds: 0.28),
+                               special: Move(clip: "Dodge_Backward", from: 0.05, to: 0.9, seconds: 0.36),
                                scale: 0.95)
         }
     }

@@ -61,8 +61,6 @@ final class ArenaAvatar {
     private var outlined = true
     /// 上半身的骨骼（跑着出手只换这些）
     private let upper: [Int]
-    /// 出手时把挥砍放大的骨骼（还是这个人自己的骨头，只是幅度更大）
-    private let accent: [Int]
 
     private struct Playing {
         let clip: GLTFModel.Clip
@@ -104,12 +102,9 @@ final class ArenaAvatar {
         if let model {
             instance = model.instantiate(outline: ArenaArt.outline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
-            let swing = ["upperarm.r", "lowerarm.r", "upperarm.l", "lowerarm.l", "spine", "chest"]
-            accent = swing.compactMap { model.node(named: $0) }.filter { model.animated.contains($0) }
         } else {
             instance = nil
             upper = []
-            accent = []
         }
         if let instance {
             for name in look.hidden {
@@ -429,10 +424,6 @@ final class ArenaAvatar {
                 let t = current.move.from + (current.move.to - current.move.from) * min(progress, 1)
                 var layer = model.restPose
                 current.clip.sample(at: t * current.clip.duration, into: &layer)
-                if current.move.clip == look.attack.clip || current.move.clip == look.special.clip {
-                    let strike = sin(min(progress, 1) * .pi)
-                    widen(&layer, bones: accent, from: model.restPose, by: 1 + (Self.swing(brawler) - 1) * strike)
-                }
                 let fadeIn = min(1, current.elapsed / 0.06)
                 let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.12)
                 let weight = min(fadeIn, fadeOut)
@@ -448,28 +439,6 @@ final class ArenaAvatar {
 
     private static func looped(_ time: Float, _ duration: Float) -> Float {
         duration > 0 ? time.truncatingRemainder(dividingBy: duration) : 0
-    }
-
-    /// 近战挥得更大，远程只把举枪、抬手夸张一点。放大的是这段动作里已经有的旋转，不另做一套骨架
-    private static func swing(_ brawler: Brawler) -> Float {
-        switch brawler {
-        case .barbarian, .swordsman, .knight, .guardian, .brewer: return 1.85
-        case .ranger, .shade, .mage, .necromancer, .darter: return 1.35
-        default: return 1.55
-        }
-    }
-
-    /// 把这些骨骼相对静止姿势的转动放大。amount 为 1 时不动
-    private func widen(_ pose: inout GLTFModel.Pose, bones: [Int], from rest: GLTFModel.Pose, by amount: Float) {
-        guard amount > 1.01 else { return }
-        for i in bones {
-            let restQ = rest.rotation[i]
-            let delta = simd_mul(pose.rotation[i], restQ.inverse)
-            let angle = delta.angle
-            if angle < 0.02 || angle > 2.6 { continue }
-            let bigger = simd_quatf(angle: min(angle * amount, 2.4), axis: delta.axis)
-            pose.rotation[i] = simd_mul(bigger, restQ)
-        }
     }
 
     // MARK: - 材质

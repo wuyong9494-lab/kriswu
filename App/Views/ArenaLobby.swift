@@ -776,7 +776,7 @@ final class ArenaShowcaseView: SCNView {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
-        antialiasingMode = .multisampling2X
+        antialiasingMode = .none
         preferredFramesPerSecond = 60
         rendersContinuously = true
         isPlaying = true
@@ -797,12 +797,6 @@ final class ArenaShowcaseView: SCNView {
         camera.fieldOfView = 28
         camera.zNear = 0.1
         camera.zFar = 30
-        camera.wantsHDR = true
-        camera.bloomIntensity = 0.55
-        camera.bloomThreshold = 0.7
-        camera.bloomBlurRadius = 8
-        camera.saturation = 1.12
-        camera.contrast = 1.04
         let eye = SCNNode()
         eye.camera = camera
         eye.simdPosition = SIMD3(0, 1.25, 4.6)
