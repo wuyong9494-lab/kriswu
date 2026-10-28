@@ -17,6 +17,8 @@ struct ArenaHomeView: View {
     @State private var sheet: Sheet?
     /// 在「和同事打」里开的房间（面板收起来以后再进房间）
     @State private var pendingRoom: GameRoom?
+    /// 冒险
+    @State private var adventure = false
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
 
@@ -175,23 +177,36 @@ struct ArenaHomeView: View {
     // MARK: 左边
 
     private var leftMenu: some View {
-        VStack(spacing: DS.Space.s) {
+        VStack(spacing: 6) {
+            tile("冒险", face: Color(red: 0.86, green: 0.3, blue: 0.3), edge: Color(red: 0.55, green: 0.12, blue: 0.12)) {
+                Image(systemName: "map.fill").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
+                    .overlay(alignment: .topTrailing) {
+                        if ArenaStory.levels.contains(where: { progress.isOpen($0.id) && progress.stars($0.id) == 0 }) {
+                            Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: 6, y: -4)
+                        }
+                    }
+            } action: {
+                adventure = true
+            }
             tile("角色", face: Color(red: 0.25, green: 0.55, blue: 1), edge: Color(red: 0.1, green: 0.3, blue: 0.7)) {
-                BrawlerBadge(brawler: chosen, size: 40)
+                BrawlerBadge(brawler: chosen, size: 34)
                     .overlay(Circle().strokeBorder(.white, lineWidth: 2))
             } action: {
                 sheet = .brawlers
             }
             tile("奖杯之路", face: Color(red: 1, green: 0.6, blue: 0.15), edge: Color(red: 0.7, green: 0.36, blue: 0.02)) {
-                Image(systemName: "flag.checkered").font(.system(size: 24, weight: .black)).foregroundStyle(.white)
+                Image(systemName: "flag.checkered").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
             } action: {
                 sheet = .road
             }
             tile("和同事打", face: Color(red: 0.3, green: 0.78, blue: 0.4), edge: Color(red: 0.12, green: 0.48, blue: 0.18)) {
-                Image(systemName: "person.3.fill").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
+                Image(systemName: "person.3.fill").font(.system(size: 19, weight: .black)).foregroundStyle(.white)
             } action: {
                 sheet = .together
             }
+        }
+        .fullScreenCover(isPresented: $adventure) {
+            ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
         }
     }
 
@@ -199,8 +214,8 @@ struct ArenaHomeView: View {
     private func tile<Icon: View>(_ title: String, face: Color, edge: Color, @ViewBuilder icon: () -> Icon,
                                   action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 2) {
-                icon().frame(height: 42)
+            VStack(spacing: 1) {
+                icon().frame(height: 34)
                 Text(title)
                     .font(.system(size: 12, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
@@ -208,7 +223,7 @@ struct ArenaHomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(width: 76, height: 70)
+            .frame(width: 74, height: 60)
         }
         .buttonStyle(ArenaTileButton(face: face, edge: edge))
     }

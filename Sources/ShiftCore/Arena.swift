@@ -695,8 +695,9 @@ public struct ArenaGame: Sendable {
     var random: SeededRandom
     var bossBrain = BossBrain()
 
-    /// map：用哪张地图；nil 或者不是这个玩法的地图（拿团战的图打大乱斗）就用这个玩法的第一张
-    public init(mode: Mode, entrants: [Entrant], seed: UInt64, map chosen: ArenaMap? = nil) {
+    /// map：用哪张地图；nil 或者不是这个玩法的地图（拿团战的图打大乱斗）就用这个玩法的第一张。
+    /// bossLevel：讨伐骷髅王时骷髅王几级（nil：按勇者们的平均等级；冒险里每关定好）
+    public init(mode: Mode, entrants: [Entrant], seed: UInt64, map chosen: ArenaMap? = nil, bossLevel: Int? = nil) {
         self.mode = mode
         let pool = ArenaMap.pool(for: mode)
         if let chosen, pool.contains(where: { $0.id == chosen.id })
@@ -745,7 +746,7 @@ public struct ArenaGame: Sendable {
         case .heist:
             chests = map.chestSpots.map { Chest(team: $0.team, center: $0.center, health: Chest.fullHealth, maxHealth: Chest.fullHealth) }
         case .boss:
-            setUpBoss()
+            setUpBoss(level: bossLevel)
         default:
             break
         }

@@ -28,9 +28,9 @@ extension ArenaGame {
     // MARK: 开局
 
     /// 讨伐骷髅王：上边一队的就是骷髅王，等级按勇者的平均
-    mutating func setUpBoss() {
+    mutating func setUpBoss(level fixed: Int? = nil) {
         let heroes = fighters.filter { $0.team == 0 }
-        let level = heroes.isEmpty ? 1 : Int((Double(heroes.map(\.level).reduce(0, +)) / Double(heroes.count)).rounded())
+        let level = fixed ?? (heroes.isEmpty ? 1 : Int((Double(heroes.map(\.level).reduce(0, +)) / Double(heroes.count)).rounded()))
         for i in fighters.indices where fighters[i].team == 1 {
             fighters[i].isBoss = true
             fighters[i].brawler = .guardian

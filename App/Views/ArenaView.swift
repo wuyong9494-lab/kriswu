@@ -263,7 +263,8 @@ private struct ArenaMatchView: View {
             }
             if let result = hud.result { resultCard(result) }
             if controller.showingIntro {
-                ArenaVersus(game: controller.game, me: controller.me)
+                ArenaVersus(game: controller.game, me: controller.me,
+                            title: controller.story.map { "\($0.id) \($0.title)" } ?? controller.game.mode.title)
                     .transition(.opacity)
             }
         }
@@ -558,6 +559,10 @@ private struct ArenaMatchView: View {
     private func resultTitle(_ result: ArenaGame.Result, mine: Fighter) -> (String, Color) {
         let gold = Color(uiColor: ArenaPalette.gold)
         let lost = Color(red: 1, green: 0.42, blue: 0.38)
+        if controller.story != nil {
+            let stars = controller.storyReward?.stars ?? 0
+            return stars > 0 ? ("过关！", gold) : ("没过关", lost)
+        }
         switch result {
         case .team(let team):
             switch controller.game.mode {
@@ -579,6 +584,9 @@ private struct ArenaMatchView: View {
 
     private func resultDetails(_ mine: Fighter) -> some View {
         VStack(spacing: DS.Space.m) {
+            if let story = controller.storyReward {
+                storyStars(story)
+            }
             if let reward = controller.reward {
                 HStack(spacing: DS.Space.l) {
                     HStack(spacing: 6) {
@@ -610,14 +618,51 @@ private struct ArenaMatchView: View {
             }
             HStack(spacing: DS.Space.s) {
                 if let onAgain {
-                    Button("再来一局") { onAgain() }
+                    Button(controller.story == nil ? "再来一局" : "再打一次") { onAgain() }
                         .buttonStyle(ArenaGameButton.yellow)
-                    Button("回大厅") { onExit() }
+                    Button(controller.story == nil ? "回大厅" : "回冒险") { onExit() }
                         .buttonStyle(ArenaGameButton.blue)
                 } else {
                     Button("回房间") { onExit() }
                         .buttonStyle(ArenaGameButton.yellow)
                 }
+            }
+        }
+    }
+
+    /// 冒险：三颗星一颗颗亮起来，下面是这一关的要求、给的金币、投奔过来的骷髅
+    private func storyStars(_ reward: ArenaStory.Reward) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                ForEach(0..<3, id: \.self) { k in
+                    Image(systemName: "star.fill")
+                        .font(.system(size: k == 1 ? 40 : 32, weight: .black))
+                        .foregroundStyle(k < reward.stars ? Color(uiColor: ArenaPalette.gold) : Color.white.opacity(0.18))
+                        .arenaOutline(1.5)
+                        .offset(y: k == 1 ? -6 : 0)
+                        .scaleEffect(resultShown || k >= reward.stars ? 1 : 0.2)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.5).delay(0.35 + Double(k) * 0.25), value: resultShown)
+                }
+            }
+            if let level = controller.story {
+                Text("赢下这一关 · 一次没被打倒 · " + level.goal.note)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            if reward.coins > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "dollarsign.circle.fill").foregroundStyle(.yellow)
+                    ArenaCountUp(value: reward.coins, signed: true)
+                }
+                .font(.system(size: 22, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(.white)
+                .arenaOutline(1.2)
+            }
+            if !reward.recruited.isEmpty {
+                Text(reward.recruited.map(\.name).joined(separator: "、") + "加入了勇者们！")
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(Color(uiColor: ArenaPalette.myName))
+                    .arenaOutline(1)
             }
         }
     }
@@ -734,6 +779,8 @@ private struct ArenaCountUp: View {
 private struct ArenaVersus: View {
     let game: ArenaGame
     let me: Int
+    /// 上面的大字：玩法（冒险是这一关的名字）
+    let title: String
     @State private var shown = false
 
     var body: some View {
@@ -748,7 +795,7 @@ private struct ArenaVersus: View {
                 VersusSlant(wide: wide, edgeOnly: false).fill(Color(uiColor: ArenaPalette.blue))
                 VersusSlant(wide: wide, edgeOnly: true).stroke(.white.opacity(0.9), lineWidth: 7)
                 VStack(spacing: 2) {
-                    Text(game.mode.title)
+                    Text(title)
                         .font(.system(size: 30, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .arenaOutline(2)

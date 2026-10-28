@@ -463,6 +463,8 @@ enum ScreenCatalog {
                                                                        loadout: ArenaLoadout.basic(.knight, level: 7), demo: .versus))
         case "arenaResult": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .ranger, name: "我", level: 4,
                                                                        loadout: ArenaLoadout.basic(.ranger, level: 4), demo: .result))
+        case "arenaStory": ArenaStoryView(brawler: .knight, partners: [.ranger, .mage], name: "我")
+        case "arenaTalk": ArenaStoryView(brawler: .knight, partners: [.ranger, .mage], name: "我", showIntro: true)
         case "gomoku": GomokuHomeView()
         case "gomokuBoard":
             GomokuLocalScreen(mode: .computer(.normal, .black),

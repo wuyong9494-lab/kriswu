@@ -88,6 +88,8 @@ final class ArenaController: ObservableObject {
         var lineup: [Brawler] = []
         /// 带的小道具、星徽、超级充能
         var loadout = ArenaLoadout()
+        /// 冒险的一关（玩法、地图、对手、队友都按这一关的）
+        var story: ArenaStory.Level?
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
 
@@ -106,6 +108,9 @@ final class ArenaController: ObservableObject {
     @Published private(set) var hud = HUD()
     /// 打完这局得到的奖杯、金币（结果出来时记一次）
     @Published private(set) var reward: ArenaProgress.Reward?
+    /// 冒险的一关：打的是哪一关、打完拿了几颗星和金币
+    private(set) var story: ArenaStory.Level?
+    @Published private(set) var storyReward: ArenaStory.Reward?
     /// 联机时房主走了
     @Published private(set) var disconnected = false
     /// 进球、一局打完、开新一局时屏幕中间写一行大字（两秒后消失）
@@ -159,24 +164,33 @@ final class ArenaController: ObservableObject {
     private var history: [(sequence: Int, move: V2, dt: Double)] = []
     private var lastSnapshot = -1.0
 
-    /// 自己和电脑打
+    /// 自己和电脑打（冒险的一关也是）
     convenience init(setup: Setup, seed: UInt64 = UInt64.random(in: 0..<UInt64.max)) {
-        var random = SeededRandom(seed: seed)
-        var others = Brawler.allCases.filter { $0 != setup.brawler }
-        random.shuffle(&others)
-        let maps = ArenaMap.pool(for: setup.mode)
-        let map = maps[random.below(maps.count)]
-        let teams = setup.mode.seatTeams
-        var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: teams[0],
-                                          level: setup.level, lineup: setup.lineup,
-                                          loadout: setup.loadout.allowed(setup.brawler, level: setup.level))]
-        for k in 1..<teams.count {
-            let brawler = others[(k - 1) % others.count]
-            let boss = setup.mode == .boss && teams[k] == 1
-            entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
-                                              level: setup.level, loadout: ArenaLoadout.basic(brawler, level: setup.level)))
+        let mine = ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
+                                     level: setup.level, lineup: setup.lineup, loadout: setup.loadout.allowed(setup.brawler, level: setup.level))
+        let game: ArenaGame
+        if let story = setup.story {
+            game = ArenaGame(mode: story.mode, entrants: story.entrants(me: mine), seed: seed, map: ArenaMap.named(story.map),
+                             bossLevel: story.bossLevel)
+        } else {
+            var random = SeededRandom(seed: seed)
+            var others = Brawler.allCases.filter { $0 != setup.brawler }
+            random.shuffle(&others)
+            let maps = ArenaMap.pool(for: setup.mode)
+            let map = maps[random.below(maps.count)]
+            let teams = setup.mode.seatTeams
+            var entrants = [mine]
+            entrants[0].team = teams[0]
+            for k in 1..<teams.count {
+                let brawler = others[(k - 1) % others.count]
+                let boss = setup.mode == .boss && teams[k] == 1
+                entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
+                                                  level: setup.level, loadout: ArenaLoadout.basic(brawler, level: setup.level)))
+            }
+            game = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
-        self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map), me: 0, room: nil, seed: seed)
+        self.init(role: .solo, game: game, me: 0, room: nil, seed: seed)
+        story = setup.story
         switch setup.demo {
         case .versus?:
             introLeft = .infinity
@@ -486,8 +500,13 @@ final class ArenaController: ObservableObject {
         }
         if hud.result != nil, !recorded {
             recorded = true
-            ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
-            reward = ArenaProgressStore.shared.record(outcome(hud.result), brawler: mine.brawler)
+            if let story {
+                // 冒险不加减奖杯：按星给金币
+                storyReward = ArenaProgressStore.shared.finish(story, stars: story.stars(in: game, me: me))
+            } else {
+                ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
+                reward = ArenaProgressStore.shared.record(outcome(hud.result), brawler: mine.brawler)
+            }
         }
         if hud != self.hud { self.hud = hud }
     }
@@ -607,6 +626,21 @@ final class ArenaProgressStore: ObservableObject {
     func choose(_ gadget: Gadget, for brawler: Brawler) {
         progress.choose(gadget, for: brawler)
         save()
+    }
+
+    /// 冒险最近打完的一关（冒险地图上看要不要放打完的对话）
+    struct StoryResult: Equatable {
+        let level: String
+        let stars: Int
+    }
+    @Published private(set) var lastStory: StoryResult?
+
+    /// 打完冒险的一关
+    func finish(_ level: ArenaStory.Level, stars: Int) -> ArenaStory.Reward {
+        let reward = progress.finish(level, stars: stars)
+        lastStory = StoryResult(level: level.id, stars: stars)
+        save()
+        return reward
     }
 
     func choose(_ starPower: StarPower, for brawler: Brawler) {

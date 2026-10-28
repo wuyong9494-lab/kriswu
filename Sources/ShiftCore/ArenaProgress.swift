@@ -48,6 +48,10 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
     /// 每个角色选的小道具、星徽（按 Brawler.rawValue；没选过的带第一个）
     private var gadgetTable: [Int: Int] = [:]
     private var starTable: [Int: Int] = [:]
+    /// 冒险：每一关最好拿过几颗星（按关的编号）
+    public internal(set) var storyStars: [String: Int] = [:]
+    /// 冒险里投奔过来的骷髅（按 Brawler.rawValue，不用攒奖杯就解锁）
+    private var recruited: Set<Int> = []
 
     public init() {}
 
@@ -60,6 +64,8 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
         reached = try container.decodeIfPresent(Int.self, forKey: .reached) ?? 0
         gadgetTable = try container.decodeIfPresent([Int: Int].self, forKey: .gadgetTable) ?? [:]
         starTable = try container.decodeIfPresent([Int: Int].self, forKey: .starTable) ?? [:]
+        storyStars = try container.decodeIfPresent([String: Int].self, forKey: .storyStars) ?? [:]
+        recruited = try container.decodeIfPresent(Set<Int>.self, forKey: .recruited) ?? []
     }
 
     /// 奖杯之路：越往后间隔越大
@@ -93,7 +99,17 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
     }
 
     public func isUnlocked(_ brawler: Brawler) -> Bool {
-        brawler.unlockAt == 0 || max(totalTrophies, reached) >= brawler.unlockAt
+        brawler.unlockAt == 0 || max(totalTrophies, reached) >= brawler.unlockAt || recruited.contains(brawler.rawValue)
+    }
+
+    /// 冒险给的金币
+    mutating func addCoins(_ amount: Int) {
+        coins += max(amount, 0)
+    }
+
+    /// 冒险里投奔过来的（马上解锁）
+    mutating func recruit(_ brawlers: [Brawler]) {
+        recruited.formUnion(brawlers.map(\.rawValue))
     }
 
     /// 下一个还没走到的点
@@ -193,5 +209,6 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case trophyTable = "trophies", levelTable = "levels", coins, reached, gadgetTable = "gadgets", starTable = "stars"
+        case storyStars = "story", recruited
     }
 }
