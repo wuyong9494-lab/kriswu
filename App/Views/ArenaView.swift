@@ -301,7 +301,7 @@ private struct ArenaMatchView: View {
             }
             Button {
                 muted.toggle()
-                ArenaSound.shared.muteChanged()
+                ArenaSound.shared.muteChanged(battle: true)
             } label: {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.subheadline).foregroundStyle(.white)
                     .frame(width: 36, height: 36)

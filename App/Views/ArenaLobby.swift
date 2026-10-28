@@ -22,6 +22,8 @@ struct ArenaHomeView: View {
     @State private var adventure = false
     /// 排位赛（只打 3v3，按段位加减排位分）
     @AppStorage("arena.ranked") private var ranked = false
+    @AppStorage(ArenaSound.muteKey) private var muted = false
+    @AppStorage(ArenaSound.volumeKey) private var volume = 0.7
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
 
@@ -95,7 +97,11 @@ struct ArenaHomeView: View {
         .persistentSystemOverlays(.hidden)
         // 先在后台把 3D 模型读好、画好头像，开打时不用等
         .task { await ArenaPortraits.shared.prepare() }
-        .onAppear { growth.refreshSeason() }
+        .onAppear {
+            growth.refreshSeason()
+            ArenaSound.shared.enterLobby()
+        }
+        .onChange(of: volume) { _ in ArenaSound.shared.volumeChanged() }
         .sheet(item: $sheet, onDismiss: {
             guard let room = pendingRoom else { return }
             pendingRoom = nil
@@ -103,10 +109,10 @@ struct ArenaHomeView: View {
         }) { item in
             sheetContent(item)
         }
-        .fullScreenCover(item: $playing) { entry in
+        .fullScreenCover(item: $playing, onDismiss: { ArenaSound.shared.enterLobby() }) { entry in
             ArenaPlayView(setup: entry.setup)
         }
-        .fullScreenCover(item: $lobby) { entry in
+        .fullScreenCover(item: $lobby, onDismiss: { ArenaSound.shared.enterLobby() }) { entry in
             ArenaRoomView(lobby: entry.lobby)
         }
     }
@@ -117,6 +123,7 @@ struct ArenaHomeView: View {
         HStack(spacing: DS.Space.s) {
             Button {
                 ArenaOrientation.releaseAll()
+                ArenaSound.shared.leaveLobby()
                 dismiss()
             } label: {
                 Image(systemName: "xmark").font(.headline).foregroundStyle(.white)
@@ -124,6 +131,23 @@ struct ArenaHomeView: View {
                     .background(.black.opacity(0.3), in: Circle())
             }
             .accessibilityLabel("离开勇者乱斗")
+            Button {
+                muted.toggle()
+                ArenaSound.shared.muteChanged(battle: false)
+            } label: {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(.black.opacity(0.3), in: Circle())
+            }
+            .accessibilityLabel(muted ? "打开声音" : "静音")
+            if !muted {
+                Slider(value: $volume, in: 0.05...1)
+                    .frame(width: 72)
+                    .tint(.white)
+                    .accessibilityLabel("音量")
+            }
             trophyPill
             pill {
                 Image(systemName: "dollarsign.circle.fill").foregroundStyle(.yellow)
@@ -246,7 +270,7 @@ struct ArenaHomeView: View {
                 sheet = .together
             }
         }
-        .fullScreenCover(isPresented: $adventure) {
+        .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
             ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
         }
     }

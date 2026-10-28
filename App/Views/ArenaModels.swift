@@ -204,18 +204,30 @@ final class ArenaModels: @unchecked Sendable {
 
     private func model(_ file: String, animations: Set<String>) -> GLTFModel? {
         lock.lock()
-        defer { lock.unlock() }
-        if let model = models[file] { return model }
-        guard !missing.contains(file) else { return nil }
+        if let model = models[file] {
+            lock.unlock()
+            return model
+        }
+        if missing.contains(file) {
+            lock.unlock()
+            return nil
+        }
+        lock.unlock()
+        // 解析不占着锁。进对局如果还在后台读，主线程不用等整包读完
         let name = (file as NSString).deletingPathExtension
         let type = (file as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: type),
-              let model = try? GLTFModel(url: url, animations: animations) else {
+              let parsed = try? GLTFModel(url: url, animations: animations) else {
+            lock.lock()
             missing.insert(file)
+            lock.unlock()
             return nil
         }
-        models[file] = model
-        return model
+        lock.lock()
+        if models[file] == nil { models[file] = parsed }
+        let stored = models[file]
+        lock.unlock()
+        return stored
     }
 
     /// 在后台把全部模型读好（进乱斗首页时就开始，开打时不用等）

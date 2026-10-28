@@ -137,7 +137,8 @@ final class ArenaWorldView: SCNView {
         self.controller = controller
         super.init(frame: .zero, options: nil)
         backgroundColor = ArenaPalette.grass
-        antialiasingMode = .none
+        // 2 倍抗锯齿。不开 HDR、不开泛光：那两项在 iOS 27 的渲染线程上会直接断（EXC_BREAKPOINT）
+        antialiasingMode = .multisampling2X
         preferredFramesPerSecond = 60
         rendersContinuously = true
         isPlaying = true
@@ -224,6 +225,8 @@ final class ArenaWorldView: SCNView {
         camera.zFar = 140
         camera.projectionDirection = .vertical
         camera.fieldOfView = 60
+        camera.wantsHDR = false
+        camera.bloomIntensity = 0
         cameraNode.camera = camera
         cameraNode.simdPosition = Self.cameraOffset
         cameraNode.simdEulerAngles = SIMD3(-atan2(Self.cameraOffset.y, Self.cameraOffset.z), 0, 0)
@@ -372,7 +375,7 @@ final class ArenaWorldView: SCNView {
             // 毒圈：圈外一圈半透明的绿墙，边上一道亮线
             let radius = game.safeRadius
             let wall = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius) + Self.gasBand, height: 3.2)
-            wall.radialSegmentCount = 28
+            wall.radialSegmentCount = 64
             let gas = ArenaAvatar.decal(ArenaPalette.poison.withAlphaComponent(0.55))
             wall.firstMaterial = gas
             let wallNode = SCNNode(geometry: wall)
@@ -380,7 +383,7 @@ final class ArenaWorldView: SCNView {
             wallNode.castsShadow = false
             wallNode.renderingOrder = 20
             let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.18), height: 3.5)
-            edge.radialSegmentCount = 28
+            edge.radialSegmentCount = 64
             edge.firstMaterial = ArenaAvatar.decal(UIColor(red: 0.6, green: 1, blue: 0.5, alpha: 0.9))
             let edgeNode = SCNNode(geometry: edge)
             edgeNode.simdPosition = center + SIMD3(0, 1.75, 0)
@@ -550,7 +553,7 @@ final class ArenaWorldView: SCNView {
         return ArenaArt.walls(cells)
     }
 
-    /// 场地外一圈树、几块石头，分队玩法两头插旗。网格大家共用，不描边、不投影，也不压成一整块（压的那一下会把进对局卡住）
+    /// 场地外两圈树、几块石头，分队玩法两头插旗。网格大家共用，不描边、不投影。不压成一整块：那一下会卡住进对局
     private func scenery(_ game: ArenaGame) -> SCNNode {
         let map = game.map
         let width = Double(map.width), height = Double(map.height)
@@ -577,7 +580,7 @@ final class ArenaWorldView: SCNView {
         }
         for row in 0..<2 {
             let gap = 1.6 + Double(row) * 2.2
-            let step = 4.2
+            let step = 2.6
             var edge: [V2] = []
             var t = -gap + Double(row) * step / 2
             while t <= width + gap {
@@ -1602,7 +1605,7 @@ final class ArenaWorldView: SCNView {
         label.isHidden = true
         overlay.addChild(label)
         floaters.append(Floater(label: label, at: point, born: clock))
-        if floaters.count > 16 { floaters.removeFirst().label.removeFromParent() }
+        if floaters.count > 24 { floaters.removeFirst().label.removeFromParent() }
     }
 
     private func syncFloaters(_ view: simd_float4x4) {
