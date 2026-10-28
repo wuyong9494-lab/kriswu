@@ -413,18 +413,30 @@ final class GLTFModel: @unchecked Sendable {
                           bytesPerComponent: MemoryLayout<Float>.size, dataOffset: 0, dataStride: MemoryLayout<Float>.size * width)
     }
 
-    /// 零长度或带 NaN 的四元数归一化会得到非法值
-    static func unit(_ q: simd_quatf) -> simd_quatf { BoneSampler.unit(q) }
+    static func unit(_ q: simd_quatf) -> simd_quatf { simd_quatf(BoneSampler.unit(q.bone)) }
 
     /// 自己插值。simd_slerp 在 iOS 27 上会进 atan2，然后按坏地址读内存（SIGBUS）
-    static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf { BoneSampler.mix(a, b, t) }
+    static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf {
+        simd_quatf(BoneSampler.mix(a.bone, b.bone, t))
+    }
 }
 
 extension GLTFModel.Clip {
     /// 第 time 秒（超出就停在头尾）每根骨骼的样子写进 pose；这段动画没动到的骨骼不改
     func sample(at time: Float, into pose: inout GLTFModel.Pose) {
-        BoneSampler.sample(time, channels, translation: &pose.translation, rotation: &pose.rotation, scale: &pose.scale)
+        var translation = pose.translation.map { BoneSampler.Vec3(x: $0.x, y: $0.y, z: $0.z) }
+        var rotation = pose.rotation.map(\.bone)
+        var scale = pose.scale.map { BoneSampler.Vec3(x: $0.x, y: $0.y, z: $0.z) }
+        BoneSampler.sample(time, channels, translation: &translation, rotation: &rotation, scale: &scale)
+        pose.translation = translation.map { SIMD3($0.x, $0.y, $0.z) }
+        pose.rotation = rotation.map { simd_quatf($0) }
+        pose.scale = scale.map { SIMD3($0.x, $0.y, $0.z) }
     }
+}
+
+private extension simd_quatf {
+    var bone: BoneSampler.Quat { BoneSampler.Quat(x: vector.x, y: vector.y, z: vector.z, w: vector.w) }
+    init(_ q: BoneSampler.Quat) { self.init(ix: q.x, iy: q.y, iz: q.z, r: q.w) }
 }
 
 extension GLTFModel.Pose {

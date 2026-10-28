@@ -1,8 +1,33 @@
 import Foundation
-import simd
 
-/// 骨骼动画采样。不调用 simd_slerp：iOS 27 上那个函数会进 atan2，再按一个不存在的地址读内存（SIGBUS）。
+/// 骨骼动画采样。不用 simd_slerp：iOS 27 上那个函数会进 atan2，再按一个不存在的地址读内存（SIGBUS）。
+/// 这里只用四个浮点数，Linux 上的单元测试和手机上的 App 走同一份代码。
 public enum BoneSampler {
+    public struct Quat: Equatable, Sendable {
+        public var x, y, z, w: Float
+        public init(x: Float, y: Float, z: Float, w: Float) {
+            self.x = x
+            self.y = y
+            self.z = z
+            self.w = w
+        }
+        public static let identity = Quat(x: 0, y: 0, z: 0, w: 1)
+    }
+
+    public struct Vec3: Equatable, Sendable {
+        public var x, y, z: Float
+        public init(x: Float, y: Float, z: Float) {
+            self.x = x
+            self.y = y
+            self.z = z
+        }
+        public static let zero = Vec3(x: 0, y: 0, z: 0)
+        public static let one = Vec3(x: 1, y: 1, z: 1)
+        public static func + (a: Vec3, b: Vec3) -> Vec3 { Vec3(x: a.x + b.x, y: a.y + b.y, z: a.z + b.z) }
+        public static func - (a: Vec3, b: Vec3) -> Vec3 { Vec3(x: a.x - b.x, y: a.y - b.y, z: a.z - b.z) }
+        public static func * (a: Vec3, k: Float) -> Vec3 { Vec3(x: a.x * k, y: a.y * k, z: a.z * k) }
+    }
+
     public struct Channel: Sendable {
         public enum Path: Sendable { case translation, rotation, scale }
         public var node: Int
@@ -20,35 +45,31 @@ public enum BoneSampler {
         }
     }
 
-    public static func unit(_ q: simd_quatf) -> simd_quatf {
-        let x = q.vector.x, y = q.vector.y, z = q.vector.z, w = q.vector.w
-        guard x.isFinite, y.isFinite, z.isFinite, w.isFinite else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
-        let length = (x * x + y * y + z * z + w * w).squareRoot()
-        guard length.isFinite, length > 1e-6 else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
-        return simd_quatf(ix: x / length, iy: y / length, iz: z / length, r: w / length)
+    public static func unit(_ q: Quat) -> Quat {
+        guard q.x.isFinite, q.y.isFinite, q.z.isFinite, q.w.isFinite else { return .identity }
+        let length = (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w).squareRoot()
+        guard length.isFinite, length > 1e-6 else { return .identity }
+        return Quat(x: q.x / length, y: q.y / length, z: q.z / length, w: q.w / length)
     }
 
-    public static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf {
+    public static func mix(_ a: Quat, _ b: Quat, _ t: Float) -> Quat {
         let from = unit(a)
         var to = unit(b)
         guard t.isFinite else { return from }
         if t <= 0 { return from }
         if t >= 1 { return to }
-        let dot = from.vector.x * to.vector.x + from.vector.y * to.vector.y + from.vector.z * to.vector.z + from.vector.w * to.vector.w
-        if dot < 0 { to = simd_quatf(vector: -to.vector) }
+        let dot = from.x * to.x + from.y * to.y + from.z * to.z + from.w * to.w
+        if dot < 0 { to = Quat(x: -to.x, y: -to.y, z: -to.z, w: -to.w) }
         let s = 1 - t
-        return unit(simd_quatf(ix: from.vector.x * s + to.vector.x * t,
-                               iy: from.vector.y * s + to.vector.y * t,
-                               iz: from.vector.z * s + to.vector.z * t,
-                               r: from.vector.w * s + to.vector.w * t))
+        return unit(Quat(x: from.x * s + to.x * t, y: from.y * s + to.y * t, z: from.z * s + to.z * t, w: from.w * s + to.w * t))
     }
 
-    /// 按时间把通道写进姿势。关键帧不够、节点编号超出、数值不是有限数，都跳过，不读越界。
+    /// 关键帧不够、节点编号超出、数值不是有限数，都跳过，不读越界。
     public static func sample(_ time: Float,
                               _ channels: [Channel],
-                              translation: inout [SIMD3<Float>],
-                              rotation: inout [simd_quatf],
-                              scale: inout [SIMD3<Float>]) {
+                              translation: inout [Vec3],
+                              rotation: inout [Quat],
+                              scale: inout [Vec3]) {
         let time = time.isFinite ? time : 0
         for channel in channels {
             let times = channel.times
@@ -84,7 +105,7 @@ public enum BoneSampler {
                 guard let value0 = vec3(v, k0), translation.indices.contains(channel.node), scale.indices.contains(channel.node) else { continue }
                 var value = value0
                 if fraction > 0, let value1 = vec3(v, k1) {
-                    value += (value1 - value) * fraction
+                    value = value + (value1 - value) * fraction
                 }
                 if channel.path == .translation {
                     translation[channel.node] = value
@@ -95,18 +116,18 @@ public enum BoneSampler {
         }
     }
 
-    private static func quat(_ v: [Float], _ key: Int) -> simd_quatf? {
+    private static func quat(_ v: [Float], _ key: Int) -> Quat? {
         guard key >= 0, key < 1_000_000 else { return nil }
         let base = key * 4
         guard base >= 0, base + 3 < v.count else { return nil }
-        return simd_quatf(ix: v[base], iy: v[base + 1], iz: v[base + 2], r: v[base + 3])
+        return Quat(x: v[base], y: v[base + 1], z: v[base + 2], w: v[base + 3])
     }
 
-    private static func vec3(_ v: [Float], _ key: Int) -> SIMD3<Float>? {
+    private static func vec3(_ v: [Float], _ key: Int) -> Vec3? {
         guard key >= 0, key < 1_000_000 else { return nil }
         let base = key * 3
         guard base >= 0, base + 2 < v.count else { return nil }
-        let value = SIMD3(v[base], v[base + 1], v[base + 2])
+        let value = Vec3(x: v[base], y: v[base + 1], z: v[base + 2])
         guard value.x.isFinite, value.y.isFinite, value.z.isFinite else { return nil }
         return value
     }
