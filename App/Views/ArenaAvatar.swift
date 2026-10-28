@@ -354,8 +354,15 @@ final class ArenaAvatar {
         sparks?.birthRate = hyper ? 40 : 0
         // 走得快：脚下拖一道光（超级充能是紫的）
         let fast = fighter.alive && (fighter.speedBoost > 0 || fighter.hyperTime > 0) && speed > 0.6 && opacity > 0.3
-        streak?.birthRate = fast ? 24 : 0
-        streak?.particleColor = fighter.hyperTime > 0 ? ArenaPalette.hyper : UIColor(white: 1, alpha: 0.9)
+        if fast {
+            streak?.birthRate = 24
+            streak?.particleColor = fighter.hyperTime > 0 ? ArenaPalette.hyper : UIColor(white: 1, alpha: 0.9)
+        } else if fighter.alive && speed > 0.6 && opacity > 0.3 {
+            streak?.birthRate = 8
+            streak?.particleColor = UIColor(white: 0.8, alpha: 0.45)
+        } else {
+            streak?.birthRate = 0
+        }
         // 被冰霜打中：身上发蓝
         let frozen = fighter.alive && fighter.slowed > 0
         if frozen != frosted, let instance {
@@ -642,7 +649,7 @@ final class ArenaAvatar {
                 var layer = model.restPose
                 current.clip.sample(at: t * current.clip.duration, into: &layer)
                 let fadeIn = min(1, current.elapsed / 0.06)
-                let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.12)
+                let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.22)
                 let weight = min(fadeIn, fadeOut)
                 if current.upperOnly || (!current.fullBody && moving) {
                     pose.blend(toward: layer, weight: weight, nodes: upper)
@@ -759,20 +766,23 @@ final class ArenaTag {
     private var ammo: [ArenaBar] = []
     private var shownHealth = -1
     private var shownStars = -1
-    private static let width: CGFloat = 52
-    private static let barHeight: CGFloat = 8
+    private let healthy: UIColor
+    private static let width: CGFloat = 64
+    private static let barHeight: CGFloat = 10
 
     /// boss：骷髅王的血条长一倍、粗一点
     init(fighter: Fighter, isMe: Bool, ally: Bool, boss: Bool = false) {
         let width = boss ? 120 : ArenaTag.width, barHeight = boss ? 15 : ArenaTag.barHeight
         let healthColor = isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName)
-        name = ArenaText(size: boss ? 14 : 9, color: healthColor)
-        number = ArenaText(size: boss ? 18 : 11, color: healthColor)
-        bar = ArenaBar(width: width, height: barHeight, color: isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red))
+        let barColor = isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red)
+        healthy = barColor
+        name = ArenaText(size: boss ? 14 : 10, color: healthColor)
+        number = ArenaText(size: boss ? 18 : 13, color: healthColor)
+        bar = ArenaBar(width: width, height: barHeight, color: barColor)
         name.set(fighter.name)
         let barH = Float(barHeight / 55)
-        let numberH = Float(boss ? 18 : 11) / 48
-        let nameH = Float(boss ? 14 : 9) / 48
+        let numberH = Float(boss ? 18 : 13) / 48
+        let nameH = Float(boss ? 14 : 10) / 48
         number.node.simdPosition = SIMD3(0, barH / 2 + numberH / 2 + 0.04, 0.02)
         name.node.simdPosition = SIMD3(0, barH / 2 + numberH + nameH / 2 + 0.08, 0.01)
         starText.node.simdPosition = SIMD3(0, barH / 2 + numberH + nameH + 0.2, 0.01)
@@ -802,10 +812,24 @@ final class ArenaTag {
         }
         node.isHidden = false
         node.opacity = CGFloat(min(1, opacity * 1.4))
-        bar.set(CGFloat(fighter.health) / CGFloat(max(fighter.maxHealth, 1)))
+        let ratio = CGFloat(fighter.health) / CGFloat(max(fighter.maxHealth, 1))
+        bar.set(ratio)
+        if ratio < 0.28 {
+            bar.color = UIColor(red: 1, green: 0.28, blue: 0.22, alpha: 1)
+        } else if ratio < 0.55 {
+            bar.color = ArenaPalette.gold
+        } else {
+            bar.color = healthy
+        }
         if fighter.health != shownHealth {
+            let dropped = shownHealth >= 0 && fighter.health < shownHealth
             shownHealth = fighter.health
             number.set("\(max(fighter.health, 0))")
+            if dropped {
+                number.node.removeAllActions()
+                number.node.simdScale = SIMD3(repeating: 1.35)
+                number.node.runAction(.scale(to: 1, duration: 0.12))
+            }
         }
         let mark = fighter.stars > 0 ? fighter.stars : -fighter.cubes
         if mark != shownStars {

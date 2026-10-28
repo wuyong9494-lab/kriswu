@@ -711,6 +711,11 @@ final class ArenaWorldView: SCNView {
         for k in bushes.indices {
             let fade = me.alive && bushes[k].at.distance(to: me.pos) < 1.45
             if fade != bushes[k].faded {
+                if fade {
+                    let base = bushes[k].node.scale
+                    bushes[k].node.scale = SCNVector3(base.x * 1.12, base.y * 0.88, base.z * 1.12)
+                    bushes[k].node.runAction(.scale(to: base, duration: 0.16))
+                }
                 bushes[k].faded = fade
                 bushes[k].node.opacity = fade ? 0.4 : 1
             }
@@ -730,7 +735,7 @@ final class ArenaWorldView: SCNView {
             if abs(current.radius - radius) > 0.02 {
                 current.radius = radius
                 current.edge.innerRadius = CGFloat(radius)
-                current.edge.outerRadius = CGFloat(radius + 0.28)
+                current.edge.outerRadius = CGFloat(radius + 0.7)
                 poison = current
             }
             layPoison(current, radius: Float(radius), center: SIMD3(Float(game.map.center.x), 0, Float(game.map.center.y)))
@@ -817,7 +822,7 @@ final class ArenaWorldView: SCNView {
 
     /// 毒圈。细边标出安全区，外面三圈紫雾牌子。雾只建一次，缩圈时挪位置，不重做网格
     private func makePoison(at center: SIMD3<Float>, radius: Double) -> PoisonField {
-        let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.28), height: 0.06)
+        let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.7), height: 0.16)
         edge.radialSegmentCount = 48
         edge.firstMaterial = ArenaAvatar.decal(UIColor(red: 0.72, green: 0.35, blue: 1, alpha: 0.9))
         let edgeNode = SCNNode(geometry: edge)
@@ -1898,19 +1903,19 @@ private struct ThemeLook {
         switch theme {
         case .sand:
             return ThemeLook(floor: color(0.58, 0.79, 0.30), floorDark: color(0.54, 0.75, 0.28), patch: color(0.93, 0.80, 0.52),
-                             bushGround: color(0.33, 0.55, 0.22), lawn: color(0.45, 0.67, 0.26), sunlight: color(1.0, 0.97, 0.9),
+                             bushGround: color(0.16, 0.38, 0.12), lawn: color(0.45, 0.67, 0.26), sunlight: color(1.0, 0.97, 0.9),
                              flowers: false, walls: [(kind: .crate, weight: 7), (kind: .barrel, weight: 3)])
         case .meadow:
             return ThemeLook(floor: color(0.53, 0.80, 0.31), floorDark: color(0.49, 0.76, 0.29), patch: color(0.36, 0.62, 0.22),
-                             bushGround: color(0.30, 0.53, 0.21), lawn: color(0.42, 0.66, 0.25), sunlight: color(1.0, 0.98, 0.92),
+                             bushGround: color(0.14, 0.36, 0.11), lawn: color(0.42, 0.66, 0.25), sunlight: color(1.0, 0.98, 0.92),
                              flowers: true, walls: [(kind: .crate, weight: 5), (kind: .barrel, weight: 5)])
         case .stone:
             return ThemeLook(floor: color(0.52, 0.77, 0.34), floorDark: color(0.48, 0.73, 0.32), patch: color(0.74, 0.74, 0.70),
-                             bushGround: color(0.31, 0.52, 0.24), lawn: color(0.42, 0.64, 0.28), sunlight: color(0.96, 0.98, 1.0),
+                             bushGround: color(0.15, 0.36, 0.13), lawn: color(0.42, 0.64, 0.28), sunlight: color(0.96, 0.98, 1.0),
                              flowers: false, walls: [(kind: .stone, weight: 6), (kind: .crate, weight: 4)])
         case .dusk:
             return ThemeLook(floor: color(0.60, 0.77, 0.30), floorDark: color(0.56, 0.73, 0.28), patch: color(0.82, 0.63, 0.38),
-                             bushGround: color(0.34, 0.52, 0.22), lawn: color(0.47, 0.64, 0.26), sunlight: color(1.0, 0.88, 0.72),
+                             bushGround: color(0.16, 0.34, 0.12), lawn: color(0.47, 0.64, 0.26), sunlight: color(1.0, 0.88, 0.72),
                              flowers: false, walls: [(kind: .crate, weight: 5), (kind: .barrel, weight: 5)])
         }
     }
