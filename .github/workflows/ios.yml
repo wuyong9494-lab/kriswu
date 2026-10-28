@@ -414,12 +414,81 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.com commit -qm "Screenshots for ${GITHUB_SHA::7}"
           git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" screenshots
 
-  # 签名后上传到 TestFlight（同事用 TestFlight App 安装）。
-  # 需要在仓库 Settings › Secrets and variables › Actions 里配好：
-  # APPLE_TEAM_ID、ASC_KEY_ID、ASC_ISSUER_ID、ASC_KEY_P8（.p8 文件的全部内容）。没配就跳过。
+  # 乱斗：模拟器里打开大厅和一局团战，截图留底。不上传。
+  arena-look:
+    runs-on: macos-15
+    concurrency:
+      group: arena-look-${{ github.ref }}
+      cancel-in-progress: true
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 选用最新的 Xcode（26 或更新）
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || { echo "::error::这台云端电脑上没有 Xcode 26"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 编译模拟器版本
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro') or x['name'].startswith('iPhone')))")
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcodebuild build \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Debug \
+            -destination "id=$DEVICE" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
+
+      - name: 打开大厅和对局并截图
+        run: |
+          set -euo pipefail
+          APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
+          ID=com.kriswu.shiftreminder
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          mkdir -p shots
+          before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
+          for s in arena arenaPlay; do
+            xcrun simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+            xcrun simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+            sleep 12
+            xcrun simctl io "$DEVICE" screenshot "shots/$s.png"
+          done
+          xcrun simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+          after=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$after" -gt "$before" ]; then
+            echo "::error::模拟器里闪退了"
+            find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
+            exit 1
+          fi
+          find shots -type f -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arena-look
+          path: shots
+          if-no-files-found: error
+
+  # 签名后上传到 TestFlight。只有手动跑这一次工作流才传。
+  # 平常的 push 先在模拟器里打开大厅和对局、截图。看过截图没有问题，再手动跑才会上传。
   testflight:
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15
