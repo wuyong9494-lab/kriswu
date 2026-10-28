@@ -419,12 +419,17 @@ extension ArenaProgress {
     /// 有的表情（按顺序）
     public var emotes: [ArenaEmote] { ArenaEmote.all.filter { owns(emote: $0) } }
 
-    /// 商店：用金币买皮肤、表情
+    /// 商店：用金币买皮肤、表情。price 是实付（今日特惠可以比标价低）
     @discardableResult
-    public mutating func buy(_ skin: ArenaSkin) -> Bool {
-        guard !owns(skin: skin), spend(skin.price) else { return false }
+    public mutating func buy(_ skin: ArenaSkin, for price: Int) -> Bool {
+        guard price > 0, !owns(skin: skin), spend(price) else { return false }
         season.skins.insert(skin.id)
         return true
+    }
+
+    @discardableResult
+    public mutating func buy(_ skin: ArenaSkin) -> Bool {
+        buy(skin, for: skin.price)
     }
 
     @discardableResult

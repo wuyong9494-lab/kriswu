@@ -44,7 +44,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together, season, settings, friends, party
+        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop
         var id: String { rawValue }
     }
 
@@ -281,7 +281,7 @@ struct ArenaHomeView: View {
                 sheet = .together
             }
             HStack(spacing: 6) {
-                placeholder("商店", icon: "bag.fill")
+                miniTile("商店", icon: "bag.fill", face: Color(red: 0.95, green: 0.62, blue: 0.15)) { sheet = .shop }
                 miniTile("好友", icon: "person.2.fill", face: Color(red: 0.25, green: 0.55, blue: 0.95)) { sheet = .friends }
                 miniTile("组队", icon: "plus", face: Color(red: 0.2, green: 0.72, blue: 0.45)) { sheet = .party }
             }
@@ -307,21 +307,6 @@ struct ArenaHomeView: View {
             .frame(width: 74, height: 64)
         }
         .buttonStyle(ArenaTileButton(face: face, edge: edge))
-    }
-
-    /// 还没做的入口：灰的，点了没反应
-    private func placeholder(_ title: String, icon: String) -> some View {
-        VStack(spacing: 1) {
-            Image(systemName: icon).font(.system(size: 16, weight: .black)).foregroundStyle(.white.opacity(0.7))
-                .frame(height: 22)
-            Text(title)
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.75))
-        }
-        .frame(width: 52, height: 46)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(white: 0.35)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black.opacity(0.75), lineWidth: 3))
-        .accessibilityLabel("\(title)，还没开放")
     }
 
     private func miniTile(_ title: String, icon: String, face: Color, action: @escaping () -> Void) -> some View {
@@ -562,6 +547,7 @@ struct ArenaHomeView: View {
             case .together: togetherList
             case .friends: friendsBoard
             case .party: partyBoard
+            case .shop: shopBoard
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
             }
@@ -577,6 +563,7 @@ struct ArenaHomeView: View {
         case .together: return "和同事打"
         case .friends: return "好友"
         case .party: return "组队"
+        case .shop: return "商店"
         case .season: return "赛季"
         case .settings: return "设置"
         }
@@ -591,6 +578,7 @@ struct ArenaHomeView: View {
         case .together: return Color(red: 0.3, green: 0.78, blue: 0.4)
         case .friends: return Color(red: 0.25, green: 0.55, blue: 0.95)
         case .party: return Color(red: 0.2, green: 0.72, blue: 0.45)
+        case .shop: return Color(red: 0.95, green: 0.62, blue: 0.15)
         case .season: return Color(red: 0.6, green: 0.4, blue: 0.95)
         case .settings: return Color(red: 0.45, green: 0.5, blue: 0.58)
         }
@@ -1016,6 +1004,109 @@ struct ArenaHomeView: View {
         let code = RoomCode.make(players: players)
         pendingRoom = GameRoom(kind: .arena, mode: .remote(code: code), name: nick, capacity: players)
         sheet = nil
+    }
+
+    /// 商店：金币、每天三件特惠、全部皮肤和表情。特惠到午夜换一批
+    private var shopBoard: some View {
+        let deals = ArenaShop.deals()
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("\(progress.coins)", systemImage: "dollarsign.circle.fill")
+                        .font(.system(size: 22, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.yellow)
+                        .arenaOutline(1)
+                    Spacer()
+                    Text("还有 \(ArenaShop.hoursLeft()) 小时换特惠")
+                        .font(.system(size: 12, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Text("今日特惠")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
+                ForEach(deals) { skin in
+                    shopSkin(skin, price: ArenaShop.dealPrice(skin), was: skin.price)
+                }
+                Text("皮肤")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
+                ForEach(ArenaSkin.all) { skin in
+                    shopSkin(skin, price: skin.price, was: nil)
+                }
+                Text("表情")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
+                ForEach(ArenaEmote.all.filter { !$0.free }) { emote in
+                    shopEmote(emote)
+                }
+            }
+            .padding(.bottom, 16)
+        }
+    }
+
+    private func shopSkin(_ skin: ArenaSkin, price: Int, was: Int?) -> some View {
+        let owned = progress.owns(skin: skin)
+        let wearing = progress.skin(skin.brawler) == skin.index
+        return HStack(spacing: 10) {
+            BrawlerBadge(brawler: skin.brawler, size: 42)
+                .overlay(Circle().strokeBorder(skin.color, lineWidth: 3))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(skin.name).font(.system(size: 16, weight: .black, design: .rounded)).foregroundStyle(.white).arenaOutline(1)
+                Text(skin.brawler.name).font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                if let was, was > price, !owned {
+                    Text("\(was)").font(.system(size: 11, weight: .bold, design: .rounded)).strikethrough().foregroundStyle(.white.opacity(0.55))
+                }
+            }
+            Spacer(minLength: 0)
+            if wearing {
+                Text("穿着").font(.system(size: 13, weight: .black, design: .rounded)).foregroundStyle(.white)
+            } else if owned {
+                Button("穿上") {
+                    growth.wear(skin.index, for: skin.brawler)
+                    brawler = skin.brawler
+                }
+                    .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face, edge: ArenaGameButton.blue.edge, height: 36))
+            } else {
+                Button {
+                    _ = growth.buy(skin, price: price)
+                } label: {
+                    Label("\(price)", systemImage: "dollarsign.circle.fill")
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 36))
+                .disabled(progress.coins < price)
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black.opacity(0.28)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: 2))
+    }
+
+    private func shopEmote(_ emote: ArenaEmote) -> some View {
+        let owned = progress.owns(emote: emote)
+        return HStack(spacing: 10) {
+            Text(emote.symbol).font(.system(size: 28)).frame(width: 42)
+            Text(emote.name).font(.system(size: 16, weight: .black, design: .rounded)).foregroundStyle(.white).arenaOutline(1)
+            Spacer()
+            if owned {
+                Text("有了").font(.system(size: 13, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+            } else if let price = emote.price {
+                Button {
+                    _ = growth.buy(emote)
+                } label: {
+                    Label("\(price)", systemImage: "dollarsign.circle.fill")
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.yellow.face, edge: ArenaGameButton.yellow.edge, height: 36))
+                .disabled(progress.coins < price)
+            } else {
+                Text("赛季奖励").font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.75))
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black.opacity(0.28)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: 2))
     }
 }
 
@@ -1447,4 +1538,32 @@ private enum ArenaFriends {
         guard let data = try? JSONEncoder().encode(list) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
+}
+
+/// 每天三件特惠：同一天大家看到的一样，本地午夜换
+private enum ArenaShop {
+    static func dayNumber(_ date: Date = Date()) -> Int {
+        Int(date.timeIntervalSince1970 / 86_400)
+    }
+
+    static func hoursLeft(_ date: Date = Date()) -> Int {
+        let passed = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 86_400)
+        return max(1, Int((86_400 - passed) / 3600))
+    }
+
+    static func deals(_ date: Date = Date()) -> [ArenaSkin] {
+        let all = ArenaSkin.all
+        guard all.count >= 3 else { return all }
+        var picks: [ArenaSkin] = []
+        var n = dayNumber(date)
+        while picks.count < 3 {
+            n = n &* 1_103_515_245 &+ 12_345
+            let index = Int(UInt(bitPattern: n) % UInt(all.count))
+            let skin = all[index]
+            if !picks.contains(where: { $0.id == skin.id }) { picks.append(skin) }
+        }
+        return picks
+    }
+
+    static func dealPrice(_ skin: ArenaSkin) -> Int { max(40, skin.price * 7 / 10) }
 }

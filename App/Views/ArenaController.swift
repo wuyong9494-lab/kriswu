@@ -713,10 +713,15 @@ final class ArenaProgressStore: ObservableObject {
     }
 
     @discardableResult
-    func buy(_ skin: ArenaSkin) -> Bool {
-        guard progress.buy(skin) else { return false }
+    func buy(_ skin: ArenaSkin, price: Int) -> Bool {
+        guard progress.buy(skin, for: price) else { return false }
         save()
         return true
+    }
+
+    @discardableResult
+    func buy(_ skin: ArenaSkin) -> Bool {
+        buy(skin, price: skin.price)
     }
 
     @discardableResult
