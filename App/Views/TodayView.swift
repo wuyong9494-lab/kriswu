@@ -137,6 +137,7 @@ struct TodayView: View {
                 MonthStatCard(today: today)
                 QuickActions(today: today) { searching = true }
             }
+        case .games: GamesCard()
         case .favorites: FavoritesCard(today: today)
         case .upcoming: UpcomingList(from: today.adding(days: 8), count: 14) { editing = $0 }
         case .syncStatus: SyncStatus()
@@ -377,6 +378,70 @@ private struct MonthStatCard: View {
     }
 }
 
+/// 小游戏入口：勇者乱斗一个大按钮（直接进横屏大厅），下面叠叠消、五子棋
+private struct GamesCard: View {
+    @State private var showingArena = false
+    @ObservedObject private var growth = ArenaProgressStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            CardTitle(title: "小游戏", icon: "gamecontroller")
+            Button {
+                Haptics.tap()
+                showingArena = true
+            } label: {
+                HStack(spacing: DS.Space.s) {
+                    Text("🛡️").font(.system(size: 30))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("勇者乱斗")
+                            .font(.system(size: 19, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text(growth.progress.totalTrophies > 0
+                             ? "🏆 \(growth.progress.totalTrophies) · 冒险 ⭐️ \(growth.progress.totalStoryStars)/\(ArenaStory.levels.count * 3)"
+                             : "3D 横屏对战：11 种玩法、冒险、和同事一起打")
+                            .font(DS.Font.caption)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text("开打")
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundStyle(Color(red: 0.45, green: 0.25, blue: 0))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color(red: 1, green: 0.78, blue: 0.2), in: Capsule())
+                }
+                .padding(DS.Space.s)
+                .background(
+                    LinearGradient(colors: [Color(red: 0.25, green: 0.55, blue: 1), Color(red: 0.4, green: 0.25, blue: 0.85)],
+                                   startPoint: .leading, endPoint: .trailing),
+                    in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+            }
+            .buttonStyle(PressableStyle())
+            HStack(spacing: DS.Space.s) {
+                NavigationLink { TileGameHomeView() } label: { small("叠叠消", "square.stack.3d.up.fill", 6) }
+                NavigationLink { GomokuHomeView() } label: { small("五子棋", "circle.grid.3x3.fill", 0) }
+            }
+        }
+        .card()
+        .fullScreenCover(isPresented: $showingArena) {
+            ArenaHomeView()
+        }
+    }
+
+    private func small(_ title: String, _ icon: String, _ color: Int) -> some View {
+        HStack(spacing: DS.Space.xs) {
+            IconBadge(icon: icon, color: DS.Palette.vivid[color], size: 30)
+            Text(title).font(DS.Font.callout).foregroundStyle(.primary)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+        }
+        .padding(DS.Space.xs)
+        .frame(maxWidth: .infinity)
+        .background(DS.Palette.surfaceSunken, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+    }
+}
+
 /// 常用功能：单色玻璃图标，2×4 排
 private struct QuickActions: View {
     @EnvironmentObject private var store: AppStore
@@ -400,6 +465,7 @@ private struct QuickActions: View {
                 tile("自动同步", store.automationLooksMissing ? "exclamationmark.arrow.triangle.2.circlepath" : "arrow.triangle.2.circlepath",
                      color: store.automationLooksMissing ? DS.Palette.warning : nil) { AutomationGuideView() }
                 tile("工作量", "chart.bar") { WorkloadView() }
+                tile("小游戏", "gamecontroller") { GamesHomeView() }
                 tile("全部功能", "square.grid.2x2") { AllFeaturesView() }
             }
         }

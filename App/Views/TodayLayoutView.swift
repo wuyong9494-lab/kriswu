@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 今天页日期、今天的班、提醒横幅下面那些卡片
 enum TodayCard: String, CaseIterable, Identifiable {
-    case week, workLog, dutyInsight, tasks, changes, meeting, stats, favorites, upcoming, syncStatus
+    case week, workLog, dutyInsight, tasks, changes, meeting, stats, games, favorites, upcoming, syncStatus
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum TodayCard: String, CaseIterable, Identifiable {
         case .changes: return "最近的排班变动"
         case .meeting: return "周会问题"
         case .stats: return "本月数字、常用功能"
+        case .games: return "小游戏"
         case .favorites: return "收藏的同事"
         case .upcoming: return "再往后两周"
         case .syncStatus: return "同步状态"
@@ -30,6 +31,7 @@ enum TodayCard: String, CaseIterable, Identifiable {
         case .changes: return "arrow.triangle.2.circlepath"
         case .meeting: return "doc.text.magnifyingglass"
         case .stats: return "chart.bar"
+        case .games: return "gamecontroller"
         case .favorites: return "star"
         case .upcoming: return "list.bullet"
         case .syncStatus: return "icloud"

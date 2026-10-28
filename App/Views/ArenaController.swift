@@ -181,9 +181,9 @@ final class ArenaController: ObservableObject {
     convenience init(setup: Setup, seed: UInt64 = UInt64.random(in: 0..<UInt64.max)) {
         let mine = ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
                                      level: setup.level, lineup: setup.lineup, loadout: setup.loadout.allowed(setup.brawler, level: setup.level))
-        let game: ArenaGame
+        let built: ArenaGame
         if let story = setup.story {
-            game = ArenaGame(mode: story.mode, entrants: story.entrants(me: mine), seed: seed, map: ArenaMap.named(story.map),
+            built = ArenaGame(mode: story.mode, entrants: story.entrants(me: mine), seed: seed, map: ArenaMap.named(story.map),
                              bossLevel: story.bossLevel)
         } else {
             var random = SeededRandom(seed: seed)
@@ -201,9 +201,9 @@ final class ArenaController: ObservableObject {
                 entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
                                                   level: level, loadout: ArenaLoadout.basic(brawler, level: level)))
             }
-            game = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
+            built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
-        self.init(role: .solo, game: game, me: 0, room: nil, seed: seed)
+        self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
         story = setup.story
         ranked = setup.ranked && setup.story == nil
         switch setup.demo {
