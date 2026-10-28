@@ -87,6 +87,29 @@ final class ArenaModesTests: XCTestCase {
 
     // MARK: 宝箱攻防
 
+    /// 和 App 里自己和电脑打一样：自己站着不动，其余五个电脑；两张图、几个种子都打得下去
+    func testHeistWithAnIdlePlayer() {
+        let others = Brawler.allCases.filter { $0 != .mage }
+        for seed in UInt64(1)...6 {
+            for map in ArenaMap.pool(for: .heist) {
+                var entrants = [ArenaGame.Entrant(name: "我", brawler: .mage, isBot: false, team: 0)]
+                for k in 1..<6 {
+                    entrants.append(.init(name: "电脑\(k)", brawler: others[(k + Int(seed)) % others.count], isBot: true, team: k < 3 ? 0 : 1))
+                }
+                var game = ArenaGame(mode: .heist, entrants: entrants, seed: seed, map: map)
+                var bots = game.fighters.filter(\.isBot).map { ArenaBot(id: $0.id, seed: seed) }
+                while game.result == nil && game.time < 60 {
+                    var inputs: [Int: ArenaInput] = [:]
+                    for k in bots.indices { inputs[bots[k].id] = bots[k].input(in: game, dt: dt) }
+                    game.step(dt, inputs: inputs)
+                    game.events.removeAll()
+                }
+                XCTAssertEqual(game.chests.count, 2, map.id)
+                XCTAssertTrue(game.fighters.allSatisfy { $0.pos.x.isFinite && $0.pos.y.isFinite }, map.id)
+            }
+        }
+    }
+
     /// 打对面的宝箱扣它的血（算在打的人伤害里），打爆了就赢；时间到了比宝箱剩几成血
     func testHeistChestDamageAndWin() {
         var game = ArenaGame(mode: .heist, entrants: pair(.ranger, .barbarian), seed: 4)
