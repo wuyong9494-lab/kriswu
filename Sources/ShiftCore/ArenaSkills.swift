@@ -188,7 +188,7 @@ extension ArenaGame {
 
     /// 攒满一次大招要打出多少伤害（等级高、玩家伤害高，要的也多：打中几下攒满不变）
     func superCost(_ fighter: Fighter) -> Double {
-        let edge = fighter.isBot || fighter.isBoss ? 1.0 : playerEdge
+        let edge = fighter.isBot || fighter.isBoss ? 1.0 : ArenaGame.playerEdge
         return fighter.brawler.superCost * Brawler.boost(fighter.level) * edge * (fighter.starPower == .surge ? 0.8 : 1)
     }
 
