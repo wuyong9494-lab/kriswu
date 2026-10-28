@@ -24,12 +24,13 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 从自己后上方看。高 12.4、往后 13.8，大约 42 度：看得到背和墙的侧面。横屏左右大约 11 格，人比整张图更大
-    private static let cameraOffset = SIMD3<Float>(0, 12.4, 13.8)
+    /// 公开对照过的打法镜头：俯角 60 度、竖向视角大约 7 度（镜头拉得很远，所以不变形）。
+    /// 横屏左右大约 16 格。高 57、往后 33：atan(57/33) ≈ 60 度
+    private static let cameraOffset = SIMD3<Float>(0, 57, 33)
     /// 竖屏时自己这一排左右各看得到几米
-    private static let portraitHalfWidth: Float = 4.4
-    /// 横屏左右各大约 5.6 格。自己在画面偏下，前面看得到要打的人
-    private static let landscapeHalfWidth: Float = 5.6
+    private static let portraitHalfWidth: Float = 5.2
+    /// 横屏左右各 8 格，整屏大约 16 格
+    private static let landscapeHalfWidth: Float = 8
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -185,7 +186,7 @@ final class ArenaWorldView: SCNView {
             // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 1.6
+            lookAhead = 2.4
         } else {
             // 竖屏：左右宽度按米算，不跟着镜头远近放大（镜头拉远了还用旧的角度，人会缩成一点）
             tanX = Self.portraitHalfWidth / simd_length(Self.cameraOffset)
@@ -224,7 +225,7 @@ final class ArenaWorldView: SCNView {
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
         camera.zNear = 0.6
-        camera.zFar = 140
+        camera.zFar = 220
         camera.projectionDirection = .vertical
         camera.fieldOfView = 60
         camera.wantsHDR = false
@@ -1091,8 +1092,8 @@ final class ArenaWorldView: SCNView {
                 return box
             }
         default:
-            let thick: CGFloat = p.isSuper ? 0.18 : (owner == .assassin ? 0.07 : 0.11)
-            let long: CGFloat = p.isSuper ? 1.45 : (owner == .assassin ? 0.55 : 0.95)
+            let thick: CGFloat = p.isSuper ? 0.22 : (owner == .assassin ? 0.09 : 0.16)
+            let long: CGFloat = p.isSuper ? 1.6 : (owner == .assassin ? 0.62 : 1.15)
             piece.geometry = shared("bolt-\(owner.rawValue)-\(tintKey)-\(p.isSuper)") {
                 let capsule = SCNCapsule(capRadius: thick, height: long)
                 capsule.firstMaterial = ArenaAvatar.material(core, lit: false)
@@ -1103,7 +1104,7 @@ final class ArenaWorldView: SCNView {
         piece.castsShadow = false
         let root = SCNNode()
         root.addChildNode(piece)
-        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.1 : 1.35))
+        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.4 : 1.7))
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
         root.simdPosition = SIMD3(Float(p.pos.x), 0.6, Float(p.pos.y))
         root.addParticleSystem(trail(tint, size: p.isSuper ? 0.4 : 0.24, life: p.isSuper ? 0.3 : 0.16))
