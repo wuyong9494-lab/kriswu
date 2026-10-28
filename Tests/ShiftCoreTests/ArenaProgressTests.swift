@@ -86,7 +86,7 @@ final class ArenaProgressTests: XCTestCase {
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
         for _ in 0..<36 { game.step(dt, inputs: [:]) }
         XCTAssertEqual(game.fighters[1].health, 8736 - 1805)
-        XCTAssertEqual(game.fighters[0].superCharge, 1300 / Brawler.ranger.superCost, accuracy: 1e-9)
+        XCTAssertEqual(game.fighters[0].superCharge, 1805 / (Brawler.ranger.superCost * Brawler.boost(5) * ArenaGame.playerEdge), accuracy: 1e-9)
         XCTAssertEqual(Brawler.boost(0), 1, "等级不在 1–9 的按边上算")
         XCTAssertEqual(Brawler.boost(20), Brawler.boost(ArenaProgress.maxLevel))
     }

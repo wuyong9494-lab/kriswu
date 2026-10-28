@@ -89,10 +89,10 @@ final class ArenaNewBrawlerTests: XCTestCase {
         game.step(dt, inputs: [0: ArenaInput(attack: V2(1, 0))])
         XCTAssertEqual(game.projectiles.first?.boomerang, true)
         run(&game, seconds: 0.5)
-        XCTAssertEqual(enemy - game.fighters[2].health, 680, "飞出去打一次")
+        XCTAssertEqual(enemy - game.fighters[2].health, 762, "飞出去打一次")
         XCTAssertEqual(game.projectiles.first?.returning, true, "飞到头往回飞")
         run(&game, seconds: 1.2)
-        XCTAssertEqual(enemy - game.fighters[2].health, 1360, "飞回来再打一次")
+        XCTAssertEqual(enemy - game.fighters[2].health, 1524, "飞回来再打一次")
         XCTAssertTrue(game.projectiles.isEmpty, "回到手里收掉")
 
         game.adjust(2) { $0.pos = V2(7, 12.5) }

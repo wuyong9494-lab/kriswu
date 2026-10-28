@@ -82,7 +82,7 @@ final class ArenaSkillsTests: XCTestCase {
         shock.adjust(1) { $0.pos = V2(6.8, 12.5) }
         let full = shock.fighters[1].health
         shock.step(dt, inputs: [0: ArenaInput(gadget: true)])
-        XCTAssertEqual(full - shock.fighters[1].health, 700)
+        XCTAssertEqual(full - shock.fighters[1].health, 784)
         XCTAssertGreaterThan(shock.fighters[1].pos.x, 8, "震开了")
 
         var frost = duel(.mage, .knight, loadout: ArenaLoadout(gadget: .frost))
@@ -153,13 +153,13 @@ final class ArenaSkillsTests: XCTestCase {
         harvest.adjust(1) { $0.health = 10 }
         harvest.hurt(1, 500, by: 0, charges: true)
         XCTAssertFalse(harvest.fighters[1].alive)
-        XCTAssertEqual(harvest.fighters[0].health, 2500, "打倒一个回 1500")
+        XCTAssertEqual(harvest.fighters[0].health, 2680, "打倒一个回 1680")
 
         var thorns = duel(.guardian, loadout: ArenaLoadout(starPower: .thorns))
         thorns.adjust(0) { $0.shield = 2 }
         let attacker = thorns.fighters[1].health
         thorns.hurt(0, 1000, by: 1, charges: true)
-        XCTAssertEqual(attacker - thorns.fighters[1].health, 250, "举着骨盾时打人的掉血")
+        XCTAssertEqual(attacker - thorns.fighters[1].health, 280, "举着骨盾时打人的掉血")
 
         var twin = duel(.summoner, loadout: ArenaLoadout(starPower: .twin))
         for _ in 0..<3 {
@@ -187,7 +187,7 @@ final class ArenaSkillsTests: XCTestCase {
         XCTAssertEqual(game.fighters[0].hyperCharge, 0.25, accuracy: 0.001, "超级充能攒得慢四倍")
 
         let speed = game.moveSpeed(game.fighters[0])
-        game.adjust(0) { $0.hyperCharge = 1 }
+        game.adjust(0) { $0.hyperCharge = 1; $0.superCharge = 1 }
         game.step(dt, inputs: [0: ArenaInput(special: V2(3, 0))])
         XCTAssertTrue(game.events.contains(.hyper(fighter: 0)))
         XCTAssertEqual(game.fighters[0].hyperCharge, 0)
