@@ -86,6 +86,36 @@ enum ArenaArt {
         return SCNNode(geometry: mesh.geometry([crateMaterial, stoneMaterial, barrelSideMaterial, barrelTopMaterial, woodEdge, stoneEdge]))
     }
 
+    /// 大乱斗的能量箱：一个木箱，顶上嵌着一块发绿光的能量晶（挨打时木头闪白用 wood）
+    static func powerBox() -> (node: SCNNode, wood: SCNMaterial) {
+        var mesh = Mesh(parts: 2)
+        mesh.box(center: SIMD3(0, 0.4, 0), size: SIMD3(0.8, 0.8, 0.8), part: 0)
+        mesh.box(center: SIMD3(0, 0.4, 0), size: SIMD3(0.88, 0.88, 0.88), part: 1)
+        let wood = crateMaterial.copy() as? SCNMaterial ?? crateMaterial
+        let node = SCNNode(geometry: mesh.geometry([wood, woodEdge]))
+        let gem = SCNBox(width: 0.32, height: 0.32, length: 0.32, chamferRadius: 0.05)
+        let shine = SCNMaterial()
+        shine.lightingModel = .constant
+        shine.diffuse.contents = rgb(0.45, 1, 0.5)
+        gem.firstMaterial = shine
+        let gemNode = SCNNode(geometry: gem)
+        gemNode.simdPosition = SIMD3(0, 0.9, 0)
+        gemNode.simdEulerAngles = SIMD3(0.6, 0.78, 0)
+        gemNode.name = "gem"
+        node.addChildNode(gemNode)
+        return (node, wood)
+    }
+
+    /// 地上的能量块：发绿光的小方块
+    static let cube: SCNGeometry = {
+        let box = SCNBox(width: 0.34, height: 0.34, length: 0.34, chamferRadius: 0.06)
+        let shine = SCNMaterial()
+        shine.lightingModel = .constant
+        shine.diffuse.contents = rgb(0.45, 1, 0.5)
+        box.firstMaterial = shine
+        return box
+    }()
+
     /// 场地四周一圈矮木沿
     static func border(width: Float, height: Float) -> SCNNode {
         var mesh = Mesh(parts: 2)

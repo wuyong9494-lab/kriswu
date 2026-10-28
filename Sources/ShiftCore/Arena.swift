@@ -381,11 +381,13 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     /// 穿的第几套皮肤（0 原来的样子）、上次冒表情是什么时候
     public var skin = 0
     public var lastEmote: Double = -10
+    /// 大乱斗捡到的能量块（每块血多 400、伤害多一成）
+    public var cubes = 0
 
     public var maxHealth: Int {
         if isBoss { return ArenaGame.bossHealth(level: level) }
         let base = brawler.health(level: level)
-        return starPower == .tough ? Int((Double(base) * 1.12).rounded()) : base
+        return (starPower == .tough ? Int((Double(base) * 1.12).rounded()) : base) + cubes * ArenaGame.cubeHealth
     }
     public var busy: Bool { dash != nil || leap != nil }
 }
@@ -689,6 +691,9 @@ public struct ArenaGame: Sendable {
     public internal(set) var score = [0, 0]
     public internal(set) var ball: Ball?
     public internal(set) var chests: [Chest] = []
+    /// 大乱斗：能量箱、地上的能量块
+    public internal(set) var boxes: [PowerBox] = []
+    public internal(set) var cubes: [PowerCube] = []
     /// 地上快要炸的红圈
     public internal(set) var warnings: [Warning] = []
     /// 三局两胜：第几局、这局从第几秒开始
@@ -753,6 +758,8 @@ public struct ArenaGame: Sendable {
             ball = Ball(pos: map.center)
         case .heist:
             chests = map.chestSpots.map { Chest(team: $0.team, center: $0.center, health: Chest.fullHealth, maxHealth: Chest.fullHealth) }
+        case .showdown, .duo:
+            setUpBoxes()
         case .boss:
             setUpBoss(level: bossLevel)
         default:
@@ -822,7 +829,10 @@ public struct ArenaGame: Sendable {
         case .stars: updateStars(dt)
         case .zone: updateZone(dt)
         case .ball: updateBall(dt)
-        case .showdown, .duo, .knockout: updatePoison(dt)
+        case .showdown, .duo:
+            updatePoison(dt)
+            collectCubes()
+        case .knockout: updatePoison(dt)
         case .teamFight, .heist, .bounty, .duel, .boss: break
         }
         decide()
@@ -892,7 +902,7 @@ public struct ArenaGame: Sendable {
 
     /// 走：先整个走，碰墙了就只走横的或只走竖的（贴着墙滑）
     mutating func walk(_ i: Int, by delta: V2) {
-        fighters[i].pos = Self.walk(from: fighters[i].pos, by: delta, on: map)
+        fighters[i].pos = blockedByBoxes(fighters[i].pos, Self.walk(from: fighters[i].pos, by: delta, on: map))
     }
 
     /// 被打倒的这个人还回不回来：大乱斗、三局两胜（这一局）不回来，双人大乱斗要队友还活着，一对一要还有角色没上过
@@ -1062,7 +1072,8 @@ public struct ArenaGame: Sendable {
     /// 按这个人的等级加成后的伤害
     func power(_ i: Int, _ damage: Int) -> Int {
         let hyper = fighters[i].hyperTime > 0 ? 1.1 : 1
-        return Int((Double(damage) * Brawler.boost(fighters[i].level) * hyper).rounded())
+        let cubes = 1 + Self.cubeDamage * Double(fighters[i].cubes)
+        return Int((Double(damage) * Brawler.boost(fighters[i].level) * hyper * cubes).rounded())
     }
 
     mutating func spread(_ i: Int, _ direction: V2, count: Int, angle: Double, speed: Double, range: Double,
@@ -1155,6 +1166,13 @@ public struct ArenaGame: Sendable {
                 }
                 continue
             }
+            // 打到能量箱（穿透的记一下打过哪个：能量箱用 -1000 往下的编号）
+            if let b = boxes.indices.first(where: { boxes[$0].health > 0 && !p.hit.contains(-1000 - $0)
+                && boxes[$0].pos.distance(to: p.pos) < PowerBox.radius + p.radius }) {
+                hitBox(b, p.damage)
+                if !p.pierce { continue }
+                p.hit.append(-1000 - b)
+            }
             var consumed = false
             for j in fighters.indices where fighters[j].alive && fighters[j].team != p.team && fighters[j].leap == nil && !p.hit.contains(j) {
                 guard fighters[j].pos.distance(to: p.pos) < Self.hitRadius(fighters[j]) + p.radius else { continue }
@@ -1195,6 +1213,9 @@ public struct ArenaGame: Sendable {
         }
         for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + 1.3 {
             hitChest(k, damage, by: owner)
+        }
+        for b in boxes.indices where boxes[b].health > 0 && boxes[b].pos.distance(to: point) < radius + PowerBox.radius {
+            hitBox(b, damage)
         }
     }
 
@@ -1283,6 +1304,11 @@ public struct ArenaGame: Sendable {
 
     mutating func knockOut(_ j: Int, by attacker: Int?) {
         let victim = fighters[j]
+        // 大乱斗：倒下的人身上的能量块掉在地上
+        if victim.cubes > 0 {
+            cubes.append(PowerCube(pos: victim.pos, count: victim.cubes))
+            fighters[j].cubes = 0
+        }
         fighters[j].alive = false
         fighters[j].health = 0
         fighters[j].deaths += 1

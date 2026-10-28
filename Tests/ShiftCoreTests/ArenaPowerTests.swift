@@ -1,0 +1,92 @@
+import XCTest
+@testable import ShiftCore
+
+/// 大乱斗的能量箱、能量块
+final class ArenaPowerTests: XCTestCase {
+    private let dt = 1.0 / 60
+
+    private func showdown(seed: UInt64) -> ArenaGame {
+        ArenaGame(mode: .showdown, entrants: (0..<6).map {
+            ArenaGame.Entrant(name: "电脑\($0)", brawler: Brawler.allCases[$0 % 5], isBot: true, team: $0)
+        }, seed: seed)
+    }
+
+    /// 开局放好能量箱（同一个种子放的一样，不贴墙）；打碎掉一个能量块，捡了血和伤害都多；倒下的人能量块全掉出来
+    func testBoxesDropCubesThatMakeYouStronger() throws {
+        var game = showdown(seed: 4)
+        XCTAssertEqual(game.boxes.count, ArenaGame.boxCount)
+        XCTAssertEqual(showdown(seed: 4).boxes, game.boxes, "同一个种子放的一样")
+        for box in game.boxes {
+            XCTAssertFalse(game.map.collides(box.pos, radius: 0.5))
+            XCTAssertEqual(box.health, ArenaGame.PowerBox.fullHealth)
+        }
+        XCTAssertTrue(ArenaGame(mode: .teamFight, entrants: [], seed: 4).boxes.isEmpty, "只有大乱斗有")
+
+        let box = game.boxes[0]
+        game.hitBox(0, 1000)
+        XCTAssertEqual(game.boxes[0].health, ArenaGame.PowerBox.fullHealth - 1000)
+        XCTAssertTrue(game.cubes.isEmpty)
+        game.hitBox(0, ArenaGame.PowerBox.fullHealth)
+        XCTAssertEqual(game.boxes[0].health, 0)
+        XCTAssertEqual(game.cubes, [ArenaGame.PowerCube(pos: box.pos, count: 1)])
+
+        let health = game.fighters[0].maxHealth
+        XCTAssertEqual(game.power(0, 1000), 1000)
+        game.adjust(0) { $0.pos = box.pos + V2(0.3, 0) }
+        game.collectCubes()
+        XCTAssertEqual(game.fighters[0].cubes, 1)
+        XCTAssertTrue(game.cubes.isEmpty)
+        XCTAssertEqual(game.fighters[0].maxHealth, health + ArenaGame.cubeHealth)
+        XCTAssertEqual(game.power(0, 1000), 1100, "伤害多一成")
+        XCTAssertTrue(game.events.contains(.pickup(fighter: 0)))
+
+        game.adjust(0) { $0.cubes = 3 }
+        let spot = game.fighters[0].pos
+        game.hurt(0, 1_000_000, by: 1, charges: false)
+        XCTAssertFalse(game.fighters[0].alive)
+        XCTAssertEqual(game.fighters[0].cubes, 0)
+        let dropped = try XCTUnwrap(game.cubes.first)
+        XCTAssertEqual(dropped.count, 3, "倒下的人的能量块全掉出来")
+        XCTAssertEqual(dropped.pos, spot)
+    }
+
+    /// 子弹、爆炸都打得到能量箱；人走不进箱子里
+    func testBoxesTakeHitsAndBlockWalking() throws {
+        var game = showdown(seed: 9)
+        let box = game.boxes[1]
+        game.blast(at: box.pos, radius: 1, damage: 500, by: 0, team: 0, charges: false)
+        XCTAssertEqual(game.boxes[1].health, ArenaGame.PowerBox.fullHealth - 500)
+
+        let start = box.pos + V2(1.4, 0)
+        game.adjust(2) { $0.pos = start }
+        for _ in 0..<40 { game.walk(2, by: V2(-0.05, 0)) }
+        XCTAssertGreaterThanOrEqual(game.fighters[2].pos.distance(to: box.pos), ArenaGame.fighterRadius + ArenaGame.PowerBox.radius - 1e-6,
+                                    "贴着箱子边停下")
+    }
+
+    /// 电脑会去打能量箱、捡能量块；联机时能量箱、能量块、每个人捡了几块都发得过去，老版本的包也读得出来
+    func testBotsGoForCubesAndTheyCrossTheNetwork() throws {
+        var game = showdown(seed: 12)
+        var bots = game.fighters.map { ArenaBot(id: $0.id, seed: 12) }
+        // 打到有箱子碎了为止（最多 90 秒）
+        while game.result == nil && game.time < 90 && game.boxes.allSatisfy({ $0.health > 0 }) {
+            var inputs: [Int: ArenaInput] = [:]
+            for k in bots.indices { inputs[bots[k].id] = bots[k].input(in: game, dt: dt) }
+            game.step(dt, inputs: inputs)
+            game.events.removeAll()
+        }
+        XCTAssertLessThan(game.boxes.filter { $0.health > 0 }.count, ArenaGame.boxCount, "打碎过箱子")
+        XCTAssertGreaterThan(game.fighters.map(\.cubes).reduce(0, +) + game.cubes.map(\.count).reduce(0, +), 0, "有能量块")
+
+        let snapshot = try XCTUnwrap(ArenaSnapshot(data: game.snapshot(events: []).encoded()))
+        XCTAssertEqual(snapshot.boxes.map(\.health), game.boxes.map(\.health))
+        XCTAssertEqual(snapshot.cubes.map(\.count), game.cubes.map(\.count))
+        XCTAssertEqual(snapshot.fighters.map(\.cubes), game.fighters.map(\.cubes))
+        var client = showdown(seed: 12)
+        client.apply(snapshot)
+        XCTAssertEqual(client.fighters.map(\.cubes), game.fighters.map(\.cubes))
+        XCTAssertEqual(client.fighters.map(\.maxHealth), game.fighters.map(\.maxHealth))
+        let old = try XCTUnwrap(ArenaSnapshot(data: game.snapshot(events: []).encoded(version: 4)))
+        XCTAssertTrue(old.boxes.isEmpty)
+    }
+}

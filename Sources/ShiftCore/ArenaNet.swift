@@ -37,6 +37,8 @@ public struct ArenaSnapshot: Equatable, Sendable {
         public var speedBoost = 0.0
         public var slowed = 0.0
         public var invisible = 0.0
+        /// 捡到的能量块（老版本的包里没有）
+        public var cubes = 0
     }
 
     public var time: Double
@@ -60,6 +62,9 @@ public struct ArenaSnapshot: Equatable, Sendable {
     public var round = 1
     public var roundStart = 0.0
     public var pause = 0.0
+    /// 大乱斗的能量箱、地上的能量块（老版本的包里没有）
+    public var boxes: [ArenaGame.PowerBox] = []
+    public var cubes: [ArenaGame.PowerCube] = []
 }
 
 extension ArenaGame {
@@ -74,11 +79,13 @@ extension ArenaGame {
                                            attackedRecently: time - f.lastAttack < 1, leap: f.leap, dashing: f.dash != nil,
                                            ack: acks[f.id] ?? 0, shield: f.shield, brawler: f.brawler, lineupIndex: f.lineupIndex,
                                            gadgetUses: f.gadgetUses, gadgetCooldown: f.gadgetCooldown, hyperCharge: f.hyperCharge,
-                                           hyperTime: f.hyperTime, speedBoost: f.speedBoost, slowed: f.slowed, invisible: f.invisible)
+                                           hyperTime: f.hyperTime, speedBoost: f.speedBoost, slowed: f.slowed, invisible: f.invisible,
+                                           cubes: f.cubes)
             },
             projectiles: projectiles, stars: stars, teamKills: teamKills, zoneProgress: zoneProgress,
             countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets,
-            score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause)
+            score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause,
+            boxes: boxes, cubes: cubes)
     }
 
     /// 收到房主的一帧：照着改（名字、角色、队伍这些开局定下的不变）
@@ -111,7 +118,10 @@ extension ArenaGame {
             fighters[i].speedBoost = state.speedBoost
             fighters[i].slowed = state.slowed
             fighters[i].invisible = state.invisible
+            fighters[i].cubes = state.cubes
         }
+        boxes = snapshot.boxes
+        cubes = snapshot.cubes
         zones = snapshot.zones
         turrets = snapshot.turrets
         score = snapshot.score
@@ -203,8 +213,9 @@ extension ArenaGame.Event {
 }
 
 extension ArenaSnapshot {
-    /// 现在的包有几段：1 到事件为止（最早的版本），2 加上亡灵之地、骨塔、骨盾，3 加上后加的玩法，4 加上小道具、超级充能
-    public static let version = 4
+    /// 现在的包有几段：1 到事件为止（最早的版本），2 加上亡灵之地、骨塔、骨盾，3 加上后加的玩法，4 加上小道具、超级充能，
+    /// 5 加上大乱斗的能量箱、能量块
+    public static let version = 5
 
     /// 压成字节：位置精确到 1/100 格，血量整数，其余按需要的精度。version：只写到第几段（测试老版本的包用）
     public func encoded(version: Int = ArenaSnapshot.version) -> Data {
@@ -387,6 +398,20 @@ extension ArenaSnapshot {
             w.u8(Int((max(f.slowed, 0) * 20).rounded()))
             w.u8(Int((max(f.invisible, 0) * 20).rounded()))
         }
+        guard version >= 5 else { return w.data }
+        // 再后加的：能量箱、能量块、每个人的能量块
+        w.u8(boxes.count)
+        for box in boxes {
+            w.v2(box.pos)
+            w.u16(max(box.health, 0))
+        }
+        w.u8(min(cubes.count, 255))
+        for cube in cubes.prefix(255) {
+            w.v2(cube.pos)
+            w.u8(cube.count)
+        }
+        w.u8(fighters.count)
+        fighters.forEach { w.u8($0.cubes) }
         return w.data
     }
 
@@ -555,9 +580,29 @@ extension ArenaSnapshot {
                 fighters[k].invisible = Double(invisible) / 20
             }
         }
+        var boxes: [ArenaGame.PowerBox] = []
+        var cubes: [ArenaGame.PowerCube] = []
+        if r.remaining > 0 {
+            guard let boxCount = r.u8() else { return nil }
+            for _ in 0..<boxCount {
+                guard let pos = r.v2(), let health = r.u16() else { return nil }
+                boxes.append(ArenaGame.PowerBox(pos: pos, health: health))
+            }
+            guard let cubeCount = r.u8() else { return nil }
+            for _ in 0..<cubeCount {
+                guard let pos = r.v2(), let count = r.u8() else { return nil }
+                cubes.append(ArenaGame.PowerCube(pos: pos, count: count))
+            }
+            guard let fighterCount = r.u8() else { return nil }
+            for k in 0..<fighterCount {
+                guard let count = r.u8() else { return nil }
+                if fighters.indices.contains(k) { fighters[k].cubes = count }
+            }
+        }
         self.init(time: time, fighters: fighters, projectiles: projectiles, stars: stars, teamKills: kills, zoneProgress: zone,
                   countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets,
-                  score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause)
+                  score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause,
+                  boxes: boxes, cubes: cubes)
     }
 }
 

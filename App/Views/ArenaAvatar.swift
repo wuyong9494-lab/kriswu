@@ -504,9 +504,12 @@ final class ArenaTag {
             shownHealth = fighter.health
             number.set("\(max(fighter.health, 0))")
         }
-        if fighter.stars != shownStars {
-            shownStars = fighter.stars
-            starText.set(fighter.stars > 0 ? "★\(fighter.stars)" : "")
+        // 头顶的星星（悬赏、抢星星）；大乱斗是捡到的能量块
+        let mark = fighter.stars > 0 ? fighter.stars : -fighter.cubes
+        if mark != shownStars {
+            shownStars = mark
+            starText.set(fighter.stars > 0 ? "★\(fighter.stars)" : (fighter.cubes > 0 ? "⚡\(fighter.cubes)" : ""),
+                         color: fighter.stars > 0 ? ArenaPalette.gold : ArenaPalette.myName)
         }
         for (k, piece) in ammo.enumerated() {
             let part = CGFloat(min(max(fighter.ammo - Double(k), 0), 1))

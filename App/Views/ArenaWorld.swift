@@ -78,6 +78,19 @@ final class ArenaWorldView: SCNView {
     private var chestViews: [ChestView] = []
     /// 地上快要炸的红圈
     private var warningNodes: [SCNNode] = []
+    /// 大乱斗的能量箱（和 game.boxes 一个对一个）、地上的能量块
+    private var boxViews: [BoxView] = []
+    private var cubeNodes: [SCNNode] = []
+    private var cubeLabels: [ArenaText] = []
+
+    private struct BoxView {
+        let node: SCNNode
+        let wood: SCNMaterial
+        let bar: ArenaBar
+        var shownHealth: Int
+        var flashUntil: Double = 0
+    }
+
     /// 头顶冒的表情（跟着人走，2 秒多一点消失）
     private var bubbles: [(node: SKSpriteNode, fighter: Int, born: Double)] = []
     /// 震屏：越大晃得越厉害，很快就停
@@ -330,7 +343,17 @@ final class ArenaWorldView: SCNView {
                 overlay.addChild(bar.node)
                 chestViews.append(ChestView(node: made.node, bar: bar, number: number, glow: made.glow))
             }
-        case .teamFight, .bounty, .knockout, .duel, .boss, .showdown, .duo:
+        case .showdown, .duo:
+            for box in game.boxes {
+                let made = ArenaArt.powerBox()
+                made.node.simdPosition = SIMD3(Float(box.pos.x), 0, Float(box.pos.y))
+                root.addChildNode(made.node)
+                let bar = ArenaBar(width: 44, height: 7, color: ArenaPalette.gadget, border: 1.2)
+                bar.node.isHidden = true
+                overlay.addChild(bar.node)
+                boxViews.append(BoxView(node: made.node, wood: made.wood, bar: bar, shownHealth: box.health))
+            }
+        case .teamFight, .bounty, .knockout, .duel, .boss:
             break
         }
         if game.mode.hasPoison {
@@ -643,6 +666,7 @@ final class ArenaWorldView: SCNView {
         syncBall(game)
         syncChests(game, view: view)
         syncWarnings(game)
+        syncPower(game, view: view)
         if var current = poison, abs(current.radius - game.safeRadius) > 0.02 {
             current.radius = game.safeRadius
             current.wall.outerRadius = CGFloat(current.radius + 80)
@@ -771,6 +795,72 @@ final class ArenaWorldView: SCNView {
             if item.flashUntil > 0, clock >= item.flashUntil {
                 chestViews[k].flashUntil = 0
                 item.glow.forEach { $0.emission.contents = UIColor.black }
+            }
+        }
+    }
+
+    /// 能量箱：挨打闪白、飘伤害数字，打了就露出血条，碎了收起来冒一阵绿光；地上的能量块转着上下浮，叠了几块写着几
+    private func syncPower(_ game: ArenaGame, view: simd_float4x4) {
+        for (k, box) in game.boxes.enumerated() where boxViews.indices.contains(k) {
+            let item = boxViews[k]
+            if box.health != item.shownHealth {
+                let lost = item.shownHealth - box.health
+                boxViews[k].shownHealth = box.health
+                if box.health <= 0 {
+                    item.node.isHidden = true
+                    item.bar.node.isHidden = true
+                    let at = SIMD3(Float(box.pos.x), 0.6, Float(box.pos.y))
+                    burst(at: at, color: ArenaPalette.gadget, count: 36, speed: 3, size: 0.32, life: 0.5)
+                    burst(at: at, color: UIColor(red: 0.75, green: 0.55, blue: 0.3, alpha: 1), count: 18, speed: 2.4, size: 0.24, life: 0.45)
+                    continue
+                }
+                if lost > 0 {
+                    item.wood.emission.contents = UIColor(white: 0.5, alpha: 1)
+                    boxViews[k].flashUntil = clock + 0.08
+                    floater("\(lost)", at: SIMD3(Float(box.pos.x) + Float.random(in: -0.2...0.2), 1.3, Float(box.pos.y)), color: .white)
+                }
+            }
+            if boxViews[k].flashUntil > 0, clock >= boxViews[k].flashUntil {
+                boxViews[k].flashUntil = 0
+                item.wood.emission.contents = UIColor.black
+            }
+            guard box.health > 0 else { continue }
+            item.node.childNode(withName: "gem", recursively: false)?.simdEulerAngles = SIMD3(0.6, Float(clock * 1.5), 0)
+            if box.health < ArenaGame.PowerBox.fullHealth, let point = project(SIMD3(Float(box.pos.x), 1.35, Float(box.pos.y)), view) {
+                item.bar.node.isHidden = false
+                item.bar.node.position = point
+                item.bar.set(CGFloat(box.health) / CGFloat(ArenaGame.PowerBox.fullHealth))
+            } else {
+                item.bar.node.isHidden = true
+            }
+        }
+        while cubeNodes.count < game.cubes.count {
+            let node = SCNNode(geometry: ArenaArt.cube)
+            node.castsShadow = false
+            node.addChildNode(halo("cube", ArenaPalette.gadget, size: 1.1))
+            world.rootNode.addChildNode(node)
+            cubeNodes.append(node)
+            let label = ArenaText(size: 13, color: ArenaPalette.myName)
+            overlay.addChild(label.node)
+            cubeLabels.append(label)
+        }
+        while cubeNodes.count > game.cubes.count {
+            cubeNodes.removeLast().removeFromParentNode()
+            cubeLabels.removeLast().node.removeFromParent()
+        }
+        for (k, cube) in game.cubes.enumerated() {
+            let bob = Float(sin(clock * 3 + Double(k))) * 0.08
+            let at = SIMD3(Float(cube.pos.x), 0.45 + bob, Float(cube.pos.y))
+            cubeNodes[k].simdPosition = at
+            cubeNodes[k].simdEulerAngles = SIMD3(0.5, Float(clock * 1.8) + Float(k), 0.3)
+            let scale = Float(min(1 + 0.12 * Double(cube.count - 1), 1.6))
+            cubeNodes[k].simdScale = SIMD3(repeating: scale)
+            if cube.count > 1, let point = project(at + SIMD3(0, 0.55, 0), view) {
+                cubeLabels[k].node.isHidden = false
+                cubeLabels[k].node.position = point
+                cubeLabels[k].set("×\(cube.count)")
+            } else {
+                cubeLabels[k].node.isHidden = true
             }
         }
     }

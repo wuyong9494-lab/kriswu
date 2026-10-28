@@ -98,6 +98,14 @@ public struct ArenaBot: Sendable {
             trigger = 0.3
             input.attack = turret.pos - me.pos
         }
+        // 大乱斗：够得着能量箱、附近又没有敌人就打箱子
+        if (game.mode == .showdown || game.mode == .duo), input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
+           target.map({ $0.pos.distance(to: me.pos) > 6 }) ?? true,
+           let box = game.nearestBox(to: me.pos), box.pos.distance(to: me.pos) <= me.brawler.attackRange * 0.95,
+           me.brawler == .mage || game.map.lineOfSight(me.pos, box.pos) {
+            trigger = 0.3
+            input.attack = box.pos - me.pos
+        }
         // 宝箱攻防：够得着对面的宝箱、又没有更近的敌人就打宝箱
         if game.mode == .heist, !carrying, input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
            let chest = game.chests.first(where: { $0.team != me.team && $0.health > 0 }) {
@@ -164,7 +172,9 @@ public struct ArenaBot: Sendable {
         case .stars:
             if let countdown = game.countdown, countdown.team == me.team, me.stars > 0 { return home }
             return game.stars.min { $0.distance(to: me.pos) < $1.distance(to: me.pos) } ?? center
-        case .zone, .showdown, .duel:
+        case .showdown:
+            return powerObjective(me, game) ?? center
+        case .zone, .duel:
             return center
         case .teamFight, .bounty:
             let enemyHome = game.map.spawns.indices.contains(1 - me.team) ? (game.map.spawns[1 - me.team].first ?? center) : center
@@ -177,7 +187,7 @@ public struct ArenaBot: Sendable {
                mate.pos.distance(to: me.pos) > 4 {
                 return mate.pos
             }
-            return center
+            return powerObjective(me, game) ?? center
         case .ball:
             return ballObjective(me, game)
         case .heist:
@@ -192,6 +202,15 @@ public struct ArenaBot: Sendable {
             guard let boss = game.fighters.first(where: { $0.isBoss && $0.alive }) else { return center }
             return boss.pos + (me.pos - boss.pos).normalized * (me.brawler.attackRange * 0.75)
         }
+    }
+
+    /// 大乱斗：毒圈还没逼过来时去捡地上的能量块，没有就去打最近的能量箱（站在射程里）
+    private func powerObjective(_ me: Fighter, _ game: ArenaGame) -> V2? {
+        let safe = { (point: V2) in point.distance(to: game.map.center) < game.safeRadius - 1.5 }
+        if let cube = game.nearestCube(to: me.pos), safe(cube.pos), cube.pos.distance(to: me.pos) < 9 { return cube.pos }
+        guard let box = game.nearestBox(to: me.pos), safe(box.pos) else { return nil }
+        let toward = (me.pos - box.pos).normalized
+        return box.pos + (toward.length > 0 ? toward : V2(1, 0)) * min(me.brawler.attackRange * 0.7, 3)
     }
 
     /// 足球：自己带着球就去对面球门；队友带着跟在前面接应；对面带着去抢；球没人带离得最近的去捡，其余的守在球和自己球门中间
