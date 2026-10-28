@@ -135,7 +135,7 @@ final class ArenaAvatar {
             }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
-            body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size)
+            body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size * look.scale)
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -342,12 +342,19 @@ final class ArenaAvatar {
 
     /// 开了一枪
     func attack() {
-        start(look.attack, hold: false, fullBody: false)
+        // 剑圣转圈、书灵放环：整个身子跟着动，不要只动手
+        let whole = brawler == .swordsman || brawler == .scholar
+        start(look.attack, hold: false, fullBody: whole)
     }
 
-    /// 放了大招（冲锋、跳整个身子都动）
+    /// 放了大招（冲锋、跳、转圈、喝酒、抬手、闪现整个身子都动）
     func special() {
-        start(look.special, hold: false, fullBody: brawler == .knight || brawler == .barbarian)
+        switch brawler {
+        case .knight, .barbarian, .swordsman, .brewer, .scholar, .shade, .darter:
+            start(look.special, hold: false, fullBody: true)
+        default:
+            start(look.special, hold: false, fullBody: false)
+        }
     }
 
     /// 挨打：白一下

@@ -58,6 +58,8 @@ struct BrawlerLook {
     let run: String
     let attack: Move
     let special: Move
+    /// 个子相对别人多大（同一份模型也能分出高矮）
+    var scale: Float = 1
     var weapons: [Weapon] = []
 
     static let death = Move(clip: "Death_A", seconds: 0.8)
@@ -69,82 +71,103 @@ struct BrawlerLook {
             return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "2H_Sword"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0.2, to: 0.75, seconds: 0.42),
-                               special: Move(clip: "1H_Melee_Attack_Stab", from: 0.15, to: 0.7, seconds: 0.5))
+                               special: Move(clip: "1H_Melee_Attack_Stab", from: 0.15, to: 0.7, seconds: 0.5),
+                               scale: 1.05)
         case .ranger:
             return BrawlerLook(file: "Rogue.glb", hidden: ["Knife_Offhand", "2H_Crossbow", "Knife", "Throwable"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.1, to: 0.7, seconds: 0.4),
-                               special: Move(clip: "1H_Ranged_Shoot", from: 0, to: 0.8, seconds: 0.6))
+                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.1, to: 0.7, seconds: 0.36),
+                               special: Move(clip: "1H_Ranged_Shoot", from: 0, to: 1, seconds: 0.7),
+                               scale: 0.96)
         case .barbarian:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
                                idle: "2H_Melee_Idle", run: "Running_A",
                                attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.25, to: 0.7, seconds: 0.4),
-                               special: Move(clip: "Jump_Full_Short", from: 0.1, to: 0.9, seconds: Float(Fighter.Leap.duration)))
+                               special: Move(clip: "Jump_Full_Short", from: 0.1, to: 0.9, seconds: Float(Fighter.Leap.duration)),
+                               scale: 1.14)
         case .mage:
             return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "Spellbook_open", "1H_Wand"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "Spellcast_Shoot", from: 0.15, to: 0.8, seconds: 0.5),
-                               special: Move(clip: "Spellcast_Raise", from: 0.2, to: 0.7, seconds: 0.8))
+                               special: Move(clip: "Spellcast_Raise", from: 0.2, to: 0.7, seconds: 0.8),
+                               scale: 0.98)
         case .assassin:
             return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Throwable"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
-                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.1, to: 0.75, seconds: 0.5))
+                               attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.34),
+                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.1, to: 0.75, seconds: 0.5),
+                               scale: 0.94)
         case .guardian:
             return BrawlerLook(file: "Skeleton_Warrior.glb", hidden: [], idle: "Idle", run: "Running_A",
                                attack: Move(clip: "1H_Melee_Attack_Chop", from: 0.2, to: 0.75, seconds: 0.42),
                                special: Move(clip: "Block", from: 0, to: 0.6, seconds: 0.6),
+                               scale: 1.08,
                                weapons: [Weapon(file: "Skeleton_Axe.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned),
                                          Weapon(file: "Skeleton_Shield_Large_A.gltf", bone: "handslot.l", position: SIMD3(0, 0.017, 0.156),
                                                 rotation: simd_quatf(ix: 0, iy: 0, iz: 0, r: 1))])
         case .necromancer:
             return BrawlerLook(file: "Skeleton_Mage.glb", hidden: [], idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Spellcast_Shoot", from: 0.15, to: 0.8, seconds: 0.5),
+                               attack: Move(clip: "Spellcast_Shoot", from: 0.15, to: 0.8, seconds: 0.55),
                                special: Move(clip: "Spellcast_Summon", from: 0.1, to: 0.35, seconds: 0.9),
+                               scale: 1.02,
                                weapons: [Weapon(file: "Skeleton_Staff.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned)])
         case .shade:
             return BrawlerLook(file: "Skeleton_Rogue.glb", hidden: [], idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.1, to: 0.7, seconds: 0.4),
+                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.1, to: 0.7, seconds: 0.32),
                                special: Move(clip: "Dodge_Forward", seconds: 0.4),
+                               scale: 0.96,
                                weapons: [Weapon(file: "Skeleton_Crossbow.gltf", bone: "handslot.r", position: SIMD3(-0.105, -0.01, 0),
                                                 rotation: simd_quatf(ix: 0, iy: 0.7071068, iz: 0, r: 0.7071068))])
         case .summoner:
             return BrawlerLook(file: "Skeleton_Minion.glb", hidden: [], idle: "Idle", run: "Running_A",
                                attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
                                special: Move(clip: "Use_Item", from: 0.1, to: 0.6, seconds: 0.7),
+                               scale: 0.88,
                                weapons: [Weapon(file: "Skeleton_Blade.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned)])
-        // 后加的四个：用同一批模型换武器、换颜色（身上的底色见 baseTint）
+        // 后加的四个和前面共用模型，但出手的那一段、快慢、个子都不一样
         case .swordsman:
             return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0.1, to: 0.9, seconds: 0.45),
-                               special: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0, to: 1, seconds: 0.5))
+                               attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0, to: 1, seconds: 0.32),
+                               special: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0, to: 1, seconds: 0.55),
+                               scale: 1.1)
         case .brewer:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe"],
                                idle: "2H_Melee_Idle", run: "Running_A",
-                               attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.2, to: 0.7, seconds: 0.45),
-                               special: Move(clip: "2H_Melee_Idle", from: 0, to: 0.5, seconds: 0.8))
+                               attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.15, to: 0.85, seconds: 0.5),
+                               special: Move(clip: "2H_Melee_Attack_Chop", from: 0.05, to: 0.4, seconds: 0.75),
+                               scale: 1.12)
         case .scholar:
             return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "1H_Wand", "2H_Staff"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Spellcast_Raise", from: 0.2, to: 0.7, seconds: 0.5),
-                               special: Move(clip: "Spellcast_Raise", from: 0.1, to: 0.9, seconds: 0.9))
+                               attack: Move(clip: "Spellcast_Shoot", from: 0.1, to: 0.85, seconds: 0.45),
+                               special: Move(clip: "Spellcast_Raise", from: 0, to: 1, seconds: 0.9),
+                               scale: 0.97)
         case .darter:
             return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Knife_Offhand"],
                                idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
-                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.1, to: 0.75, seconds: 0.5))
+                               attack: Move(clip: "Throw", from: 0.15, to: 0.85, seconds: 0.3),
+                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0, to: 0.45, seconds: 0.35),
+                               scale: 0.95)
         }
     }
 
-    /// 后加的角色和原来的共用模型：身上乘上一个底色，一眼分得开（没有的是 nil）
+    /// 每个角色身上乘一个颜色，共用模型也能一眼分开（骑士金、游侠绿、蛮王暖、法师蓝……）
     static func baseTint(_ brawler: Brawler) -> UIColor? {
         switch brawler {
-        case .swordsman: return UIColor(red: 0.75, green: 0.85, blue: 1, alpha: 1)
-        case .brewer: return UIColor(red: 1, green: 0.8, blue: 0.55, alpha: 1)
-        case .scholar: return UIColor(red: 0.7, green: 1, blue: 0.8, alpha: 1)
-        case .darter: return UIColor(red: 1, green: 0.75, blue: 0.5, alpha: 1)
-        default: return nil
+        case .knight: return UIColor(red: 1, green: 0.9, blue: 0.72, alpha: 1)
+        case .ranger: return UIColor(red: 0.72, green: 1, blue: 0.78, alpha: 1)
+        case .barbarian: return UIColor(red: 1, green: 0.78, blue: 0.62, alpha: 1)
+        case .mage: return UIColor(red: 0.7, green: 0.82, blue: 1, alpha: 1)
+        case .assassin: return UIColor(red: 0.82, green: 0.84, blue: 1, alpha: 1)
+        case .guardian: return UIColor(red: 1, green: 0.88, blue: 0.65, alpha: 1)
+        case .necromancer: return UIColor(red: 0.68, green: 1, blue: 0.72, alpha: 1)
+        case .shade: return UIColor(red: 0.8, green: 0.7, blue: 1, alpha: 1)
+        case .summoner: return UIColor(red: 0.65, green: 1, blue: 0.95, alpha: 1)
+        case .swordsman: return UIColor(red: 0.62, green: 0.78, blue: 1, alpha: 1)
+        case .brewer: return UIColor(red: 1, green: 0.68, blue: 0.4, alpha: 1)
+        case .scholar: return UIColor(red: 0.55, green: 1, blue: 0.78, alpha: 1)
+        case .darter: return UIColor(red: 1, green: 0.62, blue: 0.38, alpha: 1)
         }
     }
 

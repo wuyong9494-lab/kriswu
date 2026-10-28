@@ -797,6 +797,12 @@ final class ArenaShowcaseView: SCNView {
         camera.fieldOfView = 28
         camera.zNear = 0.1
         camera.zFar = 30
+        camera.wantsHDR = true
+        camera.bloomIntensity = 0.55
+        camera.bloomThreshold = 0.7
+        camera.bloomBlurRadius = 8
+        camera.saturation = 1.12
+        camera.contrast = 1.04
         let eye = SCNNode()
         eye.camera = camera
         eye.simdPosition = SIMD3(0, 1.25, 4.6)

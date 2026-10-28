@@ -220,6 +220,14 @@ final class ArenaWorldView: SCNView {
         camera.zFar = 140
         camera.projectionDirection = .vertical
         camera.fieldOfView = 60
+        camera.wantsHDR = true
+        camera.bloomIntensity = 0.4
+        camera.bloomThreshold = 0.8
+        camera.bloomBlurRadius = 6
+        camera.saturation = 1.16
+        camera.contrast = 1.05
+        camera.vignettingIntensity = 0.28
+        camera.vignettingPower = 0.55
         cameraNode.camera = camera
         cameraNode.simdPosition = Self.cameraOffset
         cameraNode.simdEulerAngles = SIMD3(-atan2(Self.cameraOffset.y, Self.cameraOffset.z), 0, 0)
