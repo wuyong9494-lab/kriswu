@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      extras:
+        description: 同时跑截图和模拟器检查（会再占 Mac）
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -189,8 +194,8 @@ jobs:
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
     runs-on: macos-15
-    # Mac 不够用时先保证能上传。要再跑同步测试时手动开这次工作流
-    if: github.event_name == 'workflow_dispatch'
+    # 要再跑同步测试时，手动开工作流并勾上 extras
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true'
     concurrency:
       group: site-tests-${{ github.ref }}
       cancel-in-progress: true
@@ -253,7 +258,7 @@ jobs:
     concurrency:
       group: screenshots-${{ github.ref }}
       cancel-in-progress: true
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -422,7 +427,7 @@ jobs:
     concurrency:
       group: arena-look-${{ github.ref }}
       cancel-in-progress: true
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true'
     steps:
       - uses: actions/checkout@v5
 
