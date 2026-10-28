@@ -24,13 +24,21 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 公开对照过的打法镜头：俯角 60 度、竖向视角大约 7 度（镜头拉得很远，所以不变形）。
-    /// 横屏左右大约 16 格。高 57、往后 33：atan(57/33) ≈ 60 度
+    /// 公开对照过的打法镜头：俯角 60 度。镜头拉远，竖向张角大约 7 度，几乎不变形。
+    /// 横屏左右各 5.8 格，人比整张地图更大。高 57、往后 33：atan(57/33) ≈ 60 度
     private static let cameraOffset = SIMD3<Float>(0, 57, 33)
     /// 竖屏时自己这一排左右各看得到几米
-    private static let portraitHalfWidth: Float = 5.2
-    /// 横屏左右各 8 格，整屏大约 16 格
-    private static let landscapeHalfWidth: Float = 8
+    private static let portraitHalfWidth: Float = 4.4
+    /// 横屏左右各 5.8 格。60 度俯角不变，人比之前更大
+    private static let landscapeHalfWidth: Float = 5.8
+
+    /// 竖向张角（度）。aspect 是宽除以高
+    private static func verticalField(aspect: Float) -> Float {
+        let half = aspect >= 1 ? landscapeHalfWidth : portraitHalfWidth
+        let tanX = half / simd_length(cameraOffset)
+        let tanY = tanX / max(aspect, 0.3)
+        return 2 * atan(tanY) * 180 / .pi
+    }
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -144,8 +152,8 @@ final class ArenaWorldView: SCNView {
         self.controller = controller
         super.init(frame: .zero, options: nil)
         backgroundColor = ArenaPalette.grass
-        // 2 倍抗锯齿。不开 HDR、不开泛光：那两项在 iOS 27 的渲染线程上会直接断（EXC_BREAKPOINT）
-        antialiasingMode = .multisampling2X
+        // 不开抗锯齿：整屏 2 倍采样在对局里会把帧率拖得很低。角色描边还在
+        antialiasingMode = .none
         preferredFramesPerSecond = 60
         rendersContinuously = true
         isPlaying = true
@@ -193,7 +201,7 @@ final class ArenaWorldView: SCNView {
             tanY = tanX / max(aspect, 0.3)
             lookAhead = 2.0
         }
-        cameraNode.camera?.fieldOfView = CGFloat(2 * atan(tanY) * 180 / .pi)
+        cameraNode.camera?.fieldOfView = CGFloat(Self.verticalField(aspect: aspect))
         let lift = Self.cameraOffset.y, back = Self.cameraOffset.z
         let pitch = atan2(lift, back)
         let spread = min(atan(tanY), 0.5)
@@ -225,9 +233,9 @@ final class ArenaWorldView: SCNView {
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
         camera.zNear = 0.6
-        camera.zFar = 220
+        camera.zFar = 180
         camera.projectionDirection = .vertical
-        camera.fieldOfView = 60
+        camera.fieldOfView = CGFloat(Self.verticalField(aspect: 2.16))
         camera.wantsHDR = false
         camera.bloomIntensity = 0
         cameraNode.camera = camera
@@ -1528,7 +1536,7 @@ final class ArenaWorldView: SCNView {
     private func trail(_ color: UIColor, size: CGFloat, life: CGFloat = 0.3) -> SCNParticleSystem {
         let system = SCNParticleSystem()
         system.loops = true
-        system.birthRate = 70
+        system.birthRate = 22
         system.particleLifeSpan = life
         system.particleVelocity = 0.2
         system.spreadingAngle = 180

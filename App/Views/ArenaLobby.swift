@@ -70,8 +70,8 @@ struct ArenaHomeView: View {
                 ArenaLobbyBackground()
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                               live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                    .frame(width: min(geo.size.width * (wide ? 0.4 : 0.9), 420), height: geo.size.height * (wide ? 0.78 : 0.5))
-                    .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.47 : 0.38))
+                    .frame(width: min(geo.size.width * (wide ? 0.42 : 0.86), 460), height: geo.size.height * (wide ? 0.7 : 0.42))
+                    .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.54 : 0.48))
                 VStack(spacing: 0) {
                     topBar
                     Spacer(minLength: 0)
@@ -1307,9 +1307,9 @@ final class ArenaShowcaseView: SCNView {
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
         antialiasingMode = .none
-        preferredFramesPerSecond = 60
+        preferredFramesPerSecond = 30
         rendersContinuously = true
-        isPlaying = true
+        isPlaying = false
         world.background.contents = UIColor.clear
         scene = world
         build()
@@ -1324,13 +1324,14 @@ final class ArenaShowcaseView: SCNView {
 
     private func build() {
         let camera = SCNCamera()
-        camera.fieldOfView = 28
+        camera.fieldOfView = 24
         camera.zNear = 0.1
         camera.zFar = 30
         let eye = SCNNode()
         eye.camera = camera
-        eye.simdPosition = SIMD3(0, 1.25, 4.6)
-        eye.simdEulerAngles = SIMD3(-0.12, 0, 0)
+        // 整个人落在画面中下，头顶离开上边的奖杯，斧头不会顶出画面
+        eye.simdPosition = SIMD3(0, 1.55, 6.6)
+        eye.simdEulerAngles = SIMD3(-0.14, 0, 0)
         world.rootNode.addChildNode(eye)
         pointOfView = eye
 
@@ -1405,7 +1406,7 @@ final class ArenaShowcaseView: SCNView {
     func show(_ brawler: Brawler, skin: Int = 0) {
         guard avatar?.brawler != brawler || skin != wearing else { return }
         avatar?.node.removeFromParentNode()
-        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, skin: skin)
+        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.72, skin: skin)
         stage.addChildNode(made.node)
         avatar = made
         wearing = skin
@@ -1421,11 +1422,11 @@ final class ArenaShowcaseView: SCNView {
     func start() {
         guard window != nil else { return }
         rendersContinuously = true
-        isPlaying = true
+        isPlaying = false
         guard link == nil else { return }
         let target = ShowcaseTarget(view: self)
         let link = CADisplayLink(target: target, selector: #selector(ShowcaseTarget.tick(_:)))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 24, maximum: 30, preferred: 30)
         link.add(to: .main, forMode: .common)
         self.link = link
     }
