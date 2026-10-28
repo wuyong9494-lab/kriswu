@@ -24,14 +24,12 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 镜头在看的那一点的斜上方。高 15、往屏幕下方 14.5，大约 46 度，能看见身子和挥砍
-    private static let cameraOffset = SIMD3<Float>(0, 15, 14.5)
-    /// 竖屏时自己这一排左右看得到多宽：tan(半个视角)，自己身边左右各大约 5 格
+    /// 镜头在看的那一点的斜上方。高 13.6、往回 8.5，大约 58 度：看得到格子的顶，也看得到人的肩，和录像同一个俯角
+    private static let cameraOffset = SIMD3<Float>(0, 13.6, 8.5)
+    /// 竖屏时自己这一排左右看得到多宽：tan(半个视角)
     private static let sideView: Float = 0.267
-    /// 横屏时镜头看着的那一排左右各看得到几格（比原来近，人更大）
-    private static let landscapeHalfWidth: Float = 7
-    /// 毒圈外的绿雾有多厚。做成一圈墙，不要铺满整屏（整屏透明的面会把手机画死）
-    private static let gasBand: CGFloat = 7
+    /// 横屏时镜头看着的那一排左右各看得到几格。收近一点，人在画面里够大
+    private static let landscapeHalfWidth: Float = 5.2
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -66,7 +64,8 @@ final class ArenaWorldView: SCNView {
     private var starNodes: [SCNNode] = []
     private var floaters: [Floater] = []
     private var zone: (disc: SCNNode, rim: SCNNode, state: Int)?
-    private var poison: (wall: SCNTube, edge: SCNTube, radius: Double)?
+    /// 毒圈：一圈细边，外面几朵紫雾（牌子，不是整屏透明面）
+    private var poison: PoisonField?
     private var geometries: [String: SCNGeometry] = [:]
     /// 亡灵之地（按顺序一一对上）、骨塔（按编号）
     private var zoneNodes: [SCNNode] = []
@@ -178,10 +177,10 @@ final class ArenaWorldView: SCNView {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Float(bounds.width / bounds.height)
         if aspect >= 1 {
-            // 横屏：左右看得到整个场地宽，上下按屏幕比例；自己在屏幕中间偏下一点
+            // 横屏：看着的那一排左右各大约 5.2 格，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 1.2
+            lookAhead = 2.3
         } else {
             // 竖屏（iPad 竖着）：左右看得到的宽度固定，往前多看几格
             tanY = Self.sideView / min(max(aspect, 0.3), 0.6)
@@ -219,7 +218,7 @@ final class ArenaWorldView: SCNView {
 
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
-        camera.zNear = 4
+        camera.zNear = 0.6
         camera.zFar = 140
         camera.projectionDirection = .vertical
         camera.fieldOfView = 60
@@ -374,26 +373,7 @@ final class ArenaWorldView: SCNView {
             break
         }
         if game.mode.hasPoison {
-            // 毒圈：圈外一圈半透明的绿墙，边上一道亮线
-            let radius = game.safeRadius
-            let wall = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius) + Self.gasBand, height: 3.2)
-            wall.radialSegmentCount = 64
-            let gas = ArenaAvatar.decal(ArenaPalette.poison.withAlphaComponent(0.55))
-            wall.firstMaterial = gas
-            let wallNode = SCNNode(geometry: wall)
-            wallNode.simdPosition = center + SIMD3(0, 1.6, 0)
-            wallNode.castsShadow = false
-            wallNode.renderingOrder = 20
-            let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.18), height: 3.5)
-            edge.radialSegmentCount = 64
-            edge.firstMaterial = ArenaAvatar.decal(UIColor(red: 0.6, green: 1, blue: 0.5, alpha: 0.9))
-            let edgeNode = SCNNode(geometry: edge)
-            edgeNode.simdPosition = center + SIMD3(0, 1.75, 0)
-            edgeNode.castsShadow = false
-            edgeNode.renderingOrder = 21
-            root.addChildNode(wallNode)
-            root.addChildNode(edgeNode)
-            poison = (wall, edge, radius)
+            poison = makePoison(at: center, radius: game.safeRadius.isFinite ? max(game.safeRadius, 1) : 1)
         }
 
         // 人：自己这边蓝、对面红（大乱斗除了自己都是红）；骷髅王 2.2 倍大
@@ -406,6 +386,7 @@ final class ArenaWorldView: SCNView {
             avatars.append(avatar)
             let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
             tag.node.simdPosition = SIMD3(0, ArenaAvatar.headHeight * avatar.size, 0)
+            tag.node.simdScale = SIMD3(repeating: 0.82)
             avatar.node.addChildNode(tag.node)
             tags.append(tag)
         }
@@ -694,13 +675,15 @@ final class ArenaWorldView: SCNView {
         syncChests(game)
         syncWarnings(game)
         syncPower(game)
-        if var current = poison, abs(current.radius - game.safeRadius) > 0.02 {
-            current.radius = game.safeRadius
-            current.wall.outerRadius = CGFloat(current.radius) + Self.gasBand
-            current.wall.innerRadius = CGFloat(current.radius)
-            current.edge.outerRadius = CGFloat(current.radius + 0.18)
-            current.edge.innerRadius = CGFloat(current.radius)
-            poison = current
+        if var current = poison {
+            let radius = game.safeRadius.isFinite ? max(game.safeRadius, 1) : current.radius
+            if abs(current.radius - radius) > 0.02 {
+                current.radius = radius
+                current.edge.innerRadius = CGFloat(radius)
+                current.edge.outerRadius = CGFloat(radius + 0.28)
+                poison = current
+            }
+            layPoison(current, radius: Float(radius), center: SIMD3(Float(game.map.center.x), 0, Float(game.map.center.y)))
         }
 
         for event in events { effect(event, game: game) }
@@ -776,6 +759,68 @@ final class ArenaWorldView: SCNView {
         guard amount > 0 else { return }
         shake = min(0.9, max(shake, amount))
     }
+
+    /// 毒圈。细边标出安全区，外面三圈紫雾牌子。雾只建一次，缩圈时挪位置，不重做网格
+    private func makePoison(at center: SIMD3<Float>, radius: Double) -> PoisonField {
+        let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.28), height: 0.06)
+        edge.radialSegmentCount = 48
+        edge.firstMaterial = ArenaAvatar.decal(UIColor(red: 0.72, green: 0.35, blue: 1, alpha: 0.9))
+        let edgeNode = SCNNode(geometry: edge)
+        edgeNode.simdPosition = center + SIMD3(0, 0.08, 0)
+        edgeNode.castsShadow = false
+        edgeNode.renderingOrder = 7
+        world.rootNode.addChildNode(edgeNode)
+        let plane = SCNPlane(width: 3.6, height: 2.3)
+        plane.firstMaterial = Self.gasMaterial
+        var puffs: [SCNNode] = []
+        for _ in 0..<36 {
+            let node = SCNNode(geometry: plane)
+            node.faceCamera()
+            node.renderingOrder = 8
+            node.castsShadow = false
+            world.rootNode.addChildNode(node)
+            puffs.append(node)
+        }
+        let field = PoisonField(edge: edge, puffs: puffs, radius: radius)
+        layPoison(field, radius: Float(radius), center: center)
+        return field
+    }
+
+    private func layPoison(_ field: PoisonField, radius: Float, center: SIMD3<Float>) {
+        let t = Float(clock)
+        for (i, puff) in field.puffs.enumerated() {
+            let ring = i % 3
+            let extra: Float = ring == 0 ? 1.15 : (ring == 1 ? 2.7 : 4.4)
+            let spin = Float(i) * 2.399963
+            let wobble = sin(t * 0.55 + spin) * 0.35
+            let r = radius + extra + wobble
+            let angle = spin + t * 0.04
+            let lift = 0.9 + Float(ring) * 0.55 + sin(t * 0.8 + Float(i)) * 0.12
+            puff.simdPosition = center + SIMD3(cos(angle) * r, lift, sin(angle) * r)
+            let swell = 1 + 0.08 * sin(t * 0.7 + Float(i) * 1.7)
+            let width: Float = ring == 2 ? 1.45 : (ring == 1 ? 1.15 : 0.92)
+            puff.simdScale = SIMD3(swell * width, swell, 1)
+        }
+    }
+
+    /// 一朵软边紫雾，全场共用一张。自己画的，不是别人的贴图
+    private static let gasMaterial: SCNMaterial = {
+        let side: CGFloat = 64
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { ctx in
+            let colors = [
+                UIColor(red: 0.64, green: 0.24, blue: 0.98, alpha: 0.72).cgColor,
+                UIColor(red: 0.52, green: 0.16, blue: 0.86, alpha: 0.34).cgColor,
+                UIColor(red: 0.4, green: 0.08, blue: 0.7, alpha: 0).cgColor
+            ] as CFArray
+            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.42, 1]) else { return }
+            ctx.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: side / 2, y: side / 2), startRadius: 0,
+                                              endCenter: CGPoint(x: side / 2, y: side / 2), endRadius: side / 2, options: [])
+        }
+        return ArenaArt.flat(image)
+    }()
 
     /// 球：有人带着画在他脚前（跳起来也跟着），没人带画在地上；按走了多远滚着转
     private func syncBall(_ game: ArenaGame) {
@@ -1725,6 +1770,12 @@ final class ArenaWorldView: SCNView {
 }
 
 /// 每种地图的样子：都是亮绿的草地，主题换的是地上一块块的颜色（沙土、石板、深一点的草）、阳光、墙用哪几种（各占几成）
+private struct PoisonField {
+    let edge: SCNTube
+    let puffs: [SCNNode]
+    var radius: Double
+}
+
 private struct ThemeLook {
     let floor: UIColor
     let floorDark: UIColor

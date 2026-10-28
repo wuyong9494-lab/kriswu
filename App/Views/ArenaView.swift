@@ -431,10 +431,22 @@ private struct ArenaMatchView: View {
                 .padding(.vertical, 6)
                 .background((team == controller.mine.team ? Color(uiColor: ArenaPalette.blue) : Color(uiColor: ArenaPalette.red)).opacity(0.85),
                             in: Capsule())
+        } else if hud.poisonShrinking && controller.game.safeRadius < 6.5 {
+            Text("决赛圈")
+                .font(.system(size: 36, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .arenaInk()
+                .padding(.horizontal, DS.Space.m)
+                .padding(.vertical, 8)
+                .background(Color(red: 0.45, green: 0.16, blue: 0.72).opacity(0.82), in: Capsule())
         } else if hud.poisonShrinking {
-            Text("毒圈在缩小，待在圈里").font(DS.Font.caption).foregroundStyle(.white)
-                .padding(.horizontal, DS.Space.s).padding(.vertical, 4)
-                .background(Color.green.opacity(0.6), in: Capsule())
+            Text("毒圈在缩，待在圈里")
+                .font(.system(size: 16, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .arenaInk()
+                .padding(.horizontal, DS.Space.m)
+                .padding(.vertical, 4)
+                .background(Color(red: 0.45, green: 0.16, blue: 0.72).opacity(0.82), in: Capsule())
         } else if controller.game.time < 3 {
             // 开局头几秒：这局的地图
             Text("\(controller.game.mode.title) · \(controller.game.map.title)")

@@ -172,7 +172,8 @@ final class ArenaAvatar {
         ring.addChildNode(discNode)
         ring.addChildNode(rimNode)
         ring.simdPosition = SIMD3(0, 0.03, 0)
-        ring.simdScale = SIMD3(size, 1, size)
+        let span = isMe ? size * 1.35 : size
+        ring.simdScale = SIMD3(span, 1, span)
         ring.renderingOrder = 5
         ring.castsShadow = false
         discNode.castsShadow = false
