@@ -155,7 +155,8 @@ final class ArenaPowerTests: XCTestCase {
             ArenaGame.Entrant(name: "甲", brawler: .knight, isBot: true, team: 1),
             ArenaGame.Entrant(name: "乙", brawler: .ranger, isBot: true, team: 2),
         ], seed: 1, map: map)
-        game.adjust(0) { $0.pos = V2(4.5, 1.5); $0.health = Int(Double(game.fighters[0].maxHealth) * 0.6) }
+        let full = game.fighters[0].maxHealth
+        game.adjust(0) { $0.pos = V2(4.5, 1.5); $0.health = Int(Double(full) * 0.6) }
         game.adjust(1) { $0.pos = V2(5.8, 1.5) }
         game.adjust(2) { $0.pos = V2(4.5, 2.8) }
         var bot = ArenaBot(id: 0, seed: 4)

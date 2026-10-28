@@ -745,9 +745,8 @@ final class ArenaWorldView: SCNView {
             let fade = openBush.contains(game.map.bushId(at: bushes[k].at))
             if fade != bushes[k].faded {
                 if fade {
-                    let base = bushes[k].node.scale
-                    bushes[k].node.scale = SCNVector3(base.x * 1.12, base.y * 0.88, base.z * 1.12)
-                    bushes[k].node.runAction(.scale(to: base, duration: 0.16))
+                    bushes[k].node.scale = SCNVector3(1.12, 0.88, 1.12)
+                    bushes[k].node.runAction(.scale(to: 1, duration: 0.16))
                 }
                 bushes[k].faded = fade
                 bushes[k].node.opacity = fade ? 0.4 : 1
@@ -1490,9 +1489,9 @@ final class ArenaWorldView: SCNView {
     private static func crescent(color: UIColor, wide: CGFloat) -> SCNGeometry {
         let path = UIBezierPath()
         path.move(to: CGPoint(x: -0.2 * wide, y: -0.05))
-        path.addQuadCurve(to: CGPoint(x: 0.95 * wide, y: 0.05), control: CGPoint(x: 0.35 * wide, y: 0.62))
+        path.addQuadCurve(to: CGPoint(x: 0.95 * wide, y: 0.05), controlPoint: CGPoint(x: 0.35 * wide, y: 0.62))
         path.addLine(to: CGPoint(x: 0.82 * wide, y: -0.02))
-        path.addQuadCurve(to: CGPoint(x: -0.2 * wide, y: -0.05), control: CGPoint(x: 0.3 * wide, y: 0.22))
+        path.addQuadCurve(to: CGPoint(x: -0.2 * wide, y: -0.05), controlPoint: CGPoint(x: 0.3 * wide, y: 0.22))
         path.close()
         let shape = SCNShape(path: path, extrusionDepth: 0.05)
         let material = SCNMaterial()
