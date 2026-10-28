@@ -60,8 +60,8 @@ final class ArenaSkillsTests: XCTestCase {
         let now = potion.time
         potion.adjust(0) { $0.health = 1000; $0.lastHurt = now }
         potion.step(dt, inputs: [0: ArenaInput(gadget: true)])
-        XCTAssertEqual(potion.fighters[0].health, 2800)
-        XCTAssertTrue(potion.events.contains(.heal(target: 0, amount: 1800)))
+        XCTAssertEqual(potion.fighters[0].health, 3016)
+        XCTAssertTrue(potion.events.contains(.heal(target: 0, amount: 2016)))
 
         var ward = duel(.knight, loadout: ArenaLoadout(gadget: .ward))
         ward.step(dt, inputs: [0: ArenaInput(gadget: true)])
@@ -125,7 +125,7 @@ final class ArenaSkillsTests: XCTestCase {
 
     func testStarPowers() {
         let tough = duel(.knight, loadout: ArenaLoadout(starPower: .tough))
-        XCTAssertEqual(tough.fighters[0].maxHealth, Int((Double(Brawler.knight.health(level: 1)) * 1.12).rounded()))
+        XCTAssertEqual(tough.fighters[0].maxHealth, Int((Double(Int((Double(Brawler.knight.health(level: 1)) * ArenaGame.playerEdge).rounded())) * 1.12).rounded()))
         XCTAssertEqual(tough.fighters[0].health, tough.fighters[0].maxHealth, "开局满血")
 
         let quick = duel(.ranger, loadout: ArenaLoadout(starPower: .quickload))
@@ -195,7 +195,7 @@ final class ArenaSkillsTests: XCTestCase {
         let meteor = try XCTUnwrap(game.projectiles.last?.lob)
         XCTAssertEqual(meteor.blast, 3, accuracy: 0.01, "陨石炸得更大")
         XCTAssertEqual(game.moveSpeed(game.fighters[0]), speed * 1.25, accuracy: 1e-9)
-        XCTAssertEqual(game.power(0, 1000), 1100)
+        XCTAssertEqual(game.power(0, 1000), 1232)
         let health = game.fighters[0].health
         game.hurt(0, 1000, by: 1, charges: true)
         XCTAssertEqual(health - game.fighters[0].health, 850)

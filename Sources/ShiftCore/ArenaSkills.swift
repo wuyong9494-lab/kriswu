@@ -186,9 +186,10 @@ extension ArenaGame {
         fighter.brawler.reload * (fighter.starPower == .quickload ? 0.8 : 1)
     }
 
-    /// 攒满一次大招要打出多少伤害（等级高的伤害大，要的也多：打中几下攒满不变）
+    /// 攒满一次大招要打出多少伤害（等级高、玩家伤害高，要的也多：打中几下攒满不变）
     func superCost(_ fighter: Fighter) -> Double {
-        fighter.brawler.superCost * Brawler.boost(fighter.level) * (fighter.starPower == .surge ? 0.8 : 1)
+        let edge = fighter.isBot || fighter.isBoss ? 1.0 : playerEdge
+        return fighter.brawler.superCost * Brawler.boost(fighter.level) * edge * (fighter.starPower == .surge ? 0.8 : 1)
     }
 
     /// 受到的伤害打几折（骨盾、铁壁少六成，超级充能少一成半）

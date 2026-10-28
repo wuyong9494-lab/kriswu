@@ -138,11 +138,11 @@ final class ArenaTests: XCTestCase {
         game.adjust(0) { $0.pos = V2(3.5, 14.5); $0.superCharge = 1; $0.health = 3000 }
         game.adjust(1) { $0.pos = V2(3.5, 20.5) }
         game.step(dt, inputs: [0: ArenaInput(special: V2(0, 1))])
-        XCTAssertEqual(game.fighters[0].health, 4200)
+        XCTAssertEqual(game.fighters[0].health, 4344)
         XCTAssertEqual(game.fighters[0].shield, 4)
         game.step(dt, inputs: [1: ArenaInput(attack: V2(0, -1))])
         run(&game, seconds: 0.6)
-        XCTAssertEqual(game.fighters[0].health, 4200 - 520, "1300 只受四成")
+        XCTAssertEqual(game.fighters[0].health, 4344 - 520, "电脑的 1300 只受四成")
         run(&game, seconds: 4)
         XCTAssertEqual(game.fighters[0].shield, 0)
     }
@@ -161,8 +161,8 @@ final class ArenaTests: XCTestCase {
         XCTAssertEqual(game.zones.count, 1)
         XCTAssertEqual(game.zones[0].center, V2(7.5, 17.5))
         run(&game, seconds: 1.1)
-        XCTAssertEqual(game.fighters[1].health, 1700, "两次各回 350")
-        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth - 350, "两次各扣 175")
+        XCTAssertEqual(game.fighters[1].health, 1784, "两次各回 392")
+        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth - 392, "两次各扣 196")
         run(&game, seconds: 5)
         XCTAssertTrue(game.zones.isEmpty)
     }
@@ -178,7 +178,7 @@ final class ArenaTests: XCTestCase {
         game.adjust(1) { $0.pos = V2(7.5, 13.5) }
         game.step(dt, inputs: [0: ArenaInput(special: V2(0, -5))])
         XCTAssertEqual(game.fighters[0].pos.y, 13.5, accuracy: 0.6)
-        XCTAssertEqual(game.fighters[1].health, Brawler.barbarian.maxHealth - 1400)
+        XCTAssertEqual(game.fighters[1].health, Brawler.barbarian.maxHealth - 1568)
     }
 
     /// 骨灵的大招：骨塔自动打够得着的敌人（伤害算骨灵的），被打掉了就没了
@@ -226,7 +226,7 @@ final class ArenaTests: XCTestCase {
         game.adjust(2) { $0.pos = V2(3.5, 14.5) }
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
         run(&game, seconds: 0.6)
-        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth - 1300)
+        XCTAssertEqual(game.fighters[2].health, Brawler.barbarian.maxHealth - 1456)
         XCTAssertEqual(game.fighters[1].health, Brawler.knight.maxHealth, "不打自己人")
         XCTAssertEqual(game.fighters[0].superCharge, 1300 / Brawler.ranger.superCost, accuracy: 1e-9)
         XCTAssertEqual(game.fighters[0].ammo, 2 + 0.6 / Brawler.ranger.reload, accuracy: 0.05)

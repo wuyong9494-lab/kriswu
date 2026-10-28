@@ -434,7 +434,8 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var maxHealth: Int {
         if isBoss { return ArenaGame.bossHealth(level: level) }
         let base = brawler.health(level: level)
-        return (starPower == .tough ? Int((Double(base) * 1.12).rounded()) : base) + cubes * ArenaGame.cubeHealth
+        let scaled = isBot ? base : Int((Double(base) * ArenaGame.playerEdge).rounded())
+        return (starPower == .tough ? Int((Double(scaled) * 1.12).rounded()) : scaled) + cubes * ArenaGame.cubeHealth
     }
     public var busy: Bool { dash != nil || leap != nil }
 }
@@ -488,6 +489,9 @@ public struct ArenaInput: Equatable, Codable, Sendable {
 }
 
 public struct ArenaGame: Sendable {
+    /// 玩家比同级电脑多一成二的血和伤害。电脑不加
+    public static let playerEdge = 1.12
+
     public enum Mode: String, CaseIterable, Codable, Sendable {
         case teamFight, stars, ball, heist, bounty, zone, knockout, showdown, duo, duel, boss
 
@@ -1245,7 +1249,8 @@ public struct ArenaGame: Sendable {
     func power(_ i: Int, _ damage: Int) -> Int {
         let hyper = fighters[i].hyperTime > 0 ? 1.1 : 1
         let cubes = 1 + Self.cubeDamage * Double(fighters[i].cubes)
-        return Int((Double(damage) * Brawler.boost(fighters[i].level) * hyper * cubes).rounded())
+        let edge = fighters[i].isBot || fighters[i].isBoss ? 1.0 : Self.playerEdge
+        return Int((Double(damage) * Brawler.boost(fighters[i].level) * hyper * cubes * edge).rounded())
     }
 
     mutating func spread(_ i: Int, _ direction: V2, count: Int, angle: Double, speed: Double, range: Double,

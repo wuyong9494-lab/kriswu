@@ -755,7 +755,7 @@ struct ArenaHomeView: View {
                     .font(.system(size: 20, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .arenaOutline(1.2)
-                Text("\(item.role) · 血 \(item.health(level: progress.level(item)))")
+                Text("\(item.role) · 血 \(Int((Double(item.health(level: progress.level(item))) * ArenaGame.playerEdge).rounded()))")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.9))
                 Text(item.attackNote)
@@ -910,7 +910,7 @@ struct ArenaHomeView: View {
                 Label("\(chosen.name)已经满级了", systemImage: "checkmark.seal.fill").foregroundStyle(.secondary)
             }
         } footer: {
-            Text("现在有 \(progress.coins) 金币。升级后血 \(chosen.health(level: level)) → \(chosen.health(level: min(level + 1, ArenaProgress.maxLevel)))，伤害同样多 6%。")
+            Text("现在有 \(progress.coins) 金币。升级后血 \(Int((Double(chosen.health(level: level)) * ArenaGame.playerEdge).rounded())) → \(Int((Double(chosen.health(level: min(level + 1, ArenaProgress.maxLevel))) * ArenaGame.playerEdge).rounded()))，伤害同样多 6%。")
         }
     }
 

@@ -121,9 +121,9 @@ final class ArenaModesTests: XCTestCase {
         game.adjust(1) { $0.pos = V2(1.5, 12.5) }
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
         run(&game, seconds: 0.6)
-        XCTAssertEqual(game.chests[0].health, ArenaGame.Chest.fullHealth - 1300)
-        XCTAssertEqual(game.fighters[0].damageDealt, 1300)
-        XCTAssertTrue(game.events.contains(.chestHit(chest: 0, amount: 1300)))
+        XCTAssertEqual(game.chests[0].health, ArenaGame.Chest.fullHealth - 1456)
+        XCTAssertEqual(game.fighters[0].damageDealt, 1456)
+        XCTAssertTrue(game.events.contains(.chestHit(chest: 0, amount: 1456)))
         game.chests[0].health = 1000
         run(&game, seconds: 1.5)
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
@@ -247,7 +247,7 @@ final class ArenaModesTests: XCTestCase {
         run(&game, seconds: ArenaGame.respawnDelay + 0.1)
         XCTAssertTrue(game.fighters[0].alive)
         XCTAssertEqual(game.fighters[0].brawler, .mage)
-        XCTAssertEqual(game.fighters[0].health, Brawler.mage.maxHealth)
+        XCTAssertEqual(game.fighters[0].health, game.fighters[0].maxHealth)
         XCTAssertEqual(game.fighters[0].pos, game.map.spawns[0][0])
         game.knockOut(0, by: 1)
         run(&game, seconds: ArenaGame.respawnDelay + 0.1)
@@ -278,10 +278,10 @@ final class ArenaModesTests: XCTestCase {
         game.step(dt, inputs: [:])
         XCTAssertEqual(game.warnings.count, 1)
         XCTAssertEqual(game.warnings.first?.center, boss.pos)
-        XCTAssertEqual(game.fighters[0].health, Brawler.ranger.maxHealth, "红圈先不伤人")
+        XCTAssertEqual(game.fighters[0].health, Int((Double(Brawler.ranger.maxHealth) * ArenaGame.playerEdge).rounded()), "红圈先不伤人")
         run(&game, seconds: 1.05)
         XCTAssertTrue(game.warnings.isEmpty)
-        XCTAssertEqual(game.fighters[0].health, Brawler.ranger.maxHealth - 2400)
+        XCTAssertEqual(game.fighters[0].health, Int((Double(Brawler.ranger.maxHealth) * ArenaGame.playerEdge).rounded()) - 2400)
         // 骷髅王个子大：子弹擦边也打得中
         game.adjust(1) { $0.pos = boss.pos + V2(-0.9, 5) }
         game.step(dt, inputs: [1: ArenaInput(attack: V2(0, -1))])

@@ -79,13 +79,13 @@ final class ArenaProgressTests: XCTestCase {
             .init(name: "游侠", brawler: .ranger, isBot: false, team: 0, level: 5),
             .init(name: "蛮王", brawler: .barbarian, isBot: true, team: 1, level: 3),
         ], seed: 2)
-        XCTAssertEqual(game.fighters[0].maxHealth, 3968)
+        XCTAssertEqual(game.fighters[0].maxHealth, 4444)
         XCTAssertEqual(game.fighters[1].health, 8736)
         game.adjust(0) { $0.pos = V2(3.5, 20.5) }
         game.adjust(1) { $0.pos = V2(3.5, 14.5) }
         game.step(dt, inputs: [0: ArenaInput(attack: V2(0, -1))])
         for _ in 0..<36 { game.step(dt, inputs: [:]) }
-        XCTAssertEqual(game.fighters[1].health, 8736 - 1612)
+        XCTAssertEqual(game.fighters[1].health, 8736 - 1805)
         XCTAssertEqual(game.fighters[0].superCharge, 1300 / Brawler.ranger.superCost, accuracy: 1e-9)
         XCTAssertEqual(Brawler.boost(0), 1, "等级不在 1–9 的按边上算")
         XCTAssertEqual(Brawler.boost(20), Brawler.boost(ArenaProgress.maxLevel))

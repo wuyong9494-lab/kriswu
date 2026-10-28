@@ -41,7 +41,7 @@ final class ArenaNewBrawlerTests: XCTestCase {
         var game = trio(.swordsman)
         let enemy = game.fighters[2].health, ally = game.fighters[1].health
         game.step(dt, inputs: [0: ArenaInput(attack: V2(1, 0))])
-        XCTAssertEqual(enemy - game.fighters[2].health, 1050)
+        XCTAssertEqual(enemy - game.fighters[2].health, 1176)
         XCTAssertEqual(game.fighters[1].health, ally)
         XCTAssertTrue(game.projectiles.isEmpty, "转圈不是子弹")
         game.adjust(0) { $0.superCharge = 1 }
@@ -56,7 +56,7 @@ final class ArenaNewBrawlerTests: XCTestCase {
         XCTAssertNotNil(game.projectiles.first?.lob)
         game.adjust(0) { $0.health = 1000; $0.superCharge = 1 }
         game.step(dt, inputs: [0: ArenaInput(special: V2(1, 0))])
-        XCTAssertEqual(game.fighters[0].health, 3400)
+        XCTAssertEqual(game.fighters[0].health, 3688)
         XCTAssertGreaterThan(game.fighters[0].shield, 3)
         XCTAssertGreaterThan(game.fighters[0].speedBoost, 3)
     }
@@ -70,9 +70,9 @@ final class ArenaNewBrawlerTests: XCTestCase {
         game.adjust(1) { $0.health = 1000; $0.lastHurt = now }
         let enemy = game.fighters[2].health
         game.step(dt, inputs: [0: ArenaInput(attack: V2(1, 0))])
-        XCTAssertEqual(game.fighters[1].health, 1600)
+        XCTAssertEqual(game.fighters[1].health, 1672)
         XCTAssertEqual(game.fighters[0].health, 1000, "不回自己")
-        XCTAssertEqual(enemy - game.fighters[2].health, 520)
+        XCTAssertEqual(enemy - game.fighters[2].health, 582)
         XCTAssertGreaterThan(game.fighters[0].superCharge, Double(520) / game.superCost(game.fighters[0]), "回血也攒大招")
         game.adjust(0) { $0.superCharge = 1 }
         game.step(dt, inputs: [0: ArenaInput(special: V2(1, 0))])
