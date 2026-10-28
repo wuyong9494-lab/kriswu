@@ -536,6 +536,37 @@ enum ArenaArt {
         }
     }
 
+    private static var bubbles: [String: UIImage] = [:]
+
+    /// 表情泡泡：白底圆框、下面一个小尖，中间是表情（同一个表情画一次）
+    static func bubble(_ symbol: String) -> UIImage {
+        if let cached = bubbles[symbol] { return cached }
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 120, height: 120), format: format).image { _ in
+            let ink = rgb(0.12, 0.1, 0.16)
+            let tail = UIBezierPath()
+            tail.move(to: CGPoint(x: 48, y: 96))
+            tail.addLine(to: CGPoint(x: 58, y: 116))
+            tail.addLine(to: CGPoint(x: 74, y: 96))
+            tail.close()
+            tail.lineWidth = 6
+            ink.setStroke()
+            tail.stroke()
+            UIColor.white.setFill()
+            tail.fill()
+            let round = UIBezierPath(roundedRect: CGRect(x: 6, y: 4, width: 108, height: 96), cornerRadius: 44)
+            round.lineWidth = 6
+            round.stroke()
+            round.fill()
+            let text = NSAttributedString(string: symbol, attributes: [.font: UIFont.systemFont(ofSize: 58)])
+            let size = text.size()
+            text.draw(at: CGPoint(x: 60 - size.width / 2, y: 52 - size.height / 2))
+        }
+        bubbles[symbol] = image
+        return image
+    }
+
     /// 光点用的软圆点
     static let dot: UIImage = draw(CGSize(width: 32, height: 32), opaque: false) { cg in
         let colors = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray

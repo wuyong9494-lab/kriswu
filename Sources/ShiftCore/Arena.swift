@@ -378,6 +378,9 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var speedBoost: Double = 0
     public var slowed: Double = 0
     public var invisible: Double = 0
+    /// 穿的第几套皮肤（0 原来的样子）、上次冒表情是什么时候
+    public var skin = 0
+    public var lastEmote: Double = -10
 
     public var maxHealth: Int {
         if isBoss { return ArenaGame.bossHealth(level: level) }
@@ -420,12 +423,15 @@ public struct ArenaInput: Equatable, Codable, Sendable {
     public var attack: V2?
     public var special: V2?
     public var gadget: Bool
+    /// 头顶冒个表情（ArenaEmote.id）
+    public var emote: Int?
 
-    public init(move: V2 = .zero, attack: V2? = nil, special: V2? = nil, gadget: Bool = false) {
+    public init(move: V2 = .zero, attack: V2? = nil, special: V2? = nil, gadget: Bool = false, emote: Int? = nil) {
         self.move = move
         self.attack = attack
         self.special = special
         self.gadget = gadget
+        self.emote = emote
     }
 }
 
@@ -539,6 +545,8 @@ public struct ArenaGame: Sendable {
         case gadget(fighter: Int)
         /// 开了超级充能
         case hyper(fighter: Int)
+        /// 头顶冒了个表情
+        case emote(fighter: Int, emote: Int)
     }
 
     /// 亡灵之地：圈里的队友回血、敌人掉血，每 0.5 秒结一次
@@ -821,6 +829,11 @@ public struct ArenaGame: Sendable {
     }
 
     private mutating func update(_ i: Int, _ input: ArenaInput, _ dt: Double) {
+        // 表情：倒下了也能冒，1.5 秒最多一个
+        if let emote = input.emote, time - fighters[i].lastEmote >= 1.5 {
+            fighters[i].lastEmote = time
+            events.append(.emote(fighter: i, emote: emote))
+        }
         if !fighters[i].alive {
             guard canRespawn(i) else { return }
             fighters[i].respawnIn -= dt

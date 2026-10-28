@@ -33,6 +33,8 @@ final class ArenaAvatar {
     private var frosted = false
     /// 大招和超级充能都满了：脚下的光圈变紫
     private var hyperReady = false
+    /// 皮肤的颜色（冻住时换成冰蓝，好了换回来）
+    private var baseTint = UIColor.white
     /// 材质本来的自发光（骷髅的眼睛），挨打闪白后改回去
     private var glows: [Any?] = []
     /// 身上、手里武器的描边（半透明、淡出时藏起来）
@@ -72,7 +74,8 @@ final class ArenaAvatar {
     private var flashing = false
     private var placed = false
 
-    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1) {
+    /// skin：穿第几套皮肤（0 原来的样子）
+    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0) {
         self.brawler = brawler
         self.size = size
         look = BrawlerLook.of(brawler)
@@ -98,6 +101,16 @@ final class ArenaAvatar {
                 outlines += held.outlines
             }
             outlines += instance.outlines
+            // 皮肤：身上的颜色乘上皮肤的颜色，原来不发光的地方加一点光（武器、骷髅的眼睛不变）
+            if let look = ArenaSkin.of(brawler).first(where: { $0.index == skin }), look.tint.count == 3, look.glow.count == 3 {
+                let tint = UIColor(red: look.tint[0], green: look.tint[1], blue: look.tint[2], alpha: 1)
+                let glow = UIColor(red: look.glow[0], green: look.glow[1], blue: look.glow[2], alpha: 1)
+                for material in instance.materials {
+                    material.multiply.contents = tint
+                    if Self.dark(material.emission.contents) { material.emission.contents = glow }
+                }
+                baseTint = tint
+            }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size)
@@ -279,7 +292,7 @@ final class ArenaAvatar {
         let frozen = fighter.alive && fighter.slowed > 0
         if frozen != frosted, let instance {
             frosted = frozen
-            instance.materials.forEach { $0.multiply.contents = frozen ? ArenaPalette.frost : UIColor.white }
+            instance.materials.forEach { $0.multiply.contents = frozen ? ArenaPalette.frost : baseTint }
         }
 
         if flashing && clock >= flashUntil {
@@ -397,6 +410,15 @@ final class ArenaAvatar {
         material.lightingModel = lit ? .lambert : .constant
         material.diffuse.contents = color
         return material
+    }
+
+    /// 材质原来不发光（没设、或者是黑的）
+    private static func dark(_ contents: Any?) -> Bool {
+        guard let contents else { return true }
+        guard let color = contents as? UIColor else { return false }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return max(red, green, blue) < 0.05 || alpha < 0.05
     }
 
     /// 一直冒的光点（先不冒：birthRate 0，要的时候再开）

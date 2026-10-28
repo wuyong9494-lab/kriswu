@@ -6,7 +6,8 @@ import simd
 // MARK: - 大厅
 
 /// 勇者乱斗的大厅（iPhone 上横着）：中间是自己选的角色（3D，站在台子上，手指拖着能转、点一下出手），
-/// 上边奖杯、金币、名字，左边「角色」「奖杯之路」「和同事打」，右下带的本事、玩法卡片和大大的「开打」
+/// 上边奖杯（点开奖杯之路）、金币、赛季等级、名字，左边「冒险」「角色」「赛季」「和同事打」，
+/// 右下普通 / 排位、带的本事、玩法卡片和大大的「开打」
 struct ArenaHomeView: View {
     @ObservedObject private var records = ArenaRecords.shared
     @ObservedObject private var growth = ArenaProgressStore.shared
@@ -19,6 +20,8 @@ struct ArenaHomeView: View {
     @State private var pendingRoom: GameRoom?
     /// 冒险
     @State private var adventure = false
+    /// 排位赛（只打 3v3，按段位加减排位分）
+    @AppStorage("arena.ranked") private var ranked = false
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
 
@@ -33,7 +36,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together
+        case brawlers, modes, loadout, road, together, season
         var id: String { rawValue }
     }
 
@@ -57,7 +60,7 @@ struct ArenaHomeView: View {
             let wide = geo.size.width > geo.size.height
             ZStack {
                 ArenaLobbyBackground()
-                ArenaShowcase(brawler: chosen)
+                ArenaShowcase(brawler: chosen, skin: progress.skin(chosen))
                     .frame(width: min(geo.size.width * (wide ? 0.4 : 0.9), 420), height: geo.size.height * (wide ? 0.78 : 0.5))
                     .position(x: geo.size.width / 2, y: geo.size.height * (wide ? 0.47 : 0.38))
                 VStack(spacing: 0) {
@@ -92,6 +95,7 @@ struct ArenaHomeView: View {
         .persistentSystemOverlays(.hidden)
         // 先在后台把 3D 模型读好、画好头像，开打时不用等
         .task { await ArenaPortraits.shared.prepare() }
+        .onAppear { growth.refreshSeason() }
         .sheet(item: $sheet, onDismiss: {
             guard let room = pendingRoom else { return }
             pendingRoom = nil
@@ -125,6 +129,7 @@ struct ArenaHomeView: View {
                 Image(systemName: "dollarsign.circle.fill").foregroundStyle(.yellow)
                 Text("\(progress.coins)")
             }
+            seasonPill
             Spacer()
             pill {
                 Image(systemName: "person.crop.circle.fill").foregroundStyle(.white.opacity(0.9))
@@ -164,6 +169,42 @@ struct ArenaHomeView: View {
         .accessibilityLabel("奖杯 \(progress.totalTrophies)，看奖杯之路")
     }
 
+    /// 赛季：几级，下面一条到下一级的经验；有能领的奖励、没做完的任务冒个点
+    private var seasonPill: some View {
+        let state = progress.season
+        let into = state.tier >= ArenaSeason.tiers ? ArenaSeason.pointsPerTier : state.points % ArenaSeason.pointsPerTier
+        let waiting = (1...max(state.tier, 1)).contains { $0 <= state.tier && !state.claimed.contains($0) }
+        return Button {
+            sheet = .season
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "medal.fill").foregroundStyle(Color(red: 0.78, green: 0.6, blue: 1))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("赛季 \(state.tier) 级")
+                    Capsule().fill(.black.opacity(0.45))
+                        .frame(width: 70, height: 5)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color(red: 0.7, green: 0.5, blue: 1))
+                                .frame(width: 70 * CGFloat(into) / CGFloat(ArenaSeason.pointsPerTier), height: 5)
+                        }
+                }
+            }
+            .font(.system(size: 14, weight: .black, design: .rounded).monospacedDigit())
+            .foregroundStyle(.white)
+            .arenaInk()
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .background(.black.opacity(0.3), in: Capsule())
+            .overlay(alignment: .topTrailing) {
+                if waiting {
+                    Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: -2, y: 2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("赛季 \(state.tier) 级，看任务和奖励")
+    }
+
     private func pill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: 6, content: content)
             .font(.system(size: 16, weight: .black, design: .rounded).monospacedDigit())
@@ -194,10 +235,10 @@ struct ArenaHomeView: View {
             } action: {
                 sheet = .brawlers
             }
-            tile("奖杯之路", face: Color(red: 1, green: 0.6, blue: 0.15), edge: Color(red: 0.7, green: 0.36, blue: 0.02)) {
-                Image(systemName: "flag.checkered").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
+            tile("赛季", face: Color(red: 0.6, green: 0.4, blue: 0.95), edge: Color(red: 0.36, green: 0.2, blue: 0.66)) {
+                Image(systemName: "medal.fill").font(.system(size: 21, weight: .black)).foregroundStyle(.white)
             } action: {
-                sheet = .road
+                sheet = .season
             }
             tile("和同事打", face: Color(red: 0.3, green: 0.78, blue: 0.4), edge: Color(red: 0.12, green: 0.48, blue: 0.18)) {
                 Image(systemName: "person.3.fill").font(.system(size: 19, weight: .black)).foregroundStyle(.white)
@@ -284,7 +325,10 @@ struct ArenaHomeView: View {
 
     private var rightPanel: some View {
         VStack(alignment: .trailing, spacing: DS.Space.s) {
-            loadoutChips
+            HStack(spacing: DS.Space.s) {
+                rankedSwitch
+                loadoutChips
+            }
             modeCard
             Button {
                 start()
@@ -333,23 +377,48 @@ struct ArenaHomeView: View {
             .overlay(Circle().strokeBorder(.black.opacity(0.6), lineWidth: 2))
     }
 
-    /// 现在的玩法：颜色、图标、名字、赢了几局；点一下换
+    /// 普通 / 排位
+    private var rankedSwitch: some View {
+        HStack(spacing: 0) {
+            ForEach([false, true], id: \.self) { item in
+                Button {
+                    ranked = item
+                } label: {
+                    Text(item ? "排位" : "普通")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaInk()
+                        .frame(width: 46, height: 34)
+                        .background(Capsule().fill(ranked == item ? (item ? Color(red: 0.86, green: 0.3, blue: 0.3) : Color(red: 0.25, green: 0.55, blue: 1)) : .clear))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(.black.opacity(0.28), in: Capsule())
+        .accessibilityLabel(ranked ? "排位赛" : "普通赛")
+    }
+
+    /// 排位赛打哪个玩法：选的是 3v3 的就打它，不然打 3v3 团战
+    private var playMode: ArenaGame.Mode { ranked && !ArenaRank.allows(mode) ? .teamFight : mode }
+
+    /// 现在的玩法：颜色、图标、名字、赢了几局（排位赛是段位和分数）；点一下换
     private var modeCard: some View {
         Button {
             sheet = .modes
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: mode.icon)
+                Image(systemName: playMode.icon)
                     .font(.system(size: 20, weight: .black))
                     .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(.black.opacity(0.22)))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(mode.title)
+                    Text(ranked ? "排位 · \(playMode.title)" : playMode.title)
                         .font(.system(size: 17, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .arenaOutline(1.2)
-                    Text(records.tally.played[mode.rawValue].map { "赢了 \(records.tally.won[mode.rawValue] ?? 0)/\($0) 局" } ?? "点一下换玩法")
+                    Text(subtitle)
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.9))
                 }
@@ -358,16 +427,28 @@ struct ArenaHomeView: View {
             }
             .padding(.horizontal, 10)
             .frame(width: 244, height: 58)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(mode.tint))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(playMode.tint))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black.opacity(0.65), lineWidth: 2))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("玩法：\(mode.title)，点一下换")
+        .accessibilityLabel("玩法：\(playMode.title)，点一下换")
+    }
+
+    private var subtitle: String {
+        if ranked {
+            let points = progress.season.rankPoints
+            let tier = ArenaRank.tiers[ArenaRank.tier(points)]
+            return ArenaRank.allows(mode) ? "\(tier.name) \(points) 分 · 电脑 \(tier.botLevel) 级" : "排位只打 3v3 · \(tier.name) \(points) 分"
+        }
+        return records.tally.played[mode.rawValue].map { "赢了 \(records.tally.won[mode.rawValue] ?? 0)/\($0) 局" } ?? "点一下换玩法"
     }
 
     private func start() {
-        playing = ArenaEntry(setup: ArenaController.Setup(mode: mode, brawler: chosen, name: name, level: progress.level(chosen),
-                                                          lineup: duelPartners, loadout: progress.loadout(for: chosen)))
+        let level = progress.level(chosen)
+        let botLevel = ranked ? max(ArenaRank.tiers[progress.rankTier].botLevel, level) : nil
+        playing = ArenaEntry(setup: ArenaController.Setup(mode: playMode, brawler: chosen, name: name, level: level,
+                                                          lineup: duelPartners, loadout: progress.loadout(for: chosen),
+                                                          ranked: ranked, botLevel: botLevel))
     }
 
     // MARK: 面板
@@ -381,6 +462,7 @@ struct ArenaHomeView: View {
                 case .loadout: loadoutList
                 case .road: ArenaTrophyRoad()
                 case .together: togetherList
+                case .season: ArenaSeasonSheet()
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -505,6 +587,7 @@ struct ArenaHomeView: View {
         List {
             upgradeSection
             ArenaLoadoutSection(brawler: chosen)
+            ArenaSkinSection(brawler: chosen)
         }
         .appList()
         .navigationTitle("\(chosen.name)的本事")
@@ -654,13 +737,15 @@ private struct Rays: Shape {
 /// 大厅中间的 3D 角色：站在台子上轻轻左右转，手指拖着能转，点一下出手（换了角色先欢呼一下）
 struct ArenaShowcase: UIViewRepresentable {
     let brawler: Brawler
+    /// 穿第几套皮肤
+    var skin = 0
 
     func makeUIView(context: Context) -> ArenaShowcaseView {
-        ArenaShowcaseView(brawler: brawler)
+        ArenaShowcaseView(brawler: brawler, skin: skin)
     }
 
     func updateUIView(_ view: ArenaShowcaseView, context: Context) {
-        view.show(brawler)
+        view.show(brawler, skin: skin)
     }
 
     static func dismantleUIView(_ view: ArenaShowcaseView, coordinator: ()) {
@@ -684,8 +769,10 @@ final class ArenaShowcaseView: SCNView {
     private var dragging = false
     private var cheerUntil = 0.0
     private var taps = 0
+    /// 现在穿的第几套皮肤
+    private var wearing = 0
 
-    init(brawler: Brawler) {
+    init(brawler: Brawler, skin: Int = 0) {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
@@ -696,7 +783,7 @@ final class ArenaShowcaseView: SCNView {
         world.background.contents = UIColor.clear
         scene = world
         build()
-        show(brawler)
+        show(brawler, skin: skin)
         addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         isAccessibilityElement = true
@@ -774,13 +861,14 @@ final class ArenaShowcaseView: SCNView {
         world.rootNode.addChildNode(stage)
     }
 
-    /// 换角色：换模型，先欢呼一下
-    func show(_ brawler: Brawler) {
-        guard avatar?.brawler != brawler else { return }
+    /// 换角色、换皮肤：换模型，先欢呼一下
+    func show(_ brawler: Brawler, skin: Int = 0) {
+        guard avatar?.brawler != brawler || skin != wearing else { return }
         avatar?.node.removeFromParentNode()
-        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false)
+        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, skin: skin)
         stage.addChildNode(made.node)
         avatar = made
+        wearing = skin
         fighter.brawler = brawler
         cheerUntil = clock + 1.6
     }

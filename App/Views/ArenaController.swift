@@ -90,6 +90,9 @@ final class ArenaController: ObservableObject {
         var loadout = ArenaLoadout()
         /// 冒险的一关（玩法、地图、对手、队友都按这一关的）
         var story: ArenaStory.Level?
+        /// 排位赛（只打 3v3，不加减奖杯，按段位加减排位分）；电脑补位的等级（nil：和自己一样）
+        var ranked = false
+        var botLevel: Int?
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
 
@@ -111,6 +114,14 @@ final class ArenaController: ObservableObject {
     /// 冒险的一关：打的是哪一关、打完拿了几颗星和金币
     private(set) var story: ArenaStory.Level?
     @Published private(set) var storyReward: ArenaStory.Reward?
+    /// 排位赛：打完给的金币（不加减奖杯）
+    private(set) var ranked = false
+    @Published private(set) var rankedCoins: Int?
+    /// 这局给的赛季经验、做完的任务、排位分
+    @Published private(set) var seasonGain: ArenaSeasonGain?
+    /// 这局自己用了几次小道具、放了几次大招（任务要算）
+    private var gadgetsUsed = 0
+    private var supersUsed = 0
     /// 联机时房主走了
     @Published private(set) var disconnected = false
     /// 进球、一局打完、开新一局时屏幕中间写一行大字（两秒后消失）
@@ -146,6 +157,7 @@ final class ArenaController: ObservableObject {
     private var queuedAttack: V2?
     private var queuedSpecial: V2?
     private var queuedGadget = false
+    private var queuedEmote: Int?
     private var sceneEvents: [ArenaGame.Event] = []
     private var recorded = false
 
@@ -156,6 +168,7 @@ final class ArenaController: ObservableObject {
     private var remoteAttacks: [Int: V2] = [:]
     private var remoteSpecials: [Int: V2] = [:]
     private var remoteGadgets: Set<Int> = []
+    private var remoteEmotes: [Int: Int] = [:]
     private var netEvents: [ArenaGame.Event] = []
     private var ticks = 0
 
@@ -184,13 +197,15 @@ final class ArenaController: ObservableObject {
             for k in 1..<teams.count {
                 let brawler = others[(k - 1) % others.count]
                 let boss = setup.mode == .boss && teams[k] == 1
+                let level = setup.botLevel ?? setup.level
                 entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
-                                                  level: setup.level, loadout: ArenaLoadout.basic(brawler, level: setup.level)))
+                                                  level: level, loadout: ArenaLoadout.basic(brawler, level: level)))
             }
             game = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
         self.init(role: .solo, game: game, me: 0, room: nil, seed: seed)
         story = setup.story
+        ranked = setup.ranked && setup.story == nil
         switch setup.demo {
         case .versus?:
             introLeft = .infinity
@@ -258,18 +273,22 @@ final class ArenaController: ObservableObject {
     }
 
     private func tick() {
-        var inputs: [Int: ArenaInput] = [me: ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial, gadget: queuedGadget)]
+        var inputs: [Int: ArenaInput] = [me: ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial, gadget: queuedGadget,
+                                                        emote: queuedEmote)]
         queuedAttack = nil
         queuedSpecial = nil
         queuedGadget = false
+        queuedEmote = nil
         if role == .host {
             for (seat, move) in remoteMoves { inputs[seat] = ArenaInput(move: move) }
             for (seat, aim) in remoteAttacks { inputs[seat, default: ArenaInput()].attack = aim }
             for (seat, aim) in remoteSpecials { inputs[seat, default: ArenaInput()].special = aim }
             for seat in remoteGadgets { inputs[seat, default: ArenaInput()].gadget = true }
+            for (seat, emote) in remoteEmotes { inputs[seat, default: ArenaInput()].emote = emote }
             remoteAttacks = [:]
             remoteSpecials = [:]
             remoteGadgets = []
+            remoteEmotes = [:]
         }
         for k in bots.indices {
             inputs[bots[k].id] = bots[k].input(in: game, dt: Self.step)
@@ -302,6 +321,11 @@ final class ArenaController: ObservableObject {
         guard mine.superCharge >= 1 else { return }
         let aim = target(for: drag, range: mine.brawler.superRange)
         if role == .client { sendFire(attack: nil, special: aim) } else { queuedSpecial = aim }
+    }
+
+    /// 头顶冒个表情
+    func emote(_ id: Int) {
+        if role == .client { sendFire(attack: nil, special: nil, emote: id) } else { queuedEmote = id }
     }
 
     /// 点小道具按钮（往摇杆的方向用：翻滚、闪烁）
@@ -356,8 +380,8 @@ final class ArenaController: ObservableObject {
         game.extrapolate(dt, except: me)
     }
 
-    /// 开火、放大招、用小道具（小道具那一位是后加的，老版本的房主读不到就不管）
-    private func sendFire(attack: V2?, special: V2?, gadget: Bool = false) {
+    /// 开火、放大招、用小道具、冒表情（小道具、表情是后加的，老版本的房主读不到就不管）
+    private func sendFire(attack: V2?, special: V2?, gadget: Bool = false, emote: Int? = nil) {
         var writer = ByteWriter()
         writer.u8(Int(Packet.fire))
         for aim in [attack, special] {
@@ -365,6 +389,7 @@ final class ArenaController: ObservableObject {
             writer.v2(aim ?? .zero)
         }
         writer.u8(gadget ? 1 : 0)
+        writer.u8(emote ?? 255)
         room?.sendDirect(writer.data, delivery: .reliable)
     }
 
@@ -391,6 +416,7 @@ final class ArenaController: ObservableObject {
             if hasAttack == 1 { remoteAttacks[seat] = attack }
             if hasSpecial == 1 { remoteSpecials[seat] = special }
             if reader.u8() == 1 { remoteGadgets.insert(seat) }
+            if let emote = reader.u8(), emote < 255 { remoteEmotes[seat] = emote }
         case (.client, Packet.snapshot):
             guard let snapshot = ArenaSnapshot(data: Data(body)), snapshot.time >= lastSnapshot else { return }
             lastSnapshot = snapshot.time
@@ -500,13 +526,20 @@ final class ArenaController: ObservableObject {
         }
         if hud.result != nil, !recorded {
             recorded = true
+            let store = ArenaProgressStore.shared
             if let story {
                 // 冒险不加减奖杯：按星给金币
-                storyReward = ArenaProgressStore.shared.finish(story, stars: story.stars(in: game, me: me))
+                storyReward = store.finish(story, stars: story.stars(in: game, me: me))
+            } else if ranked {
+                // 排位不加减奖杯：金币照给，排位分在赛季里算
+                rankedCoins = store.recordRanked(outcome(hud.result))
             } else {
                 ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
-                reward = ArenaProgressStore.shared.record(outcome(hud.result), brawler: mine.brawler)
+                reward = store.record(outcome(hud.result), brawler: mine.brawler)
             }
+            let stats = ArenaMatchStats(mode: game.mode, brawler: mine.brawler, won: won(hud.result), kills: mine.kills,
+                                        damage: mine.damageDealt, gadgets: gadgetsUsed, supers: supersUsed, ranked: ranked)
+            seasonGain = store.recordSeason(stats, draw: hud.result == .draw)
         }
         if hud != self.hud { self.hud = hud }
     }
@@ -524,6 +557,10 @@ final class ArenaController: ObservableObject {
                 announcement = Announcement(text: text, good: winner == mine.team, at: game.time)
             case .reset where game.mode == .knockout:
                 announcement = Announcement(text: "第 \(game.round) 局", good: true, at: game.time)
+            case .gadget(let fighter) where fighter == me:
+                gadgetsUsed += 1
+            case .special(let fighter) where fighter == me:
+                supersUsed += 1
             case .knockout(let target, let by):
                 notes += 1
                 feed.append(KillNote(id: notes, killer: by, victim: target, at: game.time))
@@ -641,6 +678,55 @@ final class ArenaProgressStore: ObservableObject {
         lastStory = StoryResult(level: level.id, stars: stars)
         save()
         return reward
+    }
+
+    // MARK: 赛季、任务、排位、商店
+
+    /// 打完一局：赛季经验、任务，排位赛加减排位分
+    func recordSeason(_ stats: ArenaMatchStats, draw: Bool) -> ArenaSeasonGain {
+        let gain = progress.recordSeason(stats, draw: draw, now: Date(), calendar: .current)
+        save()
+        return gain
+    }
+
+    /// 排位赛给的金币
+    func recordRanked(_ outcome: ArenaProgress.Outcome) -> Int {
+        let coins = progress.recordRanked(outcome)
+        save()
+        return coins
+    }
+
+    /// 换天、换周、换季（打开大厅时看一下）
+    func refreshSeason() {
+        let before = progress
+        progress.refreshSeason(Date(), calendar: .current)
+        if progress != before { save() }
+    }
+
+    @discardableResult
+    func claim(_ tier: Int) -> ArenaSeason.Prize? {
+        let prize = progress.claim(tier)
+        if prize != nil { save() }
+        return prize
+    }
+
+    @discardableResult
+    func buy(_ skin: ArenaSkin) -> Bool {
+        guard progress.buy(skin) else { return false }
+        save()
+        return true
+    }
+
+    @discardableResult
+    func buy(_ emote: ArenaEmote) -> Bool {
+        guard progress.buy(emote) else { return false }
+        save()
+        return true
+    }
+
+    func wear(_ index: Int, for brawler: Brawler) {
+        progress.wear(index, for: brawler)
+        save()
     }
 
     func choose(_ starPower: StarPower, for brawler: Brawler) {

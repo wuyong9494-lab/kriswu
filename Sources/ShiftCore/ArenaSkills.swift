@@ -98,11 +98,14 @@ public struct ArenaLoadout: Equatable, Codable, Sendable {
     public var gadget: Gadget?
     public var starPower: StarPower?
     public var hypercharge: Bool
+    /// 穿哪套皮肤（第几套，nil 是原来的样子；只是样子，别人也看得见）
+    public var skin: Int?
 
-    public init(gadget: Gadget? = nil, starPower: StarPower? = nil, hypercharge: Bool = false) {
+    public init(gadget: Gadget? = nil, starPower: StarPower? = nil, hypercharge: Bool = false, skin: Int? = nil) {
         self.gadget = gadget
         self.starPower = starPower
         self.hypercharge = hypercharge
+        self.skin = skin
     }
 
     /// 这个等级能带的（电脑补位按等级带第一个）
@@ -125,7 +128,8 @@ public struct ArenaLoadout: Equatable, Codable, Sendable {
     public func allowed(_ brawler: Brawler, level: Int) -> ArenaLoadout {
         ArenaLoadout(gadget: gadget.flatMap { Self.gadgets(brawler, level: level).contains($0) ? $0 : nil },
                      starPower: starPower.flatMap { Self.starPowers(brawler, level: level).contains($0) ? $0 : nil },
-                     hypercharge: hypercharge && level >= ArenaProgress.hyperLevel)
+                     hypercharge: hypercharge && level >= ArenaProgress.hyperLevel,
+                     skin: skin.flatMap { (1...2).contains($0) ? $0 : nil })
     }
 }
 
@@ -144,6 +148,7 @@ extension ArenaGame {
         fighter.gadgetCooldown = 0
         fighter.starPower = loadout.starPower.flatMap { brawler.starPowers.contains($0) ? $0 : nil }
         fighter.hyperUnlocked = loadout.hypercharge
+        fighter.skin = loadout.skin.flatMap { (1...2).contains($0) ? $0 : nil } ?? 0
         fighter.health = fighter.maxHealth
     }
 

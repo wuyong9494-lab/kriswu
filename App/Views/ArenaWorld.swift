@@ -78,6 +78,8 @@ final class ArenaWorldView: SCNView {
     private var chestViews: [ChestView] = []
     /// 地上快要炸的红圈
     private var warningNodes: [SCNNode] = []
+    /// 头顶冒的表情（跟着人走，2 秒多一点消失）
+    private var bubbles: [(node: SKSpriteNode, fighter: Int, born: Double)] = []
     /// 震屏：越大晃得越厉害，很快就停
     private var shake: Float = 0
     /// 打完了镜头凑到自己跟前（0–1）
@@ -359,7 +361,7 @@ final class ArenaWorldView: SCNView {
             let isMe = fighter.id == controller.me
             let ally = fighter.team == myTeam
             let avatar = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red, isMe: isMe,
-                                     size: fighter.isBoss ? 2.2 : 1)
+                                     size: fighter.isBoss ? 2.2 : 1, skin: fighter.isBoss ? 0 : fighter.skin)
             root.addChildNode(avatar.node)
             avatars.append(avatar)
             let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
@@ -610,7 +612,7 @@ final class ArenaWorldView: SCNView {
                 avatars[fighter.id].node.removeFromParentNode()
                 let ally = fighter.team == myTeam
                 let replacement = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red,
-                                              isMe: fighter.id == controller.me)
+                                              isMe: fighter.id == controller.me, skin: fighter.skin)
                 world.rootNode.addChildNode(replacement.node)
                 avatars[fighter.id] = replacement
             }
@@ -658,6 +660,7 @@ final class ArenaWorldView: SCNView {
             ArenaSound.shared.finish(won: controller.won(result))
         }
         syncFloaters(view)
+        syncBubbles(view)
         syncAim(me)
     }
 
@@ -1133,6 +1136,21 @@ final class ArenaWorldView: SCNView {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 addShake(0.35)
             }
+        case .emote(let fighter, let emote):
+            guard avatars.indices.contains(fighter), let symbol = ArenaEmote.find(emote)?.symbol else { return }
+            // 同一个人的上一个表情收起来
+            for item in bubbles where item.fighter == fighter { item.node.removeFromParent() }
+            bubbles.removeAll { $0.fighter == fighter }
+            let node = SKSpriteNode(texture: SKTexture(image: ArenaArt.bubble(symbol)))
+            node.size = CGSize(width: 60, height: 60)
+            node.isHidden = true
+            node.setScale(0.3)
+            node.run(.scale(to: 1, duration: 0.16))
+            overlay.addChild(node)
+            bubbles.append((node: node, fighter: fighter, born: clock))
+            if avatars[fighter].opacity > 0.1 {
+                ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos) * 0.5)
+            }
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos))
@@ -1184,6 +1202,28 @@ final class ArenaWorldView: SCNView {
         case .necromancer: return UIColor(red: 0.45, green: 1, blue: 0.55, alpha: 1)
         case .shade: return UIColor(red: 0.62, green: 0.42, blue: 1, alpha: 1)
         case .summoner: return UIColor(red: 0.4, green: 1, blue: 0.85, alpha: 1)
+        }
+    }
+
+    /// 表情跟着头顶走，最后 0.4 秒淡掉；人看不见了表情也藏起来
+    private func syncBubbles(_ view: simd_float4x4) {
+        for k in bubbles.indices.reversed() {
+            let item = bubbles[k]
+            let age = clock - item.born
+            guard age < 2.4, avatars.indices.contains(item.fighter) else {
+                item.node.removeFromParent()
+                bubbles.remove(at: k)
+                continue
+            }
+            let avatar = avatars[item.fighter]
+            let head = avatar.node.simdPosition + SIMD3(0, (ArenaAvatar.headHeight + 0.8) * avatar.size, 0)
+            if avatar.opacity > 0.1, let point = project(head, view) {
+                item.node.isHidden = false
+                item.node.position = point
+                item.node.alpha = age > 2 ? CGFloat((2.4 - age) / 0.4) : 1
+            } else {
+                item.node.isHidden = true
+            }
         }
     }
 

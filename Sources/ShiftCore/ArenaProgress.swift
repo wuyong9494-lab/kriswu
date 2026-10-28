@@ -52,6 +52,8 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
     public internal(set) var storyStars: [String: Int] = [:]
     /// 冒险里投奔过来的骷髅（按 Brawler.rawValue，不用攒奖杯就解锁）
     private var recruited: Set<Int> = []
+    /// 赛季、任务、排位、皮肤、表情
+    public internal(set) var season = ArenaSeasonState()
 
     public init() {}
 
@@ -66,6 +68,7 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
         starTable = try container.decodeIfPresent([Int: Int].self, forKey: .starTable) ?? [:]
         storyStars = try container.decodeIfPresent([String: Int].self, forKey: .storyStars) ?? [:]
         recruited = try container.decodeIfPresent(Set<Int>.self, forKey: .recruited) ?? []
+        season = try container.decodeIfPresent(ArenaSeasonState.self, forKey: .season) ?? ArenaSeasonState()
     }
 
     /// 奖杯之路：越往后间隔越大
@@ -102,9 +105,23 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
         brawler.unlockAt == 0 || max(totalTrophies, reached) >= brawler.unlockAt || recruited.contains(brawler.rawValue)
     }
 
-    /// 冒险给的金币
+    /// 冒险、赛季奖励给的金币
     mutating func addCoins(_ amount: Int) {
         coins += max(amount, 0)
+    }
+
+    /// 花金币（不够返回 false，不扣）
+    mutating func spend(_ amount: Int) -> Bool {
+        guard amount >= 0, coins >= amount else { return false }
+        coins -= amount
+        return true
+    }
+
+    /// 排位赛：不加减奖杯，金币照给
+    public mutating func recordRanked(_ outcome: Outcome) -> Int {
+        let gained = Self.coinReward(outcome)
+        coins += gained
+        return gained
     }
 
     /// 冒险里投奔过来的（马上解锁）
@@ -142,7 +159,9 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
         let owned = self.gadgets(brawler), stars = self.starPowers(brawler)
         let gadget = gadgetTable[brawler.rawValue].flatMap(Gadget.init(rawValue:)).flatMap { owned.contains($0) ? $0 : nil }
         let star = starTable[brawler.rawValue].flatMap(StarPower.init(rawValue:)).flatMap { stars.contains($0) ? $0 : nil }
-        return ArenaLoadout(gadget: gadget ?? owned.first, starPower: star ?? stars.first, hypercharge: hasHypercharge(brawler))
+        let wearing = skin(brawler)
+        return ArenaLoadout(gadget: gadget ?? owned.first, starPower: star ?? stars.first, hypercharge: hasHypercharge(brawler),
+                            skin: wearing == 0 ? nil : wearing)
     }
 
     /// 选这个角色带的小道具（没解锁的不让选）
@@ -209,6 +228,6 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case trophyTable = "trophies", levelTable = "levels", coins, reached, gadgetTable = "gadgets", starTable = "stars"
-        case storyStars = "story", recruited
+        case storyStars = "story", recruited, season
     }
 }

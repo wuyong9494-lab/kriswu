@@ -224,6 +224,8 @@ private struct ArenaMatchView: View {
     var onExit: () -> Void
     @State private var confirmingExit = false
     @State private var resultShown = false
+    /// 表情那一排打开着
+    @State private var emoting = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -241,6 +243,9 @@ private struct ArenaMatchView: View {
                 .ignoresSafeArea()
             VStack(spacing: DS.Space.xs) {
                 topBar
+                if emoting && hud.result == nil {
+                    emoteBar.transition(.move(edge: .top).combined(with: .opacity))
+                }
                 banner
                 Spacer()
                 controls
@@ -302,6 +307,14 @@ private struct ArenaMatchView: View {
                     .frame(width: 36, height: 36)
                     .background(.black.opacity(0.35), in: Circle())
             }
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { emoting.toggle() }
+            } label: {
+                Image(systemName: "face.smiling.inverse").font(.headline).foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background((emoting ? Color(uiColor: ArenaPalette.gold) : Color.black).opacity(emoting ? 0.8 : 0.35), in: Circle())
+            }
+            .accessibilityLabel("表情")
             Spacer()
             score
             Spacer()
@@ -481,6 +494,29 @@ private struct ArenaMatchView: View {
                    })
     }
 
+    // MARK: 表情
+
+    /// 有的表情一排，点一个头顶冒出来
+    private var emoteBar: some View {
+        HStack(spacing: 6) {
+            ForEach(ArenaProgressStore.shared.progress.emotes) { emote in
+                Button {
+                    controller.emote(emote.id)
+                    withAnimation(.easeOut(duration: 0.2)) { emoting = false }
+                } label: {
+                    Text(emote.symbol)
+                        .font(.system(size: 26))
+                        .frame(width: 42, height: 42)
+                        .background(.white.opacity(0.92), in: Circle())
+                        .overlay(Circle().strokeBorder(.black.opacity(0.6), lineWidth: 2))
+                }
+                .accessibilityLabel(emote.name)
+            }
+        }
+        .padding(6)
+        .background(.black.opacity(0.35), in: Capsule())
+    }
+
     // MARK: 击倒提示
 
     private var killFeed: some View {
@@ -532,16 +568,16 @@ private struct ArenaMatchView: View {
             } else {
                 Color.black.opacity(0.45).ignoresSafeArea()
             }
-            VStack(spacing: DS.Space.m) {
+            VStack(spacing: wide ? DS.Space.s : DS.Space.m) {
                 Text(title)
-                    .font(.system(size: wide ? 46 : 52, weight: .black, design: .rounded))
+                    .font(.system(size: wide ? 42 : 52, weight: .black, design: .rounded))
                     .foregroundStyle(tint)
                     .arenaOutline(2.5)
                     .scaleEffect(resultShown ? 1 : 2.4)
                     .opacity(resultShown ? 1 : 0)
                 resultDetails(mine)
             }
-            .padding(DS.Space.l)
+            .padding(wide ? DS.Space.m : DS.Space.l)
             .frame(width: wide ? 400 : nil)
             .frame(maxWidth: wide ? nil : 380)
             .background(
@@ -583,9 +619,12 @@ private struct ArenaMatchView: View {
     }
 
     private func resultDetails(_ mine: Fighter) -> some View {
-        VStack(spacing: DS.Space.m) {
+        VStack(spacing: wide ? DS.Space.s : DS.Space.m) {
             if let story = controller.storyReward {
                 storyStars(story)
+            }
+            if let coins = controller.rankedCoins {
+                rankedRow(coins)
             }
             if let reward = controller.reward {
                 HStack(spacing: DS.Space.l) {
@@ -615,6 +654,9 @@ private struct ArenaMatchView: View {
                 stat("打倒", mine.kills)
                 stat("被打倒", mine.deaths)
                 stat("伤害", mine.damageDealt)
+            }
+            if let gain = controller.seasonGain {
+                seasonRow(gain)
             }
             HStack(spacing: DS.Space.s) {
                 if let onAgain {
@@ -663,6 +705,46 @@ private struct ArenaMatchView: View {
                     .font(.system(size: 17, weight: .black, design: .rounded))
                     .foregroundStyle(Color(uiColor: ArenaPalette.myName))
                     .arenaOutline(1)
+            }
+        }
+    }
+
+    /// 排位：加减了多少排位分、现在什么段，升段了大字写出来；金币照给
+    private func rankedRow(_ coins: Int) -> some View {
+        let points = ArenaProgressStore.shared.progress.season.rankPoints
+        let tier = ArenaRank.tiers[ArenaRank.tier(points)]
+        let change = controller.seasonGain?.rankChange ?? 0
+        return VStack(spacing: 4) {
+            if controller.seasonGain?.promoted == true {
+                Text("升到\(tier.name)段了！")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundStyle(Color(uiColor: ArenaPalette.gold))
+                    .arenaOutline(1.4)
+            }
+            HStack(spacing: DS.Space.l) {
+                Label("\(tier.name) \(points)（\(change >= 0 ? "+" : "")\(change)）", systemImage: "shield.lefthalf.filled")
+                    .foregroundStyle(change >= 0 ? Color(uiColor: ArenaPalette.myName) : Color(red: 1, green: 0.5, blue: 0.45))
+                HStack(spacing: 6) {
+                    Image(systemName: "dollarsign.circle.fill").foregroundStyle(.yellow)
+                    ArenaCountUp(value: coins, signed: true)
+                }
+                .foregroundStyle(.white)
+            }
+            .font(.system(size: 18, weight: .black, design: .rounded).monospacedDigit())
+            .arenaOutline(1)
+        }
+    }
+
+    /// 赛季：这局给的经验、做完的任务
+    private func seasonRow(_ gain: ArenaSeasonGain) -> some View {
+        VStack(spacing: 2) {
+            Text("赛季经验 +\(gain.points)")
+                .font(.system(size: 14, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(Color(red: 0.75, green: 0.85, blue: 1))
+            ForEach(gain.quests) { quest in
+                Label("完成任务：\(quest.title)", systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(uiColor: ArenaPalette.myName))
             }
         }
     }
