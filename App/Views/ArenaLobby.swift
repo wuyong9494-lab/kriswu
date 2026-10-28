@@ -97,8 +97,6 @@ struct ArenaHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        // 先在后台把 3D 模型读好、画好头像，开打时不用等
-        .task { await ArenaPortraits.shared.prepare() }
         .onAppear {
             growth.refreshSeason()
             ArenaSound.shared.enterLobby()

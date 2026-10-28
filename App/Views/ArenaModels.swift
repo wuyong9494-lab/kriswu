@@ -240,14 +240,8 @@ final class ArenaPortraits: ObservableObject {
     private var preparing = false
 
     func prepare() async {
-        guard !preparing, images.count < Brawler.allCases.count else { return }
-        preparing = true
-        await ArenaModels.loadAll()
-        for brawler in Brawler.allCases where images[brawler] == nil {
-            if let image = render(brawler) { images[brawler] = image }
-            await Task.yield()
-        }
-        preparing = false
+        // 大厅和对局自己就有 SceneKit。再开一套 SCNRenderer 给每个角色拍头像，两套同时画，iOS 27 上进游戏大约两秒就在渲染线程上断。
+        // 头像先用表情。
     }
 
     private func render(_ brawler: Brawler) -> UIImage? {
@@ -308,6 +302,5 @@ struct BrawlerBadge: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay(Circle().strokeBorder(selected ? DS.Palette.accent : .clear, lineWidth: 2))
-        .task { await portraits.prepare() }
     }
 }

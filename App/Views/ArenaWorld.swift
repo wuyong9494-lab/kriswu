@@ -430,7 +430,6 @@ final class ArenaWorldView: SCNView {
         material.multiply.mipFilter = .linear
         material.multiply.maxAnisotropy = 4
         material.multiply.contentsTransform = SCNMatrix4MakeScale(repeats.x, repeats.y, 1)
-        ArenaArt.grade(material, ArenaArt.groundSurface)
         return material
     }
 

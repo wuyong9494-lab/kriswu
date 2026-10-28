@@ -134,7 +134,6 @@ final class ArenaAvatar {
                 instance.materials.forEach { $0.multiply.contents = tint }
                 baseTint = tint
             }
-            instance.materials.forEach { ArenaArt.grade($0, ArenaArt.characterSurface) }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size * look.scale)
