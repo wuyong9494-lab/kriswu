@@ -148,6 +148,7 @@ final class ArenaAvatar {
             body.addChildNode(instance.root)
             bodyScale = ArenaAvatar.scale * size * look.scale
             body.simdScale = SIMD3(repeating: bodyScale)
+            pinLimbs(on: instance.root, skeleton: look.file.contains("Skeleton"))
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -368,6 +369,44 @@ final class ArenaAvatar {
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
         animate(dt: dt, moving: moving, base: wanted)
     }
+
+    /// 新身体没有手和脚。挂在骨骼上，武器才接得住，脚才落地
+    private func pinLimbs(on root: SCNNode, skeleton: Bool) {
+        let fist = skeleton ? Self.boneFist : Self.fist
+        for name in ["hand.l", "hand.r"] {
+            guard let bone = root.childNode(withName: name, recursively: true) else { continue }
+            let node = SCNNode(geometry: fist)
+            node.simdPosition = SIMD3(0, 0.04, 0)
+            bone.addChildNode(node)
+        }
+        for name in ["foot.l", "foot.r"] {
+            guard let bone = root.childNode(withName: name, recursively: true) else { continue }
+            let node = SCNNode(geometry: Self.boot)
+            node.simdScale = SIMD3(1.2, 0.5, 1.45)
+            bone.addChildNode(node)
+        }
+    }
+
+    private static let fist: SCNGeometry = {
+        let sphere = SCNSphere(radius: 0.055)
+        sphere.segmentCount = 8
+        sphere.firstMaterial = material(UIColor(red: 1, green: 0.73, blue: 0.54, alpha: 1), lit: false)
+        return sphere
+    }()
+
+    private static let boneFist: SCNGeometry = {
+        let sphere = SCNSphere(radius: 0.05)
+        sphere.segmentCount = 8
+        sphere.firstMaterial = material(UIColor(red: 0.9, green: 0.86, blue: 0.74, alpha: 1), lit: false)
+        return sphere
+    }()
+
+    private static let boot: SCNGeometry = {
+        let sphere = SCNSphere(radius: 0.075)
+        sphere.segmentCount = 8
+        sphere.firstMaterial = material(UIColor(red: 0.14, green: 0.09, blue: 0.06, alpha: 1), lit: false)
+        return sphere
+    }()
 
     /// 贴图保持原色，明暗和边光在着色器里算，不再整个人乘一层灰。描边材质别动
     private static func finish(_ material: SCNMaterial) {

@@ -1308,15 +1308,16 @@ final class ArenaWorldView: SCNView {
             let at = SIMD3(Float(shooter.pos.x), 0, Float(shooter.pos.y))
             switch shooter.brawler {
             case .swordsman:
-                slashArc(at: at, facing: shooter.facing, color: color, reach: 2.1, sweep: 2.6)
+                slashArc(at: at, facing: shooter.facing, color: color, reach: 2.6, sweep: 2.6)
             case .barbarian:
-                slashArc(at: at, facing: shooter.facing, color: color, reach: 1.7, sweep: 1.5)
+                slashArc(at: at, facing: shooter.facing, color: color, reach: 2.2, sweep: 1.6)
             case .knight, .guardian:
-                slashArc(at: at, facing: shooter.facing, color: color, reach: 1.35, sweep: 1.15)
+                slashArc(at: at, facing: shooter.facing, color: color, reach: 1.8, sweep: 1.3)
             default:
                 let muzzle = SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
-                burst(at: muzzle, color: color, count: 14, speed: 2.2, size: 0.32, life: 0.16)
-                burst(at: muzzle, color: .white, count: 6, speed: 1.4, size: 0.16, life: 0.1)
+                burst(at: muzzle, color: color, count: 10, speed: 2.2, size: 0.28, life: 0.14)
+                burst(at: muzzle, color: .white, count: 4, speed: 1.4, size: 0.14, life: 0.08)
+                shotStreak(from: at, facing: shooter.facing, color: color)
             }
         case .heal(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
@@ -1417,6 +1418,24 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 近战挥出去的那一刀：沿面朝的方向排一排亮片，转一下就收
+    /// 远程开火时地上一条短的亮线，标出打出去的方向
+    private func shotStreak(from point: SIMD3<Float>, facing: V2, color: UIColor) {
+        let box = SCNBox(width: 0.16, height: 0.02, length: 2.2, chamferRadius: 0.04)
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = color.withAlphaComponent(0.9)
+        material.emission.contents = color
+        box.firstMaterial = material
+        let node = SCNNode(geometry: box)
+        let yaw = atan2(Float(facing.x), Float(facing.y))
+        node.simdPosition = point + SIMD3(Float(facing.x) * 1.3, 0.05, Float(facing.y) * 1.3)
+        node.simdEulerAngles = SIMD3(0, yaw, 0)
+        node.castsShadow = false
+        node.renderingOrder = 6
+        world.rootNode.addChildNode(node)
+        node.runAction(.sequence([.fadeOut(duration: 0.16), .removeFromParentNode()]))
+    }
+
     private func slashArc(at point: SIMD3<Float>, facing: V2, color: UIColor, reach: Float, sweep: Float) {
         guard bursts < 24 else { return }
         bursts += 1
@@ -1429,7 +1448,7 @@ final class ArenaWorldView: SCNView {
         for i in 0..<steps {
             let t = Float(i) / Float(steps - 1) - 0.5
             let angle = t * sweep
-            let box = SCNBox(width: 0.42, height: 0.07, length: 0.14, chamferRadius: 0.03)
+            let box = SCNBox(width: 0.72, height: 0.16, length: 0.2, chamferRadius: 0.04)
             let material = SCNMaterial()
             material.lightingModel = .constant
             material.diffuse.contents = color
@@ -1443,9 +1462,9 @@ final class ArenaWorldView: SCNView {
             root.addChildNode(node)
         }
         world.rootNode.addChildNode(root)
-        root.simdScale = SIMD3(repeating: 0.35)
+        root.simdScale = SIMD3(repeating: 0.7)
         root.runAction(.sequence([
-            .group([.scale(to: 1.05, duration: 0.07), .fadeOut(duration: 0.16)]),
+            .group([.scale(to: 1.15, duration: 0.08), .fadeOut(duration: 0.26)]),
             .run { [weak self] _ in self?.bursts = max(0, (self?.bursts ?? 1) - 1) },
             .removeFromParentNode()
         ]))
