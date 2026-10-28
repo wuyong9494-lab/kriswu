@@ -164,6 +164,7 @@ final class ArenaAvatar {
             body.simdScale = SIMD3(repeating: bodyScale)
             pinLimbs(on: instance.root, skeleton: look.file.contains("Skeleton"))
             pinShape(on: instance.root, skeleton: look.file.contains("Skeleton"))
+            pinCrest(on: instance.root)
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -376,11 +377,10 @@ final class ArenaAvatar {
         }
         ammoPips = pips
 
-        if punch > 0 {
-            punch = max(0, punch - dt)
-            let k = bodyScale * (1 + punch * 0.9)
-            body.simdScale = SIMD3(repeating: k)
-        }
+        if punch > 0 { punch = max(0, punch - dt) }
+        let bob = fighter.alive && speed > 0.6 ? abs(sin(Float(clock) * 14)) * 0.07 : 0
+        let k = bodyScale * (1 + punch * 0.9)
+        body.simdScale = SIMD3(k * (1 + bob * 0.25), k * (1 - bob), k * (1 + bob * 0.25))
 
         guard !node.isHidden else { return }
         let moving = fighter.alive && speed > 0.6
@@ -414,6 +414,47 @@ final class ArenaAvatar {
             let node = SCNNode(geometry: neck)
             node.simdPosition = SIMD3(0, -0.05, 0)
             head.addChildNode(node)
+        }
+    }
+
+    /// 头顶一个小标记，缩远了靠它认人。挂在头骨上，跟着动
+    private func pinCrest(on root: SCNNode) {
+        guard let head = root.childNode(withName: "head", recursively: true) else { return }
+        let color = Self.clothColor(brawler, skeleton: look.file.contains("Skeleton"))
+        let material = Self.material(color, lit: false)
+        switch brawler {
+        case .barbarian, .brewer:
+            for side: Float in [-1, 1] {
+                let horn = SCNCone(topRadius: 0.01, bottomRadius: 0.035, height: 0.16)
+                horn.radialSegmentCount = 6
+                horn.firstMaterial = material
+                let node = SCNNode(geometry: horn)
+                node.simdPosition = SIMD3(0.06 * side, 0.14, 0)
+                node.simdEulerAngles = SIMD3(0, 0, -0.5 * side)
+                head.addChildNode(node)
+            }
+        case .knight, .guardian, .swordsman:
+            let fin = SCNBox(width: 0.04, height: 0.16, length: 0.1, chamferRadius: 0.01)
+            fin.firstMaterial = material
+            let node = SCNNode(geometry: fin)
+            node.simdPosition = SIMD3(0, 0.16, 0)
+            head.addChildNode(node)
+        case .mage, .scholar, .necromancer:
+            let tip = SCNCone(topRadius: 0, bottomRadius: 0.05, height: 0.2)
+            tip.radialSegmentCount = 8
+            tip.firstMaterial = material
+            let node = SCNNode(geometry: tip)
+            node.simdPosition = SIMD3(0, 0.16, 0)
+            head.addChildNode(node)
+        default:
+            let ear = SCNSphere(radius: 0.045)
+            ear.segmentCount = 6
+            ear.firstMaterial = material
+            for side: Float in [-1, 1] {
+                let node = SCNNode(geometry: ear)
+                node.simdPosition = SIMD3(0.1 * side, 0.08, 0)
+                head.addChildNode(node)
+            }
         }
     }
 
@@ -585,7 +626,10 @@ final class ArenaAvatar {
                 action = nil
             } else {
                 action = current
-                let t = current.move.from + (current.move.to - current.move.from) * min(progress, 1)
+                let linear = min(progress, 1)
+                // 前半段走得快，挥出去那一下先到，后半段收回来
+                let eased = 1 - (1 - linear) * (1 - linear)
+                let t = current.move.from + (current.move.to - current.move.from) * eased
                 var layer = model.restPose
                 current.clip.sample(at: t * current.clip.duration, into: &layer)
                 let fadeIn = min(1, current.elapsed / 0.06)

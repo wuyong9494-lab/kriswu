@@ -1840,9 +1840,9 @@ final class ArenaWorldView: SCNView {
                 let half: Double
                 switch brawler {
                 case .knight: half = ArenaGame.fighterRadius
-                case .guardian: half = 0.5
-                case .necromancer: half = 0.32
-                default: half = isSuper ? 0.35 : 0.22
+                case .guardian: half = 0.62
+                case .necromancer: half = 0.42
+                default: half = isSuper ? 0.48 : 0.36
                 }
                 let side = V2(-direction.y, direction.x) * half
                 let end = direction * range
