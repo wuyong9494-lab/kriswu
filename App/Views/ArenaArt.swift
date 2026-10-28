@@ -49,6 +49,25 @@ enum ArenaArt {
         _surface.emission.rgb += c * fres * 0.2;
         """
 
+    /// 大厅展台：比场上多一档明暗，再加一圈冷色轮廓光。仍然不走真实灯光，避免和描边抢
+    static let stageToon = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float3 key = normalize(float3(-0.42, 0.74, 0.48));
+        float3 fill = normalize(float3(0.72, 0.18, 0.35));
+        float keyWrap = saturate(dot(n, key) * 0.55 + 0.45);
+        float fillWrap = saturate(dot(n, fill) * 0.5 + 0.5);
+        float shade = keyWrap > 0.64 ? 1.08 : (keyWrap > 0.4 ? 0.84 : 0.62);
+        shade += fillWrap * 0.1;
+        float3 c = _surface.diffuse.rgb;
+        float luma = dot(c, float3(0.3, 0.59, 0.11));
+        c = mix(float3(luma), c, 1.55);
+        _surface.diffuse.rgb = min(c * shade, float3(1.0));
+        float fres = 1.0 - saturate(dot(n, normalize(_surface.view)));
+        fres = fres * fres;
+        _surface.emission.rgb += c * fres * 0.42 + float3(0.45, 0.65, 1.0) * fres * 0.16;
+        """
+
     /// 角色表面的边缘光和略提的饱和。画在每个角色自己的材质上，不走相机的泛光（那个在 iOS 27 上会断）
     static let characterSurface = """
         #pragma body

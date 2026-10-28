@@ -274,12 +274,13 @@ struct ArenaHomeView: View {
                         }
                 }
             }
-            .font(.system(size: 14, weight: .black, design: .rounded).monospacedDigit())
+            .font(.system(size: 16, weight: .black, design: .rounded).monospacedDigit())
             .foregroundStyle(.white)
-            .arenaInk()
+            .arenaOutline(2)
             .padding(.horizontal, 12)
-            .frame(height: 40)
-            .background(.black.opacity(0.3), in: Capsule())
+            .frame(height: 54)
+            .background(Color(red: 0.28, green: 0.16, blue: 0.48), in: Capsule())
+            .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
             .overlay(alignment: .topTrailing) {
                 if waiting {
                     Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: -2, y: 2)
@@ -366,7 +367,7 @@ struct ArenaHomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(width: 74, height: 64)
+            .frame(width: 82, height: 72)
         }
         .buttonStyle(ArenaTileButton(face: face, edge: edge))
     }
@@ -570,9 +571,15 @@ struct ArenaHomeView: View {
                 Image(systemName: "map.fill").font(.system(size: 13, weight: .black)).foregroundStyle(.white.opacity(0.9))
             }
             .padding(.horizontal, 10)
-            .frame(width: 260, height: 78)
+            .frame(width: 268, height: 82)
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(playMode.tint))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.black, lineWidth: 4))
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.black.opacity(0.55))
+                    .offset(y: 6)
+            )
+            .padding(.bottom, 6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("玩法：\(playMode.title)，点一下换")
@@ -820,7 +827,18 @@ struct ArenaHomeView: View {
         .padding(8)
         .frame(maxWidth: .infinity, minHeight: 168, alignment: .top)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(chosen == item ? Color(red: 0.16, green: 0.28, blue: 0.5) : Color(red: 0.08, green: 0.12, blue: 0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(chosen == item ? Color(red: 1, green: 0.86, blue: 0.2) : .black, lineWidth: 4))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(chosen == item ? Color(red: 1, green: 0.86, blue: 0.2) : roleEdge(item), lineWidth: 4))
+    }
+
+    /// 角色墙的色边：近战红、远程蓝、肉盾金、法术紫、治疗绿。不是稀有度，只是一眼能分开
+    private func roleEdge(_ item: Brawler) -> Color {
+        switch item {
+        case .knight, .barbarian, .swordsman: return Color(red: 0.86, green: 0.28, blue: 0.22)
+        case .ranger, .assassin, .shade, .darter: return Color(red: 0.28, green: 0.55, blue: 1)
+        case .guardian, .brewer: return Color(red: 0.95, green: 0.64, blue: 0.16)
+        case .mage, .necromancer, .summoner: return Color(red: 0.62, green: 0.38, blue: 0.95)
+        case .scholar: return Color(red: 0.28, green: 0.78, blue: 0.42)
+        }
     }
 
     private var modeList: some View {
@@ -1489,13 +1507,24 @@ final class ArenaShowcaseView: SCNView {
         let outline = SCNNode(geometry: rimGeometry)
         outline.simdPosition = pedestal.simdPosition
         world.rootNode.addChildNode(outline)
-        let shadow = SCNCylinder(radius: 0.5, height: 0.002)
+        let shadow = SCNCylinder(radius: 0.72, height: 0.002)
         shadow.radialSegmentCount = 32
-        shadow.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.28))
+        shadow.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.42))
         let shadowNode = SCNNode(geometry: shadow)
         shadowNode.simdPosition = SIMD3(0, height + 0.002, 0)
         shadowNode.renderingOrder = 2
         world.rootNode.addChildNode(shadowNode)
+        let ring = SCNTorus(ringRadius: 0.9, pipeRadius: 0.045)
+        ring.ringSegmentCount = 48
+        ring.pipeSegmentCount = 12
+        let gold = SCNMaterial()
+        gold.lightingModel = .constant
+        gold.diffuse.contents = UIColor(red: 1, green: 0.86, blue: 0.28, alpha: 1)
+        ring.firstMaterial = gold
+        let ringNode = SCNNode(geometry: ring)
+        ringNode.simdPosition = SIMD3(0, height + 0.02, 0)
+        ringNode.castsShadow = false
+        world.rootNode.addChildNode(ringNode)
 
         stage.simdPosition = SIMD3(0, height, 0)
         world.rootNode.addChildNode(stage)
@@ -1505,7 +1534,7 @@ final class ArenaShowcaseView: SCNView {
     func show(_ brawler: Brawler, skin: Int = 0) {
         guard avatar?.brawler != brawler || skin != wearing else { return }
         avatar?.node.removeFromParentNode()
-        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.86, skin: skin)
+        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.86, skin: skin, stageLit: true)
         stage.addChildNode(made.node)
         avatar = made
         wearing = skin

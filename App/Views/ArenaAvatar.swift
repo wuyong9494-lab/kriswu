@@ -114,7 +114,7 @@ final class ArenaAvatar {
     private var ammoPips = 3
 
     /// skin：穿第几套皮肤（0 原来的样子）
-    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0) {
+    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false) {
         self.brawler = brawler
         self.mine = isMe
         self.teamColor = color
@@ -146,7 +146,7 @@ final class ArenaAvatar {
                 held.root.simdOrientation = weapon.rotation
                 bone.addChildNode(held.root)
                 outlines += held.outlines
-                Self.paint(held.root)
+                Self.paint(held.root, stage: stageLit)
             }
             outlines += instance.outlines
             // 皮肤：身上的颜色乘上皮肤的颜色，原来不发光的地方加一点光（武器、骷髅的眼睛不变）
@@ -159,7 +159,7 @@ final class ArenaAvatar {
                 }
                 baseTint = tint
             }
-            instance.materials.forEach(Self.finish)
+            instance.materials.forEach { Self.finish($0, stage: stageLit) }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             bodyScale = ArenaAvatar.scale * size * look.scale
@@ -398,15 +398,15 @@ final class ArenaAvatar {
 
 
     /// 贴图保持原色，明暗和边光在着色器里算，不再整个人乘一层灰。描边材质别动
-    private static func finish(_ material: SCNMaterial) {
+    private static func finish(_ material: SCNMaterial, stage: Bool = false) {
         guard material !== ArenaArt.outline else { return }
         material.lightingModel = .constant
-        ArenaArt.grade(material, ArenaArt.characterToon)
+        ArenaArt.grade(material, stage ? ArenaArt.stageToon : ArenaArt.characterToon)
     }
 
-    private static func paint(_ node: SCNNode) {
-        node.geometry?.materials.forEach(finish)
-        node.enumerateChildNodes { child, _ in child.geometry?.materials.forEach(finish) }
+    private static func paint(_ node: SCNNode, stage: Bool = false) {
+        node.geometry?.materials.forEach { finish($0, stage: stage) }
+        node.enumerateChildNodes { child, _ in child.geometry?.materials.forEach { finish($0, stage: stage) } }
     }
 
     /// 大招攒满时给身上打一层亮光；关掉就回到原来的眼睛光
