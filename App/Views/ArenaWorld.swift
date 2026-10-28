@@ -235,7 +235,7 @@ final class ArenaWorldView: SCNView {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 420
+        ambient.light?.intensity = 500
         ambient.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.95, alpha: 1)
         root.addChildNode(ambient)
         let sun = SCNLight()
@@ -1644,11 +1644,11 @@ final class ArenaWorldView: SCNView {
         if let cached = numberImages[key] {
             image = cached
         } else {
-            image = ArenaArt.text(text, size: 17, color: color)
+            image = ArenaArt.text(text, size: 26, color: color)
             if numberImages.count > 150 { numberImages.removeAll() }
             numberImages[key] = image
         }
-        let height: CGFloat = 0.42
+        let height: CGFloat = 0.62
         let aspect = image.size.width / max(image.size.height, 1)
         let plane = SCNPlane(width: height * aspect, height: height)
         plane.firstMaterial = ArenaArt.flat(image)

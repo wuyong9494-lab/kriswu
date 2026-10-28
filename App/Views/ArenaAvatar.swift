@@ -75,6 +75,8 @@ final class ArenaAvatar {
         let hold: Bool
         /// 整个身子都换（冲锋、跳、倒下）；不然跑着时只换上半身
         let fullBody: Bool
+        /// 换弹：不论站着还是跑，都只换上半身，腿继续走
+        var upperOnly = false
     }
 
     private var base: Playing?
@@ -82,6 +84,9 @@ final class ArenaAvatar {
     private var fade: Float = 1
     private var action: Action?
     private var angle: Float = 0
+    /// 身子本来多大。挨打时在这上面弹一下，弹完改回去
+    private var bodyScale: Float = 1
+    private var punch: Float = 0
     private var lastPosition: V2?
     /// 看起来走得多快（按每帧挪了多远算，联机收到的别人也一样）
     private var speed: Float = 0
@@ -133,10 +138,11 @@ final class ArenaAvatar {
                 instance.materials.forEach { $0.multiply.contents = tint }
                 baseTint = tint
             }
-            instance.materials.forEach { ArenaArt.grade($0, ArenaArt.characterSurface, fragment: ArenaArt.characterBands) }
+            instance.materials.forEach { ArenaArt.grade($0, ArenaArt.characterSurface) }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
-            body.simdScale = SIMD3(repeating: ArenaAvatar.scale * size * look.scale)
+            bodyScale = ArenaAvatar.scale * size * look.scale
+            body.simdScale = SIMD3(repeating: bodyScale)
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -336,11 +342,18 @@ final class ArenaAvatar {
             }
         }
 
-        let pips = Int(fighter.ammo)
-        if fighter.alive, pips < ammoPips, action == nil, (brawler == .ranger || brawler == .shade) {
-            start(BrawlerLook.Move(clip: "1H_Ranged_Reload", from: 0.08, to: 0.72, seconds: 0.38), hold: false, fullBody: false)
+        let pips = Int(fighter.ammo.rounded(.down))
+        // 弹回来的那一发才做换弹，而且只动手。开枪那一下不算换弹，免得把跑和出手盖住
+        if fighter.alive, pips > ammoPips, action == nil, (brawler == .ranger || brawler == .shade) {
+            start(BrawlerLook.Move(clip: "1H_Ranged_Reload", from: 0.08, to: 0.72, seconds: 0.28), hold: false, fullBody: false, upperOnly: true)
         }
         ammoPips = pips
+
+        if punch > 0 {
+            punch = max(0, punch - dt)
+            let k = bodyScale * (1 + punch * 0.9)
+            body.simdScale = SIMD3(repeating: k)
+        }
 
         guard !node.isHidden else { return }
         let moving = fighter.alive && speed > 0.6
@@ -368,6 +381,7 @@ final class ArenaAvatar {
     /// 挨打：白一下。打得重、而且这一下没在出招，才缩一下身子
     func flash(clock: Double, flinch: Bool = false) {
         flashUntil = clock + 0.09
+        punch = 0.16
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
             start(BrawlerLook.Move(clip: "Hit_A", from: 0.05, to: 0.5, seconds: 0.2), hold: false, fullBody: false)
         }
@@ -391,9 +405,9 @@ final class ArenaAvatar {
 
     // MARK: - 动作
 
-    private func start(_ move: BrawlerLook.Move, hold: Bool, fullBody: Bool) {
+    private func start(_ move: BrawlerLook.Move, hold: Bool, fullBody: Bool, upperOnly: Bool = false) {
         guard let clip = model?.clips[move.clip], clip.duration > 0 else { return }
-        action = Action(clip: clip, move: move, hold: hold, fullBody: fullBody)
+        action = Action(clip: clip, move: move, hold: hold, fullBody: fullBody, upperOnly: upperOnly)
     }
 
     private func animate(dt: Float, moving: Bool, base wanted: String) {
@@ -438,10 +452,10 @@ final class ArenaAvatar {
                 let fadeIn = min(1, current.elapsed / 0.06)
                 let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.12)
                 let weight = min(fadeIn, fadeOut)
-                if current.fullBody || !moving {
-                    pose.blend(toward: layer, weight: weight, nodes: model.animated)
-                } else {
+                if current.upperOnly || (!current.fullBody && moving) {
                     pose.blend(toward: layer, weight: weight, nodes: upper)
+                } else {
+                    pose.blend(toward: layer, weight: weight, nodes: model.animated)
                 }
             }
         }
@@ -519,14 +533,13 @@ final class ArenaAvatar {
     }
 }
 
-/// 一个人头顶上的东西：名字（自己绿、队友蓝、对面红）、圆头粗血条（血量写在条上），自己的再加一排橙色弹药。
-/// 贴在角色头顶，正对镜头（场景里的牌子，不走 SpriteKit）
+/// 一个人头顶上的东西：名字、大号血量、细血条。能量方块用 ◆。贴在角色头顶，正对镜头。
 @MainActor
 final class ArenaTag {
     let node = SCNNode()
     private let name: ArenaText
     private let bar: ArenaBar
-    private let number = ArenaText(size: 11, color: .white)
+    private let number: ArenaText
     private let starText = ArenaText(size: 13, color: ArenaPalette.gold)
     private var ammo: [ArenaBar] = []
     private var shownHealth = -1
@@ -537,13 +550,17 @@ final class ArenaTag {
     /// boss：骷髅王的血条长一倍、粗一点
     init(fighter: Fighter, isMe: Bool, ally: Bool, boss: Bool = false) {
         let width = boss ? 120 : ArenaTag.width, barHeight = boss ? 15 : ArenaTag.barHeight
-        name = ArenaText(size: boss ? 15 : 12, color: isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName))
+        let healthColor = isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName)
+        name = ArenaText(size: boss ? 14 : 11, color: healthColor)
+        number = ArenaText(size: boss ? 26 : 20, color: healthColor)
         bar = ArenaBar(width: width, height: barHeight, color: isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red))
-        name.set(isMe ? "我" : fighter.name)
+        name.set(fighter.name)
         let barH = Float(barHeight / 55)
-        name.node.simdPosition = SIMD3(0, barH / 2 + 0.18, 0.01)
-        starText.node.simdPosition = SIMD3(0, barH / 2 + 0.42, 0.01)
-        number.node.simdPosition = SIMD3(0, 0, 0.02)
+        let numberH = Float(boss ? 26 : 20) / 48
+        let nameH = Float(boss ? 14 : 11) / 48
+        number.node.simdPosition = SIMD3(0, barH / 2 + numberH / 2 + 0.04, 0.02)
+        name.node.simdPosition = SIMD3(0, barH / 2 + numberH + nameH / 2 + 0.08, 0.01)
+        starText.node.simdPosition = SIMD3(0, barH / 2 + numberH + nameH + 0.2, 0.01)
         node.addChildNode(bar.node)
         node.addChildNode(number.node)
         node.addChildNode(name.node)
@@ -578,8 +595,8 @@ final class ArenaTag {
         let mark = fighter.stars > 0 ? fighter.stars : -fighter.cubes
         if mark != shownStars {
             shownStars = mark
-            starText.set(fighter.stars > 0 ? "★\(fighter.stars)" : (fighter.cubes > 0 ? "⚡\(fighter.cubes)" : ""),
-                         color: fighter.stars > 0 ? ArenaPalette.gold : ArenaPalette.myName)
+            starText.set(fighter.stars > 0 ? "★\(fighter.stars)" : (fighter.cubes > 0 ? "◆\(fighter.cubes)" : ""),
+                         color: ArenaPalette.gold)
         }
         for (k, piece) in ammo.enumerated() {
             let part = CGFloat(min(max(fighter.ammo - Double(k), 0), 1))
