@@ -23,6 +23,19 @@ final class BoneSamplerTests: XCTestCase {
         }
     }
 
+    func testExaggeratePushesPastTheClipAndStaysFinite() {
+        let rest = BoneSampler.Quat.identity
+        let pose = BoneSampler.Quat(x: 0, y: 0.25, z: 0, w: 0.95)
+        let same = BoneSampler.exaggerate(rest, pose, 1)
+        let bigger = BoneSampler.exaggerate(rest, pose, 1.6)
+        let still = BoneSampler.exaggerate(rest, rest, 1.8)
+        XCTAssertTrue(finite(same) && finite(bigger) && finite(still))
+        XCTAssertEqual(still.w, 1, accuracy: 0.001)
+        XCTAssertGreaterThan(abs(bigger.y), abs(same.y))
+        let broken = BoneSampler.exaggerate(.init(x: .nan, y: 0, z: 0, w: 1), pose, .infinity)
+        XCTAssertTrue(finite(broken))
+    }
+
     func testShortAndWildChannelsDoNotTrap() {
         var translation = [BoneSampler.Vec3](repeating: .zero, count: 2)
         var rotation = [BoneSampler.Quat](repeating: .identity, count: 2)

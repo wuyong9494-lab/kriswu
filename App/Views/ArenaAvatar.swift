@@ -65,6 +65,10 @@ final class ArenaAvatar {
     private var outlined = true
     /// 上半身的骨骼（跑着出手只换这些）
     private let upper: [Int]
+    /// 挥击时把胳膊的旋转再推远一点，缩得很小也看得见
+    private let swingBones: [Int]
+    /// 出手、挨打时身子和头再多动一点
+    private let torsoBones: [Int]
 
     private struct Playing {
         let clip: GLTFModel.Clip
@@ -114,9 +118,13 @@ final class ArenaAvatar {
         if let model {
             instance = model.instantiate(outline: ArenaArt.outline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
+            swingBones = ["upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r"].compactMap { model.node(named: $0) }
+            torsoBones = ["spine", "chest", "head"].compactMap { model.node(named: $0) }
         } else {
             instance = nil
             upper = []
+            swingBones = []
+            torsoBones = []
         }
         if let instance {
             for name in look.hidden {
@@ -537,7 +545,26 @@ final class ArenaAvatar {
                 }
             }
         }
+        accent(&pose, rest: model.restPose, moving: moving)
         apply(pose, to: instance, nodes: model.animated)
+    }
+
+    /// 片段本身是写实的，幅度小。在静止姿势和当前姿势之间再推一截，相当于加一层，不新做动画
+    private func accent(_ pose: inout GLTFModel.Pose, rest: GLTFModel.Pose, moving: Bool) {
+        let name = action?.clip.name
+        let attacking = name != nil && name != "Hit_A" && name != BrawlerLook.death.clip
+        let hit = name == "Hit_A"
+        let armGain: Float = attacking ? 1.55 : (moving ? 1.28 : 1)
+        let torsoGain: Float = attacking ? 1.28 : (hit ? 1.45 : 1)
+        if armGain > 1 { push(bones: swingBones, gain: armGain, pose: &pose, rest: rest) }
+        if torsoGain > 1 { push(bones: torsoBones, gain: torsoGain, pose: &pose, rest: rest) }
+    }
+
+    private func push(bones: [Int], gain: Float, pose: inout GLTFModel.Pose, rest: GLTFModel.Pose) {
+        for i in bones {
+            guard pose.rotation.indices.contains(i), rest.rotation.indices.contains(i) else { continue }
+            pose.rotation[i] = GLTFModel.exaggerated(rest.rotation[i], pose.rotation[i], gain)
+        }
     }
 
     /// 只在主线程写，而且这根骨骼得在、变换得是有限数。半初始化的骨头不写，避免和渲染线程抢着 retain

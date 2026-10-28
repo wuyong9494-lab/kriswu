@@ -64,6 +64,25 @@ public enum BoneSampler {
         return unit(Quat(x: from.x * s + to.x * t, y: from.y * s + to.y * t, z: from.z * s + to.z * t, w: from.w * s + to.w * t))
     }
 
+    /// 把这段旋转相对静止姿势再推远一点。gain 为 1 时就是原来的姿势，1.5 大约再大一半。
+    /// 不用 simd，避免 iOS 27 上 slerp 的崩溃。增益封在 1.8，骨头不会拧翻过去。
+    public static func exaggerate(_ rest: Quat, _ pose: Quat, _ gain: Float) -> Quat {
+        let from = unit(rest)
+        var to = unit(pose)
+        guard gain.isFinite else { return to }
+        if gain <= 1 { return mix(from, to, max(gain, 0)) }
+        let capped = min(gain, 1.8)
+        let dot = from.x * to.x + from.y * to.y + from.z * to.z + from.w * to.w
+        if dot < 0 { to = Quat(x: -to.x, y: -to.y, z: -to.z, w: -to.w) }
+        let s = 1 - capped
+        return unit(Quat(
+            x: from.x * s + to.x * capped,
+            y: from.y * s + to.y * capped,
+            z: from.z * s + to.z * capped,
+            w: from.w * s + to.w * capped
+        ))
+    }
+
     /// 关键帧不够、节点编号超出、数值不是有限数，都跳过，不读越界。
     public static func sample(_ time: Float,
                               _ channels: [Channel],

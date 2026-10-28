@@ -422,6 +422,11 @@ final class GLTFModel: @unchecked Sendable {
     static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf {
         simd_quatf(BoneSampler.mix(a.bone, b.bone, t))
     }
+
+    /// 相对静止姿势把旋转推远。给挥击、跑步加一层，不新做动画
+    static func exaggerated(_ rest: simd_quatf, _ pose: simd_quatf, _ gain: Float) -> simd_quatf {
+        simd_quatf(BoneSampler.exaggerate(rest.bone, pose.bone, gain))
+    }
 }
 
 extension GLTFModel.Clip {
