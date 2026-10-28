@@ -15,89 +15,170 @@ struct ArenaSeasonSheet: View {
     private var progress: ArenaProgress { growth.progress }
 
     var body: some View {
-        List {
-            Section {
-                Picker("看哪个", selection: $tab) {
-                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                ForEach(Tab.allCases) { item in
+                    Button {
+                        tab = item
+                        opened = nil
+                    } label: {
+                        Text(item.rawValue)
+                            .font(.system(size: 14, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .arenaOutline(1)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tab == item ? Color(red: 0.55, green: 0.35, blue: 0.95) : .black.opacity(0.35)))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.black.opacity(0.65), lineWidth: 2))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
             }
-            switch tab {
-            case .quests: quests
-            case .track: track
-            case .shop: shop
-            case .ranked: rankedInfo
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    switch tab {
+                    case .quests: quests
+                    case .track: track
+                    case .shop: shop
+                    case .ranked: rankedInfo
+                    }
+                }
+                if let opened {
+                    questDetail(opened)
+                }
             }
         }
-        .appList()
-        .navigationTitle("赛季")
         .onAppear { growth.refreshSeason() }
+        .environment(\.colorScheme, .dark)
     }
+
+    @State private var opened: ArenaQuest?
 
     // MARK: 任务
 
-    @ViewBuilder private var quests: some View {
+    private var quests: some View {
         let all = progress.quests(Date(), calendar: .current)
-        seasonHeader
-        Section {
-            ForEach(all.filter { !$0.weekly }) { questRow($0) }
-        } header: {
-            Text("每日任务")
-        } footer: {
-            Text("每天零点换新的；打完一局自动算进度，做完给赛季经验。")
-        }
-        Section {
-            ForEach(all.filter(\.weekly)) { questRow($0) }
-        } header: {
-            Text("每周任务")
-        } footer: {
-            Text("每周一换新的。冒险、排位、联机的局都算。")
+        return VStack(alignment: .leading, spacing: 8) {
+            seasonHeader
+            Text("每日")
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+            ForEach(all.filter { !$0.weekly }) { questCard($0) }
+            Text("每周")
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+                .padding(.top, 4)
+            ForEach(all.filter(\.weekly)) { questCard($0) }
         }
     }
 
     private var seasonHeader: some View {
         let state = progress.season
         let into = state.tier >= ArenaSeason.tiers ? ArenaSeason.pointsPerTier : state.points % ArenaSeason.pointsPerTier
-        return Section {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Label("赛季 \(state.tier) 级", systemImage: "medal.fill")
-                        .font(DS.Font.headline)
-                        .foregroundStyle(Color(red: 0.55, green: 0.35, blue: 0.95))
-                    Spacer()
-                    Text("还剩 \(ArenaSeason.daysLeft(Date(), calendar: .current)) 天")
-                        .font(DS.Font.caption)
-                        .foregroundStyle(.secondary)
-                }
-                ProgressView(value: Double(into), total: Double(ArenaSeason.pointsPerTier))
-                    .tint(Color(red: 0.55, green: 0.35, blue: 0.95))
-                Text(state.tier >= ArenaSeason.tiers ? "这一季满级了" : "再 \(ArenaSeason.pointsPerTier - into) 经验升到 \(state.tier + 1) 级")
-                    .font(DS.Font.caption)
-                    .foregroundStyle(.secondary)
+        let fraction = CGFloat(into) / CGFloat(ArenaSeason.pointsPerTier)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("赛季 \(state.tier) 级")
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
+                Spacer()
+                Text("还剩 \(ArenaSeason.daysLeft(Date(), calendar: .current)) 天")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.85))
             }
+            ZStack(alignment: .leading) {
+                Capsule().fill(.black.opacity(0.45))
+                Capsule().fill(Color(red: 0.62, green: 0.4, blue: 1)).frame(width: 180 * fraction)
+            }
+            .frame(width: 180, height: 10)
+            .overlay(Capsule().strokeBorder(.black.opacity(0.6), lineWidth: 1.5))
+            Text(state.tier >= ArenaSeason.tiers ? "这一季满级了" : "再 \(ArenaSeason.pointsPerTier - into) 经验升到 \(state.tier + 1) 级")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black.opacity(0.35)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.16), lineWidth: 2))
     }
 
-    private func questRow(_ quest: ArenaQuest) -> some View {
+    private func questCard(_ quest: ArenaQuest) -> some View {
         let value = progress.questProgress(quest)
         let done = value >= quest.target
-        return HStack(spacing: DS.Space.s) {
-            Image(systemName: done ? "checkmark.seal.fill" : "scroll.fill")
-                .font(.title3)
-                .foregroundStyle(done ? DS.Palette.success : Color.orange)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(quest.title).font(DS.Font.headline).foregroundStyle(done ? .secondary : .primary)
-                ProgressView(value: Double(value), total: Double(quest.target))
-                    .tint(done ? DS.Palette.success : Color.orange)
-                Text("\(value)/\(quest.target)").font(DS.Font.caption.monospacedDigit()).foregroundStyle(.secondary)
+        let fraction = CGFloat(value) / CGFloat(max(quest.target, 1))
+        return Button {
+            opened = quest
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: done ? "checkmark.seal.fill" : "scroll.fill")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(done ? Color(red: 0.3, green: 0.75, blue: 0.35) : Color.orange))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black.opacity(0.55), lineWidth: 2))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(quest.title)
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaOutline(1)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.black.opacity(0.45))
+                        Capsule().fill(done ? Color(red: 0.4, green: 0.9, blue: 0.35) : Color.orange)
+                            .frame(width: max(8, 160 * fraction))
+                    }
+                    .frame(width: 160, height: 8)
+                    Text("\(value)/\(quest.target)")
+                        .font(.system(size: 11, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Spacer()
+                Text("+\(quest.points)")
+                    .font(.system(size: 16, weight: .black, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
+                    .padding(.horizontal, 8)
+                    .frame(height: 32)
+                    .background(Capsule().fill(Color(red: 0.5, green: 0.28, blue: 0.9)))
+                    .overlay(Capsule().strokeBorder(.black.opacity(0.55), lineWidth: 2))
             }
-            Spacer()
-            Text("+\(quest.points)")
-                .font(DS.Font.headline.monospacedDigit())
-                .foregroundStyle(Color(red: 0.55, green: 0.35, blue: 0.95))
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black.opacity(0.38)))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.16), lineWidth: 2))
         }
+        .buttonStyle(.plain)
+    }
+
+    /// 第三层：这个任务怎么算
+    private func questDetail(_ quest: ArenaQuest) -> some View {
+        let value = progress.questProgress(quest)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(quest.title)
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .arenaOutline(1)
+                Spacer()
+                Button {
+                    opened = nil
+                } label: {
+                    Image(systemName: "xmark").font(.headline.weight(.black)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(Color(red: 0.85, green: 0.22, blue: 0.22)))
+                }
+                .buttonStyle(.plain)
+            }
+            Text(quest.detail)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.92))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("进度 \(value)/\(quest.target)，做完 +\(quest.points) 赛季经验")
+                .font(.system(size: 12, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(Color(red: 1, green: 0.86, blue: 0.35))
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(red: 0.16, green: 0.1, blue: 0.28).opacity(0.96)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.black, lineWidth: 3))
     }
 
     // MARK: 赛季奖励

@@ -7,31 +7,40 @@ struct ArenaTrophyRoad: View {
 
     var body: some View {
         let reached = max(growth.progress.totalTrophies, growth.progress.reached)
-        List {
-            Section {
+        return ScrollView {
+            VStack(spacing: 8) {
                 ForEach(ArenaProgress.road, id: \.trophies) { point in
-                    HStack(spacing: DS.Space.s) {
+                    HStack(spacing: 10) {
                         Image(systemName: point.trophies <= reached ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(point.trophies <= reached ? DS.Palette.success : .secondary)
+                            .font(.system(size: 20, weight: .black))
+                            .foregroundStyle(point.trophies <= reached ? Color(red: 0.45, green: 0.9, blue: 0.35) : .white.opacity(0.5))
                         Label("\(point.trophies)", systemImage: "trophy.fill")
-                            .font(DS.Font.headline.monospacedDigit())
+                            .font(.system(size: 16, weight: .black, design: .rounded).monospacedDigit())
                             .foregroundStyle(.orange)
-                            .frame(width: 90, alignment: .leading)
+                            .frame(width: 100, alignment: .leading)
                         if let brawler = point.brawler {
                             BrawlerBadge(brawler: brawler, size: 32)
                             Text("解锁\(brawler.name)")
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                                .foregroundStyle(.white)
+                                .arenaOutline(1)
                         } else {
                             Label("\(point.coins) 金币", systemImage: "dollarsign.circle.fill")
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                                .foregroundStyle(.white)
                         }
                         Spacer()
                     }
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black.opacity(point.trophies <= reached ? 0.28 : 0.45)))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.14), lineWidth: 2))
                 }
-            } footer: {
                 Text("所有角色的奖杯加起来算。奖杯掉了再涨回来，已经给过的奖励不重复给。")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .appList()
-        .navigationTitle("奖杯之路")
     }
 }
 

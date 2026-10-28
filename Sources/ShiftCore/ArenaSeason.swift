@@ -59,6 +59,20 @@ public struct ArenaQuest: Equatable, Sendable, Identifiable {
         }
     }
 
+    /// 点进任务之后看到的说明
+    public var detail: String {
+        switch kind {
+        case .play: return "任意模式打完 \(target) 局，赢了输了都算。冒险、排位、和同事打都算。"
+        case .win: return "赢下 \(target) 局。中途退出不算赢。"
+        case .kills: return "把对手打倒 \(target) 次。自己倒下再起来，已经打倒的还算。"
+        case .damage: return "这一局打出去的伤害加起来，满 \(target) 就行。打箱子、打 Boss 也算。"
+        case .gadgets: return "对局里按下小道具，一共用 \(target) 次。"
+        case .supers: return "黄圈攒满后放大招，一共放 \(target) 次。"
+        case .winMode: return "玩法选「\(mode?.title ?? "")」，赢 \(target) 局。别的玩法赢了不算这个。"
+        case .winWith: return "上场用\(brawler?.name ?? "指定角色")，赢 \(target) 局。"
+        }
+    }
+
     /// 这一局给这个任务算多少进度
     public func progress(of stats: ArenaMatchStats) -> Int {
         switch kind {
