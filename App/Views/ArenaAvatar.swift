@@ -164,9 +164,12 @@ final class ArenaAvatar {
             body.addChildNode(instance.root)
             bodyScale = ArenaAvatar.scale * size * look.scale
             body.simdScale = SIMD3(repeating: bodyScale)
-            pinLimbs(on: instance.root, skeleton: look.file.contains("Skeleton"))
-            pinShape(on: instance.root, skeleton: look.file.contains("Skeleton"))
-            pinCrest(on: instance.root)
+            // 大厅只看模型本身。手上脚上的色块、肩膀和头顶标记是缩远了才加的，近看会把人弄歪
+            if decorated {
+                pinLimbs(on: instance.root, skeleton: look.file.contains("Skeleton"))
+                pinShape(on: instance.root, skeleton: look.file.contains("Skeleton"))
+                pinCrest(on: instance.root)
+            }
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)

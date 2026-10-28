@@ -116,7 +116,7 @@ final class ArenaSound {
         let now = ProcessInfo.processInfo.systemUptime
         if let last = lastPlayed[effect], now - last < 0.03 { return }
         lastPlayed[effect] = now
-        guard let voices = players[effect], let player = voices.first(where: { !$0.isPlaying }) ?? voices.first else { return }
+        guard let voices = players[effect], let player = voices.first(where: { !$0.isPlaying }) else { return }
         player.currentTime = 0
         player.volume = min(volume, 1) * self.volume
         player.play()

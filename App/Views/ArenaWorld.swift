@@ -1122,13 +1122,12 @@ final class ArenaWorldView: SCNView {
                 return sphere
             }
             piece.addParticleSystem(trail(UIColor(red: 0.5, green: 1, blue: 0.6, alpha: 1), size: 0.35))
-        case .knight, .barbarian, .guardian:
-            let wide: CGFloat = owner == .knight ? 1.15 : (owner == .guardian ? 1.7 : 1.35)
-            piece.geometry = shared("slash-\(owner.rawValue)-\(tintKey)") {
-                let box = SCNBox(width: wide, height: 0.14, length: 0.22, chamferRadius: 0.04)
-                box.firstMaterial = ArenaAvatar.material(core, lit: false)
-                return box
+        case .knight, .barbarian, .guardian, .swordsman:
+            piece.geometry = shared("slash-fly-\(tintKey)") {
+                Self.crescent(color: core, wide: owner == .guardian ? 1.5 : 1.15)
             }
+            // 弯的那头朝前飞，不要横着
+            piece.simdEulerAngles = SIMD3(0, -.pi / 2, 0)
         default:
             let thick: CGFloat = p.isSuper ? 0.28 : 0.22
             let long: CGFloat = p.isSuper ? 2.6 : 1.85
@@ -1448,37 +1447,40 @@ final class ArenaWorldView: SCNView {
     }
 
     private func slashArc(at point: SIMD3<Float>, facing: V2, color: UIColor, reach: Float, sweep: Float) {
-        guard bursts < 24 else { return }
+        guard bursts < 16 else { return }
         bursts += 1
         let yaw = atan2(Float(facing.x), Float(facing.y))
-        let root = SCNNode()
-        root.simdPosition = point + SIMD3(0, 0.9, 0)
-        root.simdEulerAngles = SIMD3(0, yaw, 0)
-        root.castsShadow = false
-        let steps = 6
-        for i in 0..<steps {
-            let t = Float(i) / Float(steps - 1) - 0.5
-            let angle = t * sweep
-            let box = SCNBox(width: 0.72, height: 0.16, length: 0.2, chamferRadius: 0.04)
-            let material = SCNMaterial()
-            material.lightingModel = .constant
-            material.diffuse.contents = color
-            material.emission.contents = color
-            box.firstMaterial = material
-            let node = SCNNode(geometry: box)
-            let radius = reach
-            node.simdPosition = SIMD3(sin(angle) * radius, 0, cos(angle) * radius)
-            node.simdEulerAngles = SIMD3(0.5, -angle, 0)
-            node.castsShadow = false
-            root.addChildNode(node)
-        }
-        world.rootNode.addChildNode(root)
-        root.simdScale = SIMD3(repeating: 0.7)
-        root.runAction(.sequence([
-            .group([.scale(to: 1.15, duration: 0.08), .fadeOut(duration: 0.26)]),
+        let key = color == ArenaPalette.allyShot ? "ally" : "enemy"
+        let node = SCNNode(geometry: shared("slash-arc-\(key)") { Self.crescent(color: color, wide: 1) })
+        node.simdPosition = point + SIMD3(0, 0.85, 0)
+        node.simdEulerAngles = SIMD3(0.15, yaw - .pi / 2, 0)
+        node.simdScale = SIMD3(reach, max(sweep * 0.55, 0.7), 1)
+        node.castsShadow = false
+        node.renderingOrder = 20
+        world.rootNode.addChildNode(node)
+        node.runAction(.sequence([
+            .fadeOut(duration: 0.22),
             .run { [weak self] _ in self?.bursts = max(0, (self?.bursts ?? 1) - 1) },
-            .removeFromParentNode()
+            .removeFromParentNode(),
         ]))
+    }
+
+    /// 一道弯的刀光，不要一排方块
+    private static func crescent(color: UIColor, wide: CGFloat) -> SCNGeometry {
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: -0.2 * wide, y: -0.05))
+        path.addQuadCurve(to: CGPoint(x: 0.95 * wide, y: 0.05), control: CGPoint(x: 0.35 * wide, y: 0.62))
+        path.addLine(to: CGPoint(x: 0.82 * wide, y: -0.02))
+        path.addQuadCurve(to: CGPoint(x: -0.2 * wide, y: -0.05), control: CGPoint(x: 0.3 * wide, y: 0.22))
+        path.close()
+        let shape = SCNShape(path: path, extrusionDepth: 0.05)
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = color
+        material.emission.contents = color
+        material.isDoubleSided = true
+        shape.materials = [material]
+        return shape
     }
 
     /// 放大招：脚下一圈这个角色的颜色往外扩，身上冲起一道光柱、往外蹦光点（超级充能的是紫的）

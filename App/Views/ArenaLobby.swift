@@ -1423,14 +1423,14 @@ final class ArenaShowcaseView: SCNView {
 
     private func build() {
         let camera = SCNCamera()
-        camera.fieldOfView = 28
+        camera.fieldOfView = 32
         camera.zNear = 0.08
         camera.zFar = 40
         let eye = SCNNode()
         eye.camera = camera
-        // 侧前上方大约 28 度，整个人落在台子中下，头和武器都在画面里
-        eye.simdPosition = SIMD3(0.7, 1.9, 6.4)
-        eye.simdEulerAngles = SIMD3(-0.28, 0.14, 0)
+        // 人站近一点，头和武器都在画面里，不要缩成台子上的一个小点
+        eye.simdPosition = SIMD3(0.42, 1.62, 4.15)
+        eye.simdEulerAngles = SIMD3(-0.2, 0.1, 0)
         world.rootNode.addChildNode(eye)
         pointOfView = eye
 
@@ -1505,7 +1505,7 @@ final class ArenaShowcaseView: SCNView {
     func show(_ brawler: Brawler, skin: Int = 0) {
         guard avatar?.brawler != brawler || skin != wearing else { return }
         avatar?.node.removeFromParentNode()
-        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.58, skin: skin)
+        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.86, skin: skin)
         stage.addChildNode(made.node)
         avatar = made
         wearing = skin
