@@ -163,6 +163,7 @@ final class ArenaAvatar {
             bodyScale = ArenaAvatar.scale * size * look.scale
             body.simdScale = SIMD3(repeating: bodyScale)
             pinLimbs(on: instance.root, skeleton: look.file.contains("Skeleton"))
+            pinShape(on: instance.root, skeleton: look.file.contains("Skeleton"))
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -385,6 +386,49 @@ final class ArenaAvatar {
         let moving = fighter.alive && speed > 0.6
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
         animate(dt: dt, moving: moving, base: wanted)
+    }
+
+    /// 肩和腰加一块纯色，远看能分出上身。脖子把脑袋和身子接上
+    private func pinShape(on root: SCNNode, skeleton: Bool) {
+        let cloth = SCNSphere(radius: 0.09)
+        cloth.segmentCount = 8
+        cloth.firstMaterial = Self.material(Self.clothColor(brawler, skeleton: skeleton), lit: false)
+        for name in ["upperarm.l", "upperarm.r"] {
+            guard let bone = root.childNode(withName: name, recursively: true) else { continue }
+            let node = SCNNode(geometry: cloth)
+            node.simdScale = SIMD3(1.35, 0.65, 1.05)
+            bone.addChildNode(node)
+        }
+        if let hips = root.childNode(withName: "hips", recursively: true) {
+            let node = SCNNode(geometry: cloth)
+            node.simdScale = SIMD3(1.35, 0.32, 1.05)
+            hips.addChildNode(node)
+        }
+        let neck = SCNSphere(radius: 0.042)
+        neck.segmentCount = 8
+        let skin = skeleton
+            ? UIColor(red: 0.9, green: 0.86, blue: 0.74, alpha: 1)
+            : UIColor(red: 1, green: 0.74, blue: 0.55, alpha: 1)
+        neck.firstMaterial = Self.material(skin, lit: false)
+        if let head = root.childNode(withName: "head", recursively: true) {
+            let node = SCNNode(geometry: neck)
+            node.simdPosition = SIMD3(0, -0.05, 0)
+            head.addChildNode(node)
+        }
+    }
+
+    private static func clothColor(_ brawler: Brawler, skeleton: Bool) -> UIColor {
+        if skeleton { return UIColor(red: 0.55, green: 0.32, blue: 0.22, alpha: 1) }
+        switch brawler {
+        case .barbarian, .swordsman: return UIColor(red: 0.82, green: 0.16, blue: 0.12, alpha: 1)
+        case .knight, .guardian: return UIColor(red: 0.18, green: 0.4, blue: 0.88, alpha: 1)
+        case .mage, .scholar: return UIColor(red: 0.28, green: 0.34, blue: 0.9, alpha: 1)
+        case .ranger, .darter: return UIColor(red: 0.16, green: 0.58, blue: 0.28, alpha: 1)
+        case .assassin, .shade: return UIColor(red: 0.36, green: 0.2, blue: 0.55, alpha: 1)
+        case .necromancer: return UIColor(red: 0.2, green: 0.7, blue: 0.4, alpha: 1)
+        case .brewer: return UIColor(red: 0.75, green: 0.4, blue: 0.12, alpha: 1)
+        case .summoner: return UIColor(red: 0.15, green: 0.65, blue: 0.7, alpha: 1)
+        }
     }
 
     /// 新身体没有手和脚。挂在骨骼上，武器才接得住，脚才落地
