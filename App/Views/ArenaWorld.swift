@@ -1292,6 +1292,10 @@ final class ArenaWorldView: SCNView {
         case .necromancer: return UIColor(red: 0.45, green: 1, blue: 0.55, alpha: 1)
         case .shade: return UIColor(red: 0.62, green: 0.42, blue: 1, alpha: 1)
         case .summoner: return UIColor(red: 0.4, green: 1, blue: 0.85, alpha: 1)
+        case .swordsman: return UIColor(red: 0.8, green: 0.88, blue: 1, alpha: 1)
+        case .brewer: return UIColor(red: 1, green: 0.7, blue: 0.3, alpha: 1)
+        case .scholar: return UIColor(red: 0.55, green: 1, blue: 0.75, alpha: 1)
+        case .darter: return UIColor(red: 0.6, green: 0.6, blue: 0.65, alpha: 1)
         }
     }
 
@@ -1568,16 +1572,22 @@ final class ArenaWorldView: SCNView {
         func flat(_ v: V2) -> CGPoint { CGPoint(x: v.x, y: -v.y) }
         let path = UIBezierPath()
         // 落在一个点上的（扔火球、跳、亡灵之地、闪现、骨塔）画落点的圈和一条线
-        let lobbing = brawler == .mage || (isSuper && [.barbarian, .necromancer, .shade, .summoner].contains(brawler))
-        if isSuper && brawler == .guardian {
-            // 骨盾是给自己的：脚下一圈
-            path.append(UIBezierPath(ovalIn: CGRect(x: -0.9, y: -0.9, width: 1.8, height: 1.8)))
+        let lobbing = brawler == .mage || brawler == .brewer && !isSuper
+            || (isSuper && [.barbarian, .necromancer, .shade, .summoner].contains(brawler))
+        // 给自己（身边一圈）的：骨盾、豪饮、烟雾弹、护盾书；剑圣转圈砍、书灵的灵光也是身边一圈
+        let selfRadius: Double? = {
+            if isSuper { return [.guardian, .brewer, .darter].contains(brawler) ? 0.9 : (brawler == .scholar ? range : nil) }
+            return brawler == .swordsman || brawler == .scholar ? range : nil
+        }()
+        if let selfRadius {
+            path.append(UIBezierPath(ovalIn: CGRect(x: -selfRadius, y: -selfRadius, width: selfRadius * 2, height: selfRadius * 2)))
         } else if lobbing {
             let distance = max(drag.length, 0.35) * range
             let target = direction * distance
             let blast: Double
             switch brawler {
             case .mage: blast = isSuper ? 2.2 : 1.2
+            case .brewer: blast = 1.3
             case .necromancer: blast = 2.2
             case .summoner: blast = 0.6
             default: blast = 1.6

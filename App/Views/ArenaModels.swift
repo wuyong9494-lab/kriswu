@@ -113,6 +113,38 @@ struct BrawlerLook {
                                attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
                                special: Move(clip: "Use_Item", from: 0.1, to: 0.6, seconds: 0.7),
                                weapons: [Weapon(file: "Skeleton_Blade.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned)])
+        // 后加的四个：用同一批模型换武器、换颜色（身上的底色见 baseTint）
+        case .swordsman:
+            return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield"],
+                               idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0.1, to: 0.9, seconds: 0.45),
+                               special: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0, to: 1, seconds: 0.5))
+        case .brewer:
+            return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe"],
+                               idle: "2H_Melee_Idle", run: "Running_A",
+                               attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.2, to: 0.7, seconds: 0.45),
+                               special: Move(clip: "2H_Melee_Idle", from: 0, to: 0.5, seconds: 0.8))
+        case .scholar:
+            return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "1H_Wand", "2H_Staff"],
+                               idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "Spellcast_Raise", from: 0.2, to: 0.7, seconds: 0.5),
+                               special: Move(clip: "Spellcast_Raise", from: 0.1, to: 0.9, seconds: 0.9))
+        case .darter:
+            return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Knife_Offhand"],
+                               idle: "Idle", run: "Running_A",
+                               attack: Move(clip: "Throw", from: 0.25, to: 0.7, seconds: 0.4),
+                               special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.1, to: 0.75, seconds: 0.5))
+        }
+    }
+
+    /// 后加的角色和原来的共用模型：身上乘上一个底色，一眼分得开（没有的是 nil）
+    static func baseTint(_ brawler: Brawler) -> UIColor? {
+        switch brawler {
+        case .swordsman: return UIColor(red: 0.75, green: 0.85, blue: 1, alpha: 1)
+        case .brewer: return UIColor(red: 1, green: 0.8, blue: 0.55, alpha: 1)
+        case .scholar: return UIColor(red: 0.7, green: 1, blue: 0.8, alpha: 1)
+        case .darter: return UIColor(red: 1, green: 0.75, blue: 0.5, alpha: 1)
+        default: return nil
         }
     }
 

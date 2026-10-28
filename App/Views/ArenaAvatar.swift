@@ -110,6 +110,9 @@ final class ArenaAvatar {
                     if Self.dark(material.emission.contents) { material.emission.contents = glow }
                 }
                 baseTint = tint
+            } else if let tint = BrawlerLook.baseTint(brawler) {
+                instance.materials.forEach { $0.multiply.contents = tint }
+                baseTint = tint
             }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)

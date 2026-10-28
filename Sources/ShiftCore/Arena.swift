@@ -45,39 +45,47 @@ public struct V2: Equatable, Hashable, Codable, Sendable {
 // MARK: - 角色
 
 /// 能选的角色：各有各的普通攻击和大招（3D 模型用 KayKit 的冒险者、骷髅，CC0 授权）。
-/// 后四个要攒奖杯解锁，各带一样新本事：护盾、亡灵之地（回血 + 伤人）、闪现、召唤骨塔
+/// 四个骷髅要攒奖杯解锁，各带一样新本事：护盾、亡灵之地（回血 + 伤人）、闪现、召唤骨塔；
+/// 再往后四个（剑圣、酒桶、书灵、飞镖手）奖杯更多才解锁：转圈砍、喝酒回血、给队友回血加盾、回旋镖
 public enum Brawler: Int, CaseIterable, Codable, Sendable {
     case knight, ranger, barbarian, mage, assassin, guardian, necromancer, shade, summoner
+    /// 后加的四个（奖杯到了解锁）：剑圣、酒桶、书灵、飞镖手
+    case swordsman, brewer, scholar, darter
 
-    public var name: String { ["骑士", "游侠", "蛮王", "法师", "刺客", "骨盾卫", "亡灵巫师", "幽影", "骨灵"][rawValue] }
-    public var emoji: String { ["🛡️", "🏹", "🪓", "🔮", "🗡️", "💀", "🕯️", "👻", "🦴"][rawValue] }
+    public var name: String { ["骑士", "游侠", "蛮王", "法师", "刺客", "骨盾卫", "亡灵巫师", "幽影", "骨灵", "剑圣", "酒桶", "书灵", "飞镖手"][rawValue] }
+    public var emoji: String { ["🛡️", "🏹", "🪓", "🔮", "🗡️", "💀", "🕯️", "👻", "🦴", "⚔️", "🍺", "📖", "🪃"][rawValue] }
     public var role: String {
-        ["近身剑气", "远程弩箭", "肉盾斧劈", "隔墙火球", "连掷飞刀", "护盾坦克", "回血辅助", "闪现突袭", "召唤骨塔"][rawValue]
+        ["近身剑气", "远程弩箭", "肉盾斧劈", "隔墙火球", "连掷飞刀", "护盾坦克", "回血辅助", "闪现突袭", "召唤骨塔",
+         "旋风近战", "投掷回血", "治疗辅助", "回旋飞镖"][rawValue]
     }
     public var attackNote: String {
         ["一剑挥出五道散开的剑气，贴脸打最疼", "一支又快又远的弩箭", "近身连劈三斧，血厚", "扔火球，能越过墙，落地炸一片", "一口气连掷四把飞刀",
-         "斧子劈出一道宽宽的冲击波，能穿过一排人", "射出一团慢慢飞的魂火，能穿过好几个人", "连射两支短弩", "扔出三把散开的骨刃"][rawValue]
+         "斧子劈出一道宽宽的冲击波，能穿过一排人", "射出一团慢慢飞的魂火，能穿过好几个人", "连射两支短弩", "扔出三把散开的骨刃",
+         "抡起大剑转一圈，身边的人都挨砍", "扔出酒桶，能越过墙，落地溅开一片", "放出一圈灵光：身边的队友回血、敌人掉血",
+         "扔出回旋镖，飞出去再飞回来，来回都能打中"][rawValue]
     }
     public var superNote: String {
         ["大招：举盾往前冲锋，撞到的人都受伤", "大招：能穿透好几个人的重弩", "大招：跳过去砸一片（能跳过墙）", "大招：召唤一颗大陨石", "大招：一大片扇形飞刀",
          "大招：举起骨盾，4 秒里受到的伤害少六成，还回一口血", "大招：放下一片亡灵之地，5 秒里队友在里面回血、敌人掉血",
-         "大招：一下闪到远处（能穿墙），落地炸伤旁边的敌人", "大招：召唤一座骨塔，12 秒里自动打附近的敌人"][rawValue]
+         "大招：一下闪到远处（能穿墙），落地炸伤旁边的敌人", "大招：召唤一座骨塔，12 秒里自动打附近的敌人",
+         "大招：边转边往前冲，冲过的人都挨砍", "大招：豪饮一大口，回一大口血，4 秒里挨打少六成、走得快",
+         "大招：给身边的队友（连自己）加 3 秒护盾，大家都回一口血", "大招：扔下烟雾弹：自己隐身 3 秒、走得快，身边的敌人走得慢"][rawValue]
     }
 
-    public var maxHealth: Int { [5600, 3200, 7800, 3800, 4400, 6800, 3600, 3700, 4000][rawValue] }
+    public var maxHealth: Int { [5600, 3200, 7800, 3800, 4400, 6800, 3600, 3700, 4000, 6400, 5200, 3600, 3800][rawValue] }
     /// 每秒走几格
-    public var speed: Double { [2.45, 2.4, 2.55, 2.3, 2.4, 2.35, 2.4, 2.65, 2.45][rawValue] }
+    public var speed: Double { [2.45, 2.4, 2.55, 2.3, 2.4, 2.35, 2.4, 2.65, 2.45, 2.5, 2.4, 2.4, 2.55][rawValue] }
     /// 装一发弹要几秒（最多存 3 发）
-    public var reload: Double { [1.5, 2.0, 1.2, 1.7, 1.4, 1.5, 1.6, 1.3, 1.5][rawValue] }
-    public var attackRange: Double { [4.5, 9, 2.6, 7, 7, 3.2, 7.5, 6.5, 5.5][rawValue] }
-    /// 大招打多远（骨盾卫的护盾是给自己的，只是一点点）
-    public var superRange: Double { [5.5, 11, 6, 8, 7, 1, 6, 6.5, 5][rawValue] }
+    public var reload: Double { [1.5, 2.0, 1.2, 1.7, 1.4, 1.5, 1.6, 1.3, 1.5, 1.6, 1.8, 1.5, 1.5][rawValue] }
+    public var attackRange: Double { [4.5, 9, 2.6, 7, 7, 3.2, 7.5, 6.5, 5.5, 2.2, 6.5, 3.6, 6.5][rawValue] }
+    /// 大招打多远（骨盾卫的护盾、酒桶的豪饮、飞镖手的烟雾弹是给自己的，只是一点点）
+    public var superRange: Double { [5.5, 11, 6, 8, 7, 1, 6, 6.5, 5, 5, 1, 5, 1][rawValue] }
     /// 打出多少伤害攒满一次大招
-    public var superCost: Double { [7200, 3900, 8400, 4800, 6000, 6400, 4600, 4400, 5200][rawValue] }
+    public var superCost: Double { [7200, 3900, 8400, 4800, 6000, 6400, 4600, 4400, 5200, 6800, 5600, 4600, 5000][rawValue] }
     /// 子弹飞多快（电脑瞄准提前量用）
-    public var bulletSpeed: Double { [13, 17, 14, 10, 14, 12, 9, 18, 14][rawValue] }
+    public var bulletSpeed: Double { [13, 17, 14, 10, 14, 12, 9, 18, 14, 13, 10, 12, 13][rawValue] }
     /// 总奖杯到多少解锁（一开始就有的是 0）
-    public var unlockAt: Int { [0, 0, 0, 0, 0, 70, 140, 230, 340][rawValue] }
+    public var unlockAt: Int { [0, 0, 0, 0, 0, 70, 140, 230, 340, 450, 560, 680, 800][rawValue] }
 
     /// 等级加成：每升一级血量、伤害多 6%（1 级不加）
     public static func boost(_ level: Int) -> Double {
@@ -417,6 +425,9 @@ public struct Projectile: Equatable, Codable, Sendable, Identifiable {
     public var isSuper = false
     public var hit: [Int] = []
     public var lob: Lob?
+    /// 回旋镖：飞到头（或者撞墙）往回飞向扔的人；returning：在往回飞
+    public var boomerang = false
+    public var returning = false
 }
 
 /// 摇杆的输入：走的方向（长度 0–1）、这一帧开火、放大招（相对自己的偏移，单位格：方向 + 想打多远）、用小道具
@@ -990,6 +1001,17 @@ public struct ArenaGame: Sendable {
             fighters[i].burst = Fighter.Burst(left: 2, timer: 0, direction: direction)
         case .summoner:
             spread(i, direction, count: 3, angle: 0.3, speed: 14, range: 5.5, damage: 420, radius: 0.2)
+        case .swordsman:
+            // 抡大剑转一圈：身边一圈的敌人都挨一剑
+            sweep(i, radius: fighter.starPower == .wideSpin ? 2.7 : 2.2, damage: power(i, 1050))
+        case .brewer:
+            lob(i, to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.attackRange),
+                duration: 0.6, blast: fighter.starPower == .strongBrew ? 1.65 : 1.3, damage: 1100, isSuper: false)
+        case .scholar:
+            pulse(i, radius: fighter.brawler.attackRange, heal: power(i, fighter.starPower == .mending ? 780 : 600), damage: power(i, 520))
+        case .darter:
+            boomerang(i, direction)
+            if fighter.starPower == .twinDarts { boomerang(i, direction.rotated(by: 0.22)) }
         }
     }
 
@@ -1057,7 +1079,117 @@ public struct ArenaGame: Sendable {
             turrets.append(Turret(id: nextTurret, owner: i, team: fighter.team, pos: spot, facing: direction,
                                   health: health, maxHealth: health, left: Turret.duration))
             nextTurret += 1
+        case .swordsman:
+            // 边转边往前冲（和骑士的冲锋一样撞人）
+            fighters[i].dash = Fighter.Dash(direction: direction, remaining: hyper ? 7 : fighter.brawler.superRange, hit: [])
+        case .brewer:
+            // 豪饮：回一大口血，4 秒里挨打少六成、走得快
+            let amount = Double(hyper ? 3200 : 2400) * (fighter.starPower == .bottomless ? 1.5 : 1)
+            let healed = min(power(i, Int(amount)), fighters[i].maxHealth - fighters[i].health)
+            if healed > 0 {
+                fighters[i].health += healed
+                events.append(.heal(target: i, amount: healed))
+            }
+            fighters[i].shield = max(fighters[i].shield, 4)
+            fighters[i].speedBoost = max(fighters[i].speedBoost, 4)
+        case .scholar:
+            // 给身边的队友（连自己）加护盾、回血
+            let reach = hyper ? 7 : fighter.brawler.superRange
+            for j in fighters.indices where fighters[j].alive && fighters[j].team == fighter.team && fighters[j].pos.distance(to: fighter.pos) <= reach {
+                fighters[j].shield = max(fighters[j].shield, fighter.starPower == .longPages ? 5 : 3)
+                let healed = min(power(i, hyper ? 2000 : 1200), fighters[j].maxHealth - fighters[j].health)
+                if healed > 0 {
+                    fighters[j].health += healed
+                    events.append(.heal(target: j, amount: healed))
+                }
+            }
+        case .darter:
+            // 烟雾弹：自己隐身、走得快，身边的敌人走得慢
+            fighters[i].invisible = max(fighters[i].invisible, fighter.starPower == .shadowStep ? 4.5 : 3)
+            fighters[i].speedBoost = max(fighters[i].speedBoost, 3)
+            let reach = hyper ? 4 : 2.8
+            for j in fighters.indices where fighters[j].alive && fighters[j].team != fighter.team && !fighters[j].isBoss
+                && fighters[j].pos.distance(to: fighter.pos) < reach + Self.hitRadius(fighters[j]) {
+                fighters[j].slowed = max(fighters[j].slowed, 2)
+            }
         }
+    }
+
+    /// 剑圣转一圈：身边一圈的敌人、对面的骨塔和宝箱、能量箱都挨一下（打人攒大招）
+    mutating func sweep(_ i: Int, radius: Double, damage: Int) {
+        let me = fighters[i]
+        for j in fighters.indices where fighters[j].alive && fighters[j].team != me.team && fighters[j].leap == nil
+            && fighters[j].pos.distance(to: me.pos) < radius + Self.hitRadius(fighters[j]) {
+            hurt(j, damage, by: i, charges: true)
+        }
+        strikeObjects(around: me.pos, radius: radius, damage: damage, by: i, team: me.team)
+    }
+
+    /// 书灵的灵光：身边的队友回血（不回自己）、敌人掉血；回血、打人都攒大招
+    mutating func pulse(_ i: Int, radius: Double, heal: Int, damage: Int) {
+        let me = fighters[i]
+        var healedTotal = 0
+        for j in fighters.indices where fighters[j].alive && fighters[j].pos.distance(to: me.pos) < radius + Self.hitRadius(fighters[j]) {
+            if fighters[j].team == me.team {
+                guard j != i else { continue }
+                let healed = min(heal, fighters[j].maxHealth - fighters[j].health)
+                if healed > 0 {
+                    fighters[j].health += healed
+                    healedTotal += healed
+                    events.append(.heal(target: j, amount: healed))
+                }
+            } else if fighters[j].leap == nil {
+                hurt(j, damage, by: i, charges: true)
+            }
+        }
+        if healedTotal > 0 {
+            fighters[i].superCharge = min(1, fighters[i].superCharge + Double(healedTotal) / superCost(fighters[i]))
+        }
+        strikeObjects(around: me.pos, radius: radius, damage: damage, by: i, team: me.team)
+    }
+
+    /// 打一圈里的东西：对面的骨塔、宝箱，能量箱
+    private mutating func strikeObjects(around point: V2, radius: Double, damage: Int, by owner: Int, team: Int) {
+        for t in turrets.indices where turrets[t].team != team && turrets[t].pos.distance(to: point) < radius + Turret.radius {
+            turrets[t].health -= damage
+        }
+        for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + 1.3 {
+            hitChest(k, damage, by: owner)
+        }
+        for b in boxes.indices where boxes[b].health > 0 && boxes[b].pos.distance(to: point) < radius + PowerBox.radius {
+            hitBox(b, damage)
+        }
+    }
+
+    /// 飞镖手扔回旋镖：穿人，飞到头往回飞，来回每趟每人打一次
+    mutating func boomerang(_ i: Int, _ direction: V2) {
+        let fighter = fighters[i]
+        var dart = Projectile(id: nextProjectile, owner: i, team: fighter.team, pos: fighter.pos + direction * 0.3,
+                              velocity: direction * fighter.brawler.bulletSpeed, rangeLeft: fighter.brawler.attackRange,
+                              damage: power(i, 680), radius: 0.28, pierce: true)
+        dart.boomerang = true
+        projectiles.append(dart)
+        nextProjectile += 1
+    }
+
+    /// 回旋镖往前飞到头（或者撞墙）就掉头、能再打一遍；往回飞时一直朝着扔的人，飞到身边就收回（返回 false）
+    private func steerBoomerang(_ p: inout Projectile, _ dt: Double) -> Bool {
+        if p.returning {
+            guard fighters.indices.contains(p.owner), fighters[p.owner].alive else { return false }
+            let back = fighters[p.owner].pos - p.pos
+            if back.length < 0.45 { return false }
+            p.velocity = back.normalized * max(p.velocity.length, 1)
+        }
+        let delta = p.velocity * dt
+        p.pos = p.pos + delta
+        if !p.returning {
+            p.rangeLeft -= delta.length
+            if p.rangeLeft <= 0 || map.blocks(p.pos) {
+                p.returning = true
+                p.hit = []
+            }
+        }
+        return true
     }
 
     mutating func shoot(_ i: Int, _ direction: V2, speed: Double, range: Double, damage: Int, radius: Double,
@@ -1155,11 +1287,15 @@ public struct ArenaGame: Sendable {
                 kept.append(p)
                 continue
             }
-            let delta = p.velocity * dt
-            p.pos = p.pos + delta
-            p.rangeLeft -= delta.length
-            if p.rangeLeft <= 0 { continue }
-            if map.blocks(p.pos) {
+            if p.boomerang {
+                guard steerBoomerang(&p, dt) else { continue }
+            } else {
+                let delta = p.velocity * dt
+                p.pos = p.pos + delta
+                p.rangeLeft -= delta.length
+            }
+            if p.rangeLeft <= 0 && !p.boomerang { continue }
+            if map.blocks(p.pos) && !p.boomerang {
                 // 打到墙上；是对面的宝箱就扣宝箱的血
                 if let k = map.chest(at: p.pos), chests.indices.contains(k), chests[k].team != p.team {
                     hitChest(k, p.damage, by: p.owner)

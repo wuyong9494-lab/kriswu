@@ -82,6 +82,16 @@ public struct ArenaBot: Sendable {
                     if !low, distance > 2.5, distance <= me.brawler.superRange { input.special = target.pos - me.pos }
                 case .necromancer:
                     if distance <= me.brawler.superRange * 0.9 { input.special = target.pos - me.pos }
+                case .brewer:
+                    // 血少了就喝
+                    if Double(me.health) < Double(me.maxHealth) * 0.6 { input.special = me.facing }
+                case .darter:
+                    // 被贴近了、或者血少了放烟雾
+                    if distance < 3 || low { input.special = me.facing }
+                case .scholar:
+                    // 身边有受伤的队友（或自己）就放护盾
+                    if game.fighters.contains(where: { $0.alive && $0.team == me.team && $0.pos.distance(to: me.pos) <= me.brawler.superRange
+                        && Double($0.health) < Double($0.maxHealth) * 0.7 }) { input.special = me.facing }
                 default:
                     if distance <= me.brawler.superRange * 0.85, clear || me.brawler == .barbarian || me.brawler == .mage {
                         input.special = target.pos - me.pos

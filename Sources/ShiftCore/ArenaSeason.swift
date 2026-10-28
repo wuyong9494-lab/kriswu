@@ -99,6 +99,10 @@ public struct ArenaSkin: Equatable, Sendable, Identifiable {
             (.necromancer, "冰魂巫师", [0.55, 0.92, 1], [0, 0.1, 0.16], "血月巫师", [1, 0.42, 0.42], [0.16, 0, 0]),
             (.shade, "虚空幽影", [0.66, 0.45, 1], [0.1, 0, 0.18], "白骨幽影", [1, 0.97, 0.88], [0.16, 0.15, 0.12]),
             (.summoner, "蓝焰骨灵", [0.5, 0.75, 1], [0, 0.06, 0.2], "金骨灵", [1, 0.84, 0.4], [0.16, 0.1, 0]),
+            (.swordsman, "银月剑圣", [0.85, 0.9, 1], [0.08, 0.08, 0.12], "赤炎剑圣", [1, 0.5, 0.4], [0.16, 0.04, 0]),
+            (.brewer, "麦香酒桶", [1, 0.85, 0.5], [0.12, 0.08, 0], "冰镇酒桶", [0.6, 0.9, 1], [0, 0.08, 0.14]),
+            (.scholar, "青竹书灵", [0.6, 1, 0.75], [0, 0.1, 0.04], "墨夜书灵", [0.5, 0.5, 0.7], [0.04, 0.02, 0.1]),
+            (.darter, "沙漠飞镖手", [1, 0.85, 0.6], [0.1, 0.06, 0], "毒蛇飞镖手", [0.55, 1, 0.45], [0, 0.1, 0]),
         ]
         return table.flatMap { brawler, firstName, firstTint, firstGlow, secondName, secondTint, secondGlow in
             [ArenaSkin(brawler: brawler, index: 1, name: firstName, tint: firstTint, glow: firstGlow, price: 160),

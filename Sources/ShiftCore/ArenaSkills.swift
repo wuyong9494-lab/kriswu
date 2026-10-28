@@ -33,11 +33,13 @@ public enum Gadget: Int, CaseIterable, Codable, Sendable {
 /// 星徽：一直有效的被动本事（每个角色两种里选一种）
 public enum StarPower: Int, CaseIterable, Codable, Sendable {
     case chivalry, tough, quickload, farsight, bloodlust, quake, bigFire, surge, fiveKnives, swift,
-         longShield, thorns, feast, harvest, ambush, ghost, sturdy, twin
+         longShield, thorns, feast, harvest, ambush, ghost, sturdy, twin,
+         wideSpin, ironSkin, strongBrew, bottomless, mending, longPages, twinDarts, shadowStep
 
     public var name: String {
         ["骑士精神", "坚韧", "快装", "远视", "嗜血", "震荡", "大火球", "法力涌动", "五刃", "疾风",
-         "长盾", "反震", "亡灵盛宴", "灵魂收割", "暗影突袭", "鬼魅", "坚固骨塔", "双塔"][rawValue]
+         "长盾", "反震", "亡灵盛宴", "灵魂收割", "暗影突袭", "鬼魅", "坚固骨塔", "双塔",
+         "剑气回旋", "铁骨", "烈酒", "海量", "妙手", "长卷", "双镖", "疾影"][rawValue]
     }
 
     public var note: String {
@@ -60,6 +62,14 @@ public enum StarPower: Int, CaseIterable, Codable, Sendable {
         case .ghost: return "在草丛里走得快 20%"
         case .sturdy: return "骨塔的血多一半"
         case .twin: return "能同时放两座骨塔"
+        case .wideSpin: return "转圈砍的范围大半格"
+        case .ironSkin: return "受到的伤害少一成"
+        case .strongBrew: return "酒桶溅开大四分之一"
+        case .bottomless: return "豪饮回的血多一半"
+        case .mending: return "灵光回的血多三成"
+        case .longPages: return "护盾撑 5 秒"
+        case .twinDarts: return "一次扔两支回旋镖"
+        case .shadowStep: return "烟雾弹隐身 4.5 秒"
         }
     }
 }
@@ -77,6 +87,10 @@ extension Brawler {
         case .necromancer: return [.potion, .frost]
         case .shade: return [.vanish, .reload]
         case .summoner: return [.frost, .roll]
+        case .swordsman: return [.ward, .shockwave]
+        case .brewer: return [.potion, .shockwave]
+        case .scholar: return [.potion, .blink]
+        case .darter: return [.roll, .vanish]
         }
     }
 
@@ -89,7 +103,8 @@ extension Brawler {
     /// 超级充能后大招变成什么样
     public var hyperNote: String {
         ["冲锋冲得更远、撞得更疼", "重弩更粗、更疼", "砸地的范围更大", "陨石炸得更大", "飞刀多一半",
-         "骨盾回的血翻倍", "亡灵之地更大", "闪现落地炸得更大", "骨塔的血翻倍"][rawValue]
+         "骨盾回的血翻倍", "亡灵之地更大", "闪现落地炸得更大", "骨塔的血翻倍",
+         "冲得更远、撞得更疼", "回的血更多", "护盾罩得更远、回血更多", "烟雾更大"][rawValue]
     }
 }
 
@@ -178,7 +193,7 @@ extension ArenaGame {
 
     /// 受到的伤害打几折（骨盾、铁壁少六成，超级充能少一成半）
     func damageTaken(_ fighter: Fighter) -> Double {
-        (fighter.shield > 0 ? 0.4 : 1) * (fighter.hyperTime > 0 ? 0.85 : 1)
+        (fighter.shield > 0 ? 0.4 : 1) * (fighter.hyperTime > 0 ? 0.85 : 1) * (fighter.starPower == .ironSkin ? 0.9 : 1)
     }
 
     // MARK: 小道具
