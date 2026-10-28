@@ -17,8 +17,9 @@ struct ArenaStoryView: View {
     @State private var selected: ArenaStory.Level?
     @State private var talk: Talk?
     @State private var playing: ArenaHomeView.ArenaEntry?
-    /// 正在打的那一关（打完回来看要不要放打赢后的对话）
+    /// 正在打的那一关、开打前最近一次打完的记录（打完回来看要不要放打赢后的对话）
     @State private var current: ArenaStory.Level?
+    @State private var lastBefore: ArenaProgressStore.StoryResult?
 
     /// 一段对话，说完了做什么
     struct Talk: Identifiable {
@@ -337,6 +338,7 @@ struct ArenaStoryView: View {
 
     private func start(_ level: ArenaStory.Level) {
         current = level
+        lastBefore = growth.lastStory
         playing = ArenaHomeView.ArenaEntry(setup: ArenaController.Setup(
             mode: level.mode, brawler: brawler, name: name, level: progress.level(brawler),
             lineup: [brawler] + partners, loadout: progress.loadout(for: brawler), story: level))
@@ -346,7 +348,8 @@ struct ArenaStoryView: View {
     private func finished() {
         guard let level = current else { return }
         current = nil
-        if let last = growth.lastStory, last.level == level.id, last.stars > 0 {
+        // 这次真的打完了（中途退出不算）、赢了
+        if let last = growth.lastStory, last != lastBefore, last.level == level.id, last.stars > 0 {
             talk = Talk(lines: level.after, then: nil)
             // 翻到下一关所在的那一章
             if let next = ArenaStory.next(after: level.id), let chapter = ArenaStory.chapter(of: next.id) {

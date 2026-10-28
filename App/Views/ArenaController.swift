@@ -669,13 +669,15 @@ final class ArenaProgressStore: ObservableObject {
     struct StoryResult: Equatable {
         let level: String
         let stars: Int
+        /// 什么时候打完的（同一关打了几次也分得开）
+        let at: Date
     }
     @Published private(set) var lastStory: StoryResult?
 
     /// 打完冒险的一关
     func finish(_ level: ArenaStory.Level, stars: Int) -> ArenaStory.Reward {
         let reward = progress.finish(level, stars: stars)
-        lastStory = StoryResult(level: level.id, stars: stars)
+        lastStory = StoryResult(level: level.id, stars: stars, at: Date())
         save()
         return reward
     }
