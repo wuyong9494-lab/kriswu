@@ -8,8 +8,8 @@ import simd
 final class ArenaAvatar {
     /// 角色模型缩多小（模型大约 2.3 高，缩完比一格高一点）
     static let scale: Float = 0.95
-    /// 血条画在离地多高
-    static let headHeight: Float = 1.6
+    /// 血条画在离地多高。大头和帽子大约到 2 米，再低会被头挡住
+    static let headHeight: Float = 2.35
 
     /// 脚下的软影子，所有人共用一张
     private static let blobShadow: SCNMaterial = {
@@ -583,8 +583,8 @@ final class ArenaTag {
     private var ammo: [ArenaBar] = []
     private var shownHealth = -1
     private var shownStars = -1
-    private static let width: CGFloat = 58
-    private static let barHeight: CGFloat = 12
+    private static let width: CGFloat = 92
+    private static let barHeight: CGFloat = 18
 
     /// boss：骷髅王的血条长一倍、粗一点
     init(fighter: Fighter, isMe: Bool, ally: Bool, boss: Bool = false) {

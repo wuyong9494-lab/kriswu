@@ -813,6 +813,7 @@ extension ArenaArt {
         material.diffuse.contents = contents
         material.isDoubleSided = true
         material.writesToDepthBuffer = false
+        material.readsFromDepthBuffer = false
         return material
     }
 }

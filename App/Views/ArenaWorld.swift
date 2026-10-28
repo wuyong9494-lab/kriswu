@@ -400,7 +400,7 @@ final class ArenaWorldView: SCNView {
             avatars.append(avatar)
             let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
             tag.node.simdPosition = SIMD3(0, ArenaAvatar.headHeight * avatar.size, 0)
-            tag.node.simdScale = SIMD3(repeating: 0.82)
+            tag.node.simdScale = SIMD3(repeating: 1)
             avatar.node.addChildNode(tag.node)
             tags.append(tag)
         }
