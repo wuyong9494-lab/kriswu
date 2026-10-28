@@ -372,7 +372,7 @@ final class ArenaWorldView: SCNView {
             // 毒圈：圈外一圈半透明的绿墙，边上一道亮线
             let radius = game.safeRadius
             let wall = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius) + Self.gasBand, height: 3.2)
-            wall.radialSegmentCount = 64
+            wall.radialSegmentCount = 28
             let gas = ArenaAvatar.decal(ArenaPalette.poison.withAlphaComponent(0.55))
             wall.firstMaterial = gas
             let wallNode = SCNNode(geometry: wall)
@@ -380,7 +380,7 @@ final class ArenaWorldView: SCNView {
             wallNode.castsShadow = false
             wallNode.renderingOrder = 20
             let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.18), height: 3.5)
-            edge.radialSegmentCount = 64
+            edge.radialSegmentCount = 28
             edge.firstMaterial = ArenaAvatar.decal(UIColor(red: 0.6, green: 1, blue: 0.5, alpha: 0.9))
             let edgeNode = SCNNode(geometry: edge)
             edgeNode.simdPosition = center + SIMD3(0, 1.75, 0)
@@ -550,7 +550,7 @@ final class ArenaWorldView: SCNView {
         return ArenaArt.walls(cells)
     }
 
-    /// 场地外两圈树、几块石头，分队玩法两头插旗。每种模型只读一次，摆下去的是同一份网格，不描边、不投影，再合成一块
+    /// 场地外一圈树、几块石头，分队玩法两头插旗。网格大家共用，不描边、不投影，也不压成一整块（压的那一下会把进对局卡住）
     private func scenery(_ game: ArenaGame) -> SCNNode {
         let map = game.map
         let width = Double(map.width), height = Double(map.height)
@@ -577,7 +577,7 @@ final class ArenaWorldView: SCNView {
         }
         for row in 0..<2 {
             let gap = 1.6 + Double(row) * 2.2
-            let step = 2.6
+            let step = 4.2
             var edge: [V2] = []
             var t = -gap + Double(row) * step / 2
             while t <= width + gap {
@@ -618,9 +618,8 @@ final class ArenaWorldView: SCNView {
                 }
             }
         }
-        let baked = holder.flattenedClone()
-        baked.castsShadow = false
-        return baked
+        holder.castsShadow = false
+        return holder
     }
 
     // MARK: - 每帧摆一遍
@@ -1284,6 +1283,8 @@ final class ArenaWorldView: SCNView {
 
     /// 近战挥出去的那一刀：沿面朝的方向排一排亮片，转一下就收
     private func slashArc(at point: SIMD3<Float>, facing: V2, color: UIColor, reach: Float, sweep: Float) {
+        guard bursts < 24 else { return }
+        bursts += 1
         let yaw = atan2(Float(facing.x), Float(facing.y))
         let root = SCNNode()
         root.simdPosition = point + SIMD3(0, 0.9, 0)
@@ -1310,6 +1311,7 @@ final class ArenaWorldView: SCNView {
         root.simdScale = SIMD3(repeating: 0.35)
         root.runAction(.sequence([
             .group([.scale(to: 1.05, duration: 0.07), .fadeOut(duration: 0.16)]),
+            .run { [weak self] _ in self?.bursts = max(0, (self?.bursts ?? 1) - 1) },
             .removeFromParentNode()
         ]))
     }
@@ -1600,7 +1602,7 @@ final class ArenaWorldView: SCNView {
         label.isHidden = true
         overlay.addChild(label)
         floaters.append(Floater(label: label, at: point, born: clock))
-        if floaters.count > 40 { floaters.removeFirst().label.removeFromParent() }
+        if floaters.count > 16 { floaters.removeFirst().label.removeFromParent() }
     }
 
     private func syncFloaters(_ view: simd_float4x4) {
