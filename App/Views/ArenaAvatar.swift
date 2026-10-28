@@ -331,7 +331,7 @@ final class ArenaAvatar {
         sparks?.birthRate = hyper ? 40 : 0
         // 走得快：脚下拖一道光（超级充能是紫的）
         let fast = fighter.alive && (fighter.speedBoost > 0 || fighter.hyperTime > 0) && speed > 0.6 && opacity > 0.3
-        streak?.birthRate = fast ? 60 : 0
+        streak?.birthRate = fast ? 24 : 0
         streak?.particleColor = fighter.hyperTime > 0 ? ArenaPalette.hyper : UIColor(white: 1, alpha: 0.9)
         // 被冰霜打中：身上发蓝
         let frozen = fighter.alive && fighter.slowed > 0
