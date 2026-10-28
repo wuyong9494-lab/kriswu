@@ -583,20 +583,20 @@ final class ArenaTag {
     private var ammo: [ArenaBar] = []
     private var shownHealth = -1
     private var shownStars = -1
-    private static let width: CGFloat = 92
-    private static let barHeight: CGFloat = 18
+    private static let width: CGFloat = 52
+    private static let barHeight: CGFloat = 8
 
     /// boss：骷髅王的血条长一倍、粗一点
     init(fighter: Fighter, isMe: Bool, ally: Bool, boss: Bool = false) {
         let width = boss ? 120 : ArenaTag.width, barHeight = boss ? 15 : ArenaTag.barHeight
         let healthColor = isMe ? ArenaPalette.myName : (ally ? ArenaPalette.allyName : ArenaPalette.enemyName)
-        name = ArenaText(size: boss ? 14 : 11, color: healthColor)
-        number = ArenaText(size: boss ? 26 : 20, color: healthColor)
+        name = ArenaText(size: boss ? 14 : 9, color: healthColor)
+        number = ArenaText(size: boss ? 18 : 11, color: healthColor)
         bar = ArenaBar(width: width, height: barHeight, color: isMe ? ArenaPalette.mine : (ally ? ArenaPalette.blue : ArenaPalette.red))
         name.set(fighter.name)
         let barH = Float(barHeight / 55)
-        let numberH = Float(boss ? 26 : 20) / 48
-        let nameH = Float(boss ? 14 : 11) / 48
+        let numberH = Float(boss ? 18 : 11) / 48
+        let nameH = Float(boss ? 14 : 9) / 48
         number.node.simdPosition = SIMD3(0, barH / 2 + numberH / 2 + 0.04, 0.02)
         name.node.simdPosition = SIMD3(0, barH / 2 + numberH + nameH / 2 + 0.08, 0.01)
         starText.node.simdPosition = SIMD3(0, barH / 2 + numberH + nameH + 0.2, 0.01)
