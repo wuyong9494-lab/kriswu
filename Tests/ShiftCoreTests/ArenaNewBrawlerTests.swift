@@ -64,8 +64,10 @@ final class ArenaNewBrawlerTests: XCTestCase {
     /// 书灵：灵光给队友回血（不回自己）、敌人掉血，回血也攒大招；大招给身边的队友加盾
     func testScholarHealsAlliesAndShieldsThem() {
         var game = trio(.scholar)
-        game.adjust(0) { $0.health = 1000 }
-        game.adjust(1) { $0.health = 1000 }
+        // 刚挨过打（不自己慢慢回血）
+        let now = game.time
+        game.adjust(0) { $0.health = 1000; $0.lastHurt = now }
+        game.adjust(1) { $0.health = 1000; $0.lastHurt = now }
         let enemy = game.fighters[2].health
         game.step(dt, inputs: [0: ArenaInput(attack: V2(1, 0))])
         XCTAssertEqual(game.fighters[1].health, 1600)
