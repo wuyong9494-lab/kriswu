@@ -24,12 +24,12 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 从自己后上方看。高 16.5、往后 15.2，大约 47 度：看得到背和武器朝哪边，不是对着头顶
-    private static let cameraOffset = SIMD3<Float>(0, 16.5, 15.2)
+    /// 从自己后上方看。高 12.4、往后 13.8，大约 42 度：看得到背和墙的侧面。横屏左右大约 11 格，人比整张图更大
+    private static let cameraOffset = SIMD3<Float>(0, 12.4, 13.8)
     /// 竖屏时自己这一排左右各看得到几米
-    private static let portraitHalfWidth: Float = 5.8
-    /// 横屏左右各大约 7.6 格。人占画面一角，前面留得下要打的人
-    private static let landscapeHalfWidth: Float = 7.6
+    private static let portraitHalfWidth: Float = 4.4
+    /// 横屏左右各大约 5.6 格。自己在画面偏下，前面看得到要打的人
+    private static let landscapeHalfWidth: Float = 5.6
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -185,12 +185,12 @@ final class ArenaWorldView: SCNView {
             // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 3.2
+            lookAhead = 1.6
         } else {
             // 竖屏：左右宽度按米算，不跟着镜头远近放大（镜头拉远了还用旧的角度，人会缩成一点）
             tanX = Self.portraitHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / max(aspect, 0.3)
-            lookAhead = 3.6
+            lookAhead = 2.0
         }
         cameraNode.camera?.fieldOfView = CGFloat(2 * atan(tanY) * 180 / .pi)
         let lift = Self.cameraOffset.y, back = Self.cameraOffset.z
@@ -433,7 +433,7 @@ final class ArenaWorldView: SCNView {
             let cg = context.cgContext
             for y in 0..<map.height {
                 for x in 0..<map.width {
-                    cg.setFillColor(((x + y) % 2 == 0 ? look.floor : look.floorDark).cgColor)
+                    cg.setFillColor((((x / 2) + (y / 2)) % 2 == 0 ? look.floor : look.floorDark).cgColor)
                     cg.fill(CGRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell, width: cell, height: cell))
                 }
             }
@@ -1091,8 +1091,8 @@ final class ArenaWorldView: SCNView {
                 return box
             }
         default:
-            let thick: CGFloat = p.isSuper ? 0.12 : (owner == .assassin ? 0.045 : 0.06)
-            let long: CGFloat = p.isSuper ? 1.2 : (owner == .assassin ? 0.42 : 0.7)
+            let thick: CGFloat = p.isSuper ? 0.18 : (owner == .assassin ? 0.07 : 0.11)
+            let long: CGFloat = p.isSuper ? 1.45 : (owner == .assassin ? 0.55 : 0.95)
             piece.geometry = shared("bolt-\(owner.rawValue)-\(tintKey)-\(p.isSuper)") {
                 let capsule = SCNCapsule(capRadius: thick, height: long)
                 capsule.firstMaterial = ArenaAvatar.material(core, lit: false)
@@ -1103,7 +1103,7 @@ final class ArenaWorldView: SCNView {
         piece.castsShadow = false
         let root = SCNNode()
         root.addChildNode(piece)
-        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 1.5 : 0.95))
+        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.1 : 1.35))
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
         root.simdPosition = SIMD3(Float(p.pos.x), 0.6, Float(p.pos.y))
         root.addParticleSystem(trail(tint, size: p.isSuper ? 0.4 : 0.24, life: p.isSuper ? 0.3 : 0.16))
@@ -1270,7 +1270,8 @@ final class ArenaWorldView: SCNView {
                 slashArc(at: at, facing: shooter.facing, color: color, reach: 1.35, sweep: 1.15)
             default:
                 let muzzle = SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
-                burst(at: muzzle, color: color, count: 8, speed: 1.6, size: 0.22, life: 0.14)
+                burst(at: muzzle, color: color, count: 14, speed: 2.2, size: 0.32, life: 0.16)
+                burst(at: muzzle, color: .white, count: 6, speed: 1.4, size: 0.16, life: 0.1)
             }
         case .heal(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }

@@ -7,7 +7,7 @@ import simd
 @MainActor
 final class ArenaAvatar {
     /// 角色模型缩多小（模型大约 2.3 高，缩完比一格高一点）
-    static let scale: Float = 0.6
+    static let scale: Float = 0.74
     /// 血条画在离地多高
     static let headHeight: Float = 1.6
 
