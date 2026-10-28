@@ -310,6 +310,8 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
         public var direction: V2
         public var remaining: Double
         public var hit: [Int]
+        /// 只是翻滚（小道具），不撞人
+        public var harmless = false
     }
 
     public struct Leap: Equatable, Codable, Sendable {
@@ -362,8 +364,26 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     /// 一对一：带的几个角色（按顺序上场）、现在上的是第几个
     public var lineup: [Brawler] = []
     public var lineupIndex = 0
+    /// 带的小道具、还能用几次、用完一次还要等几秒
+    public var gadget: Gadget?
+    public var gadgetUses = 0
+    public var gadgetCooldown: Double = 0
+    /// 星徽
+    public var starPower: StarPower?
+    /// 超级充能：解锁了没有、攒了多少（满了是 1）、开着还剩几秒
+    public var hyperUnlocked = false
+    public var hyperCharge: Double = 0
+    public var hyperTime: Double = 0
+    /// 疾行加速、被冰霜减速、隐身还剩几秒
+    public var speedBoost: Double = 0
+    public var slowed: Double = 0
+    public var invisible: Double = 0
 
-    public var maxHealth: Int { isBoss ? ArenaGame.bossHealth(level: level) : brawler.health(level: level) }
+    public var maxHealth: Int {
+        if isBoss { return ArenaGame.bossHealth(level: level) }
+        let base = brawler.health(level: level)
+        return starPower == .tough ? Int((Double(base) * 1.12).rounded()) : base
+    }
     public var busy: Bool { dash != nil || leap != nil }
 }
 
@@ -394,16 +414,18 @@ public struct Projectile: Equatable, Codable, Sendable, Identifiable {
     public var lob: Lob?
 }
 
-/// 摇杆的输入：走的方向（长度 0–1）、这一帧开火、放大招（相对自己的偏移，单位格：方向 + 想打多远）
+/// 摇杆的输入：走的方向（长度 0–1）、这一帧开火、放大招（相对自己的偏移，单位格：方向 + 想打多远）、用小道具
 public struct ArenaInput: Equatable, Codable, Sendable {
     public var move: V2
     public var attack: V2?
     public var special: V2?
+    public var gadget: Bool
 
-    public init(move: V2 = .zero, attack: V2? = nil, special: V2? = nil) {
+    public init(move: V2 = .zero, attack: V2? = nil, special: V2? = nil, gadget: Bool = false) {
         self.move = move
         self.attack = attack
         self.special = special
+        self.gadget = gadget
     }
 }
 
@@ -513,6 +535,10 @@ public struct ArenaGame: Sendable {
         case reset
         /// 宝箱挨打（第几个宝箱、多少）
         case chestHit(chest: Int, amount: Int)
+        /// 用了小道具
+        case gadget(fighter: Int)
+        /// 开了超级充能
+        case hyper(fighter: Int)
     }
 
     /// 亡灵之地：圈里的队友回血、敌人掉血，每 0.5 秒结一次
@@ -591,14 +617,18 @@ public struct ArenaGame: Sendable {
         public var level: Int
         /// 一对一带的角色（第一个是 brawler；不够 3 个开局时补上）
         public var lineup: [Brawler]
+        /// 带的小道具、星徽、超级充能
+        public var loadout: ArenaLoadout
 
-        public init(name: String, brawler: Brawler, isBot: Bool, team: Int, level: Int = 1, lineup: [Brawler] = []) {
+        public init(name: String, brawler: Brawler, isBot: Bool, team: Int, level: Int = 1, lineup: [Brawler] = [],
+                    loadout: ArenaLoadout = ArenaLoadout()) {
             self.name = name
             self.brawler = brawler
             self.isBot = isBot
             self.team = team
             self.level = level
             self.lineup = lineup
+            self.loadout = loadout
         }
 
         /// 老版本存的、发来的没有等级（按 1 级）、没有一对一的阵容
@@ -610,6 +640,7 @@ public struct ArenaGame: Sendable {
             team = try container.decode(Int.self, forKey: .team)
             level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 1
             lineup = try container.decodeIfPresent([Brawler].self, forKey: .lineup) ?? []
+            loadout = try container.decodeIfPresent(ArenaLoadout.self, forKey: .loadout) ?? ArenaLoadout()
         }
     }
 
@@ -704,6 +735,7 @@ public struct ArenaGame: Sendable {
                                   pos: spawn, facing: (map.center - spawn).normalized, health: entrant.brawler.health(level: level))
             if mode == .duel { fighter.lineup = Self.lineup(entrant, seed: seed &+ UInt64(index + 1)) }
             if mode == .bounty { fighter.stars = Self.startingBounty }
+            Self.equip(&fighter, entrant.loadout)
             list.append(fighter)
         }
         fighters = list
@@ -743,8 +775,12 @@ public struct ArenaGame: Sendable {
     /// 这个人现在看不看得见：在草丛里的，敌人走近（2.5 格内）或者他刚开过火才看得见
     public func isVisible(_ fighter: Fighter, to team: Int) -> Bool {
         guard fighter.alive else { return false }
-        if fighter.isBoss { return true }
-        if fighter.team == team || !map.inBush(fighter.pos) || time - fighter.lastAttack < 1 { return true }
+        if fighter.isBoss || fighter.team == team || time - fighter.lastAttack < 1 { return true }
+        // 隐身：贴得很近才看得见；草丛里：走近才看得见
+        if fighter.invisible > 0 {
+            return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 1.5 }
+        }
+        if !map.inBush(fighter.pos) { return true }
         return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 2.5 }
     }
 
@@ -791,8 +827,10 @@ public struct ArenaGame: Sendable {
             return
         }
         fighters[i].cooldown -= dt
-        fighters[i].ammo = min(3, fighters[i].ammo + dt / fighters[i].brawler.reload)
+        fighters[i].ammo = min(3, fighters[i].ammo + dt / reloadTime(fighters[i]))
         if fighters[i].shield > 0 { fighters[i].shield = max(0, fighters[i].shield - dt) }
+        tickStatus(i, dt)
+        if input.gadget { useGadget(i, move: input.move) }
         if fighters[i].leap != nil {
             updateLeap(i, dt)
             return
@@ -802,9 +840,10 @@ public struct ArenaGame: Sendable {
             return
         }
         let move = input.move.clamped(to: 1)
-        fighters[i].moving = move * fighters[i].brawler.speed
+        let speed = moveSpeed(fighters[i])
+        fighters[i].moving = move * speed
         if move.length > 0.05 {
-            walk(i, by: move * (fighters[i].brawler.speed * dt))
+            walk(i, by: move * (speed * dt))
             if input.attack == nil && input.special == nil { fighters[i].facing = move.normalized }
         }
         if var burst = fighters[i].burst {
@@ -873,13 +912,19 @@ public struct ArenaGame: Sendable {
             spawn = homeSpot(i)
         }
         if mode == .duel {
-            // 一对一：换下一个角色上
+            // 一对一：换下一个角色上（小道具、星徽按这个角色的等级带）
             fighters[i].lineupIndex = min(fighters[i].lineupIndex + 1, max(fighters[i].lineup.count - 1, 0))
             if fighters[i].lineup.indices.contains(fighters[i].lineupIndex) {
                 fighters[i].brawler = fighters[i].lineup[fighters[i].lineupIndex]
             }
             fighters[i].superCharge = 0
+            fighters[i].hyperCharge = 0
+            Self.equip(&fighters[i], ArenaLoadout.basic(fighters[i].brawler, level: fighters[i].level))
         }
+        fighters[i].speedBoost = 0
+        fighters[i].slowed = 0
+        fighters[i].invisible = 0
+        fighters[i].hyperTime = 0
         fighters[i].pos = spawn
         fighters[i].facing = (map.center - spawn).normalized
         fighters[i].health = fighters[i].maxHealth
@@ -905,14 +950,14 @@ public struct ArenaGame: Sendable {
         case .knight:
             spread(i, direction, count: 5, angle: 0.52, speed: 13, range: 4.5, damage: 360, radius: 0.2)
         case .ranger:
-            shoot(i, direction, speed: 17, range: 9, damage: 1300, radius: 0.22)
+            shoot(i, direction, speed: 17, range: fighter.starPower == .farsight ? 10.5 : 9, damage: 1300, radius: 0.22)
         case .barbarian:
             spread(i, direction, count: 3, angle: 0.9, speed: 14, range: 2.6, damage: 700, radius: 0.3)
         case .mage:
             lob(i, to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.attackRange),
-                duration: 0.7, blast: 1.2, damage: 1200, isSuper: false)
+                duration: 0.7, blast: fighter.starPower == .bigFire ? 1.5 : 1.2, damage: 1200, isSuper: false)
         case .assassin:
-            fighters[i].burst = Fighter.Burst(left: 4, timer: 0, direction: direction)
+            fighters[i].burst = Fighter.Burst(left: fighter.starPower == .fiveKnives ? 5 : 4, timer: 0, direction: direction)
         case .guardian:
             shoot(i, direction, speed: 12, range: 3.2, damage: 1100, radius: 0.5, pierce: true)
         case .necromancer:
@@ -941,41 +986,50 @@ public struct ArenaGame: Sendable {
         fighters[i].lastAttack = time
         fighters[i].facing = direction
         events.append(.special(fighter: i))
+        // 超级充能满了：这一下是加强版，还开 5 秒加速、加伤、减伤
+        let hyper = startHyper(i)
         switch fighter.brawler {
         case .knight:
-            fighters[i].dash = Fighter.Dash(direction: direction, remaining: fighter.brawler.superRange, hit: [])
+            fighters[i].dash = Fighter.Dash(direction: direction, remaining: hyper ? 8 : fighter.brawler.superRange, hit: [])
         case .ranger:
-            shoot(i, direction, speed: 18, range: fighter.brawler.superRange, damage: 2400, radius: 0.35, pierce: true, isSuper: true)
+            shoot(i, direction, speed: 18, range: fighter.brawler.superRange + (hyper ? 2 : 0), damage: hyper ? 3100 : 2400,
+                  radius: hyper ? 0.6 : 0.35, pierce: true, isSuper: true)
         case .barbarian:
             let target = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
             fighters[i].leap = Fighter.Leap(from: fighter.pos, to: target, elapsed: 0)
         case .mage:
             lob(i, to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange),
-                duration: 0.9, blast: 2.2, damage: 2600, isSuper: true)
+                duration: 0.9, blast: hyper ? 3 : 2.2, damage: 2600, isSuper: true)
         case .assassin:
-            spread(i, direction, count: 12, angle: 1.05, speed: 14, range: 7, damage: 500, radius: 0.2, isSuper: true)
+            spread(i, direction, count: hyper ? 18 : 12, angle: hyper ? 1.4 : 1.05, speed: 14, range: 7, damage: 500, radius: 0.2, isSuper: true)
         case .guardian:
-            fighters[i].shield = 4
-            let healed = min(power(i, 1200), fighters[i].maxHealth - fighters[i].health)
+            fighters[i].shield = fighter.starPower == .longShield ? 6 : 4
+            let healed = min(power(i, hyper ? 2400 : 1200), fighters[i].maxHealth - fighters[i].health)
             if healed > 0 {
                 fighters[i].health += healed
                 events.append(.heal(target: i, amount: healed))
             }
         case .necromancer:
             let center = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.superRange), radius: 0.2)
-            zones.append(Zone(center: center, radius: 2.2, team: fighter.team, owner: i, left: Zone.duration,
-                              heal: power(i, 700), damage: power(i, 350)))
+            zones.append(Zone(center: center, radius: hyper ? 3 : 2.2, team: fighter.team, owner: i,
+                              left: fighter.starPower == .feast ? 7 : Zone.duration, heal: power(i, 700), damage: power(i, 350)))
         case .shade:
             // 一下闪过去（能穿墙），落地炸一下
             let target = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
             fighters[i].pos = target
             fighters[i].moving = .zero
-            blast(at: target, radius: 1.6, damage: power(i, 1400), by: i, team: fighter.team, charges: false)
+            blast(at: target, radius: hyper ? 2.4 : 1.6, damage: power(i, fighter.starPower == .ambush ? 1960 : 1400), by: i,
+                  team: fighter.team, charges: false)
         case .summoner:
-            // 同时只有一座：再召唤就换掉旧的
+            // 同时只有一座（星徽「双塔」两座）：再召唤就换掉最早的
             let spot = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.2), fighter.brawler.superRange))
-            let health = power(i, 2800)
-            turrets.removeAll { $0.owner == i }
+            let health = Int(Double(power(i, 2800)) * (fighter.starPower == .sturdy ? 1.5 : 1) * (hyper ? 2 : 1))
+            let limit = fighter.starPower == .twin ? 2 : 1
+            let mine = turrets.filter { $0.owner == i }.sorted { $0.id < $1.id }
+            if mine.count >= limit {
+                let gone = Set(mine.prefix(mine.count - limit + 1).map(\.id))
+                turrets.removeAll { gone.contains($0.id) }
+            }
             turrets.append(Turret(id: nextTurret, owner: i, team: fighter.team, pos: spot, facing: direction,
                                   health: health, maxHealth: health, left: Turret.duration))
             nextTurret += 1
@@ -993,7 +1047,8 @@ public struct ArenaGame: Sendable {
 
     /// 按这个人的等级加成后的伤害
     func power(_ i: Int, _ damage: Int) -> Int {
-        Int((Double(damage) * Brawler.boost(fighters[i].level)).rounded())
+        let hyper = fighters[i].hyperTime > 0 ? 1.1 : 1
+        return Int((Double(damage) * Brawler.boost(fighters[i].level) * hyper).rounded())
     }
 
     mutating func spread(_ i: Int, _ direction: V2, count: Int, angle: Double, speed: Double, range: Double,
@@ -1023,10 +1078,19 @@ public struct ArenaGame: Sendable {
         fighters[i].pos = next
         fighters[i].moving = dash.direction * 12
         dash.remaining -= step
-        for j in fighters.indices where fighters[j].alive && fighters[j].team != fighters[i].team && !dash.hit.contains(j)
+        for j in fighters.indices where !dash.harmless && fighters[j].alive && fighters[j].team != fighters[i].team && !dash.hit.contains(j)
             && fighters[j].pos.distance(to: next) < Self.hitRadius(fighters[j]) + Self.hitRadius(fighters[i]) + 0.08 {
             dash.hit.append(j)
-            hurt(j, power(i, fighters[i].isBoss ? 2000 : 1600), by: i, charges: false)
+            let damage = fighters[i].isBoss ? 2000 : (fighters[i].hyperTime > 0 ? 2400 : 1600)
+            hurt(j, power(i, damage), by: i, charges: false)
+            // 星徽「骑士精神」：撞到一个回一口血
+            if fighters[i].starPower == .chivalry, fighters[i].alive {
+                let healed = min(power(i, 800), fighters[i].maxHealth - fighters[i].health)
+                if healed > 0 {
+                    fighters[i].health += healed
+                    events.append(.heal(target: i, amount: healed))
+                }
+            }
         }
         fighters[i].dash = dash.remaining > 0.01 ? dash : nil
     }
@@ -1038,7 +1102,15 @@ public struct ArenaGame: Sendable {
         fighters[i].pos = V2.lerp(leap.from, leap.to, t)
         if t >= 1 {
             fighters[i].leap = nil
-            blast(at: leap.to, radius: 1.6, damage: power(i, 1800), by: i, team: fighters[i].team, charges: false)
+            let radius = fighters[i].hyperTime > 0 ? 2.4 : 1.6
+            // 星徽「震荡」：砸中的人走得慢
+            if fighters[i].starPower == .quake {
+                for j in fighters.indices where fighters[j].alive && fighters[j].team != fighters[i].team
+                    && fighters[j].pos.distance(to: leap.to) < radius + Self.hitRadius(fighters[j]) {
+                    fighters[j].slowed = max(fighters[j].slowed, 2)
+                }
+            }
+            blast(at: leap.to, radius: radius, damage: power(i, 1800), by: i, team: fighters[i].team, charges: false)
         } else {
             fighters[i].leap = leap
         }
@@ -1166,8 +1238,9 @@ public struct ArenaGame: Sendable {
 
     mutating func hurt(_ j: Int, _ raw: Int, by attacker: Int?, charges: Bool) {
         guard fighters[j].alive, raw > 0 else { return }
-        // 骨盾：少受六成
-        let amount = fighters[j].shield > 0 ? max(1, Int((Double(raw) * 0.4).rounded())) : raw
+        // 骨盾、铁壁少受六成，超级充能少受一成半
+        let factor = damageTaken(fighters[j])
+        let amount = factor < 1 ? max(1, Int((Double(raw) * factor).rounded())) : raw
         let dealt = min(amount, fighters[j].health)
         fighters[j].health -= amount
         fighters[j].lastHurt = time
@@ -1175,9 +1248,20 @@ public struct ArenaGame: Sendable {
         if let attacker, fighters.indices.contains(attacker) {
             fighters[attacker].damageDealt += dealt
             if charges {
-                // 等级高的伤害大，攒大招要的伤害也跟着大：打中几下攒满不变
-                let cost = fighters[attacker].brawler.superCost * Brawler.boost(fighters[attacker].level)
-                fighters[attacker].superCharge = min(1, fighters[attacker].superCharge + Double(amount) / cost)
+                fighters[attacker].superCharge = min(1, fighters[attacker].superCharge + Double(amount) / superCost(fighters[attacker]))
+                chargeHyper(attacker, amount)
+            }
+            // 星徽「嗜血」：打中回伤害的 15%
+            if fighters[attacker].starPower == .bloodlust, fighters[attacker].alive, attacker != j {
+                let healed = min(Int((Double(dealt) * 0.15).rounded()), fighters[attacker].maxHealth - fighters[attacker].health)
+                if healed > 0 {
+                    fighters[attacker].health += healed
+                    events.append(.heal(target: attacker, amount: healed))
+                }
+            }
+            // 星徽「反震」：举着骨盾时打你的人掉血
+            if charges, attacker != j, fighters[j].starPower == .thorns, fighters[j].shield > 0 {
+                hurt(attacker, power(j, 250), by: j, charges: false)
             }
         }
         if fighters[j].health <= 0 { knockOut(j, by: attacker) }
@@ -1193,9 +1277,21 @@ public struct ArenaGame: Sendable {
         fighters[j].burst = nil
         fighters[j].shield = 0
         fighters[j].moving = .zero
+        fighters[j].speedBoost = 0
+        fighters[j].slowed = 0
+        fighters[j].invisible = 0
+        fighters[j].hyperTime = 0
         if let attacker, attacker != j {
             fighters[attacker].kills += 1
             if mode.isTeams { teamKills[fighters[attacker].team] += 1 }
+            // 星徽「灵魂收割」：打倒一个人回血
+            if fighters[attacker].starPower == .harvest, fighters[attacker].alive {
+                let healed = min(power(attacker, 1500), fighters[attacker].maxHealth - fighters[attacker].health)
+                if healed > 0 {
+                    fighters[attacker].health += healed
+                    events.append(.heal(target: attacker, amount: healed))
+                }
+            }
             // 悬赏：按他头上的星星给队里加分，自己的悬赏涨一颗
             if mode == .bounty, fighters[attacker].team != victim.team {
                 score[fighters[attacker].team] += victim.stars

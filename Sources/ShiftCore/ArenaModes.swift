@@ -36,6 +36,11 @@ extension ArenaGame {
             fighters[i].brawler = .guardian
             fighters[i].name = "骷髅王"
             fighters[i].level = min(max(level, 1), ArenaProgress.maxLevel)
+            // 骷髅王不带小道具、星徽、超级充能
+            fighters[i].gadget = nil
+            fighters[i].gadgetUses = 0
+            fighters[i].starPower = nil
+            fighters[i].hyperUnlocked = false
             fighters[i].health = fighters[i].maxHealth
         }
     }

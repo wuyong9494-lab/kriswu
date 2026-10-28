@@ -10,7 +10,7 @@ final class ArenaSound {
     nonisolated static let muteKey = "arena.mute"
 
     enum Effect: String, CaseIterable {
-        case shot, slash, magic, boom, hit, knockout = "ko", power = "super", pickup, heal, respawn, blink, win, lose
+        case shot, slash, magic, boom, hit, knockout = "ko", power = "super", pickup, heal, respawn, blink, win, lose, gadget, hyper
 
         var file: String { "arena_" + rawValue }
         /// 同时能响几个（电脑一起开火时叠得起来）

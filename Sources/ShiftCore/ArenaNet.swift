@@ -29,6 +29,14 @@ public struct ArenaSnapshot: Equatable, Sendable {
         /// 现在用的角色、一对一上到第几个（老版本的包里没有：nil 不改）
         public var brawler: Brawler?
         public var lineupIndex = 0
+        /// 小道具还能用几次、还要等几秒；超级充能攒了多少、开着还剩几秒；加速、减速、隐身还剩几秒（老版本的包里没有）
+        public var gadgetUses = 0
+        public var gadgetCooldown = 0.0
+        public var hyperCharge = 0.0
+        public var hyperTime = 0.0
+        public var speedBoost = 0.0
+        public var slowed = 0.0
+        public var invisible = 0.0
     }
 
     public var time: Double
@@ -64,7 +72,9 @@ extension ArenaGame {
                                            superCharge: f.superCharge, alive: f.alive, respawnIn: f.respawnIn, stars: f.stars,
                                            kills: f.kills, deaths: f.deaths, damageDealt: f.damageDealt, place: f.place,
                                            attackedRecently: time - f.lastAttack < 1, leap: f.leap, dashing: f.dash != nil,
-                                           ack: acks[f.id] ?? 0, shield: f.shield, brawler: f.brawler, lineupIndex: f.lineupIndex)
+                                           ack: acks[f.id] ?? 0, shield: f.shield, brawler: f.brawler, lineupIndex: f.lineupIndex,
+                                           gadgetUses: f.gadgetUses, gadgetCooldown: f.gadgetCooldown, hyperCharge: f.hyperCharge,
+                                           hyperTime: f.hyperTime, speedBoost: f.speedBoost, slowed: f.slowed, invisible: f.invisible)
             },
             projectiles: projectiles, stars: stars, teamKills: teamKills, zoneProgress: zoneProgress,
             countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets,
@@ -94,6 +104,13 @@ extension ArenaGame {
             fighters[i].shield = state.shield
             if let brawler = state.brawler, !fighters[i].isBoss { fighters[i].brawler = brawler }
             fighters[i].lineupIndex = state.lineupIndex
+            fighters[i].gadgetUses = state.gadgetUses
+            fighters[i].gadgetCooldown = state.gadgetCooldown
+            fighters[i].hyperCharge = state.hyperCharge
+            fighters[i].hyperTime = state.hyperTime
+            fighters[i].speedBoost = state.speedBoost
+            fighters[i].slowed = state.slowed
+            fighters[i].invisible = state.invisible
         }
         zones = snapshot.zones
         turrets = snapshot.turrets
@@ -175,9 +192,19 @@ extension ArenaGame {
 
 // MARK: - 打包
 
+extension ArenaGame.Event {
+    /// 第 4 段才有的事件（小道具、超级充能）
+    var isLate: Bool {
+        switch self {
+        case .gadget, .hyper: return true
+        default: return false
+        }
+    }
+}
+
 extension ArenaSnapshot {
-    /// 现在的包有几段：1 到事件为止（最早的版本），2 加上亡灵之地、骨塔、骨盾，3 加上后加的玩法
-    public static let version = 3
+    /// 现在的包有几段：1 到事件为止（最早的版本），2 加上亡灵之地、骨塔、骨盾，3 加上后加的玩法，4 加上小道具、超级充能
+    public static let version = 4
 
     /// 压成字节：位置精确到 1/100 格，血量整数，其余按需要的精度。version：只写到第几段（测试老版本的包用）
     public func encoded(version: Int = ArenaSnapshot.version) -> Data {
@@ -253,8 +280,10 @@ extension ArenaSnapshot {
         w.u8(stars.count)
         stars.forEach { w.v2($0) }
         let kept = Array(events.prefix(60))
-        w.u8(kept.count)
-        for event in kept {
+        // 小道具、超级充能这些后加的事件放到最后一段（老版本读到不认识的事件会整包丢掉）
+        let early = kept.filter { !$0.isLate }
+        w.u8(early.count)
+        for event in early {
             switch event {
             case .hit(let target, let amount): w.u8(1); w.u8(target); w.u16(min(amount, 65535))
             case .knockout(let target, let by): w.u8(2); w.u8(target); w.u8(by ?? 255)
@@ -268,6 +297,7 @@ extension ArenaSnapshot {
             case .round(let winner): w.u8(10); w.u8(winner ?? 255)
             case .reset: w.u8(11)
             case .chestHit(let chest, let amount): w.u8(12); w.u8(chest); w.u16(min(amount, 65535))
+            case .gadget, .hyper: break
             }
         }
         guard version >= 2 else { return w.data }
@@ -333,6 +363,27 @@ extension ArenaSnapshot {
         for f in fighters {
             w.u8(f.brawler?.rawValue ?? 255)
             w.u8(f.lineupIndex)
+        }
+        guard version >= 4 else { return w.data }
+        // 再后加的：小道具、超级充能的事件，每个人的小道具、超级充能、加速减速隐身
+        let late = kept.filter(\.isLate)
+        w.u8(late.count)
+        for event in late {
+            switch event {
+            case .gadget(let fighter): w.u8(13); w.u8(fighter)
+            case .hyper(let fighter): w.u8(14); w.u8(fighter)
+            default: break
+            }
+        }
+        w.u8(fighters.count)
+        for f in fighters {
+            w.u8(f.gadgetUses)
+            w.u8(Int((max(f.gadgetCooldown, 0) * 20).rounded()))
+            w.u8(Int((min(max(f.hyperCharge, 0), 1) * 250).rounded()))
+            w.u8(Int((max(f.hyperTime, 0) * 20).rounded()))
+            w.u8(Int((max(f.speedBoost, 0) * 20).rounded()))
+            w.u8(Int((max(f.slowed, 0) * 20).rounded()))
+            w.u8(Int((max(f.invisible, 0) * 20).rounded()))
         }
         return w.data
     }
@@ -475,6 +526,30 @@ extension ArenaSnapshot {
                 guard fighters.indices.contains(k) else { continue }
                 fighters[k].brawler = Brawler(rawValue: brawler)
                 fighters[k].lineupIndex = index
+            }
+        }
+        if r.remaining > 0 {
+            guard let lateCount = r.u8() else { return nil }
+            for _ in 0..<lateCount {
+                guard let kind = r.u8(), let f = r.u8() else { return nil }
+                switch kind {
+                case 13: events.append(.gadget(fighter: f))
+                case 14: events.append(.hyper(fighter: f))
+                default: break
+                }
+            }
+            guard let fighterCount = r.u8() else { return nil }
+            for k in 0..<fighterCount {
+                guard let uses = r.u8(), let cooldown = r.u8(), let charge = r.u8(), let hyper = r.u8(), let boost = r.u8(),
+                      let slowed = r.u8(), let invisible = r.u8() else { return nil }
+                guard fighters.indices.contains(k) else { continue }
+                fighters[k].gadgetUses = uses
+                fighters[k].gadgetCooldown = Double(cooldown) / 20
+                fighters[k].hyperCharge = Double(charge) / 250
+                fighters[k].hyperTime = Double(hyper) / 20
+                fighters[k].speedBoost = Double(boost) / 20
+                fighters[k].slowed = Double(slowed) / 20
+                fighters[k].invisible = Double(invisible) / 20
             }
         }
         self.init(time: time, fighters: fighters, projectiles: projectiles, stars: stars, teamKills: kills, zoneProgress: zone,

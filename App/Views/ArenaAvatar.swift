@@ -24,6 +24,15 @@ final class ArenaAvatar {
     private let glow = SCNNode()
     /// 骨盾：罩在身上的一层金光
     private let bubble = SCNNode()
+    /// 超级充能开着：脚下一圈紫光、身上往上冒紫色光点
+    private let aura = SCNNode()
+    private var sparks: SCNParticleSystem?
+    /// 走得快（疾行、超级充能）：脚下拖一道光
+    private var streak: SCNParticleSystem?
+    /// 被冰霜减速：身上发蓝
+    private var frosted = false
+    /// 大招和超级充能都满了：脚下的光圈变紫
+    private var hyperReady = false
     /// 材质本来的自发光（骷髅的眼睛），挨打闪白后改回去
     private var glows: [Any?] = []
     /// 身上、手里武器的描边（半透明、淡出时藏起来）
@@ -146,6 +155,34 @@ final class ArenaAvatar {
         bubble.renderingOrder = 12
         bubble.isHidden = true
         node.addChildNode(bubble)
+        let band = SCNTube(innerRadius: 0.56, outerRadius: 0.8, height: 0.02)
+        band.radialSegmentCount = 40
+        band.firstMaterial = ArenaAvatar.decal(ArenaPalette.hyper.withAlphaComponent(0.85))
+        aura.geometry = band
+        aura.simdPosition = SIMD3(0, 0.05, 0)
+        aura.castsShadow = false
+        aura.renderingOrder = 6
+        aura.isHidden = true
+        node.addChildNode(aura)
+        let rising = ArenaAvatar.particles(color: ArenaPalette.hyper, size: 0.2 * CGFloat(size), life: 0.7)
+        rising.emitterShape = SCNCylinder(radius: CGFloat(0.42 * size), height: CGFloat(1.1 * size))
+        rising.birthLocation = .surface
+        rising.emittingDirection = SCNVector3(0, 1, 0)
+        rising.spreadingAngle = 12
+        rising.particleVelocity = 1.4
+        let riser = SCNNode()
+        riser.simdPosition = SIMD3(0, 0.6 * size, 0)
+        riser.addParticleSystem(rising)
+        node.addChildNode(riser)
+        sparks = rising
+        let trail = ArenaAvatar.particles(color: UIColor(white: 1, alpha: 0.9), size: 0.34 * CGFloat(size), life: 0.32)
+        trail.emitterShape = SCNSphere(radius: CGFloat(0.25 * size))
+        trail.particleVelocity = 0.15
+        let feet = SCNNode()
+        feet.simdPosition = SIMD3(0, 0.25, 0)
+        feet.addParticleSystem(trail)
+        node.addChildNode(feet)
+        streak = trail
         node.opacity = 0
     }
 
@@ -219,6 +256,30 @@ final class ArenaAvatar {
         if !glow.isHidden {
             let pulse = (1 + 0.07 * Float(sin(clock * 6))) * size
             glow.simdScale = SIMD3(pulse, 1, pulse)
+        }
+        // 大招满了、超级充能也满了：光圈变紫（这一下放出去是加强版）
+        let ready = fighter.hyperCharge >= 1
+        if ready != hyperReady {
+            hyperReady = ready
+            glow.geometry?.firstMaterial?.diffuse.contents = (ready ? ArenaPalette.hyper : ArenaPalette.gold).withAlphaComponent(0.9)
+        }
+        // 超级充能开着：紫光一圈一圈往外跳、身上冒光点
+        let hyper = fighter.alive && fighter.hyperTime > 0 && opacity > 0.05
+        aura.isHidden = !hyper
+        if hyper {
+            let pulse = (1.05 + 0.12 * Float(sin(clock * 10))) * size
+            aura.simdScale = SIMD3(pulse, 1, pulse)
+        }
+        sparks?.birthRate = hyper ? 40 : 0
+        // 走得快：脚下拖一道光（超级充能是紫的）
+        let fast = fighter.alive && (fighter.speedBoost > 0 || fighter.hyperTime > 0) && speed > 0.6 && opacity > 0.3
+        streak?.birthRate = fast ? 60 : 0
+        streak?.particleColor = fighter.hyperTime > 0 ? ArenaPalette.hyper : UIColor(white: 1, alpha: 0.9)
+        // 被冰霜打中：身上发蓝
+        let frozen = fighter.alive && fighter.slowed > 0
+        if frozen != frosted, let instance {
+            frosted = frozen
+            instance.materials.forEach { $0.multiply.contents = frozen ? ArenaPalette.frost : UIColor.white }
         }
 
         if flashing && clock >= flashUntil {
@@ -336,6 +397,26 @@ final class ArenaAvatar {
         material.lightingModel = lit ? .lambert : .constant
         material.diffuse.contents = color
         return material
+    }
+
+    /// 一直冒的光点（先不冒：birthRate 0，要的时候再开）
+    static func particles(color: UIColor, size: CGFloat, life: CGFloat) -> SCNParticleSystem {
+        let system = SCNParticleSystem()
+        system.loops = true
+        system.birthRate = 0
+        system.particleLifeSpan = life
+        system.particleLifeSpanVariation = life * 0.3
+        system.particleSize = size
+        system.particleSizeVariation = size * 0.3
+        system.particleColor = color
+        system.particleImage = ArenaArt.dot
+        system.blendMode = .additive
+        system.isAffectedByGravity = false
+        let fade = CAKeyframeAnimation()
+        fade.values = [0, 1, 0]
+        fade.keyTimes = [0, 0.2, 1]
+        system.propertyControllers = [.opacity: SCNParticlePropertyController(animation: fade)]
+        return system
     }
 
     /// 贴在地上的圈、范围：不受光、不挡后面的东西

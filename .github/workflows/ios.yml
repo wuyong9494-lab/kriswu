@@ -310,7 +310,8 @@ jobs:
             if [ $mode = light ]; then SCREENS=$LIGHT; else SCREENS=$DARK; fi
             for s in $SCREENS; do
               xcrun simctl launch "$DEVICE" $ID -demo -screen $s > /dev/null
-              sleep 4
+              # 乱斗对局要转横屏、第一次读 3D 模型和编译着色器，多等一会儿
+              case $s in arena?*) sleep 9 ;; *) sleep 4 ;; esac
               xcrun simctl io "$DEVICE" screenshot "shots/$mode-$s.png" > /dev/null 2>&1
               xcrun simctl terminate "$DEVICE" $ID || true
               sips -s format jpeg -s formatOptions 70 -Z 1100 "shots/$mode-$s.png" --out "shots/$mode-$s.jpg" > /dev/null

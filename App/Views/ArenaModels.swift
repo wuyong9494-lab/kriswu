@@ -27,6 +27,10 @@ enum ArenaPalette {
     static let myName = UIColor(red: 0.62, green: 1.0, blue: 0.38, alpha: 1)
     static let allyName = UIColor(red: 0.50, green: 0.80, blue: 1.0, alpha: 1)
     static let enemyName = UIColor(red: 1.0, green: 0.47, blue: 0.43, alpha: 1)
+    /// 小道具按钮、用小道具的光（绿）；超级充能（紫）；冰霜减速（冰蓝）
+    static let gadget = UIColor(red: 0.30, green: 0.88, blue: 0.36, alpha: 1)
+    static let hyper = UIColor(red: 0.78, green: 0.36, blue: 1.0, alpha: 1)
+    static let frost = UIColor(red: 0.62, green: 0.88, blue: 1.0, alpha: 1)
 }
 
 /// 每个角色的样子：用哪个模型、拿什么、怎么动

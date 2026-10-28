@@ -319,7 +319,8 @@ final class ArenaTests: XCTestCase {
                 }
             }
             XCTAssertNotNil(game.result, "\(mode)")
-            XCTAssertGreaterThan(shots, 20, "\(mode) 电脑会开火")
+            // 一对一只有两个人、双人大乱斗散得开，开火少一些
+            XCTAssertGreaterThan(shots, 2 * game.fighters.count, "\(mode) 电脑会开火")
             XCTAssertGreaterThan(game.fighters.map(\.damageDealt).reduce(0, +), 0, "\(mode) 打中过人")
         }
     }

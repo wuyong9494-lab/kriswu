@@ -612,7 +612,8 @@ final class ArenaWorldView: SCNView {
             }
             let avatar = avatars[fighter.id]
             let visible = game.isVisible(fighter, to: myTeam)
-            let hidden = fighter.team == myTeam && game.map.inBush(fighter.pos)
+            // 自己这边躲在草丛里的、隐身的（对面贴近了才看得见）：半透明
+            let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock)
             let head = avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight * avatar.size, 0)
             tags[fighter.id].update(fighter, at: project(head, view), opacity: avatar.opacity)
@@ -1049,6 +1050,39 @@ final class ArenaWorldView: SCNView {
             chestViews[chest].flashUntil = clock + 0.08
             ArenaSound.shared.play(.hit, volume: loudness(center) * 0.6)
             floater("\(amount)", at: SIMD3(Float(center.x) + Float.random(in: -0.4...0.4), 2.0, Float(center.y)), color: .white)
+        case .gadget(let fighter):
+            guard avatars.indices.contains(fighter) else { return }
+            let user = game.fighters[fighter]
+            let at = avatars[fighter].node.simdPosition
+            // 隐身的人用小道具，对面看不见就不出光、不出声
+            guard game.isVisible(user, to: myTeam) || user.team == myTeam else { return }
+            ArenaSound.shared.play(.gadget, volume: loudness(user.pos))
+            ring(at: at, color: ArenaPalette.gadget, to: 1.6)
+            burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.gadget, count: 18, speed: 1.8, size: 0.24, life: 0.4)
+            switch user.gadget {
+            case .frost?:
+                ring(at: at, color: ArenaPalette.frost, to: 6.5)
+                burst(at: at + SIMD3(0, 0.4, 0), color: ArenaPalette.frost, count: 60, speed: 5, size: 0.3, life: 0.5)
+            case .potion?:
+                burst(at: at + SIMD3(0, 0.6, 0), color: UIColor(red: 1, green: 0.4, blue: 0.6, alpha: 1), count: 24, speed: 1.2, size: 0.3, life: 0.6)
+            case .vanish?:
+                burst(at: at + SIMD3(0, 0.7, 0), color: UIColor(white: 0.85, alpha: 1), count: 40, speed: 1.4, size: 0.5, life: 0.6)
+            case .ward?, .reload?:
+                ring(at: at, color: ArenaPalette.gold, to: 2.2)
+            default:
+                break
+            }
+            if fighter == controller.me { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+        case .hyper(let fighter):
+            guard avatars.indices.contains(fighter) else { return }
+            let user = game.fighters[fighter]
+            let at = avatars[fighter].node.simdPosition
+            ArenaSound.shared.play(.hyper, volume: fighter == controller.me ? 1 : loudness(user.pos))
+            ring(at: at, color: ArenaPalette.hyper, to: 3.2)
+            ring(at: at, color: .white, to: 2.2)
+            burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.hyper, count: 70, speed: 4, size: 0.4, life: 0.6)
+            burst(at: at + SIMD3(0, 0.8, 0), color: .white, count: 24, speed: 2.5, size: 0.25, life: 0.4)
+            if fighter == controller.me { UINotificationFeedbackGenerator().notificationOccurred(.success) }
         case .pickup(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             ArenaSound.shared.play(.pickup, volume: loudness(game.fighters[fighter].pos))
@@ -1082,7 +1116,7 @@ final class ArenaWorldView: SCNView {
         system.particleSize = size
         system.particleSizeVariation = size * 0.4
         system.particleColor = color
-        system.particleImage = Self.dot
+        system.particleImage = ArenaArt.dot
         system.blendMode = .additive
         system.isAffectedByGravity = false
         system.dampingFactor = 2
@@ -1114,7 +1148,7 @@ final class ArenaWorldView: SCNView {
         system.spreadingAngle = 180
         system.particleSize = size
         system.particleColor = color
-        system.particleImage = Self.dot
+        system.particleImage = ArenaArt.dot
         system.blendMode = .additive
         system.propertyControllers = [.opacity: Self.fadeOut]
         return system
@@ -1140,17 +1174,6 @@ final class ArenaWorldView: SCNView {
         return SCNParticlePropertyController(animation: animation)
     }()
 
-    /// 光点用的软圆点
-    private static let dot: UIImage = {
-        let size = CGSize(width: 32, height: 32)
-        return UIGraphicsImageRenderer(size: size).image { context in
-            let colors = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
-            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) else { return }
-            context.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: 16, y: 16), startRadius: 0,
-                                                 endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
-        }
-    }()
-
     // MARK: - 亡灵之地、骨塔
 
     /// 亡灵之地：地上一个发光的圈，自己这边绿、对面紫，冒着光点
@@ -1174,7 +1197,7 @@ final class ArenaWorldView: SCNView {
             motes.emittingDirection = SCNVector3(0, 1, 0)
             motes.spreadingAngle = 10
             motes.particleSize = 0.12
-            motes.particleImage = Self.dot
+            motes.particleImage = ArenaArt.dot
             motes.blendMode = .additive
             motes.emitterShape = SCNCylinder(radius: 1, height: 0.01)
             motes.birthLocation = .surface

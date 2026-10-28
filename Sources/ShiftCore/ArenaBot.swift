@@ -109,6 +109,10 @@ public struct ArenaBot: Sendable {
                 input.attack = chest.center - me.pos
             }
         }
+        // 小道具：看情况用（逃跑、补血、近身的震开冻住）
+        if me.gadgetUses > 0, me.gadgetCooldown <= 0, wantsGadget(me, target: target) {
+            input.gadget = true
+        }
         // 毒圈快到了：往中间走
         if game.mode.hasPoison, me.pos.distance(to: game.map.center) > game.safeRadius - 1.2 {
             goal = game.map.center
@@ -122,6 +126,21 @@ public struct ArenaBot: Sendable {
         }
         input.move = steer(me, to: goal, in: game)
         return input
+    }
+
+    /// 现在该不该用小道具（翻滚、闪烁往摇杆方向：血少时摇杆正往回跑）
+    private func wantsGadget(_ me: Fighter, target: Fighter?) -> Bool {
+        guard let gadget = me.gadget else { return false }
+        let distance = target.map { $0.pos.distance(to: me.pos) } ?? .infinity
+        let health = Double(me.health) / Double(max(me.maxHealth, 1))
+        switch gadget {
+        case .potion: return health < 0.4
+        case .ward: return health < 0.55 && distance < 5
+        case .sprint, .roll, .vanish, .blink: return health < 0.35 && distance < 5
+        case .reload: return me.ammo < 0.5 && distance < me.brawler.attackRange
+        case .shockwave: return distance < 2.2
+        case .frost: return distance < 2.8
+        }
     }
 
     /// 带着球时往哪踢（不踢返回 nil）：看得见对面球门、离得不远就射门；被敌人贴身了往前踢

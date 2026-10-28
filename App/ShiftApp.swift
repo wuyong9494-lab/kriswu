@@ -450,12 +450,15 @@ enum ScreenCatalog {
         case "tiles": TileGameHomeView()
         case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
         case "arena": ArenaHomeView()
-        case "arenaPlay": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .knight, name: "我"))
+        case "arenaPlay": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .knight, name: "我", level: 3,
+                                                                     loadout: ArenaLoadout.basic(.knight, level: 3)))
         case "arenaShowdown": ArenaPlayView(setup: ArenaController.Setup(mode: .showdown, brawler: .mage, name: "我"))
-        case "arenaZone": ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .necromancer, name: "我", level: 5))
+        case "arenaZone": ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .necromancer, name: "我", level: 5,
+                                                                     loadout: ArenaLoadout.basic(.necromancer, level: 5)))
         case "arenaBall": ArenaPlayView(setup: ArenaController.Setup(mode: .ball, brawler: .ranger, name: "我"))
         case "arenaHeist": ArenaPlayView(setup: ArenaController.Setup(mode: .heist, brawler: .mage, name: "我"))
-        case "arenaBoss": ArenaPlayView(setup: ArenaController.Setup(mode: .boss, brawler: .knight, name: "我", level: 3))
+        case "arenaBoss": ArenaPlayView(setup: ArenaController.Setup(mode: .boss, brawler: .knight, name: "我", level: 9,
+                                                                     loadout: ArenaLoadout.basic(.knight, level: 9)))
         case "gomoku": GomokuHomeView()
         case "gomokuBoard":
             GomokuLocalScreen(mode: .computer(.normal, .black),

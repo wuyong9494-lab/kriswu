@@ -536,6 +536,14 @@ enum ArenaArt {
         }
     }
 
+    /// 光点用的软圆点
+    static let dot: UIImage = draw(CGSize(width: 32, height: 32), opaque: false) { cg in
+        let colors = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
+        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) else { return }
+        cg.drawRadialGradient(gradient, startCenter: CGPoint(x: 16, y: 16), startRadius: 0,
+                              endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
+    }
+
     /// 发光的软圆点：中间白、往外是这个颜色、边上透明（子弹的光晕、打中的闪光）
     static func glow(_ color: UIColor) -> UIImage {
         draw(CGSize(width: 64, height: 64), opaque: false) { cg in

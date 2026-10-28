@@ -5,6 +5,12 @@ import Foundation
 
 public struct ArenaProgress: Codable, Equatable, Sendable {
     public static let maxLevel = 9
+    /// 几级解锁第一个、第二个小道具
+    public static let gadgetLevels = [3, 5]
+    /// 几级解锁第一个、第二个星徽
+    public static let starLevels = [6, 8]
+    /// 几级解锁超级充能
+    public static let hyperLevel = 9
 
     /// 奖杯之路上的一个点
     public struct Milestone: Equatable, Sendable {
@@ -39,8 +45,22 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
     public private(set) var coins = 0
     /// 奖杯之路走到过最远的地方（奖杯掉了再涨回来不重复给）
     public private(set) var reached = 0
+    /// 每个角色选的小道具、星徽（按 Brawler.rawValue；没选过的带第一个）
+    private var gadgetTable: [Int: Int] = [:]
+    private var starTable: [Int: Int] = [:]
 
     public init() {}
+
+    /// 老版本存的没有小道具、星徽的选择
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        trophyTable = try container.decodeIfPresent([Int: Int].self, forKey: .trophyTable) ?? [:]
+        levelTable = try container.decodeIfPresent([Int: Int].self, forKey: .levelTable) ?? [:]
+        coins = try container.decodeIfPresent(Int.self, forKey: .coins) ?? 0
+        reached = try container.decodeIfPresent(Int.self, forKey: .reached) ?? 0
+        gadgetTable = try container.decodeIfPresent([Int: Int].self, forKey: .gadgetTable) ?? [:]
+        starTable = try container.decodeIfPresent([Int: Int].self, forKey: .starTable) ?? [:]
+    }
 
     /// 奖杯之路：越往后间隔越大
     public static let road: [Milestone] = {
@@ -85,6 +105,40 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
     public func upgradeCost(_ brawler: Brawler) -> Int? {
         let level = level(brawler)
         return level < Self.maxLevel ? Self.costs[level] : nil
+    }
+
+    /// 这个角色已经解锁的小道具（按等级）
+    public func gadgets(_ brawler: Brawler) -> [Gadget] {
+        ArenaLoadout.gadgets(brawler, level: level(brawler))
+    }
+
+    /// 这个角色已经解锁的星徽（按等级）
+    public func starPowers(_ brawler: Brawler) -> [StarPower] {
+        ArenaLoadout.starPowers(brawler, level: level(brawler))
+    }
+
+    public func hasHypercharge(_ brawler: Brawler) -> Bool {
+        level(brawler) >= Self.hyperLevel
+    }
+
+    /// 上场带的：选过的（还得是解锁了的），没选过的带第一个
+    public func loadout(for brawler: Brawler) -> ArenaLoadout {
+        let open = self.gadgets(brawler), stars = self.starPowers(brawler)
+        let gadget = gadgetTable[brawler.rawValue].flatMap(Gadget.init(rawValue:)).flatMap { open.contains($0) ? $0 : nil }
+        let star = starTable[brawler.rawValue].flatMap(StarPower.init(rawValue:)).flatMap { stars.contains($0) ? $0 : nil }
+        return ArenaLoadout(gadget: gadget ?? open.first, starPower: star ?? stars.first, hypercharge: hasHypercharge(brawler))
+    }
+
+    /// 选这个角色带的小道具（没解锁的不让选）
+    public mutating func choose(_ gadget: Gadget, for brawler: Brawler) {
+        guard gadgets(brawler).contains(gadget) else { return }
+        gadgetTable[brawler.rawValue] = gadget.rawValue
+    }
+
+    /// 选这个角色带的星徽（没解锁的不让选）
+    public mutating func choose(_ starPower: StarPower, for brawler: Brawler) {
+        guard starPowers(brawler).contains(starPower) else { return }
+        starTable[brawler.rawValue] = starPower.rawValue
     }
 
     /// 花金币升一级；金币不够、满级、没解锁返回 false
@@ -138,6 +192,6 @@ public struct ArenaProgress: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case trophyTable = "trophies", levelTable = "levels", coins, reached
+        case trophyTable = "trophies", levelTable = "levels", coins, reached, gadgetTable = "gadgets", starTable = "stars"
     }
 }

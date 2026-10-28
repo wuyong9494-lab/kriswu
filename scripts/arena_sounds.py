@@ -146,6 +146,34 @@ def blink():
     tone = osc(np.geomspace(300, 1600, n), n, 'tri') * adsr(n, 0.01, 0.1, 0.4, 0.15) * 0.4
     return up + tone
 
+def gadget():
+    """小道具：咔哒一下，两声往上跳的短音带一阵风"""
+    n = int(SR * 0.34)
+    click = highpass(noise(n), 3000) * expdecay(n, 0.006) * 0.8
+    blips = np.zeros(n)
+    for at, name in ((0.0, 'G5'), (0.07, 'D6')):
+        m = int(SR * 0.16)
+        x = osc(note(name), m, 'square') * adsr(m, 0.003, 0.04, 0.5, 0.08) * 0.35
+        place(blips, lowpass(x, 5000), at)
+    whoosh = lowpass(highpass(noise(n), 600), np.geomspace(1200, 8000, n)) * adsr(n, 0.04, 0.1, 0.5, 0.15) * 0.45
+    return click + blips + whoosh
+
+def hyper():
+    """超级充能：一下沉的重音接着往上冲的颤音，最后亮一下"""
+    n = int(SR * 1.0)
+    tt = t(1.0)
+    thump = osc(np.geomspace(110, 40, n), n) * expdecay(n, 0.12) * 0.9
+    f = np.geomspace(160, 980, n)
+    wobble = 1 + 0.5 * np.sin(2 * np.pi * np.geomspace(6, 22, n) * tt)
+    rise = (osc(f, n, 'saw') + osc(f * 1.01, n, 'saw') + 0.5 * osc(f * 2, n, 'square')) * wobble
+    rise = lowpass(rise, np.geomspace(700, 7000, n)) * adsr(n, 0.05, 0.3, 0.8, 0.3) * 0.22
+    shine = np.zeros(n)
+    for name in ('E5', 'G#5', 'B5', 'E6'):
+        m = int(SR * 0.45)
+        place(shine, (osc(note(name), m, 'tri') + 0.3 * osc(note(name) * 2, m)) * expdecay(m, 0.15) * 0.16, 0.55)
+    sparkle = bandpass(noise(n), 4000, 10000) * adsr(n, 0.4, 0.2, 0.5, 0.3) * 0.25
+    return thump + rise + shine + sparkle
+
 def jingle(melody, tempo=0.14, last=0.8, kind='square'):
     out = np.zeros(int(SR * (tempo * len(melody) + last + 0.2)))
     for k, name in enumerate(melody):
@@ -250,3 +278,7 @@ if __name__ == '__main__':
     m = music()
     save(os.path.join(out, 'arena_music.wav'), m, peak=0.6, fade=False)
     print('music', round(len(m) / SR, 2), 's')
+    # 后加的放在最后生成（随机数接着往下用，前面的声音一点不变）
+    for name, x in (('arena_gadget', gadget()), ('arena_hyper', hyper())):
+        save(os.path.join(out, name + '.wav'), x)
+        print(name, round(len(x) / SR, 2), 's')

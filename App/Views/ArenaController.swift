@@ -12,6 +12,8 @@ struct ArenaStart: Codable, Equatable {
         var level: Int?
         /// 一对一带的角色（老版本没有）
         var lineup: [Brawler]?
+        /// 带的小道具、星徽、超级充能（老版本没有：按等级带第一个）
+        var loadout: ArenaLoadout?
     }
 
     var round: Int
@@ -23,8 +25,11 @@ struct ArenaStart: Codable, Equatable {
 
     var entrants: [ArenaGame.Entrant] {
         seats.map {
-            ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team, level: $0.level ?? 1,
-                              lineup: $0.lineup ?? [])
+            let level = $0.level ?? 1
+            // 带的东西按等级再查一遍（每台手机都这么查，摆出来的一样）
+            let loadout = ($0.loadout ?? ArenaLoadout.basic($0.brawler, level: level)).allowed($0.brawler, level: level)
+            return ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team, level: level,
+                                     lineup: $0.lineup ?? [], loadout: loadout)
         }
     }
 }
@@ -60,6 +65,14 @@ final class ArenaController: ObservableObject {
         var health = 0
         var maxHealth = 1
         var superCharge = 0.0
+        /// 小道具：带的哪个、还能用几次、还要等几秒
+        var gadget: Gadget?
+        var gadgetUses = 0
+        var gadgetCooldown = 0
+        /// 超级充能：解锁了没有、攒了多少、开着还剩几秒
+        var hyperUnlocked = false
+        var hyperCharge = 0.0
+        var hyperTime = 0.0
         var dead = false
         var respawnIn = 0
         var result: ArenaGame.Result?
@@ -73,6 +86,8 @@ final class ArenaController: ObservableObject {
         var level = 1
         /// 一对一带的另外两个角色
         var lineup: [Brawler] = []
+        /// 带的小道具、星徽、超级充能
+        var loadout = ArenaLoadout()
     }
 
     static let step = 1.0 / 60
@@ -105,6 +120,7 @@ final class ArenaController: ObservableObject {
     var superAiming: V2?
     private var queuedAttack: V2?
     private var queuedSpecial: V2?
+    private var queuedGadget = false
     private var sceneEvents: [ArenaGame.Event] = []
     private var recorded = false
 
@@ -114,6 +130,7 @@ final class ArenaController: ObservableObject {
     private var remoteAcks: [Int: Int] = [:]
     private var remoteAttacks: [Int: V2] = [:]
     private var remoteSpecials: [Int: V2] = [:]
+    private var remoteGadgets: Set<Int> = []
     private var netEvents: [ArenaGame.Event] = []
     private var ticks = 0
 
@@ -131,12 +148,13 @@ final class ArenaController: ObservableObject {
         let map = maps[random.below(maps.count)]
         let teams = setup.mode.seatTeams
         var entrants = [ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: teams[0],
-                                          level: setup.level, lineup: setup.lineup)]
+                                          level: setup.level, lineup: setup.lineup,
+                                          loadout: setup.loadout.allowed(setup.brawler, level: setup.level))]
         for k in 1..<teams.count {
             let brawler = others[(k - 1) % others.count]
             let boss = setup.mode == .boss && teams[k] == 1
             entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
-                                              level: setup.level))
+                                              level: setup.level, loadout: ArenaLoadout.basic(brawler, level: setup.level)))
         }
         self.init(role: .solo, game: ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map), me: 0, room: nil, seed: seed)
     }
@@ -186,15 +204,18 @@ final class ArenaController: ObservableObject {
     }
 
     private func tick() {
-        var inputs: [Int: ArenaInput] = [me: ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial)]
+        var inputs: [Int: ArenaInput] = [me: ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial, gadget: queuedGadget)]
         queuedAttack = nil
         queuedSpecial = nil
+        queuedGadget = false
         if role == .host {
             for (seat, move) in remoteMoves { inputs[seat] = ArenaInput(move: move) }
             for (seat, aim) in remoteAttacks { inputs[seat, default: ArenaInput()].attack = aim }
             for (seat, aim) in remoteSpecials { inputs[seat, default: ArenaInput()].special = aim }
+            for seat in remoteGadgets { inputs[seat, default: ArenaInput()].gadget = true }
             remoteAttacks = [:]
             remoteSpecials = [:]
+            remoteGadgets = []
         }
         for k in bots.indices {
             inputs[bots[k].id] = bots[k].input(in: game, dt: Self.step)
@@ -227,6 +248,13 @@ final class ArenaController: ObservableObject {
         guard mine.superCharge >= 1 else { return }
         let aim = target(for: drag, range: mine.brawler.superRange)
         if role == .client { sendFire(attack: nil, special: aim) } else { queuedSpecial = aim }
+    }
+
+    /// 点小道具按钮（往摇杆的方向用：翻滚、闪烁）
+    func fireGadget() {
+        let fighter = mine
+        guard fighter.alive, fighter.gadget != nil, fighter.gadgetUses > 0, fighter.gadgetCooldown <= 0 else { return }
+        if role == .client { sendFire(attack: nil, special: nil, gadget: true) } else { queuedGadget = true }
     }
 
     private func target(for drag: V2, range: Double) -> V2 {
@@ -268,19 +296,21 @@ final class ArenaController: ObservableObject {
         }
         let fighter = game.fighters[me]
         if fighter.alive, !fighter.busy, move.length > 0.05 {
-            game.fighters[me].pos = ArenaGame.walk(from: fighter.pos, by: move.clamped(to: 1) * (fighter.brawler.speed * dt), on: game.map)
+            game.fighters[me].pos = ArenaGame.walk(from: fighter.pos, by: move.clamped(to: 1) * (game.moveSpeed(fighter) * dt), on: game.map)
             if aiming == nil && superAiming == nil { game.fighters[me].facing = move.normalized }
         }
         game.extrapolate(dt, except: me)
     }
 
-    private func sendFire(attack: V2?, special: V2?) {
+    /// 开火、放大招、用小道具（小道具那一位是后加的，老版本的房主读不到就不管）
+    private func sendFire(attack: V2?, special: V2?, gadget: Bool = false) {
         var writer = ByteWriter()
         writer.u8(Int(Packet.fire))
         for aim in [attack, special] {
             writer.u8(aim == nil ? 0 : 1)
             writer.v2(aim ?? .zero)
         }
+        writer.u8(gadget ? 1 : 0)
         room?.sendDirect(writer.data, delivery: .reliable)
     }
 
@@ -306,6 +336,7 @@ final class ArenaController: ObservableObject {
                   let hasSpecial = reader.u8(), let special = reader.v2() else { return }
             if hasAttack == 1 { remoteAttacks[seat] = attack }
             if hasSpecial == 1 { remoteSpecials[seat] = special }
+            if reader.u8() == 1 { remoteGadgets.insert(seat) }
         case (.client, Packet.snapshot):
             guard let snapshot = ArenaSnapshot(data: Data(body)), snapshot.time >= lastSnapshot else { return }
             lastSnapshot = snapshot.time
@@ -327,8 +358,9 @@ final class ArenaController: ObservableObject {
         let fighter = game.fighters[me]
         guard fighter.alive, !fighter.busy else { return }
         var position = fighter.pos
+        let speed = game.moveSpeed(fighter)
         for step in history where step.move.length > 0.05 {
-            position = ArenaGame.walk(from: position, by: step.move.clamped(to: 1) * (fighter.brawler.speed * step.dt), on: game.map)
+            position = ArenaGame.walk(from: position, by: step.move.clamped(to: 1) * (speed * step.dt), on: game.map)
         }
         game.fighters[me].pos = position
     }
@@ -392,6 +424,12 @@ final class ArenaController: ObservableObject {
         hud.health = fighter.health
         hud.maxHealth = fighter.maxHealth
         hud.superCharge = fighter.superCharge
+        hud.gadget = fighter.gadget
+        hud.gadgetUses = fighter.gadgetUses
+        hud.gadgetCooldown = Int(fighter.gadgetCooldown.rounded(.up))
+        hud.hyperUnlocked = fighter.hyperUnlocked
+        hud.hyperCharge = (fighter.hyperCharge * 50).rounded() / 50
+        hud.hyperTime = (fighter.hyperTime * 10).rounded() / 10
         hud.dead = !fighter.alive
         hud.respawnIn = Int(fighter.respawnIn.rounded(.up))
         // 大乱斗被打倒、双人大乱斗自己这队出局就算结束（不用看别人打完）
@@ -508,6 +546,16 @@ final class ArenaProgressStore: ObservableObject {
         return true
     }
 
+    func choose(_ gadget: Gadget, for brawler: Brawler) {
+        progress.choose(gadget, for: brawler)
+        save()
+    }
+
+    func choose(_ starPower: StarPower, for brawler: Brawler) {
+        progress.choose(starPower, for: brawler)
+        save()
+    }
+
     private func save() {
         if let data = try? JSONEncoder().encode(progress) { UserDefaults.standard.set(data, forKey: Self.key) }
     }
@@ -524,6 +572,8 @@ final class ArenaLobby: ObservableObject {
         case start(ArenaStart)
         /// 选的角色几级（老版本收到不认识，当 1 级）
         case level(Int)
+        /// 带的小道具、星徽、超级充能（老版本收到不认识：按等级带第一个）
+        case loadout(ArenaLoadout)
     }
 
     struct Playing: Identifiable {
@@ -535,6 +585,7 @@ final class ArenaLobby: ObservableObject {
     @Published private(set) var mode: ArenaGame.Mode
     @Published private(set) var picks: [String: Brawler] = [:]
     @Published private(set) var levels: [String: Int] = [:]
+    @Published private(set) var loadouts: [String: ArenaLoadout] = [:]
     @Published var playing: Playing?
     @Published private(set) var myPick: Brawler
     private var round = 0
@@ -552,6 +603,7 @@ final class ArenaLobby: ObservableObject {
         picks[room.me.id] = myPick
         send(.pick(myPick))
         send(.level(myLevel))
+        send(.loadout(myLoadout))
         if room.isHost { send(.mode(mode)) }
         playing?.controller.membersChanged()
     }
@@ -566,6 +618,22 @@ final class ArenaLobby: ObservableObject {
         picks[room.me.id] = brawler
         send(.pick(brawler))
         send(.level(myLevel))
+        send(.loadout(myLoadout))
+    }
+
+    /// 改了带的小道具、星徽：告诉大家
+    func loadoutChanged() {
+        send(.loadout(myLoadout))
+    }
+
+    /// 自己带的
+    var myLoadout: ArenaLoadout { ArenaProgressStore.shared.progress.loadout(for: myPick) }
+
+    /// 谁带的什么（没收到的按等级带第一个）
+    func loadout(of member: String) -> ArenaLoadout {
+        if member == room.me.id { return myLoadout }
+        let brawler = pick(of: member) ?? .knight
+        return loadouts[member] ?? ArenaLoadout.basic(brawler, level: level(of: member))
     }
 
     /// 自己选的角色几级
@@ -623,7 +691,7 @@ final class ArenaLobby: ObservableObject {
             let seat = order[k]
             let pick = pick(of: member.id) ?? .knight
             seated[seat] = ArenaStart.Seat(member: member.id, name: member.name, brawler: pick, team: teams[seat], level: level(of: member.id),
-                                           lineup: mode == .duel ? [pick] : nil)
+                                           lineup: mode == .duel ? [pick] : nil, loadout: loadout(of: member.id))
         }
         var seats: [ArenaStart.Seat] = []
         for (seat, team) in teams.enumerated() {
@@ -634,7 +702,8 @@ final class ArenaLobby: ObservableObject {
             let used = Set(seated.values.filter { $0.team == team }.map(\.brawler) + seats.filter { $0.team == team }.map(\.brawler))
             let brawler = Brawler.allCases.first { !used.contains($0) } ?? .knight
             let boss = mode == .boss && team == 1
-            seats.append(ArenaStart.Seat(member: nil, name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, team: team, level: botLevel))
+            seats.append(ArenaStart.Seat(member: nil, name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, team: team, level: botLevel,
+                                         loadout: ArenaLoadout.basic(brawler, level: botLevel)))
         }
         return seats
     }
@@ -650,6 +719,8 @@ final class ArenaLobby: ObservableObject {
             picks[from] = brawler
         case .level(let level):
             levels[from] = min(max(level, 1), ArenaProgress.maxLevel)
+        case .loadout(let loadout):
+            loadouts[from] = loadout
         case .mode(let newMode):
             if from == room.hostID { mode = newMode }
         case .start(let start):

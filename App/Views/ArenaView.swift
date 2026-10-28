@@ -67,10 +67,12 @@ struct ArenaHomeView: View {
                 Text("每升一级血量、伤害多 6%，最高 \(ArenaProgress.maxLevel) 级；联机时电脑补位的按大家的平均等级。")
             }
             upgradeSection
+            ArenaLoadoutSection(brawler: chosen)
             Section {
                 Button {
                     playing = ArenaEntry(setup: ArenaController.Setup(mode: mode, brawler: chosen, name: store.settings.aliases.first ?? "我",
-                                                                      level: progress.level(chosen), lineup: duelPartners))
+                                                                      level: progress.level(chosen), lineup: duelPartners,
+                                                                      loadout: progress.loadout(for: chosen)))
                 } label: {
                     Label("开打（人不够电脑补位）", systemImage: "play.fill")
                         .font(DS.Font.headline)
@@ -83,7 +85,7 @@ struct ArenaHomeView: View {
                     if mode == .duel {
                         Text("一对一带：" + ([chosen] + duelPartners).map(\.name).joined(separator: "、") + "（按这个顺序上场）")
                     }
-                    Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；上面黄圈满了放大招。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
+                    Text("左下角摇杆走；右下角摇杆拖着瞄准、松手开火，点一下自动打最近的敌人；黄圈满了放大招，绿钮是小道具。躲进草丛里敌人看不见你（离得很近或者你开火时除外）。")
                 }
             }
             GameRoomButtons(kind: .arena, remotePlayers: 2...6, nearbyCapacity: 6) { room in
@@ -369,6 +371,7 @@ struct ArenaRoomView: View {
                     } header: {
                         Text("我用 \(lobby.myPick.name)（\(lobby.myPick.role)）")
                     }
+                    ArenaLoadoutSection(brawler: lobby.myPick, onChange: lobby.loadoutChanged)
                     Section {
                         ForEach(room.members) { member in
                             HStack {
@@ -633,15 +636,22 @@ private struct ArenaMatchView: View {
             ArenaStick(kind: .move, onChange: { controller.move = $0 * flip }, onRelease: { _ in controller.move = .zero })
             Spacer()
             // 横屏：大招钮在攻击钮左上；竖屏：在攻击钮上面
+            // 小道具钮（绿）：横屏在攻击钮上面，竖屏在攻击钮左边
             if wide {
                 HStack(alignment: .bottom, spacing: DS.Space.m) {
                     superStick.padding(.bottom, 44)
-                    attackStick
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
+                        gadgetButton
+                        attackStick
+                    }
                 }
             } else {
                 VStack(alignment: .trailing, spacing: DS.Space.s) {
                     superStick
-                    attackStick
+                    HStack(alignment: .bottom, spacing: DS.Space.s) {
+                        gadgetButton
+                        attackStick
+                    }
                 }
             }
         }
@@ -650,8 +660,16 @@ private struct ArenaMatchView: View {
         .opacity(hud.result == nil ? 1 : 0)
     }
 
+    @ViewBuilder private var gadgetButton: some View {
+        if let gadget = hud.gadget {
+            ArenaGadgetButton(gadget: gadget, uses: hud.gadgetUses, cooldown: hud.gadgetCooldown, dead: hud.dead) {
+                controller.fireGadget()
+            }
+        }
+    }
+
     private var superStick: some View {
-        ArenaStick(kind: .special(charge: hud.superCharge),
+        ArenaStick(kind: .special(charge: hud.superCharge, hyper: hud.hyperUnlocked ? hud.hyperCharge : nil, hyperTime: hud.hyperTime),
                    onChange: { controller.superAiming = $0 * flip },
                    onRelease: { drag in
                        controller.superAiming = nil
@@ -778,7 +796,8 @@ private extension View {
 private struct ArenaStick: View {
     enum Kind: Equatable {
         case move, attack
-        case special(charge: Double)
+        /// charge：大招攒了多少；hyper：超级充能攒了多少（没解锁 nil）；hyperTime：超级充能开着还剩几秒
+        case special(charge: Double, hyper: Double?, hyperTime: Double)
     }
 
     let kind: Kind
@@ -796,15 +815,21 @@ private struct ArenaStick: View {
     }
 
     private var ready: Bool {
-        if case .special(let charge) = kind { return charge >= 1 }
+        if case .special(let charge, _, _) = kind { return charge >= 1 }
         return true
+    }
+
+    /// 大招满了、超级充能也满了：这一下是加强版（钮变紫）
+    private var hyperReady: Bool {
+        if case .special(_, let hyper?, _) = kind { return hyper >= 1 }
+        return false
     }
 
     private var tint: Color {
         switch kind {
         case .move: return .white
         case .attack: return Color(uiColor: ArenaPalette.attack)
-        case .special: return ready ? .yellow : .gray
+        case .special: return ready ? (hyperReady ? Color(uiColor: ArenaPalette.hyper) : .yellow) : .gray
         }
     }
 
@@ -812,11 +837,18 @@ private struct ArenaStick: View {
         ZStack {
             Circle().fill(Color.black.opacity(active ? 0.3 : 0.18))
                 .overlay(Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: 2))
-            if case .special(let charge) = kind {
+            if case .special(let charge, let hyper, let hyperTime) = kind {
                 Circle().trim(from: 0, to: min(charge, 1))
                     .stroke(Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .padding(3)
+                // 外面一圈紫的：超级充能攒了多少；开着的时候是还剩多久
+                if let hyper {
+                    Circle().trim(from: 0, to: hyperTime > 0 ? min(hyperTime / ArenaGame.hyperDuration, 1) : min(hyper, 1))
+                        .stroke(Color(uiColor: ArenaPalette.hyper), style: StrokeStyle(lineWidth: hyperTime > 0 ? 6 : 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(-7)
+                }
             }
             Circle().fill(tint.opacity(kind == .move ? 0.75 : 0.95))
                 .frame(width: radius * 0.8, height: radius * 0.8)
@@ -847,7 +879,7 @@ private struct ArenaStick: View {
         switch kind {
         case .move: EmptyView()
         case .attack: Image(systemName: "scope").font(.title2.weight(.bold)).foregroundStyle(.white)
-        case .special: Image(systemName: "bolt.fill").font(.title3.weight(.bold)).foregroundStyle(ready ? .black : .white)
+        case .special: Image(systemName: "bolt.fill").font(.title3.weight(.bold)).foregroundStyle(ready && !hyperReady ? .black : .white)
         }
     }
 
@@ -859,5 +891,112 @@ private struct ArenaStick: View {
 
     private func vector(_ size: CGSize) -> V2 {
         V2(Double(size.width / radius), Double(size.height / radius))
+    }
+}
+
+/// 小道具钮：绿色圆钮，写着还能用几次；用完一次灰着倒数几秒
+private struct ArenaGadgetButton: View {
+    let gadget: Gadget
+    let uses: Int
+    let cooldown: Int
+    let dead: Bool
+    var action: () -> Void
+
+    private var ready: Bool { uses > 0 && cooldown == 0 && !dead }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle().fill(Color(uiColor: ArenaPalette.gadget).opacity(ready ? 0.95 : 0.35))
+                Circle().strokeBorder(Color.white.opacity(ready ? 0.85 : 0.4), lineWidth: 2.5)
+                Text(gadget.emoji).font(.system(size: 22)).opacity(ready ? 1 : 0.45)
+                if cooldown > 0 && uses > 0 {
+                    Text("\(cooldown)")
+                        .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .arenaInk()
+                }
+            }
+            .frame(width: 54, height: 54)
+            .overlay(alignment: .topTrailing) {
+                Text("\(uses)")
+                    .font(.system(size: 12, weight: .black, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(uses > 0 ? Color.black.opacity(0.7) : Color(uiColor: ArenaPalette.attack)))
+                    .offset(x: 3, y: -3)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!ready)
+        .accessibilityLabel("小道具：\(gadget.name)，还能用 \(uses) 次")
+    }
+}
+
+/// 选这个角色带的本事：两个小道具里选一个（3、5 级解锁）、两个星徽里选一个（6、8 级解锁），满级有超级充能
+struct ArenaLoadoutSection: View {
+    let brawler: Brawler
+    /// 改了选的（联机房间里要告诉大家）
+    var onChange: @MainActor () -> Void = {}
+    @ObservedObject private var growth = ArenaProgressStore.shared
+
+    var body: some View {
+        let progress = growth.progress
+        let level = progress.level(brawler)
+        let loadout = progress.loadout(for: brawler)
+        Section {
+            ForEach(brawler.gadgets.indices, id: \.self) { k in
+                let gadget = brawler.gadgets[k]
+                let needs = ArenaProgress.gadgetLevels[k]
+                Button {
+                    growth.choose(gadget, for: brawler)
+                    onChange()
+                } label: {
+                    row(badge: Text(gadget.emoji).font(.system(size: 20)), tint: Color(uiColor: ArenaPalette.gadget),
+                        title: "小道具 · \(gadget.name)", note: gadget.note, chosen: loadout.gadget == gadget,
+                        locked: level < needs ? needs : nil)
+                }
+                .disabled(level < needs)
+            }
+            ForEach(brawler.starPowers.indices, id: \.self) { k in
+                let star = brawler.starPowers[k]
+                let needs = ArenaProgress.starLevels[k]
+                Button {
+                    growth.choose(star, for: brawler)
+                    onChange()
+                } label: {
+                    row(badge: Image(systemName: "star.fill").font(.system(size: 18, weight: .bold)).foregroundStyle(.white),
+                        tint: Color(uiColor: ArenaPalette.gold), title: "星徽 · \(star.name)", note: star.note,
+                        chosen: loadout.starPower == star, locked: level < needs ? needs : nil)
+                }
+                .disabled(level < needs)
+            }
+            row(badge: Image(systemName: "bolt.fill").font(.system(size: 18, weight: .bold)).foregroundStyle(.white),
+                tint: Color(uiColor: ArenaPalette.hyper), title: "超级充能", note: "攒满紫条再放大招：" + brawler.hyperNote,
+                chosen: loadout.hypercharge, locked: loadout.hypercharge ? nil : ArenaProgress.hyperLevel)
+        } header: {
+            Text("\(brawler.name)带的本事")
+        } footer: {
+            Text("小道具一局能用 \(ArenaGame.gadgetUses) 次，用完一次等 \(Int(ArenaGame.gadgetCooldown)) 秒；星徽一直有效；"
+                 + "超级充能 5 秒里走得快、打得疼、挨打少掉血。")
+        }
+    }
+
+    private func row(badge: some View, tint: Color, title: String, note: String, chosen: Bool, locked: Int?) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Circle().fill(tint.opacity(locked == nil ? 1 : 0.35))
+                .frame(width: 38, height: 38)
+                .overlay(badge.opacity(locked == nil ? 1 : 0.5))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(DS.Font.headline).foregroundStyle(locked == nil ? .primary : .secondary)
+                Text(note).font(DS.Font.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if let locked {
+                Label("\(locked) 级", systemImage: "lock.fill").font(DS.Font.caption).foregroundStyle(.secondary)
+            } else if chosen {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(DS.Palette.accent)
+            }
+        }
     }
 }
