@@ -299,7 +299,7 @@ final class ArenaWorldView: SCNView {
                 let node = SCNNode(geometry: ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
                 node.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
                 node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 12) * .pi / 6, 0)
-                let size = 1 + Float((x * 5 + y * 3) % 4) * 0.04
+                let size = 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
                 node.simdScale = SIMD3(size, size, size)
                 node.castsShadow = false
                 root.addChildNode(node)
@@ -446,7 +446,19 @@ final class ArenaWorldView: SCNView {
                     cg.fill(CGRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell, width: cell, height: cell))
                 }
             }
-            // 草皮：几圈叠起来，边上淡
+            // 中间一条暖色的路，两边留深草。远看能分出道和墙，不是一整片绿。
+            let lane0 = max(0, map.width / 2 - 2)
+            let lane1 = min(map.width, map.width / 2 + 2)
+            cg.setFillColor(look.patch.withAlphaComponent(0.55).cgColor)
+            cg.fill(CGRect(x: CGFloat(lane0) * cell, y: 0, width: CGFloat(lane1 - lane0) * cell, height: size.height))
+            cg.setStrokeColor(UIColor(white: 0, alpha: 0.12).cgColor)
+            cg.setLineWidth(2)
+            for y in 0..<map.height {
+                let line = CGFloat(y) * cell
+                cg.move(to: CGPoint(x: 0, y: line))
+                cg.addLine(to: CGPoint(x: size.width, y: line))
+            }
+            cg.strokePath()
             cg.setFillColor(look.patch.withAlphaComponent(0.22).cgColor)
             for _ in 0..<(map.width * map.height / 14) {
                 let center = CGPoint(x: CGFloat(random.below(map.width * 100)) / 100 * cell,
@@ -1093,7 +1105,7 @@ final class ArenaWorldView: SCNView {
             }
             piece.addParticleSystem(trail(UIColor(red: 0.5, green: 1, blue: 0.6, alpha: 1), size: 0.35))
         case .knight, .barbarian, .guardian:
-            let wide: CGFloat = owner == .knight ? 0.55 : (owner == .guardian ? 1.0 : 0.8)
+            let wide: CGFloat = owner == .knight ? 1.15 : (owner == .guardian ? 1.7 : 1.35)
             piece.geometry = shared("slash-\(owner.rawValue)-\(tintKey)") {
                 let box = SCNBox(width: wide, height: 0.06, length: 0.16, chamferRadius: 0.03)
                 box.firstMaterial = ArenaAvatar.material(core, lit: false)
@@ -1112,7 +1124,17 @@ final class ArenaWorldView: SCNView {
         piece.castsShadow = false
         let root = SCNNode()
         root.addChildNode(piece)
-        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.4 : 1.7))
+        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.8 : 2.1))
+        let mark = SCNNode(geometry: shared("shot-mark-\(tintKey)") {
+            let ring = SCNTube(innerRadius: 0.22, outerRadius: 0.4, height: 0.012)
+            ring.radialSegmentCount = 24
+            ring.firstMaterial = ArenaAvatar.decal(tint.withAlphaComponent(0.9))
+            return ring
+        })
+        mark.simdPosition = SIMD3(0, -0.56, 0)
+        mark.castsShadow = false
+        mark.renderingOrder = 6
+        root.addChildNode(mark)
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
         root.simdPosition = SIMD3(Float(p.pos.x), 0.6, Float(p.pos.y))
         root.addParticleSystem(trail(tint, size: p.isSuper ? 0.4 : 0.24, life: p.isSuper ? 0.3 : 0.16))

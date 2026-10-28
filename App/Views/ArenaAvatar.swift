@@ -420,7 +420,7 @@ final class ArenaAvatar {
     /// 挨打：白一下。打得重、而且这一下没在出招，才缩一下身子
     func flash(clock: Double, flinch: Bool = false) {
         flashUntil = clock + 0.09
-        punch = 0.16
+        punch = 0.28
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
             start(BrawlerLook.Move(clip: "Hit_A", from: 0.05, to: 0.5, seconds: 0.2), hold: false, fullBody: false)
         }
