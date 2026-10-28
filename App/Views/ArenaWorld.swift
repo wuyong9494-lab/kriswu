@@ -459,6 +459,13 @@ final class ArenaWorldView: SCNView {
                 cg.addLine(to: CGPoint(x: size.width, y: line))
             }
             cg.strokePath()
+            let mark = min(size.width, size.height) * 0.16
+            let mid = CGPoint(x: size.width / 2, y: size.height / 2)
+            cg.setFillColor(UIColor(red: 0.95, green: 0.85, blue: 0.45, alpha: 0.35).cgColor)
+            cg.fillEllipse(in: CGRect(x: mid.x - mark, y: mid.y - mark * 0.72, width: mark * 2, height: mark * 1.44))
+            cg.setStrokeColor(UIColor(red: 0.85, green: 0.55, blue: 0.12, alpha: 0.9).cgColor)
+            cg.setLineWidth(5)
+            cg.strokeEllipse(in: CGRect(x: mid.x - mark, y: mid.y - mark * 0.72, width: mark * 2, height: mark * 1.44))
             cg.setFillColor(look.patch.withAlphaComponent(0.22).cgColor)
             for _ in 0..<(map.width * map.height / 14) {
                 let center = CGPoint(x: CGFloat(random.below(map.width * 100)) / 100 * cell,
@@ -1120,6 +1127,13 @@ final class ArenaWorldView: SCNView {
                 return capsule
             }
             piece.simdEulerAngles = SIMD3(.pi / 2, 0, 0)
+            let whiteCore = SCNNode(geometry: shared("bolt-core-\(owner.rawValue)-\(p.isSuper)") {
+                let capsule = SCNCapsule(capRadius: thick * 0.45, height: long * 0.92)
+                capsule.firstMaterial = ArenaAvatar.material(.white, lit: false)
+                return capsule
+            })
+            whiteCore.simdEulerAngles = SIMD3(.pi / 2, 0, 0)
+            piece.addChildNode(whiteCore)
         }
         piece.castsShadow = false
         let root = SCNNode()

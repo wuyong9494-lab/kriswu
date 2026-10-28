@@ -112,24 +112,38 @@ enum ArenaArt {
     private static let woodEdge = edge(ink)
     private static let stoneEdge = edge(rgb(0.2, 0.2, 0.24))
 
+    private static func flat(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> SCNMaterial {
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = rgb(r, g, b)
+        return material
+    }
+
     /// 整张地图的墙拼成一个网格（按材质分几份，画几次就够）
     static func walls(_ cells: [(x: Int, y: Int, kind: Wall)]) -> SCNNode {
-        var mesh = Mesh(parts: 6)
+        var mesh = Mesh(parts: 10)
         for cell in cells {
             let foot = SIMD3(Float(cell.x) + 0.5, 0, Float(cell.y) + 0.5)
+            let cap = 6 + (cell.x * 3 + cell.y) % 4
             switch cell.kind {
             case .crate:
                 mesh.box(center: foot + SIMD3(0, 0.45, 0), size: SIMD3(repeating: 0.9), part: 0)
                 mesh.box(center: foot + SIMD3(0, 0.45, 0), size: SIMD3(repeating: 0.98), part: 4)
+                mesh.box(center: foot + SIMD3(0, 0.93, 0), size: SIMD3(0.86, 0.1, 0.86), part: cap)
             case .stone:
                 mesh.box(center: foot + SIMD3(0, 0.47, 0), size: SIMD3(repeating: 0.94), part: 1)
                 mesh.box(center: foot + SIMD3(0, 0.47, 0), size: SIMD3(repeating: 1.02), part: 5)
+                mesh.box(center: foot + SIMD3(0, 0.97, 0), size: SIMD3(0.9, 0.1, 0.9), part: cap)
             case .barrel:
                 mesh.cylinder(base: foot, radius: 0.38, height: 0.86, side: 2, cap: 3)
                 mesh.cylinder(base: foot - SIMD3(0, 0.04, 0), radius: 0.42, height: 0.94, side: 4, cap: 4)
+                mesh.box(center: foot + SIMD3(0, 0.9, 0), size: SIMD3(0.5, 0.08, 0.5), part: cap)
             }
         }
-        return SCNNode(geometry: mesh.geometry([crateMaterial, stoneMaterial, barrelSideMaterial, barrelTopMaterial, woodEdge, stoneEdge]))
+        return SCNNode(geometry: mesh.geometry([
+            crateMaterial, stoneMaterial, barrelSideMaterial, barrelTopMaterial, woodEdge, stoneEdge,
+            flat(0.95, 0.28, 0.22), flat(0.25, 0.55, 1), flat(1, 0.78, 0.2), flat(0.25, 0.78, 0.35),
+        ]))
     }
 
     /// 大乱斗的能量箱：一个木箱，顶上嵌着一块发绿光的能量晶（挨打时木头闪白用 wood）
