@@ -32,10 +32,11 @@ public struct ArenaBot: Sendable {
         }
 
         let enemies = game.fighters.filter { $0.alive && $0.team != me.team && game.isVisible($0, to: me.team) }
-        // 对面带着球的人先打
+        // 对面带着球的人先打；不然在看得到的人里挑更好打的（近、残血、没被墙挡住、队友已经在打）
         let carrier = game.ball?.carrier.flatMap { game.fighters.indices.contains($0) ? game.fighters[$0] : nil }
-        let target = carrier.flatMap { $0.team != me.team && $0.alive ? $0 : nil }
-            ?? enemies.min { $0.pos.distance(to: me.pos) < $1.pos.distance(to: me.pos) }
+        let nearby = enemies.filter { $0.pos.distance(to: me.pos) < 10 }
+        let target = carrier.flatMap { $0.team != me.team && $0.alive && $0.pos.distance(to: me.pos) < 10 ? $0 : nil }
+            ?? choose(me, among: nearby, in: game)
         var input = ArenaInput()
         var goal = objective(me, game)
         let carrying = game.ball?.carrier == id
@@ -52,10 +53,30 @@ public struct ArenaBot: Sendable {
             let low = Double(me.health) < Double(me.maxHealth) * (careful ? 0.5 : 0.3)
             let ideal = range * ([.barbarian, .knight, .guardian].contains(me.brawler) ? 0.55 : 0.75)
             let clear = me.brawler == .mage || game.map.lineOfSight(me.pos, target.pos)
-            if low && distance < range + 2.5 {
+            let ratio = Double(me.health) / Double(max(me.maxHealth, 1))
+            let closeEnemies = enemies.filter { $0.pos.distance(to: me.pos) < 5.5 }
+            let alone = !game.fighters.contains { $0.alive && $0.id != me.id && $0.team == me.team && $0.pos.distance(to: me.pos) < 7 }
+            let outnumbered = closeEnemies.count >= 2 && alone && ratio < 0.75
+            let meleeThreat = target.brawler.attackRange <= 3.6 && range >= 6 && distance < ideal * 0.9
+            let reloading = me.ammo < 0.35
+            if outnumbered {
+                // 两个人围上来、身边没有队友：先撤，不站着换血
+                let mid = closeEnemies.reduce(V2.zero) { $0 + $1.pos } * (1 / Double(closeEnemies.count))
+                let off = me.pos - mid
+                goal = me.pos + (off.length > 0.01 ? off.normalized : away) * 4
+            } else if reloading && distance < range + 1 {
+                goal = me.pos + away * 3.5
+            } else if meleeThreat && !low {
+                // 远程被近战贴住：拉开，不要跟他换
+                goal = me.pos + away * 3
+            } else if low && distance < range + 2.5 {
                 // 血少了：往反方向跑，等着回血
                 goal = me.pos + away * 4
-            } else if distance > ideal || !clear {
+            } else if !clear {
+                // 墙挡住了：从侧面绕，不要顶着墙走
+                let side = V2(-away.y, away.x) * strafe
+                goal = target.pos + side * 3
+            } else if distance > ideal {
                 goal = target.pos
             } else {
                 // 在射程里：横着绕，太近了往后退一点
@@ -148,6 +169,21 @@ public struct ArenaBot: Sendable {
         }
         input.move = steer(me, to: goal, in: game)
         return input
+    }
+
+    /// 看得到的人里挑一个：更近、血更少、中间没墙、队友已经在打的，优先
+    private func choose(_ me: Fighter, among enemies: [Fighter], in game: ArenaGame) -> Fighter? {
+        enemies.min { score(me, $0, game) < score(me, $1, game) }
+    }
+
+    private func score(_ me: Fighter, _ enemy: Fighter, _ game: ArenaGame) -> Double {
+        let distance = enemy.pos.distance(to: me.pos)
+        let health = Double(enemy.health) / Double(max(enemy.maxHealth, 1))
+        let blocked = (me.brawler == .mage || game.map.lineOfSight(me.pos, enemy.pos)) ? 0.0 : 5.0
+        let focused = game.fighters.contains {
+            $0.alive && $0.id != me.id && $0.team == me.team && $0.pos.distance(to: enemy.pos) < $0.brawler.attackRange + 1
+        } ? -1.8 : 0
+        return distance * 0.55 + health * 3.2 + blocked + focused
     }
 
     /// 现在该不该用小道具（翻滚、闪烁往摇杆方向：血少时摇杆正往回跑）

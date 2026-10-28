@@ -117,6 +117,52 @@ final class ArenaPowerTests: XCTestCase {
         XCTAssertLessThan(input.move.x, -0.3, "往左边的草走")
     }
 
+    /// 残血的人站得稍远，也比贴脸的满血更该打
+    func testBotAimsAtTheWeakerEnemy() {
+        let map = ArenaMap(rows: ["o...............", "................"])
+        var game = ArenaGame(mode: .showdown, entrants: [
+            ArenaGame.Entrant(name: "我", brawler: .ranger, isBot: true, team: 0),
+            ArenaGame.Entrant(name: "满", brawler: .knight, isBot: true, team: 1),
+            ArenaGame.Entrant(name: "残", brawler: .knight, isBot: true, team: 2),
+        ], seed: 1, map: map)
+        game.adjust(0) { $0.pos = V2(1.5, 0.5) }
+        game.adjust(1) { $0.pos = V2(4.5, 0.5) }
+        game.adjust(2) { $0.pos = V2(8.5, 0.5); $0.health = 80 }
+        var bot = ArenaBot(id: 0, seed: 3)
+        let aim = bot.input(in: game, dt: 0.05).attack
+        XCTAssertGreaterThan(aim?.length ?? 0, 4.5, "打较远的那个残血，不是贴脸的满血")
+    }
+
+    /// 远程被近战贴住要往回走
+    func testRangedBotKitesAMelee() {
+        let map = ArenaMap(rows: ["o...............", "................"])
+        var game = ArenaGame(mode: .showdown, entrants: [
+            ArenaGame.Entrant(name: "我", brawler: .ranger, isBot: true, team: 0),
+            ArenaGame.Entrant(name: "斧", brawler: .barbarian, isBot: true, team: 1),
+        ], seed: 1, map: map)
+        game.adjust(0) { $0.pos = V2(6.5, 0.5) }
+        game.adjust(1) { $0.pos = V2(7.8, 0.5) }
+        var bot = ArenaBot(id: 0, seed: 2)
+        let move = bot.input(in: game, dt: 0.05).move
+        XCTAssertLessThan(move.x, -0.4, "往离斧头远的方向退")
+    }
+
+    /// 一个人被两个敌人贴住，血又不满：先撤
+    func testLoneBotRetreatsFromTwo() {
+        let map = ArenaMap(rows: ["o.........", "..........", ".........."])
+        var game = ArenaGame(mode: .showdown, entrants: [
+            ArenaGame.Entrant(name: "我", brawler: .knight, isBot: true, team: 0),
+            ArenaGame.Entrant(name: "甲", brawler: .knight, isBot: true, team: 1),
+            ArenaGame.Entrant(name: "乙", brawler: .ranger, isBot: true, team: 2),
+        ], seed: 1, map: map)
+        game.adjust(0) { $0.pos = V2(4.5, 1.5); $0.health = Int(Double(game.fighters[0].maxHealth) * 0.6) }
+        game.adjust(1) { $0.pos = V2(5.8, 1.5) }
+        game.adjust(2) { $0.pos = V2(4.5, 2.8) }
+        var bot = ArenaBot(id: 0, seed: 4)
+        let move = bot.input(in: game, dt: 0.05).move
+        XCTAssertLessThan(move.x + move.y, -0.2, "朝两个敌人的反方向撤")
+    }
+
     /// 子弹、爆炸都打得到能量箱；人走不进箱子里
     func testBoxesTakeHitsAndBlockWalking() throws {
         var game = showdown(seed: 9)
