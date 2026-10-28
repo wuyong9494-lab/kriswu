@@ -28,10 +28,26 @@ enum ArenaArt {
         material.cullMode = .front
         material.shaderModifiers = [.geometry: """
             float outlineScale = max(length(scn_node.modelTransform[0].xyz), 0.0001);
-            _geometry.position.xyz += normalize(_geometry.normal) * (0.026 / outlineScale);
+            _geometry.position.xyz += normalize(_geometry.normal) * (0.032 / outlineScale);
             """]
         return material
     }()
+
+    /// 角色：贴图当颜色，自己算一层柔和的明暗和边光。不走兰伯特，免得贴图上的颜色被灯压灰
+    static let characterToon = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float3 key = normalize(float3(-0.35, 0.86, 0.32));
+        float wrap = saturate(dot(n, key) * 0.5 + 0.5);
+        float shade = wrap > 0.58 ? 1.0 : 0.78;
+        float3 c = _surface.diffuse.rgb;
+        float luma = dot(c, float3(0.3, 0.59, 0.11));
+        c = mix(float3(luma), c, 1.28);
+        _surface.diffuse.rgb = min(c * shade, float3(1.0));
+        float fres = 1.0 - saturate(dot(n, normalize(_surface.view)));
+        fres = fres * fres;
+        _surface.emission.rgb += c * fres * 0.2;
+        """
 
     /// 角色表面的边缘光和略提的饱和。画在每个角色自己的材质上，不走相机的泛光（那个在 iOS 27 上会断）
     static let characterSurface = """

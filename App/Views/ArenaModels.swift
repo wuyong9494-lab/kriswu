@@ -194,23 +194,23 @@ final class ArenaModels: @unchecked Sendable {
 
     func character(_ brawler: Brawler) -> GLTFModel? {
         let look = BrawlerLook.of(brawler)
-        return model(look.file, animations: look.clips)
+        return model(look.file, animations: look.clips, smooth: true)
     }
 
     func prop(_ file: String) -> GLTFModel? {
         model(file, animations: [])
     }
 
-    private func model(_ file: String, animations: Set<String>) -> GLTFModel? {
+    private func model(_ file: String, animations: Set<String>, smooth: Bool = false) -> GLTFModel? {
         if !Thread.isMainThread {
-            return DispatchQueue.main.sync { self.model(file, animations: animations) }
+            return DispatchQueue.main.sync { self.model(file, animations: animations, smooth: smooth) }
         }
         if let model = models[file] { return model }
         if missing.contains(file) { return nil }
         let name = (file as NSString).deletingPathExtension
         let type = (file as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: type),
-              let parsed = try? GLTFModel(url: url, animations: animations) else {
+              let parsed = try? GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth) else {
             missing.insert(file)
             return nil
         }

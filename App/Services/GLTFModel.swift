@@ -68,8 +68,8 @@ final class GLTFModel: @unchecked Sendable {
     private let skins: [Skin]
 
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
-    /// maxTexture：贴图最大边长，大了缩小（这些模型的贴图是一格格的纯色，缩小看不出来，省显存）
-    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512) throws {
+    /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
+    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false) throws {
         // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
         guard Thread.isMainThread else { throw LoadError.offMain }
         guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
@@ -154,7 +154,10 @@ final class GLTFModel: @unchecked Sendable {
                 var normals: [Float] = []
                 if let normalIndex = attributes["NORMAL"] {
                     normals = reader.floats(normalIndex)
-                    if normals.count == count * 3 { sources.append(GLTFModel.source(normals, .normal, width: 3)) }
+                    if normals.count == count * 3 {
+                        let shading = smoothNormals ? GLTFModel.smoothed(normals, at: positions) : normals
+                        sources.append(GLTFModel.source(shading, .normal, width: 3))
+                    }
                 }
                 if let uvIndex = attributes["TEXCOORD_0"] {
                     let uvs = reader.floats(uvIndex)
