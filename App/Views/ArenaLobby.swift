@@ -22,6 +22,10 @@ struct ArenaHomeView: View {
     @State private var pendingRoom: GameRoom?
     /// 冒险
     @State private var adventure = false
+    /// 组队开几个人的房间（2 是双人，3–6 是多人）
+    @State private var partySize = 2
+    @State private var friends = ArenaFriends.load()
+    @State private var friendName = ""
     /// 排位赛（只打 3v3，按段位加减排位分）
     @AppStorage("arena.ranked") private var ranked = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
@@ -40,7 +44,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together, season, settings
+        case brawlers, modes, loadout, road, together, season, settings, friends, party
         var id: String { rawValue }
     }
 
@@ -278,8 +282,8 @@ struct ArenaHomeView: View {
             }
             HStack(spacing: 6) {
                 placeholder("商店", icon: "bag.fill")
-                placeholder("好友", icon: "person.2.fill")
-                placeholder("组队", icon: "plus")
+                miniTile("好友", icon: "person.2.fill", face: Color(red: 0.25, green: 0.55, blue: 0.95)) { sheet = .friends }
+                miniTile("组队", icon: "plus", face: Color(red: 0.2, green: 0.72, blue: 0.45)) { sheet = .party }
             }
         }
         .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
@@ -320,6 +324,23 @@ struct ArenaHomeView: View {
         .accessibilityLabel("\(title)，还没开放")
     }
 
+    private func miniTile(_ title: String, icon: String, face: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 1) {
+                Image(systemName: icon).font(.system(size: 16, weight: .black)).foregroundStyle(.white)
+                    .frame(height: 22)
+                Text(title)
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 52, height: 46)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(face))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black, lineWidth: 3))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+
     // MARK: 中间：角色的名字、等级、升级
 
     private var brawlerPlate: some View {
@@ -338,13 +359,18 @@ struct ArenaHomeView: View {
                     .font(.system(size: 26, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .arenaOutline(2)
-                Text("+")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(Color(white: 0.35)))
-                    .overlay(Circle().strokeBorder(.black.opacity(0.75), lineWidth: 3))
-                    .accessibilityLabel("组队，还没开放")
+                Button {
+                    sheet = .party
+                } label: {
+                    Text("+")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(Color(red: 0.2, green: 0.72, blue: 0.45)))
+                        .overlay(Circle().strokeBorder(.black.opacity(0.75), lineWidth: 3))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("组队")
             }
             HStack(spacing: 8) {
                 Label("\(progress.trophies(chosen))", systemImage: "trophy.fill")
@@ -531,9 +557,11 @@ struct ArenaHomeView: View {
             switch item {
             case .brawlers: brawlerGrid
             case .modes: modeList
-            case .loadout: loadoutList
+            case .loadout: skillBoard
             case .road: ArenaTrophyRoad()
             case .together: togetherList
+            case .friends: friendsBoard
+            case .party: partyBoard
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
             }
@@ -547,6 +575,8 @@ struct ArenaHomeView: View {
         case .loadout: return "\(chosen.name)的本事"
         case .road: return "奖杯之路"
         case .together: return "和同事打"
+        case .friends: return "好友"
+        case .party: return "组队"
         case .season: return "赛季"
         case .settings: return "设置"
         }
@@ -559,6 +589,8 @@ struct ArenaHomeView: View {
         case .loadout: return Color(red: 0.36, green: 0.82, blue: 0.24)
         case .road: return .orange
         case .together: return Color(red: 0.3, green: 0.78, blue: 0.4)
+        case .friends: return Color(red: 0.25, green: 0.55, blue: 0.95)
+        case .party: return Color(red: 0.2, green: 0.72, blue: 0.45)
         case .season: return Color(red: 0.6, green: 0.4, blue: 0.95)
         case .settings: return Color(red: 0.45, green: 0.5, blue: 0.58)
         }
@@ -831,6 +863,159 @@ struct ArenaHomeView: View {
         }
         .scrollContentBackground(.hidden)
         .environment(\.colorScheme, .dark)
+    }
+
+    /// 普攻、大招、小道具、星徽。选了就带上，没解锁的锁着
+    private var skillBoard: some View {
+        let level = progress.level(chosen)
+        let loadout = progress.loadout(for: chosen)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                skillCard(title: "普攻", note: chosen.attackNote, tint: Color(red: 0.9, green: 0.28, blue: 0.24), mark: "打", chosen: true, locked: nil) {}
+                skillCard(title: "大招", note: chosen.superNote, tint: Color(uiColor: ArenaPalette.gold), mark: "大", chosen: true, locked: nil) {}
+                Text("小道具（一局 \(ArenaGame.gadgetUses) 次）")
+                    .font(.system(size: 13, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                ForEach(chosen.gadgets.indices, id: \.self) { k in
+                    let gadget = chosen.gadgets[k]
+                    let needs = ArenaProgress.gadgetLevels[k]
+                    skillCard(title: gadget.name, note: gadget.note, tint: Color(uiColor: ArenaPalette.gadget), mark: "具",
+                              chosen: loadout.gadget == gadget, locked: level < needs ? needs : nil) {
+                        growth.choose(gadget, for: chosen)
+                    }
+                }
+                Text("星徽（一直有效）")
+                    .font(.system(size: 13, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                ForEach(chosen.starPowers.indices, id: \.self) { k in
+                    let star = chosen.starPowers[k]
+                    let needs = ArenaProgress.starLevels[k]
+                    skillCard(title: star.name, note: star.note, tint: Color(uiColor: ArenaPalette.gold), mark: "星",
+                              chosen: loadout.starPower == star, locked: level < needs ? needs : nil) {
+                        growth.choose(star, for: chosen)
+                    }
+                }
+                skillCard(title: "超级充能", note: "攒满再放大招：" + chosen.hyperNote, tint: Color(uiColor: ArenaPalette.hyper), mark: "超",
+                          chosen: loadout.hypercharge, locked: level < ArenaProgress.hyperLevel ? ArenaProgress.hyperLevel : nil) {}
+            }
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func skillCard(title: String, note: String, tint: Color, mark: String, chosen: Bool, locked: Int?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Text(mark)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(locked == nil ? tint : Color.gray))
+                    .overlay(Circle().strokeBorder(.black, lineWidth: 2))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 18, weight: .black, design: .rounded)).foregroundStyle(.white).arenaOutline(1)
+                    Text(note).font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.9))
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                if let locked {
+                    Text("\(locked) 级").font(.system(size: 12, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                } else if chosen {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color(red: 1, green: 0.86, blue: 0.2))
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(tint.opacity(locked == nil ? 0.9 : 0.35)))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.black, lineWidth: chosen && locked == nil ? 3 : 2))
+        }
+        .buttonStyle(.plain)
+        .disabled(locked != nil)
+    }
+
+    private var friendsBoard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                TextField("好友的名字", text: $friendName)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    let trimmed = friendName.trimmingCharacters(in: .whitespaces)
+                    guard !trimmed.isEmpty else { return }
+                    friends.append(ArenaFriend(id: UUID(), name: trimmed))
+                    ArenaFriends.save(friends)
+                    friendName = ""
+                } label: {
+                    Text("加上").frame(width: 72)
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face, edge: ArenaGameButton.blue.edge, height: 40))
+            }
+            ScrollView {
+                VStack(spacing: 8) {
+                    if friends.isEmpty {
+                        Text("还没有好友。加上名字，再约他打双人。房间号在下一页，发给他就行。")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    ForEach(friends) { friend in
+                        HStack {
+                            Text(friend.name)
+                                .font(.system(size: 18, weight: .black, design: .rounded))
+                                .foregroundStyle(.white)
+                                .arenaOutline(1)
+                            Spacer()
+                            Button("双人") { openRoom(players: 2) }
+                                .buttonStyle(ArenaGameButton(face: ArenaGameButton.green.face, edge: ArenaGameButton.green.edge, height: 36))
+                            Button("删") {
+                                friends.removeAll { $0.id == friend.id }
+                                ArenaFriends.save(friends)
+                            }
+                            .buttonStyle(ArenaGameButton(face: Color(red: 0.85, green: 0.22, blue: 0.22),
+                                                             edge: Color(red: 0.5, green: 0.08, blue: 0.08), height: 36))
+                        }
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black.opacity(0.28)))
+                    }
+                }
+            }
+        }
+    }
+
+    private var partyBoard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                partySizeButton("双人对战", size: 2)
+                partySizeButton("多人对战", size: max(partySize, 3) == partySize && partySize > 2 ? partySize : 3)
+            }
+            if partySize > 2 {
+                Stepper("\(partySize) 个人", value: $partySize, in: 3...6)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            List {
+                GameRoomButtons(kind: .arena, remotePlayers: partySize...partySize, nearbyCapacity: partySize) { room in
+                    pendingRoom = room
+                    sheet = nil
+                }
+                .id(partySize)
+            }
+            .frame(maxHeight: .infinity)
+            .scrollContentBackground(.hidden)
+            .environment(\.colorScheme, .dark)
+        }
+    }
+
+    private func partySizeButton(_ title: String, size: Int) -> some View {
+        let on = (size == 2 && partySize == 2) || (size > 2 && partySize > 2)
+        return Button {
+            partySize = size
+        } label: {
+            Text(title).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ArenaGameButton(face: on ? ArenaGameButton.yellow.face : ArenaGameButton.blue.face,
+                                     edge: on ? ArenaGameButton.yellow.edge : ArenaGameButton.blue.edge, height: 44))
+    }
+
+    private func openRoom(players: Int) {
+        let nick = GameProfile.nickname.isEmpty ? name : GameProfile.nickname
+        let code = RoomCode.make(players: players)
+        pendingRoom = GameRoom(kind: .arena, mode: .remote(code: code), name: nick, capacity: players)
+        sheet = nil
     }
 }
 
@@ -1240,5 +1425,26 @@ struct ArenaMapThumb: View {
         case .bush: return Color(red: 0.12, green: 0.48, blue: 0.18)
         case .goal: return Color(red: 0.95, green: 0.82, blue: 0.2)
         }
+    }
+}
+
+/// 记在这台手机上的好友（名字）。约人时开一个双人房间，把房间号发给他
+private struct ArenaFriend: Codable, Identifiable, Equatable {
+    var id: UUID
+    var name: String
+}
+
+private enum ArenaFriends {
+    static let key = "arena.friends"
+
+    static func load() -> [ArenaFriend] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let list = try? JSONDecoder().decode([ArenaFriend].self, from: data) else { return [] }
+        return list
+    }
+
+    static func save(_ list: [ArenaFriend]) {
+        guard let data = try? JSONEncoder().encode(list) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 }

@@ -99,6 +99,7 @@ struct GameRoomButtons: View {
         }
         .onAppear {
             if nickname.isEmpty { nickname = store.settings.aliases.first ?? "" }
+            if !remotePlayers.contains(players) { players = remotePlayers.lowerBound }
         }
         Section {
             if remotePlayers.count > 1 {
