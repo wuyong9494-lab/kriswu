@@ -118,6 +118,7 @@ final class GLTFModel: @unchecked Sendable {
         let textures = json["textures"] as? [[String: Any]] ?? []
         let materials: [SCNMaterial] = (json["materials"] as? [[String: Any]] ?? []).map { info in
             let material = SCNMaterial()
+            material.name = info["name"] as? String ?? ""
             material.lightingModel = .lambert
             material.isDoubleSided = info["doubleSided"] as? Bool ?? false
             let pbr = info["pbrMetallicRoughness"] as? [String: Any] ?? [:]

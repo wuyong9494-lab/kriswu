@@ -197,6 +197,9 @@ struct ArenaHomeView: View {
             .frame(height: 54)
             .background(Color(red: 0.18, green: 0.22, blue: 0.38), in: Capsule())
             .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
+            .overlay(alignment: .top) {
+                Capsule().fill(.white.opacity(0.28)).frame(height: 8).padding(.horizontal, 18).padding(.top, 7)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("奖杯 \(progress.totalTrophies)，看奖杯之路")
@@ -223,6 +226,9 @@ struct ArenaHomeView: View {
             .frame(height: 54)
             .background(Color(red: 0.42, green: 0.28, blue: 0.05), in: Capsule())
             .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
+            .overlay(alignment: .top) {
+                Capsule().fill(.white.opacity(0.28)).frame(height: 8).padding(.horizontal, 18).padding(.top, 7)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("金币 \(progress.coins)，打开商店")
@@ -246,6 +252,9 @@ struct ArenaHomeView: View {
         .frame(height: 54)
         .background(Color(red: 0.08, green: 0.28, blue: 0.34), in: Capsule())
         .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
+        .overlay(alignment: .top) {
+            Capsule().fill(.white.opacity(0.28)).frame(height: 8).padding(.horizontal, 18).padding(.top, 7)
+        }
         .accessibilityLabel("宝石还没开放")
     }
 
@@ -281,6 +290,9 @@ struct ArenaHomeView: View {
             .frame(height: 54)
             .background(Color(red: 0.28, green: 0.16, blue: 0.48), in: Capsule())
             .overlay(Capsule().strokeBorder(.black, lineWidth: 4))
+            .overlay(alignment: .top) {
+                Capsule().fill(.white.opacity(0.28)).frame(height: 8).padding(.horizontal, 18).padding(.top, 7)
+            }
             .overlay(alignment: .topTrailing) {
                 if waiting {
                     Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: -2, y: 2)
@@ -1514,6 +1526,16 @@ final class ArenaShowcaseView: SCNView {
         shadowNode.simdPosition = SIMD3(0, height + 0.002, 0)
         shadowNode.renderingOrder = 2
         world.rootNode.addChildNode(shadowNode)
+        let deck = SCNCylinder(radius: 0.7, height: 0.018)
+        deck.radialSegmentCount = 40
+        let deckMaterial = SCNMaterial()
+        deckMaterial.lightingModel = .constant
+        deckMaterial.diffuse.contents = UIColor(red: 0.55, green: 0.78, blue: 1, alpha: 1)
+        deck.firstMaterial = deckMaterial
+        let deckNode = SCNNode(geometry: deck)
+        deckNode.simdPosition = SIMD3(0, height + 0.012, 0)
+        deckNode.castsShadow = false
+        world.rootNode.addChildNode(deckNode)
         let ring = SCNTorus(ringRadius: 0.9, pipeRadius: 0.045)
         ring.ringSegmentCount = 48
         ring.pipeSegmentCount = 12
@@ -1577,8 +1599,8 @@ final class ArenaShowcaseView: SCNView {
         fighter.facing = V2(Double(sin(angle)), Double(cos(angle)))
         avatar?.update(fighter, visible: true, translucent: false, cheering: clock < cheerUntil, dt: dt, clock: clock)
         if !dragging, clock > cheerUntil, clock > nextSwing {
-            avatar?.attack()
-            nextSwing = clock + 5
+            avatar?.showcaseSwing()
+            nextSwing = clock + 4.8
         }
     }
 

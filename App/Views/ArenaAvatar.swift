@@ -401,7 +401,7 @@ final class ArenaAvatar {
     private static func finish(_ material: SCNMaterial, stage: Bool = false) {
         guard material !== ArenaArt.outline else { return }
         material.lightingModel = .constant
-        ArenaArt.grade(material, stage ? ArenaArt.stageToon : ArenaArt.characterToon)
+        ArenaArt.grade(material, stage ? ArenaArt.stageShade(material) : ArenaArt.characterToon)
     }
 
     private static func paint(_ node: SCNNode, stage: Bool = false) {
@@ -426,6 +426,13 @@ final class ArenaAvatar {
         for (material, original) in zip(instance?.materials ?? [], glows) {
             material.emission.contents = original ?? UIColor.black
         }
+    }
+
+    /// 大厅展台的轻出手：整个人跟着挥，比场上那一下稍长，好让人看见。不改对局里的出手
+    func showcaseSwing() {
+        let move = look.attack
+        start(BrawlerLook.Move(clip: move.clip, from: move.from, to: move.to, seconds: max(move.seconds, 0.62)),
+              hold: false, fullBody: true)
     }
 
     /// 开了一枪

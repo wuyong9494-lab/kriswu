@@ -68,6 +68,72 @@ enum ArenaArt {
         _surface.emission.rgb += c * fres * 0.42 + float3(0.45, 0.65, 1.0) * fres * 0.16;
         """
 
+    /// 展台上的肤色块：暖、少压暗，别和衣服混成一块灰
+    static let stageSkin = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float wrap = saturate(dot(n, normalize(float3(-0.3, 0.8, 0.4))) * 0.35 + 0.65);
+        float3 c = _surface.diffuse.rgb;
+        float luma = dot(c, float3(0.3, 0.59, 0.11));
+        c = mix(float3(luma), c, 1.25);
+        _surface.diffuse.rgb = min(c * (0.92 + wrap * 0.18), float3(1.0));
+        """
+
+    /// 展台上的衣服：饱和拉高，明暗分成两档
+    static let stageCloth = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float wrap = saturate(dot(n, normalize(float3(-0.42, 0.74, 0.48))) * 0.55 + 0.45);
+        float shade = wrap > 0.6 ? 1.12 : 0.72;
+        float3 c = _surface.diffuse.rgb;
+        float luma = dot(c, float3(0.3, 0.59, 0.11));
+        c = mix(float3(luma), c, 1.7);
+        _surface.diffuse.rgb = min(c * shade, float3(1.0));
+        """
+
+    /// 展台上的金属：对比更硬，边上一层冷光
+    static let stageMetal = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float wrap = saturate(dot(n, normalize(float3(-0.5, 0.7, 0.45))));
+        float shade = wrap > 0.55 ? 1.25 : 0.55;
+        float3 c = _surface.diffuse.rgb;
+        _surface.diffuse.rgb = min(c * shade, float3(1.0));
+        float fres = 1.0 - saturate(dot(n, normalize(_surface.view)));
+        _surface.emission.rgb += float3(0.75, 0.85, 1.0) * fres * fres * 0.35;
+        """
+
+    /// 展台上的金色配件
+    static let stageGold = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float wrap = saturate(dot(n, normalize(float3(-0.4, 0.85, 0.3))));
+        float shade = wrap > 0.5 ? 1.2 : 0.7;
+        _surface.diffuse.rgb = min(_surface.diffuse.rgb * shade, float3(1.0));
+        _surface.emission.rgb += float3(1.0, 0.82, 0.3) * wrap * 0.12;
+        """
+
+    /// 眼睛别进阴影档，保持亮
+    static let stageEyes = """
+        #pragma body
+        _surface.diffuse.rgb = min(_surface.diffuse.rgb * 1.15, float3(1.0));
+        """
+
+    /// 展台按材质挑明暗。只给大厅用，场上仍走 characterToon
+    static func stageShade(_ material: SCNMaterial) -> String {
+        let name = material.name.lowercased()
+        if name.contains("pupil") { return stageMetal }
+        if name.contains("eye") { return stageEyes }
+        guard let color = material.diffuse.contents as? UIColor else { return stageToon }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return stageToon }
+        if red > 0.8 && green > 0.55 && blue > 0.4 && red >= blue { return stageSkin }
+        if blue > red + 0.15 && blue > 0.45 { return stageCloth }
+        if red > 0.4 && green > 0.32 && blue < 0.4 && red > blue { return stageGold }
+        if max(red, green, blue) < 0.5 { return stageMetal }
+        return stageToon
+    }
+
     /// 角色表面的边缘光和略提的饱和。画在每个角色自己的材质上，不走相机的泛光（那个在 iOS 27 上会断）
     static let characterSurface = """
         #pragma body
