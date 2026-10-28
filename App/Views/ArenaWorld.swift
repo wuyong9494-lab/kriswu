@@ -1058,7 +1058,7 @@ final class ArenaWorldView: SCNView {
         let tint = hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
         let tintKey = hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
         // 子弹芯是偏白的亮色，外面一圈光晕，后面拖一条尾巴
-        let core = Self.lighter(tint, 0.5)
+        let core = Self.lighter(tint, 0.72)
         if let lob = p.lob {
             // 扔出去的火球：天上的球、地上的影子、落点的圈
             let root = SCNNode()
@@ -1107,13 +1107,13 @@ final class ArenaWorldView: SCNView {
         case .knight, .barbarian, .guardian:
             let wide: CGFloat = owner == .knight ? 1.15 : (owner == .guardian ? 1.7 : 1.35)
             piece.geometry = shared("slash-\(owner.rawValue)-\(tintKey)") {
-                let box = SCNBox(width: wide, height: 0.06, length: 0.16, chamferRadius: 0.03)
+                let box = SCNBox(width: wide, height: 0.14, length: 0.22, chamferRadius: 0.04)
                 box.firstMaterial = ArenaAvatar.material(core, lit: false)
                 return box
             }
         default:
-            let thick: CGFloat = p.isSuper ? 0.22 : (owner == .assassin ? 0.09 : 0.16)
-            let long: CGFloat = p.isSuper ? 1.6 : (owner == .assassin ? 0.62 : 1.15)
+            let thick: CGFloat = p.isSuper ? 0.28 : 0.22
+            let long: CGFloat = p.isSuper ? 2.6 : 1.85
             piece.geometry = shared("bolt-\(owner.rawValue)-\(tintKey)-\(p.isSuper)") {
                 let capsule = SCNCapsule(capRadius: thick, height: long)
                 capsule.firstMaterial = ArenaAvatar.material(core, lit: false)
