@@ -708,8 +708,14 @@ final class ArenaWorldView: SCNView {
                  color: UIColor(red: 0.45, green: 0.95, blue: 0.4, alpha: 1), to: 1.7)
         }
         wasInBush = inside
+        // 自己、队友、或者已经露出来的人待在哪片草，就把那一整片拨开。别的草保持挡住
+        var openBush = Set<Int>()
+        for fighter in game.fighters where fighter.alive && game.isVisible(fighter, to: myTeam) {
+            let id = game.map.bushId(at: fighter.pos)
+            if id > 0 { openBush.insert(id) }
+        }
         for k in bushes.indices {
-            let fade = me.alive && bushes[k].at.distance(to: me.pos) < 1.45
+            let fade = openBush.contains(game.map.bushId(at: bushes[k].at))
             if fade != bushes[k].faded {
                 if fade {
                     let base = bushes[k].node.scale

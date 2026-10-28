@@ -77,6 +77,30 @@ final class ArenaPowerTests: XCTestCase {
         XCTAssertTrue(game.isVisible(game.fighters[0], to: 1), "开火就露出来")
     }
 
+    /// 连成一片的草两头也能看见；中间隔开的两丛，站得很近也看不见
+    func testBushVisionFollowsTheConnectedPatch() {
+        let map = ArenaMap(rows: [
+            "o........o",
+            "..........",
+            ".********.",
+            "..........",
+            "..*..*....",
+        ])
+        var game = ArenaGame(mode: .showdown, entrants: [
+            ArenaGame.Entrant(name: "甲", brawler: .knight, isBot: true, team: 0),
+            ArenaGame.Entrant(name: "乙", brawler: .ranger, isBot: true, team: 1),
+        ], seed: 1, map: map)
+        XCTAssertEqual(game.map.width, 10, "用的是这张图")
+        game.adjust(0) { $0.pos = V2(1.5, 2.5); $0.lastAttack = -10 }
+        game.adjust(1) { $0.pos = V2(8.5, 2.5); $0.lastAttack = -10 }
+        XCTAssertTrue(game.map.sameBush(V2(1.5, 2.5), V2(8.5, 2.5)))
+        XCTAssertTrue(game.isVisible(game.fighters[0], to: 1), "同一片草的两头互相看得见")
+        game.adjust(0) { $0.pos = V2(2.5, 4.5) }
+        game.adjust(1) { $0.pos = V2(5.5, 4.5) }
+        XCTAssertFalse(game.map.sameBush(game.fighters[0].pos, game.fighters[1].pos))
+        XCTAssertFalse(game.isVisible(game.fighters[0], to: 1), "隔开的两丛，站得近也看不见")
+    }
+
     /// 子弹、爆炸都打得到能量箱；人走不进箱子里
     func testBoxesTakeHitsAndBlockWalking() throws {
         var game = showdown(seed: 9)

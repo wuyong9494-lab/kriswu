@@ -129,6 +129,8 @@ public struct ArenaMap: Sendable {
     /// 两队守的球门的中间：[下边一队的, 上边一队的]（足球的地图才有）
     public let goalCenters: [V2?]
     private let chestOfCell: [Int: Int]
+    /// 连成一片的草是同一个编号。0 表示这格不是草
+    private let bushOfCell: [Int]
 
     /// 用字画地图：# 墙、* 草丛、. 空地；a 下边一队的出生点、b 上边一队的、o 各自为战的；s 中间；
     /// G 球门（上半边的是上边一队守的）；C 宝箱（连在一起的几格是一个）
@@ -201,6 +203,7 @@ public struct ArenaMap: Sendable {
         }
         chestSpots = spots
         chestOfCell = owner
+        bushOfCell = Self.bushPatches(tiles: tiles, width: w, height: h)
     }
 
     public func tile(_ x: Int, _ y: Int) -> Tile {
@@ -220,6 +223,42 @@ public struct ArenaMap: Sendable {
     public func blocks(_ p: V2) -> Bool { tile(at: p) == .wall }
 
     public func inBush(_ p: V2) -> Bool { tile(at: p) == .bush }
+
+    /// 这一点在第几片草里。不在草里是 0。上下左右连着的草算同一片，斜着挨着不算
+    public func bushId(at p: V2) -> Int {
+        let x = Int(p.x.rounded(.down)), y = Int(p.y.rounded(.down))
+        guard x >= 0, y >= 0, x < width, y < height else { return 0 }
+        return bushOfCell[y * width + x]
+    }
+
+    /// 两个人是不是站在同一片连着的草里
+    public func sameBush(_ a: V2, _ b: V2) -> Bool {
+        let id = bushId(at: a)
+        return id > 0 && id == bushId(at: b)
+    }
+
+    private static func bushPatches(tiles: [Tile], width: Int, height: Int) -> [Int] {
+        var ids = [Int](repeating: 0, count: tiles.count)
+        var next = 1
+        for start in tiles.indices where tiles[start] == .bush && ids[start] == 0 {
+            var stack = [start]
+            ids[start] = next
+            while let current = stack.popLast() {
+                let x = current % width, y = current / width
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nx = x + dx, ny = y + dy
+                    guard nx >= 0, ny >= 0, nx < width, ny < height else { continue }
+                    let nextCell = ny * width + nx
+                    if tiles[nextCell] == .bush && ids[nextCell] == 0 {
+                        ids[nextCell] = next
+                        stack.append(nextCell)
+                    }
+                }
+            }
+            next += 1
+        }
+        return ids
+    }
 
     /// 这一格是不是宝箱
     public func isChest(_ x: Int, _ y: Int) -> Bool {
@@ -808,7 +847,8 @@ public struct ArenaGame: Sendable {
             return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 1.5 }
         }
         if !map.inBush(fighter.pos) { return true }
-        return fighters.contains { $0.alive && $0.team == team && map.inBush($0.pos) && $0.pos.distance(to: fighter.pos) < 3.2 }
+        // 只有走进同一片连着的草才看得见，不是靠距离
+        return fighters.contains { $0.alive && $0.team == team && map.sameBush($0.pos, fighter.pos) }
     }
 
     // MARK: 一帧
