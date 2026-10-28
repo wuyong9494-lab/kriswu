@@ -92,6 +92,7 @@ final class ArenaAvatar {
     private var flashUntil: Double = 0
     private var flashing = false
     private var placed = false
+    private var ammoPips = 3
 
     /// skin：穿第几套皮肤（0 原来的样子）
     init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0) {
@@ -333,6 +334,12 @@ final class ArenaAvatar {
                 material.emission.contents = original ?? UIColor.black
             }
         }
+
+        let pips = Int(fighter.ammo)
+        if fighter.alive, pips < ammoPips, action == nil, (brawler == .ranger || brawler == .shade) {
+            start(BrawlerLook.Move(clip: "1H_Ranged_Reload", from: 0.08, to: 0.72, seconds: 0.38), hold: false, fullBody: false)
+        }
+        ammoPips = pips
 
         guard !node.isHidden else { return }
         let moving = fighter.alive && speed > 0.6

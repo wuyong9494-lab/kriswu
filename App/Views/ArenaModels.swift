@@ -175,7 +175,7 @@ struct BrawlerLook {
     private static let turned = simd_quatf(ix: 0, iy: -1, iz: 0, r: 0)
 
     /// 要从模型里读的动画
-    var clips: Set<String> { [idle, run, attack.clip, special.clip, Self.death.clip, Self.cheer, "Hit_A"] }
+    var clips: Set<String> { [idle, run, attack.clip, special.clip, Self.death.clip, Self.cheer, "Hit_A", "1H_Ranged_Reload"] }
 }
 
 /// 乱斗用到的 3D 模型：第一次用时从 App 里读（读不出来就返回 nil，画面用简单的形状代替，照样能玩），之后一直留着

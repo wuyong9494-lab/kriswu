@@ -40,6 +40,10 @@ final class ArenaWorldView: SCNView {
     private let rig = SCNNode()
     private let cameraNode = SCNNode()
     private let aimNode = SCNNode()
+    /// 瞄准的形状没变就别重做（每帧新建 SCNShape 会把手机卡死，严重时渲染线程直接断）
+    private var aimKey = ""
+    /// 同一时刻场上的爆炸光点，太多就先不生，免得一下子把内存打满闪退
+    private var bursts = 0
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
     private var clock = 0.0
@@ -1386,6 +1390,8 @@ final class ArenaWorldView: SCNView {
 
     /// 一下子炸开的一团光点
     private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
+        guard bursts < 24 else { return }
+        bursts += 1
         let system = SCNParticleSystem()
         system.loops = false
         system.emissionDuration = 0.05
@@ -1408,7 +1414,11 @@ final class ArenaWorldView: SCNView {
         holder.simdPosition = point
         holder.addParticleSystem(system)
         world.rootNode.addChildNode(holder)
-        holder.runAction(.sequence([.wait(duration: Double(life) * 1.4 + 0.2), .removeFromParentNode()]))
+        holder.runAction(.sequence([
+            .wait(duration: Double(life) * 1.4 + 0.2),
+            .run { [weak self] _ in self?.bursts = max(0, (self?.bursts ?? 1) - 1) },
+            .removeFromParentNode()
+        ]))
     }
 
     /// 打中的地方：一下亮光，几颗火星往外蹦
@@ -1619,6 +1629,7 @@ final class ArenaWorldView: SCNView {
     private func syncAim(_ fighter: Fighter) {
         guard fighter.alive, let drag = controller.superAiming ?? controller.aiming else {
             aimNode.isHidden = true
+            aimKey = ""
             return
         }
         let isSuper = controller.superAiming != nil
@@ -1692,12 +1703,15 @@ final class ArenaWorldView: SCNView {
                 path.close()
             }
         }
-        path.flatness = 0.03
+        path.flatness = 0.08
+        let key = "\(isSuper)-\(brawler.rawValue)-\(Int((direction.x * 6).rounded()))-\(Int((direction.y * 6).rounded()))-\(Int((drag.length * 6).rounded()))"
+        aimNode.simdPosition = SIMD3(Float(fighter.pos.x), 0.07, Float(fighter.pos.y))
+        aimNode.isHidden = false
+        guard key != aimKey else { return }
+        aimKey = key
         let shape = SCNShape(path: path, extrusionDepth: 0)
         shape.firstMaterial = ArenaAvatar.decal((isSuper ? ArenaPalette.gold : UIColor.white).withAlphaComponent(0.3))
         aimNode.geometry = shape
-        aimNode.simdPosition = SIMD3(Float(fighter.pos.x), 0.07, Float(fighter.pos.y))
-        aimNode.isHidden = false
     }
 }
 
