@@ -49,8 +49,6 @@ final class ArenaWorldView: SCNView {
     private var aimKey = ""
     private let aimFill = ArenaAvatar.decal(UIColor.white.withAlphaComponent(0.3))
     private let aimSuperFill = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.3))
-    /// 同一时刻场上的爆炸光点，太多就先不生，免得一下子把内存打满闪退
-    private var bursts = 0
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
     private var clock = 0.0
@@ -140,6 +138,34 @@ final class ArenaWorldView: SCNView {
         var ball: SCNNode?
         var shadow: SCNNode?
     }
+
+    /// 开局就建好的刀光、圈、命中。打的时候只改位置，不再新建
+    private final class FxSlot {
+        let node: SCNNode
+        var busy = false
+        init(_ node: SCNNode) {
+            self.node = node
+            node.isHidden = true
+        }
+    }
+
+    private final class BurstSlot {
+        let node: SCNNode
+        let system: SCNParticleSystem
+        var busy = false
+        init(_ node: SCNNode, _ system: SCNParticleSystem) {
+            self.node = node
+            self.system = system
+            node.isHidden = true
+        }
+    }
+
+    private var slashSlots: [FxSlot] = []
+    private var streakSlots: [FxSlot] = []
+    private var ringSlots: [FxSlot] = []
+    private var flashSlots: [FxSlot] = []
+    private var burstSlots: [BurstSlot] = []
+    private var trailPool: [SCNParticleSystem] = []
 
     /// 飘起来的伤害数字
     private struct Floater {
@@ -410,6 +436,7 @@ final class ArenaWorldView: SCNView {
         aimNode.castsShadow = false
         aimNode.isHidden = true
         root.addChildNode(aimNode)
+        prepareFx()
     }
 
     /// 地面的材质：底色（颜色或画好的地面）乘上草叶、落叶的细纹（细纹一张铺 2 × 2 格）
@@ -1064,6 +1091,7 @@ final class ArenaWorldView: SCNView {
             }
         }
         for (id, view) in projectiles where !seen.contains(id) {
+            reclaimTrails(view.root)
             view.root.removeFromParentNode()
             projectiles[id] = nil
         }
@@ -1430,38 +1458,31 @@ final class ArenaWorldView: SCNView {
     /// 近战挥出去的那一刀：沿面朝的方向排一排亮片，转一下就收
     /// 远程开火时地上一条短的亮线，标出打出去的方向
     private func shotStreak(from point: SIMD3<Float>, facing: V2, color: UIColor) {
-        let box = SCNBox(width: 0.16, height: 0.02, length: 2.2, chamferRadius: 0.04)
-        let material = SCNMaterial()
-        material.lightingModel = .constant
-        material.diffuse.contents = color.withAlphaComponent(0.9)
-        material.emission.contents = color
-        box.firstMaterial = material
-        let node = SCNNode(geometry: box)
+        guard let slot = take(streakSlots) else { return }
+        slot.node.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(0.9)
+        slot.node.geometry?.firstMaterial?.emission.contents = color
         let yaw = atan2(Float(facing.x), Float(facing.y))
-        node.simdPosition = point + SIMD3(Float(facing.x) * 1.3, 0.05, Float(facing.y) * 1.3)
-        node.simdEulerAngles = SIMD3(0, yaw, 0)
-        node.castsShadow = false
-        node.renderingOrder = 6
-        world.rootNode.addChildNode(node)
-        node.runAction(.sequence([.fadeOut(duration: 0.16), .removeFromParentNode()]))
+        slot.node.simdPosition = point + SIMD3(Float(facing.x) * 1.3, 0.05, Float(facing.y) * 1.3)
+        slot.node.simdEulerAngles = SIMD3(0, yaw, 0)
+        slot.node.opacity = 1
+        slot.node.runAction(.sequence([
+            .fadeOut(duration: 0.16),
+            .run { _ in slot.busy = false; slot.node.isHidden = true },
+        ]))
     }
 
     private func slashArc(at point: SIMD3<Float>, facing: V2, color: UIColor, reach: Float, sweep: Float) {
-        guard bursts < 16 else { return }
-        bursts += 1
+        guard let slot = take(slashSlots) else { return }
+        slot.node.geometry?.firstMaterial?.diffuse.contents = color
+        slot.node.geometry?.firstMaterial?.emission.contents = color
         let yaw = atan2(Float(facing.x), Float(facing.y))
-        let key = color == ArenaPalette.allyShot ? "ally" : "enemy"
-        let node = SCNNode(geometry: shared("slash-arc-\(key)") { Self.crescent(color: color, wide: 1) })
-        node.simdPosition = point + SIMD3(0, 0.85, 0)
-        node.simdEulerAngles = SIMD3(0.15, yaw - .pi / 2, 0)
-        node.simdScale = SIMD3(reach, max(sweep * 0.55, 0.7), 1)
-        node.castsShadow = false
-        node.renderingOrder = 20
-        world.rootNode.addChildNode(node)
-        node.runAction(.sequence([
+        slot.node.simdPosition = point + SIMD3(0, 0.85, 0)
+        slot.node.simdEulerAngles = SIMD3(0.15, yaw - .pi / 2, 0)
+        slot.node.simdScale = SIMD3(reach, max(sweep * 0.55, 0.7), 1)
+        slot.node.opacity = 1
+        slot.node.runAction(.sequence([
             .fadeOut(duration: 0.22),
-            .run { [weak self] _ in self?.bursts = max(0, (self?.bursts ?? 1) - 1) },
-            .removeFromParentNode(),
+            .run { _ in slot.busy = false; slot.node.isHidden = true },
         ]))
     }
 
@@ -1557,76 +1578,72 @@ final class ArenaWorldView: SCNView {
         return 1 / (1 + distance / 5)
     }
 
-    /// 一下子炸开的一团光点
+    /// 一下子炸开的一团光点。系统是开局建好的，这里只挪位置再放一次
     private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
-        guard bursts < 24 else { return }
-        bursts += 1
-        let system = SCNParticleSystem()
-        system.loops = false
-        system.emissionDuration = 0.05
+        guard let slot = burstSlots.first(where: { !$0.busy }) else { return }
+        slot.busy = true
+        slot.node.simdPosition = point
+        slot.node.isHidden = false
+        let system = slot.system
         system.birthRate = count / 0.05
         system.particleLifeSpan = life
-        system.particleLifeSpanVariation = life * 0.3
         system.particleVelocity = speed
-        system.particleVelocityVariation = speed * 0.5
-        system.spreadingAngle = 180
-        system.emittingDirection = SCNVector3(0, 1, 0)
         system.particleSize = size
-        system.particleSizeVariation = size * 0.4
         system.particleColor = color
-        system.particleImage = ArenaArt.dot
-        system.blendMode = .additive
-        system.isAffectedByGravity = false
-        system.dampingFactor = 2
-        system.propertyControllers = [.opacity: Self.fadeOut]
-        let holder = SCNNode()
-        holder.simdPosition = point
-        holder.addParticleSystem(system)
-        world.rootNode.addChildNode(holder)
-        holder.runAction(.sequence([
+        system.reset()
+        slot.node.runAction(.sequence([
             .wait(duration: Double(life) * 1.4 + 0.2),
-            .run { [weak self] _ in self?.bursts = max(0, (self?.bursts ?? 1) - 1) },
-            .removeFromParentNode()
+            .run { _ in slot.busy = false; slot.node.isHidden = true },
         ]))
     }
 
     /// 打中的地方：一下亮光，几颗火星往外蹦
     private func spark(at point: SIMD3<Float>) {
         burst(at: point, color: UIColor(red: 1, green: 0.95, blue: 0.7, alpha: 1), count: 14, speed: 3.5, size: 0.13, life: 0.22)
-        let flash = halo("spark", UIColor(red: 1, green: 0.88, blue: 0.5, alpha: 1), size: 1.1)
-        flash.simdPosition = point
-        flash.simdScale = SIMD3(repeating: 0.4)
-        world.rootNode.addChildNode(flash)
-        flash.runAction(.sequence([.group([.scale(to: 1.2, duration: 0.12), .fadeOut(duration: 0.16)]), .removeFromParentNode()]))
+        guard let slot = take(flashSlots) else { return }
+        slot.node.simdPosition = point
+        slot.node.simdScale = SIMD3(repeating: 0.4)
+        slot.node.opacity = 1
+        slot.node.runAction(.sequence([
+            .group([.scale(to: 1.2, duration: 0.12), .fadeOut(duration: 0.16)]),
+            .run { _ in slot.busy = false; slot.node.isHidden = true },
+        ]))
     }
 
-    /// 子弹后面拖的尾巴
+    /// 子弹后面拖的尾巴。优先用开局建好的那一批
     private func trail(_ color: UIColor, size: CGFloat, life: CGFloat = 0.3) -> SCNParticleSystem {
-        let system = SCNParticleSystem()
-        system.loops = true
-        system.birthRate = 22
+        let system = trailPool.popLast() ?? Self.makeTrail()
         system.particleLifeSpan = life
-        system.particleVelocity = 0.2
-        system.spreadingAngle = 180
         system.particleSize = size
         system.particleColor = color
-        system.particleImage = ArenaArt.dot
-        system.blendMode = .additive
-        system.propertyControllers = [.opacity: Self.fadeOut]
+        system.birthRate = 22
         return system
+    }
+
+    private func reclaimTrails(_ node: SCNNode) {
+        if let systems = node.particleSystems {
+            trailPool.append(contentsOf: systems)
+            node.removeAllParticleSystems()
+        }
+        node.enumerateChildNodes { child, _ in
+            if let systems = child.particleSystems {
+                self.trailPool.append(contentsOf: systems)
+                child.removeAllParticleSystems()
+            }
+        }
     }
 
     /// 地上一个往外扩的圈（放大招、复活）
     private func ring(at point: SIMD3<Float>, color: UIColor, to scale: CGFloat) {
-        let tube = SCNTube(innerRadius: 0.45, outerRadius: 0.6, height: 0.02)
-        tube.radialSegmentCount = 40
-        tube.firstMaterial = ArenaAvatar.decal(color.withAlphaComponent(0.9))
-        let node = SCNNode(geometry: tube)
-        node.simdPosition = SIMD3(point.x, 0.06, point.z)
-        node.castsShadow = false
-        node.renderingOrder = 9
-        world.rootNode.addChildNode(node)
-        node.runAction(.sequence([.group([.scale(to: scale, duration: 0.35), .fadeOut(duration: 0.35)]), .removeFromParentNode()]))
+        guard let slot = take(ringSlots) else { return }
+        slot.node.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(0.9)
+        slot.node.simdPosition = SIMD3(point.x, 0.06, point.z)
+        slot.node.simdScale = SIMD3(repeating: 1)
+        slot.node.opacity = 1
+        slot.node.runAction(.sequence([
+            .group([.scale(to: scale, duration: 0.35), .fadeOut(duration: 0.35)]),
+            .run { _ in slot.busy = false; slot.node.isHidden = true },
+        ]))
     }
 
     private static let fadeOut: SCNParticlePropertyController = {
@@ -1635,6 +1652,115 @@ final class ArenaWorldView: SCNView {
         animation.keyTimes = [0, 0.4, 1]
         return SCNParticlePropertyController(animation: animation)
     }()
+
+    /// 刀光、地上的线、圈、命中、拖尾都在进场时做好。打架时只拿一个出来用
+    private func prepareFx() {
+        let crescent = Self.crescent(color: .white, wide: 1)
+        for _ in 0..<10 {
+            let geometry = (crescent.copy() as? SCNGeometry) ?? crescent
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.isDoubleSided = true
+            geometry.materials = [material]
+            let node = SCNNode(geometry: geometry)
+            node.castsShadow = false
+            node.renderingOrder = 20
+            world.rootNode.addChildNode(node)
+            slashSlots.append(FxSlot(node))
+        }
+        for _ in 0..<8 {
+            let box = SCNBox(width: 0.16, height: 0.02, length: 2.2, chamferRadius: 0.04)
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            box.firstMaterial = material
+            let node = SCNNode(geometry: box)
+            node.castsShadow = false
+            node.renderingOrder = 6
+            world.rootNode.addChildNode(node)
+            streakSlots.append(FxSlot(node))
+        }
+        for _ in 0..<8 {
+            let tube = SCNTube(innerRadius: 0.45, outerRadius: 0.6, height: 0.02)
+            tube.radialSegmentCount = 28
+            tube.firstMaterial = ArenaAvatar.decal(.white)
+            let node = SCNNode(geometry: tube)
+            node.castsShadow = false
+            node.renderingOrder = 9
+            world.rootNode.addChildNode(node)
+            ringSlots.append(FxSlot(node))
+        }
+        let glow = ArenaArt.glow(UIColor(red: 1, green: 0.88, blue: 0.5, alpha: 1))
+        for _ in 0..<8 {
+            let plane = SCNPlane(width: 1.1, height: 1.1)
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = glow
+            material.blendMode = .add
+            material.writesToDepthBuffer = false
+            material.isDoubleSided = true
+            plane.firstMaterial = material
+            let node = SCNNode(geometry: plane)
+            node.constraints = [SCNBillboardConstraint()]
+            node.castsShadow = false
+            node.renderingOrder = 40
+            world.rootNode.addChildNode(node)
+            flashSlots.append(FxSlot(node))
+        }
+        for _ in 0..<8 {
+            let system = Self.makeBurst()
+            let node = SCNNode()
+            node.addParticleSystem(system)
+            node.castsShadow = false
+            world.rootNode.addChildNode(node)
+            burstSlots.append(BurstSlot(node, system))
+        }
+        for _ in 0..<24 {
+            trailPool.append(Self.makeTrail())
+        }
+    }
+
+    private func take(_ slots: [FxSlot]) -> FxSlot? {
+        guard let slot = slots.first(where: { !$0.busy }) else { return nil }
+        slot.busy = true
+        slot.node.removeAllActions()
+        slot.node.isHidden = false
+        slot.node.opacity = 1
+        return slot
+    }
+
+    private static func makeBurst() -> SCNParticleSystem {
+        let system = SCNParticleSystem()
+        system.loops = false
+        system.emissionDuration = 0.05
+        system.birthRate = 200
+        system.particleLifeSpan = 0.22
+        system.particleLifeSpanVariation = 0.05
+        system.particleVelocity = 3
+        system.particleVelocityVariation = 1
+        system.spreadingAngle = 180
+        system.emittingDirection = SCNVector3(0, 1, 0)
+        system.particleSize = 0.13
+        system.particleImage = ArenaArt.dot
+        system.blendMode = .additive
+        system.isAffectedByGravity = false
+        system.dampingFactor = 2
+        system.propertyControllers = [.opacity: fadeOut]
+        return system
+    }
+
+    private static func makeTrail() -> SCNParticleSystem {
+        let system = SCNParticleSystem()
+        system.loops = true
+        system.birthRate = 22
+        system.particleLifeSpan = 0.3
+        system.particleVelocity = 0.2
+        system.spreadingAngle = 180
+        system.particleSize = 0.24
+        system.particleImage = ArenaArt.dot
+        system.blendMode = .additive
+        system.propertyControllers = [.opacity: fadeOut]
+        return system
+    }
 
     // MARK: - 亡灵之地、骨塔
 
@@ -1704,6 +1830,7 @@ final class ArenaWorldView: SCNView {
         }
         for (id, item) in turretViews where !seen.contains(id) {
             burst(at: item.node.simdPosition + SIMD3(0, 0.8, 0), color: UIColor(white: 0.9, alpha: 1), count: 20, speed: 1.5, size: 0.3, life: 0.5)
+            reclaimTrails(item.node)
             item.node.removeFromParentNode()
             turretViews[id] = nil
         }

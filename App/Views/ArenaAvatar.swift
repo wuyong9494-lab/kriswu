@@ -164,12 +164,7 @@ final class ArenaAvatar {
             body.addChildNode(instance.root)
             bodyScale = ArenaAvatar.scale * size * look.scale
             body.simdScale = SIMD3(repeating: bodyScale)
-            // 大厅只看模型本身。手上脚上的色块、肩膀和头顶标记是缩远了才加的，近看会把人弄歪
-            if decorated {
-                pinLimbs(on: instance.root, skeleton: look.file.contains("Skeleton"))
-                pinShape(on: instance.root, skeleton: look.file.contains("Skeleton"))
-                pinCrest(on: instance.root)
-            }
+            // 手、脚、肩膀已经做在模型里，不再临时加球
         } else {
             // 模型读不出来：一个胶囊当身子
             let capsule = SCNCapsule(capRadius: 0.32, height: 1.2)
@@ -401,132 +396,6 @@ final class ArenaAvatar {
         animate(dt: dt, moving: moving, base: wanted)
     }
 
-    /// 肩和腰加一块纯色，远看能分出上身。脖子把脑袋和身子接上
-    private func pinShape(on root: SCNNode, skeleton: Bool) {
-        let cloth = SCNSphere(radius: 0.09)
-        cloth.segmentCount = 8
-        cloth.firstMaterial = Self.material(Self.clothColor(brawler, skeleton: skeleton), lit: false)
-        for name in ["upperarm.l", "upperarm.r"] {
-            guard let bone = root.childNode(withName: name, recursively: true) else { continue }
-            let node = inked(cloth, scale: SIMD3(1.35, 0.65, 1.05))
-            bone.addChildNode(node)
-        }
-        if let hips = root.childNode(withName: "hips", recursively: true) {
-            let node = inked(cloth, scale: SIMD3(1.35, 0.32, 1.05))
-            hips.addChildNode(node)
-        }
-        let neck = SCNSphere(radius: 0.042)
-        neck.segmentCount = 8
-        let skin = skeleton
-            ? UIColor(red: 0.9, green: 0.86, blue: 0.74, alpha: 1)
-            : UIColor(red: 1, green: 0.74, blue: 0.55, alpha: 1)
-        neck.firstMaterial = Self.material(skin, lit: false)
-        if let head = root.childNode(withName: "head", recursively: true) {
-            let node = inked(neck, at: SIMD3(0, -0.05, 0))
-            head.addChildNode(node)
-        }
-    }
-
-    /// 头顶一个小标记，缩远了靠它认人。挂在头骨上，跟着动
-    private func pinCrest(on root: SCNNode) {
-        guard let head = root.childNode(withName: "head", recursively: true) else { return }
-        let color = Self.clothColor(brawler, skeleton: look.file.contains("Skeleton"))
-        let material = Self.material(color, lit: false)
-        switch brawler {
-        case .barbarian, .brewer:
-            for side: Float in [-1, 1] {
-                let horn = SCNCone(topRadius: 0.01, bottomRadius: 0.035, height: 0.16)
-                horn.radialSegmentCount = 6
-                horn.firstMaterial = material
-                let node = inked(horn, at: SIMD3(0.06 * side, 0.14, 0))
-                node.simdEulerAngles = SIMD3(0, 0, -0.5 * side)
-                head.addChildNode(node)
-            }
-        case .knight, .guardian, .swordsman:
-            let fin = SCNBox(width: 0.04, height: 0.16, length: 0.1, chamferRadius: 0.01)
-            fin.firstMaterial = material
-            let node = inked(fin, at: SIMD3(0, 0.16, 0))
-            head.addChildNode(node)
-        case .mage, .scholar, .necromancer:
-            let tip = SCNCone(topRadius: 0, bottomRadius: 0.05, height: 0.2)
-            tip.radialSegmentCount = 8
-            tip.firstMaterial = material
-            let node = inked(tip, at: SIMD3(0, 0.16, 0))
-            head.addChildNode(node)
-        default:
-            let ear = SCNSphere(radius: 0.045)
-            ear.segmentCount = 6
-            ear.firstMaterial = material
-            for side: Float in [-1, 1] {
-                let node = inked(ear, at: SIMD3(0.1 * side, 0.08, 0))
-                head.addChildNode(node)
-            }
-        }
-    }
-
-    private static func clothColor(_ brawler: Brawler, skeleton: Bool) -> UIColor {
-        if skeleton { return UIColor(red: 0.55, green: 0.32, blue: 0.22, alpha: 1) }
-        switch brawler {
-        case .barbarian, .swordsman: return UIColor(red: 0.82, green: 0.16, blue: 0.12, alpha: 1)
-        case .knight, .guardian: return UIColor(red: 0.18, green: 0.4, blue: 0.88, alpha: 1)
-        case .mage, .scholar: return UIColor(red: 0.28, green: 0.34, blue: 0.9, alpha: 1)
-        case .ranger, .darter: return UIColor(red: 0.16, green: 0.58, blue: 0.28, alpha: 1)
-        case .assassin, .shade: return UIColor(red: 0.36, green: 0.2, blue: 0.55, alpha: 1)
-        case .necromancer: return UIColor(red: 0.2, green: 0.7, blue: 0.4, alpha: 1)
-        case .brewer: return UIColor(red: 0.75, green: 0.4, blue: 0.12, alpha: 1)
-        case .summoner: return UIColor(red: 0.15, green: 0.65, blue: 0.7, alpha: 1)
-        }
-    }
-
-    /// 新身体没有手和脚。挂在骨骼上，武器才接得住，脚才落地
-    private func pinLimbs(on root: SCNNode, skeleton: Bool) {
-        let fist = skeleton ? Self.boneFist : Self.fist
-        for name in ["hand.l", "hand.r"] {
-            guard let bone = root.childNode(withName: name, recursively: true) else { continue }
-            let node = inked(fist, at: SIMD3(0, 0.04, 0))
-            bone.addChildNode(node)
-        }
-        for name in ["foot.l", "foot.r"] {
-            guard let bone = root.childNode(withName: name, recursively: true) else { continue }
-            let node = inked(Self.boot, scale: SIMD3(1.2, 0.5, 1.45))
-            bone.addChildNode(node)
-        }
-    }
-
-    /// 色块外面再套一圈和身体一样的描边，远看才是一块完整的人
-    private func inked(_ geometry: SCNGeometry, scale: SIMD3<Float> = SIMD3(repeating: 1), at position: SIMD3<Float> = .zero) -> SCNNode {
-        let node = SCNNode(geometry: geometry)
-        node.simdScale = scale
-        node.simdPosition = position
-        if let shell = geometry.copy() as? SCNGeometry {
-            shell.materials = [ArenaArt.outline]
-            let rim = SCNNode(geometry: shell)
-            node.addChildNode(rim)
-            outlines.append(rim)
-        }
-        return node
-    }
-
-    private static let fist: SCNGeometry = {
-        let sphere = SCNSphere(radius: 0.055)
-        sphere.segmentCount = 8
-        sphere.firstMaterial = material(UIColor(red: 1, green: 0.73, blue: 0.54, alpha: 1), lit: false)
-        return sphere
-    }()
-
-    private static let boneFist: SCNGeometry = {
-        let sphere = SCNSphere(radius: 0.05)
-        sphere.segmentCount = 8
-        sphere.firstMaterial = material(UIColor(red: 0.9, green: 0.86, blue: 0.74, alpha: 1), lit: false)
-        return sphere
-    }()
-
-    private static let boot: SCNGeometry = {
-        let sphere = SCNSphere(radius: 0.075)
-        sphere.segmentCount = 8
-        sphere.firstMaterial = material(UIColor(red: 0.14, green: 0.09, blue: 0.06, alpha: 1), lit: false)
-        return sphere
-    }()
 
     /// 贴图保持原色，明暗和边光在着色器里算，不再整个人乘一层灰。描边材质别动
     private static func finish(_ material: SCNMaterial) {
