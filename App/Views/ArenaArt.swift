@@ -121,7 +121,7 @@ enum ArenaArt {
 
     /// 展台按材质挑明暗。只给大厅用，场上仍走 characterToon
     static func stageShade(_ material: SCNMaterial) -> String {
-        let name = material.name.lowercased()
+        let name = material.name?.lowercased() ?? ""
         if name.contains("pupil") { return stageMetal }
         if name.contains("eye") { return stageEyes }
         guard let color = material.diffuse.contents as? UIColor else { return stageToon }
