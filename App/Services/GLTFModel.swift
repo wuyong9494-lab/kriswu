@@ -9,21 +9,11 @@ import simd
 final class GLTFModel: @unchecked Sendable {
     enum LoadError: Error { case unreadable, badFormat, offMain }
 
-    /// 一段动画
+    /// 一段动画。采样在 BoneSampler 里，那边有测试，不走 simd_slerp
     struct Clip {
-        enum Path { case translation, rotation, scale }
-
-        struct Channel {
-            let node: Int
-            let path: Path
-            let times: [Float]
-            let values: [Float]
-            let step: Bool
-        }
-
         let name: String
         let duration: Float
-        let channels: [Channel]
+        let channels: [BoneSampler.Channel]
     }
 
     /// 一套骨骼的姿势（按 glTF 里的节点编号）
@@ -254,12 +244,12 @@ final class GLTFModel: @unchecked Sendable {
             let name = animation["name"] as? String ?? "animation\(clipList.count)"
             if let wanted, !wanted.contains(name) { continue }
             let samplers = animation["samplers"] as? [[String: Any]] ?? []
-            var channels: [Clip.Channel] = []
+            var channels: [BoneSampler.Channel] = []
             for channel in animation["channels"] as? [[String: Any]] ?? [] {
                 guard let samplerIndex = channel["sampler"] as? Int, samplers.indices.contains(samplerIndex),
                       let target = channel["target"] as? [String: Any], let node = target["node"] as? Int, infos.indices.contains(node),
                       let input = samplers[samplerIndex]["input"] as? Int, let output = samplers[samplerIndex]["output"] as? Int else { continue }
-                let path: Clip.Path
+                let path: BoneSampler.Channel.Path
                 switch target["path"] as? String {
                 case "translation": path = .translation
                 case "rotation": path = .rotation
@@ -280,7 +270,7 @@ final class GLTFModel: @unchecked Sendable {
                 guard keys > 0 else { continue }
                 times = Array(times.prefix(keys))
                 values = Array(values.prefix(keys * width))
-                channels.append(Clip.Channel(node: node, path: path, times: times, values: values, step: interpolation == "STEP"))
+                channels.append(BoneSampler.Channel(node: node, path: path, times: times, values: values, step: interpolation == "STEP"))
                 moved.insert(node)
             }
             let duration = channels.compactMap { $0.times.last }.max() ?? 0
@@ -423,93 +413,17 @@ final class GLTFModel: @unchecked Sendable {
                           bytesPerComponent: MemoryLayout<Float>.size, dataOffset: 0, dataStride: MemoryLayout<Float>.size * width)
     }
 
-    /// 零长度或带 NaN 的四元数归一化会得到非法值。simd_slerp 在 iOS 27 上碰到这种值会进 atan2，然后按坏下标去读内存（SIGBUS）
-    static func unit(_ q: simd_quatf) -> simd_quatf {
-        let x = q.vector.x, y = q.vector.y, z = q.vector.z, w = q.vector.w
-        guard x.isFinite, y.isFinite, z.isFinite, w.isFinite else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
-        let length = (x * x + y * y + z * z + w * w).squareRoot()
-        guard length.isFinite, length > 1e-6 else { return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) }
-        return simd_quatf(ix: x / length, iy: y / length, iz: z / length, r: w / length)
-    }
+    /// 零长度或带 NaN 的四元数归一化会得到非法值
+    static func unit(_ q: simd_quatf) -> simd_quatf { BoneSampler.unit(q) }
 
-    /// 自己插值，不调用 simd_slerp（那个在真机上会 SIGBUS）
-    static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf {
-        let from = unit(a)
-        var to = unit(b)
-        guard t.isFinite else { return from }
-        if t <= 0 { return from }
-        if t >= 1 { return to }
-        if from.vector.x * to.vector.x + from.vector.y * to.vector.y + from.vector.z * to.vector.z + from.vector.w * to.vector.w < 0 {
-            to = simd_quatf(vector: -to.vector)
-        }
-        let s = 1 - t
-        return unit(simd_quatf(ix: from.vector.x * s + to.vector.x * t,
-                               iy: from.vector.y * s + to.vector.y * t,
-                               iz: from.vector.z * s + to.vector.z * t,
-                               r: from.vector.w * s + to.vector.w * t))
-    }
+    /// 自己插值。simd_slerp 在 iOS 27 上会进 atan2，然后按坏地址读内存（SIGBUS）
+    static func mix(_ a: simd_quatf, _ b: simd_quatf, _ t: Float) -> simd_quatf { BoneSampler.mix(a, b, t) }
 }
 
 extension GLTFModel.Clip {
     /// 第 time 秒（超出就停在头尾）每根骨骼的样子写进 pose；这段动画没动到的骨骼不改
     func sample(at time: Float, into pose: inout GLTFModel.Pose) {
-        for channel in channels {
-            let times = channel.times
-            let last = times.count - 1
-            var k0 = 0, k1 = 0
-            var fraction: Float = 0
-            if last > 0 && time > times[0] {
-                if time >= times[last] {
-                    k0 = last
-                    k1 = last
-                } else {
-                    var low = 0, high = last
-                    while high - low > 1 {
-                        let middle = (low + high) / 2
-                        if times[middle] <= time { low = middle } else { high = middle }
-                    }
-                    k0 = low
-                    k1 = high
-                    let span = times[k1] - times[k0]
-                    fraction = channel.step || span <= 0 ? 0 : (time - times[k0]) / span
-                }
-            }
-            let v = channel.values
-            if !fraction.isFinite { fraction = 0 }
-            fraction = min(max(fraction, 0), 1)
-            switch channel.path {
-            case .rotation:
-                guard let a = Self.quat(v, k0), let b = Self.quat(v, k1), pose.rotation.indices.contains(channel.node) else { continue }
-                pose.rotation[channel.node] = fraction > 0 ? GLTFModel.mix(a, b, fraction) : GLTFModel.unit(a)
-            case .translation, .scale:
-                guard let value0 = Self.vec3(v, k0), pose.translation.indices.contains(channel.node), pose.scale.indices.contains(channel.node) else { continue }
-                var value = value0
-                if fraction > 0, let value1 = Self.vec3(v, k1) {
-                    value += (value1 - value) * fraction
-                }
-                if channel.path == .translation {
-                    pose.translation[channel.node] = value
-                } else {
-                    pose.scale[channel.node] = value
-                }
-            }
-        }
-    }
-
-    private static func quat(_ v: [Float], _ key: Int) -> simd_quatf? {
-        guard key >= 0, key < 1_000_000 else { return nil }
-        let base = key * 4
-        guard base >= 0, base + 3 < v.count else { return nil }
-        return simd_quatf(ix: v[base], iy: v[base + 1], iz: v[base + 2], r: v[base + 3])
-    }
-
-    private static func vec3(_ v: [Float], _ key: Int) -> SIMD3<Float>? {
-        guard key >= 0, key < 1_000_000 else { return nil }
-        let base = key * 3
-        guard base >= 0, base + 2 < v.count else { return nil }
-        let value = SIMD3(v[base], v[base + 1], v[base + 2])
-        guard value.x.isFinite, value.y.isFinite, value.z.isFinite else { return nil }
-        return value
+        BoneSampler.sample(time, channels, translation: &pose.translation, rotation: &pose.rotation, scale: &pose.scale)
     }
 }
 
