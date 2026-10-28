@@ -1064,9 +1064,12 @@ private struct ArenaStick: View {
                 .overlay(Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: 2))
             if case .special(let charge, let hyper, let hyperTime) = kind {
                 Circle().trim(from: 0, to: min(charge, 1))
-                    .stroke(Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .stroke(ready ? Color.white : Color.yellow, style: StrokeStyle(lineWidth: ready ? 8 : 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .padding(3)
+                    .padding(ready ? 1 : 3)
+                if ready {
+                    Circle().stroke(Color.yellow, lineWidth: 3).padding(-4)
+                }
                 // 外面一圈紫的：超级充能攒了多少；开着的时候是还剩多久
                 if let hyper {
                     Circle().trim(from: 0, to: hyperTime > 0 ? min(hyperTime / ArenaGame.hyperDuration, 1) : min(hyper, 1))

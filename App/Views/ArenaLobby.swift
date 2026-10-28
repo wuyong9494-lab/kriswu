@@ -467,11 +467,11 @@ struct ArenaHomeView: View {
             sheet = .modes
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: playMode.icon)
-                    .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(.black.opacity(0.22)))
+                if let map = ArenaMap.pool(for: playMode).first {
+                    ArenaMapThumb(map: map)
+                        .frame(width: 46, height: 46)
+                        .accessibilityLabel("地图 \(map.title)")
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(ranked ? "排位 · \(playMode.title)" : playMode.title)
                         .font(.system(size: 17, weight: .black, design: .rounded))
@@ -769,6 +769,9 @@ struct ArenaHomeView: View {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(Color(red: 1, green: 0.86, blue: 0.2))
                     }
                     Spacer()
+                    if let map = ArenaMap.pool(for: item).first {
+                        ArenaMapThumb(map: map).frame(width: 52, height: 36)
+                    }
                     if let played = records.tally.played[item.rawValue] {
                         Text("赢了 \(records.tally.won[item.rawValue] ?? 0)/\(played)")
                             .font(.system(size: 12, weight: .black, design: .rounded).monospacedDigit())
@@ -1205,5 +1208,37 @@ private final class ShowcaseTarget: NSObject {
 
     @objc func tick(_ link: CADisplayLink) {
         view?.tick(link.timestamp)
+    }
+}
+
+/// 玩法卡上的小地图：格子自己画，不再开一套 3D
+struct ArenaMapThumb: View {
+    let map: ArenaMap
+
+    var body: some View {
+        Canvas { context, size in
+            let columns = max(map.width, 1)
+            let rows = max(map.height, 1)
+            let cellW = size.width / CGFloat(columns)
+            let cellH = size.height / CGFloat(rows)
+            for y in 0..<rows {
+                for x in 0..<columns {
+                    let rect = CGRect(x: CGFloat(x) * cellW, y: CGFloat(rows - 1 - y) * cellH, width: cellW + 0.6, height: cellH + 0.6)
+                    context.fill(Path(rect), with: .color(color(map.tile(x, y))))
+                }
+            }
+        }
+        .background(Color(red: 0.35, green: 0.62, blue: 0.22))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.black, lineWidth: 2))
+    }
+
+    private func color(_ tile: ArenaMap.Tile) -> Color {
+        switch tile {
+        case .floor: return Color(red: 0.48, green: 0.78, blue: 0.3)
+        case .wall: return Color(red: 0.62, green: 0.42, blue: 0.24)
+        case .bush: return Color(red: 0.12, green: 0.48, blue: 0.18)
+        case .goal: return Color(red: 0.95, green: 0.82, blue: 0.2)
+        }
     }
 }

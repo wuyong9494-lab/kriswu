@@ -72,7 +72,8 @@ final class ArenaPowerTests: XCTestCase {
         game.adjust(1) { $0.pos = bushSpot }
         XCTAssertTrue(game.isVisible(game.fighters[0], to: 1), "走进同一丛草就看得见")
         game.adjust(1) { $0.pos = outsideSpot }
-        game.adjust(0) { $0.lastAttack = game.time }
+        let now = game.time
+        game.adjust(0) { $0.lastAttack = now }
         XCTAssertTrue(game.isVisible(game.fighters[0], to: 1), "开火就露出来")
     }
 

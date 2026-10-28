@@ -375,7 +375,9 @@ final class ArenaAvatar {
     private func paintCharge(_ on: Bool) {
         guard let instance else { return }
         if on {
-            let glow = (mine ? ArenaPalette.gold : teamColor).withAlphaComponent(1)
+            let glow = mine
+                ? UIColor(red: 0.55, green: 0.38, blue: 0.05, alpha: 1)
+                : teamColor.withAlphaComponent(1)
             instance.materials.forEach { $0.emission.contents = glow }
         } else {
             restoreGlow()

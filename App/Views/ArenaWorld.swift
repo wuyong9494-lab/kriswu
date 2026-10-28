@@ -927,6 +927,8 @@ final class ArenaWorldView: SCNView {
                 item.wood.emission.contents = UIColor.black
             }
             guard box.health > 0 else { continue }
+            let left = CGFloat(box.health) / CGFloat(ArenaGame.PowerBox.fullHealth)
+            item.wood.multiply.contents = UIColor(white: 0.4 + 0.6 * left, alpha: 1)
             item.node.childNode(withName: "gem", recursively: false)?.simdEulerAngles = SIMD3(0.6, Float(clock * 1.5), 0)
             if box.health < ArenaGame.PowerBox.fullHealth {
                 item.bar.node.isHidden = false
