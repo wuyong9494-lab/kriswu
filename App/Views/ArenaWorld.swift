@@ -24,12 +24,12 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 镜头离看的那一点大约 38 米、俯角 60 度。视角压到大约 8 度，近处远处的格子几乎一样大（原版就是这种长焦，不是广角）
-    private static let cameraOffset = SIMD3<Float>(0, 32.9, 19.0)
+    /// 从自己后上方看。高 16.5、往后 15.2，大约 47 度：看得到背和武器朝哪边，不是对着头顶
+    private static let cameraOffset = SIMD3<Float>(0, 16.5, 15.2)
     /// 竖屏时自己这一排左右各看得到几米
-    private static let portraitHalfWidth: Float = 4.4
-    /// 横屏时镜头看着的那一排左右各看得到几格。人要够大，又要看得到身边的墙
-    private static let landscapeHalfWidth: Float = 5.6
+    private static let portraitHalfWidth: Float = 5.8
+    /// 横屏左右各大约 7.6 格。人占画面一角，前面留得下要打的人
+    private static let landscapeHalfWidth: Float = 7.6
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -180,12 +180,12 @@ final class ArenaWorldView: SCNView {
             // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 1.8
+            lookAhead = 3.2
         } else {
             // 竖屏：左右宽度按米算，不跟着镜头远近放大（镜头拉远了还用旧的角度，人会缩成一点）
             tanX = Self.portraitHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / max(aspect, 0.3)
-            lookAhead = 2.4
+            lookAhead = 3.6
         }
         cameraNode.camera?.fieldOfView = CGFloat(2 * atan(tanY) * 180 / .pi)
         let lift = Self.cameraOffset.y, back = Self.cameraOffset.z
@@ -235,12 +235,12 @@ final class ArenaWorldView: SCNView {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 500
+        ambient.light?.intensity = 560
         ambient.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.95, alpha: 1)
         root.addChildNode(ambient)
         let sun = SCNLight()
         sun.type = .directional
-        sun.intensity = 860
+        sun.intensity = 640
         sun.color = look.sunlight
         sun.castsShadow = false
         let sunNode = SCNNode()

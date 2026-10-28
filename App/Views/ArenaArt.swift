@@ -28,7 +28,7 @@ enum ArenaArt {
         material.cullMode = .front
         material.shaderModifiers = [.geometry: """
             float outlineScale = max(length(scn_node.modelTransform[0].xyz), 0.0001);
-            _geometry.position.xyz += normalize(_geometry.normal) * (0.05 / outlineScale);
+            _geometry.position.xyz += normalize(_geometry.normal) * (0.026 / outlineScale);
             """]
         return material
     }()
@@ -40,20 +40,10 @@ enum ArenaArt {
         float3 e = normalize(_surface.view);
         float fres = 1.0 - saturate(dot(n, e));
         fres = fres * fres;
-        _surface.emission.rgb += float3(1.0, 0.94, 0.78) * fres * 0.5;
+        _surface.emission.rgb += float3(1.0, 0.94, 0.78) * fres * 0.18;
         float3 c = _surface.diffuse.rgb;
         float luma = dot(c, float3(0.3, 0.59, 0.11));
         _surface.diffuse.rgb = mix(float3(luma), c, 1.22);
-        """
-
-    /// 角色身上的光分成三档（亮、中间、暗），颜色还是原来的色相。不走相机后处理
-    static let characterBands = """
-        #pragma body
-        float3 col = _output.color.rgb;
-        float l = dot(col, float3(0.299, 0.587, 0.114));
-        float stepped = l > 0.62 ? 1.0 : (l > 0.34 ? 0.78 : 0.55);
-        float scale = stepped / max(l, 0.08);
-        _output.color.rgb = min(col * scale, float3(1.6));
         """
 
     /// 地面只提一点饱和，不描边光（平地描边光会发灰）
