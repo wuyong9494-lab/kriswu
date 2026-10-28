@@ -701,7 +701,7 @@ private struct ArenaLobbyBackground: View {
             .overlay {
                 Rays()
                     .fill(Color.white.opacity(0.07))
-                    .frame(width: 1600, height: 1600)
+                    .frame(width: 900, height: 900)
                     .rotationEffect(.degrees(turning ? 360 : 0))
                     .animation(.linear(duration: 80).repeatForever(autoreverses: false), value: turning)
             }
@@ -776,8 +776,8 @@ final class ArenaShowcaseView: SCNView {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
-        antialiasingMode = .multisampling4X
-        preferredFramesPerSecond = 60
+        antialiasingMode = .none
+        preferredFramesPerSecond = 30
         rendersContinuously = true
         isPlaying = true
         world.background.contents = UIColor.clear

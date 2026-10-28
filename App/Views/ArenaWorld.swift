@@ -31,6 +31,8 @@ final class ArenaWorldView: SCNView {
     private static let sideView: Float = 0.267
     /// 横屏时镜头看着的那一排左右各看得到几格（场地 15 格宽，两边再露一点场外）
     private static let landscapeHalfWidth: Float = 9
+    /// 毒圈外的绿雾有多厚。太厚会铺满整个屏幕，手机一开打就卡死
+    private static let gasBand: CGFloat = 12
 
     private let controller: ArenaController
     private let world = SCNScene()
@@ -131,7 +133,7 @@ final class ArenaWorldView: SCNView {
         self.controller = controller
         super.init(frame: .zero, options: nil)
         backgroundColor = ArenaPalette.grass
-        antialiasingMode = .multisampling4X
+        antialiasingMode = .none
         preferredFramesPerSecond = 60
         rendersContinuously = true
         isPlaying = true
@@ -237,12 +239,12 @@ final class ArenaWorldView: SCNView {
         sun.intensity = 640
         sun.color = look.sunlight
         sun.castsShadow = true
-        sun.shadowMapSize = CGSize(width: 2048, height: 2048)
-        sun.shadowSampleCount = 4
-        sun.shadowRadius = 3
+        sun.shadowMapSize = CGSize(width: 1024, height: 1024)
+        sun.shadowSampleCount = 1
+        sun.shadowRadius = 2
         sun.shadowColor = UIColor(red: 0.05, green: 0.12, blue: 0.02, alpha: 0.26)
         sun.automaticallyAdjustsShadowProjection = true
-        sun.maximumShadowDistance = 50
+        sun.maximumShadowDistance = 28
         let sunNode = SCNNode()
         sunNode.light = sun
         let toward = simd_normalize(SIMD3<Float>(0.35, -1, -0.45))
@@ -268,7 +270,9 @@ final class ArenaWorldView: SCNView {
         root.addChildNode(ArenaArt.border(width: width, height: height))
 
         // 墙：木箱、木桶、石块（同一格每次都一样）；草丛
-        root.addChildNode(walls(map, look: look))
+        let wallNode = walls(map, look: look)
+        wallNode.castsShadow = false
+        root.addChildNode(wallNode)
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .bush {
                 let node = SCNNode(geometry: ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
@@ -276,6 +280,7 @@ final class ArenaWorldView: SCNView {
                 node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 12) * .pi / 6, 0)
                 let size = 1 + Float((x * 5 + y * 3) % 4) * 0.04
                 node.simdScale = SIMD3(size, size, size)
+                node.castsShadow = false
                 root.addChildNode(node)
                 bushes.append((node, V2(Double(x) + 0.5, Double(y) + 0.5), false))
             }
@@ -359,16 +364,16 @@ final class ArenaWorldView: SCNView {
         if game.mode.hasPoison {
             // 毒圈：圈外一圈半透明的绿墙，边上一道亮线
             let radius = game.safeRadius
-            let wall = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 80), height: 1.6)
-            wall.radialSegmentCount = 96
+            let wall = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius) + Self.gasBand, height: 2.2)
+            wall.radialSegmentCount = 48
             let gas = ArenaAvatar.decal(ArenaPalette.poison.withAlphaComponent(0.38))
             wall.firstMaterial = gas
             let wallNode = SCNNode(geometry: wall)
             wallNode.simdPosition = center + SIMD3(0, 0.8, 0)
             wallNode.castsShadow = false
             wallNode.renderingOrder = 20
-            let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.1), height: 1.7)
-            edge.radialSegmentCount = 96
+            let edge = SCNTube(innerRadius: CGFloat(radius), outerRadius: CGFloat(radius + 0.12), height: 2.3)
+            edge.radialSegmentCount = 48
             edge.firstMaterial = ArenaAvatar.decal(UIColor(red: 0.6, green: 1, blue: 0.5, alpha: 0.9))
             let edgeNode = SCNNode(geometry: edge)
             edgeNode.simdPosition = center + SIMD3(0, 0.85, 0)
@@ -538,7 +543,7 @@ final class ArenaWorldView: SCNView {
         return ArenaArt.walls(cells)
     }
 
-    /// 场地外：两排树、几块石头，分队玩法两头插上两队的旗子
+    /// 场地外一圈树、几块石头，分队玩法两头插旗。树不多、不描边、不投影，开打时合成一块，避免上百个模型把手机撑爆
     private func scenery(_ game: ArenaGame) -> SCNNode {
         let map = game.map
         let width = Double(map.width), height = Double(map.height)
@@ -549,37 +554,35 @@ final class ArenaWorldView: SCNView {
         var random = SeededRandom(seed: 2026)
         let holder = SCNNode()
         func place(_ model: GLTFModel, at point: V2, scale: Float, turn: Float) {
-            let node = model.instantiate(shareMaterials: true, outline: ArenaArt.outline).root
+            let node = model.instantiate(shareMaterials: true).root
             node.simdPosition = SIMD3(Float(point.x), 0, Float(point.y))
             node.simdScale = SIMD3(repeating: scale)
             node.simdEulerAngles = SIMD3(0, turn, 0)
+            node.castsShadow = false
+            node.enumerateChildNodes { child, _ in child.castsShadow = false }
             holder.addChildNode(node)
         }
-        // 沿四边，离场地 1.4 格、3.4 格各一排，错开
-        for row in 0..<3 {
-            let gap = 1.4 + Double(row) * 2.1
-            let step = 1.9
-            var edge: [V2] = []
-            var t = -gap + Double(row % 2) * step / 2
-            while t <= width + gap {
-                edge.append(V2(t, -gap))
-                edge.append(V2(t, height + gap))
-                t += step
-            }
-            t = Double(row % 2) * step / 2
-            while t <= height {
-                edge.append(V2(-gap, t))
-                edge.append(V2(width + gap, t))
-                t += step
-            }
-            for point in edge where !trees.isEmpty {
-                let jitter = V2(Double(random.below(60)) / 100 - 0.3, Double(random.below(60)) / 100 - 0.3)
-                place(trees[random.below(trees.count)], at: point + jitter, scale: 1.25 + Float(random.below(40)) / 100,
-                      turn: Float(random.below(6)) * .pi / 3)
-            }
+        let gap = 2.4
+        let step = 3.8
+        var edge: [V2] = []
+        var t = -gap
+        while t <= width + gap {
+            edge.append(V2(t, -gap))
+            edge.append(V2(t, height + gap))
+            t += step
         }
-        // 石头：贴着场地边上
-        for _ in 0..<14 where !rocks.isEmpty {
+        t = step / 2
+        while t <= height {
+            edge.append(V2(-gap, t))
+            edge.append(V2(width + gap, t))
+            t += step
+        }
+        for point in edge where !trees.isEmpty {
+            let jitter = V2(Double(random.below(40)) / 100 - 0.2, Double(random.below(40)) / 100 - 0.2)
+            place(trees[random.below(trees.count)], at: point + jitter, scale: 1.35 + Float(random.below(30)) / 100,
+                  turn: Float(random.below(6)) * .pi / 3)
+        }
+        for _ in 0..<8 where !rocks.isEmpty {
             let side = random.below(4)
             let along = Double(random.below(1000)) / 1000
             let point: V2
@@ -589,9 +592,8 @@ final class ArenaWorldView: SCNView {
             case 2: point = V2(-0.6, along * height)
             default: point = V2(width + 0.6, along * height)
             }
-            place(rocks[random.below(rocks.count)], at: point, scale: 2.4 + Float(random.below(15)) / 10, turn: Float(random.below(628)) / 100)
+            place(rocks[random.below(rocks.count)], at: point, scale: 2.2 + Float(random.below(12)) / 10, turn: Float(random.below(628)) / 100)
         }
-        // 旗子：插在两队家后面
         if game.mode.isTeams, let blue = models.prop("flag_blue.gltf"), let red = models.prop("flag_red.gltf") {
             for (team, z) in [(1, -0.9), (0, height + 0.9)] {
                 let flag = team == myTeam ? blue : red
@@ -600,7 +602,9 @@ final class ArenaWorldView: SCNView {
                 }
             }
         }
-        return holder.flattenedClone()
+        let baked = holder.flattenedClone()
+        baked.castsShadow = false
+        return baked
     }
 
     // MARK: - 每帧摆一遍
@@ -669,9 +673,9 @@ final class ArenaWorldView: SCNView {
         syncPower(game, view: view)
         if var current = poison, abs(current.radius - game.safeRadius) > 0.02 {
             current.radius = game.safeRadius
-            current.wall.outerRadius = CGFloat(current.radius + 80)
+            current.wall.outerRadius = CGFloat(current.radius) + Self.gasBand
             current.wall.innerRadius = CGFloat(current.radius)
-            current.edge.outerRadius = CGFloat(current.radius + 0.1)
+            current.edge.outerRadius = CGFloat(current.radius + 0.12)
             current.edge.innerRadius = CGFloat(current.radius)
             poison = current
         }
@@ -711,7 +715,7 @@ final class ArenaWorldView: SCNView {
             goal = SIMD3(Float(me.x) + (flipped ? -shift : shift), 0, Float(me.y))
         }
         if cameraPlaced {
-            rig.simdPosition += (goal - rig.simdPosition) * min(1, dt * (ending ? 3 : 7))
+            rig.simdPosition += (goal - rig.simdPosition) * min(1, dt * (ending ? 3 : 11))
         } else {
             rig.simdPosition = goal
             cameraPlaced = true

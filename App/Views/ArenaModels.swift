@@ -220,6 +220,7 @@ final class ArenaPortraits: ObservableObject {
         await ArenaModels.loadAll()
         for brawler in Brawler.allCases where images[brawler] == nil {
             if let image = render(brawler) { images[brawler] = image }
+            await Task.yield()
         }
         preparing = false
     }
@@ -257,7 +258,7 @@ final class ArenaPortraits: ObservableObject {
         renderer.pointOfView = cameraNode
         // 刚摆好的姿势马上生效再画
         SCNTransaction.flush()
-        return renderer.snapshot(atTime: 0, with: CGSize(width: 200, height: 200), antialiasingMode: .multisampling4X)
+        return renderer.snapshot(atTime: 0, with: CGSize(width: 160, height: 160), antialiasingMode: .none)
     }
 }
 

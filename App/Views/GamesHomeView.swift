@@ -22,7 +22,7 @@ struct GamesHomeView: View {
                     showingArena = true
                 } label: {
                     HStack {
-                        row("勇者乱斗", "3D 横屏双摇杆对战：11 种玩法、9 个角色、小道具和星徽，电脑补位，也能和同事一起打", "flame.fill", 3)
+                        row("勇者乱斗", "3D 横屏双摇杆对战：11 种玩法、13 个角色、小道具和星徽，电脑补位，也能和同事一起打", "flame.fill", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
