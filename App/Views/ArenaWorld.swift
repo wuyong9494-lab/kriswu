@@ -1114,7 +1114,7 @@ final class ArenaWorldView: SCNView {
             // 毒圈这种一帧扣一点的不出声、不闪
             guard amount >= 60 else { return }
             ArenaSound.shared.play(.hit, volume: loudness(game.fighters[target].pos) * 0.8)
-            avatars[target].flash(clock: clock)
+            avatars[target].flash(clock: clock, flinch: amount >= 400)
             if target == controller.me, amount >= 900 { addShake(0.22) }
             let at = avatars[target].node.simdPosition
             spark(at: at + SIMD3(0, 0.7, 0))
@@ -1169,11 +1169,20 @@ final class ArenaWorldView: SCNView {
             // 看不见的人开火也听得见一点（草丛里有人）
             ArenaSound.shared.play(sound, volume: loudness(game.fighters[fighter].pos) * (fighter == controller.me ? 1 : 0.7))
             avatars[fighter].attack()
-            // 枪口一闪（看不见的人不闪，免得暴露草丛里的人）
-            if avatars[fighter].opacity > 0.1 {
-                let shooter = game.fighters[fighter]
-                let at = SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
-                burst(at: at, color: shooter.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot, count: 8, speed: 1.6, size: 0.22, life: 0.14)
+            guard avatars[fighter].opacity > 0.1 else { break }
+            let shooter = game.fighters[fighter]
+            let color = shooter.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot
+            let at = SIMD3(Float(shooter.pos.x), 0, Float(shooter.pos.y))
+            switch shooter.brawler {
+            case .swordsman:
+                slashArc(at: at, facing: shooter.facing, color: color, reach: 2.1, sweep: 2.6)
+            case .barbarian:
+                slashArc(at: at, facing: shooter.facing, color: color, reach: 1.7, sweep: 1.5)
+            case .knight, .guardian:
+                slashArc(at: at, facing: shooter.facing, color: color, reach: 1.35, sweep: 1.15)
+            default:
+                let muzzle = SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
+                burst(at: muzzle, color: color, count: 8, speed: 1.6, size: 0.22, life: 0.14)
             }
         case .heal(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
@@ -1267,6 +1276,38 @@ final class ArenaWorldView: SCNView {
             let color = game.fighters[fighter].team == myTeam ? ArenaPalette.blue : ArenaPalette.red
             ring(at: avatars[fighter].node.simdPosition, color: color, to: 1.8)
         }
+    }
+
+    /// 近战挥出去的那一刀：沿面朝的方向排一排亮片，转一下就收
+    private func slashArc(at point: SIMD3<Float>, facing: V2, color: UIColor, reach: Float, sweep: Float) {
+        let yaw = atan2(Float(facing.x), Float(facing.y))
+        let root = SCNNode()
+        root.simdPosition = point + SIMD3(0, 0.9, 0)
+        root.simdEulerAngles = SIMD3(0, yaw, 0)
+        root.castsShadow = false
+        let steps = 6
+        for i in 0..<steps {
+            let t = Float(i) / Float(steps - 1) - 0.5
+            let angle = t * sweep
+            let box = SCNBox(width: 0.42, height: 0.07, length: 0.14, chamferRadius: 0.03)
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = color
+            material.emission.contents = color
+            box.firstMaterial = material
+            let node = SCNNode(geometry: box)
+            let radius = reach
+            node.simdPosition = SIMD3(sin(angle) * radius, 0, cos(angle) * radius)
+            node.simdEulerAngles = SIMD3(0.5, -angle, 0)
+            node.castsShadow = false
+            root.addChildNode(node)
+        }
+        world.rootNode.addChildNode(root)
+        root.simdScale = SIMD3(repeating: 0.35)
+        root.runAction(.sequence([
+            .group([.scale(to: 1.05, duration: 0.07), .fadeOut(duration: 0.16)]),
+            .removeFromParentNode()
+        ]))
     }
 
     /// 放大招：脚下一圈这个角色的颜色往外扩，身上冲起一道光柱、往外蹦光点（超级充能的是紫的）

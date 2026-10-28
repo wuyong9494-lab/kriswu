@@ -81,7 +81,7 @@ struct BrawlerLook {
                                scale: 0.96)
         case .barbarian:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
-                               idle: "2H_Melee_Idle", run: "Running_A",
+                               idle: "2H_Melee_Idle", run: "Running_B",
                                attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.25, to: 0.7, seconds: 0.4),
                                special: Move(clip: "Jump_Full_Short", from: 0.1, to: 0.9, seconds: Float(Fighter.Leap.duration)),
                                scale: 1.14)
@@ -93,13 +93,13 @@ struct BrawlerLook {
                                scale: 0.98)
         case .assassin:
             return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Throwable"],
-                               idle: "Idle", run: "Running_A",
+                               idle: "Idle", run: "Running_B",
                                attack: Move(clip: "Throw", from: 0.2, to: 0.72, seconds: 0.3),
                                special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.08, to: 0.8, seconds: 0.46),
                                scale: 0.94)
         case .guardian:
-            return BrawlerLook(file: "Skeleton_Warrior.glb", hidden: [], idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Melee_Attack_Chop", from: 0.2, to: 0.75, seconds: 0.42),
+            return BrawlerLook(file: "Skeleton_Warrior.glb", hidden: [], idle: "Idle", run: "Running_B",
+                               attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0.12, to: 0.82, seconds: 0.4),
                                special: Move(clip: "Block", from: 0, to: 0.6, seconds: 0.6),
                                scale: 1.08,
                                weapons: [Weapon(file: "Skeleton_Axe.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned),
@@ -127,7 +127,7 @@ struct BrawlerLook {
         // 后加的四个和前面共用模型，但出手的那一段、快慢、个子都不一样
         case .swordsman:
             return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield"],
-                               idle: "Idle", run: "Running_A",
+                               idle: "Idle", run: "Running_B",
                                attack: Move(clip: "2H_Melee_Attack_Spin", from: 0.05, to: 0.95, seconds: 0.5),
                                special: Move(clip: "2H_Melee_Attack_Spinning", from: 0, to: 1, seconds: 0.62),
                                scale: 1.1)
@@ -175,7 +175,7 @@ struct BrawlerLook {
     private static let turned = simd_quatf(ix: 0, iy: -1, iz: 0, r: 0)
 
     /// 要从模型里读的动画
-    var clips: Set<String> { [idle, run, attack.clip, special.clip, Self.death.clip, Self.cheer] }
+    var clips: Set<String> { [idle, run, attack.clip, special.clip, Self.death.clip, Self.cheer, "Hit_A"] }
 }
 
 /// 乱斗用到的 3D 模型：第一次用时从 App 里读（读不出来就返回 nil，画面用简单的形状代替，照样能玩），之后一直留着
