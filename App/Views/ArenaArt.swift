@@ -34,6 +34,34 @@ enum ArenaArt {
         return material
     }()
 
+    /// 角色表面的边缘光和略提的饱和。画在每个角色自己的材质上，不走相机的泛光（那个在 iOS 27 上会断）
+    static let characterSurface = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float3 e = normalize(_surface.view);
+        float fres = 1.0 - saturate(dot(n, e));
+        fres = fres * fres;
+        _surface.emission.rgb += float3(1.0, 0.94, 0.78) * fres * 0.5;
+        float3 c = _surface.diffuse.rgb;
+        float luma = dot(c, float3(0.3, 0.59, 0.11));
+        _surface.diffuse.rgb = mix(float3(luma), c, 1.22);
+        """
+
+    /// 地面只提一点饱和，不描边光（平地描边光会发灰）
+    static let groundSurface = """
+        #pragma body
+        float3 c = _surface.diffuse.rgb;
+        float luma = dot(c, float3(0.3, 0.59, 0.11));
+        _surface.diffuse.rgb = mix(float3(luma), c, 1.16);
+        """
+
+    static func grade(_ material: SCNMaterial, _ surface: String) {
+        var modifiers = material.shaderModifiers ?? [:]
+        guard modifiers[.surface] == nil else { return }
+        modifiers[.surface] = surface
+        material.shaderModifiers = modifiers
+    }
+
     /// 方块、圆柱、草丛的描边：形状已经放大好了，只画背面
     private static func edge(_ color: UIColor) -> SCNMaterial {
         let material = SCNMaterial()
