@@ -1324,14 +1324,14 @@ final class ArenaShowcaseView: SCNView {
 
     private func build() {
         let camera = SCNCamera()
-        camera.fieldOfView = 24
+        camera.fieldOfView = 32
         camera.zNear = 0.1
         camera.zFar = 30
         let eye = SCNNode()
         eye.camera = camera
-        // 整个人落在画面中下，头顶离开上边的奖杯，斧头不会顶出画面
-        eye.simdPosition = SIMD3(0, 1.55, 6.6)
-        eye.simdEulerAngles = SIMD3(-0.14, 0, 0)
+        // 从侧前上方看，大约 25 度。看得到脸、肩膀和整个人，不是平视肚子
+        eye.simdPosition = SIMD3(0.7, 2.45, 4.3)
+        eye.simdEulerAngles = SIMD3(-0.42, 0.18, 0)
         world.rootNode.addChildNode(eye)
         pointOfView = eye
 

@@ -24,13 +24,13 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
-    /// 公开对照过的打法镜头：俯角 60 度。镜头拉远，竖向张角大约 7 度，几乎不变形。
-    /// 横屏左右各 5.8 格，人比整张地图更大。高 57、往后 33：atan(57/33) ≈ 60 度
-    private static let cameraOffset = SIMD3<Float>(0, 57, 33)
+    /// 斜着从后上方看，大约 42 度。不是贴地，也不是正俯视。
+    /// 高 7.4、往后 8.2：atan(7.4/8.2) ≈ 42 度。竖向张角大约 30 度，近大远小，墙的侧面看得到。
+    private static let cameraOffset = SIMD3<Float>(0, 7.4, 8.2)
     /// 竖屏时自己这一排左右各看得到几米
-    private static let portraitHalfWidth: Float = 4.4
-    /// 横屏左右各 5.8 格。60 度俯角不变，人比之前更大
-    private static let landscapeHalfWidth: Float = 5.8
+    private static let portraitHalfWidth: Float = 3.6
+    /// 横屏左右各 6.2 格，自己在画面偏下，前面留得下要打的人
+    private static let landscapeHalfWidth: Float = 6.2
 
     /// 竖向张角（度）。aspect 是宽除以高
     private static func verticalField(aspect: Float) -> Float {
@@ -194,7 +194,7 @@ final class ArenaWorldView: SCNView {
             // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 2.4
+            lookAhead = 2.0
         } else {
             // 竖屏：左右宽度按米算，不跟着镜头远近放大（镜头拉远了还用旧的角度，人会缩成一点）
             tanX = Self.portraitHalfWidth / simd_length(Self.cameraOffset)
