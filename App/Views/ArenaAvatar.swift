@@ -69,6 +69,10 @@ final class ArenaAvatar {
     private let swingBones: [Int]
     /// 出手、挨打时身子和头再多动一点
     private let torsoBones: [Int]
+    /// 站着的时候胸口慢慢起伏
+    private let chestBone: Int?
+    /// 跑起来身子前倾，停下来再立直
+    private var lean: Float = 0
 
     private struct Playing {
         let clip: GLTFModel.Clip
@@ -120,11 +124,13 @@ final class ArenaAvatar {
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
             swingBones = ["upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r"].compactMap { model.node(named: $0) }
             torsoBones = ["spine", "chest", "head"].compactMap { model.node(named: $0) }
+            chestBone = model.node(named: "chest")
         } else {
             instance = nil
             upper = []
             swingBones = []
             torsoBones = []
+            chestBone = nil
         }
         if let instance {
             for name in look.hidden {
@@ -283,7 +289,10 @@ final class ArenaAvatar {
             }
         }
         placed = true
-        body.simdEulerAngles = SIMD3(0, angle, 0)
+        let leaning = fighter.alive && speed > 0.6
+        let leanTarget: Float = leaning ? -0.16 : 0
+        lean += (leanTarget - lean) * min(1, dt * 6)
+        body.simdEulerAngles = SIMD3(lean, angle, 0)
 
         // 倒下、复活
         if fighter.alive {
@@ -558,6 +567,10 @@ final class ArenaAvatar {
         let torsoGain: Float = attacking ? 1.28 : (hit ? 1.45 : 1)
         if armGain > 1 { push(bones: swingBones, gain: armGain, pose: &pose, rest: rest) }
         if torsoGain > 1 { push(bones: torsoBones, gain: torsoGain, pose: &pose, rest: rest) }
+        if !moving, !attacking, !hit, let chest = chestBone, pose.scale.indices.contains(chest) {
+            let wave = sin((base?.time ?? 0) * 2.4)
+            pose.scale[chest] *= 1 + wave * 0.045
+        }
     }
 
     private func push(bones: [Int], gain: Float, pose: inout GLTFModel.Pose, rest: GLTFModel.Pose) {
