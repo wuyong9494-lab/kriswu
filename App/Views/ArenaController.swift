@@ -199,7 +199,7 @@ final class ArenaController: ObservableObject {
             var random = SeededRandom(seed: seed)
             var others = Brawler.allCases.filter { $0 != setup.brawler }
             random.shuffle(&others)
-            let maps = ArenaMap.pool(for: setup.mode)
+            let maps = ArenaMap.playPool(for: setup.mode)
             let map = setup.benchmark ? ArenaMap.canyon : maps[random.below(maps.count)]
             let teams = setup.mode.seatTeams
             var entrants = [mine]
@@ -837,6 +837,7 @@ final class ArenaLobby: ObservableObject {
         case level(Int)
         /// 带的小道具、星徽、超级充能（老版本收到不认识：按等级带第一个）
         case loadout(ArenaLoadout)
+        case arenaRevision(Int)
     }
 
     struct Playing: Identifiable {
@@ -852,6 +853,7 @@ final class ArenaLobby: ObservableObject {
     @Published var playing: Playing?
     @Published private(set) var myPick: Brawler
     private var round = 0
+    private var arenaRevisions: [String: Int] = [:]
 
     init(room: GameRoom, mode: ArenaGame.Mode, brawler: Brawler) {
         self.room = room
@@ -867,6 +869,7 @@ final class ArenaLobby: ObservableObject {
         send(.pick(myPick))
         send(.level(myLevel))
         send(.loadout(myLoadout))
+        send(.arenaRevision(1))
         if room.isHost { send(.mode(mode)) }
         playing?.controller.membersChanged()
     }
@@ -917,7 +920,8 @@ final class ArenaLobby: ObservableObject {
     func start() {
         guard room.isHost, fits else { return }
         round += 1
-        let maps = ArenaMap.pool(for: mode)
+        let supportsExpanded = room.members.allSatisfy { $0.id == room.me.id || arenaRevisions[$0.id] == 1 }
+        let maps = supportsExpanded ? ArenaMap.playPool(for: mode) : ArenaMap.pool(for: mode)
         let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats(),
                                map: maps.randomElement()?.id)
         send(.start(start))
@@ -978,6 +982,10 @@ final class ArenaLobby: ObservableObject {
     private func received(_ data: Data, from: String) {
         guard let message = try? JSONDecoder().decode(Message.self, from: data) else { return }
         switch message {
+        case .arenaRevision(let revision):
+            let first = arenaRevisions[from] == nil
+            arenaRevisions[from] = revision
+            if first { send(.arenaRevision(1)) }
         case .pick(let brawler):
             picks[from] = brawler
         case .level(let level):
@@ -993,3 +1001,4 @@ final class ArenaLobby: ObservableObject {
         }
     }
 }
+

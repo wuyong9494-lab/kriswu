@@ -64,6 +64,37 @@ final class ArenaTests: XCTestCase {
 
     /// 每张地图：大小、出生点对、对称（两队对打的中心对称，各自为战的上下左右都对称）、没有被墙围死走不到的空地；
     /// 足球的两头有球门，宝箱攻防两边各一个宝箱
+    func testExpandedArenasHaveCoverAndReachableSpawns() {
+        for map in ArenaMap.expandedMaps {
+            XCTAssertGreaterThanOrEqual(map.width, 21)
+            XCTAssertGreaterThanOrEqual(map.height, 25)
+            XCTAssertNotNil(ArenaMap.named(map.id))
+            let bushes = map.tiles.filter { $0 == .bush }.count
+            XCTAssertGreaterThan(Double(bushes) / Double(map.width * map.height), 0.15, map.id)
+            var reached = Set<Int>()
+            var queue = [Int(map.center.y) * map.width + Int(map.center.x)]
+            reached.insert(queue[0])
+            while let cell = queue.popLast() {
+                let x = cell % map.width, y = cell / map.width
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] where map.tile(x + dx, y + dy) != .wall {
+                    let next = (y + dy) * map.width + x + dx
+                    if reached.insert(next).inserted { queue.append(next) }
+                }
+            }
+            XCTAssertEqual(reached.count, map.tiles.filter { $0 != .wall }.count, map.id)
+            for y in 0..<map.height { for x in 0..<map.width {
+                XCTAssertEqual(map.tile(x, y), map.tile(map.width - 1 - x, map.height - 1 - y), map.id)
+            } }
+            for spawn in map.spawns.flatMap({ $0 }) {
+                XCTAssertFalse(map.collides(spawn, radius: ArenaGame.fighterRadius), map.id)
+                XCTAssertEqual(map.path(from: spawn, to: map.center).last, map.center, map.id)
+            }
+        }
+        XCTAssertTrue(ArenaMap.playPool(for: .teamFight).allSatisfy { $0.width == 21 })
+        XCTAssertTrue(ArenaMap.playPool(for: .showdown).allSatisfy { $0.width == 25 })
+        XCTAssertEqual(ArenaMap.canyon.width, 15, "Historical map IDs must not change under older peers")
+    }
+
     func testEveryMapIsFairAndOpen() {
         let shapes: [(ArenaGame.Mode, width: Int, height: Int, spawns: [Int])] = [
             (.teamFight, 15, 25, [3, 3]), (.ball, 15, 25, [3, 3]), (.heist, 15, 25, [3, 3]), (.duel, 15, 17, [1, 1]),
@@ -447,3 +478,4 @@ final class ArenaNetTests: XCTestCase {
         XCTAssertEqual(ArenaGame.walk(from: V2(0.5, 0.5), by: V2(-1, 0), on: game.map).x, 0.5, accuracy: 0.6, "地图边上走不出去")
     }
 }
+

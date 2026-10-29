@@ -35,7 +35,7 @@ final class ArenaBushVisual {
         node.opacity = 1
         let spread: Float = bends ? 0.08 : 0
         node.simdScale = baseScale * SIMD3(1 + spread * openness,
-                                          1 - 0.6 * openness,
+                                          1 - 0.18 * openness,
                                           1 + spread * openness)
     }
 }
@@ -63,13 +63,12 @@ struct ArenaWorld: UIViewRepresentable {
 @MainActor
 final class ArenaWorldView: SCNView {
     private(set) static var activeDisplayLinks = 0
-    /// 斜着从后上方看，大约 52 度。看得到一大片地图，人是小的，墙还有侧面。
-    /// 高 16、往后 12.5：atan(16/12.5) ≈ 52 度。横屏左右各 12 格。
-    private static let cameraOffset = SIMD3<Float>(0, 16, 12.5)
+    /// 约63度俯视，减少前后人物的透视尺寸差异，并露出更多可行走地面。
+    static let cameraOffset = SIMD3<Float>(0, 24, 12)
     /// 竖屏时自己这一排左右各看得到几米
     private static let portraitHalfWidth: Float = 6.6
     /// 横屏左右各 12 格，人和草丛的比例接近对局录像
-    private static let landscapeHalfWidth: Float = 12
+    static let landscapeHalfWidth: Float = 12.8
 
     /// 竖向张角（度）。aspect 是宽除以高
     private static func verticalField(aspect: Float) -> Float {
@@ -310,15 +309,15 @@ final class ArenaWorldView: SCNView {
         }
         let aspect = Float(bounds.width / bounds.height)
         if aspect >= 1 {
-            // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
+            // 横屏保持稳定的世界宽度，自己在画面中间偏下
             tanX = Self.landscapeHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / aspect
-            lookAhead = 4.2
+            lookAhead = 2.8
         } else {
             // 竖屏：左右宽度按米算，不跟着镜头远近放大（镜头拉远了还用旧的角度，人会缩成一点）
             tanX = Self.portraitHalfWidth / simd_length(Self.cameraOffset)
             tanY = tanX / max(aspect, 0.3)
-            lookAhead = 4.2
+            lookAhead = 2.8
         }
         cameraNode.camera?.fieldOfView = CGFloat(Self.verticalField(aspect: aspect))
         let lift = Self.cameraOffset.y, back = Self.cameraOffset.z
@@ -916,7 +915,7 @@ final class ArenaWorldView: SCNView {
             }
             let visible = game.isVisible(fighter, to: myTeam)
             // 草丛/隐身使用脚圈提示；可见性规则独立于不透明角色表现。
-            let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
+            let hidden = fighter.team == myTeam && (game.map.inBush(fighter.pos) || fighter.invisible > 0) && game.time - fighter.lastAttack >= 1
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock,
                           sampleBones: ArenaDiagnostics.shared.variant != .noBones && (ArenaDiagnostics.shared.variant != .halfAnimation || diagnosticFrame % 2 == 0))
             tags[fighter.id].update(fighter, opacity: avatar.opacity)
@@ -939,14 +938,17 @@ final class ArenaWorldView: SCNView {
                  color: UIColor(red: 0.45, green: 0.95, blue: 0.4, alpha: 1), to: 1.7)
         }
         wasInBush = inside
-        // 自己、队友、或者已经露出来的人待在哪片草，就把那一整片拨开。别的草保持挡住
-        var openBush = Set<Int>()
-        for fighter in game.fighters where fighter.alive && game.isVisible(fighter, to: myTeam) {
-            let id = game.map.bushId(at: fighter.pos)
-            if id > 0 { openBush.insert(id) }
-        }
+        // Only leaves immediately around a visible fighter part slightly. A large
+        // connected patch must retain cover and must never open for a hidden enemy.
+        let visibleFighters = game.fighters.filter { $0.alive && game.isVisible($0, to: myTeam) }
         for bush in bushes {
-            bush.update(open: openBush.contains(bush.patchID), dt: dt)
+            let position = bush.node.simdPosition
+            let nearby = visibleFighters.contains { fighter in
+                let dx = Float(fighter.pos.x) - position.x
+                let dz = Float(fighter.pos.y) - position.z
+                return dx * dx + dz * dz < 1.15 * 1.15
+            }
+            bush.update(open: nearby, dt: dt)
         }
 
         syncProjectiles(game)
@@ -2320,3 +2322,4 @@ private final class DisplayTarget: NSObject {
         view?.tick(link.timestamp)
     }
 }
+

@@ -59,8 +59,8 @@ final class ArenaRangerTests: XCTestCase {
             } } }
         }
         XCTAssertEqual(low, 0, accuracy: 0.002)
-        XCTAssertGreaterThan(high, 1.42)
-        XCTAssertLessThan(high, 1.60, "Ranger must not become a giant relative to the existing map and roster")
+        XCTAssertGreaterThan(high, 1.13)
+        XCTAssertLessThan(high, 1.29, "Ranger must not become a giant relative to the existing map and roster")
     }
 
     func testShotMuzzleMatchesImmediateAimWithoutMovingCollisionBody() throws {
@@ -101,3 +101,4 @@ final class ArenaRangerTests: XCTestCase {
         }
     }
 }
+

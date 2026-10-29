@@ -500,6 +500,7 @@ jobs:
           grep -E "Test Case|Executed" animation-tests.log || true
 
       - name: 打开大厅和对局并截图
+        if: ${{ !contains(github.event.head_commit.message, '[skip-arena-capture]') }}
         # Build 397 spent ~6 min in cold simulator services before the first capture.
         # Ten still captures plus video now include two offline room states.
         # Build 409 reached video at 12 min; retain per-command limits and allow
@@ -886,4 +887,5 @@ jobs:
           export ASC_KEY_PATH="$KEY"
           python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography || python3 -m pip install --quiet --user pyjwt cryptography
           python3 .github/scripts/asc_whats_new.py "${{ github.run_number }}" notes.txt
+
 

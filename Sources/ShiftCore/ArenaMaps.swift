@@ -249,8 +249,56 @@ extension ArenaMap {
     public static let all: [ArenaMap] = [canyon, crossroads, fortress, garden, plaza, ruins, grove, pitch, sandPitch, vault, cove,
                                          ring, glade, lair]
 
+    /// New match arenas have flanking lanes and cover, with distinct wire IDs.
+    /// Keep historical IDs intact for story missions, replays and older peers.
+    public static let expandedMaps: [ArenaMap] = [canyon, crossroads, fortress, garden, plaza, ruins, grove].map(expanded)
+
+    private static func expanded(_ source: ArenaMap) -> ArenaMap {
+        let insetX = 3, insetY = source.width == source.height ? 3 : 2
+        let width = source.width + insetX * 2, height = source.height + insetY * 2
+        var rows = Array(repeating: Array(repeating: Character("."), count: width), count: height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let edgeX = min(x, width - 1 - x), edgeY = min(y, height - 1 - y)
+                if edgeX < 2 && edgeY > 2 && edgeY % 6 < 4 { rows[y][x] = "*" }
+            }
+        }
+        for y in 0..<source.height {
+            for x in 0..<source.width {
+                let tile = source.tile(x, y)
+                rows[y + insetY][x + insetX] = tile == .wall ? "#" : tile == .bush ? "*" : "."
+            }
+        }
+        // Widen existing cover into adjacent floor cells symmetrically. Leave
+        // the middle crossing open; bushes remain traversable in every mode.
+        for y in 1..<(source.height - 1) {
+            for x in 1..<(source.width - 1) where source.tile(x, y) == .bush {
+                for dx in [-1, 1] where source.tile(x + dx, y) == .floor {
+                    if abs(Double(y) + 0.5 - source.center.y) > 1 {
+                        rows[y + insetY][x + dx + insetX] = "*"
+                    }
+                }
+            }
+        }
+        for (team, spawns) in source.spawns.enumerated() {
+            for spawn in spawns {
+                rows[Int(spawn.y) + insetY][Int(spawn.x) + insetX] = source.spawns.count == 1 ? "o" : team == 0 ? "a" : "b"
+            }
+        }
+        rows[Int(source.center.y) + insetY][Int(source.center.x) + insetX] = "s"
+        return ArenaMap(id: source.id + "_expanded_v1", title: source.title + " · 扩展", theme: source.theme,
+                        rows: rows.map { String($0) })
+    }
+
+    public static func playPool(for mode: ArenaGame.Mode) -> [ArenaMap] {
+        let ids = Set(pool(for: mode).map { $0.id + "_expanded_v1" })
+        let expanded = expandedMaps.filter { ids.contains($0.id) }
+        return expanded.isEmpty ? pool(for: mode) : expanded
+    }
+
     /// 按名字找（联机开局时房主发来的）
     public static func named(_ id: String) -> ArenaMap? {
-        all.first { $0.id == id }
+        all.first { $0.id == id } ?? expandedMaps.first { $0.id == id }
     }
 }
+

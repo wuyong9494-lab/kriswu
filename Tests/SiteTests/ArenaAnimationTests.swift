@@ -1,6 +1,7 @@
 import XCTest
 import SceneKit
 import simd
+import Metal
 @testable import ShiftReminder
 
 @MainActor
@@ -15,7 +16,7 @@ final class ArenaAnimationTests: XCTestCase {
             bush.update(open: frame % 2 == 0, dt: 1 / 60)
             XCTAssertLessThan(abs(node.opacity - previousOpacity), 0.16)
             XCTAssertGreaterThanOrEqual(node.simdScale.x, base.x)
-            XCTAssertGreaterThanOrEqual(node.simdScale.y, base.y * 0.4 - 0.00001)
+            XCTAssertGreaterThanOrEqual(node.simdScale.y, base.y * 0.82 - 0.00001)
         }
         for _ in 0..<120 { bush.update(open: false, dt: 1 / 60) }
         XCTAssertEqual(node.simdScale, base)
@@ -36,7 +37,7 @@ final class ArenaAnimationTests: XCTestCase {
         XCTAssertEqual(sample.node.opacity, 1)
         for _ in 0..<120 { sample.update(open: true, dt: 1 / 60) }
         XCTAssertEqual(sample.node.simdScale.x, 1)
-        XCTAssertEqual(sample.node.simdScale.y, 0.4, accuracy: 0.00001)
+        XCTAssertEqual(sample.node.simdScale.y, 0.82, accuracy: 0.00001)
         XCTAssertEqual(sample.node.simdScale.z, 1)
         XCTAssertEqual(sample.node.opacity, 1)
     }
@@ -57,11 +58,66 @@ final class ArenaAnimationTests: XCTestCase {
             XCTAssertFalse(avatar.node.isHidden)
             XCTAssertEqual(grass.node.opacity, 1)
         }
+        XCTAssertGreaterThan(avatar.concealmentAmount, 0.95, "An ally in cover must have a visible ghost treatment")
         for frame in 0..<120 {
             avatar.update(game.fighters[0], visible: false, translucent: true, cheering: false,
                           dt: 1 / 60, clock: 3 + Double(frame) / 60)
         }
         XCTAssertTrue(avatar.node.isHidden, "Concealment cue must not reveal a hidden fighter")
+        XCTAssertLessThan(avatar.concealmentAmount, 0.01)
+        let other = ArenaAvatar(brawler: .ranger, color: .red, isMe: false)
+        other.update(game.fighters[1], visible: true, translucent: false, cheering: false, dt: 1, clock: 8)
+        XCTAssertEqual(other.concealmentAmount, 0)
+    }
+
+    func testConcealmentShaderActuallyRendersAndDiscardsCoverage() throws {
+        // In-memory GPU assertion only: no screenshot files or visual approval step.
+        let device = try XCTUnwrap(MTLCreateSystemDefaultDevice())
+        let renderer = SCNRenderer(device: device, options: nil)
+        let scene = SCNScene()
+        scene.background.contents = UIColor.black
+        renderer.scene = scene
+        let camera = SCNNode()
+        camera.camera = SCNCamera()
+        camera.position = SCNVector3(0, 0, 4)
+        scene.rootNode.addChildNode(camera)
+        renderer.pointOfView = camera
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = UIColor.white
+        material.shaderModifiers = [.fragment: ArenaAvatar.concealmentFragment]
+        let plane = SCNNode(geometry: SCNPlane(width: 2, height: 2))
+        plane.geometry?.firstMaterial = material
+        scene.rootNode.addChildNode(plane)
+        func litPixels(_ amount: Float) throws -> Int {
+            material.setValue(amount, forKey: "arenaConcealment")
+            SCNTransaction.flush()
+            let image = renderer.snapshot(atTime: 0, with: CGSize(width: 128, height: 128), antialiasingMode: .none)
+            let cg = try XCTUnwrap(image.cgImage)
+            var rgba = [UInt8](repeating: 0, count: 128 * 128 * 4)
+            let count: Int = try rgba.withUnsafeMutableBytes { bytes in
+                let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 128, height: 128,
+                    bitsPerComponent: 8, bytesPerRow: 128 * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(cg, in: CGRect(x: 0, y: 0, width: 128, height: 128))
+                let pixels = bytes.bindMemory(to: UInt8.self)
+                return stride(from: 0, to: pixels.count, by: 4).filter { pixels[$0] > 64 }.count
+            }
+            return count
+        }
+        let solid = try litPixels(0)
+        let hidden = try litPixels(1)
+        XCTAssertGreaterThan(solid, 1000, "Shader must compile and render")
+        XCTAssertGreaterThan(hidden, solid / 5, "Concealed ally remains readable")
+        XCTAssertLessThan(hidden, solid * 3 / 4, "Concealment must visibly remove coverage")
+        XCTAssertEqual(try litPixels(0), solid, "Leaving grass restores the opaque hero")
+    }
+
+    func testCombatCameraRetainsTopDownGroundCoverage() {
+        let pitch = atan2(ArenaWorldView.cameraOffset.y, ArenaWorldView.cameraOffset.z) * 180 / Float.pi
+        XCTAssertGreaterThan(pitch, 60)
+        XCTAssertLessThan(pitch, 70)
+        XCTAssertGreaterThan(ArenaWorldView.landscapeHalfWidth * 2, 25)
     }
 
     func testBenchmarkIsRepeatableAcrossCallbackCadences() {
@@ -227,3 +283,4 @@ final class ArenaAnimationTests: XCTestCase {
         XCTAssertEqual(rest.translation[1], SIMD3(1, 2, 3))
     }
 }
+

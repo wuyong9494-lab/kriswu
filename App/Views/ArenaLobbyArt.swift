@@ -5,7 +5,53 @@ struct ArenaLobbyIcon: View {
     let asset: String
     init(_ asset: String) { self.asset = asset }
     var body: some View {
-        Image(asset).renderingMode(.template).resizable().scaledToFit().accessibilityHidden(true)
+        Canvas { context, size in
+            context.scaleBy(x: size.width / 40, y: size.height / 40)
+            let ink = Color(red: 0.06, green: 0.08, blue: 0.16)
+            func box(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ color: Color) {
+                let p = Path(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: 2)
+                context.fill(p, with: .color(color)); context.stroke(p, with: .color(ink), lineWidth: 1.8)
+            }
+            func disc(_ x: CGFloat, _ y: CGFloat, _ radius: CGFloat, _ color: Color) {
+                let p = Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
+                context.fill(p, with: .color(color)); context.stroke(p, with: .color(ink), lineWidth: 1.5)
+            }
+            func face(_ x: CGFloat, _ y: CGFloat, _ color: Color) {
+                disc(x, y, 7, color)
+                disc(x - 2.5, y - 1, 1.3, ink); disc(x + 2.5, y - 1, 1.3, ink)
+                box(x - 2.5, y + 2, 5, 2, ink)
+            }
+            switch asset {
+            case "ArenaIconShop":
+                box(7, 13, 27, 23, .cyan); box(16, 22, 9, 14, Color(red: 0.1, green: 0.25, blue: 0.5))
+                for i in 0..<4 { box(4 + CGFloat(i) * 8, 5, 8, 13, i % 2 == 0 ? .red : .white) }
+            case "ArenaIconHero":
+                box(2, 9, 17, 25, .cyan); box(13, 3, 17, 27, .yellow); box(24, 12, 14, 24, .pink)
+                face(11, 20, .white); face(22, 14, .orange); face(31, 23, .purple)
+            case "ArenaIconFriends":
+                box(5, 5, 30, 28, Color(red: 1, green: 0.70, blue: 0.24))
+                face(20, 18, .yellow)
+            case "ArenaIconParty":
+                box(2, 15, 12, 21, .yellow); box(13, 4, 14, 29, .green); box(27, 13, 12, 23, .cyan)
+                face(8, 23, .yellow); face(20, 14, .green); face(33, 22, .cyan)
+            case "ArenaIconSeason":
+                box(7, 15, 27, 22, .cyan); box(5, 11, 31, 8, .purple); box(18, 11, 6, 26, .pink)
+                disc(15, 7, 5, .pink); disc(26, 7, 5, .pink)
+            case "ArenaIconCoins":
+                disc(20, 21, 16, .orange); disc(20, 19, 13, .yellow); face(20, 19, .yellow)
+            case "ArenaIconTrophy":
+                box(15, 28, 10, 8, .orange); box(10, 34, 20, 4, .yellow)
+                disc(9, 13, 7, .orange); disc(31, 13, 7, .orange); box(10, 4, 20, 22, .yellow)
+            case "ArenaIconBattle":
+                let points = [CGPoint(x: 20, y: 1), CGPoint(x: 36, y: 10), CGPoint(x: 33, y: 29), CGPoint(x: 20, y: 39), CGPoint(x: 5, y: 29), CGPoint(x: 3, y: 10)]
+                var p = Path(); p.addLines(points); p.closeSubpath()
+                context.fill(p, with: .color(.purple)); context.stroke(p, with: .color(.white), lineWidth: 2)
+                box(17, 8, 6, 23, .pink); box(10, 16, 20, 5, .pink)
+            default:
+                let image = context.resolve(Image(asset).renderingMode(.original))
+                context.draw(image, in: CGRect(x: 0, y: 0, width: 40, height: 40))
+            }
+        }.accessibilityHidden(true)
     }
 }
 
@@ -34,13 +80,13 @@ struct ArenaLobbyButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(primary ? Color(red: 0.24, green: 0.13, blue: 0.05) : .white)
             .background {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 4)
                     .fill(LinearGradient(colors: primary
                         ? [Color(red: 1, green: 0.88, blue: 0.34), Color(red: 1, green: 0.66, blue: 0.12)]
-                        : [Color(red: 0.20, green: 0.29, blue: 0.56), Color(red: 0.10, green: 0.16, blue: 0.36)],
+                        : [Color(red: 0.22, green: 0.29, blue: 0.40), Color(red: 0.10, green: 0.16, blue: 0.26)],
                                          startPoint: .top, endPoint: .bottom))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(primary ? 0.8 : 0.6), lineWidth: 2)
+                        RoundedRectangle(cornerRadius: 4).strokeBorder(Color(red: 0.025, green: 0.045, blue: 0.12), lineWidth: 2.5)
                     }
                     .overlay(alignment: .top) {
                         RoundedRectangle(cornerRadius: 2).fill(.white.opacity(primary ? 0.5 : 0.18))
@@ -60,49 +106,45 @@ struct ArenaLobbyBackdrop: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                LinearGradient(colors: [Color(red: 0.12, green: 0.20, blue: 0.48),
-                                        Color(red: 0.26, green: 0.39, blue: 0.70),
-                                        Color(red: 0.40, green: 0.31, blue: 0.60)],
-                               startPoint: .top, endPoint: .bottom)
-                RadialGradient(colors: [Color(red: 0.56, green: 0.77, blue: 0.94).opacity(0.55), .clear],
-                               center: UnitPoint(x: 0.5, y: 0.42), startRadius: 0, endRadius: geo.size.width * 0.46)
+                LinearGradient(colors: [Color(red: 0.01, green: 0.09, blue: 0.56),
+                                        Color(red: 0.02, green: 0.22, blue: 0.91),
+                                        Color(red: 0.36, green: 0.12, blue: 0.72)], startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Color.purple.opacity(0.9), .clear], center: UnitPoint(x: 0.5, y: 0.52),
+                               startRadius: 0, endRadius: geo.size.height * 0.53)
                 Canvas { context, size in
                     let w = size.width, h = size.height
-                    // Subtle rays and a distant arched arena, with a quiet central stage.
-                    let center = CGPoint(x: w * 0.5, y: h * 0.62)
-                    for i in 0..<9 {
-                        let x = CGFloat(i) * w / 8
-                        var ray = Path()
-                        ray.move(to: center)
-                        ray.addLine(to: CGPoint(x: x - w * 0.025, y: 0))
-                        ray.addLine(to: CGPoint(x: x + w * 0.025, y: 0))
-                        ray.closeSubpath()
-                        context.fill(ray, with: .color(.white.opacity(0.035)))
-                    }
-                    for side in 0..<2 {
-                        for tower in 0..<3 {
-                            let x = side == 0 ? CGFloat(tower) * w * 0.095 - w * 0.035
-                                : w - CGFloat(tower + 1) * w * 0.095 + w * 0.035
-                            let top = h * (0.27 + CGFloat(tower) * 0.10)
-                            let rect = CGRect(x: x, y: top, width: w * 0.08, height: h - top)
-                            context.fill(Path(rect), with: .color(Color(red: 0.12, green: 0.20, blue: 0.42).opacity(0.5)))
-                            context.fill(Path(CGRect(x: x - w * 0.006, y: top, width: w * 0.092, height: h * 0.025)),
-                                         with: .color(Color(red: 0.40, green: 0.52, blue: 0.74).opacity(0.6)))
-                            let banner = CGRect(x: x + w * 0.023, y: top + h * 0.06,
-                                                width: w * 0.034, height: h * 0.16)
-                            context.fill(Path(roundedRect: banner, cornerRadius: 3),
-                                         with: .color(Color(red: 0.40, green: 0.26, blue: 0.56).opacity(0.65)))
+                    let moon = CGRect(x: w * 0.5 - h * 0.31, y: h * 0.16, width: h * 0.62, height: h * 0.62)
+                    context.fill(Path(ellipseIn: moon.insetBy(dx: -8, dy: -8)), with: .color(Color.pink.opacity(0.14)))
+                    context.fill(Path(ellipseIn: moon), with: .color(Color(red: 1, green: 0.88, blue: 0.89)))
+                    // Three depths of angular skyline; the center stays clear for the hero.
+                    for layer in 0..<3 {
+                        let base = h * (0.72 + CGFloat(layer) * 0.08)
+                        for i in 0..<18 {
+                            let x = CGFloat(i) * w / 17 - w * 0.03
+                            let central = abs(x + w * 0.03 - w * 0.5) < h * 0.23
+                            let roof = h * (0.10 + CGFloat((i * 7 + layer * 11) % 9) * 0.018) * (central ? 0.28 : 1)
+                            let rect = CGRect(x: x, y: base - roof, width: w * 0.066, height: h - base + roof)
+                            let blue = 0.39 - Double(layer) * 0.09
+                            context.fill(Path(rect), with: .color(Color(red: 0.025, green: 0.065, blue: blue)))
+                            context.fill(Path(CGRect(x: x, y: base - roof, width: 3, height: roof)),
+                                         with: .color(Color(red: 0.57, green: 0.24, blue: 0.89).opacity(layer == 0 ? 0.8 : 0.35)))
+                            if i % 3 == 0 {
+                                context.fill(Path(CGRect(x: x + w * 0.025, y: base - roof - h * 0.05,
+                                                         width: 3, height: h * 0.05)), with: .color(Color(red: 0.04, green: 0.07, blue: blue)))
+                            }
                         }
                     }
-                    let floor = CGRect(x: -w * 0.15, y: h * 0.73, width: w * 1.3, height: h * 0.65)
-                    context.fill(Path(ellipseIn: floor), with: .color(Color(red: 0.17, green: 0.22, blue: 0.43)))
-                    context.stroke(Path(ellipseIn: floor), with: .color(Color(red: 0.48, green: 0.58, blue: 0.79).opacity(0.45)), lineWidth: 3)
-                    let inner = CGRect(x: w * 0.22, y: h * 0.77, width: w * 0.56, height: h * 0.23)
-                    context.fill(Path(ellipseIn: inner), with: .color(Color(red: 0.35, green: 0.38, blue: 0.60)))
-                    context.stroke(Path(ellipseIn: inner), with: .color(.white.opacity(0.12)), lineWidth: 2)
+                    var floor = Path()
+                    floor.move(to: CGPoint(x: w * 0.30, y: h * 0.76))
+                    floor.addLine(to: CGPoint(x: w * 0.70, y: h * 0.76))
+                    floor.addLine(to: CGPoint(x: w * 0.94, y: h))
+                    floor.addLine(to: CGPoint(x: w * 0.06, y: h))
+                    floor.closeSubpath()
+                    context.fill(floor, with: .linearGradient(Gradient(colors: [Color(red: 0.13, green: 0.11, blue: 0.34),
+                                                                                               Color(red: 0.025, green: 0.06, blue: 0.17)]),
+                                                              startPoint: CGPoint(x: 0, y: h * 0.76), endPoint: CGPoint(x: 0, y: h)))
                 }
-                LinearGradient(colors: [.black.opacity(0.22), .clear, .clear, .black.opacity(0.18)],
-                               startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [.black.opacity(0.25), .clear, .clear, .black.opacity(0.25)], startPoint: .top, endPoint: .bottom)
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
     }

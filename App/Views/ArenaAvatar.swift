@@ -7,9 +7,9 @@ import simd
 @MainActor
 final class ArenaAvatar {
     /// 角色模型缩多小（模型大约 2.3 高，缩完比一格高一点）
-    static let scale: Float = 0.95
+    static let scale: Float = 0.76
     /// 血条画在离地多高。大头和帽子大约到 2 米，再低会被头挡住
-    static let headHeight: Float = 2.35
+    static let headHeight: Float = 1.90
 
     /// 脚下的软影子，所有人共用一张
     private static let blobShadow: SCNMaterial = {
@@ -111,6 +111,46 @@ final class ArenaAvatar {
     private var concealmentRim: SCNMaterial?
     private var concealmentHold: Float = 0
     private var showingConcealment = false
+    private(set) var concealmentAmount: Float = 0
+    private var concealmentMaterials: [SCNMaterial] = []
+
+    // Screen-ray stipple discards the SAME samples in every mesh layer. Remaining
+    // samples stay opaque and write depth; no transparent skeleton sorting.
+    static let concealmentFragment = """
+        #pragma arguments
+        float arenaConcealment;
+        #pragma opaque
+        #pragma body
+        if (arenaConcealment > 0.001) {
+        float2 cell = floor((_surface.position.xy / max(abs(_surface.position.z), 0.001)) * 900.0);
+        float pattern = fract(sin(dot(cell, float2(12.9898, 78.233))) * 43758.5453);
+        if (pattern < arenaConcealment * 0.58) { discard_fragment(); }
+        _output.color.rgb = mix(_output.color.rgb, _output.color.rgb * float3(0.65, 0.88, 1.0), arenaConcealment * 0.65);
+        }
+        """
+
+    private func prepareConcealment() {
+        var copies: [ObjectIdentifier: SCNMaterial] = [:]
+        let owned = Set((instance?.materials ?? []).map { ObjectIdentifier($0) })
+        body.enumerateChildNodes { node, _ in
+            guard let geometry = node.geometry else { return }
+            // Geometry is per instance; material copies prevent a concealed ally
+            // from changing another hero or the globally shared outline material.
+            geometry.materials = geometry.materials.map { original in
+                let key = ObjectIdentifier(original)
+                if let copy = copies[key] { return copy }
+                let copy = owned.contains(key) ? original : original.copy() as! SCNMaterial
+                var modifiers = copy.shaderModifiers ?? [:]
+                let previous = modifiers[.fragment] ?? ""
+                modifiers[.fragment] = Self.concealmentFragment + "\n" + previous.replacingOccurrences(of: "#pragma body", with: "")
+                copy.shaderModifiers = modifiers
+                copy.setValue(Float(0), forKey: "arenaConcealment")
+                copies[key] = copy
+                return copy
+            }
+        }
+        concealmentMaterials = Array(copies.values)
+    }
     private var deadSince: Double?
     private var flashUntil: Double = 0
     private var flashing = false
@@ -148,7 +188,7 @@ final class ArenaAvatar {
             for weapon in look.weapons {
                 guard let piece = ArenaModels.shared.prop(weapon.file),
                       let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else { continue }
-                let held = piece.instantiate(shareMaterials: true, outline: ArenaArt.outline)
+                let held = piece.instantiate(shareMaterials: false, outline: ArenaArt.outline)
                 held.root.simdPosition = weapon.position
                 held.root.simdOrientation = weapon.rotation
                 bone.addChildNode(held.root)
@@ -186,6 +226,7 @@ final class ArenaAvatar {
             body.addChildNode(torso)
         }
         node.addChildNode(body)
+        prepareConcealment()
         guard decorated else {
             opacity = 1
             return
@@ -338,7 +379,7 @@ final class ArenaAvatar {
         } else {
             target = visible ? 1 : 0
         }
-        if !placedOpacity {
+        if fighter.alive || !placedOpacity {
             opacity = target
             placedOpacity = true
         } else {
@@ -353,8 +394,13 @@ final class ArenaAvatar {
             concealmentRim?.diffuse.contents = concealed ? UIColor(red: 0.35, green: 1, blue: 0.5, alpha: 1)
                 : (mine ? UIColor.white.withAlphaComponent(0.95) : teamColor.withAlphaComponent(0.9))
         }
+        let next = concealmentAmount + ((concealed ? Float(1) : 0) - concealmentAmount) * (1 - exp(-16 * max(dt, 0)))
+        if abs(next - concealmentAmount) > 0.0001 {
+            concealmentAmount = abs(next - (concealed ? 1 : 0)) < 0.001 ? (concealed ? 1 : 0) : next
+            concealmentMaterials.forEach { $0.setValue(concealmentAmount, forKey: "arenaConcealment") }
+        }
         node.opacity = CGFloat(opacity)
-        node.isHidden = opacity < 0.02
+        node.isHidden = (!visible && fighter.alive) || opacity < 0.02
         // 不透明时才描边（半透明时会从身子里透出一圈黑）
         let solid = opacity > 0.97 && ArenaDiagnostics.shared.variant != .noCharacterOutlines
         if solid != outlined {
@@ -788,3 +834,4 @@ final class ArenaTag {
         }
     }
 }
+

@@ -74,49 +74,53 @@ struct ArenaHomeView: View {
     var body: some View {
         GeometryReader { geo in
             let wide = geo.size.width > geo.size.height
+            let rail: CGFloat = geo.size.height < 370 ? 64 : 76
             ZStack {
                 ArenaLobbyBackground()
-                VStack(spacing: 8) {
+                // The hero owns the middle of the screen. Controls float around
+                // that stage instead of squeezing it into a dashboard column.
+                ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
+                              live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                    .frame(width: geo.size.width * 0.46, height: geo.size.height * 0.67)
+                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.49)
+                VStack(spacing: 0) {
                     compactTopBar
-                    HStack(alignment: .center, spacing: 12) {
-                        ScrollView(.vertical, showsIndicators: false) { leftMenu.padding(.bottom, 5) }
-                            .frame(width: 76)
-                        ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
-                                      live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
-                            .overlay(alignment: .bottomLeading) {
-                                // Keep the selector beside the hero, not in a row that steals
-                                // 44 points of vertical camera space on a landscape phone.
-                                Button { sheet = .brawlers } label: {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        HStack(spacing: 6) {
-                                            Text(chosen.name).font(.system(size: 21, weight: .heavy, design: .rounded))
-                                            Image(systemName: "chevron.left.chevron.right").font(.caption.bold())
-                                        }
-                                        Text("Lv. \(progress.level(chosen)) · \(chosen.role)")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 10).padding(.vertical, 6).frame(minHeight: 44)
-                                    .background(Color(red: 0.08, green: 0.12, blue: 0.32).opacity(0.8), in: RoundedRectangle(cornerRadius: 8))
-                                }.buttonStyle(.plain)
-                                    .accessibilityLabel("选择角色，当前\(chosen.name)")
-                            }
-                        ScrollView(.vertical, showsIndicators: false) {
-                            VStack(spacing: 8) {
-                                quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
+                    HStack(alignment: .top, spacing: 0) {
+                        ScrollView(showsIndicators: false) { leftMenu }
+                            .frame(width: rail + 12)
+                        Spacer(minLength: 0)
+                        heroStatus.padding(.top, 10)
+                        Spacer(minLength: 0)
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 10) {
                                 quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
                                 quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
                                 quietMenu("升级", symbol: "arrow.up.circle.fill") { sheet = .loadout }
-                            }.padding(.bottom, 5)
-                        }.frame(width: 76)
-                    }
-                    .frame(maxHeight: .infinity)
+                                Button { adventure = true } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "gamecontroller.fill").font(.system(size: 25))
+                                        Text("冒险").font(.system(size: 14, weight: .black))
+                                    }.frame(width: 106, height: 42)
+                                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+                            }.padding(.top, 28).padding(.bottom, 5)
+                        }.frame(width: 112)
+                    }.frame(maxHeight: .infinity)
                     lobbyFooter(wide: wide)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                }.padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
+                HStack {
+                    Button { sheet = .brawlers } label: {
+                        Image(systemName: "tshirt.fill").font(.system(size: 21, weight: .heavy))
+                            .frame(width: 44, height: 42)
+                    }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
+                        .accessibilityLabel("选择英雄和皮肤")
+                    Spacer()
+                    Button { sheet = .party } label: {
+                        Image(systemName: "plus").font(.system(size: 25, weight: .black))
+                            .frame(width: 44, height: 42)
+                    }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
+                        .accessibilityLabel("邀请队友")
+                }.frame(width: geo.size.width * 0.40)
+                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.65)
             }
         }
         .modifier(ArenaLandscape())
@@ -149,93 +153,131 @@ struct ArenaHomeView: View {
         }
     }
 
+    private var heroStatus: some View {
+        Button { sheet = .loadout } label: {
+            VStack(spacing: 3) {
+                HStack(spacing: 5) {
+                    Image(systemName: "trophy.fill").foregroundStyle(.yellow)
+                    Text("\(progress.trophies(chosen))").monospacedDigit()
+                    Text("威能 \(progress.level(chosen))")
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.purple, in: RoundedRectangle(cornerRadius: 4))
+                    Image(systemName: "bolt.shield.fill").foregroundStyle(.green)
+                    Image(systemName: "star.circle.fill").foregroundStyle(.yellow)
+                }.font(.system(size: 14, weight: .black, design: .rounded))
+                Text(chosen.name).font(.system(size: 18, weight: .black, design: .rounded))
+            }.foregroundStyle(.white).arenaOutline(1)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Color(red: 0.07, green: 0.13, blue: 0.29).opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+        }.buttonStyle(.plain).accessibilityLabel("\(chosen.name)，等级\(progress.level(chosen))，升级与技能")
+    }
+
     private func quietMenu(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
         let item = ArenaLobbyEmblem.menu(symbol)
         return Button(action: action) {
-            VStack(spacing: 1) {
-                ArenaLobbyIcon(item.asset).foregroundStyle(item.tint).frame(width: 30, height: 30)
-                Text(title).font(.system(size: 11, weight: .heavy, design: .rounded))
-            }
-            .foregroundStyle(.white)
-            .frame(width: 72, height: 50)
-        }
-        .buttonStyle(ArenaLobbyButtonStyle(tint: item.tint))
-        .accessibilityLabel(title)
+            VStack(spacing: -2) {
+                ArenaLobbyIcon(item.asset).foregroundStyle(item.tint)
+                    .frame(width: 35, height: 31).rotationEffect(.degrees(-5))
+                    .shadow(color: .black.opacity(0.8), radius: 0, x: 1, y: 2)
+                Text(title).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
+            }.foregroundStyle(.white).frame(width: 67, height: 49)
+        }.buttonStyle(ArenaLobbyButtonStyle(tint: item.tint))
+            .accessibilityLabel(title)
     }
 
     private var compactTopBar: some View {
-        HStack(spacing: 8) {
-            Button {
-                ArenaOrientation.releaseAll()
-                ArenaSound.shared.leaveLobby()
-                dismiss()
-            } label: { Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44) }
-                .buttonStyle(ArenaLobbyButtonStyle(tint: .white))
-                .accessibilityLabel("离开勇者乱斗")
-            HStack(spacing: 8) {
-                ArenaLobbyIcon("ArenaIconHero").foregroundStyle(.cyan).frame(width: 30, height: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(name).font(.system(size: 14, weight: .heavy, design: .rounded)).lineLimit(1)
-                    Text("勇者竞技场").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.65))
-                }
-            }.frame(maxWidth: 150, alignment: .leading)
+        HStack(spacing: 7) {
+            Button { sheet = .brawlers } label: {
+                HStack(spacing: 5) {
+                    ArenaLobbyIcon("ArenaIconHero").foregroundStyle(.white)
+                        .frame(width: 29, height: 29).padding(3).background(.purple)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(name).font(.system(size: 12, weight: .black)).lineLimit(1)
+                        HStack(spacing: 3) {
+                            Image(systemName: "trophy.fill").foregroundStyle(.yellow)
+                            Text("\(progress.totalTrophies)").foregroundStyle(.yellow)
+                        }.font(.system(size: 15, weight: .black, design: .rounded))
+                    }
+                }.padding(.horizontal, 6).frame(width: 130, height: 43)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
+            Button { sheet = .road } label: {
+                Image(systemName: "crown.fill").font(.system(size: 24, weight: .black))
+                    .foregroundStyle(.yellow).frame(width: 44, height: 43)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow)).accessibilityLabel("奖杯之路")
             Spacer(minLength: 0)
-            lobbyCounter("\(progress.totalTrophies)", asset: "ArenaIconTrophy", tint: .orange, label: "奖杯之路") { sheet = .road }
             lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店") { sheet = .shop }
-            lobbyCounter("\(progress.season.tier)级", asset: "ArenaIconSeason", tint: .cyan, label: "赛季奖励") { sheet = .season }
+            lobbyCounter("\(progress.season.points)", asset: "ArenaIconSeason", tint: .green, label: "赛季经验") { sheet = .season }
             Button { muted.toggle(); ArenaSound.shared.muteChanged(battle: false) } label: {
-                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").frame(width: 44, height: 44)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
-                .accessibilityLabel(muted ? "打开声音" : "静音")
-        }
-        .foregroundStyle(.white)
-        .frame(height: 44)
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 18, weight: .black))
+                    .frame(width: 42, height: 40)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel(muted ? "打开声音" : "静音")
+            Button { sheet = .settings } label: {
+                Image(systemName: "line.3.horizontal").font(.system(size: 22, weight: .black)).frame(width: 42, height: 40)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("游戏设置")
+            Button {
+                ArenaOrientation.releaseAll(); ArenaSound.shared.leaveLobby(); dismiss()
+            } label: {
+                Image(systemName: "chevron.left").font(.headline).frame(width: 38, height: 40)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("离开勇者乱斗")
+        }.foregroundStyle(.white).frame(height: 44)
     }
 
     private func lobbyCounter(_ value: String, asset: String, tint: Color, label: String,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                ArenaLobbyIcon(asset).foregroundStyle(tint).frame(width: 24, height: 24)
-                Text(value).font(.system(size: 15, weight: .heavy, design: .rounded).monospacedDigit())
+            HStack(spacing: 5) {
+                ArenaLobbyIcon(asset).foregroundStyle(tint).frame(width: 25, height: 25)
+                Text(value).font(.system(size: 17, weight: .black, design: .rounded).monospacedDigit())
                     .lineLimit(1).minimumScaleFactor(0.7)
-            }.padding(.horizontal, 10).frame(minWidth: 68, minHeight: 44)
-        }.buttonStyle(ArenaLobbyButtonStyle(tint: tint))
-            .accessibilityLabel("\(label)，\(value)")
+            }.foregroundStyle(.white).arenaOutline(1)
+                .padding(.horizontal, 9).frame(minWidth: 68, minHeight: 38)
+                .background(Color(red: 0.04, green: 0.11, blue: 0.24).opacity(0.88))
+        }.buttonStyle(.plain).accessibilityLabel("\(label)，\(value)")
     }
 
     private func lobbyFooter(wide: Bool) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .bottom, spacing: 10) {
             Button { sheet = .season } label: {
-                HStack(spacing: 8) {
-                    ArenaLobbyIcon("ArenaIconSeason").foregroundStyle(.yellow).frame(width: 30, height: 30)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("赛季任务").font(.system(size: 13, weight: .heavy, design: .rounded))
-                        Text("等级 \(progress.season.tier)").font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.7))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "ticket.fill").font(.system(size: 27)).foregroundStyle(.yellow)
+                        Text("\(progress.season.tier)").font(.system(size: 22, weight: .black))
                     }
-                }.padding(.horizontal, 12).frame(height: 60)
+                    Text("乱斗通行证").font(.system(size: 11, weight: .black))
+                    ProgressView(value: Double(progress.season.points % ArenaSeason.pointsPerTier), total: Double(ArenaSeason.pointsPerTier))
+                        .tint(.yellow).frame(width: 98)
+                }.padding(.horizontal, 8).frame(height: 65)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
+            Button { sheet = .season } label: {
+                VStack(spacing: 1) {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 26)).foregroundStyle(.cyan)
+                    Text("任务").font(.system(size: 12, weight: .black))
+                }.frame(width: 48, height: 56)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
             Spacer(minLength: 0)
             Button { sheet = .modes } label: {
-                HStack(spacing: 10) {
-                    ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.mint).frame(width: 34, height: 34)
+                HStack(spacing: 8) {
+                    ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.purple).frame(width: 34, height: 39)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(playMode.title).font(.system(size: 17, weight: .heavy, design: .rounded))
-                        Text("选择玩法与地图").font(.system(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.7))
-                    }.lineLimit(1).minimumScaleFactor(0.8)
+                        Text(playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
+                        Text(ArenaMap.playPool(for: playMode).map(\.title).joined(separator: " / "))
+                            .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
+                    }.lineLimit(1).minimumScaleFactor(0.7)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.up.chevron.down").font(.caption.bold())
-                }.padding(.horizontal, 12).frame(maxWidth: 290).frame(height: 60)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .mint))
-            rankedSwitch
-            Button { start() } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "play.fill").font(.system(size: 22, weight: .black))
-                    Text("开始对战").font(.system(size: 23, weight: .heavy, design: .rounded))
-                }.frame(width: wide ? 176 : 130, height: 60)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
-        }.foregroundStyle(.white).frame(height: 64)
+                    Image(systemName: "chevron.up").font(.system(size: 15, weight: .black))
+                }.padding(.horizontal, 9).frame(maxWidth: 340).frame(height: 57)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
+            VStack(spacing: 3) {
+                Button { ranked.toggle() } label: {
+                    Text(ranked ? "排位对战 ▾" : "普通对战 ▾").font(.system(size: 11, weight: .black))
+                        .foregroundStyle(.white).frame(minHeight: 24)
+                }.buttonStyle(.plain).accessibilityLabel("切换普通或排位")
+                Button { start() } label: {
+                    Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
+                        .frame(width: wide ? 168 : 124, height: 57)
+                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+            }
+        }.foregroundStyle(.white).frame(height: 84)
     }
 
     // MARK: 上边
@@ -432,12 +474,20 @@ struct ArenaHomeView: View {
     // MARK: 左边
 
     private var leftMenu: some View {
-        VStack(spacing: 8) {
-            quietMenu("冒险", symbol: "flag.checkered") { adventure = true }
-            quietMenu("角色", symbol: "person.crop.square.fill") { sheet = .brawlers }
-            quietMenu("赛季", symbol: "star.circle.fill") { sheet = .season }
-            quietMenu("设置", symbol: "gearshape.fill") { sheet = .settings }
-        }
+        VStack(spacing: 11) {
+            quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
+            quietMenu("英雄", symbol: "person.crop.square.fill") { sheet = .brawlers }
+            quietMenu("活动", symbol: "star.circle.fill") { sheet = .season }
+            Button { adventure = true } label: {
+                VStack(spacing: 1) {
+                    Image(systemName: "hexagon.fill").font(.system(size: 26, weight: .black))
+                    Text("冒险基地").font(.system(size: 12, weight: .black))
+                }.foregroundStyle(Color(red: 1, green: 0.25, blue: 0.38))
+                    .frame(width: 73, height: 50)
+                    .background(Color(red: 0.14, green: 0.06, blue: 0.20))
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.red, lineWidth: 2))
+            }.buttonStyle(.plain)
+        }.padding(.top, 28).padding(.bottom, 6)
         .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
             ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
         }
@@ -1641,59 +1691,36 @@ final class ArenaShowcaseView: SCNView {
         rim.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.25, -0.35, 1)))
         world.rootNode.addChildNode(rim)
 
-        // 台子：金边的圆台，描一圈深色的边，上面一块影子
-        let height: Float = 0.07
-        let top = SCNCylinder(radius: 0.78, height: CGFloat(height))
-        top.radialSegmentCount = 6
-        let side = SCNMaterial()
-        side.lightingModel = .lambert
-        side.diffuse.contents = UIColor(red: 0.27, green: 0.18, blue: 0.37, alpha: 1)
-        let face = SCNMaterial()
-        face.lightingModel = .lambert
-        face.diffuse.contents = UIColor(red: 0.55, green: 0.40, blue: 0.63, alpha: 1)
-        top.materials = [side, face, side]
-        let pedestal = SCNNode(geometry: top)
-        pedestal.simdPosition = SIMD3(0, height / 2, 0)
+        let height: Float = 0.06
+        let deck = SCNBox(width: 2.1, height: CGFloat(height), length: 1.2, chamferRadius: 0.015)
+        let base = SCNMaterial()
+        base.lightingModel = .constant
+        base.diffuse.contents = UIColor(red: 0.08, green: 0.10, blue: 0.25, alpha: 1)
+        deck.firstMaterial = base
+        let pedestal = SCNNode(geometry: deck)
+        pedestal.position = SCNVector3(0, height / 2, 0)
         world.rootNode.addChildNode(pedestal)
-        let rimGeometry = SCNCylinder(radius: 0.80, height: CGFloat(height + 0.025))
-        rimGeometry.radialSegmentCount = 6
-        let ink = SCNMaterial()
-        ink.lightingModel = .constant
-        ink.diffuse.contents = UIColor(red: 0.12, green: 0.08, blue: 0.2, alpha: 1)
-        ink.cullMode = .front
-        rimGeometry.firstMaterial = ink
-        let outline = SCNNode(geometry: rimGeometry)
-        outline.simdPosition = pedestal.simdPosition
-        world.rootNode.addChildNode(outline)
-        let shadow = SCNCylinder(radius: 0.58, height: 0.002)
-        shadow.radialSegmentCount = 32
-        shadow.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.42))
-        let shadowNode = SCNNode(geometry: shadow)
-        shadowNode.simdPosition = SIMD3(0, height + 0.002, 0)
-        shadowNode.renderingOrder = 2
-        world.rootNode.addChildNode(shadowNode)
-        let deck = SCNCylinder(radius: 0.59, height: 0.018)
-        deck.radialSegmentCount = 6
-        let deckMaterial = SCNMaterial()
-        deckMaterial.lightingModel = .constant
-        deckMaterial.diffuse.contents = UIColor(red: 0.48, green: 0.34, blue: 0.58, alpha: 1)
-        deck.firstMaterial = deckMaterial
-        let deckNode = SCNNode(geometry: deck)
-        deckNode.simdPosition = SIMD3(0, height + 0.012, 0)
-        deckNode.castsShadow = false
-        world.rootNode.addChildNode(deckNode)
-        let ring = SCNTorus(ringRadius: 0.61, pipeRadius: 0.018)
-        ring.ringSegmentCount = 48
-        ring.pipeSegmentCount = 12
-        let gold = SCNMaterial()
-        gold.lightingModel = .constant
-        gold.diffuse.contents = UIColor(red: 0.72, green: 0.54, blue: 0.77, alpha: 1)
-        ring.firstMaterial = gold
-        let ringNode = SCNNode(geometry: ring)
-        ringNode.simdPosition = SIMD3(0, height + 0.02, 0)
-        ringNode.castsShadow = false
-        world.rootNode.addChildNode(ringNode)
-
+        let neon = SCNMaterial()
+        neon.lightingModel = .constant
+        neon.diffuse.contents = UIColor(red: 1, green: 0.35, blue: 0.64, alpha: 1)
+        for x in [Float(-0.93), 0.93] {
+            let strip = SCNNode(geometry: SCNBox(width: 0.035, height: 0.008, length: 1.05, chamferRadius: 0))
+            strip.geometry?.firstMaterial = neon
+            strip.position = SCNVector3(x, height + 0.005, 0)
+            world.rootNode.addChildNode(strip)
+        }
+        for z in [Float(-0.53), 0.53] {
+            let strip = SCNNode(geometry: SCNBox(width: 1.9, height: 0.008, length: 0.035, chamferRadius: 0))
+            strip.geometry?.firstMaterial = neon
+            strip.position = SCNVector3(0, height + 0.005, z)
+            world.rootNode.addChildNode(strip)
+        }
+        for i in 0..<6 {
+            let plate = SCNNode(geometry: SCNBox(width: 0.15, height: 0.009, length: 0.10, chamferRadius: 0))
+            plate.geometry?.firstMaterial = neon
+            plate.position = SCNVector3(Float(i) * 0.31 - 0.78, height + 0.006, 0.40)
+            world.rootNode.addChildNode(plate)
+        }
         stage.simdPosition = SIMD3(0, height, 0)
         world.rootNode.addChildNode(stage)
     }
@@ -1736,7 +1763,7 @@ final class ArenaShowcaseView: SCNView {
         let depth: Float = max(abs(low.z), abs(high.z), 0.2)
         let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + depth
         let target = stage.convertPosition(SCNVector3(0, height * 0.5, 0), to: nil)
-        eye.position = SCNVector3(0.15, target.y + distance * 0.06, distance)
+        eye.position = SCNVector3(0.15, target.y + distance * 0.10, distance)
         eye.look(at: target)
         setNeedsDisplay()
         writeCaptureReadiness()
@@ -1952,3 +1979,4 @@ private enum ArenaShop {
 
     static func dealPrice(_ skin: ArenaSkin) -> Int { max(40, skin.price * 7 / 10) }
 }
+
