@@ -291,27 +291,28 @@ enum ArenaArt {
 
     private static let leafMaterial = lit(leaves, repeats: 2)
 
-    /// 草丛：五团叶子挤在一起（三种摆法），深绿描边
-    static let bushes: [SCNGeometry] = {
-        let layouts: [[(SIMD3<Float>, Float)]] = [
-            [(SIMD3(0, 0.5, 0.02), 0.5), (SIMD3(0.27, 0.62, 0.15), 0.38), (SIMD3(-0.25, 0.66, -0.1), 0.4),
-             (SIMD3(0.05, 0.9, -0.08), 0.33), (SIMD3(-0.12, 0.48, 0.28), 0.34)],
-            [(SIMD3(-0.05, 0.52, 0), 0.52), (SIMD3(0.25, 0.7, -0.15), 0.36), (SIMD3(-0.28, 0.6, 0.18), 0.36),
-             (SIMD3(0.18, 0.5, 0.26), 0.32), (SIMD3(0, 0.92, 0.04), 0.3)],
-            [(SIMD3(0.02, 0.48, -0.02), 0.5), (SIMD3(-0.24, 0.72, -0.2), 0.34), (SIMD3(0.28, 0.58, -0.05), 0.38),
-             (SIMD3(-0.2, 0.5, 0.25), 0.33), (SIMD3(0.12, 0.88, 0.12), 0.31)],
-        ]
-        let rim = edge(bushInk)
-        return layouts.map { balls in
-            var mesh = Mesh(parts: 2)
-            let squash = SIMD3<Float>(1, 0.86, 1)
-            for (center, radius) in balls {
-                mesh.sphere(center: center, radius: squash * radius, part: 0)
-                mesh.sphere(center: center, radius: squash * (radius + 0.05), part: 1)
+    /// Opaque, shared grass meshes with a readable tile footprint. Each tuft
+    /// uses closed tapered blades instead of overlapping outlined spheres.
+    static let bushes: [SCNGeometry] = (0..<3).map { variant in
+        var mesh = Mesh(parts: 2)
+        for row in 0..<4 {
+            for column in 0..<4 {
+                let seed = row * 7 + column * 11 + variant * 5
+                let x = Float(column) * 0.20 - 0.30
+                let z = Float(row) * 0.20 - 0.30
+                let height = Float(0.63) + Float(seed % 5) * 0.045
+                mesh.blade(base: SIMD3(x, 0, z), height: height,
+                           lean: Float(seed % 3 - 1) * 0.08, part: seed % 2)
             }
-            return mesh.geometry([leafMaterial, rim])
         }
-    }()
+        let light = SCNMaterial()
+        light.lightingModel = .lambert
+        light.diffuse.contents = rgb(0.42, 0.76, 0.13)
+        let dark = SCNMaterial()
+        dark.lightingModel = .lambert
+        dark.diffuse.contents = rgb(0.24, 0.57, 0.08)
+        return mesh.geometry([light, dark])
+    }
 
     // MARK: - 足球、球门、宝箱
 
@@ -950,6 +951,19 @@ private struct Mesh {
 
     private var next: UInt32 { UInt32(positions.count / 3) }
 
+    mutating func blade(base: SIMD3<Float>, height: Float, lean: Float, part: Int) {
+        let corners: [SIMD3<Float>] = [SIMD3(-0.12, 0, -0.10), SIMD3(-0.12, 0, 0.10),
+                                      SIMD3(0.12, 0, 0.10), SIMD3(0.12, 0, -0.10)]
+        let tip = base + SIMD3(lean, height, 0.035)
+        for i in 0..<4 {
+            let a = base + corners[i], b = base + corners[(i + 1) % 4]
+            let n = simd_normalize(simd_cross(b - a, tip - a))
+            let start = next
+            vertex(a, n, 0, 1); vertex(b, n, 1, 1); vertex(tip, n, 0.5, 0)
+            parts[part] += [start, start + 1, start + 2]
+        }
+    }
+
     /// 方块：六个面都贴整张图（正着放）。从外面看三角形是逆时针的
     mutating func box(center: SIMD3<Float>, size: SIMD3<Float>, part: Int) {
         let half = size / 2
@@ -1042,3 +1056,4 @@ private struct Mesh {
                           dataOffset: 0, dataStride: MemoryLayout<Float>.size * width)
     }
 }
+
