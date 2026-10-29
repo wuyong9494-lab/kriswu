@@ -1,0 +1,82 @@
+[
+  {
+    "file": "arena_theme_battle.m4a",
+    "sha256": "b32dc6363813214cf58746fd7a95241a9a4db0b18fa3a111a7ba969067b1e928",
+    "source": "scripts/arena_theme_sample.py; original procedural composition; no third-party samples",
+    "probe": {
+      "programs": [],
+      "streams": [
+        {
+          "codec_name": "aac",
+          "sample_rate": "22050",
+          "channels": 1
+        }
+      ],
+      "format": {
+        "duration": "60.000000"
+      }
+    },
+    "listening_review": "not performed",
+    "device_playback": "not verified"
+  },
+  {
+    "file": "arena_theme_lobby.m4a",
+    "sha256": "09aaba2e90681c928519fbaadc524abdb5805d16021fbd5a3196470d8ef971ef",
+    "source": "scripts/arena_theme_sample.py; original procedural composition; no third-party samples",
+    "probe": {
+      "programs": [],
+      "streams": [
+        {
+          "codec_name": "aac",
+          "sample_rate": "22050",
+          "channels": 1
+        }
+      ],
+      "format": {
+        "duration": "68.571020"
+      }
+    },
+    "listening_review": "not performed",
+    "device_playback": "not verified"
+  },
+  {
+    "file": "arena_theme_lose.m4a",
+    "sha256": "3621cba557dbe736fad73560e10a3a9f578b9a54f59381b528bdca23b56a229b",
+    "source": "scripts/arena_theme_sample.py; original procedural composition; no third-party samples",
+    "probe": {
+      "programs": [],
+      "streams": [
+        {
+          "codec_name": "aac",
+          "sample_rate": "22050",
+          "channels": 1
+        }
+      ],
+      "format": {
+        "duration": "5.000000"
+      }
+    },
+    "listening_review": "not performed",
+    "device_playback": "not verified"
+  },
+  {
+    "file": "arena_theme_win.m4a",
+    "sha256": "232c5e456e0a717d09d87bcde4a8a8604c11ac5bd17a076132a8433d4b1127fd",
+    "source": "scripts/arena_theme_sample.py; original procedural composition; no third-party samples",
+    "probe": {
+      "programs": [],
+      "streams": [
+        {
+          "codec_name": "aac",
+          "sample_rate": "22050",
+          "channels": 1
+        }
+      ],
+      "format": {
+        "duration": "5.000000"
+      }
+    },
+    "listening_review": "not performed",
+    "device_playback": "not verified"
+  }
+]

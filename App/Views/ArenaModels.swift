@@ -6,7 +6,7 @@ import UIKit
 import simd
 
 // 乱斗的 3D 素材：角色、武器、场外的树这些模型从 App 里读（KayKit 的免费素材，CC0 授权，见 App/Arena3D/KayKit-LICENSE.txt）。
-// 以后换成买的素材：同名文件放进私有仓库，打包时覆盖这里的就行
+// 新资产必须通过单位、骨骼、挂点、动画与材质兼容验收，并显式更新 BrawlerLook；不能靠同名覆盖接入。
 
 /// 乱斗的颜色（3D 画面、上面那排比分、摇杆共用）
 enum ArenaPalette {

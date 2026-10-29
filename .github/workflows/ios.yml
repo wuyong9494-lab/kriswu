@@ -479,6 +479,7 @@ jobs:
             -destination "id=$DEVICE" \
             -parallel-testing-enabled NO \
             -only-testing:SiteTests/ArenaAnimationTests \
+            -only-testing:SiteTests/ArenaAudioTests \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO > animation-tests.log 2>&1 || { tail -100 animation-tests.log; exit 1; }
           grep -E "Test Case|Executed" animation-tests.log || true
@@ -536,9 +537,11 @@ jobs:
           simctl install "$DEVICE" "$APP"
           mkdir -p shots
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple; do
+          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings; do
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
-            if [ "$s" = arenaBaseline ]; then
+            if [ "$s" = arenaSettings ]; then
+              simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.openSettings YES
+            elif [ "$s" = arenaBaseline ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample NO -arena.snapshotTime 6
             elif [ "$s" = arenaPurple ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime 6

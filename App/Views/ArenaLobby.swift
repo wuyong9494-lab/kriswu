@@ -137,6 +137,7 @@ struct ArenaHomeView: View {
         .persistentSystemOverlays(.hidden)
         .onAppear {
             growth.refreshSeason()
+            if UserDefaults.standard.bool(forKey: "arena.openSettings") { sheet = .settings }
             ArenaSound.shared.enterLobby()
         }
         .onChange(of: volume) { _ in ArenaSound.shared.volumeChanged() }
@@ -663,6 +664,9 @@ struct ArenaHomeView: View {
     // MARK: 面板
 
     @ViewBuilder private func sheetContent(_ item: Sheet) -> some View {
+        if item == .settings {
+            ArenaMenuScreen(title: "设置", onClose: { sheet = nil }) { settingsPanel }
+        } else {
         ArenaGamePanel(title: panelTitle(item), tint: panelTint(item), onClose: {
             inspected = nil
             sheet = nil
@@ -679,6 +683,7 @@ struct ArenaHomeView: View {
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
             }
+        }
         }
     }
 
@@ -714,43 +719,28 @@ struct ArenaHomeView: View {
 
     private var settingsPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
+            ArenaAudioSettingsView()
             settingsCard {
-                HStack {
-                    Text(muted ? "声音关着" : "声音开着")
-                        .font(.system(size: 20, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .arenaOutline(1)
-                    Spacer()
-                    Button {
-                        muted.toggle()
-                        ArenaSound.shared.muteChanged(battle: false)
-                    } label: {
-                        Text(muted ? "打开" : "静音").frame(width: 88)
-                    }
-                    .buttonStyle(ArenaGameButton(face: muted ? ArenaGameButton.green.face : ArenaGameButton.blue.face,
-                                                 edge: muted ? ArenaGameButton.green.edge : ArenaGameButton.blue.edge, height: 40))
-                }
-                Text("大厅是一首，开打换成战斗的。静音之后两边都不响。")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.85))
-                volumeBar
-            }
-            settingsCard {
-                Toggle("显示对局性能", isOn: $performanceOverlay)
+                ArenaMenuToggle(title: "显示对局性能", isOn: $performanceOverlay)
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .tint(.green)
                     .foregroundStyle(.white)
-                Picker("单项性能对照", selection: $diagnosticVariant) {
-                    ForEach(ArenaDiagnostics.Variant.allCases, id: \.rawValue) { variant in
-                        Text(variant.title).tag(variant.rawValue)
-                    }
+                Text("单项性能对照").font(.headline)
+                ForEach(ArenaDiagnostics.Variant.allCases, id: \.rawValue) { variant in
+                    Button { diagnosticVariant = variant.rawValue } label: {
+                        HStack {
+                            Text(variant.title)
+                            Spacer()
+                            Image(systemName: diagnosticVariant == variant.rawValue ? "checkmark.circle.fill" : "circle")
+                        }.padding(10).frame(minHeight: 44)
+                    }.buttonStyle(ArenaMenuButtonStyle())
                 }
-                Toggle("峡谷紫色视觉样板", isOn: $purpleSample)
+                ArenaMenuToggle(title: "峡谷紫色视觉样板", isOn: $purpleSample)
                 Button("运行固定混战样板（6角色 / 峡谷 / 种子170017）") {
                     pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", level: 3,
                                                                        loadout: ArenaLoadout.basic(.ranger, level: 3), benchmark: true))
                     sheet = nil
-                }
+                }.buttonStyle(ArenaMenuButtonStyle())
 
                 Text("对照项一次只改一项，重启 App 生效。样板只换峡谷视觉；玩法与碰撞不变。对局左上角可复制性能报告。")
                     .font(.caption).foregroundStyle(.white.opacity(0.85))
@@ -797,11 +787,7 @@ struct ArenaHomeView: View {
     }
 
     private func settingsCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8, content: content)
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.black.opacity(0.38)))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 2))
+        ArenaMenuCard { content() }
     }
 
     private var brawlerGrid: some View {

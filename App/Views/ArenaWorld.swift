@@ -16,6 +16,7 @@ struct ArenaWorld: UIViewRepresentable {
 
     static func dismantleUIView(_ view: ArenaWorldView, coordinator: ()) {
         view.stop()
+        ArenaSound.shared.end(owner: ObjectIdentifier(view))
     }
 }
 
@@ -235,7 +236,7 @@ final class ArenaWorldView: SCNView {
         isPlaying = true
         metrics.reset()
         nextMetricsAt = 0
-        ArenaSound.shared.begin()
+        ArenaSound.shared.begin(owner: ObjectIdentifier(self))
         let target = DisplayTarget(view: self)
         let link = CADisplayLink(target: target, selector: #selector(DisplayTarget.tick(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
@@ -250,7 +251,7 @@ final class ArenaWorldView: SCNView {
         lastTimestamp = nil
         rendersContinuously = false
         isPlaying = false
-        ArenaSound.shared.end()
+        ArenaSound.shared.pauseRenderer(owner: ObjectIdentifier(self))
     }
 
     override func layoutSubviews() {
