@@ -31,3 +31,14 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 4. 同版本真机复测贴墙、绕箱、进出草与持续交战；未取得数据保持未验证。
 
 每阶段更新本文件，附实际证据与下一步，避免依赖旧聊天。
+
+## 402 阶段证据（持续更新）
+- 修复提交：`8e84fb782a14c641dcf9f1fa1dcba5ac36d2a44b`。
+- 唯一自动检查：https://github.com/wuyong9494-lab/kriswu/actions/runs/40837268036 。没有手动重跑。
+- Linux 核心 job 123324883604：292 tests / 1 platform skip / 0 failures；原碰撞回归通过。macOS 核心测试步骤通过。记录时设备编译、模拟器编译/回归/截图尚未完成，不算整个 402 通过。
+- 400 run 40833969101 已重新查到 success；未将其当成发布版本。
+- 本轮实际下载并打开 400 的 arena-look（artifact 12880357756）中的 rangerLobbyAfter.png、rangerCombatAfter.png。大厅角色小、展示台显眼、外围玻璃按钮仍明显；混战武器、盾罩与强亮色特效严重重叠，仍不合格。截图是模拟器，不能证明真机性能。
+- 400 混战画面 sidecar：956×440、固定中心镜头、canyon、seed 170017、simulationTime 1.2、Ranger_Original.glb。大厅 sidecar 记录 viewWidth 260 / viewHeight 698，可能是方向切换期间首次布局；后续必须校验截图时最终 bounds，不能据此推算模型占屏比例。
+- 399 真机已有数据：empty / soloWalk / crowdWalk 回调 P95 均约16.668ms、>34.333ms为0；combat P95 42.654ms、慢回调102次。combat sceneUpdate peak168.330ms、effects mean11.977/peak81.693ms、damageText mean2.001/peak5.980ms。阶段重叠不可相加；effects 包含音效，不可等同粒子绘制瓶颈。399 的 audio 只测准备，400 已补 play 路径计时，需要新真机报告才可比较。
+- 固定路线 soloWalk 无慢回调不否认用户实际走路卡顿：该夹具不覆盖贴墙/绕箱/草丛切换，下一次增加对应场景或手动录制再对照。
+- 样板分支的独有文件包括 ArenaSampleArt.swift、ArenaBenchmark.swift、ArenaSessionMetrics.swift；diagnostics 使用其他实现。整合前比较各自功能与回归，不能直接覆盖。
