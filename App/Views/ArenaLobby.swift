@@ -319,42 +319,46 @@ struct ArenaHomeView: View {
 
     private var leftMenu: some View {
         VStack(spacing: 6) {
-            tile("冒险", face: Color(red: 0.86, green: 0.3, blue: 0.3), edge: Color(red: 0.55, green: 0.12, blue: 0.12)) {
-                Text("险")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .arenaOutline(1.2)
-                    .overlay(alignment: .topTrailing) {
-                        if ArenaStory.levels.contains(where: { progress.isOpen($0.id) && progress.stars($0.id) == 0 }) {
-                            Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: 6, y: -4)
+            // Four tall buttons in one column exceed an iPhone's landscape height
+            // and push the play button below the screen. Keep the same menu width.
+            LazyVGrid(columns: [GridItem(.fixed(82)), GridItem(.fixed(82))], spacing: 8) {
+                tile("冒险", face: Color(red: 0.86, green: 0.3, blue: 0.3), edge: Color(red: 0.55, green: 0.12, blue: 0.12)) {
+                    Text("险")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaOutline(1.2)
+                        .overlay(alignment: .topTrailing) {
+                            if ArenaStory.levels.contains(where: { progress.isOpen($0.id) && progress.stars($0.id) == 0 }) {
+                                Circle().fill(Color(uiColor: ArenaPalette.gold)).frame(width: 10, height: 10).offset(x: 6, y: -4)
+                            }
                         }
-                    }
-            } action: {
-                adventure = true
-            }
-            tile("角色", face: Color(red: 0.25, green: 0.55, blue: 1), edge: Color(red: 0.1, green: 0.3, blue: 0.7)) {
-                Text(String(chosen.name.prefix(1)))
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .arenaOutline(1.2)
-            } action: {
-                sheet = .brawlers
-            }
-            tile("赛季", face: Color(red: 0.6, green: 0.4, blue: 0.95), edge: Color(red: 0.36, green: 0.2, blue: 0.66)) {
-                Text("季")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .arenaOutline(1.2)
-            } action: {
-                sheet = .season
-            }
-            tile("设置", face: Color(red: 0.45, green: 0.52, blue: 0.62), edge: Color(red: 0.22, green: 0.26, blue: 0.34)) {
-                Text("设")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .arenaOutline(1.2)
-            } action: {
-                sheet = .settings
+                } action: {
+                    adventure = true
+                }
+                tile("角色", face: Color(red: 0.25, green: 0.55, blue: 1), edge: Color(red: 0.1, green: 0.3, blue: 0.7)) {
+                    Text(String(chosen.name.prefix(1)))
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaOutline(1.2)
+                } action: {
+                    sheet = .brawlers
+                }
+                tile("赛季", face: Color(red: 0.6, green: 0.4, blue: 0.95), edge: Color(red: 0.36, green: 0.2, blue: 0.66)) {
+                    Text("季")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaOutline(1.2)
+                } action: {
+                    sheet = .season
+                }
+                tile("设置", face: Color(red: 0.45, green: 0.52, blue: 0.62), edge: Color(red: 0.22, green: 0.26, blue: 0.34)) {
+                    Text("设")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .arenaOutline(1.2)
+                } action: {
+                    sheet = .settings
+                }
             }
             HStack(spacing: 6) {
                 miniTile("商店", mark: "店", face: Color(red: 0.95, green: 0.62, blue: 0.15)) { sheet = .shop }
