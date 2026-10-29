@@ -192,9 +192,20 @@ final class ArenaModels: @unchecked Sendable {
     private var models: [String: GLTFModel] = [:]
     private var missing: Set<String> = []
 
+    /// A cached file is shared by multiple characters. Load the union up front:
+    /// otherwise opening Knight first permanently drops Swordsman's attack clips.
+    private static let characterClips: [String: Set<String>] = {
+        var result: [String: Set<String>] = [:]
+        for brawler in Brawler.allCases {
+            let look = BrawlerLook.of(brawler)
+            result[look.file, default: []].formUnion(look.clips)
+        }
+        return result
+    }()
+
     func character(_ brawler: Brawler) -> GLTFModel? {
         let look = BrawlerLook.of(brawler)
-        return model(look.file, animations: look.clips, smooth: true)
+        return model(look.file, animations: Self.characterClips[look.file] ?? look.clips, smooth: true)
     }
 
     func prop(_ file: String) -> GLTFModel? {

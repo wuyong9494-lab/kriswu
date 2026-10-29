@@ -427,7 +427,7 @@ jobs:
     concurrency:
       group: arena-look-${{ github.ref }}
       cancel-in-progress: true
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true'
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/arena-performance-1')
     steps:
       - uses: actions/checkout@v5
 
@@ -460,6 +460,18 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
 
+      - name: 角色动画回归测试
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild test \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -destination "id=$DEVICE" \
+            -only-testing:SiteTests/ArenaAnimationTests \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO > animation-tests.log 2>&1 || { tail -100 animation-tests.log; exit 1; }
+          grep -E "Test Case|Executed" animation-tests.log || true
+
       - name: 打开大厅和对局并截图
         run: |
           set -euo pipefail
@@ -491,11 +503,14 @@ jobs:
           path: shots
           if-no-files-found: error
 
-  # 签名后上传到 TestFlight。只有手动跑这次工作流才传，日常 push 不占第二台 Mac。
+  # 手动发布或性能发布分支推送：编译、核心测试和本轮动画/截图检查通过后上传。
   # 需要在仓库 Settings › Secrets and variables › Actions 里配好苹果的密钥。没配就跳过。
   testflight:
-    needs: [build, core-tests-linux]
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/codex/arena-performance-1')
+    needs: [build, core-tests-linux, arena-look]
+    if: >-
+      always() && needs.build.result == 'success' && needs.core-tests-linux.result == 'success' &&
+      (needs.arena-look.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.arena-look.result == 'skipped')) &&
+      (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/codex/arena-performance-1'))
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15
