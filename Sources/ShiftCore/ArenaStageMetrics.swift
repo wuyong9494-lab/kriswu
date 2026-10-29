@@ -5,6 +5,7 @@ import Foundation
 public struct ArenaStageMetrics: Sendable {
     public enum Stage: Int, CaseIterable, Sendable {
         case modelLoad, simulation, ai, animation, sceneUpdate, sceneBuild
+        case fighterPhysics, projectilePhysics, actorNodes, projectileNodes, events, textRaster, floaterCreate, audio, audioLoad, hud
     }
     public struct Sample: Equatable, Sendable {
         public fileprivate(set) var count = 0

@@ -489,6 +489,9 @@ public struct ArenaInput: Equatable, Codable, Sendable {
 }
 
 public struct ArenaGame: Sendable {
+    public var profileCPU = false
+    public private(set) var fighterStepSeconds = 0.0
+    public private(set) var projectileStepSeconds = 0.0
     /// 玩家比同级电脑多一成二的血和伤害。电脑不加
     public static let playerEdge = 1.12
 
@@ -858,6 +861,8 @@ public struct ArenaGame: Sendable {
     // MARK: 一帧
 
     public mutating func step(_ dt: Double, inputs: [Int: ArenaInput]) {
+        fighterStepSeconds = 0
+        projectileStepSeconds = 0
         guard result == nil else { return }
         time += dt
         // 进球、一局打完：停一会儿，停完大家回到出发的地方
@@ -869,6 +874,7 @@ public struct ArenaGame: Sendable {
             }
             return
         }
+        let physicsStart = profileCPU ? ProcessInfo.processInfo.systemUptime : 0
         for i in fighters.indices {
             if fighters[i].isBoss {
                 updateBoss(i, dt)
@@ -876,7 +882,10 @@ public struct ArenaGame: Sendable {
                 update(i, inputs[i] ?? ArenaInput(), dt)
             }
         }
+        let projectileStart = profileCPU ? ProcessInfo.processInfo.systemUptime : 0
+        if profileCPU { fighterStepSeconds = projectileStart - physicsStart }
         moveProjectiles(dt)
+        if profileCPU { projectileStepSeconds = ProcessInfo.processInfo.systemUptime - projectileStart }
         updateWarnings(dt)
         updateZones(dt)
         updateTurrets(dt)

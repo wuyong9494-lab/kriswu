@@ -7,6 +7,7 @@ options:
   developmentLanguage: zh-Hans
 settings:
   base:
+    ARENA_COMMIT: "local-unversioned"
     MARKETING_VERSION: "1.2"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"

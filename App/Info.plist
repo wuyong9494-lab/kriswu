@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>ArenaCommit</key>
+	<string>$(ARENA_COMMIT)</string>
 	<key>DefaultSiteURL</key>
 	<string>$(DEFAULT_SITE_URL)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

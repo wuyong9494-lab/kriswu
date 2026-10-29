@@ -110,6 +110,8 @@ final class ArenaSound {
 
     /// volume：0–1（离得远的小声一点）
     func play(_ effect: Effect, volume: Float = 1) {
+        let start = ArenaDiagnostics.shared.enabled ? ProcessInfo.processInfo.systemUptime : 0
+        defer { if start > 0 { ArenaDiagnostics.shared.record(.audio, seconds: ProcessInfo.processInfo.systemUptime - start) } }
         guard inMatch, !muted, volume > 0.02 else { return }
         prepare()
         // 同一种声音 30 毫秒内只响一次，免得一帧里好几下叠成噪音
@@ -142,6 +144,9 @@ final class ArenaSound {
 
     private func load() {
         guard players.isEmpty else { return }
+        let start = ArenaDiagnostics.shared.enabled ? ProcessInfo.processInfo.systemUptime : 0
+        defer { if start > 0 { ArenaDiagnostics.shared.record(.audioLoad, seconds: ProcessInfo.processInfo.systemUptime - start) } }
+        ArenaDiagnostics.shared.count("音效资源批次加载")
         for effect in Effect.allCases {
             guard let url = Bundle.main.url(forResource: effect.file, withExtension: "wav") else { continue }
             players[effect] = (0..<effect.voices).compactMap { _ in

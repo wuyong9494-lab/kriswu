@@ -235,6 +235,7 @@ private struct ArenaMatchView: View {
     @State private var resultShown = false
     /// 表情那一排打开着
     @State private var emoting = false
+    @State private var reportCopied = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -324,6 +325,18 @@ private struct ArenaMatchView: View {
                     .background((emoting ? Color(uiColor: ArenaPalette.gold) : Color.black).opacity(emoting ? 0.8 : 0.35), in: Circle())
             }
             .accessibilityLabel("表情")
+            if ArenaDiagnostics.shared.enabled {
+                Button {
+                    UIPasteboard.general.string = ArenaDiagnostics.shared.report()
+                    reportCopied = true
+                } label: {
+                    Image(systemName: reportCopied ? "checkmark" : "doc.on.doc")
+                        .font(.subheadline).foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.black.opacity(0.35), in: Circle())
+                }
+                .accessibilityLabel("复制本局性能报告")
+            }
             Spacer()
             score
             Spacer()

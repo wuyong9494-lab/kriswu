@@ -63,6 +63,8 @@ final class ArenaAvatar {
     /// 身上、手里武器的描边（半透明、淡出时藏起来）
     private var outlines: [SCNNode] = []
     private var outlined = true
+    private let diagnosticVariant = ArenaDiagnosticVariant.selected
+    private var animationCadence: Float = 0
     /// 上半身的骨骼（跑着出手只换这些）
     private let upper: [Int]
     /// 挥击时把胳膊的旋转再推远一点，缩得很小也看得见
@@ -327,7 +329,7 @@ final class ArenaAvatar {
         node.opacity = CGFloat(opacity)
         node.isHidden = opacity < 0.02
         // 不透明时才描边（半透明时会从身子里透出一圈黑）
-        let solid = opacity > 0.97
+        let solid = opacity > 0.97 && diagnosticVariant != .noOutlines
         if solid != outlined {
             outlined = solid
             outlines.forEach { $0.isHidden = !solid }
@@ -395,8 +397,15 @@ final class ArenaAvatar {
 
         let moving = fighter.alive && speed > 0.6
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
+        if diagnosticVariant == .noParticles {
+            sparks?.birthRate = 0
+            streak?.birthRate = 0
+        }
+        animationCadence += dt
+        let sample = diagnosticVariant != .halfAnimation || animationCadence >= 1.0 / 30
+        if sample { animationCadence = animationCadence.truncatingRemainder(dividingBy: 1.0 / 30) }
         ArenaDiagnostics.shared.measure(.animation) {
-            animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden)
+            animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden && sample)
         }
     }
 

@@ -56,7 +56,7 @@ jobs:
       - name: 编译 App（未签名）
         shell: bash -eo pipefail {0}
         run: |
-          xcodebuild build \
+          xcodebuild build ARENA_COMMIT=${{ github.sha }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -configuration Release \
@@ -229,7 +229,7 @@ jobs:
           print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
           echo "模拟器：$DEVICE"
           set +e
-          xcodebuild test \
+          xcodebuild test ARENA_COMMIT=${{ github.sha }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -destination "id=$DEVICE" \
@@ -285,7 +285,7 @@ jobs:
           selected = next((x for x in phones if x['name'] == 'iPhone 17 Pro Max'), phones[0])
           print(selected['udid'])")
           echo "DEVICE=$DEVICE" >> $GITHUB_ENV
-          xcodebuild build \
+          xcodebuild build ARENA_COMMIT=${{ github.sha }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -configuration Debug \
@@ -430,7 +430,7 @@ jobs:
     concurrency:
       group: arena-look-${{ github.ref }}
       cancel-in-progress: true
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-diagnostics-2'))
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && ((github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-combat-sample-1') || github.ref == 'refs/heads/codex/arena-diagnostics-2'))
     steps:
       - uses: actions/checkout@v5
 
@@ -457,7 +457,7 @@ jobs:
           selected = next((x for x in phones if x['name'] == 'iPhone 17 Pro Max'), phones[0])
           print(selected['udid'])")
           echo "DEVICE=$DEVICE" >> $GITHUB_ENV
-          xcodebuild build \
+          xcodebuild build ARENA_COMMIT=${{ github.sha }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -configuration Debug \
@@ -469,7 +469,7 @@ jobs:
         timeout-minutes: 10
         shell: bash -eo pipefail {0}
         run: |
-          xcodebuild test \
+          xcodebuild test ARENA_COMMIT=${{ github.sha }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -destination "id=$DEVICE" \
@@ -532,12 +532,12 @@ jobs:
           simctl install "$DEVICE" "$APP"
           mkdir -p shots
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay arenaPerf; do
+          for s in arena arenaPlay arenaPerf arenaBenchmarkOld arenaBenchmarkSample; do
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
             if [ "$s" = arenaPerf ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arenaPlay -arena.performanceOverlay YES
             else
-              simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+              simctl launch "$DEVICE" "$ID" -demo -screen "$s" -arena.performanceOverlay NO -arena.diagnosticVariant baseline
             fi
             sleep 12
             simctl io "$DEVICE" screenshot "shots/$s.png"
@@ -549,7 +549,7 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
-          test -s shots/arena.png && test -s shots/arenaPlay.png
+          test -s shots/arena.png && test -s shots/arenaPlay.png && test -s shots/arenaBenchmarkOld.png && test -s shots/arenaBenchmarkSample.png
           find shots -type f -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
 
       - name: 保存模拟器诊断
@@ -580,7 +580,7 @@ jobs:
     if: >-
       always() && needs.build.result == 'success' && needs.core-tests-linux.result == 'success' &&
       (needs.arena-look.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.arena-look.result == 'skipped')) &&
-      (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/codex/arena-performance-1'))
+      (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-combat-sample-1')))
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15
@@ -650,7 +650,7 @@ jobs:
         if: steps.check.outputs.skip != '1'
         shell: bash -eo pipefail {0}
         run: |
-          xcodebuild archive \
+          xcodebuild archive ARENA_COMMIT=${{ github.sha }} \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -configuration Release \

@@ -53,8 +53,10 @@ final class ArenaWorldView: SCNView {
     private var lastTimestamp: CFTimeInterval?
     private var clock = 0.0
     private let metricsEnabled = UserDefaults.standard.bool(forKey: "arena.performanceOverlay")
+    private let diagnosticVariant = ArenaDiagnosticVariant.selected
     private var metrics = ArenaFrameMetrics()
     private var nextMetricsAt = 0.0
+    private var lastRollingReport: ArenaFrameMetrics.Report?
     private let metricsLabel = UILabel()
     private var flipped = false
     private var myTeam = 0
@@ -189,6 +191,10 @@ final class ArenaWorldView: SCNView {
         isPlaying = false
         isUserInteractionEnabled = false
         scene = world
+        ArenaDiagnostics.shared.setEnabled(metricsEnabled)
+        if metricsEnabled {
+            ArenaDiagnostics.shared.beginMatch("\(controller.benchmark ? ArenaBenchmark.id : controller.game.map.id)；选项：\(diagnosticVariant.title)；美术：\(controller.sampleMap ? "紫境样板" : "原视觉")")
+        }
         ArenaDiagnostics.shared.measure(.sceneBuild) { build() }
         pointOfView = cameraNode
         if metricsEnabled {
@@ -285,15 +291,27 @@ final class ArenaWorldView: SCNView {
             metrics.record(interval: elapsed, simulation: simulated - started, scene: finished - simulated)
             if timestamp >= nextMetricsAt, let report = metrics.report() {
                 nextMetricsAt = timestamp + 1
+                lastRollingReport = report
                 metricsLabel.text = String(format: "  回调 %.0f Hz · 间隔 P95 %.1f ms\n  逻辑 %.1f ms · 场景 CPU %.1f ms\n  慢帧 %d/%d · 不含 GPU 耗时",
                                            report.fps, report.p95Milliseconds, report.simulationMilliseconds,
                                            report.sceneMilliseconds, report.slowFrames, report.samples)
+                let map = controller.game.map
+                let description = String(format: "地图 %@ %d×%d；1 格=1 世界单位；透视投影，俯角 %.2f°，垂直 FOV %.2f°；参考平面半宽 %.2f；跟随前视 %.2f；碰撞半径 %.2f；模型标称缩放 %.2f；视口 %.0f×%.0f pt", map.id, map.width, map.height, atan2(Self.cameraOffset.y, Self.cameraOffset.z) * 180 / .pi, cameraNode.camera?.fieldOfView ?? 0, Self.landscapeHalfWidth, lookAhead, ArenaGame.fighterRadius, ArenaAvatar.scale, bounds.width, bounds.height)
+                ArenaDiagnostics.shared.scene(description + "；压测步数 \(controller.benchmarkSteps)，循环 \(controller.benchmarkCycles)", counts: [
+                    "存活角色": controller.game.fighters.filter(\.alive).count,
+                    "可见角色": avatars.filter { !$0.node.isHidden }.count,
+                    "投射物": projectiles.count, "飘字": floaters.count,
+                    "命中粒子槽": burstSlots.filter(\.busy).count,
+                    "刀光/闪光/圈": (slashSlots + streakSlots + ringSlots + flashSlots).filter(\.busy).count,
+                    "持续区域": zoneNodes.count, "预警圈": warningNodes.count
+                ])
                 let stages = ArenaDiagnostics.shared.snapshot()
                 metricsLabel.text! += String(format: "\n  CPU 峰值/次(ms)：模拟 %.1f · AI %.1f\n  骨骼 %.1f · 场景 %.1f（含骨骼）\n  冷加载 %.1f · 建场景 %.1f（含加载）\n  峰值自启动累计；GPU/呈现帧率未测",
                                              stages[.simulation].peakMilliseconds, stages[.ai].peakMilliseconds,
                                              stages[.animation].peakMilliseconds, stages[.sceneUpdate].peakMilliseconds,
                                              stages[.modelLoad].peakMilliseconds, stages[.sceneBuild].peakMilliseconds)
             }
+            ArenaDiagnostics.shared.frame(interval: elapsed, work: CACurrentMediaTime() - started, rolling: lastRollingReport)
         }
     }
 
@@ -307,6 +325,7 @@ final class ArenaWorldView: SCNView {
         let root = world.rootNode
         let width = Float(map.width), height = Float(map.height)
         let look = ThemeLook.of(map.theme)
+        let sample = controller.sampleMap && map.id == "canyon"
 
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
@@ -353,38 +372,39 @@ final class ArenaWorldView: SCNView {
 
         // 地：场地外一大片草，场地里一格格深浅两种绿；上面再铺一层草叶、落叶的细纹
         let lawn = SCNPlane(width: CGFloat(width + 160), height: CGFloat(height + 160))
-        lawn.firstMaterial = grass(look.lawn, repeats: SIMD2(width + 160, height + 160) / 2)
+        lawn.firstMaterial = sample ? ArenaAvatar.material(ArenaSampleArt.outside, lit: false) : grass(look.lawn, repeats: SIMD2(width + 160, height + 160) / 2)
         let lawnNode = SCNNode(geometry: lawn)
         lawnNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         lawnNode.simdPosition = SIMD3(width / 2, -0.02, height / 2)
         lawnNode.castsShadow = false
         root.addChildNode(lawnNode)
         let floor = SCNPlane(width: CGFloat(width), height: CGFloat(height))
-        floor.firstMaterial = grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
+        floor.firstMaterial = sample ? ArenaArt.flat(ArenaSampleArt.floor(map)) : grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
         let floorNode = SCNNode(geometry: floor)
         floorNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         floorNode.simdPosition = SIMD3(width / 2, 0, height / 2)
         floorNode.castsShadow = false
         root.addChildNode(floorNode)
-        root.addChildNode(ArenaArt.border(width: width, height: height))
+        if !sample { root.addChildNode(ArenaArt.border(width: width, height: height)) }
 
         // 墙：木箱、木桶、石块（同一格每次都一样）；草丛
-        let wallNode = walls(map, look: look)
+        let wallNode = sample ? ArenaSampleArt.walls(map) : walls(map, look: look)
         wallNode.castsShadow = false
         root.addChildNode(wallNode)
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .bush {
-                let node = SCNNode(geometry: ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
+                let geometry = sample ? ArenaSampleArt.grasses[(x * 7 + y * 3) % 3] : ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count]
+                let node = SCNNode(geometry: geometry)
                 node.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
                 node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 12) * .pi / 6, 0)
-                let size = 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
+                let size: Float = sample ? 1 : 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
                 node.simdScale = SIMD3(size, size, size)
                 node.castsShadow = false
                 root.addChildNode(node)
                 bushes.append((node, V2(Double(x) + 0.5, Double(y) + 0.5), false))
             }
         }
-        root.addChildNode(scenery(game))
+        if !sample { root.addChildNode(scenery(game)) }
 
         // 各个玩法的东西
         let center = SIMD3(Float(map.center.x), 0, Float(map.center.y))
@@ -740,6 +760,7 @@ final class ArenaWorldView: SCNView {
             }
         }
         if lastPositions.count != game.fighters.count { lastPositions = game.fighters.map { $0.alive ? $0.pos : nil } }
+        ArenaDiagnostics.shared.measure(.actorNodes) {
         for fighter in game.fighters where avatars.indices.contains(fighter.id) {
             // 闪现：上一帧还在别处
             if fighter.alive, fighter.leap == nil, fighter.dash == nil, let last = lastPositions[fighter.id], last.distance(to: fighter.pos) > 2 {
@@ -767,7 +788,7 @@ final class ArenaWorldView: SCNView {
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock)
             tags[fighter.id].update(fighter, opacity: avatar.opacity)
             let before = seenHealth[fighter.id] ?? fighter.health
-            if fighter.alive, fighter.health > before, game.time - max(fighter.lastHurt, fighter.lastAttack) > 3,
+            if visible, avatar.opacity > 0.1, fighter.alive, fighter.health > before, game.time - max(fighter.lastHurt, fighter.lastAttack) > 3,
                clock - (regenAt[fighter.id] ?? -1) > 0.55 {
                 floater("+\(fighter.health - before)",
                         at: avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight + 0.2, 0),
@@ -777,6 +798,8 @@ final class ArenaWorldView: SCNView {
             } else if fighter.health <= before || !fighter.alive {
                 seenHealth[fighter.id] = fighter.health
             }
+        }
+
         }
 
         // 自己旁边的草丛变透明，看得见自己
@@ -805,7 +828,7 @@ final class ArenaWorldView: SCNView {
             }
         }
 
-        syncProjectiles(game)
+        ArenaDiagnostics.shared.measure(.projectileNodes) { syncProjectiles(game) }
         syncStars(game)
         syncZone(game)
         syncHealZones(game)
@@ -830,7 +853,9 @@ final class ArenaWorldView: SCNView {
             current.edgeNode.simdScale = SIMD3(1, lift, 1)
         }
 
-        for event in events { effect(event, game: game) }
+        ArenaDiagnostics.shared.measure(.events) {
+            for event in events { effect(event, game: game) }
+        }
         // 结算时镜头凑近自己，头顶的名字、血条、数字都收起来
         if controller.hud.result != nil {
             for tag in tags { tag.node.isHidden = true }
@@ -1149,6 +1174,7 @@ final class ArenaWorldView: SCNView {
     }
 
     private func makeProjectile(_ p: Projectile, _ game: ArenaGame) -> ProjectileView {
+        ArenaDiagnostics.shared.count("新建投射物视图")
         let owner = game.fighters.indices.contains(p.owner) ? game.fighters[p.owner].brawler : .ranger
         // 超级充能开着放的大招：紫的
         let hyper = p.isSuper && game.fighters.indices.contains(p.owner) && game.fighters[p.owner].hyperTime > 0
@@ -1332,7 +1358,7 @@ final class ArenaWorldView: SCNView {
     private func effect(_ event: ArenaGame.Event, game: ArenaGame) {
         switch event {
         case .hit(let target, let amount):
-            guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
+            guard avatars.indices.contains(target), game.isVisible(game.fighters[target], to: myTeam), avatars[target].opacity > 0.1 else { return }
             // 毒圈这种一帧扣一点的不出声、不闪
             guard amount >= 60 else { return }
             ArenaSound.shared.play(.hit, volume: loudness(game.fighters[target].pos) * 0.8)
@@ -1348,6 +1374,7 @@ final class ArenaWorldView: SCNView {
             let at = SIMD3(Float(point.x), 0.05, Float(point.y))
             burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: 40, speed: 4 * CGFloat(radius), size: 0.45, life: 0.45)
             burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: 20, speed: 2.5 * CGFloat(radius), size: 0.3, life: 0.35)
+            ArenaDiagnostics.shared.count("新建爆炸节点/几何体/材质")
             let disc = SCNCylinder(radius: CGFloat(radius), height: 0.01)
             disc.radialSegmentCount = 40
             disc.firstMaterial = ArenaAvatar.decal(UIColor.orange.withAlphaComponent(0.55))
@@ -1409,7 +1436,7 @@ final class ArenaWorldView: SCNView {
                 shotStreak(from: at, facing: shooter.facing, color: color)
             }
         case .heal(let target, let amount):
-            guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
+            guard avatars.indices.contains(target), game.isVisible(game.fighters[target], to: myTeam), avatars[target].opacity > 0.1 else { return }
             ArenaSound.shared.play(.heal, volume: loudness(game.fighters[target].pos) * 0.7)
             let at = avatars[target].node.simdPosition
             burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 10, speed: 1, size: 0.25, life: 0.5)
@@ -1631,6 +1658,7 @@ final class ArenaWorldView: SCNView {
 
     /// 一下子炸开的一团光点。系统是开局建好的，这里只挪位置再放一次
     private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
+        guard diagnosticVariant != .noParticles else { return }
         guard let slot = burstSlots.first(where: { !$0.busy }) else { return }
         slot.busy = true
         slot.node.simdPosition = point
@@ -1667,7 +1695,7 @@ final class ArenaWorldView: SCNView {
         system.particleLifeSpan = life
         system.particleSize = size
         system.particleColor = color
-        system.birthRate = 22
+        system.birthRate = diagnosticVariant == .noParticles ? 0 : 22
         return system
     }
 
@@ -1830,7 +1858,7 @@ final class ArenaWorldView: SCNView {
             node.addChildNode(disc)
             node.addChildNode(rim)
             let motes = SCNParticleSystem()
-            motes.birthRate = 40
+            motes.birthRate = diagnosticVariant == .noParticles ? 0 : 40
             motes.particleLifeSpan = 0.9
             motes.particleVelocity = 1
             motes.emittingDirection = SCNVector3(0, 1, 0)
@@ -1927,12 +1955,17 @@ final class ArenaWorldView: SCNView {
     // MARK: - 伤害数字
 
     private func floater(_ text: String, at point: SIMD3<Float>, color: UIColor) {
+        if diagnosticVariant == .noNumbers && (text.first?.isNumber == true || text.hasPrefix("+")) { return }
+        let started = metricsEnabled ? CACurrentMediaTime() : 0
+        defer { if metricsEnabled { ArenaDiagnostics.shared.record(.floaterCreate, seconds: CACurrentMediaTime() - started) } }
+        ArenaDiagnostics.shared.count("新建飘字节点/平面/材质")
         let key = "\(text)-\(color.hash)"
         let image: UIImage
         if let cached = numberImages[key] {
             image = cached
         } else {
-            image = ArenaArt.text(text, size: 26, color: color)
+            ArenaDiagnostics.shared.count("文字贴图缓存未命中")
+            image = ArenaDiagnostics.shared.measure(.textRaster) { ArenaArt.text(text, size: 26, color: color) }
             if numberImages.count > 150 { numberImages.removeAll() }
             numberImages[key] = image
         }

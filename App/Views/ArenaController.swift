@@ -95,6 +95,9 @@ final class ArenaController: ObservableObject {
         var botLevel: Int?
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
+        var benchmark = false
+        var benchmarkStill = false
+        var sampleMap = false
 
         enum Demo { case versus, result }
     }
@@ -107,6 +110,12 @@ final class ArenaController: ObservableObject {
     private weak var room: GameRoom?
     private var bots: [ArenaBot]
     private var accumulator = 0.0
+    private(set) var benchmark = false
+    private(set) var benchmarkStill = false
+    private(set) var sampleMap = false
+    private(set) var benchmarkSteps = 0
+    private(set) var benchmarkCycles = 0
+    private var cycleSteps = 0
     private var hudTimer = 0.0
     @Published private(set) var hud = HUD()
     /// 打完这局得到的奖杯、金币（结果出来时记一次）
@@ -182,7 +191,9 @@ final class ArenaController: ObservableObject {
         let mine = ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
                                      level: setup.level, lineup: setup.lineup, loadout: setup.loadout.allowed(setup.brawler, level: setup.level))
         let built: ArenaGame
-        if let story = setup.story {
+        if setup.benchmark {
+            built = ArenaBenchmark.game()
+        } else if let story = setup.story {
             built = ArenaGame(mode: story.mode, entrants: story.entrants(me: mine), seed: seed, map: ArenaMap.named(story.map),
                              bossLevel: story.bossLevel)
         } else {
@@ -203,7 +214,18 @@ final class ArenaController: ObservableObject {
             }
             built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
-        self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
+        self.init(role: .solo, game: built, me: 0, room: nil, seed: setup.benchmark ? ArenaBenchmark.seed : seed)
+        benchmark = setup.benchmark
+        sampleMap = setup.sampleMap
+        if benchmark {
+            introLeft = 0
+            showingIntro = false
+        }
+        if setup.benchmarkStill && benchmark {
+            for _ in 0..<900 { sceneEvents.removeAll(keepingCapacity: true); tick() }
+            benchmarkStill = true
+            refreshHUD()
+        }
         story = setup.story
         ranked = setup.ranked && setup.story == nil
         switch setup.demo {
@@ -247,6 +269,7 @@ final class ArenaController: ObservableObject {
 
     /// 画面每帧调：按真实过去的时间往前算
     func advance(_ elapsed: Double) {
+        guard !benchmarkStill else { return }
         // 开场对阵画面放着的时候不开打（联机时房主也一样等，别人收到的是开场那一帧）
         if introLeft > 0 {
             introLeft -= max(elapsed, 0)
@@ -273,6 +296,13 @@ final class ArenaController: ObservableObject {
     }
 
     private func tick() {
+        if benchmark && cycleSteps >= ArenaBenchmark.cycleSteps {
+            game = ArenaBenchmark.game()
+            bots = game.fighters.map { ArenaBot(id: $0.id, seed: ArenaBenchmark.seed) }
+            cycleSteps = 0
+            benchmarkCycles += 1
+            sceneEvents.append(.reset)
+        }
         var inputs: [Int: ArenaInput] = [me: ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial, gadget: queuedGadget,
                                                         emote: queuedEmote)]
         queuedAttack = nil
@@ -296,8 +326,14 @@ final class ArenaController: ObservableObject {
             }
         }
         ArenaDiagnostics.shared.measure(.simulation) {
+            game.profileCPU = ArenaDiagnostics.shared.enabled
             game.step(Self.step, inputs: inputs)
         }
+        if game.profileCPU {
+            ArenaDiagnostics.shared.record(.fighterPhysics, seconds: game.fighterStepSeconds)
+            ArenaDiagnostics.shared.record(.projectilePhysics, seconds: game.projectileStepSeconds)
+        }
+        if benchmark { cycleSteps += 1; benchmarkSteps += 1 }
         let events = game.events
         game.events.removeAll()
         sceneEvents += events
@@ -483,6 +519,8 @@ final class ArenaController: ObservableObject {
     // MARK: - 上面那排
 
     private func refreshHUD() {
+        let start = ArenaDiagnostics.shared.enabled ? ProcessInfo.processInfo.systemUptime : 0
+        defer { if start > 0 { ArenaDiagnostics.shared.record(.hud, seconds: ProcessInfo.processInfo.systemUptime - start) } }
         var hud = HUD()
         hud.timeLeft = Int(game.timeLeft.rounded(.up))
         let mineTeam = min(mine.team, 1), theirs = 1 - min(mine.team, 1)
@@ -540,7 +578,7 @@ final class ArenaController: ObservableObject {
         if feed.contains(where: { game.time - $0.at > 4 || game.time < $0.at }) {
             feed.removeAll { game.time - $0.at > 4 || game.time < $0.at }
         }
-        if hud.result != nil, !recorded {
+        if hud.result != nil, !recorded, !benchmark {
             recorded = true
             let store = ArenaProgressStore.shared
             if let story {

@@ -5,6 +5,19 @@ import simd
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testVisualSampleKeepsSimulationIdenticalAndCaptureFrozen() {
+        let old = ArenaController(setup: .init(mode: .zone, brawler: .ranger, name: "test", benchmark: true, benchmarkStill: true))
+        let sample = ArenaController(setup: .init(mode: .zone, brawler: .ranger, name: "test", benchmark: true, benchmarkStill: true, sampleMap: true))
+        XCTAssertEqual(old.benchmarkSteps, 900)
+        XCTAssertEqual(old.game.map.id, sample.game.map.id)
+        XCTAssertEqual(old.game.fighters.map(\.pos), sample.game.fighters.map(\.pos))
+        XCTAssertEqual(old.game.fighters.map(\.health), sample.game.fighters.map(\.health))
+        XCTAssertEqual(old.game.projectiles.count, sample.game.projectiles.count)
+        sample.advance(10)
+        XCTAssertEqual(sample.benchmarkSteps, 900)
+        XCTAssertEqual(old.game.time, sample.game.time)
+    }
+
     func testOutlineWindingMatchesOutwardNormals() {
         let positions: [Float] = [0, 0, 0, 1, 0, 0, 0, 1, 0]
         let normals: [Float] = [0, 0, 1, 0, 0, 1, 0, 0, 1]

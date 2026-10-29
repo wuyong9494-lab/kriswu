@@ -20,6 +20,8 @@ struct ArenaHomeView: View {
     @State private var inspected: Brawler?
     /// 在「和同事打」里开的房间（面板收起来以后再进房间）
     @State private var pendingRoom: GameRoom?
+    @State private var pendingBenchmark = false
+    @State private var reportCopied = false
     /// 冒险
     @State private var adventure = false
     /// 组队开几个人的房间（2 是双人，3–6 是多人）
@@ -31,6 +33,8 @@ struct ArenaHomeView: View {
     @AppStorage("arena.ranked") private var ranked = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
     @AppStorage("arena.performanceOverlay") private var performanceOverlay = false
+    @AppStorage("arena.diagnosticVariant") private var diagnosticVariant = ArenaDiagnosticVariant.baseline.rawValue
+    @AppStorage("arena.sampleMap") private var sampleMap = false
     @AppStorage(ArenaSound.volumeKey) private var volume = 0.7
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -110,6 +114,11 @@ struct ArenaHomeView: View {
         }
         .onChange(of: volume) { _ in ArenaSound.shared.volumeChanged() }
         .fullScreenCover(item: $sheet, onDismiss: {
+            if pendingBenchmark {
+                pendingBenchmark = false
+                playing = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "性能压测", benchmark: true, sampleMap: sampleMap))
+                return
+            }
             guard let room = pendingRoom else { return }
             pendingRoom = nil
             lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: chosen))
@@ -644,7 +653,7 @@ struct ArenaHomeView: View {
             case .party: partyBoard
             case .shop: shopBoard
             case .season: ArenaSeasonSheet()
-            case .settings: settingsPanel
+            case .settings: ScrollView { settingsPanel }
             }
         }
     }
@@ -707,10 +716,34 @@ struct ArenaHomeView: View {
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .tint(.green)
                     .foregroundStyle(.white)
+                    .onChange(of: performanceOverlay) { ArenaDiagnostics.shared.setEnabled($0) }
                 Text("下一局显示刷新回调间隔（非渲染帧率）。开启后重启 App 可记录冷加载及分项 CPU 峰值；GPU 耗时需真机工具测量。")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
+                Picker("单项诊断（下一局生效）", selection: $diagnosticVariant) {
+                    ForEach(ArenaDiagnosticVariant.allCases) { item in
+                        Text(item.title).tag(item.rawValue)
+                    }
+                }
+                .tint(.white)
+                Toggle("压测地图：紫境视觉样板", isOn: $sampleMap).tint(.purple)
+                Text("仅在固定压测中替换峡谷的视觉层；路线和碰撞不变。先比较完整效果，再一次只换一个选项。")
+                    .font(.caption).foregroundStyle(.white.opacity(0.8))
+                Button("开始固定 3v3 混战压测") {
+                    performanceOverlay = true
+                    ArenaDiagnostics.shared.setEnabled(true)
+                    pendingBenchmark = true
+                    sheet = nil
+                }
+                .buttonStyle(.borderedProminent)
+                Text("六名机器人自动交战，每 30 模拟秒重复同一种子场景；无奖杯和奖励。可持续运行 20–30 分钟，退出后复制报告。")
+                    .font(.caption).foregroundStyle(.white.opacity(0.8))
+                Button(reportCopied ? "报告已复制" : "复制最近一次性能报告") {
+                    UIPasteboard.general.string = ArenaDiagnostics.shared.report()
+                    reportCopied = true
+                }
+                .buttonStyle(.bordered)
             }
             settingsCard {
                 Text("怎么打")
