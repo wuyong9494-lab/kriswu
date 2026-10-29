@@ -393,10 +393,9 @@ final class ArenaAvatar {
         let k = bodyScale * (1 + punch * 0.9)
         body.simdScale = SIMD3(k * (1 + bob * 0.25), k * (1 - bob), k * (1 + bob * 0.25))
 
-        guard !node.isHidden else { return }
         let moving = fighter.alive && speed > 0.6
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
-        animate(dt: dt, moving: moving, base: wanted)
+        animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden)
     }
 
 
@@ -488,7 +487,7 @@ final class ArenaAvatar {
         action = Action(clip: clip, move: move, hold: hold, fullBody: fullBody, upperOnly: upperOnly)
     }
 
-    private func animate(dt: Float, moving: Bool, base wanted: String) {
+    private func animate(dt: Float, moving: Bool, base wanted: String, samplePose: Bool) {
         guard let model, let instance else { return }
         // 底下一层：站着 / 跑 / 欢呼，换的时候 0.15 秒淡过去
         if base?.clip.name != wanted, let clip = model.clips[wanted], clip.duration > 0 {
@@ -507,6 +506,13 @@ final class ArenaAvatar {
             old.time += dt * old.rate
             fading = old
         }
+        // Hidden fighters still age their actions, but do not sample or write bones.
+        // Otherwise a shot fired in a bush resumes seconds later when revealed.
+        if var current = action {
+            current.elapsed += dt
+            action = current.elapsed >= max(current.move.seconds, 0.01) && !current.hold ? nil : current
+        }
+        guard samplePose else { return }
         pose.reset(from: model.restPose)
         if let base { base.clip.sample(at: Self.looped(base.time, base.clip.duration), into: &pose) }
         if let fading {
@@ -517,27 +523,21 @@ final class ArenaAvatar {
         }
 
         // 上面一层：出手、大招、倒下
-        if var current = action {
-            current.elapsed += dt
+        if let current = action {
             let progress = current.elapsed / max(current.move.seconds, 0.01)
-            if progress >= 1 && !current.hold {
-                action = nil
+            let linear = min(progress, 1)
+            // 前半段走得快，挥出去那一下先到，后半段收回来
+            let eased = 1 - (1 - linear) * (1 - linear)
+            let t = current.move.from + (current.move.to - current.move.from) * eased
+            layer.reset(from: model.restPose)
+            current.clip.sample(at: t * current.clip.duration, into: &layer)
+            let fadeIn = min(1, current.elapsed / 0.06)
+            let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.22)
+            let weight = min(fadeIn, fadeOut)
+            if current.upperOnly || (!current.fullBody && moving) {
+                pose.blend(toward: layer, weight: weight, nodes: upper)
             } else {
-                action = current
-                let linear = min(progress, 1)
-                // 前半段走得快，挥出去那一下先到，后半段收回来
-                let eased = 1 - (1 - linear) * (1 - linear)
-                let t = current.move.from + (current.move.to - current.move.from) * eased
-                layer.reset(from: model.restPose)
-                current.clip.sample(at: t * current.clip.duration, into: &layer)
-                let fadeIn = min(1, current.elapsed / 0.06)
-                let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.22)
-                let weight = min(fadeIn, fadeOut)
-                if current.upperOnly || (!current.fullBody && moving) {
-                    pose.blend(toward: layer, weight: weight, nodes: upper)
-                } else {
-                    pose.blend(toward: layer, weight: weight, nodes: model.animated)
-                }
+                pose.blend(toward: layer, weight: weight, nodes: model.animated)
             }
         }
         accent(&pose, rest: model.restPose, moving: moving)

@@ -1,4 +1,5 @@
 import XCTest
+import SceneKit
 import simd
 @testable import ShiftReminder
 
@@ -28,6 +29,35 @@ final class ArenaAnimationTests: XCTestCase {
             let look = BrawlerLook.of(brawler)
             let model = try XCTUnwrap(ArenaModels.shared.character(brawler))
             XCTAssertNotNil(model.clips[look.special.clip])
+        }
+    }
+
+    func testHiddenFighterDoesNotReplayExpiredAttackWhenRevealed() throws {
+        let game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "游侠", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "骑士", brawler: .knight, isBot: true, team: 1)
+        ], seed: 1)
+        let fighter = game.fighters[0]
+        let reference = ArenaAvatar(brawler: .ranger, color: .blue, isMe: false, decorated: false)
+        let hidden = ArenaAvatar(brawler: .ranger, color: .blue, isMe: false, decorated: false)
+        let dt: Float = 1 / 60
+        reference.attack()
+        hidden.attack()
+        for frame in 0..<120 {
+            reference.update(fighter, visible: true, translucent: false, cheering: false, dt: dt, clock: Double(frame) / 60)
+            hidden.update(fighter, visible: false, translucent: false, cheering: false, dt: dt, clock: Double(frame) / 60)
+        }
+        XCTAssertTrue(hidden.node.isHidden)
+        reference.update(fighter, visible: true, translucent: false, cheering: false, dt: dt, clock: 2)
+        hidden.update(fighter, visible: true, translucent: false, cheering: false, dt: dt, clock: 2)
+        XCTAssertFalse(hidden.node.isHidden)
+        // Compare actual rendered bones, not an internal animation-state flag.
+        for name in ["spine", "chest", "upperarm.r", "lowerarm.r"] {
+            let expected = try XCTUnwrap(reference.node.childNode(withName: name, recursively: true))
+            let actual = try XCTUnwrap(hidden.node.childNode(withName: name, recursively: true))
+            for column in 0..<4 {
+                XCTAssertLessThan(simd_length(expected.simdTransform[column] - actual.simdTransform[column]), 0.0001, name)
+            }
         }
     }
 
