@@ -225,7 +225,7 @@ final class ArenaController: ObservableObject {
             for frame in 1...900 {
                 sceneEvents.removeAll(keepingCapacity: true)
                 tick()
-                if frame >= 240 && mine.alive && !game.projectiles.isEmpty { break }
+                if frame >= 240 && self.mine.alive && !game.projectiles.isEmpty { break }
             }
             benchmarkStill = true
             refreshHUD()
