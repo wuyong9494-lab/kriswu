@@ -56,6 +56,8 @@ final class ArenaWorldView: SCNView {
     private let diagnosticVariant = ArenaDiagnosticVariant.selected
     private var metrics = ArenaFrameMetrics()
     private var nextMetricsAt = 0.0
+    private var exportElapsed = 0.0
+    private var exportedReport = false
     private var lastRollingReport: ArenaFrameMetrics.Report?
     private let metricsLabel = UILabel()
     private var flipped = false
@@ -228,6 +230,7 @@ final class ArenaWorldView: SCNView {
         rendersContinuously = true
         isPlaying = true
         metrics.reset()
+        lastRollingReport = nil
         nextMetricsAt = 0
         ArenaSound.shared.begin()
         let target = DisplayTarget(view: self)
@@ -312,6 +315,15 @@ final class ArenaWorldView: SCNView {
                                              stages[.modelLoad].peakMilliseconds, stages[.sceneBuild].peakMilliseconds)
             }
             ArenaDiagnostics.shared.frame(interval: elapsed, work: CACurrentMediaTime() - started, rolling: lastRollingReport)
+            if controller.benchmark && !controller.benchmarkStill && UserDefaults.standard.bool(forKey: "arena.exportReport") {
+                exportElapsed += elapsed
+                if exportElapsed >= 60 && !exportedReport {
+                    exportedReport = true
+                    if let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                        try? ArenaDiagnostics.shared.report().write(to: folder.appendingPathComponent("arena-performance.txt"), atomically: true, encoding: .utf8)
+                    }
+                }
+            }
         }
     }
 
@@ -379,7 +391,7 @@ final class ArenaWorldView: SCNView {
         lawnNode.castsShadow = false
         root.addChildNode(lawnNode)
         let floor = SCNPlane(width: CGFloat(width), height: CGFloat(height))
-        floor.firstMaterial = sample ? ArenaArt.flat(ArenaSampleArt.floor(map)) : grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
+        floor.firstMaterial = sample ? ArenaSampleArt.floorMaterial(map) : grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
         let floorNode = SCNNode(geometry: floor)
         floorNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         floorNode.simdPosition = SIMD3(width / 2, 0, height / 2)

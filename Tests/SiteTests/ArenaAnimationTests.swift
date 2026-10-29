@@ -18,6 +18,17 @@ final class ArenaAnimationTests: XCTestCase {
         XCTAssertEqual(old.game.time, sample.game.time)
     }
 
+    func testSampleGroundUsesWorldDepthAndOpaqueLeaves() {
+        let material = ArenaSampleArt.floorMaterial(.canyon)
+        XCTAssertTrue(material.readsFromDepthBuffer)
+        XCTAssertTrue(material.writesToDepthBuffer)
+        XCTAssertEqual(material.transparency, 1)
+        for leaf in ArenaSampleArt.grasses {
+            XCTAssertEqual(leaf.firstMaterial?.transparency, 1)
+            XCTAssertEqual(leaf.elements.first?.primitiveCount, 24)
+        }
+    }
+
     func testOutlineWindingMatchesOutwardNormals() {
         let positions: [Float] = [0, 0, 0, 1, 0, 0, 0, 1, 0]
         let normals: [Float] = [0, 0, 1, 0, 0, 1, 0, 0, 1]

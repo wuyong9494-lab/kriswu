@@ -450,6 +450,8 @@ enum ScreenCatalog {
         case "tiles": TileGameHomeView()
         case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
         case "arena": ArenaHomeView()
+        case "arenaBenchmarkOldLive", "arenaBenchmarkSampleLive":
+            ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", benchmark: true, sampleMap: name == "arenaBenchmarkSampleLive"))
         case "arenaBenchmarkOld", "arenaBenchmarkSample":
             ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", benchmark: true, benchmarkStill: true, sampleMap: name == "arenaBenchmarkSample"))
         case "arenaPlay": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .knight, name: "我", level: 3,

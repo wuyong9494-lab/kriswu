@@ -549,8 +549,22 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
+          # Same simulator, separate fresh processes and identical deterministic AI fixture.
+          # These are simulator callback/CPU measurements, never device FPS claims.
+          DATA=$(simctl get_app_container "$DEVICE" "$ID" data)
+          for s in arenaBenchmarkOldLive arenaBenchmarkSampleLive; do
+            rm -f "$DATA/Documents/arena-performance.txt"
+            simctl launch "$DEVICE" "$ID" -demo -screen "$s" -arena.performanceOverlay YES -arena.diagnosticVariant baseline -arena.exportReport YES
+            for attempt in $(seq 1 24); do
+              [ -s "$DATA/Documents/arena-performance.txt" ] && break
+              sleep 5
+            done
+            test -s "$DATA/Documents/arena-performance.txt"
+            cp "$DATA/Documents/arena-performance.txt" "shots/$s.txt"
+            simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+          done
           test -s shots/arena.png && test -s shots/arenaPlay.png && test -s shots/arenaBenchmarkOld.png && test -s shots/arenaBenchmarkSample.png
-          find shots -type f -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
+          find shots -name '*.png' -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
 
       - name: 保存模拟器诊断
         if: always()

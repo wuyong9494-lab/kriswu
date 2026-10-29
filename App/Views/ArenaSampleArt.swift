@@ -20,6 +20,15 @@ enum ArenaSampleArt {
     private static let trim = material(UIColor(red: 0.76, green: 0.54, blue: 0.74, alpha: 1))
     private static let contact = material(UIColor(red: 0.10, green: 0.07, blue: 0.16, alpha: 1))
 
+    static func floorMaterial(_ map: ArenaMap) -> SCNMaterial {
+        let surface = material(ground)
+        surface.diffuse.contents = floor(map)
+        // World geometry must participate in depth testing (unlike HUD labels).
+        surface.readsFromDepthBuffer = true
+        surface.writesToDepthBuffer = true
+        return surface
+    }
+
     static func floor(_ map: ArenaMap) -> UIImage {
         let unit: CGFloat = 32
         let format = UIGraphicsImageRendererFormat()
@@ -81,7 +90,9 @@ enum ArenaSampleArt {
         return result.flattenedClone()
     }
 
-    static let grasses: [SCNGeometry] = (0..<3).map { variant in
+    static let grasses: [SCNGeometry] = (0..<3).map { makeGrass($0) }
+
+    private static func makeGrass(_ variant: Int) -> SCNGeometry {
         var vertices: [SCNVector3] = []
         var indices: [Int32] = []
         // Eight broad pointed blades, 24 triangles per cell; no alpha textures.
@@ -92,8 +103,8 @@ enum ArenaSampleArt {
             let base = direction * 0.15
             let shoulder = direction * 0.31 + SIMD3<Float>(0, 0.30, 0)
             let tip = direction * 0.44 + SIMD3<Float>(0, 0.48 + Float((leaf + variant) % 3) * 0.07, 0)
-            let points = [base - across * 0.09, base + across * 0.09,
-                          shoulder + across * 0.12, tip, shoulder - across * 0.12]
+            let points: [SIMD3<Float>] = [base - across * Float(0.09), base + across * Float(0.09),
+                          shoulder + across * Float(0.12), tip, shoulder - across * Float(0.12)]
             let index = Int32(vertices.count)
             vertices += points.map { SCNVector3($0.x, $0.y, $0.z) }
             indices += [index, index + 1, index + 2, index, index + 2, index + 4, index + 2, index + 3, index + 4]
