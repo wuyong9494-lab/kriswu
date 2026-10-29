@@ -25,7 +25,7 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 95
     outputs:
       upload_required: ${{ steps.verify.outputs.upload_required }}
       source_sha: ${{ steps.verify.outputs.source_sha }}
@@ -192,3 +192,4 @@ jobs:
           name: testflight-apple-status
           path: promotion-status.json
           if-no-files-found: warn
+

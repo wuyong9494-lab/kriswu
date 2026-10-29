@@ -44,10 +44,13 @@ def validate_source(request, run, jobs):
     assert str(run["run_number"]) == request["build_number"], "CI build number mismatch"
     assert run["path"] == ".github/workflows/ios.yml", "Unexpected source workflow"
     if request.get("skip_visual_capture") is True:
-        # One release only: the owner requested 416 without waiting for screenshots.
-        # Device/core checks and the actual simulator regression remain mandatory.
-        assert (request["build_number"], request["source_run_id"], request["source_sha"]) == (
-            "416", 40876218792, "8ec504fb44330d43377f4f7cd2a7e62a58733257"), "Capture exception belongs only to 416"
+        # Explicit owner-authorized capture exceptions, pinned to immutable CI.
+        # Compilation, core tests and actual simulator regressions are mandatory.
+        capture_exceptions = {
+            ("416", 40876218792, "8ec504fb44330d43377f4f7cd2a7e62a58733257"),
+            ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"),
+        }
+        assert (request["build_number"], request["source_run_id"], request["source_sha"]) in capture_exceptions, "Capture exception not authorized for this exact source"
         assert run["status"] in ("in_progress", "completed"), "Source run not active or complete"
         assert run.get("conclusion") in (None, "success", "failure"), "Source run cancelled or timed out"
         for name in ("build", "core-tests-linux"):
@@ -55,7 +58,7 @@ def validate_source(request, run, jobs):
             assert len(matched) == 1 and matched[0]["conclusion"] == "success", f"Required check failed: {name}"
         visual = [job for job in jobs if job["name"] == "arena-look"]
         assert len(visual) == 1, "Missing or ambiguous simulator job"
-        steps = visual[0].get("steps", [])
+        steps = visual[0].get("steps") or []
         for name in ("Set up job", "Run actions/checkout@v5", "选用最新的 Xcode（26 或更新）",
                      "生成 Xcode 工程", "编译模拟器版本", "角色动画回归测试"):
             matched = [step for step in steps if step["name"] == name]
@@ -107,18 +110,40 @@ def save_report(path, request, **values):
 def wait_for_source(request):
     if not request.get("wait_for_source"):
         return
-    assert (request["build_number"], request["source_run_id"], request["source_sha"]) == (
-        "417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"), "Wait belongs only to 417"
+    sources = {
+        ("417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"): "codex/arena-audio-performance",
+        ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"): "codex/arena-reference-fidelity",
+    }
+    identity = (request["build_number"], request["source_run_id"], request["source_sha"])
+    assert identity in sources, "Wait not authorized for this exact source"
     deadline = time.monotonic() + 5400
     while time.monotonic() < deadline:
-        head = github("/git/ref/heads/codex/arena-audio-performance")
+        head = github("/git/ref/heads/" + sources[identity])
         assert head["object"]["sha"] == request["source_sha"], "Source superseded; refusing stale release"
         run = github(f"/actions/runs/{request['source_run_id']}")
         assert run["head_sha"] == request["source_sha"], "Unexpected source"
-        if run["status"] == "completed":
+        if request.get("skip_visual_capture") is True:
+            jobs = github(f"/actions/runs/{request['source_run_id']}/jobs?per_page=100")["jobs"]
+            try:
+                validate_source(request, run, jobs)
+            except AssertionError:
+                if run["status"] == "completed":
+                    raise
+                failed = {"failure", "cancelled", "timed_out", "action_required"}
+                for job in jobs:
+                    if job["name"] in ("build", "core-tests-linux"):
+                        assert job.get("conclusion") not in failed, "Required source job failed"
+                    if job["name"] == "arena-look":
+                        required = {"Set up job", "Run actions/checkout@v5", "选用最新的 Xcode（26 或更新）", "生成 Xcode 工程", "编译模拟器版本", "角色动画回归测试"}
+                        for step in job.get("steps") or []:
+                            if step["name"] in required:
+                                assert step.get("conclusion") not in failed, "Required simulator step failed"
+            else:
+                return
+        elif run["status"] == "completed":
             validate_source(request, run, github(f"/actions/runs/{request['source_run_id']}/jobs?per_page=100")["jobs"])
             return
-        print("Waiting for exact 417 device and simulator checks: " + run["status"], flush=True)
+        print("Waiting for exact " + request["build_number"] + " device and simulator checks: " + run["status"], flush=True)
         time.sleep(30)
     raise TimeoutError("Source CI did not finish within 90 minutes")
 

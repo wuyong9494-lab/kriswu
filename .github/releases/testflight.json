@@ -1,10 +1,11 @@
 {
-  "build_number": "417",
+  "build_number": "425",
   "version": "1.2",
-  "source_sha": "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0",
-  "source_run_id": 40895530917,
+  "source_sha": "5b298adf9e4a4adb3e2755daf2491f87b14ff93a",
+  "source_run_id": 40908539488,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "notes": "大厅按参考重做为月亮城市背景、中央角色展示、彩色功能入口及底部对战区，保留金币升级。战斗人物缩小约20%，草丛仅在人物附近轻微拨开，增加隐蔽半透视觉提示；常规团战地图扩至21×29，大乱斗扩至25×25并增加草丛。新版队友支持扩展地图；混用旧版时兼容原地图。按授权跳过截图，保留设备、核心及iOS专项检查。大厅与原版一致性、草丛效果、穿模及多人性能仍待真机复测。",
-  "wait_for_source": true
+  "notes": "大厅更新：月夜城市背景、资源栏、角色徽章与装备状态、升级及皮肤入口、通行证与任务刷新提示、对战区域和多尺寸布局。修复冒险入口、顶部重叠及窄屏溢出。按用户最新授权直接发布，跳过截图验收，保留设备编译、核心测试及iOS专项测试。原版大厅完全一致性和真机表现尚未验证。",
+  "wait_for_source": true,
+  "skip_visual_capture": true
 }
