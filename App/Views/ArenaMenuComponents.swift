@@ -45,9 +45,12 @@ struct ArenaMenuButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .foregroundStyle(.white)
-            .background(configuration.isPressed ? Color(red: 0.22, green: 0.16, blue: 0.36) : Color(red: 0.30, green: 0.23, blue: 0.46), in: RoundedRectangle(cornerRadius: 9))
+            .background {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(configuration.isPressed ? Color(red: 0.22, green: 0.16, blue: 0.36) : Color(red: 0.30, green: 0.23, blue: 0.46))
+                    .shadow(color: Color(red: 0.06, green: 0.04, blue: 0.12), radius: 0, y: configuration.isPressed ? 1 : 4)
+            }
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(red: 0.49, green: 0.38, blue: 0.66), lineWidth: 2))
-            .shadow(color: Color(red: 0.06, green: 0.04, blue: 0.12), radius: 0, y: configuration.isPressed ? 1 : 4)
             .offset(y: configuration.isPressed ? 3 : 0)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }

@@ -1613,14 +1613,14 @@ final class ArenaShowcaseView: SCNView {
         let outline = SCNNode(geometry: rimGeometry)
         outline.simdPosition = pedestal.simdPosition
         world.rootNode.addChildNode(outline)
-        let shadow = SCNCylinder(radius: 0.72, height: 0.002)
+        let shadow = SCNCylinder(radius: 0.58, height: 0.002)
         shadow.radialSegmentCount = 32
         shadow.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.42))
         let shadowNode = SCNNode(geometry: shadow)
         shadowNode.simdPosition = SIMD3(0, height + 0.002, 0)
         shadowNode.renderingOrder = 2
         world.rootNode.addChildNode(shadowNode)
-        let deck = SCNCylinder(radius: 0.7, height: 0.018)
+        let deck = SCNCylinder(radius: 0.59, height: 0.018)
         deck.radialSegmentCount = 6
         let deckMaterial = SCNMaterial()
         deckMaterial.lightingModel = .constant
@@ -1630,7 +1630,7 @@ final class ArenaShowcaseView: SCNView {
         deckNode.simdPosition = SIMD3(0, height + 0.012, 0)
         deckNode.castsShadow = false
         world.rootNode.addChildNode(deckNode)
-        let ring = SCNTorus(ringRadius: 0.74, pipeRadius: 0.018)
+        let ring = SCNTorus(ringRadius: 0.61, pipeRadius: 0.018)
         ring.ringSegmentCount = 48
         ring.pipeSegmentCount = 12
         let gold = SCNMaterial()
