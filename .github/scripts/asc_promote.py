@@ -104,7 +104,27 @@ def save_report(path, request, **values):
     print(json.dumps(report, ensure_ascii=False), flush=True)
 
 
+def wait_for_source(request):
+    if not request.get("wait_for_source"):
+        return
+    assert (request["build_number"], request["source_run_id"], request["source_sha"]) == (
+        "417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"), "Wait belongs only to 417"
+    deadline = time.monotonic() + 5400
+    while time.monotonic() < deadline:
+        head = github("/git/ref/heads/codex/arena-audio-performance")
+        assert head["object"]["sha"] == request["source_sha"], "Source superseded; refusing stale release"
+        run = github(f"/actions/runs/{request['source_run_id']}")
+        assert run["head_sha"] == request["source_sha"], "Unexpected source"
+        if run["status"] == "completed":
+            validate_source(request, run, github(f"/actions/runs/{request['source_run_id']}/jobs?per_page=100")["jobs"])
+            return
+        print("Waiting for exact 417 device and simulator checks: " + run["status"], flush=True)
+        time.sleep(30)
+    raise TimeoutError("Source CI did not finish within 90 minutes")
+
+
 def preflight(request):
+    wait_for_source(request)
     run_id = request["source_run_id"]
     validate_source(request, github(f"/actions/runs/{run_id}"),
                     github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"])
@@ -211,3 +231,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

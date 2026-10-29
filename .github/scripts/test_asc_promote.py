@@ -57,6 +57,19 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             promotion.validate_source(request, run, jobs + [{"name": "site-tests", "conclusion": "failure"}])
 
+    def test_wait_does_not_release_failed_or_superseded_source(self):
+        request = dict(self.request, build_number="417", source_run_id=40895530917,
+                       source_sha="4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0", wait_for_source=True)
+        head = {"object": {"sha": request["source_sha"]}}
+        run = dict(self.run, head_sha=request["source_sha"], run_number=417)
+        with patch.object(promotion, "github", side_effect=[head, run, {"jobs": self.jobs}]):
+            promotion.wait_for_source(request)
+        with patch.object(promotion, "github", return_value={"object": {"sha": "b" * 40}}):
+            with self.assertRaises(AssertionError): promotion.wait_for_source(request)
+        with patch.object(promotion, "github", side_effect=[head, dict(run, conclusion="failure"), {"jobs": self.jobs}]):
+            with self.assertRaises(AssertionError): promotion.wait_for_source(request)
+        with self.assertRaises(AssertionError): promotion.wait_for_source(dict(request, build_number="418"))
+
     def test_existing_build_is_found_without_uploading(self):
         build = {"id": "existing", "relationships": {"preReleaseVersion": {"data": {"id": "v"}}}}
         response = {"data": [build], "included": [{"type": "preReleaseVersions", "id": "v",
@@ -108,3 +121,4 @@ class PromotionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
