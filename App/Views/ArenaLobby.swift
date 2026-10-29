@@ -108,7 +108,7 @@ struct ArenaHomeView: View {
                                 quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
                                 quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
                                 quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
-                                quietMenu("技能", symbol: "sparkles") { sheet = .loadout }
+                                quietMenu("升级", symbol: "arrow.up.circle.fill") { sheet = .loadout }
                             }.padding(.bottom, 5)
                         }.frame(width: 76)
                     }
@@ -732,7 +732,7 @@ struct ArenaHomeView: View {
         switch item {
         case .brawlers: return "角色"
         case .modes: return "玩法"
-        case .loadout: return "\(chosen.name)的本事"
+        case .loadout: return "\(chosen.name) · 升级与技能"
         case .road: return "奖杯之路"
         case .together: return "和同事打"
         case .friends: return "好友"
@@ -1057,11 +1057,45 @@ struct ArenaHomeView: View {
     }
 
     /// 普攻、大招、小道具、星徽。选了就带上，没解锁的锁着
+    private var heroUpgradeCard: some View {
+        let level = progress.level(chosen)
+        let cost = progress.upgradeCost(chosen)
+        let unlocked = progress.isUnlocked(chosen)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("\(chosen.name) · 等级 \(level)")
+                .font(.system(size: 20, weight: .heavy, design: .rounded))
+            Text("拥有金币：\(progress.coins)")
+                .font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.yellow)
+            if let cost {
+                Button {
+                    guard progress.isUnlocked(chosen) else { return }
+                    growth.upgrade(chosen)
+                } label: {
+                    Text("升到 \(level + 1) 级 · \(cost) 金币")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.green.face, edge: ArenaGameButton.green.edge, height: 44))
+                .disabled(!unlocked || progress.coins < cost)
+                .accessibilityIdentifier("arena.hero.upgrade")
+                Text(!unlocked ? "角色尚未解锁" : (progress.coins < cost ? "还差 \(cost - progress.coins) 金币" : "升级后生命与伤害提升，金币立即扣除。"))
+                    .font(.system(size: 12, weight: .medium))
+            } else {
+                Text("已满级").font(.headline).foregroundStyle(.yellow)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 0.08, green: 0.18, blue: 0.28), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("arena.hero.upgradeCard")
+    }
+
     private var skillBoard: some View {
         let level = progress.level(chosen)
         let loadout = progress.loadout(for: chosen)
         return ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                heroUpgradeCard
                 skillCard(title: "普攻", note: chosen.attackNote, tint: Color(red: 0.9, green: 0.28, blue: 0.24), mark: "打", chosen: true, locked: nil) {}
                 skillCard(title: "大招", note: chosen.superNote, tint: Color(uiColor: ArenaPalette.gold), mark: "大", chosen: true, locked: nil) {}
                 Text("小道具（一局 \(ArenaGame.gadgetUses) 次）")

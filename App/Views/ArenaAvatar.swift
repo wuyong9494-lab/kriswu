@@ -108,6 +108,9 @@ final class ArenaAvatar {
     private var speed: Float = 0
     private(set) var opacity: Float = 0
     private var placedOpacity = false
+    private var concealmentRim: SCNMaterial?
+    private var concealmentHold: Float = 0
+    private var showingConcealment = false
     private var deadSince: Double?
     private var flashUntil: Double = 0
     private var flashing = false
@@ -205,6 +208,7 @@ final class ArenaAvatar {
         let rim = SCNTube(innerRadius: 0.42, outerRadius: 0.5, height: 0.012)
         rim.radialSegmentCount = 40
         rim.firstMaterial = ArenaAvatar.decal(isMe ? UIColor.white.withAlphaComponent(0.95) : color.withAlphaComponent(0.9))
+        concealmentRim = rim.firstMaterial
         let rimNode = SCNNode(geometry: rim)
         ring.addChildNode(discNode)
         ring.addChildNode(rimNode)
@@ -281,7 +285,7 @@ final class ArenaAvatar {
 
     // MARK: - 每帧
 
-    /// visible：这一队看不看得见他；translucent：自己这边的人躲在草丛里（半透明）；cheering：赢了
+    /// visible：这一队看不看得见他；translucent：角色处于草丛/隐身提示状态（实心模型、绿色脚圈）；cheering：赢了
     func update(_ fighter: Fighter, visible: Bool, translucent: Bool, cheering: Bool, dt: Float, clock: Double, sampleBones: Bool = true) {
         // 位置：跳起来时往上抛一道弧
         var height: Float = 0
@@ -332,13 +336,22 @@ final class ArenaAvatar {
         if let deadSince {
             target = clock - deadSince < 1.1 ? 1 : 0
         } else {
-            target = visible ? (translucent ? 0.5 : 1) : 0
+            target = visible ? 1 : 0
         }
         if !placedOpacity {
             opacity = target
             placedOpacity = true
         } else {
             opacity += (target - opacity) * min(1, dt * 10)
+        }
+        // Concealment is communicated by a stable rim, not whole-skeleton alpha.
+        // Enemy visibility and death fade still use the original visible/dead gates.
+        concealmentHold = translucent && visible && fighter.alive ? 0.15 : max(0, concealmentHold - max(dt, 0))
+        let concealed = fighter.alive && visible && concealmentHold > 0
+        if concealed != showingConcealment {
+            showingConcealment = concealed
+            concealmentRim?.diffuse.contents = concealed ? UIColor(red: 0.35, green: 1, blue: 0.5, alpha: 1)
+                : (mine ? UIColor.white.withAlphaComponent(0.95) : teamColor.withAlphaComponent(0.9))
         }
         node.opacity = CGFloat(opacity)
         node.isHidden = opacity < 0.02

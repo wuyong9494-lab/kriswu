@@ -15,7 +15,7 @@ final class ArenaAnimationTests: XCTestCase {
             bush.update(open: frame % 2 == 0, dt: 1 / 60)
             XCTAssertLessThan(abs(node.opacity - previousOpacity), 0.16)
             XCTAssertGreaterThanOrEqual(node.simdScale.x, base.x)
-            XCTAssertGreaterThanOrEqual(node.simdScale.y, base.y * 0.94 - 0.00001)
+            XCTAssertGreaterThanOrEqual(node.simdScale.y, base.y * 0.4 - 0.00001)
         }
         for _ in 0..<120 { bush.update(open: false, dt: 1 / 60) }
         XCTAssertEqual(node.simdScale, base)
@@ -24,7 +24,7 @@ final class ArenaAnimationTests: XCTestCase {
         XCTAssertEqual(bush.patchID, 7)
     }
 
-    func testBushTransitionIsCadenceIndependentAndSampleKeepsItsScale() {
+    func testBushTransitionIsCadenceIndependentAndSampleKeepsOpaqueDepth() {
         let slow = ArenaBushVisual(node: SCNNode(), patchID: 1, bends: true)
         let fast = ArenaBushVisual(node: SCNNode(), patchID: 1, bends: true)
         for _ in 0..<6 { slow.update(open: true, dt: 1 / 30) }
@@ -35,8 +35,33 @@ final class ArenaAnimationTests: XCTestCase {
         sample.update(open: true, dt: 0)
         XCTAssertEqual(sample.node.opacity, 1)
         for _ in 0..<120 { sample.update(open: true, dt: 1 / 60) }
-        XCTAssertEqual(sample.node.simdScale, SIMD3<Float>(repeating: 1))
-        XCTAssertEqual(sample.node.opacity, 0.4, accuracy: 0.00001)
+        XCTAssertEqual(sample.node.simdScale.x, 1)
+        XCTAssertEqual(sample.node.simdScale.y, 0.4, accuracy: 0.00001)
+        XCTAssertEqual(sample.node.simdScale.z, 1)
+        XCTAssertEqual(sample.node.opacity, 1)
+    }
+
+    func testBushBoundaryNeverMakesCharacterOrFoliageTranslucent() {
+        let game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "我", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "对手", brawler: .knight, isBot: true, team: 1)
+        ], seed: 1)
+        let avatar = ArenaAvatar(brawler: .ranger, color: .blue, isMe: true)
+        let grass = ArenaBushVisual(node: SCNNode(), patchID: 1, bends: true)
+        for frame in 0..<180 {
+            let inside = frame % 2 == 0
+            avatar.update(game.fighters[0], visible: true, translucent: inside, cheering: false,
+                          dt: 1 / 60, clock: Double(frame) / 60)
+            grass.update(open: inside, dt: 1 / 60)
+            XCTAssertEqual(avatar.node.opacity, 1)
+            XCTAssertFalse(avatar.node.isHidden)
+            XCTAssertEqual(grass.node.opacity, 1)
+        }
+        for frame in 0..<120 {
+            avatar.update(game.fighters[0], visible: false, translucent: true, cheering: false,
+                          dt: 1 / 60, clock: 3 + Double(frame) / 60)
+        }
+        XCTAssertTrue(avatar.node.isHidden, "Concealment cue must not reveal a hidden fighter")
     }
 
     func testBenchmarkIsRepeatableAcrossCallbackCadences() {

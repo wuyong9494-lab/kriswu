@@ -12,6 +12,7 @@ final class ArenaBushVisual {
     let patchID: Int
     let baseScale: SIMD3<Float>
     private let bends: Bool
+    private var holdOpen: Float = 0
     private(set) var openness: Float = 0
 
     init(node: SCNNode, patchID: Int, bends: Bool) {
@@ -23,17 +24,19 @@ final class ArenaBushVisual {
 
     func update(open: Bool, dt: Float) {
         guard dt.isFinite, dt > 0 else { return }
-        let target: Float = open ? 1 : 0
+        holdOpen = open ? 0.15 : max(0, holdOpen - dt)
+        let target: Float = (open || holdOpen > 0) ? 1 : 0
         guard openness != target else { return }
         // Exponential easing gives the same response at 30/60/120 Hz.
         openness += (target - openness) * (1 - exp(-18 * dt))
         if abs(target - openness) < 0.001 { openness = target }
-        node.opacity = CGFloat(1 - 0.6 * openness)
-        if bends {
-            node.simdScale = baseScale * SIMD3(1 + 0.08 * openness,
-                                              1 - 0.06 * openness,
-                                              1 + 0.08 * openness)
-        }
+        // Solid leaves and their outline shell must stay in the depth-writing pass.
+        // Fading the entire multi-part mesh exposes/sorts its back faces against itself.
+        node.opacity = 1
+        let spread: Float = bends ? 0.08 : 0
+        node.simdScale = baseScale * SIMD3(1 + spread * openness,
+                                          1 - 0.6 * openness,
+                                          1 + spread * openness)
     }
 }
 
@@ -912,7 +915,7 @@ final class ArenaWorldView: SCNView {
                 continue
             }
             let visible = game.isVisible(fighter, to: myTeam)
-            // 自己这边躲在草丛里的、隐身的（对面贴近了才看得见）：半透明
+            // 草丛/隐身使用脚圈提示；可见性规则独立于不透明角色表现。
             let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock,
                           sampleBones: ArenaDiagnostics.shared.variant != .noBones && (ArenaDiagnostics.shared.variant != .halfAnimation || diagnosticFrame % 2 == 0))
@@ -928,7 +931,7 @@ final class ArenaWorldView: SCNView {
             }
         }
 
-        // 自己旁边的草丛变透明，看得见自己
+        // 自己旁边的草丛平滑拨低，保持不透明深度遮挡。
         let me = controller.mine
         let inside = me.alive && game.map.inBush(me.pos)
         if inside, !wasInBush {
