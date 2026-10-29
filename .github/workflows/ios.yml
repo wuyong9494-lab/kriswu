@@ -294,7 +294,7 @@ jobs:
             -configuration Debug \
             -destination "id=$DEVICE" \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
 
       - name: 编译截图对比工具
         run: swiftc -O scripts/shotdiff.swift -o shotdiff
@@ -467,7 +467,7 @@ jobs:
             -configuration Debug \
             -destination "id=$DEVICE" \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
 
       - name: 角色动画回归测试
         timeout-minutes: 10
@@ -480,8 +480,9 @@ jobs:
             -parallel-testing-enabled NO \
             -only-testing:SiteTests/ArenaAnimationTests \
             -only-testing:SiteTests/ArenaAudioTests \
+            -only-testing:SiteTests/ArenaDiagnosticsTests \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO > animation-tests.log 2>&1 || { tail -100 animation-tests.log; exit 1; }
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED=NO > animation-tests.log 2>&1 || { tail -100 animation-tests.log; exit 1; }
           grep -E "Test Case|Executed" animation-tests.log || true
 
       - name: 打开大厅和对局并截图
@@ -538,7 +539,7 @@ jobs:
           mkdir -p shots
           CAPTURE_DATA=$(simctl get_app_container "$DEVICE" "$ID" data)
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings; do
+          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings arenaDiagnostics; do
             rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
             if [ "$s" = arenaSettings ]; then
@@ -582,7 +583,7 @@ jobs:
             exit 1
           fi
           test -s shots/arena.png && test -s shots/arenaPlay.png
-          find shots -type f -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
+          find shots -type f -name '*.png' -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
 
       - name: 保存模拟器诊断
         if: always()

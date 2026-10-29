@@ -6,7 +6,7 @@ import UIKit
 final class ArenaDiagnostics: @unchecked Sendable {
     static let shared = ArenaDiagnostics()
     enum Variant: String, CaseIterable {
-        case baseline, noNumbers, noParticles, noCharacterOutlines, halfAnimation
+        case baseline, noNumbers, noParticles, noCharacterOutlines, halfAnimation, noBones, noBushes, noNumbersOrParticles, noAI
         var title: String {
             switch self {
             case .baseline: return "基准（正常显示）"
@@ -14,11 +14,20 @@ final class ArenaDiagnostics: @unchecked Sendable {
             case .noParticles: return "仅关闭粒子"
             case .noCharacterOutlines: return "仅关闭人物描边"
             case .halfAnimation: return "仅隔帧采样骨骼"
+            case .noBones: return "关闭骨骼，保留移动"
+            case .noBushes: return "关闭装饰草丛，保留规则"
+            case .noNumbersOrParticles: return "关闭浮字与粒子"
+            case .noAI: return "关闭机器人逻辑"
             }
         }
     }
-    let variant = Variant(rawValue: UserDefaults.standard.string(forKey: "arena.diagnosticVariant") ?? "") ?? .baseline
+    private var storedVariant = Variant(rawValue: UserDefaults.standard.string(forKey: "arena.diagnosticVariant") ?? "") ?? .baseline
     private let lock = NSLock()
+    var variant: Variant { lock.lock(); defer { lock.unlock() }; return storedVariant }
+    var enabled: Bool { lock.lock(); defer { lock.unlock() }; return storedEnabled }
+    func configureCapture(_ variant: Variant, enabled: Bool = true) {
+        lock.lock(); storedVariant = variant; storedEnabled = enabled; samples.reset(); lock.unlock()
+    }
     private var reportText = "尚未采样：开启性能显示并重启 App，然后进入对局。"
     var latestReport: String {
         lock.lock(); defer { lock.unlock() }
@@ -34,7 +43,7 @@ final class ArenaDiagnostics: @unchecked Sendable {
     private var samples = ArenaStageMetrics()
     private let log = OSLog(subsystem: "ShiftReminder", category: "ArenaCPU")
     // Enable before opening the lobby, then relaunch to capture cold loading.
-    let enabled = UserDefaults.standard.bool(forKey: "arena.performanceOverlay")
+    private var storedEnabled = UserDefaults.standard.bool(forKey: "arena.performanceOverlay")
 
     func measure<T>(_ stage: ArenaStageMetrics.Stage, _ work: () throws -> T) rethrows -> T {
         guard enabled else { return try work() }

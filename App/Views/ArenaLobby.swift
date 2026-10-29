@@ -49,7 +49,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop
+        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics
         var id: String { rawValue }
     }
 
@@ -664,7 +664,9 @@ struct ArenaHomeView: View {
     // MARK: 面板
 
     @ViewBuilder private func sheetContent(_ item: Sheet) -> some View {
-        if item == .settings {
+        if item == .diagnostics {
+            ArenaDiagnosticSuiteView()
+        } else if item == .settings {
             ArenaMenuScreen(title: "设置", onClose: { sheet = nil }) { settingsPanel }
         } else {
         ArenaGamePanel(title: panelTitle(item), tint: panelTint(item), onClose: {
@@ -682,6 +684,7 @@ struct ArenaHomeView: View {
             case .shop: shopBoard
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
+            case .diagnostics: EmptyView()
             }
         }
         }
@@ -699,6 +702,7 @@ struct ArenaHomeView: View {
         case .shop: return "商店"
         case .season: return "赛季"
         case .settings: return "设置"
+        case .diagnostics: return "持续性能诊断"
         }
     }
 
@@ -714,11 +718,17 @@ struct ArenaHomeView: View {
         case .shop: return Color(red: 0.95, green: 0.62, blue: 0.15)
         case .season: return Color(red: 0.6, green: 0.4, blue: 0.95)
         case .settings: return Color(red: 0.45, green: 0.5, blue: 0.58)
+        case .diagnostics: return .purple
         }
     }
 
     private var settingsPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
+            ArenaMenuCard {
+                Text(ArenaPerfRecorder.identity).font(.caption.monospaced()).textSelection(.enabled)
+                Button("一键连续性能诊断 / 导出") { sheet = .diagnostics }
+                    .padding(12).buttonStyle(ArenaMenuButtonStyle())
+            }
             ArenaAudioSettingsView()
             settingsCard {
                 ArenaMenuToggle(title: "显示对局性能", isOn: $performanceOverlay)
@@ -1489,6 +1499,7 @@ struct ArenaShowcase: UIViewRepresentable {
 
 @MainActor
 final class ArenaShowcaseView: SCNView {
+    private(set) static var activeDisplayLinks = 0
     private let world = SCNScene()
     /// 角色站的地方（台子顶上）
     private let stage = SCNNode()
@@ -1711,10 +1722,12 @@ final class ArenaShowcaseView: SCNView {
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 24, maximum: 30, preferred: 30)
         link.add(to: .main, forMode: .common)
         self.link = link
+        Self.activeDisplayLinks += 1
     }
 
     func stop() {
         wantsPlayback = false
+        if link != nil { Self.activeDisplayLinks -= 1 }
         link?.invalidate()
         link = nil
         lastTimestamp = nil

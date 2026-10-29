@@ -365,7 +365,7 @@ final class ArenaAvatar {
             streak?.birthRate = 0
         }
         // 被冰霜打中：身上发蓝
-        if ArenaDiagnostics.shared.variant == .noParticles {
+        if [.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant) {
             sparks?.birthRate = 0
             streak?.birthRate = 0
         }

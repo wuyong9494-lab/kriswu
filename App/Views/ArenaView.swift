@@ -226,7 +226,7 @@ struct ArenaRoomView: View {
     }
 }
 
-private struct ArenaMatchView: View {
+struct ArenaMatchView: View {
     @ObservedObject var controller: ArenaController
     /// 和电脑打才有「再来一局」；联机的回房间等房主再开
     var onAgain: (() -> Void)?
@@ -249,6 +249,7 @@ private struct ArenaMatchView: View {
     private var hud: ArenaController.HUD { controller.hud }
 
     var body: some View {
+        let _ = ArenaPerfRecorder.shared.noteUIEvaluation()
         ZStack {
             ArenaWorld(controller: controller)
                 .ignoresSafeArea()

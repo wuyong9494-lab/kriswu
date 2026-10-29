@@ -96,17 +96,20 @@ final class ArenaController: ObservableObject {
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
         var benchmark = false
+        var diagnosticScenario: ArenaDiagnosticScenario?
 
         enum Demo { case versus, result }
     }
 
     static let step = 1.0 / 60
+    private static let diagnosticPositions = [V2(4.5, 12.5), V2(6.5, 14.5), V2(8.5, 14.5), V2(10.5, 12.5), V2(8.5, 10.5), V2(6.5, 10.5)]
 
     let role: Role
     let me: Int
     private(set) var benchmark = false
+    private(set) var diagnosticScenario: ArenaDiagnosticScenario?
     var benchmarkSnapshotTime: Double {
-        benchmark ? UserDefaults.standard.double(forKey: "arena.snapshotTime") : 0
+        benchmark && diagnosticScenario == nil ? UserDefaults.standard.double(forKey: "arena.snapshotTime") : 0
     }
     private(set) var game: ArenaGame
     private weak var room: GameRoom?
@@ -211,15 +214,20 @@ final class ArenaController: ObservableObject {
                 let roster: [Brawler] = [.ranger, .knight, .mage, .ranger, .knight, .mage]
                 for i in entrants.indices {
                     entrants[i].brawler = roster[i % roster.count]
+                    entrants[i].name = i == 0 ? "我" : "电脑" + entrants[i].brawler.name
                     entrants[i].loadout = ArenaLoadout.basic(entrants[i].brawler, level: setup.level)
                 }
+            }
+            if setup.diagnosticScenario == .empty || setup.diagnosticScenario == .soloWalk {
+                entrants = Array(entrants.prefix(1))
             }
             built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
         self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
         benchmark = setup.benchmark
+        diagnosticScenario = setup.diagnosticScenario
         if benchmark {
-            let positions = [V2(4.5, 12.5), V2(6.5, 14.5), V2(8.5, 14.5), V2(10.5, 12.5), V2(8.5, 10.5), V2(6.5, 10.5)]
+            let positions = Self.diagnosticPositions
             for i in game.fighters.indices {
                 game.adjust(i) { $0.pos = positions[i % positions.count] }
             }
@@ -315,14 +323,34 @@ final class ArenaController: ObservableObject {
             remoteEmotes = [:]
         }
         ArenaDiagnostics.shared.measure(.ai) {
-            for k in bots.indices {
-                inputs[bots[k].id] = bots[k].input(in: game, dt: Self.step)
+            if ArenaDiagnostics.shared.variant != .noAI && diagnosticScenario != .empty && diagnosticScenario != .soloWalk {
+                for k in bots.indices {
+                    var input = bots[k].input(in: game, dt: Self.step)
+                    if diagnosticScenario == .crowdWalk {
+                        input.attack = nil; input.special = nil; input.gadget = false
+                    }
+                    inputs[bots[k].id] = input
+                }
+            }
+            if diagnosticScenario == .soloWalk {
+                // Deterministic back-and-forth along the clear center row; not bot AI.
+                inputs[me] = ArenaInput(move: V2(Int(game.time / 2) % 2 == 0 ? 1 : -1, 0))
+            } else if diagnosticScenario == .empty {
+                inputs[me] = ArenaInput()
             }
         }
         ArenaDiagnostics.shared.measure(.simulation) {
             game.step(Self.step, inputs: inputs)
         }
         ArenaDiagnostics.shared.record(.collision, seconds: game.collisionCPUSeconds)
+        if diagnosticScenario == .combat {
+            // Stress-fixture respawns rejoin the center; normal matches keep their spawn rules.
+            for event in game.events {
+                if case .respawn(let id) = event {
+                    game.adjust(id) { $0.pos = Self.diagnosticPositions[id % Self.diagnosticPositions.count] }
+                }
+            }
+        }
         let events = game.events
         game.events.removeAll()
         sceneEvents += events

@@ -26,6 +26,7 @@ struct ArenaWorld: UIViewRepresentable {
 /// 坐标：地图上的 (x, y) 格就是 3D 里的 (x, 0, y)，一格 1 米；在上边那一队的人看到的整个转过来（自己家总在下边）
 @MainActor
 final class ArenaWorldView: SCNView {
+    private(set) static var activeDisplayLinks = 0
     /// 斜着从后上方看，大约 52 度。看得到一大片地图，人是小的，墙还有侧面。
     /// 高 16、往后 12.5：atan(16/12.5) ≈ 52 度。横屏左右各 12 格。
     private static let cameraOffset = SIMD3<Float>(0, 16, 12.5)
@@ -57,7 +58,7 @@ final class ArenaWorldView: SCNView {
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
     private var clock = 0.0
-    private let metricsEnabled = UserDefaults.standard.bool(forKey: "arena.performanceOverlay")
+    private var metricsEnabled: Bool { ArenaDiagnostics.shared.enabled }
     private var metrics = ArenaFrameMetrics()
     private var nextMetricsAt = 0.0
     private var diagnosticFrame = 0
@@ -243,10 +244,12 @@ final class ArenaWorldView: SCNView {
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
         link.add(to: .main, forMode: .common)
         self.link = link
+        Self.activeDisplayLinks += 1
     }
 
     func stop() {
         controller.cancelLocalInput()
+        if link != nil { Self.activeDisplayLinks -= 1 }
         link?.invalidate()
         link = nil
         lastTimestamp = nil
@@ -315,6 +318,9 @@ final class ArenaWorldView: SCNView {
             let finished = CACurrentMediaTime()
             metrics.record(interval: elapsed, simulation: simulated - started, scene: finished - simulated)
             ArenaDiagnostics.shared.record(.frameUpdate, seconds: finished - started)
+            ArenaPerfRecorder.shared.record(controller: controller, interval: elapsed,
+                simulation: simulated - started, scene: finished - simulated,
+                battleDrivers: Self.activeDisplayLinks, lobbyDrivers: ArenaShowcaseView.activeDisplayLinks)
             if elapsed > 0 {
                 measuredSeconds += elapsed
                 measuredCallbacks += 1
@@ -456,7 +462,7 @@ final class ArenaWorldView: SCNView {
         wallNode.castsShadow = false
         root.addChildNode(wallNode)
         for y in 0..<map.height {
-            for x in 0..<map.width where map.tile(x, y) == .bush {
+            for x in 0..<map.width where map.tile(x, y) == .bush && ArenaDiagnostics.shared.variant != .noBushes {
                 let node = SCNNode(geometry: purpleSample ? ArenaPurpleArt.bush : ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
                 node.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
                 node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 12) * .pi / 6, 0)
@@ -854,11 +860,16 @@ final class ArenaWorldView: SCNView {
                 avatars[fighter.id] = replacement
             }
             let avatar = avatars[fighter.id]
+            if controller.diagnosticScenario == .empty {
+                avatar.node.isHidden = true
+                tags[fighter.id].node.isHidden = true
+                continue
+            }
             let visible = game.isVisible(fighter, to: myTeam)
             // 自己这边躲在草丛里的、隐身的（对面贴近了才看得见）：半透明
             let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock,
-                          sampleBones: ArenaDiagnostics.shared.variant != .halfAnimation || diagnosticFrame % 2 == 0)
+                          sampleBones: ArenaDiagnostics.shared.variant != .noBones && (ArenaDiagnostics.shared.variant != .halfAnimation || diagnosticFrame % 2 == 0))
             tags[fighter.id].update(fighter, opacity: avatar.opacity)
             let before = seenHealth[fighter.id] ?? fighter.health
             if fighter.alive, fighter.health > before, game.time - max(fighter.lastHurt, fighter.lastAttack) > 3,
@@ -1741,7 +1752,7 @@ final class ArenaWorldView: SCNView {
 
     /// 一下子炸开的一团光点。系统是开局建好的，这里只挪位置再放一次
     private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
-        guard ArenaDiagnostics.shared.variant != .noParticles,
+        guard ![.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant),
               let slot = burstSlots.first(where: { !$0.busy }) else { return }
         slot.busy = true
         slot.node.simdPosition = point
@@ -1778,7 +1789,7 @@ final class ArenaWorldView: SCNView {
         system.particleLifeSpan = life
         system.particleSize = size
         system.particleColor = color
-        system.birthRate = ArenaDiagnostics.shared.variant == .noParticles ? 0 : 22
+        system.birthRate = [.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant) ? 0 : 22
         return system
     }
 
@@ -1941,7 +1952,7 @@ final class ArenaWorldView: SCNView {
             node.addChildNode(disc)
             node.addChildNode(rim)
             let motes = SCNParticleSystem()
-            motes.birthRate = ArenaDiagnostics.shared.variant == .noParticles ? 0 : 40
+            motes.birthRate = [.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant) ? 0 : 40
             motes.particleLifeSpan = 0.9
             motes.particleVelocity = 1
             motes.emittingDirection = SCNVector3(0, 1, 0)
@@ -2038,7 +2049,7 @@ final class ArenaWorldView: SCNView {
     // MARK: - 伤害数字
 
     private func floater(_ text: String, at point: SIMD3<Float>, color: UIColor, target: Int? = nil) {
-        guard ArenaDiagnostics.shared.variant != .noNumbers else { return }
+        guard ![.noNumbers, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant) else { return }
         let started = metricsEnabled ? CACurrentMediaTime() : 0
         defer { if metricsEnabled { ArenaDiagnostics.shared.record(.damageText, seconds: CACurrentMediaTime() - started) } }
         let key = "\(text)-\(color.hash)"
