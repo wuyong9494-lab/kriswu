@@ -56,7 +56,10 @@ struct ArenaHomeView: View {
     private var progress: ArenaProgress { growth.progress }
 
     /// 选的角色还没解锁（比如换了一台手机）就用第一个
-    private var chosen: Brawler { progress.isUnlocked(brawler) ? brawler : .knight }
+    private var chosen: Brawler {
+        if ProcessInfo.processInfo.arguments.contains("-demo"), UserDefaults.standard.bool(forKey: "arena.previewRanger") { return .ranger }
+        return progress.isUnlocked(brawler) ? brawler : .knight
+    }
 
     /// 一对一另外带的两个：解锁了的里面奖杯最多的
     private var duelPartners: [Brawler] {
@@ -1668,12 +1671,13 @@ final class ArenaShowcaseView: SCNView {
         }
         include(stage)
         guard low.x.isFinite, high.x.isFinite, low.y < high.y else { return }
-        let height = max(high.y - min(low.y, 0), 1.2)
-        let halfWidth = max(abs(low.x), abs(high.x), 0.65) * 1.15
+        let height: Float = comparisonStill ? 2.4 : max(high.y - min(low.y, 0), 1.2)
+        let halfWidth: Float = comparisonStill ? 1.0 : max(abs(low.x), abs(high.x), 0.65) * 1.15
         let halfHeight = height * 0.6
         let aspect = Float(bounds.width / bounds.height)
         let tangent = tan(Float(camera.fieldOfView) * .pi / 360)
-        let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + max(abs(low.z), abs(high.z), 0.2)
+        let depth: Float = comparisonStill ? 1.0 : max(abs(low.z), abs(high.z), 0.2)
+        let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + depth
         let target = stage.convertPosition(SCNVector3(0, height * 0.5, 0), to: nil)
         eye.position = SCNVector3(0.15, target.y + distance * 0.06, distance)
         eye.look(at: target)
@@ -1710,9 +1714,13 @@ final class ArenaShowcaseView: SCNView {
         if wantsPlayback { start() }
     }
     private var wantsPlayback = false
+    private var comparisonStill: Bool {
+        ProcessInfo.processInfo.arguments.contains("-demo") && UserDefaults.standard.bool(forKey: "arena.rangerStill")
+    }
 
     func start() {
         wantsPlayback = true
+        if comparisonStill { rendersContinuously = false; setNeedsDisplay(); return }
         guard window != nil, UIApplication.shared.applicationState == .active else { return }
         rendersContinuously = true
         isPlaying = false

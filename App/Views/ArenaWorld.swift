@@ -155,6 +155,7 @@ final class ArenaWorldView: SCNView {
         /// 扔出去的炸弹：天上的球、地上的影子
         var ball: SCNNode?
         var shadow: SCNNode?
+        var height: Float = 0.6
     }
 
     /// 开局就建好的刀光、圈、命中。打的时候只改位置，不再新建
@@ -1259,7 +1260,7 @@ final class ArenaWorldView: SCNView {
                 view.ball?.simdPosition = SIMD3(Float(p.pos.x), 0.6 + sin(t * .pi) * arc, Float(p.pos.y))
                 view.shadow?.simdPosition = SIMD3(Float(p.pos.x), 0.035, Float(p.pos.y))
             } else {
-                view.root.simdPosition = SIMD3(Float(p.pos.x), 0.6, Float(p.pos.y))
+                view.root.simdPosition = SIMD3(Float(p.pos.x), view.height, Float(p.pos.y))
             }
         }
         for (id, view) in projectiles where !seen.contains(id) {
@@ -1355,15 +1356,16 @@ final class ArenaWorldView: SCNView {
             ring.firstMaterial = ArenaAvatar.decal(tint.withAlphaComponent(0.9))
             return ring
         })
-        mark.simdPosition = SIMD3(0, -0.56, 0)
+        let shotHeight: Float = owner == .ranger && !BrawlerLook.legacyRangerComparison ? 1.34 * ArenaAvatar.scale : 0.6
+        mark.simdPosition = SIMD3(0, 0.04 - shotHeight, 0)
         mark.castsShadow = false
         mark.renderingOrder = 6
         root.addChildNode(mark)
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
-        root.simdPosition = SIMD3(Float(p.pos.x), 0.6, Float(p.pos.y))
+        root.simdPosition = SIMD3(Float(p.pos.x), shotHeight, Float(p.pos.y))
         root.addParticleSystem(trail(tint, size: p.isSuper ? 0.4 : 0.24, life: p.isSuper ? 0.3 : 0.16))
         world.rootNode.addChildNode(root)
-        return ProjectileView(root: root)
+        return ProjectileView(root: root, height: shotHeight)
     }
 
     /// 一团朝着镜头的光晕（颜色加上去，越叠越亮）
@@ -1525,7 +1527,7 @@ final class ArenaWorldView: SCNView {
             case .knight, .guardian:
                 slashArc(at: at, facing: shooter.facing, color: color, reach: 1.8, sweep: 1.3)
             default:
-                let muzzle = SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
+                let muzzle = avatars[fighter].muzzlePosition ?? SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
                 burst(at: muzzle, color: color, count: 10, speed: 2.2, size: 0.28, life: 0.14)
                 burst(at: muzzle, color: .white, count: 4, speed: 1.4, size: 0.14, life: 0.08)
                 shotStreak(from: at, facing: shooter.facing, color: color)

@@ -49,6 +49,15 @@ enum ArenaArt {
         _surface.emission.rgb += c * fres * 0.2;
         """
 
+    /// Authored atlas keeps its palette. Soft value separation, no saturation boost,
+    /// inverted-hull outline or extra transparent layer. Shared in lobby and combat.
+    static let authoredCharacter = """
+        #pragma body
+        float3 n = normalize(_surface.normal);
+        float wrap = saturate(dot(n, normalize(float3(-0.42, 0.76, 0.48))) * 0.5 + 0.5);
+        _surface.diffuse.rgb *= 0.72 + 0.30 * smoothstep(0.22, 0.85, wrap);
+        """
+
     /// 大厅展台：比场上多一档明暗，再加一圈冷色轮廓光。仍然不走真实灯光，避免和描边抢
     static let stageToon = """
         #pragma body

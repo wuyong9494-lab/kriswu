@@ -61,6 +61,12 @@ struct BrawlerLook {
     /// 个子相对别人多大（同一份模型也能分出高矮）
     var scale: Float = 1
     var weapons: [Weapon] = []
+    /// Original rig/atlas already authored for game scale; preserve its timing and surface normals.
+    var authored = false
+
+    static var legacyRangerComparison: Bool {
+        ProcessInfo.processInfo.arguments.contains("-demo") && UserDefaults.standard.bool(forKey: "arena.legacyRanger")
+    }
 
     static let death = Move(clip: "Death_A", seconds: 0.8)
     static let cheer = "Cheer"
@@ -76,11 +82,16 @@ struct BrawlerLook {
                                special: Move(clip: "1H_Melee_Attack_Stab", from: 0.12, to: 0.72, seconds: 0.42),
                                scale: 1.05)
         case .ranger:
-            return BrawlerLook(file: "Rogue.glb", hidden: ["Knife_Offhand", "2H_Crossbow", "Knife", "Throwable"],
-                               idle: "Idle", run: "Running_A",
-                               attack: Move(clip: "1H_Ranged_Shoot", from: 0.15, to: 0.7, seconds: 0.32),
-                               special: Move(clip: "2H_Ranged_Shoot", from: 0.1, to: 0.85, seconds: 0.62),
-                               scale: 0.96)
+            if legacyRangerComparison {
+                return BrawlerLook(file: "Rogue.glb", hidden: ["Knife_Offhand", "2H_Crossbow", "Knife", "Throwable"],
+                                   idle: "Idle", run: "Running_A",
+                                   attack: Move(clip: "1H_Ranged_Shoot", from: 0.15, to: 0.7, seconds: 0.32),
+                                   special: Move(clip: "2H_Ranged_Shoot", from: 0.1, to: 0.85, seconds: 0.62), scale: 0.96)
+            }
+            return BrawlerLook(file: "Ranger_Original.glb", hidden: [],
+                               idle: "Ranger_Idle", run: "Ranger_Run",
+                               attack: Move(clip: "Ranger_Shoot", seconds: 0.32),
+                               special: Move(clip: "Ranger_Skill", seconds: 0.62), authored: true)
         case .barbarian:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
                                idle: "2H_Melee_Idle", run: "Running_B",
@@ -158,7 +169,7 @@ struct BrawlerLook {
     static func baseTint(_ brawler: Brawler) -> UIColor? {
         switch brawler {
         case .knight: return UIColor(red: 1, green: 0.9, blue: 0.72, alpha: 1)
-        case .ranger: return UIColor(red: 0.72, green: 1, blue: 0.78, alpha: 1)
+        case .ranger: return nil // authored atlas, no identifying colour multiplier
         case .barbarian: return UIColor(red: 1, green: 0.78, blue: 0.62, alpha: 1)
         case .mage: return UIColor(red: 0.7, green: 0.82, blue: 1, alpha: 1)
         case .assassin: return UIColor(red: 0.82, green: 0.84, blue: 1, alpha: 1)
@@ -223,7 +234,7 @@ final class ArenaModels: @unchecked Sendable {
         let name = (file as NSString).deletingPathExtension
         let type = (file as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: type),
-              let parsed = try? ArenaDiagnostics.shared.measure(.modelLoad, { try GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth) }) else {
+              let parsed = try? ArenaDiagnostics.shared.measure(.modelLoad, { try GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth && file != "Ranger_Original.glb") }) else {
             missing.insert(file)
             return nil
         }

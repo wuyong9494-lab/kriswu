@@ -99,6 +99,7 @@ final class ArenaAvatar {
     private var fade: Float = 1
     private var action: Action?
     private var angle: Float = 0
+    private var aimAngle: Float = 0
     /// 身子本来多大。挨打时在这上面弹一下，弹完改回去
     private var bodyScale: Float = 1
     private var punch: Float = 0
@@ -125,7 +126,7 @@ final class ArenaAvatar {
         look = BrawlerLook.of(brawler)
         model = ArenaModels.shared.character(brawler)
         if let model {
-            instance = model.instantiate(outline: ArenaArt.outline)
+            instance = model.instantiate(outline: look.authored ? nil : ArenaArt.outline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
             swingBones = ["upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r"].compactMap { model.node(named: $0) }
             torsoBones = ["spine", "chest", "head"].compactMap { model.node(named: $0) }
@@ -162,7 +163,12 @@ final class ArenaAvatar {
                 }
                 baseTint = tint
             }
-            instance.materials.forEach { Self.finish($0, stage: stageLit) }
+            instance.materials.forEach {
+                if look.authored {
+                    $0.lightingModel = .constant
+                    ArenaArt.grade($0, ArenaArt.authoredCharacter)
+                } else { Self.finish($0, stage: stageLit) }
+            }
             glows = instance.materials.map { $0.emission.contents }
             body.addChildNode(instance.root)
             bodyScale = ArenaAvatar.scale * size * look.scale
@@ -284,6 +290,7 @@ final class ArenaAvatar {
         // 转身：慢慢转过去，不一下子跳
         if fighter.facing.length > 0.01 {
             let target = atan2(Float(fighter.facing.x), Float(fighter.facing.y))
+            aimAngle = target
             if placed {
                 var delta = target - angle
                 while delta > .pi { delta -= 2 * .pi }
@@ -295,7 +302,7 @@ final class ArenaAvatar {
         }
         placed = true
         let leaning = fighter.alive && speed > 0.6
-        let leanTarget: Float = leaning ? -0.16 : 0
+        let leanTarget: Float = leaning && !look.authored ? -0.16 : 0
         lean += (leanTarget - lean) * min(1, dt * 6)
         if recoil > 0 { recoil = max(0, recoil - dt * 2.2) }
         body.simdEulerAngles = SIMD3(lean + recoil, angle, 0)
@@ -388,13 +395,15 @@ final class ArenaAvatar {
         let pips = Int(fighter.ammo.rounded(.down))
         // 弹回来的那一发才做换弹，而且只动手。开枪那一下不算换弹，免得把跑和出手盖住
         if fighter.alive, pips > ammoPips, action == nil, (brawler == .ranger || brawler == .shade) {
-            start(BrawlerLook.Move(clip: "1H_Ranged_Reload", from: 0.08, to: 0.72, seconds: 0.28), hold: false, fullBody: false, upperOnly: true)
+            let reload = look.authored ? BrawlerLook.Move(clip: "1H_Ranged_Reload", seconds: 0.65)
+                : BrawlerLook.Move(clip: "1H_Ranged_Reload", from: 0.08, to: 0.72, seconds: 0.28)
+            start(reload, hold: false, fullBody: false, upperOnly: true)
         }
         ammoPips = pips
 
         if punch > 0 { punch = max(0, punch - dt) }
-        let bob = fighter.alive && speed > 0.6 ? abs(sin(Float(clock) * 14)) * 0.07 : 0
-        let k = bodyScale * (1 + punch * 0.9)
+        let bob = !look.authored && fighter.alive && speed > 0.6 ? abs(sin(Float(clock) * 14)) * 0.07 : 0
+        let k = bodyScale * (look.authored ? 1 : 1 + punch * 0.9)
         body.simdScale = SIMD3(k * (1 + bob * 0.25), k * (1 - bob), k * (1 + bob * 0.25))
 
         let moving = fighter.alive && speed > 0.6
@@ -445,13 +454,28 @@ final class ArenaAvatar {
 
     /// 开了一枪
     func attack() {
+        alignAuthoredShot()
         // 剑圣转圈、书灵放环：整个身子跟着动，不要只动手
         let whole = brawler == .swordsman || brawler == .scholar
         start(look.attack, hold: false, fullBody: whole)
     }
 
+    /// The crossbow is already aimed in the authored rest pose. Match the simulation's
+    /// instant release direction before sampling recoil, without moving the collision body.
+    private func alignAuthoredShot() {
+        guard look.authored else { return }
+        angle = aimAngle
+        body.simdEulerAngles = SIMD3(0, angle, 0)
+    }
+
+    var muzzlePosition: SIMD3<Float>? {
+        guard look.authored, let muzzle = instance?.root.childNode(withName: "muzzle", recursively: true) else { return nil }
+        return muzzle.simdWorldPosition
+    }
+
     /// 放了大招（冲锋、跳、转圈、喝酒、抬手、闪现整个身子都动）
     func special() {
+        alignAuthoredShot()
         switch brawler {
         case .knight, .barbarian, .swordsman, .brewer, .scholar, .shade, .darter:
             start(look.special, hold: false, fullBody: true)
@@ -464,9 +488,11 @@ final class ArenaAvatar {
     func flash(clock: Double, flinch: Bool = false) {
         flashUntil = clock + 0.14
         punch = 0.28
-        recoil = 0.2
+        recoil = look.authored ? 0 : 0.2
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
-            start(BrawlerLook.Move(clip: "Hit_A", from: 0.05, to: 0.5, seconds: 0.2), hold: false, fullBody: false)
+            let hit = look.authored ? BrawlerLook.Move(clip: "Hit_A", seconds: 0.24)
+                : BrawlerLook.Move(clip: "Hit_A", from: 0.05, to: 0.5, seconds: 0.2)
+            start(hit, hold: false, fullBody: false)
         }
         guard !flashing, let instance else { return }
         flashing = true
@@ -502,7 +528,9 @@ final class ArenaAvatar {
             base = Playing(clip: clip)
         }
         if var playing = base {
-            playing.rate = playing.clip.name == look.run ? min(max(speed / 2.4, 0.75), 1.4) : 1
+            let strideSpeed = look.authored ? 2.4 * bodyScale : 2.4
+            playing.rate = playing.clip.name == look.run
+                ? min(max(speed / strideSpeed, look.authored ? 0.25 : 0.75), look.authored ? 2.5 : 1.4) : 1
             playing.time += dt * playing.rate
             base = playing
         }
@@ -533,11 +561,11 @@ final class ArenaAvatar {
             let progress = current.elapsed / max(current.move.seconds, 0.01)
             let linear = min(progress, 1)
             // 前半段走得快，挥出去那一下先到，后半段收回来
-            let eased = 1 - (1 - linear) * (1 - linear)
+            let eased = look.authored ? linear : 1 - (1 - linear) * (1 - linear)
             let t = current.move.from + (current.move.to - current.move.from) * eased
             layer.reset(from: model.restPose)
             current.clip.sample(at: t * current.clip.duration, into: &layer)
-            let fadeIn = min(1, current.elapsed / 0.06)
+            let fadeIn: Float = look.authored ? 1 : min(1, current.elapsed / 0.06)
             let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.22)
             let weight = min(fadeIn, fadeOut)
             if current.upperOnly || (!current.fullBody && moving) {
@@ -552,6 +580,7 @@ final class ArenaAvatar {
 
     /// 片段本身是写实的，幅度小。在静止姿势和当前姿势之间再推一截，相当于加一层，不新做动画
     private func accent(_ pose: inout GLTFModel.Pose, rest: GLTFModel.Pose, moving: Bool) {
+        guard !look.authored else { return }
         let name = action?.clip.name
         let attacking = name != nil && name != "Hit_A" && name != BrawlerLook.death.clip
         let hit = name == "Hit_A"

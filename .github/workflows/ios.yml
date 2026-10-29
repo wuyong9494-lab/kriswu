@@ -50,6 +50,7 @@ jobs:
 
       - name: 生成 Xcode 工程
         run: |
+          python3 scripts/assets/validate_ranger.py
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -219,6 +220,7 @@ jobs:
 
       - name: 生成 Xcode 工程
         run: |
+          python3 scripts/assets/validate_ranger.py
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -274,6 +276,7 @@ jobs:
 
       - name: 生成 Xcode 工程
         run: |
+          python3 scripts/assets/validate_ranger.py
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -447,6 +450,7 @@ jobs:
 
       - name: 生成 Xcode 工程
         run: |
+          python3 scripts/assets/validate_ranger.py
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -481,6 +485,7 @@ jobs:
             -only-testing:SiteTests/ArenaAnimationTests \
             -only-testing:SiteTests/ArenaAudioTests \
             -only-testing:SiteTests/ArenaDiagnosticsTests \
+            -only-testing:SiteTests/ArenaRangerTests \
             -derivedDataPath build \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED=NO > animation-tests.log 2>&1 || { tail -100 animation-tests.log; exit 1; }
           grep -E "Test Case|Executed" animation-tests.log || true
@@ -539,10 +544,18 @@ jobs:
           mkdir -p shots
           CAPTURE_DATA=$(simctl get_app_container "$DEVICE" "$ID" data)
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings arenaDiagnostics; do
+          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings arenaDiagnostics rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter; do
             rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
-            if [ "$s" = arenaSettings ]; then
+            TARGET_TIME=6
+            if [ "$s" = rangerLobbyBefore ] || [ "$s" = rangerLobbyAfter ]; then
+              LEGACY=NO; [ "$s" != rangerLobbyBefore ] || LEGACY=YES
+              simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.previewRanger YES -arena.rangerStill YES -arena.legacyRanger "$LEGACY"
+            elif [ "$s" = rangerBattleBefore ] || [ "$s" = rangerBattleAfter ]; then
+              LEGACY=NO; [ "$s" != rangerBattleBefore ] || LEGACY=YES
+              TARGET_TIME=1.2
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime "$TARGET_TIME" -arena.legacyRanger "$LEGACY"
+            elif [ "$s" = arenaSettings ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.openSettings YES
             elif [ "$s" = arenaBaseline ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample NO -arena.snapshotTime 6
@@ -553,15 +566,15 @@ jobs:
             else
               simctl launch "$DEVICE" "$ID" -demo -screen "$s"
             fi
-            if [ "$s" = arenaBaseline ] || [ "$s" = arenaPurple ]; then
-              python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" <<'PYCODE'
+            if [ "$s" = arenaBaseline ] || [ "$s" = arenaPurple ] || [ "$s" = rangerBattleBefore ] || [ "$s" = rangerBattleAfter ]; then
+              python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" "$TARGET_TIME" <<'PYCODE'
           import json, pathlib, sys, time
           marker = pathlib.Path(sys.argv[1])
           deadline = time.monotonic() + 120
           while time.monotonic() < deadline:
               if marker.exists():
                   evidence = json.loads(marker.read_text())
-                  if 6 <= evidence['simulationTime'] < 6.04:
+                  if float(sys.argv[2]) <= evidence['simulationTime'] < float(sys.argv[2]) + 0.04:
                       print(evidence)
                       break
               time.sleep(0.5)
@@ -575,6 +588,20 @@ jobs:
             fi
             simctl io "$DEVICE" screenshot "shots/$s.png"
           done
+          # Record the implemented ranger in the real lobby, including automatic idle/shoot cycles.
+          simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+          simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.previewRanger YES -arena.rangerStill NO -arena.legacyRanger NO
+          python3 - "$DEVICE" <<'PYCODE'
+          import signal, subprocess, sys, time
+          video = subprocess.Popen(['xcrun', 'simctl', 'io', sys.argv[1], 'recordVideo', '--codec=h264', 'shots/rangerLobbyMotion.mp4'])
+          try:
+              time.sleep(12)
+          finally:
+              video.send_signal(signal.SIGINT)
+              video.wait(timeout=20)
+          if video.returncode != 0:
+              raise SystemExit('Ranger lobby video capture failed')
+          PYCODE
           simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
           after=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
           if [ "$after" -gt "$before" ]; then
