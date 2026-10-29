@@ -81,24 +81,28 @@ struct ArenaHomeView: View {
                     HStack(alignment: .center, spacing: 12) {
                         ScrollView(.vertical, showsIndicators: false) { leftMenu.padding(.bottom, 5) }
                             .frame(width: 76)
-                        VStack(spacing: 0) {
-                            ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
-                                          live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .clipped()
-                            Button { sheet = .brawlers } label: {
-                                HStack(spacing: 8) {
-                                    Text(chosen.name).font(.system(size: 23, weight: .heavy, design: .rounded))
-                                    Text("Lv. \(progress.level(chosen)) · \(chosen.role)")
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                                    Image(systemName: "chevron.left.chevron.right").font(.caption.bold())
-                                }
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 14).frame(minHeight: 44)
-                                .background(Color(red: 0.08, green: 0.12, blue: 0.32).opacity(0.8), in: Capsule())
-                            }.buttonStyle(.plain)
-                                .accessibilityLabel("选择角色，当前\(chosen.name)")
-                        }
+                        ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
+                                      live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                            .overlay(alignment: .bottomLeading) {
+                                // Keep the selector beside the hero, not in a row that steals
+                                // 44 points of vertical camera space on a landscape phone.
+                                Button { sheet = .brawlers } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        HStack(spacing: 6) {
+                                            Text(chosen.name).font(.system(size: 21, weight: .heavy, design: .rounded))
+                                            Image(systemName: "chevron.left.chevron.right").font(.caption.bold())
+                                        }
+                                        Text("Lv. \(progress.level(chosen)) · \(chosen.role)")
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10).padding(.vertical, 6).frame(minHeight: 44)
+                                    .background(Color(red: 0.08, green: 0.12, blue: 0.32).opacity(0.8), in: RoundedRectangle(cornerRadius: 8))
+                                }.buttonStyle(.plain)
+                                    .accessibilityLabel("选择角色，当前\(chosen.name)")
+                            }
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: 8) {
                                 quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
