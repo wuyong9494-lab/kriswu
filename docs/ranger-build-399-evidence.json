@@ -73,7 +73,9 @@
     "presentedFPS": "unmeasured",
     "thermal20to30Minutes": "unverified",
     "phoneInstalledVersion": "unknown",
-    "testflightUpload": false
+    "testflightUploadAtOriginalCIRun": false,
+    "testflightUpload": true,
+    "testflightEvidence": "build-399-testflight-evidence.json"
   },
   "files": {
     "rangerBattleAfter.json": {

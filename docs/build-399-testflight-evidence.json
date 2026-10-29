@@ -1,0 +1,53 @@
+{
+  "build_number": "399",
+  "version": "1.2",
+  "source_sha": "183f980581010aeaed4425bb00a907bda207162f",
+  "source_run_id": 40828150790,
+  "build_id": "d72d4db4-b83f-4e82-8760-fb1acb473c01",
+  "processing_state": "VALID",
+  "uploaded_this_run": true,
+  "notes_written": true,
+  "source_identity_verified_this_run": true,
+  "internal_build_state": "IN_BETA_TESTING",
+  "external_build_state": "READY_FOR_BETA_SUBMISSION",
+  "upload_workflow_run": 40831199953,
+  "upload_workflow_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/40831199953",
+  "upload_request_commit": "43229495f8e7d1f61a5d9874cf4456c561820d94",
+  "upload_workflow_result": "success",
+  "upload_completed_at": "2026-10-29T06:54:36Z",
+  "apple_status_verified_at": "2026-10-29T06:56:57Z",
+  "signed_archive": {
+    "version": "1.2",
+    "build": "399",
+    "app_and_extension_build_verified": true,
+    "source_sha": "183f980581010aeaed4425bb00a907bda207162f",
+    "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d"
+  },
+  "artifacts": [
+    {
+      "id": 12879605571,
+      "name": "testflight-archive-identity",
+      "digest": "sha256:076d7006582b7829bfe8cd48dce3ae500291aed065900b4d9819be36a0b6c662",
+      "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/40831199953/artifacts/12879605571"
+    },
+    {
+      "id": 12879021524,
+      "name": "testflight-preflight",
+      "digest": "sha256:4b172bd6973ef2868926553b78defc28ac75714f44b7cebf57585b98fb376c23",
+      "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/40831199953/artifacts/12879021524"
+    },
+    {
+      "id": 12878159600,
+      "name": "testflight-apple-status",
+      "digest": "sha256:1fa36a756a8c98fcdc1ef40ef7e6cb33989be62a14a6ca3a346b55bf44b4eae3",
+      "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/40831199953/artifacts/12878159600"
+    }
+  ],
+  "validation": {
+    "promotion_regressions": 6,
+    "source_tests": "Reused the completed Build 399 CI run; no app code changes or redundant diagnostic build",
+    "physical_iPhone_17_Pro_Max_performance": "unverified",
+    "phone_installed_version": "unknown",
+    "external_beta_submission": "not submitted"
+  }
+}
