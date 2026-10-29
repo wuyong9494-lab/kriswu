@@ -176,7 +176,8 @@ struct ArenaHomeView: View {
     }
 
     private var heroStatus: some View {
-        Button { sheet = .loadout } label: {
+        let loadout = progress.loadout(for: chosen)
+        return Button { sheet = .loadout } label: {
             HStack(spacing: 5) {
                 HStack(spacing: 4) {
                     ArenaLobbyIcon("ArenaIconTrophy").frame(width: 22, height: 24)
@@ -189,11 +190,35 @@ struct ArenaHomeView: View {
                     .frame(width: 32, height: 36)
                     .background(Color.purple, in: Capsule())
                     .overlay(Capsule().stroke(Color(red: 0.93, green: 0.49, blue: 1), lineWidth: 3))
-                ArenaLobbyIcon("ArenaIconUpgrade").frame(width: 28, height: 28)
+                HStack(spacing: 3) {
+                    equipmentBadge("bolt.fill", tint: .green, unlocked: loadout.gadget != nil)
+                    equipmentBadge("star.fill", tint: .yellow, unlocked: loadout.starPower != nil)
+                    equipmentBadge("bolt.shield.fill", tint: .purple, unlocked: loadout.hypercharge)
+                }.padding(4)
+                    .background(Color(red: 0.14, green: 0.13, blue: 0.25), in: RoundedRectangle(cornerRadius: 3))
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black.opacity(0.7), lineWidth: 2))
             }.font(.system(size: 17, weight: .black, design: .rounded))
                 .foregroundStyle(.white).arenaOutline(1)
                 .padding(.vertical, 4)
-        }.buttonStyle(.plain).accessibilityLabel("\(chosen.name)，等级\(progress.level(chosen))，升级与技能")
+        }.buttonStyle(.plain).accessibilityLabel("\(chosen.name)，等级\(progress.level(chosen))，小道具\(loadout.gadget?.name ?? "未解锁")，星徽\(loadout.starPower?.name ?? "未解锁")，超级充能\(loadout.hypercharge ? "已解锁" : "未解锁")，打开升级与技能")
+    }
+
+    private func equipmentBadge(_ symbol: String, tint: Color, unlocked: Bool) -> some View {
+        Image(systemName: unlocked ? symbol : "lock.fill")
+            .font(.system(size: 14, weight: .black))
+            .foregroundStyle(unlocked ? Color.white : .white.opacity(0.55))
+            .frame(width: 25, height: 25)
+            .background(unlocked ? tint : Color.gray.opacity(0.35), in: Circle())
+            .overlay(Circle().stroke(Color.black.opacity(0.65), lineWidth: 1.5))
+    }
+
+    private var seasonTierPoints: Int {
+        progress.season.tier >= ArenaSeason.tiers ? ArenaSeason.pointsPerTier : progress.season.points % ArenaSeason.pointsPerTier
+    }
+
+    private var hasSeasonPrize: Bool {
+        let tier = min(progress.season.tier, ArenaSeason.tiers)
+        return tier > 0 && (1...max(tier, 1)).contains { !progress.season.claimed.contains($0) }
     }
 
     private func quietMenu(_ title: String, symbol: String, compact: Bool = false, action: @escaping () -> Void) -> some View {
@@ -269,10 +294,21 @@ struct ArenaHomeView: View {
                         Text("\(progress.season.tier)").font(.system(size: 22, weight: .black))
                     }
                     Text("乱斗通行证").font(.system(size: 11, weight: .black))
-                    ProgressView(value: Double(progress.season.points % ArenaSeason.pointsPerTier), total: Double(ArenaSeason.pointsPerTier))
+                    ProgressView(value: Double(seasonTierPoints), total: Double(ArenaSeason.pointsPerTier))
                         .tint(.yellow).frame(width: 98)
+                    Text("\(seasonTierPoints)/\(ArenaSeason.pointsPerTier)")
+                        .font(.system(size: 9, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.85))
                 }.padding(.horizontal, 8).frame(height: 65)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
+                .overlay(alignment: .topTrailing) {
+                    if hasSeasonPrize {
+                        Text("!").font(.system(size: 13, weight: .black)).foregroundStyle(.white)
+                            .frame(width: 20, height: 20).background(.red, in: Circle())
+                            .overlay(Circle().stroke(.black, lineWidth: 1.5)).offset(x: 5, y: -5)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
             Button { sheet = .season } label: {
                 VStack(spacing: 1) {
                     ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
@@ -1701,6 +1737,17 @@ final class ArenaShowcaseView: SCNView {
         // surface instead of stacking a second pedestal under the hero.
         stage.simdPosition = .zero
         world.rootNode.addChildNode(stage)
+        let shadow = SCNNode(geometry: SCNPlane(width: 1.3, height: 0.65))
+        shadow.name = "lobby-contact-shadow"
+        let shadowMaterial = SCNMaterial()
+        shadowMaterial.lightingModel = .constant
+        shadowMaterial.diffuse.contents = Self.contactShadow
+        shadowMaterial.writesToDepthBuffer = false
+        shadow.geometry?.firstMaterial = shadowMaterial
+        shadow.eulerAngles.x = -Float.pi / 2
+        shadow.position = SCNVector3(0, 0.008, 0)
+        shadow.castsShadow = false
+        stage.addChildNode(shadow)
     }
 
     override func layoutSubviews() {
@@ -1720,7 +1767,7 @@ final class ArenaShowcaseView: SCNView {
         var low = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
         var high = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
         func include(_ node: SCNNode) {
-            guard !node.isHidden else { return }
+            guard !node.isHidden, node.name != "lobby-contact-shadow" else { return }
             if let geometry = node.geometry {
                 let (a, b) = geometry.boundingBox
                 for x in [a.x, b.x] { for y in [a.y, b.y] { for z in [a.z, b.z] {
@@ -1781,6 +1828,17 @@ final class ArenaShowcaseView: SCNView {
         made.update(fighter, visible: true, translucent: false, cheering: false, dt: 0, clock: clock)
         fitShowcaseCamera()
     }
+
+    private static let contactShadow: UIImage = {
+        UIGraphicsImageRenderer(size: CGSize(width: 256, height: 96)).image { renderer in
+            let cg = renderer.cgContext
+            cg.scaleBy(x: 1, y: 0.375)
+            let colors = [UIColor.black.withAlphaComponent(0.4).cgColor, UIColor.clear.cgColor]
+            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: nil) else { return }
+            cg.drawRadialGradient(gradient, startCenter: CGPoint(x: 128, y: 128), startRadius: 0,
+                                  endCenter: CGPoint(x: 128, y: 128), endRadius: 128, options: [])
+        }
+    }()
 
     /// Append gallery-only light to each owned material, after its existing
     /// atlas/toon surface shader. Combat instances never receive this modifier.
@@ -1871,7 +1929,7 @@ final class ArenaShowcaseView: SCNView {
         }
         if !dragging { spin *= max(0, 1 - dt * 1.5) }
         spin = min(1.6, max(-1.6, spin))
-        let angle = 0.35 * Float(sin(clock * 0.6)) + spin
+        let angle = -0.14 + (UIAccessibility.isReduceMotionEnabled ? 0 : 0.06 * Float(sin(clock * 0.6))) + spin
         fighter.facing = V2(Double(sin(angle)), Double(cos(angle)))
         avatar?.update(fighter, visible: true, translucent: false, cheering: clock < cheerUntil, dt: dt, clock: clock)
         if !dragging, clock > cheerUntil, clock > nextSwing {
