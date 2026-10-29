@@ -140,15 +140,22 @@ struct ArenaLobbyBackdrop: View {
         GeometryReader { geo in
             ZStack {
                 Color(red: 0.025, green: 0.10, blue: 0.62)
-                Image("ArenaLobbyMoonCity")
-                    .resizable()
-                    .scaledToFill()
+                // Stretch only the outer extension. The center uses image-height
+                // coordinates so the moon stays circular and the rooftop stays at
+                // the same vertical anchor on phones and tablets.
+                Image("ArenaLobbyMoonCity").resizable()
                     .frame(width: geo.size.width, height: geo.size.height)
-                    .clipped()
+                Image("ArenaLobbyMoonCity").resizable()
+                    .frame(width: geo.size.height * (1672.0 / 941.0), height: geo.size.height)
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0),
+                                                 .init(color: .white, location: 0.06),
+                                                 .init(color: .white, location: 0.94),
+                                                 .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 LinearGradient(colors: [.black.opacity(0.12), .clear, .clear, .black.opacity(0.18)],
                                startPoint: .top, endPoint: .bottom)
             }
-        }.allowsHitTesting(false).accessibilityHidden(true)
+        }.clipped().allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -184,4 +191,25 @@ struct ArenaLobbyPlate: Shape {
         path.closeSubpath()
         return path
     }
+}
+
+/// Shared lobby layout coordinates; controls retain at least 44-point hit areas.
+struct ArenaLobbyComposition {
+    let size: CGSize
+    var compact: Bool { size.height < 370 }
+    var railGap: CGFloat { compact ? 0 : 10 }
+    var menuHeight: CGFloat { compact ? 44 : 49 }
+    var heroSize: CGSize { CGSize(width: size.width * 0.48, height: size.height * 0.70) }
+    var heroCenter: CGPoint { CGPoint(x: size.width * 0.51, y: size.height * 0.51) }
+    var socialCenter: CGPoint {
+        let railHeight = 3 * menuHeight + 2 * railGap
+        let y = compact ? size.height * 0.40 : min(size.height * 0.40, size.height - 152.5 - railHeight / 2)
+        return CGPoint(x: size.width - 50, y: y)
+    }
+    var adventureCenter: CGPoint { CGPoint(x: compact ? size.width * 0.73 : size.width - 82, y: size.height - 122) }
+    var adventureSize: CGSize { CGSize(width: compact ? 114 : 132, height: 45) }
+    var inviteCenter: CGPoint { CGPoint(x: size.width * 0.69, y: size.height * (compact ? 0.43 : 0.56)) }
+    var socialFrame: CGRect { CGRect(x: socialCenter.x - 33.5, y: socialCenter.y - (3 * menuHeight + 2 * railGap) / 2, width: 67, height: 3 * menuHeight + 2 * railGap) }
+    var adventureFrame: CGRect { CGRect(x: adventureCenter.x - adventureSize.width / 2, y: adventureCenter.y - 22.5, width: adventureSize.width, height: 45) }
+    var inviteFrame: CGRect { CGRect(x: inviteCenter.x - 22, y: inviteCenter.y - 22, width: 44, height: 44) }
 }

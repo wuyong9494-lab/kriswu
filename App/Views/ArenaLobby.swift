@@ -76,14 +76,14 @@ struct ArenaHomeView: View {
     var body: some View {
         GeometryReader { geo in
             let wide = geo.size.width > geo.size.height
-            let compact = geo.size.height < 370
-            let footerHeight: CGFloat = 84
+            let composition = ArenaLobbyComposition(size: geo.size)
+            let compact = composition.compact
             ZStack {
                 ArenaLobbyBackground()
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                               live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                    .frame(width: geo.size.width * 0.48, height: geo.size.height * 0.70)
-                    .position(x: geo.size.width * 0.51, y: geo.size.height * 0.47)
+                    .frame(width: composition.heroSize.width, height: composition.heroSize.height)
+                    .position(composition.heroCenter)
                 VStack(spacing: 0) {
                     compactTopBar
                     Spacer(minLength: 0)
@@ -92,7 +92,7 @@ struct ArenaHomeView: View {
                     .offset(y: lobbyPresented || reduceLobbyMotion ? 0 : 12)
                     .opacity(lobbyPresented || reduceLobbyMotion ? 1 : 0)
                 heroStatus
-                    .position(x: geo.size.width * 0.51, y: 76)
+                    .position(x: geo.size.width * 0.51, y: 64)
                     .opacity(lobbyPresented ? 1 : 0)
                 // Reference composition: event tile above a compact left rail,
                 // social rail on the right, equipment beside the hero's feet.
@@ -103,23 +103,23 @@ struct ArenaHomeView: View {
                     }.foregroundStyle(.white).frame(width: 68, height: 47)
                 }.buttonStyle(ArenaLobbyRailStyle())
                     .position(x: compact ? geo.size.width * 0.25 : 48, y: 82)
-                VStack(spacing: compact ? 0 : 10) {
-                    quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
-                    quietMenu("英雄", symbol: "person.crop.square.fill") { sheet = .brawlers }
-                    quietMenu("活动", symbol: "star.circle.fill") { sheet = .season }
+                VStack(spacing: composition.railGap) {
+                    quietMenu("商店", symbol: "bag.fill", compact: compact) { sheet = .shop }
+                    quietMenu("英雄", symbol: "person.crop.square.fill", compact: compact) { sheet = .brawlers }
+                    quietMenu("活动", symbol: "star.circle.fill", compact: compact) { sheet = .season }
                 }.position(x: 48, y: geo.size.height * (compact ? 0.50 : 0.53))
-                VStack(spacing: compact ? 0 : 10) {
-                    quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
-                    quietMenu("战队", symbol: "shield.fill") { sheet = .together }
-                    quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
-                }.position(x: geo.size.width - 50, y: geo.size.height * 0.46)
+                VStack(spacing: composition.railGap) {
+                    quietMenu("好友", symbol: "person.2.fill", compact: compact) { sheet = .friends }
+                    quietMenu("战队", symbol: "shield.fill", compact: compact) { sheet = .together }
+                    quietMenu("组队", symbol: "person.3.fill", compact: compact) { sheet = .party }
+                }.position(composition.socialCenter)
                 Button { adventure = true } label: {
                     HStack(spacing: 5) {
                         ArenaLobbyIcon("ArenaIconAdventure").frame(width: 35, height: 35)
                         Text("冒险乐园").font(.system(size: 15, weight: .black))
-                    }.frame(width: compact ? 114 : 132, height: 45)
+                    }.frame(width: composition.adventureSize.width, height: composition.adventureSize.height)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
-                    .position(x: geo.size.width - 82, y: geo.size.height - footerHeight - 38)
+                    .position(composition.adventureCenter)
                 VStack(spacing: 8) {
                     Button { sheet = .loadout } label: {
                         ArenaLobbyIcon("ArenaIconUpgrade").frame(width: 29, height: 29)
@@ -136,7 +136,7 @@ struct ArenaHomeView: View {
                     Image(systemName: "plus").font(.system(size: 28, weight: .black))
                         .frame(width: 44, height: 44)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
-                    .position(x: geo.size.width * 0.69, y: geo.size.height * 0.56)
+                    .position(composition.inviteCenter)
                     .accessibilityLabel("邀请队友")
             }
         }
@@ -196,7 +196,7 @@ struct ArenaHomeView: View {
         }.buttonStyle(.plain).accessibilityLabel("\(chosen.name)，等级\(progress.level(chosen))，升级与技能")
     }
 
-    private func quietMenu(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+    private func quietMenu(_ title: String, symbol: String, compact: Bool = false, action: @escaping () -> Void) -> some View {
         let item = ArenaLobbyEmblem.menu(symbol)
         return Button(action: action) {
             VStack(spacing: -2) {
@@ -204,7 +204,7 @@ struct ArenaHomeView: View {
                     .frame(width: 35, height: 31).rotationEffect(.degrees(-5))
                     .shadow(color: .black.opacity(0.8), radius: 0, x: 1, y: 2)
                 Text(title).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
-            }.foregroundStyle(.white).frame(width: 67, height: 49)
+            }.foregroundStyle(.white).frame(width: 67, height: compact ? 44 : 49)
         }.buttonStyle(ArenaLobbyRailStyle())
             .accessibilityLabel(title)
     }

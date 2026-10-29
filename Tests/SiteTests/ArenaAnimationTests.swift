@@ -6,6 +6,19 @@ import Metal
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testLobbyCriticalControlsStaySeparateAcrossPhoneAndTabletSizes() {
+        for size in [CGSize(width: 568, height: 320), CGSize(width: 667, height: 375), CGSize(width: 844, height: 390), CGSize(width: 932, height: 430), CGSize(width: 1024, height: 768), CGSize(width: 1194, height: 834)] {
+            let layout = ArenaLobbyComposition(size: size)
+            let content = CGRect(x: 0, y: 0, width: size.width, height: size.height - 92)
+            for rect in [layout.socialFrame, layout.adventureFrame, layout.inviteFrame] {
+                XCTAssertTrue(content.contains(rect), "Control outside content at \\(size)")
+            }
+            XCTAssertFalse(layout.socialFrame.intersects(layout.adventureFrame), "Social and adventure overlap at \\(size)")
+            XCTAssertFalse(layout.inviteFrame.intersects(layout.adventureFrame), "Invite and adventure overlap at \\(size)")
+            XCTAssertGreaterThanOrEqual(layout.menuHeight, 44)
+        }
+    }
+
     func testLobbySurfaceComposesWithAuthoredAtlasAndActuallyRenders() throws {
         let renderer = SCNRenderer(device: try XCTUnwrap(MTLCreateSystemDefaultDevice()), options: nil)
         let scene = SCNScene()
