@@ -53,23 +53,31 @@ final class ArenaSound: NSObject {
 
     @objc private func suspendApp() { pause(.background) }
     @objc private func resumeApp() { state.resume(.background); reconcile() }
-    @objc private func interruption(_ note: Notification) {
-        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
-        if type == .began { sessionOn = false; pause(.interruption) }
-        else {
-            let options = AVAudioSession.InterruptionOptions(rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
-            if options.contains(.shouldResume) { state.resume(.interruption); reconcile() }
+    @objc nonisolated private func interruption(_ note: Notification) {
+        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt else { return }
+        let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+        // AVAudioSession notifications are not guaranteed to arrive on the main thread.
+        Task { @MainActor [weak self] in
+            guard let self, let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+            if type == .began { self.sessionOn = false; self.pause(.interruption) }
+            else if AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) {
+                self.state.resume(.interruption)
+                self.reconcile()
+            }
         }
     }
-    @objc private func routeChanged(_ note: Notification) {
+    @objc nonisolated private func routeChanged(_ note: Notification) {
         let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
-        if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue {
-            // Removing headphones must not unexpectedly play through the speaker.
-            pause(.interruption)
-        } else { reconcile() }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue {
+                self.pause(.interruption)
+            } else { self.reconcile() }
+        }
     }
-    @objc private func silenceHintChanged() { reconcile() }
+    @objc nonisolated private func silenceHintChanged() {
+        Task { @MainActor [weak self] in self?.reconcile() }
+    }
 
     func pauseRenderer(owner: ObjectIdentifier? = nil) {
         guard owner == matchOwner else { return }
@@ -161,7 +169,7 @@ final class ArenaSound: NSObject {
         guard inMatch, state.canPlay, !effectsMuted, sessionOn, volume > 0.02 else { return }
         // Players are prewarmed at scene entry, never created/decoded by a hit.
         let critical = [Effect.hit, .win, .lose, .respawn].contains(effect)
-        let active = players.values.joined().filter(\.isPlaying).count
+        let active = players.values.reduce(0) { count, voices in count + voices.reduce(0) { $0 + ($1.isPlaying ? 1 : 0) } }
         guard active < (critical ? 12 : 8) else { return }
         // 同一种声音 30 毫秒内只响一次，免得一帧里好几下叠成噪音
         let now = ProcessInfo.processInfo.systemUptime

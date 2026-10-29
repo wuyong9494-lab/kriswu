@@ -746,13 +746,6 @@ final class ArenaWorldView: SCNView {
     /// 场地外两圈树、几块石头，分队玩法两头插旗。网格大家共用，不描边、不投影。不压成一整块：那一下会卡住进对局
     private func scenery(_ game: ArenaGame) -> SCNNode {
         let map = game.map
-        if controller.benchmark {
-            rig.simdPosition = SIMD3(Float(map.center.x), 0, Float(map.center.y))
-            cameraNode.simdPosition = Self.cameraOffset
-            cameraNode.simdEulerAngles = SIMD3(-atan2(Self.cameraOffset.y, Self.cameraOffset.z), 0, 0)
-            cameraPlaced = true
-            return
-        }
         let width = Double(map.width), height = Double(map.height)
         let models = ArenaModels.shared
         let trees = ["trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
