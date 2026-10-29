@@ -128,61 +128,19 @@ struct ArenaLobbyButtonStyle: ButtonStyle {
     }
 }
 
-/// Original, static arena backdrop. Broad value groups leave the hero silhouette clear.
-/// The architecture stays at the edges; no decorative animation competes with character playback.
+/// Bundled moon-city artwork: one static image, with live controls and 3D hero above it.
 struct ArenaLobbyBackdrop: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                LinearGradient(colors: [Color(red: 0.01, green: 0.09, blue: 0.56),
-                                        Color(red: 0.02, green: 0.22, blue: 0.91),
-                                        Color(red: 0.36, green: 0.12, blue: 0.72)], startPoint: .top, endPoint: .bottom)
-                RadialGradient(colors: [Color.purple.opacity(0.9), .clear], center: UnitPoint(x: 0.5, y: 0.52),
-                               startRadius: 0, endRadius: geo.size.height * 0.53)
-                Canvas { context, size in
-                    let w = size.width, h = size.height
-                    let moon = CGRect(x: w * 0.5 - h * 0.31, y: h * 0.18, width: h * 0.62, height: h * 0.62)
-                    context.fill(Path(ellipseIn: moon.insetBy(dx: -8, dy: -8)), with: .color(Color.pink.opacity(0.14)))
-                    context.fill(Path(ellipseIn: moon), with: .color(Color(red: 1, green: 0.88, blue: 0.89)))
-                    // Three depths of angular skyline; the center stays clear for the hero.
-                    for layer in 0..<3 {
-                        let base = h * (0.72 + CGFloat(layer) * 0.08)
-                        for i in 0..<18 {
-                            let x = CGFloat(i) * w / 17 - w * 0.03
-                            let central = abs(x + w * 0.03 - w * 0.5) < h * 0.23
-                            let roof = h * (0.10 + CGFloat((i * 7 + layer * 11) % 9) * 0.018) * (central ? 0.28 : 1)
-                            let rect = CGRect(x: x, y: base - roof, width: w * 0.066, height: h - base + roof)
-                            let blue = 0.39 - Double(layer) * 0.09
-                            context.fill(Path(rect), with: .color(Color(red: 0.025, green: 0.065, blue: blue)))
-                            context.fill(Path(CGRect(x: x, y: base - roof, width: 3, height: roof)),
-                                         with: .color(Color(red: 0.57, green: 0.24, blue: 0.89).opacity(layer == 0 ? 0.8 : 0.35)))
-                            if i % 3 == 0 {
-                                context.fill(Path(CGRect(x: x + w * 0.025, y: base - roof - h * 0.05,
-                                                         width: 3, height: h * 0.05)), with: .color(Color(red: 0.04, green: 0.07, blue: blue)))
-                            }
-                        }
-                    }
-                    // Broad rooftop with converging perspective seams and a neon
-                    // perimeter. All decoration is static and shares one Canvas.
-                    var floor = Path()
-                    floor.addLines([CGPoint(x: w * 0.34, y: h * 0.73), CGPoint(x: w * 0.67, y: h * 0.73),
-                                    CGPoint(x: w * 0.86, y: h * 0.87), CGPoint(x: w * 0.15, y: h * 0.87)])
-                    floor.closeSubpath()
-                    context.fill(floor, with: .color(Color(red: 0.035, green: 0.055, blue: 0.16)))
-                    context.stroke(floor, with: .color(Color(red: 0.20, green: 0.33, blue: 0.58)), lineWidth: 4)
-                    var inset = Path()
-                    inset.addLines([CGPoint(x: w * 0.36, y: h * 0.75), CGPoint(x: w * 0.65, y: h * 0.75),
-                                    CGPoint(x: w * 0.79, y: h * 0.85), CGPoint(x: w * 0.22, y: h * 0.85)])
-                    inset.closeSubpath()
-                    context.stroke(inset, with: .color(Color(red: 1, green: 0.43, blue: 0.68)), style: StrokeStyle(lineWidth: 5, dash: [22, 11]))
-                    for i in 0..<5 {
-                        let x = w * (0.38 + CGFloat(i) * 0.06)
-                        var seam = Path(); seam.move(to: CGPoint(x: x, y: h * 0.76))
-                        seam.addLine(to: CGPoint(x: w * 0.5 + (x - w * 0.5) * 1.8, y: h * 0.84))
-                        context.stroke(seam, with: .color(.white.opacity(0.09)), lineWidth: 1)
-                    }
-                }
-                LinearGradient(colors: [.black.opacity(0.25), .clear, .clear, .black.opacity(0.25)], startPoint: .top, endPoint: .bottom)
+                Color(red: 0.025, green: 0.10, blue: 0.62)
+                Image("ArenaLobbyMoonCity")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                LinearGradient(colors: [.black.opacity(0.12), .clear, .clear, .black.opacity(0.18)],
+                               startPoint: .top, endPoint: .bottom)
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
     }

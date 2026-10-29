@@ -715,7 +715,7 @@ jobs:
     if: >-
       always() && needs.build.result == 'success' && needs.core-tests-linux.result == 'success' &&
       (needs.arena-look.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.arena-look.result == 'skipped')) &&
-      (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-reference-fidelity')))
+      (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || (github.ref == 'refs/heads/codex/arena-reference-fidelity' && contains(github.event.head_commit.message, '[lobby-ready]')))))
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15

@@ -6,6 +6,13 @@ import Metal
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testLobbyEnvironmentArtworkIsBundledAndDecodable() throws {
+        let image = try XCTUnwrap(UIImage(named: "ArenaLobbyMoonCity", in: Bundle(for: ArenaShowcaseView.self), compatibleWith: nil))
+        let cg = try XCTUnwrap(image.cgImage)
+        XCTAssertGreaterThan(cg.width, cg.height)
+        XCTAssertGreaterThan(cg.height, 500)
+    }
+
     func testBushExitRestoresAuthoredSizeAfterRepeatedBoundaryReversals() {
         let node = SCNNode()
         let base = SIMD3<Float>(1.63, 1.45, 1.51)

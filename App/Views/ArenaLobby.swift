@@ -16,6 +16,8 @@ struct ArenaHomeView: View {
     @State private var playing: ArenaEntry?
     @State private var lobby: LobbyEntry?
     @State private var sheet: Sheet?
+    @State private var lobbyPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceLobbyMotion
     /// 角色墙里点开的那一个（第三层：本事、攻击、大招）
     @State private var inspected: Brawler?
     /// 在「和同事打」里开的房间（面板收起来以后再进房间）
@@ -87,8 +89,11 @@ struct ArenaHomeView: View {
                     Spacer(minLength: 0)
                     lobbyFooter(wide: wide)
                 }.padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
+                    .offset(y: lobbyPresented || reduceLobbyMotion ? 0 : 12)
+                    .opacity(lobbyPresented || reduceLobbyMotion ? 1 : 0)
                 heroStatus
                     .position(x: geo.size.width * 0.51, y: 76)
+                    .opacity(lobbyPresented ? 1 : 0)
                 // Reference composition: event tile above a compact left rail,
                 // social rail on the right, equipment beside the hero's feet.
                 Button { sheet = .season } label: {
@@ -140,6 +145,8 @@ struct ArenaHomeView: View {
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .onAppear {
+            if reduceLobbyMotion { lobbyPresented = true }
+            else { withAnimation(.easeOut(duration: 0.24)) { lobbyPresented = true } }
             growth.refreshSeason()
             if UserDefaults.standard.bool(forKey: "arena.openSettings") { sheet = .settings }
             ArenaSound.shared.enterLobby()
@@ -1636,6 +1643,7 @@ final class ArenaShowcaseView: SCNView {
     private var taps = 0
     /// 现在穿的第几套皮肤
     private var wearing = 0
+    private var lobbyRim: SCNLight?
     private var captureReadyWritten = false
     private var captureLayoutSize = CGSize.zero
 
@@ -1702,41 +1710,14 @@ final class ArenaShowcaseView: SCNView {
         rim.light = SCNLight()
         rim.light?.type = .directional
         rim.light?.intensity = 640
+        lobbyRim = rim.light
         rim.light?.color = UIColor(red: 0.55, green: 0.72, blue: 1, alpha: 1)
         rim.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.25, -0.35, 1)))
         world.rootNode.addChildNode(rim)
 
-        let height: Float = 0.06
-        let deck = SCNBox(width: 2.1, height: CGFloat(height), length: 1.2, chamferRadius: 0.015)
-        let base = SCNMaterial()
-        base.lightingModel = .constant
-        base.diffuse.contents = UIColor(red: 0.08, green: 0.10, blue: 0.25, alpha: 1)
-        deck.firstMaterial = base
-        let pedestal = SCNNode(geometry: deck)
-        pedestal.position = SCNVector3(0, height / 2, 0)
-        world.rootNode.addChildNode(pedestal)
-        let neon = SCNMaterial()
-        neon.lightingModel = .constant
-        neon.diffuse.contents = UIColor(red: 1, green: 0.35, blue: 0.64, alpha: 1)
-        for x in [Float(-0.93), 0.93] {
-            let strip = SCNNode(geometry: SCNBox(width: 0.035, height: 0.008, length: 1.05, chamferRadius: 0))
-            strip.geometry?.firstMaterial = neon
-            strip.position = SCNVector3(x, height + 0.005, 0)
-            world.rootNode.addChildNode(strip)
-        }
-        for z in [Float(-0.53), 0.53] {
-            let strip = SCNNode(geometry: SCNBox(width: 1.9, height: 0.008, length: 0.035, chamferRadius: 0))
-            strip.geometry?.firstMaterial = neon
-            strip.position = SCNVector3(0, height + 0.005, z)
-            world.rootNode.addChildNode(strip)
-        }
-        for i in 0..<6 {
-            let plate = SCNNode(geometry: SCNBox(width: 0.15, height: 0.009, length: 0.10, chamferRadius: 0))
-            plate.geometry?.firstMaterial = neon
-            plate.position = SCNVector3(Float(i) * 0.31 - 0.78, height + 0.006, 0.40)
-            world.rootNode.addChildNode(plate)
-        }
-        stage.simdPosition = SIMD3(0, height, 0)
+        // The rooftop is in the environment artwork. Keep a single contact
+        // surface instead of stacking a second pedestal under the hero.
+        stage.simdPosition = .zero
         world.rootNode.addChildNode(stage)
     }
 
@@ -1869,6 +1850,9 @@ final class ArenaShowcaseView: SCNView {
         let dt = Float(min(max(timestamp - (lastTimestamp ?? timestamp), 0), 0.1))
         lastTimestamp = timestamp
         clock += Double(dt)
+        if !UIAccessibility.isReduceMotionEnabled {
+            lobbyRim?.intensity = 640 + 45 * sin(clock * 0.75)
+        }
         if !dragging { spin *= max(0, 1 - dt * 1.5) }
         spin = min(1.6, max(-1.6, spin))
         let angle = 0.35 * Float(sin(clock * 0.6)) + spin
