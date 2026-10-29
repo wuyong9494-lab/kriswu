@@ -309,7 +309,10 @@ final class ArenaWorldView: SCNView {
                 let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let evidence: [String: Any] = ["simulationTime": controller.game.time, "seed": 170017,
                     "map": controller.game.map.id, "purple": purpleSample, "camera": "fixed map center",
-                    "deviceWidth": bounds.width, "deviceHeight": bounds.height]
+                    "deviceWidth": bounds.width, "deviceHeight": bounds.height,
+                    "rangerAsset": BrawlerLook.of(.ranger).file,
+                    "fighters": controller.game.fighters.map { ["id": $0.id, "x": $0.pos.x, "y": $0.pos.y,
+                        "health": $0.health, "alive": $0.alive] as [String: Any] }]
                 if let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) {
                     try? data.write(to: folder.appendingPathComponent("arena-capture-ready.json"), options: .atomic)
                 }

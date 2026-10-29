@@ -506,6 +506,27 @@ jobs:
           }
           APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
           ID=com.kriswu.shiftreminder
+          swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-arena-capture
+          if /tmp/check-arena-capture Tests/Fixtures/arena-launch-placeholder.png; then
+            echo "::error::截图检查误接受了 Build 398 的真实白屏"; exit 1
+          fi
+          wait_lobby() {
+            python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" "$1" <<'PYCODE'
+          import json, pathlib, sys, time
+          marker = pathlib.Path(sys.argv[1])
+          expected = 'Rogue.glb' if sys.argv[2] == 'YES' else 'Ranger_Original.glb'
+          deadline = time.monotonic() + 120
+          while time.monotonic() < deadline:
+              if marker.exists():
+                  evidence = json.loads(marker.read_text())
+                  if evidence.get('scene') == 'rangerLobby' and evidence.get('asset') == expected:
+                      print(evidence)
+                      break
+              time.sleep(0.5)
+          else:
+              raise SystemExit('Ranger lobby never completed model loading and camera layout')
+          PYCODE
+          }
           simctl shutdown all || true
           # XCTest has already installed/launched the app on DEVICE. Use a fresh
           # simulator for capture so its launch services and app data are isolated.
@@ -546,31 +567,24 @@ jobs:
           mkdir -p shots
           CAPTURE_DATA=$(simctl get_app_container "$DEVICE" "$ID" data)
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          # Prioritize this batch's four acceptance frames. Earlier map/settings/diagnostic
-          # baselines remain in Builds 396/397; do not delay ranger capture behind them.
-          for s in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter arena arenaPlay; do
+          # Early combat checks the asset before the clustered hits obscure it;
+          # retain the crowded 1.2 s pair as separate readability evidence.
+          for s in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter; do
             rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
             TARGET_TIME=6
             if [ "$s" = rangerLobbyBefore ] || [ "$s" = rangerLobbyAfter ]; then
               LEGACY=NO; [ "$s" != rangerLobbyBefore ] || LEGACY=YES
               simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.previewRanger YES -arena.rangerStill YES -arena.legacyRanger "$LEGACY"
-            elif [ "$s" = rangerBattleBefore ] || [ "$s" = rangerBattleAfter ]; then
-              LEGACY=NO; [ "$s" != rangerBattleBefore ] || LEGACY=YES
-              TARGET_TIME=1.2
-              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime "$TARGET_TIME" -arena.legacyRanger "$LEGACY"
-            elif [ "$s" = arenaSettings ]; then
-              simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.openSettings YES
-            elif [ "$s" = arenaBaseline ]; then
-              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample NO -arena.snapshotTime 6
-            elif [ "$s" = arenaPurple ]; then
-              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime 6
-            elif [ "$s" = arenaPerf ]; then
-              simctl launch "$DEVICE" "$ID" -demo -screen arenaPlay -arena.performanceOverlay YES
+              wait_lobby "$LEGACY"
+              cp "$CAPTURE_DATA/Documents/arena-capture-ready.json" "shots/$s.json"
             else
-              simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+              LEGACY=NO; [[ "$s" != *Before ]] || LEGACY=YES
+              TARGET_TIME=0.25
+              [[ "$s" != rangerCombat* ]] || TARGET_TIME=1.2
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime "$TARGET_TIME" -arena.legacyRanger "$LEGACY"
             fi
-            if [ "$s" = arenaBaseline ] || [ "$s" = arenaPurple ] || [ "$s" = rangerBattleBefore ] || [ "$s" = rangerBattleAfter ]; then
+            if [[ "$s" != rangerLobby* ]]; then
               python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" "$TARGET_TIME" <<'PYCODE'
           import json, pathlib, sys, time
           marker = pathlib.Path(sys.argv[1])
@@ -586,15 +600,20 @@ jobs:
               raise SystemExit('Snapshot did not reach the required simulation time; refusing mismatched capture')
           PYCODE
               cp "$CAPTURE_DATA/Documents/arena-capture-ready.json" "shots/$s.json"
-              sleep 2
-            else
-              sleep 12
             fi
-            simctl io "$DEVICE" screenshot "shots/$s.png"
+            sleep 2
+            for attempt in 1 2 3; do
+              simctl io "$DEVICE" screenshot "shots/$s.png"
+              if /tmp/check-arena-capture "shots/$s.png"; then break; fi
+              [ "$attempt" -lt 3 ] || { echo "::error::截图仍是启动页或空白"; exit 1; }
+              sleep 2
+            done
           done
           # Record the implemented ranger in the real lobby, including automatic idle/shoot cycles.
           simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+          rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
           simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.previewRanger YES -arena.rangerStill NO -arena.legacyRanger NO
+          wait_lobby NO
           python3 - "$DEVICE" <<'PYCODE'
           import signal, subprocess, sys, time
           video = subprocess.Popen(['xcrun', 'simctl', 'io', sys.argv[1], 'recordVideo', '--codec=h264', 'shots/rangerLobbyMotion.mp4'])
@@ -613,10 +632,19 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
-          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter arena arenaPlay; do
+          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter; do
             test -s "shots/$required.png"
+            /tmp/check-arena-capture "shots/$required.png"
           done
-          test -s shots/rangerBattleBefore.json && test -s shots/rangerBattleAfter.json
+          python3 - <<'PYCODE'
+          import json
+          for pair in ['rangerBattle', 'rangerCombat']:
+              before = json.load(open('shots/' + pair + 'Before.json'))
+              after = json.load(open('shots/' + pair + 'After.json'))
+              assert before.pop('rangerAsset') == 'Rogue.glb'
+              assert after.pop('rangerAsset') == 'Ranger_Original.glb'
+              assert before == after, 'Different simulation state or camera in ' + pair
+          PYCODE
           test -s shots/rangerLobbyMotion.mp4
           find shots -type f -name '*.png' -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
 

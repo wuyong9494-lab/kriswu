@@ -1521,6 +1521,7 @@ final class ArenaShowcaseView: SCNView {
     private var taps = 0
     /// 现在穿的第几套皮肤
     private var wearing = 0
+    private var captureReadyWritten = false
 
     init(brawler: Brawler, skin: Int = 0) {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
@@ -1681,6 +1682,24 @@ final class ArenaShowcaseView: SCNView {
         let target = stage.convertPosition(SCNVector3(0, height * 0.5, 0), to: nil)
         eye.position = SCNVector3(0.15, target.y + distance * 0.06, distance)
         eye.look(at: target)
+        writeCaptureReadiness()
+    }
+
+    /// Only the demo capture process writes this marker. A fixed launch sleep can
+    /// expire while iOS still shows the launch screen (observed in Build 398).
+    private func writeCaptureReadiness() {
+        guard !captureReadyWritten, window != nil, avatar?.brawler == .ranger,
+              ProcessInfo.processInfo.arguments.contains("-demo"),
+              UserDefaults.standard.bool(forKey: "arena.previewRanger") else { return }
+        let evidence: [String: Any] = ["scene": "rangerLobby", "asset": BrawlerLook.of(.ranger).file,
+            "legacy": BrawlerLook.legacyRangerComparison, "still": comparisonStill,
+            "viewWidth": bounds.width, "viewHeight": bounds.height]
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) else { return }
+        do {
+            try data.write(to: folder.appendingPathComponent("arena-capture-ready.json"), options: .atomic)
+            captureReadyWritten = true
+        } catch { return }
     }
 
     /// 换角色、换皮肤：换模型，先欢呼一下
@@ -1691,6 +1710,7 @@ final class ArenaShowcaseView: SCNView {
         stage.addChildNode(made.node)
         avatar = made
         wearing = skin
+        captureReadyWritten = false
         fighter.brawler = brawler
         cheerUntil = clock + 1.6
         made.update(fighter, visible: true, translucent: false, cheering: false, dt: 0, clock: clock)
