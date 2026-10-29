@@ -89,8 +89,28 @@ public enum BoneSampler {
                               translation: inout [Vec3],
                               rotation: inout [Quat],
                               scale: inout [Vec3]) {
+        sample(time, channels) { node, value in
+            switch value {
+            case .rotation(let q):
+                if rotation.indices.contains(node) { rotation[node] = q }
+            case .translation(let v):
+                if translation.indices.contains(node), scale.indices.contains(node) { translation[node] = v }
+            case .scale(let v):
+                if translation.indices.contains(node), scale.indices.contains(node) { scale[node] = v }
+            }
+        }
+    }
+
+    public enum Sample: Equatable, Sendable {
+        case translation(Vec3), rotation(Quat), scale(Vec3)
+    }
+
+    /// Writes only animated channels directly to the destination representation.
+    /// No whole-pose conversions or temporary arrays; callers validate destination indices.
+    public static func sample(_ time: Float, _ channels: [Channel], write: (Int, Sample) -> Void) {
         let time = time.isFinite ? time : 0
         for channel in channels {
+            guard channel.node >= 0, !channel.times.isEmpty else { continue }
             let times = channel.times
             let last = times.count - 1
             var k0 = 0
@@ -118,18 +138,18 @@ public enum BoneSampler {
             let v = channel.values
             switch channel.path {
             case .rotation:
-                guard let a = quat(v, k0), let b = quat(v, k1), rotation.indices.contains(channel.node) else { continue }
-                rotation[channel.node] = fraction > 0 ? mix(a, b, fraction) : unit(a)
+                guard let a = quat(v, k0), let b = quat(v, k1) else { continue }
+                write(channel.node, .rotation(fraction > 0 ? mix(a, b, fraction) : unit(a)))
             case .translation, .scale:
-                guard let value0 = vec3(v, k0), translation.indices.contains(channel.node), scale.indices.contains(channel.node) else { continue }
+                guard let value0 = vec3(v, k0) else { continue }
                 var value = value0
                 if fraction > 0, let value1 = vec3(v, k1) {
                     value = value + (value1 - value) * fraction
                 }
                 if channel.path == .translation {
-                    translation[channel.node] = value
+                    write(channel.node, .translation(value))
                 } else {
-                    scale[channel.node] = value
+                    write(channel.node, .scale(value))
                 }
             }
         }

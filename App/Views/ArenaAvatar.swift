@@ -112,6 +112,9 @@ final class ArenaAvatar {
     private var flashing = false
     private var placed = false
     private var ammoPips = 3
+    private var pose = GLTFModel.Pose(translation: [], rotation: [], scale: [])
+    private var previous = GLTFModel.Pose(translation: [], rotation: [], scale: [])
+    private var layer = GLTFModel.Pose(translation: [], rotation: [], scale: [])
 
     /// skin：穿第几套皮肤（0 原来的样子）
     init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false) {
@@ -504,13 +507,13 @@ final class ArenaAvatar {
             old.time += dt * old.rate
             fading = old
         }
-        var pose = model.restPose
+        pose.reset(from: model.restPose)
         if let base { base.clip.sample(at: Self.looped(base.time, base.clip.duration), into: &pose) }
         if let fading {
-            var previous = model.restPose
+            previous.reset(from: model.restPose)
             fading.clip.sample(at: Self.looped(fading.time, fading.clip.duration), into: &previous)
             previous.blend(toward: pose, weight: fade, nodes: model.animated)
-            pose = previous
+            swap(&pose, &previous)
         }
 
         // 上面一层：出手、大招、倒下
@@ -525,7 +528,7 @@ final class ArenaAvatar {
                 // 前半段走得快，挥出去那一下先到，后半段收回来
                 let eased = 1 - (1 - linear) * (1 - linear)
                 let t = current.move.from + (current.move.to - current.move.from) * eased
-                var layer = model.restPose
+                layer.reset(from: model.restPose)
                 current.clip.sample(at: t * current.clip.duration, into: &layer)
                 let fadeIn = min(1, current.elapsed / 0.06)
                 let fadeOut = current.hold ? 1 : min(1, (1 - progress) * current.move.seconds / 0.22)

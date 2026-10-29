@@ -52,6 +52,10 @@ final class ArenaWorldView: SCNView {
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
     private var clock = 0.0
+    private let metricsEnabled = UserDefaults.standard.bool(forKey: "arena.performanceOverlay")
+    private var metrics = ArenaFrameMetrics()
+    private var nextMetricsAt = 0.0
+    private let metricsLabel = UILabel()
     private var flipped = false
     private var myTeam = 0
     private var cameraPlaced = false
@@ -187,34 +191,63 @@ final class ArenaWorldView: SCNView {
         scene = world
         build()
         pointOfView = cameraNode
+        if metricsEnabled {
+            metricsLabel.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
+            metricsLabel.textColor = .white
+            metricsLabel.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+            metricsLabel.numberOfLines = 3
+            metricsLabel.layer.cornerRadius = 6
+            metricsLabel.clipsToBounds = true
+            metricsLabel.isUserInteractionEnabled = false
+            metricsLabel.text = "  性能采样中…"
+            addSubview(metricsLabel)
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(suspendRendering), name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(resumeRendering), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     required init?(coder: NSCoder) { fatalError("不从文件里读") }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil {
-            stop()
-        } else if link == nil {
-            ArenaSound.shared.begin()
-            let target = DisplayTarget(view: self)
-            let link = CADisplayLink(target: target, selector: #selector(DisplayTarget.tick(_:)))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
-            link.add(to: .main, forMode: .common)
-            self.link = link
-        }
+        if window == nil { stop() } else { resumeRendering() }
+    }
+
+    @objc private func suspendRendering() { stop() }
+
+    @objc private func resumeRendering() {
+        guard window != nil, UIApplication.shared.applicationState == .active, link == nil else { return }
+        rendersContinuously = true
+        isPlaying = true
+        metrics.reset()
+        nextMetricsAt = 0
+        ArenaSound.shared.begin()
+        let target = DisplayTarget(view: self)
+        let link = CADisplayLink(target: target, selector: #selector(DisplayTarget.tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        self.link = link
     }
 
     func stop() {
         link?.invalidate()
         link = nil
         lastTimestamp = nil
+        rendersContinuously = false
+        isPlaying = false
         ArenaSound.shared.end()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.height > 0 else { return }
+        if metricsEnabled {
+            metricsLabel.frame = CGRect(x: max(safeAreaInsets.left, 8) + 8,
+                                        y: max(safeAreaInsets.top, 8) + 48,
+                                        width: 260, height: 48)
+        }
         let aspect = Float(bounds.width / bounds.height)
         if aspect >= 1 {
             // 横屏：看着的那一排左右各大约 5.6 格，自己在画面中间偏下
@@ -239,10 +272,22 @@ final class ArenaWorldView: SCNView {
     fileprivate func tick(_ timestamp: CFTimeInterval) {
         let elapsed = lastTimestamp.map { timestamp - $0 } ?? 0
         lastTimestamp = timestamp
+        let started = metricsEnabled ? CACurrentMediaTime() : 0
         controller.advance(elapsed)
+        let simulated = metricsEnabled ? CACurrentMediaTime() : 0
         let dt = Float(min(max(elapsed, 0), 0.1))
         clock += Double(dt)
         sync(dt: dt)
+        if metricsEnabled {
+            let finished = CACurrentMediaTime()
+            metrics.record(interval: elapsed, simulation: simulated - started, scene: finished - simulated)
+            if timestamp >= nextMetricsAt, let report = metrics.report() {
+                nextMetricsAt = timestamp + 1
+                metricsLabel.text = String(format: "  刷新 %.0f FPS · P95 %.1f ms\n  逻辑 %.1f ms · 场景 CPU %.1f ms\n  慢帧 %d/%d · 不含 GPU 耗时",
+                                           report.fps, report.p95Milliseconds, report.simulationMilliseconds,
+                                           report.sceneMilliseconds, report.slowFrames, report.samples)
+            }
+        }
     }
 
     // MARK: - 搭场景

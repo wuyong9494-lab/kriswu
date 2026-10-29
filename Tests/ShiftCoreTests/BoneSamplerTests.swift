@@ -2,6 +2,36 @@ import XCTest
 @testable import ShiftCore
 
 final class BoneSamplerTests: XCTestCase {
+    func testDirectSamplingInterpolatesWithoutTouchingUnanimatedNodes() {
+        let channels = [
+            BoneSampler.Channel(node: 3, path: .translation, times: [0, 2], values: [0, 2, 4, 8, 6, 0], step: false),
+            BoneSampler.Channel(node: 7, path: .scale, times: [0, 2], values: [1, 1, 1, 3, 3, 3], step: true),
+            BoneSampler.Channel(node: 9, path: .rotation, times: [0, 2], values: [0, 0, 0, 1, 0, 1, 0, 0], step: false)
+        ]
+        var samples: [Int: BoneSampler.Sample] = [:]
+        BoneSampler.sample(1, channels) { samples[$0] = $1 }
+        XCTAssertEqual(samples.count, 3)
+        XCTAssertEqual(samples[3], .translation(.init(x: 4, y: 4, z: 2)))
+        XCTAssertEqual(samples[7], .scale(.one))
+        if case .rotation(let q) = samples[9] {
+            XCTAssertEqual(q.y, Float(0.5).squareRoot(), accuracy: 0.0001)
+            XCTAssertEqual(q.w, Float(0.5).squareRoot(), accuracy: 0.0001)
+        } else { XCTFail("Missing rotation") }
+        XCTAssertNil(samples[0])
+        BoneSampler.sample(5, channels) { samples[$0] = $1 }
+        XCTAssertEqual(samples[3], .translation(.init(x: 8, y: 6, z: 0)))
+        XCTAssertEqual(samples[7], .scale(.init(x: 3, y: 3, z: 3)))
+    }
+
+    func testDirectSamplingSkipsEmptyAndNegativeChannels() {
+        let channels = [
+            BoneSampler.Channel(node: -1, path: .translation, times: [0], values: [1, 2, 3], step: false),
+            BoneSampler.Channel(node: 0, path: .translation, times: [], values: [1, 2, 3], step: false),
+            BoneSampler.Channel(node: 0, path: .translation, times: [0], values: [.nan, 2, 3], step: false)
+        ]
+        BoneSampler.sample(0, channels) { _, _ in XCTFail("Malformed channel must not write a pose") }
+    }
+
     func testMixStaysFinite() {
         let samples: [BoneSampler.Quat] = [
             .init(x: 0, y: 0, z: 0, w: 0),

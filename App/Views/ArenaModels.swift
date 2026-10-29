@@ -243,8 +243,9 @@ final class ArenaPortraits: ObservableObject {
         guard !preparing else { return }
         preparing = true
         defer { preparing = false }
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
         for brawler in Brawler.allCases where images[brawler] == nil {
+            guard !Task.isCancelled else { return }
             if let image = render(brawler) {
                 images[brawler] = image
             }

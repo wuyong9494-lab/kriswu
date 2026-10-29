@@ -433,13 +433,16 @@ final class GLTFModel: @unchecked Sendable {
 extension GLTFModel.Clip {
     /// 第 time 秒（超出就停在头尾）每根骨骼的样子写进 pose；这段动画没动到的骨骼不改
     func sample(at time: Float, into pose: inout GLTFModel.Pose) {
-        var translation = pose.translation.map { BoneSampler.Vec3(x: $0.x, y: $0.y, z: $0.z) }
-        var rotation = pose.rotation.map(\.bone)
-        var scale = pose.scale.map { BoneSampler.Vec3(x: $0.x, y: $0.y, z: $0.z) }
-        BoneSampler.sample(time, channels, translation: &translation, rotation: &rotation, scale: &scale)
-        pose.translation = translation.map { SIMD3($0.x, $0.y, $0.z) }
-        pose.rotation = rotation.map { simd_quatf($0) }
-        pose.scale = scale.map { SIMD3($0.x, $0.y, $0.z) }
+        BoneSampler.sample(time, channels) { node, value in
+            switch value {
+            case .translation(let v):
+                if pose.translation.indices.contains(node) { pose.translation[node] = SIMD3(v.x, v.y, v.z) }
+            case .rotation(let q):
+                if pose.rotation.indices.contains(node) { pose.rotation[node] = simd_quatf(q) }
+            case .scale(let v):
+                if pose.scale.indices.contains(node) { pose.scale[node] = SIMD3(v.x, v.y, v.z) }
+            }
+        }
     }
 }
 
@@ -449,6 +452,17 @@ private extension simd_quatf {
 }
 
 extension GLTFModel.Pose {
+    /// Keep uniquely owned buffers between frames instead of copying the rest pose
+    /// and triggering three copy-on-write allocations for every animation layer.
+    mutating func reset(from rest: Self) {
+        if translation.count != rest.translation.count { translation = rest.translation }
+        else { for i in translation.indices { translation[i] = rest.translation[i] } }
+        if rotation.count != rest.rotation.count { rotation = rest.rotation }
+        else { for i in rotation.indices { rotation[i] = rest.rotation[i] } }
+        if scale.count != rest.scale.count { scale = rest.scale }
+        else { for i in scale.indices { scale[i] = rest.scale[i] } }
+    }
+
     /// 往 other 靠：weight 0 不变，1 完全变成 other；只动 nodes 里的这些骨骼
     mutating func blend<Nodes: Sequence>(toward other: GLTFModel.Pose, weight: Float, nodes: Nodes) where Nodes.Element == Int {
         guard weight > 0 else { return }

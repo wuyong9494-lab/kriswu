@@ -30,6 +30,7 @@ struct ArenaHomeView: View {
     /// 排位赛（只打 3v3，按段位加减排位分）
     @AppStorage("arena.ranked") private var ranked = false
     @AppStorage(ArenaSound.muteKey) private var muted = false
+    @AppStorage("arena.performanceOverlay") private var performanceOverlay = false
     @AppStorage(ArenaSound.volumeKey) private var volume = 0.7
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -696,6 +697,16 @@ struct ArenaHomeView: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                 volumeBar
+            }
+            settingsCard {
+                Toggle("显示对局性能", isOn: $performanceOverlay)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .tint(.green)
+                    .foregroundStyle(.white)
+                Text("下一局显示刷新率、慢帧和更新耗时。卡顿时可截图帮助定位；平时可以关闭。")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             settingsCard {
                 Text("怎么打")
@@ -1468,6 +1479,8 @@ final class ArenaShowcaseView: SCNView {
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         isAccessibilityElement = true
         accessibilityLabel = "选的角色，左右拖着转"
+        NotificationCenter.default.addObserver(self, selector: #selector(suspendRendering), name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(resumeRendering), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("不从文件里读") }
@@ -1590,8 +1603,22 @@ final class ArenaShowcaseView: SCNView {
         if window == nil { stop() } else { start() }
     }
 
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func suspendRendering() {
+        let resume = wantsPlayback
+        stop()
+        wantsPlayback = resume
+    }
+    @objc private func resumeRendering() {
+        // A sheet or match can intentionally stop this showcase while it remains in a window.
+        if wantsPlayback { start() }
+    }
+    private var wantsPlayback = false
+
     func start() {
-        guard window != nil else { return }
+        wantsPlayback = true
+        guard window != nil, UIApplication.shared.applicationState == .active else { return }
         rendersContinuously = true
         isPlaying = false
         guard link == nil else { return }
@@ -1603,6 +1630,7 @@ final class ArenaShowcaseView: SCNView {
     }
 
     func stop() {
+        wantsPlayback = false
         link?.invalidate()
         link = nil
         lastTimestamp = nil

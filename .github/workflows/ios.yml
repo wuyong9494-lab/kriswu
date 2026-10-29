@@ -494,8 +494,8 @@ jobs:
   # 签名后上传到 TestFlight。只有手动跑这次工作流才传，日常 push 不占第二台 Mac。
   # 需要在仓库 Settings › Secrets and variables › Actions 里配好苹果的密钥。没配就跳过。
   testflight:
-    needs: build
-    if: github.event_name == 'workflow_dispatch'
+    needs: [build, core-tests-linux]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/codex/arena-performance-1')
     # 苹果要求上传的 App 用 iOS 26 SDK（Xcode 26 或更新）编译。macos-15 上也装了 Xcode 26（下面会挑最新的），
     # 而 macos-26 的机器经常排不上队（GitHub 提示容量不足，排 15 分钟就被取消）
     runs-on: macos-15
