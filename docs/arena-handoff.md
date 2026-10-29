@@ -159,3 +159,8 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 等406全部完成后才更新远程分支。新功能提交38c65ba94bba5733dfac66fd84f53b98722c5c8d，远程tree与本地一致（7b8aa395dd68b2fa5055ffb470a0e7c8a69b799c）。新弹窗的编译、截图、触控与VoiceOver仍待验收，未发布。
 - 接续先查38c65ba的单次自动检查，实际打开新增arenaExitDialog与arenaDisconnectedDialog截图；如失败先修，不重复启动工作流。随后再处理联机房间和游侠/混战可读性，不将本批称为全部菜单完成。
 - 已确认新自动检查为Build407：https://github.com/wuyong9494-lab/kriswu/actions/runs/40850312495 ，查询时in_progress，尚无通过结论。
+
+### 407 编译失败与兼容修复
+- 407的arena-look在模拟器编译失败，未执行专项回归和截图。job123367844195日志明确报ArenaView.swift的318/321/912行使用iOS17新onChange重载；project.yml最低版本为iOS16.2。Linux与macOS核心测试通过不代表iOS编译通过。
+- 修复仅将三处双参数onChange改为单参数兼容重载，保留原有弹窗、清空输入和焦点更新逻辑，不提高最低系统版本。原onAppear仍负责初次显示处理。
+- 本地diff检查通过；环境无Swift/Xcode，下一次单次自动CI验证设备/模拟器编译、回归及两张新增弹窗截图。真实触控/断线/VoiceOver/性能仍未测。暂缓联机房间扩展，先关闭本批编译失败。未发布、未合并。

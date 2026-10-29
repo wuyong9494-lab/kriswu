@@ -315,10 +315,10 @@ struct ArenaMatchView: View {
             }
             if blockingDialog { clearDialogInput() }
         }
-        .onChange(of: blockingDialog) { _, blocked in
+        .onChange(of: blockingDialog) { blocked in
             if blocked { clearDialogInput() }
         }
-        .onChange(of: hud.result != nil) { _, finished in
+        .onChange(of: hud.result != nil) { finished in
             if finished { confirmingExit = false }
         }
     }
@@ -909,7 +909,7 @@ private struct ArenaMatchDialog: View {
             }
         }
         .onAppear { titleFocused = true }
-        .onChange(of: disconnected) { _, _ in titleFocused = true }
+        .onChange(of: disconnected) { _ in titleFocused = true }
     }
 
     private func action(_ title: String, face: Color, edge: Color, perform: @escaping () -> Void) -> some View {
