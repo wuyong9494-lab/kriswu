@@ -56,6 +56,9 @@ final class ArenaEffectMixer {
         guard let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else {
             throw NSError(domain: "ArenaPCM", code: 3)
         }
+        // AVAudioPCMBuffer starts with frameLength=0, so its AudioBufferList
+        // advertises zero writable bytes until frameLength is set.
+        output.frameLength = capacity
         var decoded = capacity
         try check(ExtAudioFileRead(file, &decoded, output.mutableAudioBufferList))
         guard decoded > 0 else { throw NSError(domain: "ArenaPCM", code: 4) }
