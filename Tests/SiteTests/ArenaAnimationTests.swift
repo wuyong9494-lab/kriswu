@@ -6,6 +6,37 @@ import Metal
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testLobbySurfaceComposesWithAuthoredAtlasAndActuallyRenders() throws {
+        let renderer = SCNRenderer(device: try XCTUnwrap(MTLCreateSystemDefaultDevice()), options: nil)
+        let scene = SCNScene()
+        scene.background.contents = UIColor.black
+        renderer.scene = scene
+        let eye = SCNNode()
+        eye.camera = SCNCamera()
+        eye.position = SCNVector3(0, 0, 4)
+        scene.rootNode.addChildNode(eye)
+        renderer.pointOfView = eye
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = UIColor.white
+        material.shaderModifiers = [.surface: ArenaShowcaseView.showcaseSurface(base: ArenaArt.authoredCharacter.replacingOccurrences(of: "#pragma body", with: ""))]
+        material.setValue(Float(0.5), forKey: "arenaLobbyPulse")
+        let plane = SCNNode(geometry: SCNPlane(width: 2, height: 2))
+        plane.geometry?.firstMaterial = material
+        scene.rootNode.addChildNode(plane)
+        SCNTransaction.flush()
+        let snapshot = renderer.snapshot(atTime: 0, with: CGSize(width: 64, height: 64), antialiasingMode: .none)
+        let cg = try XCTUnwrap(snapshot.cgImage?.cropping(to: CGRect(x: 32, y: 32, width: 1, height: 1)))
+        var pixel = [UInt8](repeating: 0, count: 4)
+        try pixel.withUnsafeMutableBytes { bytes in
+            let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        XCTAssertGreaterThan(pixel[0], 100)
+        XCTAssertGreaterThan(pixel[1], 100)
+        XCTAssertGreaterThan(pixel[2], 100)
+    }
+
     func testLobbyEnvironmentArtworkIsBundledAndDecodable() throws {
         let image = try XCTUnwrap(UIImage(named: "ArenaLobbyMoonCity", in: Bundle(for: ArenaShowcaseView.self), compatibleWith: nil))
         let cg = try XCTUnwrap(image.cgImage)

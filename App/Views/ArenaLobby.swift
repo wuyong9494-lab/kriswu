@@ -164,6 +164,9 @@ struct ArenaHomeView: View {
         }) { item in
             sheetContent(item)
         }
+        .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
+            ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
+        }
         .fullScreenCover(item: $playing, onDismiss: { ArenaSound.shared.enterLobby() }) { entry in
             ArenaPlayView(setup: entry.setup)
         }
@@ -228,7 +231,7 @@ struct ArenaHomeView: View {
             Spacer(minLength: 0)
             lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店") { sheet = .shop }
             lobbyCounter("\(progress.season.points)", asset: "ArenaIconSeason", tint: .green, label: "赛季经验") { sheet = .season }
-            lobbyCounter("\(progress.totalTrophies)", asset: "ArenaIconTrophy", tint: .yellow, label: "总奖杯") { sheet = .road }
+            lobbyCounter("\(progress.season.tier)", asset: "ArenaIconRank", tint: .purple, label: "通行证等级") { sheet = .season }
             Button { muted.toggle(); ArenaSound.shared.muteChanged(battle: false) } label: {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 18, weight: .black))
                     .frame(width: 42, height: 40)
@@ -252,7 +255,7 @@ struct ArenaHomeView: View {
                 Text(value).font(.system(size: 17, weight: .black, design: .rounded).monospacedDigit())
                     .lineLimit(1).minimumScaleFactor(0.7)
             }.foregroundStyle(.white).arenaOutline(1)
-                .padding(.horizontal, 9).frame(minWidth: 68, minHeight: 38)
+                .padding(.horizontal, 6).frame(width: 76, height: 44)
                 .background(Color(red: 0.04, green: 0.11, blue: 0.24).opacity(0.88))
         }.buttonStyle(.plain).accessibilityLabel("\(label)，\(value)")
     }
@@ -494,26 +497,6 @@ struct ArenaHomeView: View {
     }
 
     // MARK: 左边
-
-    private var leftMenu: some View {
-        VStack(spacing: 11) {
-            quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
-            quietMenu("英雄", symbol: "person.crop.square.fill") { sheet = .brawlers }
-            quietMenu("活动", symbol: "star.circle.fill") { sheet = .season }
-            Button { adventure = true } label: {
-                VStack(spacing: 1) {
-                    Image(systemName: "hexagon.fill").font(.system(size: 26, weight: .black))
-                    Text("冒险基地").font(.system(size: 12, weight: .black))
-                }.foregroundStyle(Color(red: 1, green: 0.25, blue: 0.38))
-                    .frame(width: 73, height: 50)
-                    .background(Color(red: 0.14, green: 0.06, blue: 0.20))
-                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.red, lineWidth: 2))
-            }.buttonStyle(.plain)
-        }.padding(.top, 28).padding(.bottom, 6)
-        .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
-            ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
-        }
-    }
 
     /// 左边的方块按钮：上面图标、下面字，底下一道深色的边
     private func tile<Icon: View>(_ title: String, face: Color, edge: Color, @ViewBuilder icon: () -> Icon,
@@ -1643,7 +1626,7 @@ final class ArenaShowcaseView: SCNView {
     private var taps = 0
     /// 现在穿的第几套皮肤
     private var wearing = 0
-    private var lobbyRim: SCNLight?
+    private var showcaseMaterials: [SCNMaterial] = []
     private var captureReadyWritten = false
     private var captureLayoutSize = CGSize.zero
 
@@ -1710,7 +1693,6 @@ final class ArenaShowcaseView: SCNView {
         rim.light = SCNLight()
         rim.light?.type = .directional
         rim.light?.intensity = 640
-        lobbyRim = rim.light
         rim.light?.color = UIColor(red: 0.55, green: 0.72, blue: 1, alpha: 1)
         rim.simdOrientation = simd_quatf(from: SIMD3(0, 0, -1), to: simd_normalize(SIMD3(0.25, -0.35, 1)))
         world.rootNode.addChildNode(rim)
@@ -1791,12 +1773,45 @@ final class ArenaShowcaseView: SCNView {
         let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.86, skin: skin, stageLit: true)
         stage.addChildNode(made.node)
         avatar = made
+        configureShowcaseMaterials(made.node)
         wearing = skin
         captureReadyWritten = false
         fighter.brawler = brawler
         cheerUntil = clock + 1.6
         made.update(fighter, visible: true, translucent: false, cheering: false, dt: 0, clock: clock)
         fitShowcaseCamera()
+    }
+
+    /// Append gallery-only light to each owned material, after its existing
+    /// atlas/toon surface shader. Combat instances never receive this modifier.
+    private func configureShowcaseMaterials(_ root: SCNNode) {
+        var seen = Set<ObjectIdentifier>()
+        showcaseMaterials.removeAll(keepingCapacity: true)
+        root.enumerateChildNodes { node, _ in
+            for material in node.geometry?.materials ?? [] where material.cullMode != .front {
+                guard seen.insert(ObjectIdentifier(material)).inserted else { continue }
+                var modifiers = material.shaderModifiers ?? [:]
+                let base = (modifiers[.surface] ?? "").replacingOccurrences(of: "#pragma body", with: "")
+                modifiers[.surface] = Self.showcaseSurface(base: base)
+                material.shaderModifiers = modifiers
+                material.setValue(Float(0.5), forKey: "arenaLobbyPulse")
+                showcaseMaterials.append(material)
+            }
+        }
+    }
+
+    static func showcaseSurface(base: String) -> String {
+        """
+        #pragma arguments
+        float arenaLobbyPulse;
+        #pragma body
+        \(base)
+        float3 arenaNormal = normalize(_surface.normal);
+        float3 arenaView = normalize(_surface.view);
+        float arenaEdge = pow(1.0 - saturate(abs(dot(arenaNormal, arenaView))), 3.0);
+        float3 arenaTint = mix(float3(0.16, 0.42, 1.0), float3(1.0, 0.18, 0.48), saturate(arenaNormal.x * 0.5 + 0.5));
+        _surface.emission.rgb += arenaTint * arenaEdge * (0.10 + arenaLobbyPulse * 0.035);
+        """
     }
 
     override func didMoveToWindow() {
@@ -1851,7 +1866,8 @@ final class ArenaShowcaseView: SCNView {
         lastTimestamp = timestamp
         clock += Double(dt)
         if !UIAccessibility.isReduceMotionEnabled {
-            lobbyRim?.intensity = 640 + 45 * sin(clock * 0.75)
+            let pulse = Float(0.5 + 0.5 * sin(clock * 0.75))
+            showcaseMaterials.forEach { $0.setValue(pulse, forKey: "arenaLobbyPulse") }
         }
         if !dragging { spin *= max(0, 1 - dt * 1.5) }
         spin = min(1.6, max(-1.6, spin))

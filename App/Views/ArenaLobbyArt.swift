@@ -40,6 +40,12 @@ struct ArenaLobbyIcon: View {
                 var arrow = Path()
                 arrow.addLines([CGPoint(x: 20, y: 6), CGPoint(x: 32, y: 21), CGPoint(x: 25, y: 21), CGPoint(x: 25, y: 32), CGPoint(x: 15, y: 32), CGPoint(x: 15, y: 21), CGPoint(x: 8, y: 21)])
                 arrow.closeSubpath(); context.fill(arrow, with: .color(.white)); context.stroke(arrow, with: .color(ink), lineWidth: 1.5)
+            case "ArenaIconRank":
+                var medal = Path()
+                medal.addLines([CGPoint(x: 20, y: 2), CGPoint(x: 35, y: 10), CGPoint(x: 33, y: 29), CGPoint(x: 20, y: 38), CGPoint(x: 7, y: 29), CGPoint(x: 5, y: 10)])
+                medal.closeSubpath()
+                context.fill(medal, with: .color(.purple)); context.stroke(medal, with: .color(.pink), lineWidth: 3)
+                disc(20, 19, 8, .yellow)
             case "ArenaIconPass":
                 box(2, 7, 36, 27, .yellow)
                 disc(20, 21, 7, ink)
@@ -108,13 +114,13 @@ struct ArenaLobbyButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(primary ? Color(red: 0.24, green: 0.13, blue: 0.05) : .white)
             .background {
-                RoundedRectangle(cornerRadius: 4)
+                ArenaLobbyPlate()
                     .fill(LinearGradient(colors: primary
                         ? [Color(red: 1, green: 0.88, blue: 0.34), Color(red: 1, green: 0.66, blue: 0.12)]
                         : [Color(red: 0.22, green: 0.29, blue: 0.40), Color(red: 0.10, green: 0.16, blue: 0.26)],
                                          startPoint: .top, endPoint: .bottom))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 4).strokeBorder(Color(red: 0.025, green: 0.045, blue: 0.12), lineWidth: 2.5)
+                        ArenaLobbyPlate().stroke(Color(red: 0.025, green: 0.045, blue: 0.12), lineWidth: 2.5)
                     }
                     .overlay(alignment: .top) {
                         RoundedRectangle(cornerRadius: 2).fill(.white.opacity(primary ? 0.5 : 0.18))
@@ -163,5 +169,19 @@ struct ArenaLobbyRailStyle: ButtonStyle {
             .contentShape(Rectangle())
             .offset(y: configuration.isPressed ? 2 : 0)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+/// Slightly skewed game plate, retaining the label's full hit rectangle.
+struct ArenaLobbyPlate: Shape {
+    func path(in rect: CGRect) -> Path {
+        let cut = min(CGFloat(5), rect.width * 0.06)
+        var path = Path()
+        path.addLines([CGPoint(x: rect.minX + cut, y: rect.minY),
+                       CGPoint(x: rect.maxX, y: rect.minY),
+                       CGPoint(x: rect.maxX - cut, y: rect.maxY),
+                       CGPoint(x: rect.minX, y: rect.maxY)])
+        path.closeSubpath()
+        return path
     }
 }
