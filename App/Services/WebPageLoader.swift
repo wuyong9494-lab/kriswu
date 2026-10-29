@@ -209,18 +209,22 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
         while index < requests.count && !outOfRequestTime && !Task.isCancelled {
             let chunk = Array(requests[index..<min(index + 4, requests.count)])
             index += chunk.count
-            var results = [String?](repeating: nil, count: chunk.count)
-            await withTaskGroup(of: (Int, String?).self) { group in
-                for (i, request) in chunk.enumerated() {
-                    group.addTask { @MainActor in (i, await self.replayOne(request, in: webView)) }
-                }
-                for await (i, text) in group { results[i] = text }
-            }
+            async let first = replayBatchItem(chunk, index: 0, in: webView)
+            async let second = replayBatchItem(chunk, index: 1, in: webView)
+            async let third = replayBatchItem(chunk, index: 2, in: webView)
+            async let fourth = replayBatchItem(chunk, index: 3, in: webView)
+            let (a, b, c, d) = await (first, second, third, fourth)
+            let results = [a, b, c, d].prefix(chunk.count)
             for (i, text) in results.enumerated() {
                 if let text { replies.append((chunk[i], text)) }
             }
         }
         return replies
+    }
+
+    private func replayBatchItem(_ chunk: [CapturedRequest], index: Int, in webView: WKWebView) async -> String? {
+        guard chunk.indices.contains(index), !Task.isCancelled else { return nil }
+        return await replayOne(chunk[index], in: webView)
     }
 
     /// 发一个请求；网络慢时可能超时，再试一次，免得整周排班丢掉

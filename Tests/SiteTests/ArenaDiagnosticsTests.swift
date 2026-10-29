@@ -21,6 +21,40 @@ final class ArenaDiagnosticsTests: XCTestCase {
         XCTAssertEqual(silent.game.time, baseline.game.time)
     }
 
+    func testPooledEffectsExpireAndReuseWithoutRendererCallbacks() {
+        let old = ArenaDiagnostics.shared.variant, enabled = ArenaDiagnostics.shared.enabled
+        defer { ArenaDiagnostics.shared.configureCapture(old, enabled: enabled) }
+        ArenaDiagnostics.shared.configureCapture(.baseline)
+        let view = ArenaWorldView(controller: make(.empty))
+        // No display link or render queue is running. Pool ownership must still
+        // expire deterministically, including repeated reuse of the same nodes.
+        for _ in 0..<30 {
+            view.emitDiagnosticPooledEffects()
+            XCTAssertEqual(view.diagnosticBusyFXCount, 5)
+            view.advanceDiagnosticEffects(by: 0.1)
+            XCTAssertEqual(view.diagnosticBusyFXCount, 5)
+            view.advanceDiagnosticEffects(by: 0.16)
+            XCTAssertEqual(view.diagnosticBusyFXCount, 2)
+            view.advanceDiagnosticEffects(by: 1)
+            XCTAssertEqual(view.diagnosticBusyFXCount, 0)
+        }
+    }
+
+    func testManualTraversalKeepsUserInputAndHasNoBots() {
+        let controller = make(.manualTraversal)
+        XCTAssertEqual(controller.game.fighters.count, 1)
+        controller.advance(ArenaController.introLength + 0.1)
+        let start = controller.mine.pos
+        controller.move = V2(1, 0)
+        for _ in 0..<30 { controller.advance(1.0 / 60) }
+        XCTAssertNotEqual(controller.mine.pos, start)
+        controller.move = .zero
+        let stopped = controller.mine.pos
+        for _ in 0..<30 { controller.advance(1.0 / 60) }
+        XCTAssertEqual(controller.mine.pos, stopped)
+        XCTAssertTrue(controller.game.projectiles.isEmpty)
+    }
+
     private func make(_ scenario: ArenaDiagnosticScenario) -> ArenaController {
         ArenaController(setup: .init(mode: .zone, brawler: .ranger, name: "测试", level: 3,
             loadout: .basic(.ranger, level: 3), benchmark: true, diagnosticScenario: scenario))
@@ -53,6 +87,29 @@ final class ArenaDiagnosticsTests: XCTestCase {
         XCTAssertEqual(controller.game.fighters.map(\.pos), positions)
         XCTAssertTrue(controller.game.projectiles.isEmpty)
     }
+    func testManualCaptureExportsInputAndCompletesOneCase() throws {
+        let recorder = ArenaPerfRecorder.shared
+        recorder.beginSuite(variant: .baseline, seconds: 10, expectedCases: 1)
+        defer { recorder.stop() }
+        recorder.beginCase(.manualTraversal)
+        let controller = make(.manualTraversal)
+        controller.move = V2(0.5, -0.25)
+        for _ in 0..<850 {
+            recorder.record(controller: controller, interval: 1.0 / 60, simulation: 0.001, scene: 0.003,
+                            battleDrivers: 1, lobbyDrivers: 0)
+        }
+        let file = try recorder.export()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        XCTAssertEqual(object["complete"] as? Bool, true)
+        let results = try XCTUnwrap(object["results"] as? [[String: Any]])
+        XCTAssertEqual(results.count, 1)
+        let frames = try XCTUnwrap(results[0]["frames"] as? [[Double]])
+        XCTAssertEqual(frames.first?[13], 0.5)
+        XCTAssertEqual(frames.first?[14], -0.25)
+        XCTAssertEqual(frames.first?[15], 1)
+    }
+
     func testInterruptedCaptureExportsRawFramesAndUnmeasuredGPU() throws {
         let recorder = ArenaPerfRecorder.shared
         recorder.beginSuite(variant: .baseline, seconds: 10)
@@ -71,7 +128,9 @@ final class ArenaDiagnosticsTests: XCTestCase {
         let results = try XCTUnwrap(object["results"] as? [[String: Any]])
         let frames = try XCTUnwrap(results.first?["frames"] as? [[Double]])
         XCTAssertGreaterThan(frames.count, 50)
-        XCTAssertEqual(frames.first?.count, 11)
+        XCTAssertEqual(frames.first?.count, 16)
+        XCTAssertEqual(object["schema"] as? Int, 2)
+        XCTAssertEqual((object["frame_columns"] as? [String])?.count, 16)
         XCTAssertEqual(frames.first?[1] ?? 0, 1000.0 / 60, accuracy: 0.001)
     }
 }

@@ -58,6 +58,7 @@ final class ArenaWorldView: SCNView {
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
     private var clock = 0.0
+    private var effectClock = 0.0
     private var metricsEnabled: Bool { ArenaDiagnostics.shared.enabled }
     private var metrics = ArenaFrameMetrics()
     private var nextMetricsAt = 0.0
@@ -159,19 +160,21 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 开局就建好的刀光、圈、命中。打的时候只改位置，不再新建
-    private final class FxSlot {
+    @MainActor private final class FxSlot {
         let node: SCNNode
         var busy = false
+        var expiresAt = Double.infinity
         init(_ node: SCNNode) {
             self.node = node
             node.isHidden = true
         }
     }
 
-    private final class BurstSlot {
+    @MainActor private final class BurstSlot {
         let node: SCNNode
         let system: SCNParticleSystem
         var busy = false
+        var expiresAt = Double.infinity
         init(_ node: SCNNode, _ system: SCNParticleSystem) {
             self.node = node
             self.system = system
@@ -300,6 +303,7 @@ final class ArenaWorldView: SCNView {
         let animationElapsed = controller.benchmark && controller.benchmarkSnapshotTime > 0 ? controller.game.time - oldGameTime : elapsed
         let dt = Float(min(max(animationElapsed, 0), 0.1))
         clock += Double(dt)
+        effectClock += max(animationElapsed, 0)
         ArenaDiagnostics.shared.measure(.sceneUpdate) { sync(dt: dt) }
         if controller.benchmarkSnapshotTime > 0 && controller.game.time >= controller.benchmarkSnapshotTime {
             world.isPaused = true
@@ -828,6 +832,7 @@ final class ArenaWorldView: SCNView {
     // MARK: - 每帧摆一遍
 
     private func sync(dt: Float) {
+        recycleExpiredEffects()
         let game = controller.game
         moveCamera(dt: dt, game: game)
         let events = controller.takeEvents()
@@ -1647,10 +1652,8 @@ final class ArenaWorldView: SCNView {
         slot.node.simdPosition = point + SIMD3(Float(facing.x) * 1.3, 0.05, Float(facing.y) * 1.3)
         slot.node.simdEulerAngles = SIMD3(0, yaw, 0)
         slot.node.opacity = 1
-        slot.node.runAction(.sequence([
-            .fadeOut(duration: 0.16),
-            .run { _ in slot.busy = false; slot.node.isHidden = true },
-        ]))
+        slot.expiresAt = effectClock + 0.16
+        slot.node.runAction(.fadeOut(duration: 0.16))
     }
 
     private func slashArc(at point: SIMD3<Float>, facing: V2, color: UIColor, reach: Float, sweep: Float) {
@@ -1662,10 +1665,8 @@ final class ArenaWorldView: SCNView {
         slot.node.simdEulerAngles = SIMD3(0.15, yaw - .pi / 2, 0)
         slot.node.simdScale = SIMD3(reach, max(sweep * 0.55, 0.7), 1)
         slot.node.opacity = 1
-        slot.node.runAction(.sequence([
-            .fadeOut(duration: 0.22),
-            .run { _ in slot.busy = false; slot.node.isHidden = true },
-        ]))
+        slot.expiresAt = effectClock + 0.22
+        slot.node.runAction(.fadeOut(duration: 0.22))
     }
 
     /// 一道弯的刀光，不要一排方块
@@ -1776,10 +1777,7 @@ final class ArenaWorldView: SCNView {
         system.particleSize = size
         system.particleColor = color
         system.reset()
-        slot.node.runAction(.sequence([
-            .wait(duration: Double(life) * 1.4 + 0.2),
-            .run { _ in slot.busy = false; slot.node.isHidden = true },
-        ]))
+        slot.expiresAt = effectClock + Double(life) * 1.4 + 0.2
     }
 
     /// 打中的地方：一下亮光，几颗火星往外蹦
@@ -1789,10 +1787,8 @@ final class ArenaWorldView: SCNView {
         slot.node.simdPosition = point
         slot.node.simdScale = SIMD3(repeating: 0.4)
         slot.node.opacity = 1
-        slot.node.runAction(.sequence([
-            .group([.scale(to: 1.2, duration: 0.12), .fadeOut(duration: 0.16)]),
-            .run { _ in slot.busy = false; slot.node.isHidden = true },
-        ]))
+        slot.expiresAt = effectClock + 0.16
+        slot.node.runAction(.group([.scale(to: 1.2, duration: 0.12), .fadeOut(duration: 0.16)]))
     }
 
     /// 子弹后面拖的尾巴。优先用开局建好的那一批
@@ -1825,10 +1821,8 @@ final class ArenaWorldView: SCNView {
         slot.node.simdPosition = SIMD3(point.x, 0.06, point.z)
         slot.node.simdScale = SIMD3(repeating: 1)
         slot.node.opacity = 1
-        slot.node.runAction(.sequence([
-            .group([.scale(to: scale, duration: 0.35), .fadeOut(duration: 0.35)]),
-            .run { _ in slot.busy = false; slot.node.isHidden = true },
-        ]))
+        slot.expiresAt = effectClock + 0.35
+        slot.node.runAction(.group([.scale(to: scale, duration: 0.35), .fadeOut(duration: 0.35)]))
     }
 
     private static let fadeOut: SCNParticlePropertyController = {
@@ -1903,6 +1897,39 @@ final class ArenaWorldView: SCNView {
             trailPool.append(Self.makeTrail())
         }
     }
+
+    /// Pool ownership stays on the display-link main actor. SceneKit actions only
+    /// animate nodes; no render-queue callback reads/writes busy or releases a slot.
+    private func recycleExpiredEffects() {
+        for slots in [slashSlots, streakSlots, ringSlots, flashSlots] {
+            for slot in slots where slot.busy && effectClock >= slot.expiresAt {
+                slot.node.removeAllActions()
+                slot.node.isHidden = true
+                slot.busy = false
+            }
+        }
+        for slot in burstSlots where slot.busy && effectClock >= slot.expiresAt {
+            slot.node.isHidden = true
+            slot.busy = false
+        }
+    }
+
+    #if DEBUG
+    var diagnosticBusyFXCount: Int {
+        [slashSlots, streakSlots, ringSlots, flashSlots].flatMap { $0 }.filter { $0.busy }.count
+            + burstSlots.filter { $0.busy }.count
+    }
+    func emitDiagnosticPooledEffects() {
+        shotStreak(from: .zero, facing: V2(1, 0), color: .white)
+        slashArc(at: .zero, facing: V2(1, 0), color: .white, reach: 1, sweep: 1)
+        spark(at: .zero)
+        ring(at: .zero, color: .white, to: 2)
+    }
+    func advanceDiagnosticEffects(by seconds: Double) {
+        effectClock += seconds
+        recycleExpiredEffects()
+    }
+    #endif
 
     private func take(_ slots: [FxSlot]) -> FxSlot? {
         guard let slot = slots.first(where: { !$0.busy }) else { return nil }

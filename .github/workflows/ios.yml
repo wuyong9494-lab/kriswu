@@ -78,9 +78,10 @@ jobs:
             echo "::error::发现可疑警告（见上），请修复"; exit 1
           fi
           # 并发检查的警告：列出来，修到没有
-          grep -E "warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated)" build.log \
+          grep -E "warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)" build.log \
             | sort -u | tee concurrency.log | head -60 | sed 's/^/::warning::/' || true
           echo "并发警告 $(wc -l < concurrency.log) 条"
+          test ! -s concurrency.log || { echo "::error::并发警告必须清零，不能仅记录后放行"; exit 1; }
 
       - name: 检查 App 名称（侧载工具注册 App ID 时只接受英文）
         run: |
@@ -195,9 +196,10 @@ jobs:
             exit 1
           }
           # 并发检查的警告（核心逻辑开了完整检查）：列出来，修到没有
-          grep -E "warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated)" swift-test.log \
+          grep -E "warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)" swift-test.log \
             | sort -u | tee concurrency.log | head -40 | sed 's/^/::warning::/' || true
           echo "并发警告 $(wc -l < concurrency.log) 条"
+          test ! -s concurrency.log || { echo "::error::并发警告必须清零，不能仅记录后放行"; exit 1; }
 
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
@@ -441,7 +443,8 @@ jobs:
     timeout-minutes: 30
     concurrency:
       group: arena-look-${{ github.ref }}
-      cancel-in-progress: true
+      # Preserve running visual evidence; a newer capture waits instead of cancelling it.
+      cancel-in-progress: false
     if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-diagnostics-2'))
     steps:
       - uses: actions/checkout@v5

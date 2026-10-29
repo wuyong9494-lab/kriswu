@@ -32,6 +32,7 @@ final class ArenaSound: NSObject {
     private enum Bed { case lobby, battle }
 
     private var players: [Effect: [AVAudioPlayer]] = [:]
+    private var activeVoices: [AVAudioPlayer] = []
     private var lastPlayed: [Effect: TimeInterval] = [:]
     private var beds: [Bed: AVAudioPlayer] = [:]
     private(set) var loadedMusicFiles: [String: String] = [:]
@@ -87,7 +88,7 @@ final class ArenaSound: NSObject {
     private func pause(_ reason: ArenaAudioState.Pause) {
         state.pause(reason)
         fadeTask?.cancel()
-        players.values.joined().forEach { $0.stop() }
+        stopEffects()
         beds.values.forEach { $0.pause() }
         if reason == .background { deactivate() }
     }
@@ -125,16 +126,16 @@ final class ArenaSound: NSObject {
         guard owner == matchOwner else { return }
         matchOwner = nil
         state.end()
-        players.values.joined().forEach { $0.stop() }
+        stopEffects()
         reconcile()
     }
 
     func muteChanged(battle: Bool) {
-        if muted { players.values.joined().forEach { $0.stop() } }
+        if muted { stopEffects() }
         reconcile()
     }
     func volumeChanged() {
-        if effectsMuted { players.values.joined().forEach { $0.stop() } }
+        if effectsMuted { stopEffects() }
         reconcile()
     }
 
@@ -142,7 +143,7 @@ final class ArenaSound: NSObject {
     func themeChanged() {
         fadeTask?.cancel()
         beds.values.forEach { $0.stop() }
-        players.values.joined().forEach { $0.stop() }
+        stopEffects()
         beds.removeAll()
         players.removeAll()
         loadedMusicFiles.removeAll()
@@ -178,6 +179,11 @@ final class ArenaSound: NSObject {
         play(won ? .win : .lose)
     }
 
+    private func stopEffects() {
+        players.values.joined().forEach { $0.stop() }
+        activeVoices.removeAll(keepingCapacity: true)
+    }
+
     /// volume：0–1（离得远的小声一点）
     func play(_ effect: Effect, volume: Float = 1) {
         guard inMatch, state.canPlay, !effectsMuted, sessionOn, volume > 0.02,
@@ -188,8 +194,10 @@ final class ArenaSound: NSObject {
         defer { ArenaDiagnostics.shared.record(.audio, seconds: ProcessInfo.processInfo.systemUptime - started) }
         // Players are prewarmed at scene entry, never created/decoded by a hit.
         let critical = [Effect.hit, .win, .lose, .respawn].contains(effect)
-        let active = players.values.reduce(0) { count, voices in count + voices.reduce(0) { $0 + ($1.isPlaying ? 1 : 0) } }
-        guard active < (critical ? 12 : 8) else { return }
+        // Only successful, currently active voices need polling (at most 12),
+        // not all 43 prewarmed players on every hit in a crowded frame.
+        activeVoices.removeAll { !$0.isPlaying }
+        guard activeVoices.count < (critical ? 12 : 8) else { return }
         // 同一种声音 30 毫秒内只响一次，免得一帧里好几下叠成噪音
         let now = ProcessInfo.processInfo.systemUptime
         if let last = lastPlayed[effect], now - last < 0.03 { return }
@@ -197,7 +205,7 @@ final class ArenaSound: NSObject {
         guard let voices = players[effect], let player = voices.first(where: { !$0.isPlaying }) else { return }
         player.currentTime = 0
         player.volume = min(volume, 1) * level(Self.effectsVolumeKey)
-        player.play()
+        if player.play() { activeVoices.append(player) }
     }
 
     private var musicLevel: Float { 0.45 * level(Self.musicVolumeKey) }

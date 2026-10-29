@@ -447,11 +447,25 @@ extension GameRoom: MCNearbyServiceAdvertiserDelegate {
     nonisolated func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
                                 withContext context: Data?, invitationHandler: @escaping (Bool, MCSession?) -> Void) {
         let hello = context.flatMap { try? JSONDecoder().decode(Envelope.self, from: $0) }
-        Task { @MainActor in
-            let accept = self.accepting && self.members.count < self.capacity
-            if accept, case .hello(let member)? = hello { self.memberOfPeer[peerID] = member.id }
-            invitationHandler(accept, accept ? self.session : nil)
+        // Keep Apple's non-Sendable completion on the delegate's calling thread.
+        // Only the synchronous room-state decision runs on the main actor.
+        let acceptedSession: MCSession?
+        if Thread.isMainThread {
+            acceptedSession = MainActor.assumeIsolated {
+                self.acceptInvitation(from: peerID, hello: hello)
+            }
+        } else {
+            acceptedSession = DispatchQueue.main.sync {
+                self.acceptInvitation(from: peerID, hello: hello)
+            }
         }
+        invitationHandler(acceptedSession != nil, acceptedSession)
+    }
+
+    private func acceptInvitation(from peerID: MCPeerID, hello: Envelope?) -> MCSession? {
+        guard accepting, members.count < capacity, let session else { return nil }
+        if case .hello(let member)? = hello { memberOfPeer[peerID] = member.id }
+        return session
     }
 
     nonisolated func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {

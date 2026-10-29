@@ -218,7 +218,7 @@ final class ArenaController: ObservableObject {
                     entrants[i].loadout = ArenaLoadout.basic(entrants[i].brawler, level: setup.level)
                 }
             }
-            if setup.diagnosticScenario == .empty || setup.diagnosticScenario == .soloWalk {
+            if setup.diagnosticScenario == .empty || setup.diagnosticScenario == .soloWalk || setup.diagnosticScenario == .manualTraversal {
                 entrants = Array(entrants.prefix(1))
             }
             built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
@@ -323,7 +323,7 @@ final class ArenaController: ObservableObject {
             remoteEmotes = [:]
         }
         ArenaDiagnostics.shared.measure(.ai) {
-            if ArenaDiagnostics.shared.variant != .noAI && diagnosticScenario != .empty && diagnosticScenario != .soloWalk {
+            if ArenaDiagnostics.shared.variant != .noAI && diagnosticScenario != .empty && diagnosticScenario != .soloWalk && diagnosticScenario != .manualTraversal {
                 for k in bots.indices {
                     var input = bots[k].input(in: game, dt: Self.step)
                     if diagnosticScenario == .crowdWalk {

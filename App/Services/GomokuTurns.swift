@@ -160,10 +160,12 @@ final class GomokuTurns: NSObject, ObservableObject {
 
 extension GomokuTurns: GKLocalPlayerListener {
     nonisolated func player(_ player: GKPlayer, receivedTurnEventFor match: GKTurnBasedMatch, didBecomeActive: Bool) {
+        // Transfer only a value, then inspect the main-actor-owned refreshed match.
+        let matchID = match.matchID
         Task { @MainActor in
             await self.refresh()
             self.changes += 1
-            if Self.isMyTurn(match) {
+            if let refreshed = self.matches.first(where: { $0.matchID == matchID }), Self.isMyTurn(refreshed) {
                 ToastCenter.shared.show("五子棋轮到你下了（小游戏 › 五子棋 › 轮流下）")
             }
         }

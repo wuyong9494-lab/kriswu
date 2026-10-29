@@ -4,13 +4,14 @@ import Darwin
 import Combine
 
 enum ArenaDiagnosticScenario: String, CaseIterable {
-    case empty, soloWalk, crowdWalk, combat
+    case empty, soloWalk, crowdWalk, combat, manualTraversal
     var title: String {
         switch self {
         case .empty: return "静止空场"
         case .soloWalk: return "单人走路"
         case .crowdWalk: return "多人无攻击"
         case .combat: return "多人混战"
+        case .manualTraversal: return "手动贴墙／绕箱／进出草"
         }
     }
 }
@@ -25,6 +26,7 @@ final class ArenaPerfRecorder: ObservableObject {
     private var variant: ArenaDiagnostics.Variant = .baseline
     private var elapsed = 0.0
     private var duration = 30.0
+    private var expectedCases = 4
     private var nextStatus = 0.0
     private var residentMB = -1.0
     private var uiEvaluations = 0
@@ -47,10 +49,11 @@ final class ArenaPerfRecorder: ObservableObject {
         }
         return ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"].map { "模拟器 \($0)" } ?? "真机 \(model)"
     }
-    func beginSuite(variant: ArenaDiagnostics.Variant, seconds: Double = 30) {
+    func beginSuite(variant: ArenaDiagnostics.Variant, seconds: Double = 30, expectedCases: Int = 4) {
         previousVariant = ArenaDiagnostics.shared.variant
         previousEnabled = ArenaDiagnostics.shared.enabled
         self.variant = variant
+        self.expectedCases = expectedCases
         duration = min(max(seconds, 10), 60)
         results.removeAll(keepingCapacity: true)
         interruption = nil
@@ -83,7 +86,7 @@ final class ArenaPerfRecorder: ObservableObject {
             frameRows.append(SIMD16(elapsed - 3, interval * 1000, simulation * 1000, scene * 1000,
                 residentMB, Double(ProcessInfo.processInfo.thermalState.rawValue), Double(battleDrivers),
                 Double(lobbyDrivers), Double(uiEvaluations), Double(scenario == .empty ? 0 : controller.game.fighters.reduce(0) { $0 + ($1.alive ? 1 : 0) }),
-                Double(controller.game.projectiles.count), 0, 0, 0, 0, 0))
+                Double(controller.game.projectiles.count), controller.mine.pos.x, controller.mine.pos.y, controller.move.x, controller.move.y, scenario == .manualTraversal ? 1 : 0))
         } else { interruption = "帧记录达到20000条上限" }
         if elapsed >= duration + 3 || interruption != nil { finishCase() }
     }
@@ -93,7 +96,7 @@ final class ArenaPerfRecorder: ObservableObject {
         let timings = frameRows.map { $0[1] }.sorted()
         let sample: [String: Any] = [
             "scenario": scenario.rawValue, "title": scenario.title,
-            "active_duration_seconds": max(0, elapsed - 3), "frames": frameRows.map { row in (0..<11).map { row[$0] } },
+            "active_duration_seconds": max(0, elapsed - 3), "frames": frameRows.map { row in (0..<16).map { row[$0] } },
             "slow_over_34_333_ms": timings.filter { $0 > 34.333333 }.count,
             "over_18_333_ms": timings.filter { $0 > 18.333333 }.count,
             "p95_callback_ms": timings.isEmpty ? 0 : timings[max(0, Int(ceil(Double(timings.count) * 0.95)) - 1)],
@@ -118,7 +121,7 @@ final class ArenaPerfRecorder: ObservableObject {
     }
     func export() throws -> URL {
         let metadata: [String: Any] = [
-            "schema": 1, "identity": Self.identity, "device": Self.device,
+            "schema": 2, "identity": Self.identity, "device": Self.device,
             "system": UIDevice.current.systemName + " " + UIDevice.current.systemVersion,
             "started_utc": ISO8601DateFormatter().string(from: startDate),
             "variant": variant.rawValue, "seed": 170017, "map": "canyon", "camera": "fixed center, perspective, offset 0/16/12.5",
@@ -127,13 +130,13 @@ final class ArenaPerfRecorder: ObservableObject {
             "audio_theme_sample": UserDefaults.standard.bool(forKey: "arena.themeAudio"),
             "audio_loaded_music_files": ArenaSound.shared.loadedMusicFiles,
             "audio_master_muted": UserDefaults.standard.bool(forKey: ArenaSound.muteKey),
-            "complete": interruption == nil && results.count == 4, "interruption": interruption ?? "none",
+            "complete": interruption == nil && results.count == expectedCases, "interruption": interruption ?? "none",
             "measurement": "CADisplayLink intervals and main-thread CPU, not presented FPS; no GPU or renderer-thread timing",
             "gpu_ms": "unmeasured", "presented_fps": "unmeasured", "physical_footprint": "unmeasured",
             "memory": "RSS MB sampled once per active second; -1 means unavailable",
             "cache_state": "warm assets may be shared across cases; not a cold-start benchmark",
             "combat_fixture": "respawns rejoin fixed center positions to sustain combat; normal game damage and collisions retained",
-            "frame_columns": ["active_seconds", "callback_ms", "controller_cpu_ms", "scene_cpu_ms", "rss_mb", "thermal_0_nominal_1_fair_2_serious_3_critical", "battle_display_links", "lobby_display_links", "match_body_evaluations", "alive_characters", "projectiles"],
+            "frame_columns": ["active_seconds", "callback_ms", "controller_cpu_ms", "scene_cpu_ms", "rss_mb", "thermal_0_nominal_1_fair_2_serious_3_critical", "battle_display_links", "lobby_display_links", "match_body_evaluations", "alive_characters", "projectiles", "player_x", "player_y", "input_x", "input_y", "manual_input"],
             "results": results
         ]
         let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("ArenaDiagnostics", isDirectory: true)

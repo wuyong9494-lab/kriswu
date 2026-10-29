@@ -178,3 +178,12 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 已实际打开artifact12887437652中的arenaExitDialog.png与arenaDisconnectedDialog.png：两种弹窗标题、说明、按钮完整，未见文字重影/截断；深蓝卡片、遮罩与游戏按钮落地。仅静态布局通过，不代表真实断线、触控取消/继续/退出、VoiceOver或真机性能通过。
 - 408完成后才更新工作分支。房间批功能提交76c8d34a3a2da7293915b391b1bcf33ea08defc5，远程与本地文件树均480446db8f1a76691d08c9655bbab30e4447063e。尚未完成房间批iOS编译/视觉/联机验收；未上传、未合并，最后内部测试证据仍399。
 - 房间批自动检查为Build409：https://github.com/wuyong9494-lab/kriswu/actions/runs/40852707807 ，当前in_progress。接续先看编译，再看arenaRoomReady/arenaRoomWaiting截图；下方滚动内容和多设备联机继续单独验收，不重复dispatch。
+
+## 性能与并发修复批（用户要求优先卡顿及7条并发警告）
+- 基于46a7ad3。7条已记录并发警告定位：ArenaWorld的5个SCNAction回调捕获可变FX池槽；GameRoom邀请completion跨Task；GomokuTurns跨Task携带GKTurnBasedMatch。另发现WebPageLoader任务组的区域隔离诊断，纳入修复与检查。
+- 特效池改为MainActor拥有，SceneKit只做渐隐/缩放，回收在已有display link更新中按截止时间执行。单独的效果时钟不受动画dt的0.1秒上限影响；后台停表、截图冻结保持既有语义。删除5个跨线程修改busy的回调，不使用unchecked Sendable掩盖警告。
+- GameRoom只在主线程同步计算是否接受与session，系统invitationHandler留在原delegate线程调用；已有主线程入口不再sync，防止自锁。Gomoku只传matchID，刷新后使用主线程拥有的对局。WebPageLoader改为4个结构化async let并发请求，保留顺序、批量大小、取消与截止逻辑。
+- 音效选择只轮询已成功播放的活跃声部（上限12），不再每次扫描全部43个预热播放器；8/12声部上限及30ms同音效节流保留，停止/静音/换曲/后台同时清理活跃列表。尚无真机耗时改善证据，不声称音效为唯一瓶颈。
+- 增加手动路线60秒诊断，保留原4组自动基线；允许用户贴墙/绕箱/进出草，单人无AI，记录坐标及摇杆输入。导出schema2，16列并明确manual_input；手动路线不作为确定性脚本对照。没有覆盖20–30分钟热稳定性。
+- 新增池回收重复复用、手动输入、单场报告完成状态回归；既有导出测试更新为16列。设备与核心CI将并发/隔离警告改成失败门禁，不能带警告放行。
+- 本地diff与workflow YAML通过；无本地Swift/Xcode。截图job改为同分支排队而非取消已运行任务，因此本批设备/核心CI可先运行，截图等待409释放队列；未手动重跑。编译、警告清零、回归、视觉均待实际结果。真实iPhone17ProMax性能仍未测；需同版本baseline/noEffectAudio对照及手动路线报告。未上传TestFlight、未合并，最后已确认内部测试仍399。
