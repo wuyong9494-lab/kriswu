@@ -244,7 +244,7 @@ final class ArenaWorldView: SCNView {
         ArenaDiagnostics.shared.measure(.sceneBuild) { build() }
         pointOfView = cameraNode
         // Upload scene resources before starting the display link, not on first movement.
-        ArenaDiagnostics.shared.measure(.scenePrepare) { _ = prepare([world], shouldAbortBlock: nil) }
+        ArenaDiagnostics.shared.measure(.scenePrepare) { _ = prepare(world, shouldAbortBlock: nil) }
         if metricsEnabled {
             metricsLabel.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
             metricsLabel.textColor = .white

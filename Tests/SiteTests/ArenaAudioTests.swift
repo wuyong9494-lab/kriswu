@@ -51,6 +51,7 @@ final class ArenaAudioTests: XCTestCase {
         mixer.load(theme: false)
         XCTAssertEqual(mixer.loadedCount, ArenaSound.Effect.allCases.count)
         let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+        engine.stop() // load() prepared resources; mode changes require a stopped engine.
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 1024)
         mixer.resume()
         XCTAssertTrue(mixer.running)

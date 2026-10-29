@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import Foundation
 
 /// A persistent engine and 12 running nodes replace per-event AVAudioPlayer start/seek.
@@ -35,25 +36,35 @@ final class ArenaEffectMixer {
 
     /// File IO and conversion happen once at lobby entry, never on a shot/hit.
     static func decode(_ url: URL, format: AVAudioFormat) throws -> AVAudioPCMBuffer {
-        let file = try AVAudioFile(forReading: url)
-        let source = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
-        try file.read(into: source)
-        let capacity = AVAudioFrameCount(ceil(Double(source.frameLength) * format.sampleRate / source.format.sampleRate)) + 32
-        guard let converter = AVAudioConverter(from: source.format, to: format),
-              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else {
-            throw NSError(domain: "ArenaPCM", code: 1)
+        // Extended Audio File performs synchronous decode/resampling into caller-owned
+        // PCM. No @Sendable input callback captures a mutable AVAudioPCMBuffer.
+        var handle: ExtAudioFileRef?
+        try check(ExtAudioFileOpenURL(url as CFURL, &handle))
+        guard let file = handle else { throw NSError(domain: "ArenaPCM", code: 1) }
+        defer { ExtAudioFileDispose(file) }
+        var sourceFormat = AudioStreamBasicDescription()
+        var formatSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        try check(ExtAudioFileGetProperty(file, kExtAudioFileProperty_FileDataFormat, &formatSize, &sourceFormat))
+        var frames: Int64 = 0
+        var frameSize = UInt32(MemoryLayout<Int64>.size)
+        try check(ExtAudioFileGetProperty(file, kExtAudioFileProperty_FileLengthFrames, &frameSize, &frames))
+        guard sourceFormat.mSampleRate > 0, frames > 0 else { throw NSError(domain: "ArenaPCM", code: 2) }
+        var clientFormat = format.streamDescription.pointee
+        try check(ExtAudioFileSetProperty(file, kExtAudioFileProperty_ClientDataFormat,
+                                         UInt32(MemoryLayout<AudioStreamBasicDescription>.size), &clientFormat))
+        let capacity = AVAudioFrameCount(ceil(Double(frames) * format.sampleRate / sourceFormat.mSampleRate)) + 32
+        guard let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else {
+            throw NSError(domain: "ArenaPCM", code: 3)
         }
-        var supplied = false
-        var error: NSError?
-        let status = converter.convert(to: output, error: &error) { _, state in
-            if supplied { state.pointee = .endOfStream; return nil }
-            supplied = true
-            state.pointee = .haveData
-            return source
-        }
-        if let error { throw error }
-        guard status != .error, output.frameLength > 0 else { throw NSError(domain: "ArenaPCM", code: 2) }
+        var decoded = capacity
+        try check(ExtAudioFileRead(file, &decoded, output.mutableAudioBufferList))
+        guard decoded > 0 else { throw NSError(domain: "ArenaPCM", code: 4) }
+        output.frameLength = decoded
         return output
+    }
+
+    private static func check(_ status: OSStatus) throws {
+        guard status == noErr else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
     }
 
     func resume() {
