@@ -9,7 +9,7 @@ struct ArenaDiagnosticSuiteView: View {
     @State private var exportURL: URL?
     @State private var error: String?
     @State private var running = false
-    private let variants: [ArenaDiagnostics.Variant] = [.baseline, .noBones, .noBushes, .noCharacterOutlines, .noNumbersOrParticles, .noAI]
+    private let variants: [ArenaDiagnostics.Variant] = [.baseline, .noBones, .noBushes, .noCharacterOutlines, .noNumbersOrParticles, .noEffectAudio, .noAI]
 
     var body: some View {
         ZStack {

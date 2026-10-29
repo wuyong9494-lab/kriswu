@@ -6,7 +6,7 @@ import UIKit
 final class ArenaDiagnostics: @unchecked Sendable {
     static let shared = ArenaDiagnostics()
     enum Variant: String, CaseIterable {
-        case baseline, noNumbers, noParticles, noCharacterOutlines, halfAnimation, noBones, noBushes, noNumbersOrParticles, noAI
+        case baseline, noNumbers, noParticles, noCharacterOutlines, halfAnimation, noBones, noBushes, noNumbersOrParticles, noAI, noEffectAudio
         var title: String {
             switch self {
             case .baseline: return "基准（正常显示）"
@@ -18,6 +18,7 @@ final class ArenaDiagnostics: @unchecked Sendable {
             case .noBushes: return "关闭装饰草丛，保留规则"
             case .noNumbersOrParticles: return "关闭浮字与粒子"
             case .noAI: return "关闭机器人逻辑"
+            case .noEffectAudio: return "仅关闭战斗音效（保留音乐）"
             }
         }
     }

@@ -229,7 +229,7 @@ final class ArenaAvatar {
         node.addChildNode(glow)
         let shell = SCNSphere(radius: 0.78)
         shell.segmentCount = 24
-        let shine = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.22))
+        let shine = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.09))
         shine.isDoubleSided = false
         shell.firstMaterial = shine
         bubble.geometry = shell
@@ -238,6 +238,15 @@ final class ArenaAvatar {
         bubble.castsShadow = false
         bubble.renderingOrder = 12
         bubble.isHidden = true
+        // Keep a readable shield boundary without tinting the entire character.
+        let shieldRim = SCNTorus(ringRadius: 0.78, pipeRadius: 0.018)
+        shieldRim.ringSegmentCount = 32
+        shieldRim.pipeSegmentCount = 6
+        shieldRim.firstMaterial = ArenaAvatar.decal(ArenaPalette.gold.withAlphaComponent(0.75))
+        let shieldEdge = SCNNode(geometry: shieldRim)
+        shieldEdge.castsShadow = false
+        shieldEdge.renderingOrder = 12
+        bubble.addChildNode(shieldEdge)
         node.addChildNode(bubble)
         let band = SCNTube(innerRadius: 0.56, outerRadius: 0.8, height: 0.02)
         band.radialSegmentCount = 40
@@ -427,12 +436,18 @@ final class ArenaAvatar {
     }
 
     /// 大招攒满时给身上打一层亮光；关掉就回到原来的眼睛光
+    private static func chargeEmission(_ color: UIColor) -> UIColor {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return UIColor(red: r * 0.12, green: g * 0.12, blue: b * 0.12, alpha: 1)
+    }
+
     private func paintCharge(_ on: Bool) {
         guard let instance else { return }
         if on {
             let glow = mine
-                ? UIColor(red: 0.55, green: 0.38, blue: 0.05, alpha: 1)
-                : teamColor.withAlphaComponent(1)
+                ? UIColor(red: 0.12, green: 0.08, blue: 0.01, alpha: 1)
+                : Self.chargeEmission(teamColor)
             instance.materials.forEach { $0.emission.contents = glow }
         } else {
             restoreGlow()
@@ -486,7 +501,7 @@ final class ArenaAvatar {
 
     /// 挨打：白一下。打得重、而且这一下没在出招，才缩一下身子
     func flash(clock: Double, flinch: Bool = false) {
-        flashUntil = clock + 0.14
+        flashUntil = clock + 0.09
         punch = 0.28
         recoil = look.authored ? 0 : 0.2
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
@@ -496,7 +511,7 @@ final class ArenaAvatar {
         }
         guard !flashing, let instance else { return }
         flashing = true
-        instance.materials.forEach { $0.emission.contents = UIColor(white: 0.7, alpha: 1) }
+        instance.materials.forEach { $0.emission.contents = UIColor(white: 0.22, alpha: 1) }
     }
 
     /// 摆一个静止的姿势（画头像用）

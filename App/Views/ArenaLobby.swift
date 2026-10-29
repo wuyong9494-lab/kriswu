@@ -172,10 +172,8 @@ struct ArenaHomeView: View {
             }
             .foregroundStyle(.white.opacity(0.92))
             .frame(width: 66, height: 48)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.12), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArenaMenuButtonStyle())
         .accessibilityLabel(title)
     }
 
@@ -1522,6 +1520,7 @@ final class ArenaShowcaseView: SCNView {
     /// 现在穿的第几套皮肤
     private var wearing = 0
     private var captureReadyWritten = false
+    private var captureLayoutSize = CGSize.zero
 
     init(brawler: Brawler, skin: Int = 0) {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
@@ -1548,6 +1547,7 @@ final class ArenaShowcaseView: SCNView {
     private func build() {
         let camera = SCNCamera()
         camera.fieldOfView = 32
+        camera.projectionDirection = .vertical
         camera.zNear = 0.08
         camera.zFar = 40
         let eye = SCNNode()
@@ -1590,8 +1590,8 @@ final class ArenaShowcaseView: SCNView {
         world.rootNode.addChildNode(rim)
 
         // 台子：金边的圆台，描一圈深色的边，上面一块影子
-        let height: Float = 0.22
-        let top = SCNCylinder(radius: 0.95, height: CGFloat(height))
+        let height: Float = 0.07
+        let top = SCNCylinder(radius: 0.78, height: CGFloat(height))
         top.radialSegmentCount = 6
         let side = SCNMaterial()
         side.lightingModel = .lambert
@@ -1603,7 +1603,7 @@ final class ArenaShowcaseView: SCNView {
         let pedestal = SCNNode(geometry: top)
         pedestal.simdPosition = SIMD3(0, height / 2, 0)
         world.rootNode.addChildNode(pedestal)
-        let rimGeometry = SCNCylinder(radius: 0.99, height: CGFloat(height + 0.06))
+        let rimGeometry = SCNCylinder(radius: 0.80, height: CGFloat(height + 0.025))
         rimGeometry.radialSegmentCount = 6
         let ink = SCNMaterial()
         ink.lightingModel = .constant
@@ -1648,6 +1648,10 @@ final class ArenaShowcaseView: SCNView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        if captureLayoutSize != bounds.size {
+            captureLayoutSize = bounds.size
+            captureReadyWritten = false
+        }
         fitShowcaseCamera()
     }
 
@@ -1672,28 +1676,31 @@ final class ArenaShowcaseView: SCNView {
         }
         include(stage)
         guard low.x.isFinite, high.x.isFinite, low.y < high.y else { return }
-        let height: Float = comparisonStill ? 1.6 : max(high.y - min(low.y, 0), 1.2)
-        let halfWidth: Float = comparisonStill ? 0.85 : max(abs(low.x), abs(high.x), 0.65) * 1.15
-        let halfHeight = height * 0.6
+        let height: Float = max(high.y - min(low.y, 0), 1.2)
+        let halfWidth: Float = max(abs(low.x), abs(high.x), 0.55) * 1.15
+        let halfHeight = height * 0.57
         let aspect = Float(bounds.width / bounds.height)
         let tangent = tan(Float(camera.fieldOfView) * .pi / 360)
-        let depth: Float = comparisonStill ? 0.7 : max(abs(low.z), abs(high.z), 0.2)
+        let depth: Float = max(abs(low.z), abs(high.z), 0.2)
         let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + depth
         let target = stage.convertPosition(SCNVector3(0, height * 0.5, 0), to: nil)
         eye.position = SCNVector3(0.15, target.y + distance * 0.06, distance)
         eye.look(at: target)
+        setNeedsDisplay()
         writeCaptureReadiness()
     }
 
     /// Only the demo capture process writes this marker. A fixed launch sleep can
     /// expire while iOS still shows the launch screen (observed in Build 398).
     private func writeCaptureReadiness() {
-        guard !captureReadyWritten, window != nil, avatar?.brawler == .ranger,
+        guard !captureReadyWritten, window != nil,
+              bounds.width > bounds.height, avatar?.brawler == .ranger,
               ProcessInfo.processInfo.arguments.contains("-demo"),
               UserDefaults.standard.bool(forKey: "arena.previewRanger") else { return }
         let evidence: [String: Any] = ["scene": "rangerLobby", "asset": BrawlerLook.of(.ranger).file,
             "legacy": BrawlerLook.legacyRangerComparison, "still": comparisonStill,
-            "viewWidth": bounds.width, "viewHeight": bounds.height]
+            "viewWidth": bounds.width, "viewHeight": bounds.height,
+            "cameraDistance": pointOfView?.position.z ?? 0, "framing": "visible-model-envelope"]
         let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         guard let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) else { return }
         do {

@@ -525,7 +525,8 @@ jobs:
           while time.monotonic() < deadline:
               if marker.exists():
                   evidence = json.loads(marker.read_text())
-                  if evidence.get('scene') == 'rangerLobby' and evidence.get('asset') == expected:
+                  if (evidence.get('scene') == 'rangerLobby' and evidence.get('asset') == expected
+                          and evidence.get('viewWidth', 0) > evidence.get('viewHeight', 0) > 0):
                       print(evidence)
                       break
               time.sleep(0.5)

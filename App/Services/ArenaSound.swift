@@ -180,7 +180,8 @@ final class ArenaSound: NSObject {
 
     /// volume：0–1（离得远的小声一点）
     func play(_ effect: Effect, volume: Float = 1) {
-        guard inMatch, state.canPlay, !effectsMuted, sessionOn, volume > 0.02 else { return }
+        guard inMatch, state.canPlay, !effectsMuted, sessionOn, volume > 0.02,
+              ArenaDiagnostics.shared.variant != .noEffectAudio else { return }
         // Effect dispatch includes audio. Measure the entire voice-selection/seek/play
         // path, not only prepare(), before attributing event stalls to rendering.
         let started = ProcessInfo.processInfo.systemUptime

@@ -35,8 +35,8 @@ struct ArenaMenuCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) { content }
             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-            .background(ArenaMenuTheme.panel, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.10)))
+            .background(ArenaMenuTheme.panel, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(red: 0.33, green: 0.25, blue: 0.48), lineWidth: 2))
     }
 }
 
@@ -45,8 +45,10 @@ struct ArenaMenuButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .foregroundStyle(.white)
-            .background(ArenaMenuTheme.accent.opacity(configuration.isPressed ? 0.38 : 0.16), in: RoundedRectangle(cornerRadius: 10))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .background(configuration.isPressed ? Color(red: 0.22, green: 0.16, blue: 0.36) : Color(red: 0.30, green: 0.23, blue: 0.46), in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(red: 0.49, green: 0.38, blue: 0.66), lineWidth: 2))
+            .shadow(color: Color(red: 0.06, green: 0.04, blue: 0.12), radius: 0, y: configuration.isPressed ? 1 : 4)
+            .offset(y: configuration.isPressed ? 3 : 0)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

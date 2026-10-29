@@ -5,6 +5,24 @@ import simd
 
 @MainActor
 final class ArenaRangerTests: XCTestCase {
+    func testShowcaseRefitsAfterPortraitToLandscapeTransition() throws {
+        let view = ArenaShowcaseView(brawler: .ranger)
+        defer { view.stop() }
+        view.frame = CGRect(x: 0, y: 0, width: 260, height: 698)
+        view.layoutSubviews()
+        let portraitDistance = try XCTUnwrap(view.pointOfView).position.z
+        view.frame = CGRect(x: 0, y: 0, width: 698, height: 260)
+        view.layoutSubviews()
+        let landscapeDistance = try XCTUnwrap(view.pointOfView).position.z
+        XCTAssertTrue(landscapeDistance.isFinite)
+        XCTAssertGreaterThan(landscapeDistance, 0)
+        XCTAssertLessThan(landscapeDistance, portraitDistance,
+                          "A portrait-width camera must not leave the landscape hero undersized")
+        view.frame = CGRect(x: 0, y: 0, width: 260, height: 698)
+        view.layoutSubviews()
+        XCTAssertEqual(try XCTUnwrap(view.pointOfView).position.z, portraitDistance, accuracy: 0.001)
+    }
+
     func testIndependentAssetImportsAllGameplayActionsAndAnchors() throws {
         let look = BrawlerLook.of(.ranger)
         XCTAssertEqual(look.file, "Ranger_Original.glb")

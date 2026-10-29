@@ -4,7 +4,7 @@ import Foundation
 /// Constant storage retains cold-start peaks for the entire recording session.
 public struct ArenaStageMetrics: Sendable {
     public enum Stage: Int, CaseIterable, Sendable {
-        case modelLoad, simulation, ai, animation, sceneUpdate, sceneBuild, collision, damageText, effects, audio, frameUpdate
+        case modelLoad, simulation, ai, animation, sceneUpdate, sceneBuild, collision, damageText, effects, audio, frameUpdate, particleDispatch, projectileUpdate
     }
     public struct Sample: Equatable, Sendable {
         public fileprivate(set) var count = 0

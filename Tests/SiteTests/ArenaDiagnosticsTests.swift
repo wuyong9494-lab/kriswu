@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class ArenaDiagnosticsTests: XCTestCase {
+    func testAudioDiagnosticRetainsCombatSimulation() {
+        let old = ArenaDiagnostics.shared.variant, enabled = ArenaDiagnostics.shared.enabled
+        defer { ArenaDiagnostics.shared.configureCapture(old, enabled: enabled) }
+        func simulate(_ variant: ArenaDiagnostics.Variant) -> ArenaController {
+            ArenaDiagnostics.shared.configureCapture(variant)
+            let controller = make(.combat)
+            controller.advance(ArenaController.introLength + 0.1)
+            for _ in 0..<180 { controller.advance(1.0 / 60) }
+            return controller
+        }
+        let baseline = simulate(.baseline)
+        let silent = simulate(.noEffectAudio)
+        XCTAssertEqual(silent.game.fighters.map(\.pos), baseline.game.fighters.map(\.pos))
+        XCTAssertEqual(silent.game.fighters.map(\.health), baseline.game.fighters.map(\.health))
+        XCTAssertEqual(silent.game.projectiles.count, baseline.game.projectiles.count)
+        XCTAssertEqual(silent.game.time, baseline.game.time)
+    }
+
     private func make(_ scenario: ArenaDiagnosticScenario) -> ArenaController {
         ArenaController(setup: .init(mode: .zone, brawler: .ranger, name: "测试", level: 3,
             loadout: .basic(.ranger, level: 3), benchmark: true, diagnosticScenario: scenario))

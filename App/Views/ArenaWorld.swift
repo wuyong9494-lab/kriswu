@@ -381,7 +381,7 @@ final class ArenaWorldView: SCNView {
             "活跃角色=\(game.fighters.filter(\.alive).count) 弹道=\(projectiles.count) 飘字=\(floaters.count) 池化特效=\(fx) 治疗区=\(zoneNodes.count)",
             "CPU阶段自App启动累计，格式：次数 / 平均ms / 单次峰值ms："
         ]
-        let names = ["模型解析", "模拟总计", "AI", "骨骼采样与写入", "场景更新", "创建场景", "移动碰撞及弹道处理", "飘字创建", "事件特效（含音效/飘字）", "音效资源准备", "回调更新总计"]
+        let names = ["模型解析", "模拟总计", "AI", "骨骼采样与写入", "场景更新", "创建场景", "移动碰撞及弹道处理", "飘字创建", "事件特效（含音效/飘字）", "音效准备及播放", "回调更新总计", "粒子发射提交", "弹道节点更新"]
         for stage in ArenaStageMetrics.Stage.allCases {
             let sample = stages[stage]
             lines.append(String(format: "\(names[stage.rawValue]): %d / %.3f / %.3f", sample.count, sample.meanMilliseconds, sample.peakMilliseconds))
@@ -1255,6 +1255,8 @@ final class ArenaWorldView: SCNView {
     // MARK: - 子弹
 
     private func syncProjectiles(_ game: ArenaGame) {
+        let started = metricsEnabled ? CACurrentMediaTime() : 0
+        defer { if metricsEnabled { ArenaDiagnostics.shared.record(.projectileUpdate, seconds: CACurrentMediaTime() - started) } }
         var seen = Set<Int>()
         for p in game.projectiles {
             seen.insert(p.id)
@@ -1762,6 +1764,8 @@ final class ArenaWorldView: SCNView {
     private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
         guard ![.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant),
               let slot = burstSlots.first(where: { !$0.busy }) else { return }
+        let started = metricsEnabled ? CACurrentMediaTime() : 0
+        defer { if metricsEnabled { ArenaDiagnostics.shared.record(.particleDispatch, seconds: CACurrentMediaTime() - started) } }
         slot.busy = true
         slot.node.simdPosition = point
         slot.node.isHidden = false
