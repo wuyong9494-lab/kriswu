@@ -197,10 +197,20 @@ struct ArenaLobbyPlate: Shape {
 struct ArenaLobbyComposition {
     let size: CGSize
     var compact: Bool { size.height < 370 }
+    var narrow: Bool { size.width < 700 }
     var railGap: CGFloat { compact ? 0 : 10 }
     var menuHeight: CGFloat { compact ? 44 : 49 }
-    var heroSize: CGSize { CGSize(width: size.width * 0.48, height: size.height * 0.70) }
-    var heroCenter: CGPoint { CGPoint(x: size.width * 0.51, y: size.height * 0.51) }
+    var topGap: CGFloat { narrow ? 4 : 7 }
+    var profileWidth: CGFloat { narrow ? 100 : 130 }
+    var counterWidth: CGFloat { narrow ? 60 : 76 }
+    var topRequiredWidth: CGFloat { profileWidth + 44 + 3 * counterWidth + 3 * 44 + 8 * topGap }
+    var heroBadgeCenter: CGPoint { CGPoint(x: size.width * 0.51, y: max(78, size.height * 0.21)) }
+    var heroBadgeFrame: CGRect { CGRect(x: heroBadgeCenter.x - 120, y: heroBadgeCenter.y - 22, width: 240, height: 44) }
+    var heroTop: CGFloat { heroBadgeFrame.maxY + 4 }
+    var heroGround: CGFloat { min(size.height * 0.80, size.height - 79) }
+    var heroSize: CGSize { CGSize(width: size.width * 0.48, height: min(size.height * 0.70, max(120, (heroGround - heroTop) / 0.80))) }
+    var heroCenter: CGPoint { CGPoint(x: size.width * 0.51, y: (heroTop + heroGround) / 2) }
+    var leftCenter: CGPoint { CGPoint(x: 48, y: size.height * 0.53) }
     var socialCenter: CGPoint {
         let railHeight = 3 * menuHeight + 2 * railGap
         let y = compact ? size.height * 0.40 : min(size.height * 0.40, size.height - 152.5 - railHeight / 2)
@@ -209,7 +219,61 @@ struct ArenaLobbyComposition {
     var adventureCenter: CGPoint { CGPoint(x: compact ? size.width * 0.73 : size.width - 82, y: size.height - 122) }
     var adventureSize: CGSize { CGSize(width: compact ? 114 : 132, height: 45) }
     var inviteCenter: CGPoint { CGPoint(x: size.width * 0.69, y: size.height * (compact ? 0.43 : 0.56)) }
-    var socialFrame: CGRect { CGRect(x: socialCenter.x - 33.5, y: socialCenter.y - (3 * menuHeight + 2 * railGap) / 2, width: 67, height: 3 * menuHeight + 2 * railGap) }
+    var equipmentCenter: CGPoint { CGPoint(x: size.width * 0.35, y: min(size.height * 0.64, size.height - 125)) }
+    var battleWidth: CGFloat { narrow ? 144 : 184 }
+    var modeWidth: CGFloat { min(340, size.width - 24 - 110 - 44 - battleWidth - 32) }
+    var socialFrame: CGRect { railFrame(center: socialCenter) }
     var adventureFrame: CGRect { CGRect(x: adventureCenter.x - adventureSize.width / 2, y: adventureCenter.y - 22.5, width: adventureSize.width, height: 45) }
     var inviteFrame: CGRect { CGRect(x: inviteCenter.x - 22, y: inviteCenter.y - 22, width: 44, height: 44) }
+    private func railFrame(center: CGPoint) -> CGRect {
+        let h = 3 * menuHeight + 2 * railGap
+        return CGRect(x: center.x - 33.5, y: center.y - h / 2, width: 67, height: h)
+    }
+    var controlFrames: [String: CGRect] {
+        var frames: [String: CGRect] = [:]
+        frames["profile"] = CGRect(x: 12, y: 6, width: profileWidth, height: 44)
+        frames["road"] = CGRect(x: 12 + profileWidth + topGap, y: 6, width: 44, height: 44)
+        var x = size.width - 12
+        for name in ["exit", "settings", "sound"] {
+            x -= 44; frames[name] = CGRect(x: x, y: 6, width: 44, height: 44); x -= topGap
+        }
+        for name in ["tier", "points", "coins"] {
+            x -= counterWidth; frames[name] = CGRect(x: x, y: 6, width: counterWidth, height: 44); x -= topGap
+        }
+        frames["heroStatus"] = heroBadgeFrame
+        frames["season"] = CGRect(x: compact ? 86 : 14, y: 58.5, width: 68, height: 47)
+        for (side, center) in [("left", leftCenter), ("social", socialCenter)] {
+            let rail = railFrame(center: center)
+            for index in 0..<3 { frames["\(side)\(index)"] = CGRect(x: rail.minX, y: rail.minY + CGFloat(index) * (menuHeight + railGap), width: 67, height: menuHeight) }
+        }
+        frames["adventure"] = adventureFrame
+        frames["invite"] = inviteFrame
+        frames["upgrade"] = CGRect(x: equipmentCenter.x - 22, y: equipmentCenter.y - 48, width: 44, height: 44)
+        frames["skin"] = CGRect(x: equipmentCenter.x - 22, y: equipmentCenter.y + 4, width: 44, height: 44)
+        frames["pass"] = CGRect(x: 12, y: size.height - 77, width: 110, height: 69)
+        frames["quests"] = CGRect(x: 130, y: size.height - 64, width: 44, height: 56)
+        let battleX = size.width - 12 - battleWidth
+        frames["battle"] = CGRect(x: battleX, y: size.height - 69, width: battleWidth, height: 61)
+        frames["mode"] = CGRect(x: battleX - 8 - modeWidth, y: size.height - 69, width: modeWidth, height: 61)
+        return frames
+    }
+}
+
+/// Daily quests use device-local calendar days, matching ArenaSeason.day.
+enum ArenaLobbyClock {
+    static func questRefreshLabel(now: Date, calendar: Calendar = .current) -> String {
+        guard let next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else { return "每日任务" }
+        let minutes = max(1, Int(ceil(next.timeIntervalSince(now) / 60)))
+        return "任务刷新：\(minutes / 60)小时\(minutes % 60)分"
+    }
+}
+
+struct ArenaLobbyQuestCountdown: View {
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: 60)) { context in
+            Text(ArenaLobbyClock.questRefreshLabel(now: context.date))
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+        }
+    }
 }

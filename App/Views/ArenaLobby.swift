@@ -59,6 +59,9 @@ struct ArenaHomeView: View {
 
     /// 选的角色还没解锁（比如换了一台手机）就用第一个
     private var chosen: Brawler {
+        if ProcessInfo.processInfo.arguments.contains("-demo"),
+           let raw = UserDefaults.standard.string(forKey: "arena.previewBrawler"),
+           let number = Int(raw), let preview = Brawler(rawValue: number) { return preview }
         if ProcessInfo.processInfo.arguments.contains("-demo"), UserDefaults.standard.bool(forKey: "arena.previewRanger") { return .ranger }
         return progress.isUnlocked(brawler) ? brawler : .knight
     }
@@ -75,7 +78,6 @@ struct ArenaHomeView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let wide = geo.size.width > geo.size.height
             let composition = ArenaLobbyComposition(size: geo.size)
             let compact = composition.compact
             ZStack {
@@ -85,14 +87,15 @@ struct ArenaHomeView: View {
                     .frame(width: composition.heroSize.width, height: composition.heroSize.height)
                     .position(composition.heroCenter)
                 VStack(spacing: 0) {
-                    compactTopBar
+                    compactTopBar(composition: composition)
                     Spacer(minLength: 0)
-                    lobbyFooter(wide: wide)
+                    lobbyFooter(composition: composition)
                 }.padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
                     .offset(y: lobbyPresented || reduceLobbyMotion ? 0 : 12)
                     .opacity(lobbyPresented || reduceLobbyMotion ? 1 : 0)
                 heroStatus
-                    .position(x: geo.size.width * 0.51, y: 64)
+                    .frame(width: composition.heroBadgeFrame.width, height: composition.heroBadgeFrame.height)
+                    .position(composition.heroBadgeCenter)
                     .opacity(lobbyPresented ? 1 : 0)
                 // Reference composition: event tile above a compact left rail,
                 // social rail on the right, equipment beside the hero's feet.
@@ -102,12 +105,12 @@ struct ArenaHomeView: View {
                         Text("赛季活动").font(.system(size: 10, weight: .black))
                     }.foregroundStyle(.white).frame(width: 68, height: 47)
                 }.buttonStyle(ArenaLobbyRailStyle())
-                    .position(x: compact ? geo.size.width * 0.25 : 48, y: 82)
+                    .position(x: compact ? 120 : 48, y: 82)
                 VStack(spacing: composition.railGap) {
                     quietMenu("商店", symbol: "bag.fill", compact: compact) { sheet = .shop }
                     quietMenu("英雄", symbol: "person.crop.square.fill", compact: compact) { sheet = .brawlers }
                     quietMenu("活动", symbol: "star.circle.fill", compact: compact) { sheet = .season }
-                }.position(x: 48, y: geo.size.height * (compact ? 0.50 : 0.53))
+                }.position(composition.leftCenter)
                 VStack(spacing: composition.railGap) {
                     quietMenu("好友", symbol: "person.2.fill", compact: compact) { sheet = .friends }
                     quietMenu("战队", symbol: "shield.fill", compact: compact) { sheet = .together }
@@ -131,7 +134,7 @@ struct ArenaHomeView: View {
                             .frame(width: 44, height: 44)
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
                         .accessibilityLabel("选择英雄和皮肤")
-                }.position(x: geo.size.width * 0.35, y: geo.size.height * 0.64)
+                }.position(composition.equipmentCenter)
                 Button { sheet = .party } label: {
                     Image(systemName: "plus").font(.system(size: 28, weight: .black))
                         .frame(width: 44, height: 44)
@@ -181,7 +184,7 @@ struct ArenaHomeView: View {
             HStack(spacing: 5) {
                 HStack(spacing: 4) {
                     ArenaLobbyIcon("ArenaIconTrophy").frame(width: 22, height: 24)
-                    Text("\(progress.trophies(chosen))").monospacedDigit()
+                    Text("\(progress.trophies(chosen))").monospacedDigit().lineLimit(1).minimumScaleFactor(0.65)
                 }.padding(.horizontal, 8).frame(height: 30)
                     .background(Color(red: 0.13, green: 0.72, blue: 0.83))
                     .overlay(Rectangle().stroke(.black.opacity(0.7), lineWidth: 2))
@@ -234,8 +237,8 @@ struct ArenaHomeView: View {
             .accessibilityLabel(title)
     }
 
-    private var compactTopBar: some View {
-        HStack(spacing: 7) {
+    private func compactTopBar(composition: ArenaLobbyComposition) -> some View {
+        HStack(spacing: composition.topGap) {
             Button { sheet = .brawlers } label: {
                 HStack(spacing: 5) {
                     ArenaLobbyIcon("ArenaIconHero").foregroundStyle(.white)
@@ -247,46 +250,53 @@ struct ArenaHomeView: View {
                             Text("\(progress.totalTrophies)").foregroundStyle(.yellow)
                         }.font(.system(size: 15, weight: .black, design: .rounded))
                     }
-                }.padding(.horizontal, 6).frame(width: 130, height: 43)
+                }.padding(.horizontal, 6).frame(width: composition.profileWidth, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
             Button { sheet = .road } label: {
                 Image(systemName: "crown.fill").font(.system(size: 24, weight: .black))
-                    .foregroundStyle(.yellow).frame(width: 44, height: 43)
+                    .foregroundStyle(.yellow).frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow)).accessibilityLabel("奖杯之路")
             Spacer(minLength: 0)
-            lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店") { sheet = .shop }
-            lobbyCounter("\(progress.season.points)", asset: "ArenaIconSeason", tint: .green, label: "赛季经验") { sheet = .season }
-            lobbyCounter("\(progress.season.tier)", asset: "ArenaIconRank", tint: .purple, label: "通行证等级") { sheet = .season }
+            lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店", width: composition.counterWidth) { sheet = .shop }
+            lobbyCounter("\(progress.season.points)", asset: "ArenaIconSeason", tint: .green, label: "赛季经验", width: composition.counterWidth) { sheet = .season }
+            lobbyCounter("\(progress.season.tier)", asset: "ArenaIconRank", tint: .purple, label: "通行证等级", width: composition.counterWidth) { sheet = .season }
             Button { muted.toggle(); ArenaSound.shared.muteChanged(battle: false) } label: {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 18, weight: .black))
-                    .frame(width: 42, height: 40)
+                    .frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel(muted ? "打开声音" : "静音")
             Button { sheet = .settings } label: {
-                Image(systemName: "line.3.horizontal").font(.system(size: 22, weight: .black)).frame(width: 42, height: 40)
+                Image(systemName: "line.3.horizontal").font(.system(size: 22, weight: .black)).frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("游戏设置")
             Button {
                 ArenaOrientation.releaseAll(); ArenaSound.shared.leaveLobby(); dismiss()
             } label: {
-                Image(systemName: "chevron.left").font(.headline).frame(width: 38, height: 40)
+                Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("离开勇者乱斗")
         }.foregroundStyle(.white).frame(height: 44)
     }
 
-    private func lobbyCounter(_ value: String, asset: String, tint: Color, label: String,
+    private func lobbyCounter(_ value: String, asset: String, tint: Color, label: String, width: CGFloat = 76,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                ArenaLobbyIcon(asset).foregroundStyle(tint).frame(width: 25, height: 25)
-                Text(value).font(.system(size: 17, weight: .black, design: .rounded).monospacedDigit())
-                    .lineLimit(1).minimumScaleFactor(0.7)
+            HStack(spacing: width < 70 ? 3 : 5) {
+                ArenaLobbyIcon(asset).foregroundStyle(tint).frame(width: width < 70 ? 18 : 25, height: 25)
+                Text(compactCounter(value)).font(.system(size: width < 70 ? 14 : 17, weight: .black, design: .rounded).monospacedDigit())
+                    .lineLimit(1).minimumScaleFactor(0.55)
             }.foregroundStyle(.white).arenaOutline(1)
-                .padding(.horizontal, 6).frame(width: 76, height: 44)
+                .padding(.horizontal, width < 70 ? 4 : 6).frame(width: width, height: 44)
                 .background(Color(red: 0.04, green: 0.11, blue: 0.24).opacity(0.88))
         }.buttonStyle(.plain).accessibilityLabel("\(label)，\(value)")
     }
 
-    private func lobbyFooter(wide: Bool) -> some View {
-        HStack(alignment: .bottom, spacing: 10) {
+    private func compactCounter(_ value: String) -> String {
+        guard let number = Int(value) else { return value }
+        if number >= 100_000_000 { return String(format: "%.1f亿", Double(number) / 100_000_000) }
+        if number >= 100_000 { return String(format: "%.1f万", Double(number) / 10_000) }
+        return value
+    }
+
+    private func lobbyFooter(composition: ArenaLobbyComposition) -> some View {
+        HStack(alignment: .bottom, spacing: 8) {
             Button { sheet = .season } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
@@ -295,11 +305,11 @@ struct ArenaHomeView: View {
                     }
                     Text("乱斗通行证").font(.system(size: 11, weight: .black))
                     ProgressView(value: Double(seasonTierPoints), total: Double(ArenaSeason.pointsPerTier))
-                        .tint(.yellow).frame(width: 98)
+                        .tint(.yellow).frame(width: 90)
                     Text("\(seasonTierPoints)/\(ArenaSeason.pointsPerTier)")
                         .font(.system(size: 9, weight: .black, design: .rounded).monospacedDigit())
                         .foregroundStyle(.white.opacity(0.85))
-                }.padding(.horizontal, 8).frame(height: 65)
+                }.padding(.horizontal, 8).frame(width: 110, height: 69)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
                 .overlay(alignment: .topTrailing) {
                     if hasSeasonPrize {
@@ -313,7 +323,7 @@ struct ArenaHomeView: View {
                 VStack(spacing: 1) {
                     ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
                     Text("任务").font(.system(size: 12, weight: .black))
-                }.frame(width: 48, height: 56)
+                }.frame(width: 44, height: 56)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
             Spacer(minLength: 0)
             Button { sheet = .modes } label: {
@@ -321,24 +331,30 @@ struct ArenaHomeView: View {
                     ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.purple).frame(width: 34, height: 39)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
-                        Text(ArenaMap.playPool(for: playMode).first?.title ?? playMode.title)
-                            .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
+                        if composition.compact { ArenaLobbyQuestCountdown() }
+                        else {
+                            Text(ArenaMap.playPool(for: playMode).first?.title ?? playMode.title)
+                                .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
+                        }
                     }.lineLimit(1).minimumScaleFactor(0.7)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.up").font(.system(size: 15, weight: .black))
-                }.padding(.horizontal, 9).frame(maxWidth: 340).frame(height: 57)
+                }.padding(.horizontal, 9).frame(width: composition.modeWidth, height: 61)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
+                .overlay(alignment: .topTrailing) {
+                    if !composition.compact {
+                        ArenaLobbyQuestCountdown().offset(y: -16).allowsHitTesting(false)
+                    }
+                }
             VStack(spacing: 3) {
-                Button { ranked.toggle() } label: {
-                    Text(ranked ? "排位对战 ▾" : "普通对战 ▾").font(.system(size: 11, weight: .black))
-                        .foregroundStyle(.white).frame(minHeight: 24)
-                }.buttonStyle(.plain).accessibilityLabel("切换普通或排位")
+                Text(ranked ? "排位对战" : "普通对战").font(.system(size: 11, weight: .black))
+                    .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
                 Button { start() } label: {
                     Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
-                        .frame(width: wide ? 184 : 124, height: 61)
+                        .frame(width: composition.battleWidth, height: 61)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
             }
-        }.foregroundStyle(.white).frame(height: 84)
+        }.foregroundStyle(.white).frame(height: 92)
     }
 
     // MARK: 上边
@@ -1050,6 +1066,12 @@ struct ArenaHomeView: View {
     private var modeList: some View {
         ScrollView {
             VStack(spacing: 8) {
+                HStack {
+                    Text("对战类型").font(.system(size: 16, weight: .black))
+                    Spacer()
+                    rankedSwitch
+                }.padding(.bottom, 6)
+
                 ForEach(ArenaGame.Mode.allCases, id: \.self) { item in
                     Button {
                         mode = item
@@ -1797,13 +1819,15 @@ final class ArenaShowcaseView: SCNView {
     /// Only the demo capture process writes this marker. A fixed launch sleep can
     /// expire while iOS still shows the launch screen (observed in Build 398).
     private func writeCaptureReadiness() {
-        guard !captureReadyWritten, window != nil,
-              bounds.width > bounds.height, avatar?.brawler == .ranger,
+        guard !captureReadyWritten, let window,
+              bounds.width > 0, bounds.height > 0,
+              window.bounds.width > window.bounds.height,
               ProcessInfo.processInfo.arguments.contains("-demo"),
-              UserDefaults.standard.bool(forKey: "arena.previewRanger") else { return }
-        let evidence: [String: Any] = ["scene": "rangerLobby", "asset": BrawlerLook.of(.ranger).file,
+              UserDefaults.standard.bool(forKey: "arena.previewRanger") || UserDefaults.standard.string(forKey: "arena.previewBrawler") != nil else { return }
+        let evidence: [String: Any] = ["scene": "rangerLobby", "asset": BrawlerLook.of(fighter.brawler).file, "brawler": fighter.brawler.rawValue,
             "legacy": BrawlerLook.legacyRangerComparison, "still": comparisonStill,
             "viewWidth": bounds.width, "viewHeight": bounds.height,
+            "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
             "cameraDistance": pointOfView?.position.z ?? 0, "framing": "visible-model-envelope"]
         let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         guard let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) else { return }

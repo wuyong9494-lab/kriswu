@@ -6,6 +6,31 @@ import Metal
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testWholeLobbyControlsFitWithoutOverlapIncludingHeaderAndBadges() {
+        for size in [CGSize(width: 568, height: 320), CGSize(width: 667, height: 375), CGSize(width: 844, height: 390), CGSize(width: 932, height: 430), CGSize(width: 1024, height: 768), CGSize(width: 1194, height: 834)] {
+            let layout = ArenaLobbyComposition(size: size)
+            XCTAssertLessThanOrEqual(layout.topRequiredWidth, size.width - 24, "Header overflows at \\(size)")
+            let controls = layout.controlFrames.sorted { $0.key < $1.key }
+            let bounds = CGRect(origin: .zero, size: size)
+            for (i, item) in controls.enumerated() {
+                XCTAssertTrue(bounds.contains(item.value), "\\(item.key) outside \\(size)")
+                XCTAssertGreaterThanOrEqual(item.value.width, 44)
+                XCTAssertGreaterThanOrEqual(item.value.height, 44)
+                for other in controls.dropFirst(i + 1) {
+                    XCTAssertFalse(item.value.intersects(other.value), "\\(item.key) overlaps \\(other.key) at \\(size)")
+                }
+            }
+            XCTAssertGreaterThan(layout.heroGround, layout.heroTop)
+        }
+    }
+
+    func testLobbyCountdownUsesActualLocalDailyQuestBoundary() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 8 * 3600))
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 29, hour: 23, minute: 40)))
+        XCTAssertEqual(ArenaLobbyClock.questRefreshLabel(now: date, calendar: calendar), "任务刷新：0小时20分")
+    }
+
     func testLobbyCriticalControlsStaySeparateAcrossPhoneAndTabletSizes() {
         for size in [CGSize(width: 568, height: 320), CGSize(width: 667, height: 375), CGSize(width: 844, height: 390), CGSize(width: 932, height: 430), CGSize(width: 1024, height: 768), CGSize(width: 1194, height: 834)] {
             let layout = ArenaLobbyComposition(size: size)
