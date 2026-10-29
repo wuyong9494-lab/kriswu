@@ -4,6 +4,17 @@ import simd
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testOutlineWindingMatchesOutwardNormals() {
+        let positions: [Float] = [0, 0, 0, 1, 0, 0, 0, 1, 0]
+        let normals: [Float] = [0, 0, 1, 0, 0, 1, 0, 0, 1]
+        // Keep good faces, reverse the imported inward face, preserve a degenerate face.
+        let repaired = GLTFModel.outwardTriangleIndices([0, 1, 2, 0, 2, 1, 0, 0, 1],
+                                                        positions: positions, normals: normals)
+        XCTAssertEqual(repaired, [0, 1, 2, 0, 1, 2, 0, 0, 1])
+        XCTAssertEqual(GLTFModel.outwardTriangleIndices(repaired, positions: positions, normals: normals), repaired)
+        XCTAssertEqual(GLTFModel.outwardTriangleIndices([0, 2, 1], positions: positions, normals: []), [0, 2, 1])
+    }
+
     func testSharedModelCacheKeepsEveryCharactersCombatClips() throws {
         // Earlier characters deliberately load before their shared-model variants.
         for brawler in Brawler.allCases {

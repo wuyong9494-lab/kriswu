@@ -164,9 +164,10 @@ final class GLTFModel: @unchecked Sendable {
                     let uvs = reader.floats(uvIndex)
                     if uvs.count == count * 2 { sources.append(GLTFModel.source(uvs, .texcoord, width: 2)) }
                 }
-                let indices: [UInt32] = (primitive["indices"] as? Int).map { reader.integers($0) }
+                var indices: [UInt32] = (primitive["indices"] as? Int).map { reader.integers($0) }
                     ?? (0..<UInt32(count)).map { $0 }
                 guard !indices.isEmpty, indices.allSatisfy({ Int($0) < count }) else { return nil }
+                indices = Self.outwardTriangleIndices(indices, positions: positions, normals: normals)
                 let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
                 let geometry = SCNGeometry(sources: sources, elements: [element])
                 let hull = normals.count == count * 3
@@ -370,6 +371,28 @@ final class GLTFModel: @unchecked Sendable {
         let root = SCNNode()
         for index in roots where made[index].parent == nil { root.addChildNode(made[index]) }
         return Instance(root: root, nodes: made, materials: owned, outlines: shells)
+    }
+
+    /// Some bundled character meshes have inward triangle winding but outward normals.
+    /// Double-sided body materials conceal it; a front-culled outline then covers the body.
+    /// Repair only inconsistent triangles, once during loading, before making either mesh.
+    static func outwardTriangleIndices(_ indices: [UInt32], positions: [Float], normals: [Float]) -> [UInt32] {
+        guard positions.count == normals.count, positions.count.isMultiple(of: 3),
+              indices.count.isMultiple(of: 3),
+              indices.allSatisfy({ Int($0) < positions.count / 3 }) else { return indices }
+        func vector(_ values: [Float], _ index: UInt32) -> SIMD3<Float> {
+            let offset = Int(index) * 3
+            return SIMD3(values[offset], values[offset + 1], values[offset + 2])
+        }
+        var result = indices
+        for offset in stride(from: 0, to: indices.count, by: 3) {
+            let a = indices[offset], b = indices[offset + 1], c = indices[offset + 2]
+            let face = simd_cross(vector(positions, b) - vector(positions, a),
+                                  vector(positions, c) - vector(positions, a))
+            let normal = vector(normals, a) + vector(normals, b) + vector(normals, c)
+            if simd_dot(face, normal) < 0 { result.swapAt(offset + 1, offset + 2) }
+        }
+        return result
     }
 
     /// 同一个位置上的几个顶点（硬边处拆开的，法线不同）法线取平均：描边沿这个方向撑开，硬边上不裂开
