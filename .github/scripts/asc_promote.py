@@ -44,10 +44,10 @@ def validate_source(request, run, jobs):
     assert str(run["run_number"]) == request["build_number"], "CI build number mismatch"
     assert run["path"] == ".github/workflows/ios.yml", "Unexpected source workflow"
     if request.get("skip_visual_capture") is True:
-        # One release only: the owner requested 415 without waiting for screenshots.
+        # One release only: the owner requested 416 without waiting for screenshots.
         # Device/core checks and the actual simulator regression remain mandatory.
         assert (request["build_number"], request["source_run_id"], request["source_sha"]) == (
-            "415", 40871120791, "7d4c9c2f9fa77e2c9d1f124ec8910e2a57b926cf"), "Capture exception belongs only to 415"
+            "416", 40876218792, "8ec504fb44330d43377f4f7cd2a7e62a58733257"), "Capture exception belongs only to 416"
         assert run["status"] in ("in_progress", "completed"), "Source run not active or complete"
         assert run.get("conclusion") in (None, "success", "failure"), "Source run cancelled or timed out"
         for name in ("build", "core-tests-linux"):

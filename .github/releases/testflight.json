@@ -1,10 +1,10 @@
 {
-  "build_number": "415",
+  "build_number": "416",
   "version": "1.2",
-  "source_sha": "7d4c9c2f9fa77e2c9d1f124ec8910e2a57b926cf",
-  "source_run_id": 40871120791,
+  "source_sha": "8ec504fb44330d43377f4f7cd2a7e62a58733257",
+  "source_run_id": 40876218792,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "notes": "• 性能优化：战斗音效改为预解码PCM和常驻播放节点，减少开火、命中时的主线程阻塞。\n• 提前准备场景资源，减少血条重复更新与慢帧追赶时的多余联机快照；包含草丛尺寸及过渡修复。\n• 设备构建、核心测试与iOS专项回归通过，并发警告0条。\n• 本次按要求跳过截图验收。真机多人混战、开局移动、贴墙进草及持续游玩效果仍待复测，不代表已保证不卡。",
+  "notes": "修复草丛进出闪烁，并恢复使用金币升级英雄的入口。",
   "skip_visual_capture": true
 }
