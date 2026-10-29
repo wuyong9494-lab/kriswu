@@ -79,56 +79,37 @@ struct ArenaHomeView: View {
                 VStack(spacing: 8) {
                     compactTopBar
                     HStack(alignment: .center, spacing: 12) {
-                        ScrollView(.vertical, showsIndicators: false) { leftMenu }.frame(width: 66)
-                        VStack(spacing: 2) {
+                        ScrollView(.vertical, showsIndicators: false) { leftMenu.padding(.bottom, 5) }
+                            .frame(width: 76)
+                        VStack(spacing: 0) {
                             ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                                           live: playing == nil && lobby == nil && !adventure && sheet == nil)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .clipped()
                             Button { sheet = .brawlers } label: {
                                 HStack(spacing: 8) {
-                                    Text(chosen.name).font(.system(size: 22, weight: .heavy, design: .rounded))
-                                    Text("Lv. \(progress.level(chosen)) · \(chosen.role)").font(.system(size: 12, weight: .semibold))
-                                    Image(systemName: "chevron.left.chevron.right").font(.caption)
+                                    Text(chosen.name).font(.system(size: 23, weight: .heavy, design: .rounded))
+                                    Text("Lv. \(progress.level(chosen)) · \(chosen.role)")
+                                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    Image(systemName: "chevron.left.chevron.right").font(.caption.bold())
                                 }
                                 .foregroundStyle(.white)
-                                .frame(minHeight: 32)
+                                .padding(.horizontal, 14).frame(minHeight: 44)
+                                .background(Color(red: 0.08, green: 0.12, blue: 0.32).opacity(0.8), in: Capsule())
                             }.buttonStyle(.plain)
+                                .accessibilityLabel("选择角色，当前\(chosen.name)")
                         }
                         ScrollView(.vertical, showsIndicators: false) {
-                          VStack(spacing: 8) {
-                            quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
-                            quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
-                            quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
-                            quietMenu("技能", symbol: "sparkles") { sheet = .loadout }
-                          }
-                        }.frame(width: 66)
+                            VStack(spacing: 8) {
+                                quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
+                                quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
+                                quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
+                                quietMenu("技能", symbol: "sparkles") { sheet = .loadout }
+                            }.padding(.bottom, 5)
+                        }.frame(width: 76)
                     }
-                    .frame(height: max(80, geo.size.height - 128))
-                    HStack(spacing: 12) {
-                        Button { sheet = .modes } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "map.fill").font(.title3).foregroundStyle(.mint)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(playMode.title).font(.system(size: 16, weight: .bold, design: .rounded))
-                                    Text("选择玩法与地图").font(.caption).foregroundStyle(.white.opacity(0.65))
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.up").font(.caption)
-                            }
-                            .foregroundStyle(.white).padding(.horizontal, 14).frame(height: 56)
-                            .background(Color(red: 0.13, green: 0.10, blue: 0.23), in: RoundedRectangle(cornerRadius: 14))
-                        }.buttonStyle(.plain)
-                        rankedSwitch
-                        Button { start() } label: {
-                            Label("开始对战", systemImage: "play.fill")
-                                .font(.system(size: 20, weight: .heavy, design: .rounded))
-                                .frame(width: wide ? 170 : 130, height: 56)
-                                .background(Color(red: 0.97, green: 0.72, blue: 0.24), in: RoundedRectangle(cornerRadius: 14))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color(red: 0.18, green: 0.10, blue: 0.20))
-                    }
+                    .frame(maxHeight: .infinity)
+                    lobbyFooter(wide: wide)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -165,15 +146,16 @@ struct ArenaHomeView: View {
     }
 
     private func quietMenu(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 18, weight: .semibold))
-                Text(title).font(.system(size: 11, weight: .semibold, design: .rounded))
+        let item = ArenaLobbyEmblem.menu(symbol)
+        return Button(action: action) {
+            VStack(spacing: 1) {
+                ArenaLobbyIcon(item.asset).foregroundStyle(item.tint).frame(width: 30, height: 30)
+                Text(title).font(.system(size: 11, weight: .heavy, design: .rounded))
             }
-            .foregroundStyle(.white.opacity(0.92))
-            .frame(width: 66, height: 48)
+            .foregroundStyle(.white)
+            .frame(width: 72, height: 50)
         }
-        .buttonStyle(ArenaMenuButtonStyle())
+        .buttonStyle(ArenaLobbyButtonStyle(tint: item.tint))
         .accessibilityLabel(title)
     }
 
@@ -183,22 +165,73 @@ struct ArenaHomeView: View {
                 ArenaOrientation.releaseAll()
                 ArenaSound.shared.leaveLobby()
                 dismiss()
-            } label: { Image(systemName: "xmark").frame(width: 44, height: 40) }
+            } label: { Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44) }
+                .buttonStyle(ArenaLobbyButtonStyle(tint: .white))
                 .accessibilityLabel("离开勇者乱斗")
+            HStack(spacing: 8) {
+                ArenaLobbyIcon("ArenaIconHero").foregroundStyle(.cyan).frame(width: 30, height: 30)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(name).font(.system(size: 14, weight: .heavy, design: .rounded)).lineLimit(1)
+                    Text("勇者竞技场").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.65))
+                }
+            }.frame(maxWidth: 150, alignment: .leading)
+            Spacer(minLength: 0)
+            lobbyCounter("\(progress.totalTrophies)", asset: "ArenaIconTrophy", tint: .orange, label: "奖杯之路") { sheet = .road }
+            lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店") { sheet = .shop }
+            lobbyCounter("\(progress.season.tier)级", asset: "ArenaIconSeason", tint: .cyan, label: "赛季奖励") { sheet = .season }
             Button { muted.toggle(); ArenaSound.shared.muteChanged(battle: false) } label: {
-                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").frame(width: 44, height: 40)
-            }.accessibilityLabel("切换声音")
-            Text("勇者竞技场").font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.65))
-            Spacer(minLength: 4)
-            Button { sheet = .road } label: { Label("\(progress.totalTrophies)", systemImage: "trophy.fill") }
-            Button { sheet = .shop } label: { Label("\(progress.coins)", systemImage: "circle.hexagongrid.fill") }
-            Button { sheet = .season } label: { Label("\(progress.season.tier)级", systemImage: "star.circle.fill") }
-            Button { sheet = .settings } label: { Image(systemName: "gearshape.fill").frame(width: 44, height: 40) }
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").frame(width: 44, height: 44)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
+                .accessibilityLabel(muted ? "打开声音" : "静音")
         }
-        .font(.system(size: 14, weight: .semibold, design: .rounded).monospacedDigit())
-        .buttonStyle(.plain)
         .foregroundStyle(.white)
-        .frame(height: 40)
+        .frame(height: 44)
+    }
+
+    private func lobbyCounter(_ value: String, asset: String, tint: Color, label: String,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                ArenaLobbyIcon(asset).foregroundStyle(tint).frame(width: 24, height: 24)
+                Text(value).font(.system(size: 15, weight: .heavy, design: .rounded).monospacedDigit())
+                    .lineLimit(1).minimumScaleFactor(0.7)
+            }.padding(.horizontal, 10).frame(minWidth: 68, minHeight: 44)
+        }.buttonStyle(ArenaLobbyButtonStyle(tint: tint))
+            .accessibilityLabel("\(label)，\(value)")
+    }
+
+    private func lobbyFooter(wide: Bool) -> some View {
+        HStack(spacing: 12) {
+            Button { sheet = .season } label: {
+                HStack(spacing: 8) {
+                    ArenaLobbyIcon("ArenaIconSeason").foregroundStyle(.yellow).frame(width: 30, height: 30)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("赛季任务").font(.system(size: 13, weight: .heavy, design: .rounded))
+                        Text("等级 \(progress.season.tier)").font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }.padding(.horizontal, 12).frame(height: 60)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
+            Spacer(minLength: 0)
+            Button { sheet = .modes } label: {
+                HStack(spacing: 10) {
+                    ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.mint).frame(width: 34, height: 34)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(playMode.title).font(.system(size: 17, weight: .heavy, design: .rounded))
+                        Text("选择玩法与地图").font(.system(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.7))
+                    }.lineLimit(1).minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption.bold())
+                }.padding(.horizontal, 12).frame(maxWidth: 290).frame(height: 60)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .mint))
+            rankedSwitch
+            Button { start() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "play.fill").font(.system(size: 22, weight: .black))
+                    Text("开始对战").font(.system(size: 23, weight: .heavy, design: .rounded))
+                }.frame(width: wide ? 176 : 130, height: 60)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+        }.foregroundStyle(.white).frame(height: 64)
     }
 
     // MARK: 上边
@@ -582,7 +615,7 @@ struct ArenaHomeView: View {
                         .font(.system(size: 13, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .arenaInk()
-                        .frame(width: 46, height: 34)
+                        .frame(width: 46, height: 44)
                         .background(Capsule().fill(ranked == item ? (item ? Color(red: 0.86, green: 0.3, blue: 0.3) : Color(red: 0.25, green: 0.55, blue: 1)) : .clear))
                 }
                 .buttonStyle(.plain)
@@ -759,6 +792,13 @@ struct ArenaHomeView: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            settingsCard {
+                Text("美术署名").font(.headline)
+                Text("大厅图标：Lorc、Delapouite · Game-icons.net（CC BY 3.0）。已去除底色、缩放并重新配色。")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                Link("Game-icons.net", destination: URL(string: "https://game-icons.net")!)
+                Link("CC BY 3.0 许可", destination: URL(string: "https://creativecommons.org/licenses/by/3.0/")!)
             }
             settingsCard {
                 Text("怎么打")
@@ -1427,33 +1467,7 @@ extension ArenaGame.Mode {
 
 /// 大厅的底：蓝到紫的渐变，后面一圈光芒慢慢转，中间亮一点
 private struct ArenaLobbyBackground: View {
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                LinearGradient(colors: [Color(red: 0.12, green: 0.11, blue: 0.25), Color(red: 0.29, green: 0.20, blue: 0.40)], startPoint: .top, endPoint: .bottom)
-                Canvas { context, size in
-                    // Original static silhouettes: no perpetual animation or image textures.
-                    for layer in 0..<2 {
-                        var ridge = Path()
-                        let y = size.height * (layer == 0 ? 0.58 : 0.72)
-                        ridge.move(to: CGPoint(x: 0, y: size.height))
-                        for i in 0...12 {
-                            let x = size.width * CGFloat(i) / 12
-                            let peak = CGFloat((i * 7 + layer * 3) % 5) * size.height * 0.035
-                            ridge.addLine(to: CGPoint(x: x, y: y - peak))
-                        }
-                        ridge.addLine(to: CGPoint(x: size.width, y: size.height))
-                        ridge.closeSubpath()
-                        context.fill(ridge, with: .color(layer == 0 ? Color(red: 0.19, green: 0.15, blue: 0.31) : Color(red: 0.14, green: 0.11, blue: 0.23)))
-                    }
-                    let floor = Path(ellipseIn: CGRect(x: size.width * 0.18, y: size.height * 0.63, width: size.width * 0.64, height: size.height * 0.52))
-                    context.fill(floor, with: .color(Color(red: 0.25, green: 0.19, blue: 0.33)))
-                }
-                RadialGradient(colors: [Color(red: 0.57, green: 0.45, blue: 0.68).opacity(0.42), .clear], center: UnitPoint(x: 0.5, y: 0.42), startRadius: 10, endRadius: geo.size.width * 0.34)
-            }
-        }
-        .ignoresSafeArea()
-    }
+    var body: some View { ArenaLobbyBackdrop().ignoresSafeArea() }
 }
 
 /// 从中间往外的一圈光芒（16 道）

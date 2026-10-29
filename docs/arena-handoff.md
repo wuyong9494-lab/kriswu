@@ -114,3 +114,14 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 候选 UI 基础素材：Kenney UI Pack（https://kenney.nl/assets/ui-pack）；本次检索找到，但详情页获取失败，许可与风格适配尚未复核，未导入。
 - 候选动画/配件参考：Quaternius Ultimate Animated Character Pack（https://quaternius.com/packs/ultimatedanimatedcharacter.html）；官方页面标明CC0，提供FBX/OBJ/Blend。仅候选，不代表造型符合目标，不替换现有游侠。
 - 本次仅更新范围及候选记录：游戏代码/新视觉验收/真机性能均未新增；未上传、未启动Apple处理、未合并，不触发新构建。
+
+## 新批次：大厅完整布局与素材落地
+
+基于 `1cf6c8a`。已重新下载并实际打开404的Original大厅截图：暗紫背景、同色侧栏、过宽玩法卡与角色/控件风格割裂仍明显。
+
+- 大厅改为玩家信息+资源栏、彩色游戏图标侧栏、分区底栏（赛季/玩法/普通排位/开始对战）。主按钮及侧栏使用游戏专用描边、背景投影和短按压位移，未重新引入文字投影。顶部/分段点击目标至少44pt。
+- 静态原创蓝色竞技场背景加入外围塔楼、旗帜及低对比地面层次；无循环背景动画、额外SCNView或运行时下载。保持现有游侠、相机包围盒取景及展示播放生命周期。
+- 实际导入11个Game-icons图标（Lorc/Delapouite，CC BY 3.0）；原始SVG、来源及固定revision、许可和重建脚本位于art/lobby及scripts/assets/build_lobby_icons.py；iOS使用预渲染40/80/120px模板图。游戏设置中加入署名与许可链接。
+- 本批只做大厅及共享大厅背景，不代表全菜单、角色、地图或混战美术已完成。值班代码、战斗规则、音频、原创游侠资产均未修改。
+- 本地：git diff --check、图标渲染和既有原创游侠验证通过；当前环境无Swift/Xcode。编译与实际新截图待单次push自动CI，未取得前不写“通过”。
+- 上传/Apple处理不启动；不合并样板分支；真机性能仍未测。下一步实际打开新大厅截图，检查紧凑横屏布局、文字、图标、角色与背景对比，再记录结果。

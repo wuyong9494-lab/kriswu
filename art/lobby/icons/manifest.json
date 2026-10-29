@@ -1,0 +1,73 @@
+{
+  "upstream": "https://github.com/game-icons/icons",
+  "commit": "82d948812bfe3f269ef8f731dcdb07b08160edc4",
+  "license": "CC BY 3.0",
+  "icons": [
+    {
+      "asset": "ArenaIconAdventure",
+      "source": "treasure-map.svg",
+      "author": "lorc",
+      "url": "https://game-icons.net/1x1/lorc/treasure-map.html"
+    },
+    {
+      "asset": "ArenaIconHero",
+      "source": "crested-helmet.svg",
+      "author": "lorc",
+      "url": "https://game-icons.net/1x1/lorc/crested-helmet.html"
+    },
+    {
+      "asset": "ArenaIconSeason",
+      "source": "star-medal.svg",
+      "author": "delapouite",
+      "url": "https://game-icons.net/1x1/delapouite/star-medal.html"
+    },
+    {
+      "asset": "ArenaIconSettings",
+      "source": "cog.svg",
+      "author": "lorc",
+      "url": "https://game-icons.net/1x1/lorc/cog.html"
+    },
+    {
+      "asset": "ArenaIconShop",
+      "source": "chest.svg",
+      "author": "delapouite",
+      "url": "https://game-icons.net/1x1/delapouite/chest.html"
+    },
+    {
+      "asset": "ArenaIconFriends",
+      "source": "three-friends.svg",
+      "author": "delapouite",
+      "url": "https://game-icons.net/1x1/delapouite/three-friends.html"
+    },
+    {
+      "asset": "ArenaIconParty",
+      "source": "team-upgrade.svg",
+      "author": "delapouite",
+      "url": "https://game-icons.net/1x1/delapouite/team-upgrade.html"
+    },
+    {
+      "asset": "ArenaIconSkill",
+      "source": "battle-gear.svg",
+      "author": "lorc",
+      "url": "https://game-icons.net/1x1/lorc/battle-gear.html"
+    },
+    {
+      "asset": "ArenaIconTrophy",
+      "source": "trophy.svg",
+      "author": "lorc",
+      "url": "https://game-icons.net/1x1/lorc/trophy.html"
+    },
+    {
+      "asset": "ArenaIconCoins",
+      "source": "coins-pile.svg",
+      "author": "delapouite",
+      "url": "https://game-icons.net/1x1/delapouite/coins-pile.html"
+    },
+    {
+      "asset": "ArenaIconBattle",
+      "source": "crossed-swords.svg",
+      "author": "lorc",
+      "url": "https://game-icons.net/1x1/lorc/crossed-swords.html"
+    }
+  ]
+}
