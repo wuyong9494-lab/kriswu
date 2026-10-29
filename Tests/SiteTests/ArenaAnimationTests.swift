@@ -5,6 +5,40 @@ import simd
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testBushExitRestoresAuthoredSizeAfterRepeatedBoundaryReversals() {
+        let node = SCNNode()
+        let base = SIMD3<Float>(1.63, 1.45, 1.51)
+        node.simdScale = base
+        let bush = ArenaBushVisual(node: node, patchID: 7, bends: true)
+        for frame in 0..<180 {
+            let previousOpacity = node.opacity
+            bush.update(open: frame % 2 == 0, dt: 1 / 60)
+            XCTAssertLessThan(abs(node.opacity - previousOpacity), 0.16)
+            XCTAssertGreaterThanOrEqual(node.simdScale.x, base.x)
+            XCTAssertGreaterThanOrEqual(node.simdScale.y, base.y * 0.94 - 0.00001)
+        }
+        for _ in 0..<120 { bush.update(open: false, dt: 1 / 60) }
+        XCTAssertEqual(node.simdScale, base)
+        XCTAssertEqual(node.opacity, 1)
+        XCTAssertFalse(node.hasActions)
+        XCTAssertEqual(bush.patchID, 7)
+    }
+
+    func testBushTransitionIsCadenceIndependentAndSampleKeepsItsScale() {
+        let slow = ArenaBushVisual(node: SCNNode(), patchID: 1, bends: true)
+        let fast = ArenaBushVisual(node: SCNNode(), patchID: 1, bends: true)
+        for _ in 0..<6 { slow.update(open: true, dt: 1 / 30) }
+        for _ in 0..<24 { fast.update(open: true, dt: 1 / 120) }
+        XCTAssertEqual(slow.openness, fast.openness, accuracy: 0.00001)
+        XCTAssertEqual(slow.node.opacity, fast.node.opacity, accuracy: 0.00001)
+        let sample = ArenaBushVisual(node: SCNNode(), patchID: 2, bends: false)
+        sample.update(open: true, dt: 0)
+        XCTAssertEqual(sample.node.opacity, 1)
+        for _ in 0..<120 { sample.update(open: true, dt: 1 / 60) }
+        XCTAssertEqual(sample.node.simdScale, SIMD3<Float>(repeating: 1))
+        XCTAssertEqual(sample.node.opacity, 0.4, accuracy: 0.00001)
+    }
+
     func testBenchmarkIsRepeatableAcrossCallbackCadences() {
         let setup = ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", level: 3,
                                           loadout: .basic(.ranger, level: 3), benchmark: true)

@@ -4,6 +4,39 @@ import UIKit
 import simd
 import Darwin
 
+/// Presentation only: preserve authored size and ease reversals without restarting actions.
+/// This never changes fighter visibility, bush membership or collision rules.
+@MainActor
+final class ArenaBushVisual {
+    let node: SCNNode
+    let patchID: Int
+    let baseScale: SIMD3<Float>
+    private let bends: Bool
+    private(set) var openness: Float = 0
+
+    init(node: SCNNode, patchID: Int, bends: Bool) {
+        self.node = node
+        self.patchID = patchID
+        self.baseScale = node.simdScale
+        self.bends = bends
+    }
+
+    func update(open: Bool, dt: Float) {
+        guard dt.isFinite, dt > 0 else { return }
+        let target: Float = open ? 1 : 0
+        guard openness != target else { return }
+        // Exponential easing gives the same response at 30/60/120 Hz.
+        openness += (target - openness) * (1 - exp(-18 * dt))
+        if abs(target - openness) < 0.001 { openness = target }
+        node.opacity = CGFloat(1 - 0.6 * openness)
+        if bends {
+            node.simdScale = baseScale * SIMD3(1 + 0.08 * openness,
+                                              1 - 0.06 * openness,
+                                              1 + 0.08 * openness)
+        }
+    }
+}
+
 /// SwiftUI 里放乱斗的 3D 画面
 struct ArenaWorld: UIViewRepresentable {
     let controller: ArenaController
@@ -83,7 +116,7 @@ final class ArenaWorldView: SCNView {
 
     private var avatars: [ArenaAvatar] = []
     private var tags: [ArenaTag] = []
-    private var bushes: [(node: SCNNode, at: V2, faded: Bool)] = []
+    private var bushes: [ArenaBushVisual] = []
     private var projectiles: [Int: ProjectileView] = [:]
     private var starNodes: [SCNNode] = []
     private var floaters: [Floater] = []
@@ -478,7 +511,9 @@ final class ArenaWorldView: SCNView {
                 node.simdScale = SIMD3(size, size, size)
                 node.castsShadow = false
                 root.addChildNode(node)
-                bushes.append((node, V2(Double(x) + 0.5, Double(y) + 0.5), false))
+                bushes.append(ArenaBushVisual(node: node,
+                    patchID: map.bushId(at: V2(Double(x) + 0.5, Double(y) + 0.5)),
+                    bends: !purpleSample))
             }
         }
         if !purpleSample { root.addChildNode(scenery(game)) }
@@ -905,19 +940,8 @@ final class ArenaWorldView: SCNView {
             let id = game.map.bushId(at: fighter.pos)
             if id > 0 { openBush.insert(id) }
         }
-        for k in bushes.indices {
-            let fade = openBush.contains(game.map.bushId(at: bushes[k].at))
-            if fade != bushes[k].faded {
-                // Boundary reversals must not leave an older scale animation running.
-                bushes[k].node.removeAction(forKey: "bush-entry")
-                bushes[k].node.scale = SCNVector3(1, 1, 1)
-                if fade && !purpleSample {
-                    bushes[k].node.scale = SCNVector3(1.12, 0.88, 1.12)
-                    bushes[k].node.runAction(.scale(to: 1, duration: 0.16), forKey: "bush-entry")
-                }
-                bushes[k].faded = fade
-                bushes[k].node.opacity = fade ? 0.4 : 1
-            }
+        for bush in bushes {
+            bush.update(open: openBush.contains(bush.patchID), dt: dt)
         }
 
         syncProjectiles(game)
