@@ -68,7 +68,9 @@ struct BrawlerLook {
     static func of(_ brawler: Brawler) -> BrawlerLook {
         switch brawler {
         case .knight:
-            return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "2H_Sword"],
+            // This bundled helmet mesh contains a duplicate, unskinned copy of ChibiEyes
+            // in body coordinates; displaying it on the head produces floating eyes.
+            return BrawlerLook(file: "Knight.glb", hidden: ["Knight_Helmet", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "2H_Sword"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "1H_Melee_Attack_Slice_Diagonal", from: 0.12, to: 0.82, seconds: 0.38),
                                special: Move(clip: "1H_Melee_Attack_Stab", from: 0.12, to: 0.72, seconds: 0.42),

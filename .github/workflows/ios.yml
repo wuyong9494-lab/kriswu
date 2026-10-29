@@ -536,8 +536,10 @@ jobs:
           simctl bootstatus "$DEVICE" -b
           simctl install "$DEVICE" "$APP"
           mkdir -p shots
+          CAPTURE_DATA=$(simctl get_app_container "$DEVICE" "$ID" data)
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
           for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings; do
+            rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
             if [ "$s" = arenaSettings ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.openSettings YES
@@ -550,7 +552,26 @@ jobs:
             else
               simctl launch "$DEVICE" "$ID" -demo -screen "$s"
             fi
-            sleep 12
+            if [ "$s" = arenaBaseline ] || [ "$s" = arenaPurple ]; then
+              python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" <<'PYCODE'
+          import json, pathlib, sys, time
+          marker = pathlib.Path(sys.argv[1])
+          deadline = time.monotonic() + 120
+          while time.monotonic() < deadline:
+              if marker.exists():
+                  evidence = json.loads(marker.read_text())
+                  if 6 <= evidence['simulationTime'] < 6.04:
+                      print(evidence)
+                      break
+              time.sleep(0.5)
+          else:
+              raise SystemExit('Snapshot did not reach the required simulation time; refusing mismatched capture')
+          PYCODE
+              cp "$CAPTURE_DATA/Documents/arena-capture-ready.json" "shots/$s.json"
+              sleep 2
+            else
+              sleep 12
+            fi
             simctl io "$DEVICE" screenshot "shots/$s.png"
           done
           simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true

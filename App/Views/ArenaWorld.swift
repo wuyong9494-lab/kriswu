@@ -61,6 +61,7 @@ final class ArenaWorldView: SCNView {
     private var metrics = ArenaFrameMetrics()
     private var nextMetricsAt = 0.0
     private var diagnosticFrame = 0
+    private var captureReady = false
     private var measuredSeconds = 0.0
     private var measuredCallbacks = 0
     private var measuredSlowCallbacks = 0
@@ -299,6 +300,16 @@ final class ArenaWorldView: SCNView {
         if controller.benchmarkSnapshotTime > 0 && controller.game.time >= controller.benchmarkSnapshotTime {
             world.isPaused = true
             isPlaying = false
+            if !captureReady {
+                captureReady = true
+                let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let evidence: [String: Any] = ["simulationTime": controller.game.time, "seed": 170017,
+                    "map": controller.game.map.id, "purple": purpleSample, "camera": "fixed map center",
+                    "deviceWidth": bounds.width, "deviceHeight": bounds.height]
+                if let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) {
+                    try? data.write(to: folder.appendingPathComponent("arena-capture-ready.json"), options: .atomic)
+                }
+            }
         }
         if metricsEnabled {
             let finished = CACurrentMediaTime()
@@ -735,6 +746,13 @@ final class ArenaWorldView: SCNView {
     /// 场地外两圈树、几块石头，分队玩法两头插旗。网格大家共用，不描边、不投影。不压成一整块：那一下会卡住进对局
     private func scenery(_ game: ArenaGame) -> SCNNode {
         let map = game.map
+        if controller.benchmark {
+            rig.simdPosition = SIMD3(Float(map.center.x), 0, Float(map.center.y))
+            cameraNode.simdPosition = Self.cameraOffset
+            cameraNode.simdEulerAngles = SIMD3(-atan2(Self.cameraOffset.y, Self.cameraOffset.z), 0, 0)
+            cameraPlaced = true
+            return
+        }
         let width = Double(map.width), height = Double(map.height)
         let models = ArenaModels.shared
         let trees = ["trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
@@ -945,6 +963,13 @@ final class ArenaWorldView: SCNView {
     /// 镜头跟着自己（往前多看几格；走到边上就不再往外跟，场外最多露出一格半）
     private func moveCamera(dt: Float, game: ArenaGame) {
         let map = game.map
+        if controller.benchmark {
+            rig.simdPosition = SIMD3(Float(map.center.x), 0, Float(map.center.y))
+            cameraNode.simdPosition = Self.cameraOffset
+            cameraNode.simdEulerAngles = SIMD3(-atan2(Self.cameraOffset.y, Self.cameraOffset.z), 0, 0)
+            cameraPlaced = true
+            return
+        }
         let width = Double(map.width), height = Double(map.height)
         let me = controller.mine.pos
         let moving = controller.mine.moving

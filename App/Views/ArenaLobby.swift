@@ -1639,15 +1639,32 @@ final class ArenaShowcaseView: SCNView {
     /// Fit a conservative model envelope; layout controls keep their own size.
     private func fitShowcaseCamera() {
         guard bounds.width > 0, bounds.height > 0, let eye = pointOfView, let camera = eye.camera else { return }
-        let (low, high) = stage.boundingBox
-        let height = max(Float(high.y - min(low.y, 0)), 2.6)
-        let halfWidth = max(abs(low.x), abs(high.x), 1.05) * 1.2
-        let halfHeight = (height + 0.22) * 0.6
+        // Aggregate only visible geometry. Node.boundingBox includes hidden shields,
+        // weapons and malformed accessories, which shrank the hero in Build 389.
+        var low = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+        var high = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+        func include(_ node: SCNNode) {
+            guard !node.isHidden else { return }
+            if let geometry = node.geometry {
+                let (a, b) = geometry.boundingBox
+                for x in [a.x, b.x] { for y in [a.y, b.y] { for z in [a.z, b.z] {
+                    let p = node.simdConvertPosition(SIMD3(x, y, z), to: stage)
+                    low = simd_min(low, p)
+                    high = simd_max(high, p)
+                } } }
+            }
+            node.childNodes.forEach(include)
+        }
+        include(stage)
+        guard low.x.isFinite, high.x.isFinite, low.y < high.y else { return }
+        let height = max(high.y - min(low.y, 0), 1.2)
+        let halfWidth = max(abs(low.x), abs(high.x), 0.65) * 1.15
+        let halfHeight = height * 0.6
         let aspect = Float(bounds.width / bounds.height)
         let tangent = tan(Float(camera.fieldOfView) * .pi / 360)
-        let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + max(abs(low.z), abs(high.z), 0.5)
-        let target = SCNVector3(0, height * 0.5 + 0.12, 0)
-        eye.position = SCNVector3(0.3, target.y + distance * 0.1, distance)
+        let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + max(abs(low.z), abs(high.z), 0.2)
+        let target = stage.convertPosition(SCNVector3(0, height * 0.5, 0), to: nil)
+        eye.position = SCNVector3(0.15, target.y + distance * 0.06, distance)
         eye.look(at: target)
     }
 
@@ -1661,6 +1678,7 @@ final class ArenaShowcaseView: SCNView {
         wearing = skin
         fighter.brawler = brawler
         cheerUntil = clock + 1.6
+        made.update(fighter, visible: true, translucent: false, cheering: false, dt: 0, clock: clock)
         fitShowcaseCamera()
     }
 

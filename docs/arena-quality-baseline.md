@@ -68,3 +68,12 @@ Perspective projection; offset (0,16,12.5), about 52° down from horizontal. Ada
 ### Outstanding acceptance
 
 New sample needs cloud compilation/tests and actual screenshot review. Full lobby character-switch/panel/foreground-background interaction coverage, all-character extremity framing, device first-load/mixed-combat/skill bursts and 20–30-minute thermal run remain UNVERIFIED. Ranger firing/audio/haptic timing polish is a subsequent batch, not claimed complete here. Diagnostics builds must not overwrite the stable latest Release artifact.
+
+
+## Build 389 review
+
+Run https://github.com/wuyong9494-lab/kriswu/actions/runs/40816286315 (`fcf21b5`) passed device/simulator builds, 288 core tests (Linux skips one platform-specific test), and 8 animation/benchmark tests. TestFlight and stable Release publishing skipped intentionally. Device build still reports 7 concurrency warnings, including pooled-effect callbacks; this is not a zero-warning acceptance.
+
+All five captures actually opened. **Visual acceptance failed**: compact menu hierarchy improved, but lobby hero became too small and a pair of detached eyes appeared above him. Asset inspection found `Knight_Helmet` is an unskinned duplicate eye mesh mounted on the head, while proper skinned ChibiEyes already exists. Targeted exclusion and visible-geometry camera bounds are the follow-up, not a wholesale model replacement.
+
+Map captures are not a valid A/B: baseline remained at 2:30 and purple at 2:26, rather than both reaching simulation 6s. Purple floor reduces noise and short leaves reveal space, but crates, foliage density, hero scale and combat readability still need work. No performance improvement conclusion is supported. Next capture waits for an app-written 6s completion marker and fixes benchmark camera to map center. Regular gameplay camera and map collision remain unchanged.
