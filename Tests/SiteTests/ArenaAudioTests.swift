@@ -5,6 +5,28 @@ import UIKit
 
 @MainActor
 final class ArenaAudioTests: XCTestCase {
+    func testThemeReplacementPreservesPausedBattleAndDoesNotRestartAudio() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: ArenaSound.muteKey)
+        defaults.set(true, forKey: ArenaSound.muteKey)
+        defer {
+            if let previous { defaults.set(previous, forKey: ArenaSound.muteKey) }
+            else { defaults.removeObject(forKey: ArenaSound.muteKey) }
+        }
+        let sound = ArenaSound()
+        sound.enterLobby()
+        sound.begin()
+        sound.pauseRenderer()
+        sound.themeChanged()
+        XCTAssertEqual(sound.state.scene, .battle)
+        XCTAssertFalse(sound.state.canPlay)
+        XCTAssertTrue(sound.loadedMusicFiles.isEmpty)
+        sound.begin()
+        XCTAssertEqual(sound.state.scene, .battle)
+        sound.end()
+        sound.leaveLobby()
+    }
+
     func testThemeFilesDecodeAndKeepRequiredDurations() throws {
         let bundle = Bundle(for: ArenaSound.self)
         for (name, minimum) in [("lobby", 60.0), ("battle", 59.9), ("win", 4.9), ("lose", 4.9)] {

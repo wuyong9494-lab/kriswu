@@ -1,0 +1,412 @@
+{
+  "audio_master_muted": false,
+  "audio_theme_sample": true,
+  "cache_state": "warm assets may be shared across cases; not a cold-start benchmark",
+  "camera": "fixed center, perspective, offset 0/16/12.5",
+  "combat_fixture": "respawns rejoin fixed center positions to sustain combat; normal game damage and collisions retained",
+  "complete": true,
+  "device": "真机 iPhone18,2",
+  "frame_columns": [
+    "active_seconds",
+    "callback_ms",
+    "controller_cpu_ms",
+    "scene_cpu_ms",
+    "rss_mb",
+    "thermal_0_nominal_1_fair_2_serious_3_critical",
+    "battle_display_links",
+    "lobby_display_links",
+    "match_body_evaluations",
+    "alive_characters",
+    "projectiles"
+  ],
+  "gpu_ms": "unmeasured",
+  "identity": "v1.2 Build 399 · 183f980581010aeaed4425bb00a907bda207162f",
+  "interruption": "none",
+  "map": "canyon",
+  "map_art": "legacy",
+  "measurement": "CADisplayLink intervals and main-thread CPU, not presented FPS; no GPU or renderer-thread timing",
+  "memory": "RSS MB sampled once per active second; -1 means unavailable",
+  "physical_footprint": "unmeasured",
+  "presented_fps": "unmeasured",
+  "schema": 1,
+  "seconds_per_case": 30,
+  "seed": 170017,
+  "started_utc": "2026-10-29T07:00:11Z",
+  "system": "iOS 27.0.1",
+  "variant": "baseline",
+  "warmup_seconds_per_case": 3,
+  "results": [
+    {
+      "active_duration_seconds": 30.003021374926902,
+      "cpu_stages": [
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "modelLoad",
+          "peak_ms": 0
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.005842255511697357,
+          "name": "simulation",
+          "peak_ms": 0.040375045500695705
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.0074002251237688405,
+          "name": "ai",
+          "peak_ms": 0.0801250571385026
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "animation",
+          "peak_ms": 0
+        },
+        {
+          "count": 1979,
+          "mean_ms": 0.02951829812097438,
+          "name": "sceneUpdate",
+          "peak_ms": 0.14533335343003273
+        },
+        {
+          "count": 1,
+          "mean_ms": 23.917000042274594,
+          "name": "sceneBuild",
+          "peak_ms": 23.917000042274594
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.00024696431178229536,
+          "name": "collision",
+          "peak_ms": 0.0010416842997074127
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "damageText",
+          "peak_ms": 0
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "effects",
+          "peak_ms": 0
+        },
+        {
+          "count": 1,
+          "mean_ms": 0.0008749775588512421,
+          "name": "audio",
+          "peak_ms": 0.0008749775588512421
+        },
+        {
+          "count": 1979,
+          "mean_ms": 0.05888659959991226,
+          "name": "frameUpdate",
+          "peak_ms": 0.17833325546234846
+        }
+      ],
+      "over_18_333_ms": 0,
+      "p95_callback_ms": 16.668166732415557,
+      "scenario": "empty",
+      "slow_over_34_333_ms": 0,
+      "stage_scope": "case including 3-second warmup and scene construction; stages overlap",
+      "title": "静止空场",
+      "frame_count": 1801,
+      "observed_driver_pairs": [
+        [
+          1,
+          0
+        ]
+      ],
+      "rss_mb_range": [
+        331.453125,
+        331.875
+      ],
+      "thermal_states": [
+        0
+      ]
+    },
+    {
+      "active_duration_seconds": 30.007237708428875,
+      "cpu_stages": [
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "modelLoad",
+          "peak_ms": 0
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.011415424395381384,
+          "name": "simulation",
+          "peak_ms": 0.09558326564729214
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.007690305764546359,
+          "name": "ai",
+          "peak_ms": 0.09474996477365494
+        },
+        {
+          "count": 1979,
+          "mean_ms": 0.027497200188972903,
+          "name": "animation",
+          "peak_ms": 0.13420835603028536
+        },
+        {
+          "count": 1979,
+          "mean_ms": 0.08772041839455688,
+          "name": "sceneUpdate",
+          "peak_ms": 1.7423332901671529
+        },
+        {
+          "count": 1,
+          "mean_ms": 22.93466660194099,
+          "name": "sceneBuild",
+          "peak_ms": 22.93466660194099
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.002283181365020162,
+          "name": "collision",
+          "peak_ms": 0.015291618183255196
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "damageText",
+          "peak_ms": 0
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "effects",
+          "peak_ms": 0
+        },
+        {
+          "count": 2,
+          "mean_ms": 0.001770851667970419,
+          "name": "audio",
+          "peak_ms": 0.0019583385437726974
+        },
+        {
+          "count": 1979,
+          "mean_ms": 0.12520526046617622,
+          "name": "frameUpdate",
+          "peak_ms": 1.74904172308743
+        }
+      ],
+      "over_18_333_ms": 0,
+      "p95_callback_ms": 16.668166732415557,
+      "scenario": "soloWalk",
+      "slow_over_34_333_ms": 0,
+      "stage_scope": "case including 3-second warmup and scene construction; stages overlap",
+      "title": "单人走路",
+      "frame_count": 1801,
+      "observed_driver_pairs": [
+        [
+          1,
+          0
+        ]
+      ],
+      "rss_mb_range": [
+        332.4375,
+        332.921875
+      ],
+      "thermal_states": [
+        0
+      ]
+    },
+    {
+      "active_duration_seconds": 30.003880541655235,
+      "cpu_stages": [
+        {
+          "count": 1,
+          "mean_ms": 50.00041669700295,
+          "name": "modelLoad",
+          "peak_ms": 50.00041669700295
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.014606788669657332,
+          "name": "simulation",
+          "peak_ms": 0.1980833476409316
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.06428299981599085,
+          "name": "ai",
+          "peak_ms": 0.2794999163597822
+        },
+        {
+          "count": 11856,
+          "mean_ms": 0.04196034386141638,
+          "name": "animation",
+          "peak_ms": 0.4747499478980899
+        },
+        {
+          "count": 1976,
+          "mean_ms": 0.3574664522101914,
+          "name": "sceneUpdate",
+          "peak_ms": 3.119458328001201
+        },
+        {
+          "count": 1,
+          "mean_ms": 87.95341663062572,
+          "name": "sceneBuild",
+          "peak_ms": 87.95341663062572
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.0030201194560151162,
+          "name": "collision",
+          "peak_ms": 0.07020833436399698
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "damageText",
+          "peak_ms": 0
+        },
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "effects",
+          "peak_ms": 0
+        },
+        {
+          "count": 2,
+          "mean_ms": 0.0007292255759239197,
+          "name": "audio",
+          "peak_ms": 0.0008334172889590263
+        },
+        {
+          "count": 1976,
+          "mean_ms": 0.44849713285583703,
+          "name": "frameUpdate",
+          "peak_ms": 3.120708395726979
+        }
+      ],
+      "over_18_333_ms": 0,
+      "p95_callback_ms": 16.668166732415557,
+      "scenario": "crowdWalk",
+      "slow_over_34_333_ms": 0,
+      "stage_scope": "case including 3-second warmup and scene construction; stages overlap",
+      "title": "多人无攻击",
+      "frame_count": 1801,
+      "observed_driver_pairs": [
+        [
+          1,
+          0
+        ]
+      ],
+      "rss_mb_range": [
+        344.578125,
+        349.421875
+      ],
+      "thermal_states": [
+        0
+      ]
+    },
+    {
+      "active_duration_seconds": 30.015096708317287,
+      "cpu_stages": [
+        {
+          "count": 0,
+          "mean_ms": 0,
+          "name": "modelLoad",
+          "peak_ms": 0
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.015169543547712053,
+          "name": "simulation",
+          "peak_ms": 0.10141672100871801
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.034575767223527926,
+          "name": "ai",
+          "peak_ms": 0.2809999277815223
+        },
+        {
+          "count": 10056,
+          "mean_ms": 0.039869903223481634,
+          "name": "animation",
+          "peak_ms": 0.48916658852249384
+        },
+        {
+          "count": 1676,
+          "mean_ms": 4.542558721468399,
+          "name": "sceneUpdate",
+          "peak_ms": 168.33045822568238
+        },
+        {
+          "count": 1,
+          "mean_ms": 45.04991672001779,
+          "name": "sceneBuild",
+          "peak_ms": 45.04991672001779
+        },
+        {
+          "count": 1812,
+          "mean_ms": 0.0050714694731406225,
+          "name": "collision",
+          "peak_ms": 0.05704164505004883
+        },
+        {
+          "count": 82,
+          "mean_ms": 2.0009486740114304,
+          "name": "damageText",
+          "peak_ms": 5.980083369649947
+        },
+        {
+          "count": 457,
+          "mean_ms": 11.97685175081124,
+          "name": "effects",
+          "peak_ms": 81.69341669417918
+        },
+        {
+          "count": 2,
+          "mean_ms": 0.0010000658221542835,
+          "name": "audio",
+          "peak_ms": 0.0012083910405635834
+        },
+        {
+          "count": 1676,
+          "mean_ms": 4.6245988976151455,
+          "name": "frameUpdate",
+          "peak_ms": 168.47504174802452
+        }
+      ],
+      "over_18_333_ms": 159,
+      "p95_callback_ms": 42.65391663648188,
+      "scenario": "combat",
+      "slow_over_34_333_ms": 102,
+      "stage_scope": "case including 3-second warmup and scene construction; stages overlap",
+      "title": "多人混战",
+      "frame_count": 1509,
+      "observed_driver_pairs": [
+        [
+          1,
+          0
+        ]
+      ],
+      "rss_mb_range": [
+        347.09375,
+        351.765625
+      ],
+      "thermal_states": [
+        0
+      ]
+    }
+  ],
+  "assessment": {
+    "combat": "failed: 102 intervals over 34.333 ms; effect dispatch requires attribution including audio",
+    "walking": "no slow callback intervals in this fixed-camera warm test; user-reported normal-game walking stutter remains unresolved",
+    "grass_flicker": "unresolved; opacity transitions and grass scale actions are candidates, not confirmed causes",
+    "art": "user rejected lobby and original ranger; prior technical import success is not art acceptance",
+    "change": "instrument full audio playback CPU path; no performance fix claimed",
+    "validation": "iOS compilation and device rerun pending"
+  }
+}

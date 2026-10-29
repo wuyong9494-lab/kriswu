@@ -107,7 +107,7 @@ struct ArenaAudioSettingsView: View {
     var body: some View {
         ArenaMenuCard {
             Label("声音", systemImage: "waveform").font(.title3.bold())
-            ArenaMenuToggle(title: "原创主题试听样板（重启生效）", isOn: $themeAudio)
+            ArenaMenuToggle(title: "原创主题音乐", isOn: $themeAudio)
             ArenaMenuToggle(title: "音乐静音", isOn: $musicMuted)
             ArenaMenuSlider(title: "音乐音量", value: $music)
             ArenaMenuToggle(title: "音效静音", isOn: $effectsMuted)
@@ -118,6 +118,7 @@ struct ArenaAudioSettingsView: View {
             Text("总静音仍由大厅扬声器按钮控制。耳机拔出后不会自动改用扬声器；确认后可在这里恢复。其他 App 播放音乐时，本游戏背景音乐让出。")
                 .font(.caption).foregroundStyle(.white.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
         }
+        .onChange(of: themeAudio) { _ in ArenaSound.shared.themeChanged() }
         .onChange(of: music) { _ in ArenaSound.shared.volumeChanged() }
         .onChange(of: effects) { _ in ArenaSound.shared.volumeChanged() }
         .onChange(of: musicMuted) { _ in ArenaSound.shared.volumeChanged() }

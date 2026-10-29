@@ -34,6 +34,7 @@ final class ArenaSound: NSObject {
     private var players: [Effect: [AVAudioPlayer]] = [:]
     private var lastPlayed: [Effect: TimeInterval] = [:]
     private var beds: [Bed: AVAudioPlayer] = [:]
+    private(set) var loadedMusicFiles: [String: String] = [:]
     private var bed: Bed?
     private var sessionOn = false
     private(set) var state = ArenaAudioState()
@@ -137,6 +138,19 @@ final class ArenaSound: NSObject {
         reconcile()
     }
 
+    /// Replace cached music without changing lobby/battle/pause ownership.
+    func themeChanged() {
+        fadeTask?.cancel()
+        beds.values.forEach { $0.stop() }
+        players.values.joined().forEach { $0.stop() }
+        beds.removeAll()
+        players.removeAll()
+        loadedMusicFiles.removeAll()
+        lastPlayed.removeAll()
+        bed = nil
+        reconcile()
+    }
+
     private func reconcile() {
         guard state.canPlay, !muted else {
             beds.values.forEach { $0.pause() }
@@ -167,6 +181,10 @@ final class ArenaSound: NSObject {
     /// volume：0–1（离得远的小声一点）
     func play(_ effect: Effect, volume: Float = 1) {
         guard inMatch, state.canPlay, !effectsMuted, sessionOn, volume > 0.02 else { return }
+        // Effect dispatch includes audio. Measure the entire voice-selection/seek/play
+        // path, not only prepare(), before attributing event stalls to rendering.
+        let started = ProcessInfo.processInfo.systemUptime
+        defer { ArenaDiagnostics.shared.record(.audio, seconds: ProcessInfo.processInfo.systemUptime - started) }
         // Players are prewarmed at scene entry, never created/decoded by a hit.
         let critical = [Effect.hit, .win, .lose, .respawn].contains(effect)
         let active = players.values.reduce(0) { count, voices in count + voices.reduce(0) { $0 + ($1.isPlaying ? 1 : 0) } }
@@ -219,9 +237,11 @@ final class ArenaSound: NSObject {
         }
         if let url = (theme ? Bundle.main.url(forResource: "arena_theme_lobby", withExtension: "m4a") : nil) ?? Bundle.main.url(forResource: "arena_lobby", withExtension: "wav") {
             beds[.lobby] = loop(url)
+            if beds[.lobby] != nil { loadedMusicFiles["lobby"] = url.lastPathComponent }
         }
         if let url = (theme ? Bundle.main.url(forResource: "arena_theme_battle", withExtension: "m4a") : nil) ?? Bundle.main.url(forResource: "arena_music", withExtension: "wav") {
             beds[.battle] = loop(url)
+            if beds[.battle] != nil { loadedMusicFiles["battle"] = url.lastPathComponent }
         }
     }
 

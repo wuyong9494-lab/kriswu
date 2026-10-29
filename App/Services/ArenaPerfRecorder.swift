@@ -125,6 +125,7 @@ final class ArenaPerfRecorder: ObservableObject {
             "map_art": UserDefaults.standard.bool(forKey: "arena.purpleSample") ? "purple" : "legacy",
             "seconds_per_case": duration, "warmup_seconds_per_case": 3,
             "audio_theme_sample": UserDefaults.standard.bool(forKey: "arena.themeAudio"),
+            "audio_loaded_music_files": ArenaSound.shared.loadedMusicFiles,
             "audio_master_muted": UserDefaults.standard.bool(forKey: ArenaSound.muteKey),
             "complete": interruption == nil && results.count == 4, "interruption": interruption ?? "none",
             "measurement": "CADisplayLink intervals and main-thread CPU, not presented FPS; no GPU or renderer-thread timing",
