@@ -210,3 +210,23 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 只改草丛表现；敌人可见性、碰撞、地图连通性和角色半透明逻辑保持原规则。此修复不代表贴墙卡顿、人物闪烁或整体60FPS已解决。
 - 新增iOS回归：反复进出草的透明度连续性、原尺寸恢复、30/120Hz响应一致、紫色样板尺寸保持。CI允许该独立分支运行arena-look，明确禁止该分支覆盖Releases；普通push不触发TestFlight。
 - 本地diff和游侠资产校验通过。环境无Swift/Xcode，新增iOS测试及设备/模拟器编译待云端；新截图、真机贴墙/绕箱/进出草和热稳定性尚未验收。411自动上传任务继续针对411，不替换成这批。
+## 410 TestFlight 发布闭环（2026-10-29）
+
+- 用户改为先发布410，411自动上传已暂停，不得继续上传411；412保持独立分支，不合并。本次仅核对已有发布并更新交接，无游戏源码、发布清单或工作流变更，无重复上传。
+- 唯一目标：1.2（410）；source_sha `df6543ea9f82792e03b30c68203caa118008047a`；source_run_id `40855038730`。发布提交 `a83946d005ec30e3f209e0700b9866cd717fe41b`。
+- 已核对现有promotion运行：https://github.com/wuyong9494-lab/kriswu/actions/runs/40861691370 ，completed / success；verify、testflight、apple-status均success。
+- 签名包身份校验日志确认主App及扩展版本、源码与游侠资源匹配。上传日志于2026-10-29 11:07:50 UTC（北京时间19:07:50）明确Upload succeeded / EXPORT SUCCEEDED。
+- Apple查询日志job123410636330于2026-10-29 11:14:15 UTC（北京时间19:14:15）返回：build_id `a7673841-25e9-4b51-9292-d3291fefc167`，processingState=`VALID`，internalBuildState=`IN_BETA_TESTING`，externalBuildState=`READY_FOR_BETA_SUBMISSION`；notes_written=true，source_identity_verified_this_run=true。据此确认410可内部测试，不代表外部测试审核通过。
+- Apple状态证据：https://github.com/wuyong9494-lab/kriswu/actions/runs/40861691370/artifacts/12892088662 。签名包身份制品：https://github.com/wuyong9494-lab/kriswu/actions/runs/40861691370/artifacts/12892052854 。
+- 410未包含411的网页认证回调签名修复，也未包含412的草丛修复。无新真机性能数据，不能宣称真机卡顿或草丛闪烁已解决；后续仍需iPhone17ProMax同版本基线、音效对照和手动路线复测。
+- 本节为最新发布状态，优先于上文历史“最后内部测试399”及“接续优先411”记录。410发布核对已达成成功条件，停止本次跟踪任务；不得因此恢复411上传。
+
+## Performance-only follow-up from real Build 410 report
+- User explicitly requests performance only, including multiplayer/start-of-match movement, then direct TestFlight upload after checks; no new approval needed. Broaden inspection but do not promise stutter-free without device evidence.
+- Input arena-1793273267.json: iPhone18,2 / Build410 df6543e / baseline. Combat callback P95=62.554ms, 201 intervals >18.333ms and 140 >34.333ms in 30s. Audio 433 calls mean20.219/peak92.714ms; effects contain audio, so do not sum. Scene CPU peak201.79ms. Empty/soloWalk/crowdWalk callback P95=16.668ms; fixed camera/clear route and warmup do NOT cover normal startup, real networking, GPU or presentation/thermal performance.
+- New codex/arena-audio-performance base includes successful412 bush fix and latest410 release evidence. Independent existing arena-performance-1 is NOT overwritten. Release 410 remains available;411 must not auto-upload.
+- Replace 43 per-effect AVAudioPlayer objects/seek/play calls with predecoded mono PCM, one persistent AVAudioEngine and 12 running nodes. Preserve all effect files, music, volume/mute and 8/12 cap. Time leases, effect limits and30ms throttle avoid polling audio objects; schedule with interrupts prevents stale queued sounds. Audio restart occurs only at lifecycle/recovery, never hit/shot. Route/background/theme changes clear voices. No render-thread callbacks mutate state.
+- Prepare SceneKit scene resources before display-link startup to move initial resource upload out of first movement. This may increase entry preparation; not a proof of GPU/first-frame smoothness. Avoid unchanged health/ammo bar material/transform updates. Host sends one latest snapshot per display update when catching up, keeping all accumulated events; ordinary20Hz snapshot rate and gameplay ticks remain unchanged.
+- Inspection: bones already skip hidden pose sampling; HUD is equality guarded/10Hz; collision/AI low in supplied warm benchmark; grass settled nodes already stop writes. Remaining potential costs: first-use projectile geometry/trails, unique damage-number rasterization (2.31ms mean), GPU transparent overdraw and real network latency. Do not claim every bottleneck identified/resolved. Add scenePrepare/networkEncode/networkApply/hud stages and backend metadata for follow-up attribution.
+- Regression added: bounded/throttled voice leases and reset, all effect/theme PCM durations, actual offline audio rendering and pause/resume queue discard. Existing core/animation/grass/diagnostics/ranger tests retained. Local diff/YAML/ranger validation only; no local Swift/Xcode. Cloud compile, zero concurrency warnings and tests still required before upload. New device report and20–30min thermal run remain unverified.
+- References used for API semantics: Apple AVAudioPlayerNode scheduleBuffer/stop/play and AVAudioEngine, https://developer.apple.com/documentation/avfaudio/avaudioplayernode .

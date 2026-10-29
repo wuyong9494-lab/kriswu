@@ -167,6 +167,7 @@ final class ArenaController: ObservableObject {
     private var queuedGadget = false
     private var queuedEmote: Int?
     private var sceneEvents: [ArenaGame.Event] = []
+    private var snapshotDue = false
     private var recorded = false
 
     // 房主
@@ -245,7 +246,7 @@ final class ArenaController: ObservableObject {
             game.adjust(0) { $0.kills = 6; $0.damageDealt = 14_200 }
             game.adjust(1) { $0.kills = 3; $0.damageDealt = 8_900 }
             game.result = .team(game.fighters[0].team)
-            refreshHUD()
+            ArenaDiagnostics.shared.measure(.hud) { refreshHUD() }
         case nil:
             break
         }
@@ -297,10 +298,16 @@ final class ArenaController: ObservableObject {
         case .client:
             clientFrame(min(max(elapsed, 0), 0.1))
         }
+        // A delayed frame may run several simulation steps. Send only its newest snapshot,
+        // retaining every accumulated event instead of bursting obsolete packets.
+        if role == .host, snapshotDue {
+            snapshotDue = false
+            broadcast()
+        }
         hudTimer += elapsed
         if hudTimer >= 0.1 || game.result != nil {
             hudTimer = 0
-            refreshHUD()
+            ArenaDiagnostics.shared.measure(.hud) { refreshHUD() }
         }
     }
 
@@ -358,7 +365,7 @@ final class ArenaController: ObservableObject {
         if role == .host {
             netEvents += events
             ticks += 1
-            if ticks % 3 == 0 || game.result != nil { broadcast() }
+            if ticks % 3 == 0 || game.result != nil { snapshotDue = true }
         }
     }
 
@@ -421,7 +428,9 @@ final class ArenaController: ObservableObject {
     /// 房主：把现在的样子发给大家（打完了那一包一定要到）
     private func broadcast() {
         var packet = Data([Packet.snapshot])
-        packet.append(game.snapshot(events: netEvents, acks: remoteAcks).encoded())
+        ArenaDiagnostics.shared.measure(.networkEncode) {
+            packet.append(game.snapshot(events: netEvents, acks: remoteAcks).encoded())
+        }
         netEvents.removeAll()
         room?.sendDirect(packet, delivery: game.result == nil ? .unreliable : .reliable)
     }
@@ -489,7 +498,7 @@ final class ArenaController: ObservableObject {
         case (.client, Packet.snapshot):
             guard let snapshot = ArenaSnapshot(data: Data(body)), snapshot.time >= lastSnapshot else { return }
             lastSnapshot = snapshot.time
-            apply(snapshot)
+            ArenaDiagnostics.shared.measure(.networkApply) { apply(snapshot) }
         default:
             break
         }

@@ -127,6 +127,7 @@ final class ArenaPerfRecorder: ObservableObject {
             "variant": variant.rawValue, "seed": 170017, "map": "canyon", "camera": "fixed center, perspective, offset 0/16/12.5",
             "map_art": UserDefaults.standard.bool(forKey: "arena.purpleSample") ? "purple" : "legacy",
             "seconds_per_case": duration, "warmup_seconds_per_case": 3,
+            "effect_backend": "persistent AVAudioEngine, predecoded PCM, 12 bounded voices",
             "audio_theme_sample": UserDefaults.standard.bool(forKey: "arena.themeAudio"),
             "audio_loaded_music_files": ArenaSound.shared.loadedMusicFiles,
             "audio_master_muted": UserDefaults.standard.bool(forKey: ArenaSound.muteKey),

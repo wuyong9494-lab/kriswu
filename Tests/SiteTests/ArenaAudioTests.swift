@@ -27,6 +27,58 @@ final class ArenaAudioTests: XCTestCase {
         sound.leaveLobby()
     }
 
+    func testEveryEffectPredecodesToSharedPCMWithoutTruncation() throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+        var urls = try ArenaSound.Effect.allCases.map {
+            try XCTUnwrap(Bundle.main.url(forResource: $0.file, withExtension: "wav"))
+        }
+        for name in ["win", "lose"] {
+            urls.append(try XCTUnwrap(Bundle.main.url(forResource: "arena_theme_" + name, withExtension: "m4a")))
+        }
+        for url in urls {
+            let source = try AVAudioFile(forReading: url)
+            let buffer = try ArenaEffectMixer.decode(url, format: format)
+            XCTAssertEqual(buffer.format.sampleRate, 44_100)
+            XCTAssertEqual(buffer.format.channelCount, 1)
+            XCTAssertEqual(Double(buffer.frameLength) / format.sampleRate,
+                           Double(source.length) / source.processingFormat.sampleRate, accuracy: 0.01)
+        }
+    }
+
+    func testPersistentMixerActuallyRendersAndClearsQueuedSoundsOnPause() throws {
+        let engine = AVAudioEngine()
+        let mixer = ArenaEffectMixer(engine: engine)
+        mixer.load(theme: false)
+        XCTAssertEqual(mixer.loadedCount, ArenaSound.Effect.allCases.count)
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
+        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 1024)
+        mixer.resume()
+        XCTAssertTrue(mixer.running)
+        mixer.play(.shot, volume: 0.7)
+        let output = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024))
+        var peak: Float = 0
+        for _ in 0..<12 {
+            let status = try engine.renderOffline(1024, to: output)
+            if status == .success, let channel = output.floatChannelData?[0] {
+                for frame in 0..<Int(output.frameLength) { peak = max(peak, abs(channel[frame])) }
+            }
+        }
+        XCTAssertGreaterThan(peak, 0.001)
+        mixer.play(.power, volume: 1)
+        mixer.pause()
+        XCTAssertFalse(mixer.running)
+        mixer.resume()
+        XCTAssertTrue(mixer.running)
+        // stop() removed the queued power effect, so resuming stays silent.
+        for _ in 0..<4 { _ = try engine.renderOffline(1024, to: output) }
+        if let channel = output.floatChannelData?[0] {
+            XCTAssertTrue((0..<Int(output.frameLength)).allSatisfy { abs(channel[$0]) < 0.0001 })
+        }
+        mixer.unload()
+        XCTAssertEqual(mixer.loadedCount, 0)
+        XCTAssertFalse(mixer.running)
+    }
+
     func testThemeFilesDecodeAndKeepRequiredDurations() throws {
         let bundle = Bundle(for: ArenaSound.self)
         for (name, minimum) in [("lobby", 60.0), ("battle", 59.9), ("win", 4.9), ("lose", 4.9)] {

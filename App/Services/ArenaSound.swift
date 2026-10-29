@@ -31,9 +31,8 @@ final class ArenaSound: NSObject {
 
     private enum Bed { case lobby, battle }
 
-    private var players: [Effect: [AVAudioPlayer]] = [:]
-    private var activeVoices: [AVAudioPlayer] = []
-    private var lastPlayed: [Effect: TimeInterval] = [:]
+    private let effects = ArenaEffectMixer()
+    private var assetsLoaded = false
     private var beds: [Bed: AVAudioPlayer] = [:]
     private(set) var loadedMusicFiles: [String: String] = [:]
     private var bed: Bed?
@@ -46,11 +45,20 @@ final class ArenaSound: NSObject {
     override init() {
         super.init()
         let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(engineConfigurationChanged), name: .AVAudioEngineConfigurationChange, object: effects.notificationObject)
         center.addObserver(self, selector: #selector(suspendApp), name: UIApplication.willResignActiveNotification, object: nil)
         center.addObserver(self, selector: #selector(resumeApp), name: UIApplication.didBecomeActiveNotification, object: nil)
         center.addObserver(self, selector: #selector(interruption(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         center.addObserver(self, selector: #selector(routeChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
         center.addObserver(self, selector: #selector(silenceHintChanged), name: AVAudioSession.silenceSecondaryAudioHintNotification, object: nil)
+    }
+
+    @objc nonisolated private func engineConfigurationChanged() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.effects.pause()
+            self.reconcile()
+        }
     }
 
     @objc private func suspendApp() { pause(.background) }
@@ -74,7 +82,7 @@ final class ArenaSound: NSObject {
             guard let self else { return }
             if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue {
                 self.pause(.interruption)
-            } else { self.reconcile() }
+            } else { self.effects.pause(); self.reconcile() }
         }
     }
     @objc nonisolated private func silenceHintChanged() {
@@ -114,6 +122,7 @@ final class ArenaSound: NSObject {
     func leaveLobby() { state.leaveLobby(); reconcile() }
     func begin(owner: ObjectIdentifier? = nil) {
         if owner != matchOwner {
+            stopEffects()
             state.end()
             matchOwner = owner
         }
@@ -145,9 +154,9 @@ final class ArenaSound: NSObject {
         beds.values.forEach { $0.stop() }
         stopEffects()
         beds.removeAll()
-        players.removeAll()
+        effects.unload()
+        assetsLoaded = false
         loadedMusicFiles.removeAll()
-        lastPlayed.removeAll()
         bed = nil
         reconcile()
     }
@@ -180,8 +189,7 @@ final class ArenaSound: NSObject {
     }
 
     private func stopEffects() {
-        players.values.joined().forEach { $0.stop() }
-        activeVoices.removeAll(keepingCapacity: true)
+        effects.pause()
     }
 
     /// volume：0–1（离得远的小声一点）
@@ -190,22 +198,10 @@ final class ArenaSound: NSObject {
               ArenaDiagnostics.shared.variant != .noEffectAudio else { return }
         // Effect dispatch includes audio. Measure the entire voice-selection/seek/play
         // path, not only prepare(), before attributing event stalls to rendering.
+        // This now schedules predecoded PCM; it never seeks/starts an AVAudioPlayer.
         let started = ProcessInfo.processInfo.systemUptime
         defer { ArenaDiagnostics.shared.record(.audio, seconds: ProcessInfo.processInfo.systemUptime - started) }
-        // Players are prewarmed at scene entry, never created/decoded by a hit.
-        let critical = [Effect.hit, .win, .lose, .respawn].contains(effect)
-        // Only successful, currently active voices need polling (at most 12),
-        // not all 43 prewarmed players on every hit in a crowded frame.
-        activeVoices.removeAll { !$0.isPlaying }
-        guard activeVoices.count < (critical ? 12 : 8) else { return }
-        // 同一种声音 30 毫秒内只响一次，免得一帧里好几下叠成噪音
-        let now = ProcessInfo.processInfo.systemUptime
-        if let last = lastPlayed[effect], now - last < 0.03 { return }
-        lastPlayed[effect] = now
-        guard let voices = players[effect], let player = voices.first(where: { !$0.isPlaying }) else { return }
-        player.currentTime = 0
-        player.volume = min(volume, 1) * level(Self.effectsVolumeKey)
-        if player.play() { activeVoices.append(player) }
+        effects.play(effect, volume: min(volume, 1) * level(Self.effectsVolumeKey))
     }
 
     private var musicLevel: Float { 0.45 * level(Self.musicVolumeKey) }
@@ -223,27 +219,21 @@ final class ArenaSound: NSObject {
             } catch { return }
         }
         load()
+        if !effectsMuted { effects.resume() }
     }
 
     private func deactivate() {
         guard sessionOn else { return }
         sessionOn = false
+        effects.pause()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     private func load() {
-        guard players.isEmpty else { return }
+        guard !assetsLoaded else { return }
+        assetsLoaded = true
         let theme = UserDefaults.standard.bool(forKey: "arena.themeAudio")
-        for effect in Effect.allCases {
-            let themeFile = effect == .win ? "arena_theme_win" : (effect == .lose ? "arena_theme_lose" : nil)
-            let sample = theme ? themeFile.flatMap { Bundle.main.url(forResource: $0, withExtension: "m4a") } : nil
-            guard let url = sample ?? Bundle.main.url(forResource: effect.file, withExtension: "wav") else { continue }
-            players[effect] = (0..<effect.voices).compactMap { _ in
-                let player = try? AVAudioPlayer(contentsOf: url)
-                player?.prepareToPlay()
-                return player
-            }
-        }
+        effects.load(theme: theme)
         if let url = (theme ? Bundle.main.url(forResource: "arena_theme_lobby", withExtension: "m4a") : nil) ?? Bundle.main.url(forResource: "arena_lobby", withExtension: "wav") {
             beds[.lobby] = loop(url)
             if beds[.lobby] != nil { loadedMusicFiles["lobby"] = url.lastPathComponent }

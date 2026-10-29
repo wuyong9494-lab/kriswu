@@ -864,6 +864,8 @@ final class ArenaBar {
     private let fillNode = SCNNode()
     private let fillMaterial: SCNMaterial
     private let length: Float
+    private var shownFraction: CGFloat?
+    private var shownDim = false
 
     init(width: CGFloat, height: CGFloat, color: UIColor, border: CGFloat = 1.5) {
         let length = Float(width / 55)
@@ -892,12 +894,15 @@ final class ArenaBar {
 
     var color: UIColor {
         get { (fillMaterial.multiply.contents as? UIColor) ?? .white }
-        set { fillMaterial.multiply.contents = newValue }
+        set { if !color.isEqual(newValue) { fillMaterial.multiply.contents = newValue } }
     }
 
     /// fraction：0–1；dim：没攒满的（弹药）暗一点
     func set(_ fraction: CGFloat, dim: Bool = false) {
         let part = max(0, min(1, fraction))
+        guard shownFraction != part || shownDim != dim else { return }
+        shownFraction = part
+        shownDim = dim
         fillNode.isHidden = part <= 0.001
         fillNode.simdScale = SIMD3(Float(part), 1, 1)
         fillNode.opacity = dim ? 0.5 : 1
