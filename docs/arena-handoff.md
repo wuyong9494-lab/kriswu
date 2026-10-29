@@ -172,3 +172,9 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 新增DEBUG专用离线房间夹具与两个demo路由：arenaRoomReady / arenaRoomWaiting。使用真实ArenaRoomView，禁止启动房间网络服务；画面标记“离线界面预览”。只用于视觉，不代表真实建房/发现/加入/开局通过。
 - CI新增两张房间截图，等待横屏布局marker后采集。准备页首屏不能代表下方装备、成员和玩法全部视觉通过；真实联机、滚动/点选、离开重进仍需验收。
 - 本地diff、YAML、截图shell语法通过；未在本地运行Swift/Xcode。等408证据完成后才推送本批，避免取消已有截图。未发布、未合并；真机性能未测。
+
+### 408闭环与房间批提交
+- 408（run40850854226）设备构建、核心测试、模拟器编译/专项回归、截图录屏全部success；TestFlight与whats-new跳过。7条已有并发警告仍在。
+- 已实际打开artifact12887437652中的arenaExitDialog.png与arenaDisconnectedDialog.png：两种弹窗标题、说明、按钮完整，未见文字重影/截断；深蓝卡片、遮罩与游戏按钮落地。仅静态布局通过，不代表真实断线、触控取消/继续/退出、VoiceOver或真机性能通过。
+- 408完成后才更新工作分支。房间批功能提交76c8d34a3a2da7293915b391b1bcf33ea08defc5，远程与本地文件树均480446db8f1a76691d08c9655bbab30e4447063e。尚未完成房间批iOS编译/视觉/联机验收；未上传、未合并，最后内部测试证据仍399。
+- 房间批自动检查为Build409：https://github.com/wuyong9494-lab/kriswu/actions/runs/40852707807 ，当前in_progress。接续先看编译，再看arenaRoomReady/arenaRoomWaiting截图；下方滚动内容和多设备联机继续单独验收，不重复dispatch。
