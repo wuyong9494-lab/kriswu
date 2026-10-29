@@ -2,6 +2,12 @@ name: iOS
 
 on:
   push:
+    # A promotion signs an already checked source commit without creating another app build number.
+    paths-ignore:
+      - '.github/releases/**'
+      - '.github/workflows/testflight-promote.yml'
+      - '.github/scripts/asc_promote.py'
+      - '.github/scripts/test_asc_promote.py'
   pull_request:
   workflow_dispatch:
     inputs:

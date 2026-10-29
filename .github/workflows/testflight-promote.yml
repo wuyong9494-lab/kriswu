@@ -1,0 +1,194 @@
+name: TestFlight promotion
+run-name: Upload verified TestFlight build
+
+on:
+  push:
+    branches: [codex/arena-diagnostics-2]
+    paths: ['.github/releases/testflight.json']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+# Serialize the entire check/upload/Apple-processing sequence, including retries.
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+  ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      upload_required: ${{ steps.verify.outputs.upload_required }}
+      source_sha: ${{ steps.verify.outputs.source_sha }}
+      build_number: ${{ steps.verify.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare Apple API access
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          test -n "$ASC_KEY_ID" && test -n "$ASC_ISSUER_ID"
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          grep -q 'BEGIN PRIVATE KEY' "$KEY"
+          echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography
+      - name: Check source CI and prevent duplicate upload
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_asc_promote.py' -v
+          python3 .github/scripts/asc_promote.py preflight .github/releases/testflight.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testflight-preflight
+          path: promotion-preflight.json
+          if-no-files-found: warn
+
+  testflight:
+    needs: verify
+    if: needs.verify.outputs.upload_required == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    outputs:
+      uploaded: ${{ steps.upload.outputs.uploaded }}
+    env:
+      SITE_URL: ${{ secrets.SITE_URL }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      TARGET_BUILD: ${{ needs.verify.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.verify.outputs.source_sha }}
+          path: source
+      - name: Prepare existing signing credentials
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          test -n "$APPLE_TEAM_ID" && test -n "$ASC_KEY_ID" && test -n "$ASC_ISSUER_ID"
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          grep -q 'BEGIN PRIVATE KEY' "$KEY"
+          echo "ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography
+      - name: Select Xcode 26 or newer
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          test -n "$XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Generate project with the verified source identity
+        run: |
+          brew install xcodegen
+          python3 .github/scripts/asc_promote.py stamp .github/releases/testflight.json --path source
+          cd source
+          python3 scripts/assets/validate_ranger.py
+          xcodegen generate
+      - name: Clear previous CI development certificates
+        run: python3 .github/scripts/asc_dev_certs.py cleanup
+      - name: Archive the requested build with automatic signing
+        working-directory: source
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild archive \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ShiftReminder.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEFAULT_SITE_URL="$SITE_URL" \
+            CURRENT_PROJECT_VERSION="$TARGET_BUILD" 2>&1 | tail -80
+      - name: Verify signed app, extension, version, source and ranger asset
+        run: |
+          codesign --verify --deep --strict source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
+          python3 .github/scripts/asc_promote.py archive .github/releases/testflight.json --path source/build/ShiftReminder.xcarchive
+          python3 .github/scripts/asc_promote.py guard .github/releases/testflight.json
+      - name: Upload exactly this build to TestFlight
+        id: upload
+        working-directory: source
+        shell: bash -eo pipefail {0}
+        run: |
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/ShiftReminder.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -80
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Uploaded build $TARGET_BUILD; Apple processing is checked separately."
+      - name: Revoke this runner's temporary development certificates
+        if: always() && env.ASC_KEY_PATH != ''
+        run: |
+          SERIALS=$(security find-certificate -a -c 'Apple Development' -p 2>/dev/null \
+            | awk '/BEGIN CERT/{n++} {print > ("/tmp/cert" n ".pem")}' ; for f in /tmp/cert*.pem; do [ -s "$f" ] && openssl x509 -in "$f" -noout -serial | cut -d= -f2; done)
+          python3 .github/scripts/asc_dev_certs.py cleanup $SERIALS || echo '::warning::Temporary certificate cleanup failed'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testflight-archive-identity
+          path: promotion-archive.json
+          if-no-files-found: warn
+
+  apple-status:
+    needs: [verify, testflight]
+    if: >-
+      always() && needs.verify.result == 'success' &&
+      (needs.testflight.result == 'success' || needs.testflight.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      UPLOADED_THIS_RUN: ${{ needs.testflight.outputs.uploaded }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check Apple processing and save verified testing notes
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          export ASC_KEY_PATH="$KEY"
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography
+          ARGS=()
+          if [ "$UPLOADED_THIS_RUN" = true ]; then ARGS+=(--uploaded); fi
+          python3 .github/scripts/asc_promote.py finish .github/releases/testflight.json "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testflight-apple-status
+          path: promotion-status.json
+          if-no-files-found: warn
