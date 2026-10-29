@@ -164,3 +164,11 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 407的arena-look在模拟器编译失败，未执行专项回归和截图。job123367844195日志明确报ArenaView.swift的318/321/912行使用iOS17新onChange重载；project.yml最低版本为iOS16.2。Linux与macOS核心测试通过不代表iOS编译通过。
 - 修复仅将三处双参数onChange改为单参数兼容重载，保留原有弹窗、清空输入和焦点更新逻辑，不提高最低系统版本。原onAppear仍负责初次显示处理。
 - 本地diff检查通过；环境无Swift/Xcode，下一次单次自动CI验证设备/模拟器编译、回归及两张新增弹窗截图。真实触控/断线/VoiceOver/性能仍未测。暂缓联机房间扩展，先关闭本批编译失败。未发布、未合并。
+
+## 联机房间游戏化小批（基于6dcc727）
+- 408接续核验：Linux/macOS核心通过，模拟器已编译成功，专项回归及设备构建仍运行；已确认407的iOS16.2 API编译问题不再阻塞模拟器。截图尚未产出，弹窗不能标记视觉通过。
+- ArenaRoomView改用现有ArenaGamePanel，移除该页面NavigationStack/List/appList及系统Picker；状态提示、附近房间、角色网格、成员卡、玩法网格和开局按钮使用游戏布局。保留room.start/join/leave、lobby.choose/start、人数限制、分享系统界面和开局fullScreenCover调用。
+- 装备区新增gameStyle选项，使用卡片与游戏字体；保留解锁等级、成长选择与loadoutChanged通知。原调用默认不变；不修改值班界面或网络协议。
+- 新增DEBUG专用离线房间夹具与两个demo路由：arenaRoomReady / arenaRoomWaiting。使用真实ArenaRoomView，禁止启动房间网络服务；画面标记“离线界面预览”。只用于视觉，不代表真实建房/发现/加入/开局通过。
+- CI新增两张房间截图，等待横屏布局marker后采集。准备页首屏不能代表下方装备、成员和玩法全部视觉通过；真实联机、滚动/点选、离开重进仍需验收。
+- 本地diff、YAML、截图shell语法通过；未在本地运行Swift/Xcode。等408证据完成后才推送本批，避免取消已有截图。未发布、未合并；真机性能未测。

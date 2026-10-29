@@ -195,6 +195,19 @@ final class GameRoom: NSObject, ObservableObject {
         super.init()
     }
 
+    #if DEBUG
+    /// Offline UI fixture; never starts advertising, browsing, or Game Center.
+    static func arenaPreview(waiting: Bool) -> GameRoom {
+        precondition(ProcessInfo.processInfo.arguments.contains("-demo"))
+        let room = GameRoom(kind: .arena, mode: waiting ? .remote(code: 3123) : .nearbyHost,
+                            name: "队长", capacity: 6)
+        room.phase = waiting ? .waiting : .ready
+        room.hostID = room.me.id
+        room.members = [room.me, Member(id: "preview-guest", name: "游侠队友")]
+        return room
+    }
+    #endif
+
     var code: Int? {
         if case .remote(let code) = mode { return code }
         return nil

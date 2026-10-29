@@ -619,6 +619,29 @@ jobs:
               sleep 2
             done
           done
+          # Offline fixtures render the production room view; no discovery or login.
+          for s in arenaRoomReady arenaRoomWaiting; do
+            simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+            rm -f "$CAPTURE_DATA/Documents/arena-room-ready.json"
+            simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+            python3 - "$CAPTURE_DATA/Documents/arena-room-ready.json" <<'PYCODE'
+          import json, pathlib, sys, time
+          marker = pathlib.Path(sys.argv[1])
+          deadline = time.monotonic() + 60
+          while time.monotonic() < deadline:
+              if marker.exists():
+                  evidence = json.loads(marker.read_text())
+                  if evidence.get('scene') == 'arenaRoom' and evidence['viewWidth'] > evidence['viewHeight'] > 0:
+                      break
+              time.sleep(0.5)
+          else:
+              raise SystemExit('Offline room did not finish landscape layout')
+          PYCODE
+            cp "$CAPTURE_DATA/Documents/arena-room-ready.json" "shots/$s.json"
+            sleep 2
+            simctl io "$DEVICE" screenshot "shots/$s.png"
+            /tmp/check-arena-capture "shots/$s.png"
+          done
           # Record the implemented ranger in the real lobby, including automatic idle/shoot cycles.
           simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
           rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
@@ -642,7 +665,7 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
-          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter arenaExitDialog arenaDisconnectedDialog; do
+          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter arenaExitDialog arenaDisconnectedDialog arenaRoomReady arenaRoomWaiting; do
             test -s "shots/$required.png"
             /tmp/check-arena-capture "shots/$required.png"
           done

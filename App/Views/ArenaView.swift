@@ -126,6 +126,7 @@ struct ArenaLandscape: ViewModifier {
 struct ArenaRoomView: View {
     @ObservedObject var lobby: ArenaLobby
     @ObservedObject private var room: GameRoom
+    private let previewOnly: Bool
     @Environment(\.dismiss) private var dismiss
 
     /// 这个玩法怎么分人
@@ -139,84 +140,48 @@ struct ArenaRoomView: View {
         }
     }
 
-    init(lobby: ArenaLobby) {
+    init(lobby: ArenaLobby, previewOnly: Bool = false) {
         self.lobby = lobby
         room = lobby.room
+        self.previewOnly = previewOnly && ProcessInfo.processInfo.arguments.contains("-demo")
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                GameRoomLobby(room: room) {
-                    Section {
-                        HStack(spacing: DS.Space.xs) {
-                            ForEach(Brawler.allCases, id: \.self) { brawler in
-                                Button {
-                                    lobby.choose(brawler)
-                                } label: {
-                                    BrawlerBadge(brawler: brawler, size: 50, selected: lobby.myPick == brawler)
-                                }
-                                .buttonStyle(.plain)
-                            }
+        ArenaGamePanel(title: room.code == nil ? "面对面乱斗" : "远程乱斗", tint: .cyan, onClose: {
+            room.leave()
+            dismiss()
+        }) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if let notice = room.notice {
+                        roomCard("房间提示", symbol: "exclamationmark.triangle.fill") {
+                            Text(notice).foregroundStyle(.yellow)
                         }
-                        .frame(maxWidth: .infinity)
-                    } header: {
-                        Text("我用 \(lobby.myPick.name)（\(lobby.myPick.role)）")
                     }
-                    ArenaLoadoutSection(brawler: lobby.myPick, onChange: lobby.loadoutChanged)
-                    Section {
-                        ForEach(room.members) { member in
-                            HStack {
-                                if let pick = lobby.pick(of: member.id) {
-                                    BrawlerBadge(brawler: pick, size: 30)
-                                } else {
-                                    Text("❔").frame(width: 30)
-                                }
-                                Text(member.id == room.me.id ? "\(member.name)（我）" : member.name)
-                                Text("\(lobby.level(of: member.id)) 级").font(DS.Font.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                Spacer()
-                                if member.id == room.hostID { Text("房主").font(DS.Font.caption).foregroundStyle(.secondary) }
-                            }
-                        }
-                    } header: {
-                        Text("谁用什么")
-                    } footer: {
-                        Text(Self.seatNote(lobby.mode))
-                    }
-                    Section {
-                        if room.isHost {
-                            Picker("玩法", selection: Binding(get: { lobby.mode }, set: { lobby.choose($0) })) {
-                                ForEach(ArenaGame.Mode.allCases, id: \.self) { Text($0.title).tag($0) }
-                            }
-                            Button {
-                                lobby.start()
-                            } label: {
-                                Label("开打（\(room.members.count) 个人）", systemImage: "play.fill").frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!lobby.fits)
-                        } else {
-                            LabeledContent("玩法", value: lobby.mode.title)
-                            Text("等房主开打，开了自动进去。").foregroundStyle(.secondary)
-                        }
-                    } footer: {
-                        Text(lobby.mode.rules)
-                    }
+                    roomState
                 }
+                .padding(6)
             }
-            .appList()
-            .navigationTitle(room.code == nil ? "面对面乱斗" : "远程乱斗")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("离开") {
-                        room.leave()
-                        dismiss()
-                    }
+            .foregroundStyle(.white)
+            .font(.system(size: 15, weight: .semibold, design: .rounded))
+        }
+        .onAppear { if !previewOnly { room.start() } }
+        .background {
+            if previewOnly {
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { writePreviewMarker(geometry.size) }
+                        .onChange(of: geometry.size) { size in writePreviewMarker(size) }
                 }
             }
         }
-        .onAppear { room.start() }
+        .overlay(alignment: .bottomTrailing) {
+            if previewOnly {
+                Text("离线界面预览").font(.caption.bold()).padding(6)
+                    .background(.black.opacity(0.8)).foregroundStyle(.yellow)
+                    .allowsHitTesting(false)
+            }
+        }
         .fullScreenCover(item: $lobby.playing) { playing in
             ArenaMatchView(controller: playing.controller, onAgain: nil, onExit: {
                 lobby.playing = nil
@@ -224,6 +189,157 @@ struct ArenaRoomView: View {
             .modifier(ArenaLandscape())
         }
     }
+
+    private func writePreviewMarker(_ size: CGSize) {
+        guard previewOnly, size.width > size.height, size.height > 0 else { return }
+        let evidence: [String: Any] = ["scene": "arenaRoom", "offline": true,
+                                      "viewWidth": size.width, "viewHeight": size.height]
+        if let data = try? JSONSerialization.data(withJSONObject: evidence),
+           let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            try? data.write(to: folder.appendingPathComponent("arena-room-ready.json"), options: .atomic)
+        }
+    }
+
+    @ViewBuilder private var roomState: some View {
+        switch room.phase {
+        case .idle:
+            roomCard("连接中", symbol: "antenna.radiowaves.left.and.right") {
+                loading("正在准备房间…")
+            }
+        case .waiting:
+            roomCard("等待队友", symbol: "person.2.fill") {
+                if let code = room.code {
+                    Text("房间号  \(code)")
+                        .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
+                        .textSelection(.enabled)
+                    loading("等待 \(RoomCode.players(of: code) - 1) 人输入房间号")
+                    Button {
+                        let text = "来「值班提醒」里玩\(room.kind.title)：小游戏 › \(room.kind.title) › 远程，房间号 \(code)"
+                        ActivityShare.present([text], excluding: ActivityShare.chatOnly) { _ in }
+                    } label: {
+                        Label("分享房间号", systemImage: "square.and.arrow.up")
+                            .padding(.horizontal, 14).frame(minHeight: 48)
+                    }
+                    .buttonStyle(ArenaTileButton(face: .blue, edge: Color(red: 0.08, green: 0.2, blue: 0.5)))
+                    Text("所有玩家都需登录 Game Center 并联网。等待时请留在此页。")
+                } else {
+                    loading("等待附近玩家加入…")
+                    Text("请队友选择「加入身边同事的房间」，找到「\(room.me.name)」并加入。")
+                }
+            }
+        case .browsing, .joining:
+            roomCard("附近房间", symbol: "antenna.radiowaves.left.and.right") {
+                if room.rooms.isEmpty { loading("正在寻找附近的房间…") }
+                ForEach(room.rooms) { nearby in
+                    Button { room.join(nearby) } label: {
+                        HStack {
+                            Label("\(nearby.name) 的房间", systemImage: "person.3.fill")
+                            Spacer()
+                            if room.phase == .joining(nearby.name) { ProgressView().tint(.white) }
+                            else { Image(systemName: "chevron.right") }
+                        }
+                        .padding(12).frame(minHeight: 48)
+                    }
+                    .buttonStyle(ArenaTileButton(face: .blue, edge: Color(red: 0.08, green: 0.2, blue: 0.5)))
+                    .disabled(room.phase != .browsing)
+                    .opacity(room.phase == .browsing || room.phase == .joining(nearby.name) ? 1 : 0.5)
+                }
+                Text("请靠近队友，打开 Wi-Fi、蓝牙，并允许本地网络访问。")
+            }
+        case .ready:
+            readyRoom
+        case .closed(let reason):
+            roomCard("房间已关闭", symbol: "wifi.slash") {
+                Text(reason)
+                Text("点击右上角关闭，再重新创建或加入房间。")
+            }
+        }
+    }
+
+    private var readyRoom: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            roomCard("选择角色 · \(lobby.myPick.name)", symbol: "person.crop.square.fill") {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 10)], spacing: 10) {
+                    ForEach(Brawler.allCases, id: \.self) { brawler in
+                        Button { lobby.choose(brawler) } label: {
+                            VStack(spacing: 4) {
+                                BrawlerBadge(brawler: brawler, size: 50, selected: lobby.myPick == brawler)
+                                Text(brawler.name).font(.system(size: 13, weight: .bold, design: .rounded))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 78)
+                            .background(lobby.myPick == brawler ? Color.blue : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(lobby.myPick == brawler ? .isSelected : [])
+                    }
+                }
+            }
+            roomCard("技能装备", symbol: "bolt.fill") {
+                ArenaLoadoutSection(brawler: lobby.myPick, onChange: lobby.loadoutChanged, gameStyle: true)
+            }
+            roomCard("房间成员 · \(room.members.count) 人", symbol: "person.3.fill") {
+                ForEach(room.members) { member in
+                    HStack(spacing: 10) {
+                        if let pick = lobby.pick(of: member.id) { BrawlerBadge(brawler: pick, size: 38) }
+                        else { Image(systemName: "questionmark.square.fill").frame(width: 38) }
+                        Text(member.id == room.me.id ? "\(member.name)（我）" : member.name)
+                        Text("Lv. \(lobby.level(of: member.id))").foregroundStyle(.white.opacity(0.7))
+                        Spacer()
+                        if member.id == room.hostID { Label("房主", systemImage: "crown.fill").foregroundStyle(.yellow) }
+                    }
+                    .padding(10)
+                    .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+                }
+                Text(Self.seatNote(lobby.mode)).foregroundStyle(.white.opacity(0.75))
+            }
+            roomCard("玩法 · \(lobby.mode.title)", symbol: "flag.fill") {
+                if room.isHost {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
+                        ForEach(ArenaGame.Mode.allCases, id: \.self) { mode in
+                            Button { lobby.choose(mode) } label: {
+                                Label(mode.title, systemImage: mode.icon)
+                                    .frame(maxWidth: .infinity, minHeight: 48)
+                                    .background(lobby.mode == mode ? Color.blue : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(lobby.mode == mode ? .isSelected : [])
+                        }
+                    }
+                    Button { lobby.start() } label: {
+                        Label("开打（\(room.members.count) 人）", systemImage: "play.fill")
+                            .font(.system(size: 20, weight: .heavy, design: .rounded))
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                    }
+                    .buttonStyle(ArenaTileButton(face: Color(red: 0.95, green: 0.66, blue: 0.1), edge: .orange))
+                    .disabled(!lobby.fits)
+                    .opacity(lobby.fits ? 1 : 0.45)
+                    if !lobby.fits { Text("当前人数不符合玩法要求，请更换玩法或调整人数。 ").foregroundStyle(.yellow) }
+                } else {
+                    loading("等待房主开打，开始后自动进入对局。")
+                }
+                Text(lobby.mode.rules).foregroundStyle(.white.opacity(0.75))
+            }
+        }
+    }
+
+    private func loading(_ text: String) -> some View {
+        HStack(spacing: 10) { ProgressView().tint(.white); Text(text) }.padding(.vertical, 8)
+    }
+
+    private func roomCard<Content: View>(_ title: String, symbol: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 19, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .accessibilityAddTraits(.isHeader)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(red: 0.07, green: 0.15, blue: 0.34), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.18), lineWidth: 2))
+    }
+
 }
 
 struct ArenaMatchView: View {
@@ -1283,13 +1399,24 @@ struct ArenaLoadoutSection: View {
     let brawler: Brawler
     /// 改了选的（联机房间里要告诉大家）
     var onChange: @MainActor () -> Void = {}
+    var gameStyle = false
     @ObservedObject private var growth = ArenaProgressStore.shared
 
     var body: some View {
+        Group {
+            if gameStyle {
+                VStack(alignment: .leading, spacing: 10) { choices }
+                    .buttonStyle(.plain)
+                    .environment(\.colorScheme, .dark)
+            } else { choices }
+        }
+    }
+
+    private var choices: some View {
         let progress = growth.progress
         let level = progress.level(brawler)
         let loadout = progress.loadout(for: brawler)
-        Section {
+        return Section {
             ForEach(brawler.gadgets.indices, id: \.self) { k in
                 let gadget = brawler.gadgets[k]
                 let needs = ArenaProgress.gadgetLevels[k]
@@ -1333,15 +1460,18 @@ struct ArenaLoadoutSection: View {
                 .frame(width: 38, height: 38)
                 .overlay(badge.opacity(locked == nil ? 1 : 0.5))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(DS.Font.headline).foregroundStyle(locked == nil ? .primary : .secondary)
-                Text(note).font(DS.Font.caption).foregroundStyle(.secondary)
+                Text(title).font(gameStyle ? .system(size: 16, weight: .heavy, design: .rounded) : DS.Font.headline).foregroundStyle(locked == nil ? .primary : .secondary)
+                Text(note).font(gameStyle ? .system(size: 13, weight: .semibold, design: .rounded) : DS.Font.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if let locked {
-                Label("\(locked) 级", systemImage: "lock.fill").font(DS.Font.caption).foregroundStyle(.secondary)
+                Label("\(locked) 级", systemImage: "lock.fill").font(gameStyle ? .system(size: 13, weight: .semibold, design: .rounded) : DS.Font.caption).foregroundStyle(.secondary)
             } else if chosen {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(DS.Palette.accent)
             }
         }
+        .padding(gameStyle ? 12 : 0)
+        .background(gameStyle ? Color.white.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+        .opacity(locked == nil ? 1 : 0.65)
     }
 }
