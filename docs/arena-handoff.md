@@ -201,3 +201,14 @@ combat-sample-1 当前为 `c1d8008f1d0343fa9ec897b203bd7fab6e8dc6a3`，与接续
 - 共享网页批量请求有变更，本补充批使用[site-tests]触发既有模拟网站完整iOS回归；无需可能发布的手动dispatch。截图预算16分钟、排队保留现有410采集。另将房间号显式转String，修正409截图中的千位分隔符。
 - 真机接续：发布授权另行核对；安装已验证新包后，在游戏设置→一键连续性能诊断/导出，依次跑baseline、仅关闭战斗音效、baseline，再跑手动路线60秒并导出JSON。手动路线覆盖贴墙/绕箱/进出草；同版本、相同画面/音量设置，避免充电/温度差异干扰。20–30分钟连续游戏热稳定性仍未验证，60秒采样不能替代。
 - 补充批已提交66c9c3ec48e0fad3f7c1d786c210c3fbf8e41f08，tree84d27473ce9540384eef3f093a58ed5c7a83d959；Build411 https://github.com/wuyong9494-lab/kriswu/actions/runs/40856782411 。查询时pending，完整模拟网站回归与16分钟截图预算由本批生效。410截图仍运行且未取消，不重复dispatch。接续优先完成411检查；原7条清零证据来自410设备日志，不能据此宣称真机卡顿已解决。
+
+## 410 TestFlight 发布闭环（2026-10-29）
+
+- 用户改为先发布410，411自动上传已暂停，不得继续上传411；412保持独立分支，不合并。本次仅核对已有发布并更新交接，无游戏源码、发布清单或工作流变更，无重复上传。
+- 唯一目标：1.2（410）；source_sha `df6543ea9f82792e03b30c68203caa118008047a`；source_run_id `40855038730`。发布提交 `a83946d005ec30e3f209e0700b9866cd717fe41b`。
+- 已核对现有promotion运行：https://github.com/wuyong9494-lab/kriswu/actions/runs/40861691370 ，completed / success；verify、testflight、apple-status均success。
+- 签名包身份校验日志确认主App及扩展版本、源码与游侠资源匹配。上传日志于2026-10-29 11:07:50 UTC（北京时间19:07:50）明确Upload succeeded / EXPORT SUCCEEDED。
+- Apple查询日志job123410636330于2026-10-29 11:14:15 UTC（北京时间19:14:15）返回：build_id `a7673841-25e9-4b51-9292-d3291fefc167`，processingState=`VALID`，internalBuildState=`IN_BETA_TESTING`，externalBuildState=`READY_FOR_BETA_SUBMISSION`；notes_written=true，source_identity_verified_this_run=true。据此确认410可内部测试，不代表外部测试审核通过。
+- Apple状态证据：https://github.com/wuyong9494-lab/kriswu/actions/runs/40861691370/artifacts/12892088662 。签名包身份制品：https://github.com/wuyong9494-lab/kriswu/actions/runs/40861691370/artifacts/12892052854 。
+- 410未包含411的网页认证回调签名修复，也未包含412的草丛修复。无新真机性能数据，不能宣称真机卡顿或草丛闪烁已解决；后续仍需iPhone17ProMax同版本基线、音效对照和手动路线复测。
+- 本节为最新发布状态，优先于上文历史“最后内部测试399”及“接续优先411”记录。410发布核对已达成成功条件，停止本次跟踪任务；不得因此恢复411上传。
