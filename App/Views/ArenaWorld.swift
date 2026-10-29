@@ -1356,7 +1356,7 @@ final class ArenaWorldView: SCNView {
             ring.firstMaterial = ArenaAvatar.decal(tint.withAlphaComponent(0.9))
             return ring
         })
-        let shotHeight: Float = owner == .ranger && !BrawlerLook.legacyRangerComparison ? 1.34 * ArenaAvatar.scale : 0.6
+        let shotHeight: Float = owner == .ranger && !BrawlerLook.legacyRangerComparison ? 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale : 0.6
         mark.simdPosition = SIMD3(0, 0.04 - shotHeight, 0)
         mark.castsShadow = false
         mark.renderingOrder = 6

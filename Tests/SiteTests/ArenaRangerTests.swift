@@ -27,6 +27,24 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertLessThan(model.animated.count, 22, "Static anchors should not be sampled every frame")
     }
 
+    func testOriginalRangerFitsExistingWorldScaleAndGroundPlane() {
+        let avatar = ArenaAvatar(brawler: .ranger, color: .blue, isMe: true, decorated: false)
+        var low = Float.greatestFiniteMagnitude
+        var high = -Float.greatestFiniteMagnitude
+        avatar.node.enumerateChildNodes { node, _ in
+            guard let geometry = node.geometry else { return }
+            let (a, b) = geometry.boundingBox
+            for x in [a.x, b.x] { for y in [a.y, b.y] { for z in [a.z, b.z] {
+                let point = node.simdConvertPosition(SIMD3(x, y, z), to: avatar.node)
+                low = min(low, point.y)
+                high = max(high, point.y)
+            } } }
+        }
+        XCTAssertEqual(low, 0, accuracy: 0.002)
+        XCTAssertGreaterThan(high, 1.42)
+        XCTAssertLessThan(high, 1.60, "Ranger must not become a giant relative to the existing map and roster")
+    }
+
     func testShotMuzzleMatchesImmediateAimWithoutMovingCollisionBody() throws {
         let game = ArenaGame(mode: .teamFight, entrants: [
             .init(name: "游侠", brawler: .ranger, isBot: false, team: 0),
@@ -41,9 +59,9 @@ final class ArenaRangerTests: XCTestCase {
         avatar.update(fighter, visible: true, translucent: false, cheering: false, dt: 1 / 60, clock: 1 / 60)
         avatar.attack()
         let muzzle = try XCTUnwrap(avatar.muzzlePosition)
-        XCTAssertGreaterThan(muzzle.x, 5.7)
+        XCTAssertEqual(muzzle.x - 5, 0.93 * ArenaAvatar.scale * BrawlerLook.rangerScale, accuracy: 0.03)
         XCTAssertEqual(muzzle.z, 5, accuracy: 0.05)
-        XCTAssertEqual(muzzle.y, 1.34 * ArenaAvatar.scale, accuracy: 0.03)
+        XCTAssertEqual(muzzle.y, 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale, accuracy: 0.03)
         XCTAssertEqual(avatar.node.simdPosition, SIMD3<Float>(5, 0, 5))
     }
 

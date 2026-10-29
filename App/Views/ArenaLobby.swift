@@ -1671,12 +1671,12 @@ final class ArenaShowcaseView: SCNView {
         }
         include(stage)
         guard low.x.isFinite, high.x.isFinite, low.y < high.y else { return }
-        let height: Float = comparisonStill ? 2.4 : max(high.y - min(low.y, 0), 1.2)
-        let halfWidth: Float = comparisonStill ? 1.0 : max(abs(low.x), abs(high.x), 0.65) * 1.15
+        let height: Float = comparisonStill ? 1.6 : max(high.y - min(low.y, 0), 1.2)
+        let halfWidth: Float = comparisonStill ? 0.85 : max(abs(low.x), abs(high.x), 0.65) * 1.15
         let halfHeight = height * 0.6
         let aspect = Float(bounds.width / bounds.height)
         let tangent = tan(Float(camera.fieldOfView) * .pi / 360)
-        let depth: Float = comparisonStill ? 1.0 : max(abs(low.z), abs(high.z), 0.2)
+        let depth: Float = comparisonStill ? 0.7 : max(abs(low.z), abs(high.z), 0.2)
         let distance = max(halfHeight / tangent, halfWidth / (tangent * aspect)) + depth
         let target = stage.convertPosition(SCNVector3(0, height * 0.5, 0), to: nil)
         eye.position = SCNVector3(0.15, target.y + distance * 0.06, distance)

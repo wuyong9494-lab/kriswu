@@ -64,6 +64,10 @@ struct BrawlerLook {
     /// Original rig/atlas already authored for game scale; preserve its timing and surface normals.
     var authored = false
 
+    // New source is 2.411 m; legacy body is 1.581 m before its 0.96 look scale.
+    // Normalize this authored rig to a 1.51 m in-game silhouette (legacy ~1.44 m).
+    static let rangerScale: Float = 0.66
+
     static var legacyRangerComparison: Bool {
         ProcessInfo.processInfo.arguments.contains("-demo") && UserDefaults.standard.bool(forKey: "arena.legacyRanger")
     }
@@ -91,7 +95,7 @@ struct BrawlerLook {
             return BrawlerLook(file: "Ranger_Original.glb", hidden: [],
                                idle: "Ranger_Idle", run: "Ranger_Run",
                                attack: Move(clip: "Ranger_Shoot", seconds: 0.32),
-                               special: Move(clip: "Ranger_Skill", seconds: 0.62), authored: true)
+                               special: Move(clip: "Ranger_Skill", seconds: 0.62), scale: Self.rangerScale, authored: true)
         case .barbarian:
             return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
                                idle: "2H_Melee_Idle", run: "Running_B",

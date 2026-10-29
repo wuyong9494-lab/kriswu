@@ -12,7 +12,7 @@
   },
   "new": {
     "bytes": 589772,
-    "sha256": "cbf06e419bdad6e3fc234f8e1ddf78b73dfb16335dacaffc07fdcbfecabe8949",
+    "sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
     "meshes": 1,
     "primitives": 1,
     "materials": 1,
@@ -34,6 +34,7 @@
   },
   "inverseBindMaxError": 8.953190713811843e-07,
   "contactAnkleMaxErrorM": 0.00411583163402518,
+  "bowTipReleaseMaxDriftM": 0.001598519398232964,
   "clips": [
     "1H_Ranged_Reload",
     "Cheer",

@@ -92,8 +92,22 @@ def main():
    if .025<phase<.575:
     w=sampled(j,acc,run,u*duration)[names['foot.'+side]];contact.append(abs(w[1][3]-.18))
  assert max(contact)<.015,('foot contact error',max(contact))
+ # Bow tips must stay attached when the release channel moves the string centre.
+ fired=sampled(j,acc,clips['Ranger_Shoot'],0); tip_drifts=[]
+ for mesh in j['meshes']:
+  for primitive in mesh['primitives']:
+   attrs=primitive['attributes']
+   for p,ws,js in zip(acc(attrs['POSITION']),acc(attrs['WEIGHTS_0']),acc(attrs['JOINTS_0'])):
+    if .333<abs(p[0])<.347 and abs(p[1]-1.35)<.009 and abs(p[2]-.63)<.009:
+     out=[0.,0.,0.]
+     for weight,joint in zip(ws,js):
+      inv=[[bind[joint][c*4+r] for c in range(4)] for r in range(4)]
+      m=mul(fired[skin['joints'][joint]],inv)
+      for r in range(3):out[r]+=weight*(sum(m[r][c]*p[c] for c in range(3))+m[r][3])
+     tip_drifts.append(math.sqrt(sum((x-y)**2 for x,y in zip(p,out))))
+ assert len(tip_drifts)>=10 and max(tip_drifts)<.005,('bow string tip detached',tip_drifts)
  report={'asset':'Ranger_Original','legacy':stats(old,oldb),'new':newstats,'bounds':{'min':low,'max':high},
- 'inverseBindMaxError':err,'contactAnkleMaxErrorM':max(contact),'clips':sorted(clips),
+ 'inverseBindMaxError':err,'contactAnkleMaxErrorM':max(contact),'bowTipReleaseMaxDriftM':max(tip_drifts),'clips':sorted(clips),
  'source':'Original Blender geometry / atlas / rig / actions. No third-party character asset.',
  'limits':['CPU asset validation; not iOS visual acceptance','No physical-device FPS, GPU or thermal evidence']}
  out=ROOT/'docs/ranger-asset-validation.json';out.write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))

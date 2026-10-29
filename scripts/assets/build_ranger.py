@@ -254,7 +254,8 @@ box('Crossbow foregrip',(0,-.69,1.305),(.16,.12,.085),6,weapon,.018)
 for side in [-1,1]:
  tube('Copper bow limb',[(0,-.78,1.35),(side*.18,-.81,1.36),(side*.30,-.75,1.36),(side*.34,-.63,1.35)],[(.035,.044),(.035,.04),(.03,.034),(.021,.025)],6,weapon,8)
  box('Bow limb tip',(side*.34,-.63,1.35),(.058,.063,.075),13,weapon,.012)
- tube('Taut string',[(side*.34,-.63,1.35),(0,-.44,1.365)],.006,10,'weapon.slide',5)
+ tube('Taut string',[(side*.34,-.63,1.35),(0,-.44,1.365)],.006,10,'weapon.slide',5,
+      weights=lambda p:{weapon:min(1,max(0,abs(p.x)/.34)), 'weapon.slide':1-min(1,max(0,abs(p.x)/.34))})
 tube('Loaded bolt',[(0,-.52,1.41),(0,-.91,1.41)],.011,13,'weapon.slide',6)
 tube('Bolt head',[(0,-.87,1.41),(0,-.95,1.41)],[(.027,.02),(.001,.001)],13,'weapon.slide',6)
 box('Trigger housing',(0,-.43,1.39),(.12,.09,.08),6,weapon,.012)
@@ -331,7 +332,7 @@ def pose(clip,t,duration):
   rotate('chest',(1,0,0),-.055*kick);rotate('upperarm.r',(1,0,0),-.11*kick)
   rotate('upperarm.l',(1,0,0),-.095*kick);rotate('lowerarm.r',(0,0,1),-.045*kick)
   rotate('head',(1,0,0),.04*kick);rotate('cape',(1,0,0),.10*kick)
-  translate_world('weapon.slide',(0,-.10*max(0,1-t/.12),0))
+  translate_world('weapon.slide',(0,-.19*max(0,1-t/.12),0))
  elif clip=='Hit_A':
   kick=sin(pi*u)*(1-u);rotate('chest',(1,0,0),-.20*kick);rotate('head',(0,1,0),.13*kick)
  elif clip=='1H_Ranged_Reload':

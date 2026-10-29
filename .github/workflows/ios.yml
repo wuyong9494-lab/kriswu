@@ -491,7 +491,9 @@ jobs:
           grep -E "Test Case|Executed" animation-tests.log || true
 
       - name: 打开大厅和对局并截图
-        timeout-minutes: 10
+        # Build 397 spent ~6 min in cold simulator services before the first capture.
+        # Each simctl call still has a 150 s deadline; this budget includes bootstrap.
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           # XCTest may leave a cloned simulator running. Release it before capture.
@@ -544,7 +546,9 @@ jobs:
           mkdir -p shots
           CAPTURE_DATA=$(simctl get_app_container "$DEVICE" "$ID" data)
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple arenaSettings arenaDiagnostics rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter; do
+          # Prioritize this batch's four acceptance frames. Earlier map/settings/diagnostic
+          # baselines remain in Builds 396/397; do not delay ranger capture behind them.
+          for s in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter arena arenaPlay; do
             rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
             TARGET_TIME=6
@@ -609,7 +613,11 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
-          test -s shots/arena.png && test -s shots/arenaPlay.png
+          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter arena arenaPlay; do
+            test -s "shots/$required.png"
+          done
+          test -s shots/rangerBattleBefore.json && test -s shots/rangerBattleAfter.json
+          test -s shots/rangerLobbyMotion.mp4
           find shots -type f -name '*.png' -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
 
       - name: 保存模拟器诊断
