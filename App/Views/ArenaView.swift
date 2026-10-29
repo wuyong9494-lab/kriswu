@@ -232,6 +232,7 @@ struct ArenaMatchView: View {
     var onAgain: (() -> Void)?
     var onExit: () -> Void
     @State private var confirmingExit = false
+    @State private var previewDisconnect = false
     @State private var resultShown = false
     /// 表情那一排打开着
     @State private var emoting = false
@@ -247,6 +248,16 @@ struct ArenaMatchView: View {
     private var flip: Double { controller.game.mode.isTeams && controller.mine.team == 1 ? -1 : 1 }
 
     private var hud: ArenaController.HUD { controller.hud }
+    private var blockingDialog: Bool {
+        hud.result == nil && (confirmingExit || controller.disconnected || previewDisconnect)
+    }
+
+    private func clearDialogInput() {
+        controller.move = .zero
+        controller.aiming = nil
+        controller.superAiming = nil
+        emoting = false
+    }
 
     var body: some View {
         let _ = ArenaPerfRecorder.shared.noteUIEvaluation()
@@ -270,14 +281,6 @@ struct ArenaMatchView: View {
                     .padding(.vertical, DS.Space.s)
                     .background(.black.opacity(0.45), in: Capsule())
             }
-            if controller.disconnected && hud.result == nil {
-                VStack(spacing: DS.Space.s) {
-                    Text("和房主断开了").font(DS.Font.title)
-                    Button("退出") { onExit() }.buttonStyle(.borderedProminent)
-                }
-                .padding(DS.Space.l)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl))
-            }
             if let result = hud.result { resultCard(result) }
             if controller.showingIntro {
                 ArenaVersus(game: controller.game, me: controller.me,
@@ -285,18 +288,38 @@ struct ArenaMatchView: View {
                     .transition(.opacity)
             }
         }
+        .allowsHitTesting(!blockingDialog)
+        .accessibilityHidden(blockingDialog)
         .overlay(alignment: .topTrailing) {
             // 右上角：谁打倒了谁
-            if hud.result == nil && !controller.showingIntro {
+            if hud.result == nil && !controller.showingIntro && !blockingDialog {
                 killFeed.padding(.top, 54).padding(.trailing, DS.Space.m)
             }
         }
         .animation(.easeOut(duration: 0.3), value: controller.showingIntro)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .confirmationDialog("退出这一局？", isPresented: $confirmingExit, titleVisibility: .visible) {
-            Button("退出", role: .destructive) { onExit() }
-            Button("接着打", role: .cancel) {}
+        .overlay {
+            if blockingDialog {
+                ArenaMatchDialog(disconnected: controller.disconnected || previewDisconnect, onContinue: {
+                    confirmingExit = false
+                }, onExit: onExit)
+            }
+        }
+        .onAppear {
+            // Screenshot fixture only; never change the network controller state.
+            if ProcessInfo.processInfo.arguments.contains("-demo") {
+                let preview = UserDefaults.standard.string(forKey: "arena.dialogPreview")
+                confirmingExit = preview == "exit"
+                previewDisconnect = preview == "disconnect"
+            }
+            if blockingDialog { clearDialogInput() }
+        }
+        .onChange(of: blockingDialog) { _, blocked in
+            if blocked { clearDialogInput() }
+        }
+        .onChange(of: hud.result != nil) { _, finished in
+            if finished { confirmingExit = false }
         }
     }
 
@@ -478,7 +501,10 @@ struct ArenaMatchView: View {
 
     private var controls: some View {
         HStack(alignment: .bottom) {
-            ArenaStick(kind: .move, onChange: { controller.move = $0 * flip }, onRelease: { _ in controller.move = .zero })
+            ArenaStick(kind: .move, onChange: {
+                guard !blockingDialog else { return }
+                controller.move = $0 * flip
+            }, onRelease: { _ in controller.move = .zero })
             Spacer()
             // 横屏：大招钮在攻击钮左上；竖屏：在攻击钮上面
             // 小道具钮（绿）：横屏在攻击钮上面，竖屏在攻击钮左边
@@ -503,11 +529,15 @@ struct ArenaMatchView: View {
         .padding(.horizontal, wide ? DS.Space.m : DS.Space.l)
         .padding(.bottom, wide ? DS.Space.s : DS.Space.m)
         .opacity(hud.result == nil ? 1 : 0)
+        // Recreate sticks when the modal opens/closes so cancelled drags cannot
+        // leave a displaced thumb or deliver a release attack after dismissal.
+        .id(blockingDialog)
     }
 
     @ViewBuilder private var gadgetButton: some View {
         if let gadget = hud.gadget {
             ArenaGadgetButton(gadget: gadget, uses: hud.gadgetUses, cooldown: hud.gadgetCooldown, dead: hud.dead) {
+                guard !blockingDialog else { return }
                 controller.fireGadget()
             }
         }
@@ -515,18 +545,20 @@ struct ArenaMatchView: View {
 
     private var superStick: some View {
         ArenaStick(kind: .special(charge: hud.superCharge, hyper: hud.hyperUnlocked ? hud.hyperCharge : nil, hyperTime: hud.hyperTime),
-                   onChange: { controller.superAiming = $0 * flip },
+                   onChange: { if !blockingDialog { controller.superAiming = $0 * flip } },
                    onRelease: { drag in
                        controller.superAiming = nil
+                       guard !blockingDialog else { return }
                        controller.fireSpecial(drag * flip)
                    })
     }
 
     private var attackStick: some View {
         ArenaStick(kind: .attack,
-                   onChange: { controller.aiming = $0 * flip },
+                   onChange: { if !blockingDialog { controller.aiming = $0 * flip } },
                    onRelease: { drag in
                        controller.aiming = nil
+                       guard !blockingDialog else { return }
                        controller.fire(drag * flip)
                    })
     }
@@ -818,6 +850,75 @@ struct ArenaMatchView: View {
                 .foregroundStyle(.white)
             Text(name).font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.7))
         }
+    }
+}
+
+/// Arena-owned modal: the match keeps running, while controls and accessibility
+/// behind the scrim are blocked. Disconnect takes precedence over confirmation.
+private struct ArenaMatchDialog: View {
+    let disconnected: Bool
+    let onContinue: () -> Void
+    let onExit: () -> Void
+    @AccessibilityFocusState private var titleFocused: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.65).ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {} // Only explicit actions dismiss this modal.
+                .accessibilityHidden(true)
+            VStack(spacing: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: disconnected ? "wifi.slash" : "door.left.hand.open")
+                        .font(.system(size: 28, weight: .black))
+                        .foregroundStyle(Color.yellow)
+                    Text(disconnected ? "连接已断开" : "退出这一局？")
+                        .font(.system(size: 25, weight: .heavy, design: .rounded))
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityFocused($titleFocused)
+                }
+                Text(disconnected ? "与房主的连接已断开，请返回房间。" : "对局仍在进行，确定要离开吗？")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 14) {
+                    if !disconnected {
+                        action("接着打", face: Color(red: 0.18, green: 0.52, blue: 0.92),
+                               edge: Color(red: 0.08, green: 0.24, blue: 0.52), perform: onContinue)
+                    }
+                    action(disconnected ? "返回" : "退出对局",
+                           face: disconnected ? Color(red: 0.95, green: 0.66, blue: 0.1) : Color(red: 0.78, green: 0.22, blue: 0.3),
+                           edge: Color(red: 0.36, green: 0.12, blue: 0.2), perform: onExit)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(22)
+            .frame(maxWidth: 420)
+            .background {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color(red: 0.09, green: 0.18, blue: 0.4))
+                    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color(red: 0.3, green: 0.57, blue: 0.9), lineWidth: 3))
+                    .shadow(color: .black.opacity(0.45), radius: 0, x: 0, y: 7)
+            }
+            .padding(20)
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityAction(.escape) {
+                if !disconnected { onContinue() }
+            }
+        }
+        .onAppear { titleFocused = true }
+        .onChange(of: disconnected) { _, _ in titleFocused = true }
+    }
+
+    private func action(_ title: String, face: Color, edge: Color, perform: @escaping () -> Void) -> some View {
+        Button(action: perform) {
+            Text(title)
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .frame(maxWidth: .infinity, minHeight: 48)
+        }
+        .buttonStyle(ArenaTileButton(face: face, edge: edge))
     }
 }
 

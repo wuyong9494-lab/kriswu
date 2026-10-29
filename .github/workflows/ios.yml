@@ -576,7 +576,7 @@ jobs:
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
           # Early combat checks the asset before the clustered hits obscure it;
           # retain the crowded 1.2 s pair as separate readability evidence.
-          for s in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter; do
+          for s in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter arenaExitDialog arenaDisconnectedDialog; do
             rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
             TARGET_TIME=6
@@ -589,7 +589,10 @@ jobs:
               LEGACY=NO; [[ "$s" != *Before ]] || LEGACY=YES
               TARGET_TIME=0.25
               [[ "$s" != rangerCombat* ]] || TARGET_TIME=1.2
-              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime "$TARGET_TIME" -arena.legacyRanger "$LEGACY"
+              DIALOG=none
+              [ "$s" != arenaExitDialog ] || DIALOG=exit
+              [ "$s" != arenaDisconnectedDialog ] || DIALOG=disconnect
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime "$TARGET_TIME" -arena.legacyRanger "$LEGACY" -arena.dialogPreview "$DIALOG"
             fi
             if [[ "$s" != rangerLobby* ]]; then
               python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" "$TARGET_TIME" <<'PYCODE'
@@ -639,7 +642,7 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
-          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter; do
+          for required in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter arenaExitDialog arenaDisconnectedDialog; do
             test -s "shots/$required.png"
             /tmp/check-arena-capture "shots/$required.png"
           done
