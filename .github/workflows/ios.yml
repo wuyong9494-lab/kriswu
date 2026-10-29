@@ -424,6 +424,7 @@ jobs:
   # 乱斗：模拟器里打开大厅和一局团战，截图留底。不上传。
   arena-look:
     runs-on: macos-15
+    timeout-minutes: 30
     concurrency:
       group: arena-look-${{ github.ref }}
       cancel-in-progress: true
@@ -461,47 +462,75 @@ jobs:
             CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
 
       - name: 角色动画回归测试
+        timeout-minutes: 10
         shell: bash -eo pipefail {0}
         run: |
           xcodebuild test \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -destination "id=$DEVICE" \
+            -parallel-testing-enabled NO \
             -only-testing:SiteTests/ArenaAnimationTests \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO > animation-tests.log 2>&1 || { tail -100 animation-tests.log; exit 1; }
           grep -E "Test Case|Executed" animation-tests.log || true
 
       - name: 打开大厅和对局并截图
+        timeout-minutes: 10
         run: |
           set -euo pipefail
+          # XCTest may leave a cloned simulator running. Release it before capture.
+          simctl() {
+            python3 - "$@" <<'PYCODE'
+          import subprocess, sys
+          print("simctl", *sys.argv[1:], flush=True)
+          subprocess.run(["xcrun", "simctl", *sys.argv[1:]], check=True, timeout=150)
+          PYCODE
+          }
           APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
           ID=com.kriswu.shiftreminder
-          xcrun simctl boot "$DEVICE" || true
-          xcrun simctl bootstatus "$DEVICE" -b
-          xcrun simctl install "$DEVICE" "$APP"
+          simctl shutdown all || true
+          simctl boot "$DEVICE"
+          simctl bootstatus "$DEVICE" -b
+          simctl install "$DEVICE" "$APP"
           mkdir -p shots
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
           for s in arena arenaPlay; do
-            xcrun simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
-            xcrun simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+            simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+            simctl launch "$DEVICE" "$ID" -demo -screen "$s"
             sleep 12
-            xcrun simctl io "$DEVICE" screenshot "shots/$s.png"
+            simctl io "$DEVICE" screenshot "shots/$s.png"
           done
-          xcrun simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+          simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
           after=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
           if [ "$after" -gt "$before" ]; then
             echo "::error::模拟器里闪退了"
             find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' -mmin -20
             exit 1
           fi
+          test -s shots/arena.png && test -s shots/arenaPlay.png
           find shots -type f -size -20k -print -exec false {} + || { echo "::error::截图是空的"; exit 1; }
 
+      - name: 保存模拟器诊断
+        if: always()
+        run: |
+          xcrun simctl list devices > simulator-devices.log
+          mkdir -p arena-diagnostics
+          cp animation-tests.log simulator-devices.log arena-diagnostics/ 2>/dev/null || true
+          find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*.ips' -mmin -30 -exec cp {} arena-diagnostics/ \; 2>/dev/null || true
+
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arena-diagnostics
+          path: arena-diagnostics
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: arena-look
           path: shots
-          if-no-files-found: error
+          if-no-files-found: warn
 
   # 手动发布或性能发布分支推送：编译、核心测试和本轮动画/截图检查通过后上传。
   # 需要在仓库 Settings › Secrets and variables › Actions 里配好苹果的密钥。没配就跳过。
