@@ -3,6 +3,22 @@ import XCTest
 
 /// 大乱斗的能量箱、能量块
 final class ArenaPowerTests: XCTestCase {
+    func testBoxBesideWallPreservesAnUnblockedMovementAxis() {
+        let map = ArenaMap(rows: ["#.....", "#.....", "#.....", "#.....", "#.....", "#....."])
+        var game = ArenaGame(mode: .showdown, entrants: [], seed: 1, map: map)
+        game.boxes = [.init(pos: V2(2, 3), health: 3600)]
+        let start = V2(1.4234496503628278, 2.3118519850924253)
+        let delta = V2(0.02390814199480701, 0.05876306959928693)
+        let end = game.blockedByBoxes(start, start + delta)
+        XCTAssertGreaterThan(end.x, start.x, "Blocked radial correction must preserve the free horizontal movement")
+        XCTAssertEqual(end.y, start.y, accuracy: 1e-9)
+        XCTAssertFalse(map.collides(end, radius: ArenaGame.fighterRadius))
+        XCTAssertGreaterThanOrEqual(end.distance(to: game.boxes[0].pos), 0.88 - 1e-9)
+        for _ in 0..<120 {
+            XCTAssertEqual(game.blockedByBoxes(start, start + delta), end)
+        }
+    }
+
     private let dt = 1.0 / 60
 
     private func showdown(seed: UInt64) -> ArenaGame {

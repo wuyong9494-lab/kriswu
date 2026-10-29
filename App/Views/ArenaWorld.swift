@@ -903,9 +903,12 @@ final class ArenaWorldView: SCNView {
         for k in bushes.indices {
             let fade = openBush.contains(game.map.bushId(at: bushes[k].at))
             if fade != bushes[k].faded {
+                // Boundary reversals must not leave an older scale animation running.
+                bushes[k].node.removeAction(forKey: "bush-entry")
+                bushes[k].node.scale = SCNVector3(1, 1, 1)
                 if fade && !purpleSample {
                     bushes[k].node.scale = SCNVector3(1.12, 0.88, 1.12)
-                    bushes[k].node.runAction(.scale(to: 1, duration: 0.16))
+                    bushes[k].node.runAction(.scale(to: 1, duration: 0.16), forKey: "bush-entry")
                 }
                 bushes[k].faded = fade
                 bushes[k].node.opacity = fade ? 0.4 : 1

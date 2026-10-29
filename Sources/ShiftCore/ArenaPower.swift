@@ -75,16 +75,31 @@ extension ArenaGame {
 
     /// 走的时候绕开没碎的能量箱（贴着箱子边停下；推出去会撞墙就不动）
     func blockedByBoxes(_ start: V2, _ next: V2) -> V2 {
+        let gap = Self.fighterRadius + PowerBox.radius
+        func clear(_ point: V2) -> Bool {
+            !map.collides(point, radius: Self.fighterRadius) &&
+                !boxes.contains { $0.health > 0 && point.distance(to: $0.pos) < gap - 1e-9 }
+        }
+        func slide() -> V2 {
+            let horizontal = V2(next.x, start.y), vertical = V2(start.x, next.y)
+            let xOK = clear(horizontal), yOK = clear(vertical)
+            if xOK && yOK {
+                return abs(next.x - start.x) >= abs(next.y - start.y) ? horizontal : vertical
+            }
+            if xOK { return horizontal }
+            if yOK { return vertical }
+            return start
+        }
         var position = next
         for box in boxes where box.health > 0 {
-            let gap = Self.fighterRadius + PowerBox.radius
             let away = position - box.pos
             guard away.length < gap else { continue }
             let push = away.length > 1e-6 ? away.normalized : (start - box.pos).normalized
             position = box.pos + (push.length > 0 ? push : V2(1, 0)) * gap
-            if map.collides(position, radius: Self.fighterRadius) { return start }
+            if map.collides(position, radius: Self.fighterRadius) { return slide() }
         }
-        return position
+        // A later box can push the fighter back into an earlier one.
+        return clear(position) ? position : slide()
     }
 
     /// 离这一点最近的、还没碎的能量箱，地上最近的能量块（电脑找东西捡用）
