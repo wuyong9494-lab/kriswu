@@ -74,7 +74,7 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee build.log
           # 这类警告意味着调用了不返回结果的旧接口，功能会悄悄失效，当作错误处理
-          if grep -E "always fails|no 'async' operations occur within 'await'" build.log; then
+          if grep -E "always fails|nearly matches optional requirement|no 'async' operations occur within 'await'" build.log; then
             echo "::error::发现可疑警告（见上），请修复"; exit 1
           fi
           # 并发检查的警告：列出来，修到没有
@@ -204,8 +204,8 @@ jobs:
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
     runs-on: macos-15
-    # 要再跑同步测试时，手动开工作流并勾上 extras
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true'
+    # Shared sync-service fixes can opt into the existing mock-site regression with [site-tests].
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[site-tests]'))
     concurrency:
       group: site-tests-${{ github.ref }}
       cancel-in-progress: true
@@ -501,8 +501,10 @@ jobs:
 
       - name: 打开大厅和对局并截图
         # Build 397 spent ~6 min in cold simulator services before the first capture.
-        # Each simctl call still has a 150 s deadline; this budget includes bootstrap.
-        timeout-minutes: 12
+        # Ten still captures plus video now include two offline room states.
+        # Build 409 reached video at 12 min; retain per-command limits and allow
+        # final video flush and validation rather than cancelling at the old budget.
+        timeout-minutes: 16
         run: |
           set -euo pipefail
           # XCTest may leave a cloned simulator running. Release it before capture.

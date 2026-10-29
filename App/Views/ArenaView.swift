@@ -209,7 +209,7 @@ struct ArenaRoomView: View {
         case .waiting:
             roomCard("等待队友", symbol: "person.2.fill") {
                 if let code = room.code {
-                    Text("房间号  \(code)")
+                    Text("房间号  \(String(code))")
                         .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                         .textSelection(.enabled)
                     loading("等待 \(RoomCode.players(of: code) - 1) 人输入房间号")

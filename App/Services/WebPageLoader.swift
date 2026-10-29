@@ -407,7 +407,7 @@ final class WebPageLoader: NSObject, WKNavigationDelegate {
 
     // 网站用浏览器弹窗式的账号密码（HTTP 认证）时，自动填入设置里的用户名密码
     func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
-                 completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+                 completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         let method = challenge.protectionSpace.authenticationMethod
         if (method == NSURLAuthenticationMethodHTTPBasic || method == NSURLAuthenticationMethodHTTPDigest),
            !username.isEmpty, challenge.previousFailureCount == 0, challenge.protectionSpace.host == host {
