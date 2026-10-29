@@ -81,8 +81,8 @@ struct ArenaHomeView: View {
                 // that stage instead of squeezing it into a dashboard column.
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                               live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                    .frame(width: geo.size.width * 0.46, height: geo.size.height * 0.67)
-                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.49)
+                    .frame(width: geo.size.width * 0.44, height: geo.size.height * 0.72)
+                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.48)
                 VStack(spacing: 0) {
                     compactTopBar
                     HStack(alignment: .top, spacing: 0) {
@@ -120,7 +120,7 @@ struct ArenaHomeView: View {
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
                         .accessibilityLabel("邀请队友")
                 }.frame(width: geo.size.width * 0.40)
-                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.65)
+                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.68)
             }
         }
         .modifier(ArenaLandscape())
@@ -181,7 +181,7 @@ struct ArenaHomeView: View {
                     .shadow(color: .black.opacity(0.8), radius: 0, x: 1, y: 2)
                 Text(title).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
             }.foregroundStyle(.white).frame(width: 67, height: 49)
-        }.buttonStyle(ArenaLobbyButtonStyle(tint: item.tint))
+        }.buttonStyle(ArenaLobbyRailStyle())
             .accessibilityLabel(title)
     }
 
@@ -260,7 +260,7 @@ struct ArenaHomeView: View {
                     ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.purple).frame(width: 34, height: 39)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
-                        Text(ArenaMap.playPool(for: playMode).map(\.title).joined(separator: " / "))
+                        Text(ArenaMap.playPool(for: playMode).first?.title ?? playMode.title)
                             .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
                     }.lineLimit(1).minimumScaleFactor(0.7)
                     Spacer(minLength: 0)

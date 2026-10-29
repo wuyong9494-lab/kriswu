@@ -510,9 +510,9 @@ final class ArenaWorldView: SCNView {
             for x in 0..<map.width where map.tile(x, y) == .bush && ArenaDiagnostics.shared.variant != .noBushes {
                 let node = SCNNode(geometry: purpleSample ? ArenaPurpleArt.bush : ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
                 node.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
-                node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 12) * .pi / 6, 0)
+                node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 4) * .pi / 2, 0)
                 let size: Float = purpleSample ? 1 : 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
-                node.simdScale = SIMD3(size, size, size)
+                node.simdScale = SIMD3(1, size, 1)
                 node.castsShadow = false
                 root.addChildNode(node)
                 bushes.append(ArenaBushVisual(node: node,

@@ -869,7 +869,7 @@ final class ArenaLobby: ObservableObject {
         send(.pick(myPick))
         send(.level(myLevel))
         send(.loadout(myLoadout))
-        send(.arenaRevision(1))
+        send(.arenaRevision(2))
         if room.isHost { send(.mode(mode)) }
         playing?.controller.membersChanged()
     }
@@ -920,7 +920,7 @@ final class ArenaLobby: ObservableObject {
     func start() {
         guard room.isHost, fits else { return }
         round += 1
-        let supportsExpanded = room.members.allSatisfy { $0.id == room.me.id || arenaRevisions[$0.id] == 1 }
+        let supportsExpanded = room.members.allSatisfy { $0.id == room.me.id || arenaRevisions[$0.id] == 2 }
         let maps = supportsExpanded ? ArenaMap.playPool(for: mode) : ArenaMap.pool(for: mode)
         let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats(),
                                map: maps.randomElement()?.id)
@@ -985,7 +985,7 @@ final class ArenaLobby: ObservableObject {
         case .arenaRevision(let revision):
             let first = arenaRevisions[from] == nil
             arenaRevisions[from] = revision
-            if first { send(.arenaRevision(1)) }
+            if first { send(.arenaRevision(2)) }
         case .pick(let brawler):
             picks[from] = brawler
         case .level(let level):

@@ -280,18 +280,30 @@ extension ArenaMap {
                 }
             }
         }
+        // Split the added side lanes into cover and open crossings. Mirrored
+        // two-cell walls leave a continuous route along x=2 and x=width-3.
+        for y in stride(from: 5, to: height / 2 - 2, by: 6) {
+            for x in 0..<2 {
+                rows[y][x] = "#"
+                rows[height - 1 - y][width - 1 - x] = "#"
+            }
+            for dy in 1...2 {
+                rows[y + dy][1] = "*"
+                rows[height - 1 - y - dy][width - 2] = "*"
+            }
+        }
         for (team, spawns) in source.spawns.enumerated() {
             for spawn in spawns {
                 rows[Int(spawn.y) + insetY][Int(spawn.x) + insetX] = source.spawns.count == 1 ? "o" : team == 0 ? "a" : "b"
             }
         }
         rows[Int(source.center.y) + insetY][Int(source.center.x) + insetX] = "s"
-        return ArenaMap(id: source.id + "_expanded_v1", title: source.title + " · 扩展", theme: source.theme,
+        return ArenaMap(id: source.id + "_expanded_v2", title: source.title + " · 扩展", theme: source.theme,
                         rows: rows.map { String($0) })
     }
 
     public static func playPool(for mode: ArenaGame.Mode) -> [ArenaMap] {
-        let ids = Set(pool(for: mode).map { $0.id + "_expanded_v1" })
+        let ids = Set(pool(for: mode).map { $0.id + "_expanded_v2" })
         let expanded = expandedMaps.filter { ids.contains($0.id) }
         return expanded.isEmpty ? pool(for: mode) : expanded
     }

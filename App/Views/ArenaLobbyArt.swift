@@ -149,3 +149,23 @@ struct ArenaLobbyBackdrop: View {
         }.allowsHitTesting(false).accessibilityHidden(true)
     }
 }
+
+/// Compact rail plate: the emblem protrudes above the lower label plate.
+struct ArenaLobbyRailStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(LinearGradient(colors: [Color(red: 0.20, green: 0.28, blue: 0.43),
+                                                  Color(red: 0.08, green: 0.13, blue: 0.26)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .frame(height: 31)
+                    .overlay(alignment: .top) { Color.white.opacity(0.18).frame(height: 1) }
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black.opacity(0.65), lineWidth: 2))
+                    .shadow(color: .black.opacity(0.5), radius: 0, y: 3)
+            }
+            .contentShape(Rectangle())
+            .offset(y: configuration.isPressed ? 2 : 0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
