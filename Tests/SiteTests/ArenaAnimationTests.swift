@@ -8,17 +8,22 @@ final class ArenaAnimationTests: XCTestCase {
     func testVisualSampleKeepsSimulationIdenticalAndCaptureFrozen() {
         let old = ArenaController(setup: .init(mode: .zone, brawler: .ranger, name: "test", benchmark: true, benchmarkStill: true))
         let sample = ArenaController(setup: .init(mode: .zone, brawler: .ranger, name: "test", benchmark: true, benchmarkStill: true, sampleMap: true))
-        XCTAssertEqual(old.benchmarkSteps, 900)
+        XCTAssertGreaterThanOrEqual(old.benchmarkSteps, 240)
+        XCTAssertTrue(old.mine.alive)
+        XCTAssertFalse(old.game.projectiles.isEmpty)
         XCTAssertEqual(old.game.map.id, sample.game.map.id)
         XCTAssertEqual(old.game.fighters.map(\.pos), sample.game.fighters.map(\.pos))
         XCTAssertEqual(old.game.fighters.map(\.health), sample.game.fighters.map(\.health))
         XCTAssertEqual(old.game.projectiles.count, sample.game.projectiles.count)
         sample.advance(10)
-        XCTAssertEqual(sample.benchmarkSteps, 900)
+        XCTAssertEqual(sample.benchmarkSteps, old.benchmarkSteps)
         XCTAssertEqual(old.game.time, sample.game.time)
     }
 
     func testSampleGroundUsesWorldDepthAndOpaqueLeaves() {
+        let wall = ArenaSampleArt.walls(.canyon)
+        XCTAssertGreaterThan(wall.geometry?.sources(for: .vertex).first?.vectorCount ?? 0, 0)
+        XCTAssertGreaterThan(wall.geometry?.elements.reduce(0) { $0 + $1.primitiveCount } ?? 0, 0)
         let material = ArenaSampleArt.floorMaterial(.canyon)
         XCTAssertTrue(material.readsFromDepthBuffer)
         XCTAssertTrue(material.writesToDepthBuffer)

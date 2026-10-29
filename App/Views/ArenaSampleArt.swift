@@ -55,39 +55,22 @@ enum ArenaSampleArt {
     }
 
     static func walls(_ map: ArenaMap) -> SCNNode {
-        let result = SCNNode()
+        var mesh = ArenaMesh(parts: 4)
         for y in 0..<map.height {
-            for x in 0..<map.width where map.tile(x, y) == .wall {
-                let crate = (x * 7 + y * 11) % 5 == 0
-                let module = SCNNode()
-                module.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
-                func box(_ w: CGFloat, _ h: CGFloat, _ d: CGFloat, _ bevel: CGFloat, _ m: SCNMaterial, _ position: SIMD3<Float>) -> SCNNode {
-                    let shape = SCNBox(width: w, height: h, length: d, chamferRadius: bevel)
-                    shape.chamferSegmentCount = 1
-                    shape.materials = [m]
-                    let node = SCNNode(geometry: shape)
-                    node.simdPosition = position
-                    node.castsShadow = false
-                    module.addChildNode(node)
-                    return node
-                }
-                // The 1×1 silhouette agrees with the tile's collision footprint.
-                _ = box(1, 0.08, 1, 0.025, contact, SIMD3(0, 0.04, 0))
-                _ = box(1, 0.88, 1, 0.055, side, SIMD3(0, 0.50, 0))
-                _ = box(0.96, 0.10, 0.96, 0.035, top, SIMD3(0, 0.94, 0))
-                if crate {
+            for x in 0..<map.width where map.tile(x, y) == .wall && !map.isChest(x, y) {
+                let foot = SIMD3<Float>(Float(x) + 0.5, 0, Float(y) + 0.5)
+                mesh.box(center: foot + SIMD3(0, 0.04, 0), size: SIMD3(1, 0.08, 1), part: 3)
+                mesh.beveledBlock(at: foot, side: 0, bevel: 2, top: 1)
+                if (x * 7 + y * 11) % 5 == 0 {
                     for direction in [Float(-1), Float(1)] {
-                        for offset in [Float(-0.36), Float(0.36)] {
-                            _ = box(0.08, 0.72, 0.035, 0.01, trim, SIMD3(offset, 0.51, direction * 0.48))
+                        for offset in [Float(-0.35), Float(0.35)] {
+                            mesh.box(center: foot + SIMD3(offset, 0.48, direction * 0.48), size: SIMD3(0.08, 0.64, 0.035), part: 2)
                         }
-                        let brace = box(0.9, 0.075, 0.035, 0.01, top, SIMD3(0, 0.51, direction * 0.48))
-                        brace.eulerAngles.z = .pi / 4
                     }
                 }
-                result.addChildNode(module)
             }
         }
-        return result.flattenedClone()
+        return SCNNode(geometry: mesh.geometry([side, top, trim, contact]))
     }
 
     static let grasses: [SCNGeometry] = (0..<3).map { makeGrass($0) }

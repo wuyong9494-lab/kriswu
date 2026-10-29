@@ -206,7 +206,7 @@ enum ArenaArt {
 
     /// 整张地图的墙拼成一个网格（按材质分几份，画几次就够）
     static func walls(_ cells: [(x: Int, y: Int, kind: Wall)]) -> SCNNode {
-        var mesh = Mesh(parts: 10)
+        var mesh = ArenaMesh(parts: 10)
         for cell in cells {
             let foot = SIMD3(Float(cell.x) + 0.5, 0, Float(cell.y) + 0.5)
             let cap = 6 + (cell.x * 3 + cell.y) % 4
@@ -233,7 +233,7 @@ enum ArenaArt {
 
     /// 大乱斗的能量箱：一个木箱，顶上嵌着一块发绿光的能量晶（挨打时木头闪白用 wood）
     static func powerBox() -> (node: SCNNode, wood: SCNMaterial) {
-        var mesh = Mesh(parts: 2)
+        var mesh = ArenaMesh(parts: 2)
         mesh.box(center: SIMD3(0, 0.4, 0), size: SIMD3(0.8, 0.8, 0.8), part: 0)
         mesh.box(center: SIMD3(0, 0.4, 0), size: SIMD3(0.88, 0.88, 0.88), part: 1)
         let wood = crateMaterial.copy() as? SCNMaterial ?? crateMaterial
@@ -263,7 +263,7 @@ enum ArenaArt {
 
     /// 场地四周一圈矮木沿
     static func border(width: Float, height: Float) -> SCNNode {
-        var mesh = Mesh(parts: 2)
+        var mesh = ArenaMesh(parts: 2)
         let pieces: [(SIMD3<Float>, SIMD3<Float>)] = [
             (SIMD3(width / 2, 0.11, -0.16), SIMD3(width + 0.64, 0.22, 0.32)),
             (SIMD3(width / 2, 0.11, height + 0.16), SIMD3(width + 0.64, 0.22, 0.32)),
@@ -294,7 +294,7 @@ enum ArenaArt {
         ]
         let rim = edge(bushInk)
         return layouts.map { balls in
-            var mesh = Mesh(parts: 2)
+            var mesh = ArenaMesh(parts: 2)
             let squash = SIMD3<Float>(1, 0.86, 1)
             for (center, radius) in balls {
                 mesh.sphere(center: center, radius: squash * radius, part: 0)
@@ -308,7 +308,7 @@ enum ArenaArt {
 
     /// 足球：白底上一块块深色的格子，外面一圈描边；脚下一片影子
     static func ball() -> SCNNode {
-        var mesh = Mesh(parts: 2)
+        var mesh = ArenaMesh(parts: 2)
         mesh.sphere(center: .zero, radius: SIMD3(repeating: Float(ArenaGame.Ball.radius)), part: 0, rings: 10, segments: 16)
         mesh.sphere(center: .zero, radius: SIMD3(repeating: Float(ArenaGame.Ball.radius) + 0.035), part: 1, rings: 10, segments: 16)
         let skin = SCNMaterial()
@@ -348,7 +348,7 @@ enum ArenaArt {
 
     /// 球门：两根白门柱、横梁、后面和顶上一张网。x0–x1 是门口的两边，mouth 是门口那条线、back 是后面那条线（地图坐标的 y）
     static func goal(from x0: Float, to x1: Float, mouth: Float, back: Float) -> SCNNode {
-        var frame = Mesh(parts: 2)
+        var frame = ArenaMesh(parts: 2)
         let height: Float = 1.25, thick: Float = 0.14
         let zs = [mouth, back]
         for z in zs {
@@ -408,7 +408,7 @@ enum ArenaArt {
     /// 返回的材质挨打时闪一下
     static func chest(color: UIColor) -> (node: SCNNode, glow: [SCNMaterial]) {
         let width: Float = 2.7, depth: Float = 1.7, height: Float = 0.95
-        var mesh = Mesh(parts: 3)
+        var mesh = ArenaMesh(parts: 3)
         mesh.box(center: SIMD3(0, height / 2, 0), size: SIMD3(width, height, depth), part: 0)
         mesh.box(center: SIMD3(0, height / 2, 0), size: SIMD3(width + 0.09, height + 0.09, depth + 0.09), part: 2)
         // 金箍：竖着三道
@@ -918,7 +918,7 @@ extension ArenaArt {
 }
 
 /// 自己拼的网格：顶点、法线、贴图坐标；三角形按材质分成几份（一份画一次）
-private struct Mesh {
+struct ArenaMesh {
     private var positions: [Float] = []
     private var normals: [Float] = []
     private var uvs: [Float] = []
@@ -957,6 +957,38 @@ private struct Mesh {
             vertex(middle + r + u, out, 1, 0)
             vertex(middle - r + u, out, 0, 0)
             parts[part] += [first, first + 1, first + 2, first, first + 2, first + 3]
+        }
+    }
+
+    /// Explicit batched bevel geometry; no lazy SCNBox tessellation/flattening.
+    mutating func beveledBlock(at foot: SIMD3<Float>, side: Int, bevel: Int, top: Int) {
+        let ring: [SIMD2<Float>] = [SIMD2(-0.45,-0.5), SIMD2(0.45,-0.5), SIMD2(0.5,-0.45), SIMD2(0.5,0.45),
+                                   SIMD2(0.45,0.5), SIMD2(-0.45,0.5), SIMD2(-0.5,0.45), SIMD2(-0.5,-0.45)]
+        func point(_ index: Int, _ y: Float, _ scale: Float) -> SIMD3<Float> {
+            let p = ring[index % 8] * scale
+            return foot + SIMD3(p.x, y, p.y)
+        }
+        for i in 0..<8 {
+            let j = (i + 1) % 8
+            let edge = ring[j] - ring[i]
+            let normal = simd_normalize(SIMD3<Float>(edge.y, 0, -edge.x))
+            for band in 0..<2 {
+                let low: Float = band == 0 ? 0.06 : 0.88
+                let high: Float = band == 0 ? 0.88 : 0.98
+                let scale: Float = band == 0 ? 1 : 0.88
+                let start = next
+                vertex(point(j, low, 1), normal, 1, 1)
+                vertex(point(i, low, 1), normal, 0, 1)
+                vertex(point(i, high, scale), normal, 0, 0)
+                vertex(point(j, high, scale), normal, 1, 0)
+                parts[band == 0 ? side : bevel] += [start, start + 1, start + 2, start, start + 2, start + 3]
+            }
+            let start = next
+            let up = SIMD3<Float>(0, 1, 0)
+            vertex(foot + SIMD3(0, 0.98, 0), up, 0.5, 0.5)
+            vertex(point(j, 0.98, 0.88), up, 1, 0)
+            vertex(point(i, 0.98, 0.88), up, 0, 0)
+            parts[top] += [start, start + 1, start + 2]
         }
     }
 
@@ -1008,9 +1040,9 @@ private struct Mesh {
 
     func geometry(_ materials: [SCNMaterial]) -> SCNGeometry {
         let count = positions.count / 3
-        let sources = [Mesh.source(positions, .vertex, width: 3, count: count),
-                       Mesh.source(normals, .normal, width: 3, count: count),
-                       Mesh.source(uvs, .texcoord, width: 2, count: count)]
+        let sources = [ArenaMesh.source(positions, .vertex, width: 3, count: count),
+                       ArenaMesh.source(normals, .normal, width: 3, count: count),
+                       ArenaMesh.source(uvs, .texcoord, width: 2, count: count)]
         var elements: [SCNGeometryElement] = []
         var used: [SCNMaterial] = []
         for (k, indices) in parts.enumerated() where !indices.isEmpty && materials.indices.contains(k) {
