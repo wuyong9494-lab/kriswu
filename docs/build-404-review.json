@@ -1,0 +1,74 @@
+{
+  "build": 404,
+  "version": "1.2",
+  "branch": "codex/arena-diagnostics-2",
+  "source_sha": "ccfac190dd8e2e70705e419b6e194f36e38de760",
+  "run_id": 40840770965,
+  "run_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/40840770965",
+  "validation": {
+    "linux_core": {
+      "total": 292,
+      "platform_skipped": 1,
+      "failures": 0
+    },
+    "macos_core": {
+      "total": 292,
+      "failures": 0
+    },
+    "ios_targeted": {
+      "total": 20,
+      "failures": 0
+    },
+    "device_build": "success",
+    "simulator_build": "success",
+    "arena_capture": "success",
+    "existing_concurrency_warnings": 7,
+    "full_site_tests": "not run"
+  },
+  "visual": {
+    "lobby": "reviewed: legible buttons, inset plinth trim, full head/feet/crossbow",
+    "motion": "sampled every two seconds; not continuous frame-by-frame review",
+    "combat": "overall readability still fails: oversized legacy accessories, light effects and transparent overlap",
+    "overall_reference_quality": "not accepted"
+  },
+  "device_performance": "unverified for this source",
+  "testflight": "skipped; no upload",
+  "apple_processing": "not initiated",
+  "last_verified_internal_build": 399,
+  "artifacts": {
+    "arena_look": 12883311930,
+    "arena_diagnostics": 12882988174,
+    "unsigned_ipa": 12882354731
+  },
+  "lobby_capture": {
+    "asset": "Ranger_Original.glb",
+    "cameraDistance": 3.0963547229766846,
+    "framing": "visible-model-envelope",
+    "legacy": false,
+    "scene": "rangerLobby",
+    "still": true,
+    "viewHeight": 258,
+    "viewWidth": 652
+  },
+  "capture_sha256": {
+    "rangerBattleAfter.json": "fcc13865a4f3300906b8612de3c52ec8cdf6444bb34b9f4d3c0e0a5dc73aef35",
+    "rangerBattleAfter.png": "363a9a3331a34e46d15b6c5ee83164db07b37b6de0789451ddd124f7cbd6f80e",
+    "rangerBattleBefore.json": "6a7dddf8aaede9b67890840784bc77bb2cae95a912837014ef89a571e75d01ff",
+    "rangerBattleBefore.png": "26777c1fa4881248f1687f9935e257e6fdd1e4f25bb1b43fe211fbc7b99550dd",
+    "rangerCombatAfter.json": "c073434c451daaee52bb96de7d0531bbf87d18de1d8cd75eeb14d56b789c5da3",
+    "rangerCombatAfter.png": "c1bd61a2a6efa7245970f3fe36f74c50f8e7a9899f8a9eafe1e97a37e3a07b4e",
+    "rangerCombatBefore.json": "8907555fc37e72f2233f86ec57ee64b231a756af421fcebd8780e9525d7d60be",
+    "rangerCombatBefore.png": "594235a09e8d5c320e517b00315edf5bf26b8404af85b6eec3ed2dde18db8ec2",
+    "rangerLobbyAfter.json": "49cb91eddab3a5477d54c4293a9362fbe458d2127fbc7f0f7b924a1e585f747d",
+    "rangerLobbyAfter.png": "0b9e7ec5e8f57b73aa90ea2109ddca8160faaaf7f4f65e7821ed1e7e09741d67",
+    "rangerLobbyBefore.json": "bf627fdee5e089499f7b38732d6146c39157e11d5b50a20df9ce1e6ce60ca9bb",
+    "rangerLobbyBefore.png": "8be4bcfbccf58f9b2056d933d12ac98c83d19f0adf0cdccb13774417ea8f21ad",
+    "rangerLobbyMotion.mp4": "635e9248fb96427b523be52b77eb553f520e9f30593a8db62a4a2b9664592c03"
+  },
+  "next": [
+    "authored character and legacy accessory proportions",
+    "combat occlusion and effects",
+    "loadout/room/exit game menus",
+    "physical-device baseline and noEffectAudio comparison"
+  ]
+}
