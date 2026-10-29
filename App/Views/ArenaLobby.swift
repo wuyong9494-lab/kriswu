@@ -74,53 +74,65 @@ struct ArenaHomeView: View {
     var body: some View {
         GeometryReader { geo in
             let wide = geo.size.width > geo.size.height
-            let rail: CGFloat = geo.size.height < 370 ? 64 : 76
+            let compact = geo.size.height < 370
+            let footerHeight: CGFloat = 84
             ZStack {
                 ArenaLobbyBackground()
-                // The hero owns the middle of the screen. Controls float around
-                // that stage instead of squeezing it into a dashboard column.
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
                               live: playing == nil && lobby == nil && !adventure && sheet == nil)
-                    .frame(width: geo.size.width * 0.44, height: geo.size.height * 0.72)
-                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.48)
+                    .frame(width: geo.size.width * 0.48, height: geo.size.height * 0.70)
+                    .position(x: geo.size.width * 0.51, y: geo.size.height * 0.47)
                 VStack(spacing: 0) {
                     compactTopBar
-                    HStack(alignment: .top, spacing: 0) {
-                        ScrollView(showsIndicators: false) { leftMenu }
-                            .frame(width: rail + 12)
-                        Spacer(minLength: 0)
-                        heroStatus.padding(.top, 10)
-                        Spacer(minLength: 0)
-                        ScrollView(showsIndicators: false) {
-                            VStack(spacing: 10) {
-                                quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
-                                quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
-                                quietMenu("升级", symbol: "arrow.up.circle.fill") { sheet = .loadout }
-                                Button { adventure = true } label: {
-                                    HStack(spacing: 3) {
-                                        Image(systemName: "gamecontroller.fill").font(.system(size: 25))
-                                        Text("冒险").font(.system(size: 14, weight: .black))
-                                    }.frame(width: 106, height: 42)
-                                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
-                            }.padding(.top, 28).padding(.bottom, 5)
-                        }.frame(width: 112)
-                    }.frame(maxHeight: .infinity)
+                    Spacer(minLength: 0)
                     lobbyFooter(wide: wide)
                 }.padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
-                HStack {
+                heroStatus
+                    .position(x: geo.size.width * 0.51, y: 76)
+                // Reference composition: event tile above a compact left rail,
+                // social rail on the right, equipment beside the hero's feet.
+                Button { sheet = .season } label: {
+                    VStack(spacing: 1) {
+                        ArenaLobbyIcon("ArenaIconSeason").frame(width: 29, height: 29)
+                        Text("赛季活动").font(.system(size: 10, weight: .black))
+                    }.foregroundStyle(.white).frame(width: 68, height: 47)
+                }.buttonStyle(ArenaLobbyRailStyle())
+                    .position(x: compact ? geo.size.width * 0.25 : 48, y: 82)
+                VStack(spacing: compact ? 0 : 10) {
+                    quietMenu("商店", symbol: "bag.fill") { sheet = .shop }
+                    quietMenu("英雄", symbol: "person.crop.square.fill") { sheet = .brawlers }
+                    quietMenu("活动", symbol: "star.circle.fill") { sheet = .season }
+                }.position(x: 48, y: geo.size.height * (compact ? 0.50 : 0.53))
+                VStack(spacing: compact ? 0 : 10) {
+                    quietMenu("好友", symbol: "person.2.fill") { sheet = .friends }
+                    quietMenu("战队", symbol: "shield.fill") { sheet = .together }
+                    quietMenu("组队", symbol: "person.3.fill") { sheet = .party }
+                }.position(x: geo.size.width - 50, y: geo.size.height * 0.46)
+                Button { adventure = true } label: {
+                    HStack(spacing: 5) {
+                        ArenaLobbyIcon("ArenaIconAdventure").frame(width: 35, height: 35)
+                        Text("冒险乐园").font(.system(size: 15, weight: .black))
+                    }.frame(width: compact ? 114 : 132, height: 45)
+                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+                    .position(x: geo.size.width - 82, y: geo.size.height - footerHeight - 38)
+                VStack(spacing: 8) {
+                    Button { sheet = .loadout } label: {
+                        ArenaLobbyIcon("ArenaIconUpgrade").frame(width: 29, height: 29)
+                            .frame(width: 44, height: 44)
+                    }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
+                        .accessibilityLabel("金币升级英雄与装备技能")
                     Button { sheet = .brawlers } label: {
-                        Image(systemName: "tshirt.fill").font(.system(size: 21, weight: .heavy))
-                            .frame(width: 44, height: 42)
+                        Image(systemName: "tshirt.fill").font(.system(size: 23, weight: .heavy))
+                            .frame(width: 44, height: 44)
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
                         .accessibilityLabel("选择英雄和皮肤")
-                    Spacer()
-                    Button { sheet = .party } label: {
-                        Image(systemName: "plus").font(.system(size: 25, weight: .black))
-                            .frame(width: 44, height: 42)
-                    }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
-                        .accessibilityLabel("邀请队友")
-                }.frame(width: geo.size.width * 0.40)
-                    .position(x: geo.size.width * 0.50, y: geo.size.height * 0.68)
+                }.position(x: geo.size.width * 0.35, y: geo.size.height * 0.64)
+                Button { sheet = .party } label: {
+                    Image(systemName: "plus").font(.system(size: 28, weight: .black))
+                        .frame(width: 44, height: 44)
+                }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
+                    .position(x: geo.size.width * 0.69, y: geo.size.height * 0.56)
+                    .accessibilityLabel("邀请队友")
             }
         }
         .modifier(ArenaLandscape())
@@ -155,20 +167,22 @@ struct ArenaHomeView: View {
 
     private var heroStatus: some View {
         Button { sheet = .loadout } label: {
-            VStack(spacing: 3) {
-                HStack(spacing: 5) {
-                    Image(systemName: "trophy.fill").foregroundStyle(.yellow)
+            HStack(spacing: 5) {
+                HStack(spacing: 4) {
+                    ArenaLobbyIcon("ArenaIconTrophy").frame(width: 22, height: 24)
                     Text("\(progress.trophies(chosen))").monospacedDigit()
-                    Text("威能 \(progress.level(chosen))")
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Color.purple, in: RoundedRectangle(cornerRadius: 4))
-                    Image(systemName: "bolt.shield.fill").foregroundStyle(.green)
-                    Image(systemName: "star.circle.fill").foregroundStyle(.yellow)
-                }.font(.system(size: 14, weight: .black, design: .rounded))
-                Text(chosen.name).font(.system(size: 18, weight: .black, design: .rounded))
-            }.foregroundStyle(.white).arenaOutline(1)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Color(red: 0.07, green: 0.13, blue: 0.29).opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                }.padding(.horizontal, 8).frame(height: 30)
+                    .background(Color(red: 0.13, green: 0.72, blue: 0.83))
+                    .overlay(Rectangle().stroke(.black.opacity(0.7), lineWidth: 2))
+                Text("\(progress.level(chosen))")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .frame(width: 32, height: 36)
+                    .background(Color.purple, in: Capsule())
+                    .overlay(Capsule().stroke(Color(red: 0.93, green: 0.49, blue: 1), lineWidth: 3))
+                ArenaLobbyIcon("ArenaIconUpgrade").frame(width: 28, height: 28)
+            }.font(.system(size: 17, weight: .black, design: .rounded))
+                .foregroundStyle(.white).arenaOutline(1)
+                .padding(.vertical, 4)
         }.buttonStyle(.plain).accessibilityLabel("\(chosen.name)，等级\(progress.level(chosen))，升级与技能")
     }
 
@@ -207,6 +221,7 @@ struct ArenaHomeView: View {
             Spacer(minLength: 0)
             lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店") { sheet = .shop }
             lobbyCounter("\(progress.season.points)", asset: "ArenaIconSeason", tint: .green, label: "赛季经验") { sheet = .season }
+            lobbyCounter("\(progress.totalTrophies)", asset: "ArenaIconTrophy", tint: .yellow, label: "总奖杯") { sheet = .road }
             Button { muted.toggle(); ArenaSound.shared.muteChanged(battle: false) } label: {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 18, weight: .black))
                     .frame(width: 42, height: 40)
@@ -240,7 +255,7 @@ struct ArenaHomeView: View {
             Button { sheet = .season } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
-                        Image(systemName: "ticket.fill").font(.system(size: 27)).foregroundStyle(.yellow)
+                        ArenaLobbyIcon("ArenaIconPass").frame(width: 42, height: 31)
                         Text("\(progress.season.tier)").font(.system(size: 22, weight: .black))
                     }
                     Text("乱斗通行证").font(.system(size: 11, weight: .black))
@@ -250,7 +265,7 @@ struct ArenaHomeView: View {
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
             Button { sheet = .season } label: {
                 VStack(spacing: 1) {
-                    Image(systemName: "checkmark.seal.fill").font(.system(size: 26)).foregroundStyle(.cyan)
+                    ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
                     Text("任务").font(.system(size: 12, weight: .black))
                 }.frame(width: 48, height: 56)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
@@ -274,7 +289,7 @@ struct ArenaHomeView: View {
                 }.buttonStyle(.plain).accessibilityLabel("切换普通或排位")
                 Button { start() } label: {
                     Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
-                        .frame(width: wide ? 168 : 124, height: 57)
+                        .frame(width: wide ? 184 : 124, height: 61)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
             }
         }.foregroundStyle(.white).frame(height: 84)
@@ -1628,7 +1643,7 @@ final class ArenaShowcaseView: SCNView {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
-        antialiasingMode = .none
+        antialiasingMode = .multisampling2X
         preferredFramesPerSecond = 30
         rendersContinuously = false
         isPlaying = false

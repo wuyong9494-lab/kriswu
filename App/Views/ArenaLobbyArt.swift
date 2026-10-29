@@ -22,6 +22,33 @@ struct ArenaLobbyIcon: View {
                 box(x - 2.5, y + 2, 5, 2, ink)
             }
             switch asset {
+            case "ArenaIconClub":
+                var shield = Path()
+                shield.addLines([CGPoint(x: 5, y: 5), CGPoint(x: 35, y: 5), CGPoint(x: 33, y: 27), CGPoint(x: 20, y: 38), CGPoint(x: 7, y: 27)])
+                shield.closeSubpath()
+                context.fill(shield, with: .color(.purple)); context.stroke(shield, with: .color(ink), lineWidth: 2)
+                var star = Path()
+                for point in 0..<10 {
+                    let angle = CGFloat(point) * .pi / 5 - .pi / 2
+                    let radius: CGFloat = point % 2 == 0 ? 10 : 4.5
+                    let p = CGPoint(x: 20 + cos(angle) * radius, y: 20 + sin(angle) * radius)
+                    if point == 0 { star.move(to: p) } else { star.addLine(to: p) }
+                }
+                star.closeSubpath(); context.fill(star, with: .color(.white))
+            case "ArenaIconUpgrade":
+                disc(20, 20, 17, Color(red: 0.18, green: 0.83, blue: 0.20))
+                var arrow = Path()
+                arrow.addLines([CGPoint(x: 20, y: 6), CGPoint(x: 32, y: 21), CGPoint(x: 25, y: 21), CGPoint(x: 25, y: 32), CGPoint(x: 15, y: 32), CGPoint(x: 15, y: 21), CGPoint(x: 8, y: 21)])
+                arrow.closeSubpath(); context.fill(arrow, with: .color(.white)); context.stroke(arrow, with: .color(ink), lineWidth: 1.5)
+            case "ArenaIconPass":
+                box(2, 7, 36, 27, .yellow)
+                disc(20, 21, 7, ink)
+                for x: CGFloat in [11, 20, 29] { disc(x, 12, 2, ink) }
+            case "ArenaIconQuest":
+                box(8, 8, 25, 29, .orange); box(5, 5, 25, 29, .cyan)
+                var check = Path()
+                check.addLines([CGPoint(x: 10, y: 20), CGPoint(x: 16, y: 26), CGPoint(x: 26, y: 12)])
+                context.stroke(check, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             case "ArenaIconShop":
                 box(7, 13, 27, 23, .cyan); box(16, 22, 9, 14, Color(red: 0.1, green: 0.25, blue: 0.5))
                 for i in 0..<4 { box(4 + CGFloat(i) * 8, 5, 8, 13, i % 2 == 0 ? .red : .white) }
@@ -66,6 +93,7 @@ struct ArenaLobbyEmblem {
         case "gearshape.fill": return .init(asset: "ArenaIconSettings", tint: Color(red: 0.72, green: 0.79, blue: 0.97))
         case "bag.fill": return .init(asset: "ArenaIconShop", tint: Color(red: 1, green: 0.69, blue: 0.35))
         case "person.2.fill": return .init(asset: "ArenaIconFriends", tint: Color(red: 0.57, green: 0.93, blue: 0.81))
+        case "shield.fill": return .init(asset: "ArenaIconClub", tint: .purple)
         case "person.3.fill": return .init(asset: "ArenaIconParty", tint: Color(red: 0.70, green: 0.78, blue: 1))
         default: return .init(asset: "ArenaIconSkill", tint: Color(red: 0.92, green: 0.66, blue: 1))
         }
@@ -113,7 +141,7 @@ struct ArenaLobbyBackdrop: View {
                                startRadius: 0, endRadius: geo.size.height * 0.53)
                 Canvas { context, size in
                     let w = size.width, h = size.height
-                    let moon = CGRect(x: w * 0.5 - h * 0.31, y: h * 0.16, width: h * 0.62, height: h * 0.62)
+                    let moon = CGRect(x: w * 0.5 - h * 0.31, y: h * 0.18, width: h * 0.62, height: h * 0.62)
                     context.fill(Path(ellipseIn: moon.insetBy(dx: -8, dy: -8)), with: .color(Color.pink.opacity(0.14)))
                     context.fill(Path(ellipseIn: moon), with: .color(Color(red: 1, green: 0.88, blue: 0.89)))
                     // Three depths of angular skyline; the center stays clear for the hero.
@@ -134,15 +162,25 @@ struct ArenaLobbyBackdrop: View {
                             }
                         }
                     }
+                    // Broad rooftop with converging perspective seams and a neon
+                    // perimeter. All decoration is static and shares one Canvas.
                     var floor = Path()
-                    floor.move(to: CGPoint(x: w * 0.30, y: h * 0.76))
-                    floor.addLine(to: CGPoint(x: w * 0.70, y: h * 0.76))
-                    floor.addLine(to: CGPoint(x: w * 0.94, y: h))
-                    floor.addLine(to: CGPoint(x: w * 0.06, y: h))
+                    floor.addLines([CGPoint(x: w * 0.34, y: h * 0.73), CGPoint(x: w * 0.67, y: h * 0.73),
+                                    CGPoint(x: w * 0.86, y: h * 0.87), CGPoint(x: w * 0.15, y: h * 0.87)])
                     floor.closeSubpath()
-                    context.fill(floor, with: .linearGradient(Gradient(colors: [Color(red: 0.13, green: 0.11, blue: 0.34),
-                                                                                               Color(red: 0.025, green: 0.06, blue: 0.17)]),
-                                                              startPoint: CGPoint(x: 0, y: h * 0.76), endPoint: CGPoint(x: 0, y: h)))
+                    context.fill(floor, with: .color(Color(red: 0.035, green: 0.055, blue: 0.16)))
+                    context.stroke(floor, with: .color(Color(red: 0.20, green: 0.33, blue: 0.58)), lineWidth: 4)
+                    var inset = Path()
+                    inset.addLines([CGPoint(x: w * 0.36, y: h * 0.75), CGPoint(x: w * 0.65, y: h * 0.75),
+                                    CGPoint(x: w * 0.79, y: h * 0.85), CGPoint(x: w * 0.22, y: h * 0.85)])
+                    inset.closeSubpath()
+                    context.stroke(inset, with: .color(Color(red: 1, green: 0.43, blue: 0.68)), style: StrokeStyle(lineWidth: 5, dash: [22, 11]))
+                    for i in 0..<5 {
+                        let x = w * (0.38 + CGFloat(i) * 0.06)
+                        var seam = Path(); seam.move(to: CGPoint(x: x, y: h * 0.76))
+                        seam.addLine(to: CGPoint(x: w * 0.5 + (x - w * 0.5) * 1.8, y: h * 0.84))
+                        context.stroke(seam, with: .color(.white.opacity(0.09)), lineWidth: 1)
+                    }
                 }
                 LinearGradient(colors: [.black.opacity(0.25), .clear, .clear, .black.opacity(0.25)], startPoint: .top, endPoint: .bottom)
             }
