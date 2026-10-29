@@ -35,6 +35,28 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             promotion.validate_source(self.request, self.run, self.jobs[:2])
 
+    def test_415_capture_exception_keeps_compile_and_regression_gates(self):
+        request = dict(self.request, build_number="415", source_run_id=40871120791,
+                       source_sha="7d4c9c2f9fa77e2c9d1f124ec8910e2a57b926cf", skip_visual_capture=True)
+        run = dict(self.run, head_sha=request["source_sha"], run_number=415, status="in_progress", conclusion=None)
+        jobs = copy.deepcopy(self.jobs)
+        jobs[2].update(conclusion=None, steps=[{"name": n, "conclusion": "success"} for n in (
+            "Set up job", "Run actions/checkout@v5", "选用最新的 Xcode（26 或更新）", "生成 Xcode 工程",
+            "编译模拟器版本", "角色动画回归测试")])
+        promotion.validate_source(request, run, jobs)
+        for index in range(2):
+            bad = copy.deepcopy(jobs); bad[index]["conclusion"] = "failure"
+            with self.assertRaises(AssertionError): promotion.validate_source(request, run, bad)
+        for index in range(6):
+            bad = copy.deepcopy(jobs); bad[2]["steps"][index]["conclusion"] = "failure"
+            with self.assertRaises(AssertionError): promotion.validate_source(request, run, bad)
+        with self.assertRaises(AssertionError):
+            promotion.validate_source(dict(request, build_number="416"), dict(run, run_number=416), jobs)
+        with self.assertRaises(AssertionError):
+            promotion.validate_source(request, dict(run, conclusion="cancelled"), jobs)
+        with self.assertRaises(AssertionError):
+            promotion.validate_source(request, run, jobs + [{"name": "site-tests", "conclusion": "failure"}])
+
     def test_existing_build_is_found_without_uploading(self):
         build = {"id": "existing", "relationships": {"preReleaseVersion": {"data": {"id": "v"}}}}
         response = {"data": [build], "included": [{"type": "preReleaseVersions", "id": "v",

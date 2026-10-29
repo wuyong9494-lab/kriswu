@@ -43,6 +43,27 @@ def validate_source(request, run, jobs):
     assert run["head_sha"] == request["source_sha"], "CI checked a different commit"
     assert str(run["run_number"]) == request["build_number"], "CI build number mismatch"
     assert run["path"] == ".github/workflows/ios.yml", "Unexpected source workflow"
+    if request.get("skip_visual_capture") is True:
+        # One release only: the owner requested 415 without waiting for screenshots.
+        # Device/core checks and the actual simulator regression remain mandatory.
+        assert (request["build_number"], request["source_run_id"], request["source_sha"]) == (
+            "415", 40871120791, "7d4c9c2f9fa77e2c9d1f124ec8910e2a57b926cf"), "Capture exception belongs only to 415"
+        assert run["status"] in ("in_progress", "completed"), "Source run not active or complete"
+        assert run.get("conclusion") in (None, "success", "failure"), "Source run cancelled or timed out"
+        for name in ("build", "core-tests-linux"):
+            matched = [job for job in jobs if job["name"] == name]
+            assert len(matched) == 1 and matched[0]["conclusion"] == "success", f"Required check failed: {name}"
+        visual = [job for job in jobs if job["name"] == "arena-look"]
+        assert len(visual) == 1, "Missing or ambiguous simulator job"
+        steps = visual[0].get("steps", [])
+        for name in ("Set up job", "Run actions/checkout@v5", "选用最新的 Xcode（26 或更新）",
+                     "生成 Xcode 工程", "编译模拟器版本", "角色动画回归测试"):
+            matched = [step for step in steps if step["name"] == name]
+            assert len(matched) == 1 and matched[0]["conclusion"] == "success", f"Required simulator step failed: {name}"
+        for job in jobs:
+            if job["name"] not in ("arena-look", "screenshots", "testflight", "whats-new"):
+                assert job["conclusion"] in ("success", "skipped"), f"Nonvisual job not passed: {job['name']}"
+        return
     assert run["status"] == "completed" and run["conclusion"] == "success", "Source CI did not pass"
     for name in ("build", "core-tests-linux", "arena-look"):
         matched = [job for job in jobs if job["name"] == name]
