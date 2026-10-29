@@ -1,0 +1,132 @@
+{
+  "build": 399,
+  "version": "1.2",
+  "codeCommit": "183f980581010aeaed4425bb00a907bda207162f",
+  "run": 40828150790,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/40828150790",
+  "environment": "iPhone 17 Pro Max Simulator, iOS 26.2, Xcode 26.3",
+  "rawPNGSize": [
+    1320,
+    2868
+  ],
+  "gameViewport": [
+    956,
+    440
+  ],
+  "artifacts": {
+    "arena-look": 12877649231,
+    "arena-diagnostics": 12878370996,
+    "ShiftReminder-ipa": 12878006395
+  },
+  "tests": {
+    "macOSCore": {
+      "tests": 291,
+      "failures": 0
+    },
+    "linuxCore": {
+      "tests": 291,
+      "skipped": 1,
+      "failures": 0
+    },
+    "iOS": {
+      "animation": 8,
+      "audio": 2,
+      "diagnostics": 3,
+      "ranger": 4,
+      "failures": 0
+    },
+    "existingDeviceConcurrencyWarnings": 7
+  },
+  "package": {
+    "version": "1.2",
+    "build": "399",
+    "commit": "183f980581010aeaed4425bb00a907bda207162f",
+    "rangerBytes": 589772,
+    "rangerSHA256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d"
+  },
+  "comparisons": {
+    "rangerBattle": {
+      "simulationTime": 0.26666666666666666,
+      "identicalCameraAndFighterState": true,
+      "seed": 170017,
+      "map": "canyon"
+    },
+    "rangerCombat": {
+      "simulationTime": 1.2000000000000006,
+      "identicalCameraAndFighterState": true,
+      "seed": 170017,
+      "map": "canyon"
+    }
+  },
+  "review": {
+    "allSixRawPNGsOpened": true,
+    "lobby": "new and legacy complete; new head, feet, face and crossbow visible, no solid black body or coarse outline",
+    "earlyBattle": "original ranger visible, file replacement confirmed; effects still partly cover crossbow",
+    "crowdedBattle": "readability failed: legacy accessories, shield transparency and bright effects obscure fighters",
+    "video": {
+      "seconds": 10.61,
+      "inspection": "three extracted frames reviewed; no claim of exhaustive motion or touch acceptance"
+    },
+    "commercialArtApproval": false,
+    "physicalDeviceFPS": "unverified",
+    "GPUTime": "unmeasured",
+    "presentedFPS": "unmeasured",
+    "thermal20to30Minutes": "unverified",
+    "phoneInstalledVersion": "unknown",
+    "testflightUpload": false
+  },
+  "files": {
+    "rangerBattleAfter.json": {
+      "bytes": 686,
+      "sha256": "fcc13865a4f3300906b8612de3c52ec8cdf6444bb34b9f4d3c0e0a5dc73aef35"
+    },
+    "rangerBattleAfter.png": {
+      "bytes": 773519,
+      "sha256": "9decb318126acf7e7b2307821662bdd01cd52776a59be4cf3e3750b1f1f4b903"
+    },
+    "rangerBattleBefore.json": {
+      "bytes": 676,
+      "sha256": "6a7dddf8aaede9b67890840784bc77bb2cae95a912837014ef89a571e75d01ff"
+    },
+    "rangerBattleBefore.png": {
+      "bytes": 806594,
+      "sha256": "345ae756c83f04ac502b8b74ea1d6454cf44e9295e851ea4f641c9b75f35573d"
+    },
+    "rangerCombatAfter.json": {
+      "bytes": 676,
+      "sha256": "c073434c451daaee52bb96de7d0531bbf87d18de1d8cd75eeb14d56b789c5da3"
+    },
+    "rangerCombatAfter.png": {
+      "bytes": 737342,
+      "sha256": "5524aad2888c7394a33b84c97a24d07a4ab01af9fd36423a5ede6e22ccc3bc0a"
+    },
+    "rangerCombatBefore.json": {
+      "bytes": 666,
+      "sha256": "8907555fc37e72f2233f86ec57ee64b231a756af421fcebd8780e9525d7d60be"
+    },
+    "rangerCombatBefore.png": {
+      "bytes": 736500,
+      "sha256": "f0feb1bfe87602404cf9d9d05ec10ed36d8371de29cba7927fae0b86156210a3"
+    },
+    "rangerLobbyAfter.json": {
+      "bytes": 114,
+      "sha256": "fa94ac42f962c28b0ec81a9dc5ecc72a03f206dd1f877da313a072a5b6256e5f"
+    },
+    "rangerLobbyAfter.png": {
+      "bytes": 2912969,
+      "sha256": "d41bf355cf9afbf04dae9cbe9d9ee138865141278e17eb8943e95c189febfd71"
+    },
+    "rangerLobbyBefore.json": {
+      "bytes": 103,
+      "sha256": "85c6d191be6bd881b8acb677d49db4f126747ab697096901f6eb4c273acfe4c8"
+    },
+    "rangerLobbyBefore.png": {
+      "bytes": 2901879,
+      "sha256": "af26d0ddc8fb03f7fd5306e7d9d418172c3a451396e1e762c23ff0e0abc16190"
+    },
+    "rangerLobbyMotion.mp4": {
+      "bytes": 7995685,
+      "sha256": "71d41fa3f79df1dcea4a605be1d056eed4fbf6c76fa74a001e15abe9ed8aad30"
+    }
+  }
+}
