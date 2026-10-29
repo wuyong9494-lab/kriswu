@@ -221,7 +221,7 @@ final class ArenaModels: @unchecked Sendable {
         let name = (file as NSString).deletingPathExtension
         let type = (file as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: type),
-              let parsed = try? GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth) else {
+              let parsed = try? ArenaDiagnostics.shared.measure(.modelLoad, { try GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth) }) else {
             missing.insert(file)
             return nil
         }

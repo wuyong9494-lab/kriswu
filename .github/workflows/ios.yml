@@ -281,7 +281,9 @@ jobs:
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
           import json, sys
           d = json.load(sys.stdin)['devices']
-          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro') or x['name'].startswith('iPhone')))")
+          phones = [x for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          selected = next((x for x in phones if x['name'] == 'iPhone 17 Pro Max'), phones[0])
+          print(selected['udid'])")
           echo "DEVICE=$DEVICE" >> $GITHUB_ENV
           xcodebuild build \
             -project ShiftReminder.xcodeproj \
@@ -428,7 +430,7 @@ jobs:
     concurrency:
       group: arena-look-${{ github.ref }}
       cancel-in-progress: true
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/codex/arena-performance-1')
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-diagnostics-2'))
     steps:
       - uses: actions/checkout@v5
 
@@ -451,7 +453,9 @@ jobs:
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
           import json, sys
           d = json.load(sys.stdin)['devices']
-          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro') or x['name'].startswith('iPhone')))")
+          phones = [x for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          selected = next((x for x in phones if x['name'] == 'iPhone 17 Pro Max'), phones[0])
+          print(selected['udid'])")
           echo "DEVICE=$DEVICE" >> $GITHUB_ENV
           xcodebuild build \
             -project ShiftReminder.xcodeproj \
@@ -483,21 +487,58 @@ jobs:
           simctl() {
             python3 - "$@" <<'PYCODE'
           import subprocess, sys
-          print("simctl", *sys.argv[1:], flush=True)
+          print("simctl", *sys.argv[1:], file=sys.stderr, flush=True)
           subprocess.run(["xcrun", "simctl", *sys.argv[1:]], check=True, timeout=150)
           PYCODE
           }
           APP=build/Build/Products/Debug-iphonesimulator/ShiftReminder.app
           ID=com.kriswu.shiftreminder
           simctl shutdown all || true
+          # XCTest has already installed/launched the app on DEVICE. Use a fresh
+          # simulator for capture so its launch services and app data are isolated.
+          SOURCE_DEVICE="$DEVICE"
+          export SOURCE_DEVICE
+          xcrun simctl list devices available -j > capture-devices.json
+          python3 - <<'PYCODE' > capture-device.env
+          import json, os, shlex
+          devices = json.load(open('capture-devices.json'))['devices']
+          for runtime, entries in devices.items():
+              for device in entries:
+                  if device['udid'] == os.environ['SOURCE_DEVICE']:
+                      print('CAPTURE_RUNTIME=' + shlex.quote(runtime))
+                      print('CAPTURE_TYPE=' + shlex.quote(device['deviceTypeIdentifier']))
+          PYCODE
+          source capture-device.env
+          DEVICE=$(simctl create "Arena Capture" "$CAPTURE_TYPE" "$CAPTURE_RUNTIME")
+          echo "CAPTURE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          capture_cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              mkdir -p arena-diagnostics
+              python3 - "$DEVICE" <<'PYCODE' > arena-diagnostics/launch-services.log 2>&1
+          import subprocess, sys
+          try:
+              subprocess.run(['xcrun', 'simctl', 'spawn', sys.argv[1], 'log', 'show', '--last', '3m', '--style', 'compact', '--predicate', 'process == "ShiftReminder" OR process == "SpringBoard" OR process == "runningboardd"'], timeout=30)
+          except subprocess.TimeoutExpired:
+              print('Simulator log collection timed out')
+          PYCODE
+            fi
+            simctl shutdown "$DEVICE" || true
+            simctl delete "$DEVICE" || true
+          }
+          trap capture_cleanup EXIT
           simctl boot "$DEVICE"
           simctl bootstatus "$DEVICE" -b
           simctl install "$DEVICE" "$APP"
           mkdir -p shots
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay; do
+          for s in arena arenaPlay arenaPerf; do
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
-            simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+            if [ "$s" = arenaPerf ]; then
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaPlay -arena.performanceOverlay YES
+            else
+              simctl launch "$DEVICE" "$ID" -demo -screen "$s"
+            fi
             sleep 12
             simctl io "$DEVICE" screenshot "shots/$s.png"
           done

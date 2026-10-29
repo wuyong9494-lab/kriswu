@@ -707,7 +707,7 @@ struct ArenaHomeView: View {
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .tint(.green)
                     .foregroundStyle(.white)
-                Text("下一局显示刷新率、慢帧和更新耗时。卡顿时可截图帮助定位；平时可以关闭。")
+                Text("下一局显示刷新回调间隔（非渲染帧率）。开启后重启 App 可记录冷加载及分项 CPU 峰值；GPU 耗时需真机工具测量。")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
@@ -1643,6 +1643,7 @@ final class ArenaShowcaseView: SCNView {
     }
 
     fileprivate func tick(_ timestamp: CFTimeInterval) {
+        guard link != nil, window != nil, UIApplication.shared.applicationState == .active else { return }
         let dt = Float(min(max(timestamp - (lastTimestamp ?? timestamp), 0), 0.1))
         lastTimestamp = timestamp
         clock += Double(dt)

@@ -61,6 +61,82 @@ final class ArenaAnimationTests: XCTestCase {
         }
     }
 
+    func testRepeatedMovingAttacksExpireAndReturnToLocomotion() throws {
+        let game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "游侠", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "骑士", brawler: .knight, isBot: true, team: 1)
+        ], seed: 1)
+        var fighter = game.fighters[0]
+        let reference = ArenaAvatar(brawler: .ranger, color: .blue, isMe: false, decorated: false)
+        let attacking = ArenaAvatar(brawler: .ranger, color: .blue, isMe: false, decorated: false)
+        let dt: Float = 1 / 60
+        var attackChangedPose = false
+        for frame in 0..<240 {
+            fighter.pos.x += 2.4 / 60
+            if [0, 24, 48, 72].contains(frame) { attacking.attack() }
+            for avatar in [reference, attacking] {
+                avatar.update(fighter, visible: true, translucent: false, cheering: false, dt: dt, clock: Double(frame) / 60)
+            }
+            if frame == 80 {
+                let a = try XCTUnwrap(reference.node.childNode(withName: "upperarm.r", recursively: true))
+                let b = try XCTUnwrap(attacking.node.childNode(withName: "upperarm.r", recursively: true))
+                attackChangedPose = (0..<4).contains { simd_length(a.simdTransform[$0] - b.simdTransform[$0]) > 0.001 }
+            }
+        }
+        XCTAssertTrue(attackChangedPose, "Repeated attacks must actually animate while moving")
+        try assertSamePose(reference, attacking)
+    }
+
+    func testDeathAndRespawnClearAttackLayer() throws {
+        let game = ArenaGame(mode: .teamFight, entrants: [
+            .init(name: "游侠", brawler: .ranger, isBot: false, team: 0),
+            .init(name: "骑士", brawler: .knight, isBot: true, team: 1)
+        ], seed: 1)
+        var fighter = game.fighters[0]
+        let reference = ArenaAvatar(brawler: .ranger, color: .blue, isMe: false, decorated: false)
+        let revived = ArenaAvatar(brawler: .ranger, color: .blue, isMe: false, decorated: false)
+        revived.attack()
+        let dt: Float = 1 / 60
+        for frame in 0..<240 {
+            reference.update(game.fighters[0], visible: true, translucent: false, cheering: false, dt: dt, clock: Double(frame) / 60)
+            fighter.alive = frame >= 120
+            revived.update(fighter, visible: true, translucent: false, cheering: false, dt: dt, clock: Double(frame) / 60)
+            if frame == 119 { XCTAssertTrue(revived.node.isHidden) }
+        }
+        XCTAssertFalse(revived.node.isHidden)
+        try assertSamePose(reference, revived)
+    }
+
+    func testStoppingWorldClearsHeldAndQueuedInput() {
+        let controller = ArenaController(setup: .init(mode: .teamFight, brawler: .ranger, name: "测试"), seed: 7)
+        controller.advance(ArenaController.introLength + 0.1)
+        let view = ArenaWorldView(controller: controller)
+        let position = controller.mine.pos
+        let ammo = controller.mine.ammo
+        controller.move = V2(1, 0)
+        controller.aiming = V2(1, 0)
+        controller.fire(V2(1, 0))
+        view.stop()
+        view.stop() // teardown and background notifications may both stop it
+        XCTAssertFalse(view.rendersContinuously)
+        XCTAssertFalse(view.isPlaying)
+        XCTAssertEqual(controller.move, .zero)
+        XCTAssertNil(controller.aiming)
+        controller.advance(ArenaController.step)
+        XCTAssertEqual(controller.mine.pos, position)
+        XCTAssertEqual(controller.mine.ammo, ammo)
+    }
+
+    private func assertSamePose(_ reference: ArenaAvatar, _ actual: ArenaAvatar) throws {
+        for name in ["spine", "chest", "upperarm.r", "lowerarm.r"] {
+            let expected = try XCTUnwrap(reference.node.childNode(withName: name, recursively: true))
+            let result = try XCTUnwrap(actual.node.childNode(withName: name, recursively: true))
+            for column in 0..<4 {
+                XCTAssertLessThan(simd_length(expected.simdTransform[column] - result.simdTransform[column]), 0.0001, name)
+            }
+        }
+    }
+
     func testPoseBuffersRestoreUnaffectedBonesBetweenLayers() {
         let rest = GLTFModel.Pose(translation: [.zero, SIMD3(1, 2, 3)],
                                  rotation: [simd_quatf(ix: 0, iy: 0, iz: 0, r: 1), simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)],

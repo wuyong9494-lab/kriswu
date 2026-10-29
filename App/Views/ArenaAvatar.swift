@@ -395,7 +395,9 @@ final class ArenaAvatar {
 
         let moving = fighter.alive && speed > 0.6
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
-        animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden)
+        ArenaDiagnostics.shared.measure(.animation) {
+            animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden)
+        }
     }
 
 

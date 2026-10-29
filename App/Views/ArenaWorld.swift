@@ -185,17 +185,17 @@ final class ArenaWorldView: SCNView {
         // 不开抗锯齿：整屏 2 倍采样在对局里会把帧率拖得很低。角色描边还在
         antialiasingMode = .none
         preferredFramesPerSecond = 60
-        rendersContinuously = true
-        isPlaying = true
+        rendersContinuously = false
+        isPlaying = false
         isUserInteractionEnabled = false
         scene = world
-        build()
+        ArenaDiagnostics.shared.measure(.sceneBuild) { build() }
         pointOfView = cameraNode
         if metricsEnabled {
             metricsLabel.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
             metricsLabel.textColor = .white
             metricsLabel.backgroundColor = UIColor.black.withAlphaComponent(0.72)
-            metricsLabel.numberOfLines = 3
+            metricsLabel.numberOfLines = 7
             metricsLabel.layer.cornerRadius = 6
             metricsLabel.clipsToBounds = true
             metricsLabel.isUserInteractionEnabled = false
@@ -232,6 +232,7 @@ final class ArenaWorldView: SCNView {
     }
 
     func stop() {
+        controller.cancelLocalInput()
         link?.invalidate()
         link = nil
         lastTimestamp = nil
@@ -246,7 +247,7 @@ final class ArenaWorldView: SCNView {
         if metricsEnabled {
             metricsLabel.frame = CGRect(x: max(safeAreaInsets.left, 8) + 8,
                                         y: max(safeAreaInsets.top, 8) + 48,
-                                        width: 260, height: 48)
+                                        width: 330, height: 104)
         }
         let aspect = Float(bounds.width / bounds.height)
         if aspect >= 1 {
@@ -270,6 +271,7 @@ final class ArenaWorldView: SCNView {
     }
 
     fileprivate func tick(_ timestamp: CFTimeInterval) {
+        guard link != nil, window != nil, UIApplication.shared.applicationState == .active else { return }
         let elapsed = lastTimestamp.map { timestamp - $0 } ?? 0
         lastTimestamp = timestamp
         let started = metricsEnabled ? CACurrentMediaTime() : 0
@@ -277,15 +279,20 @@ final class ArenaWorldView: SCNView {
         let simulated = metricsEnabled ? CACurrentMediaTime() : 0
         let dt = Float(min(max(elapsed, 0), 0.1))
         clock += Double(dt)
-        sync(dt: dt)
+        ArenaDiagnostics.shared.measure(.sceneUpdate) { sync(dt: dt) }
         if metricsEnabled {
             let finished = CACurrentMediaTime()
             metrics.record(interval: elapsed, simulation: simulated - started, scene: finished - simulated)
             if timestamp >= nextMetricsAt, let report = metrics.report() {
                 nextMetricsAt = timestamp + 1
-                metricsLabel.text = String(format: "  刷新 %.0f FPS · P95 %.1f ms\n  逻辑 %.1f ms · 场景 CPU %.1f ms\n  慢帧 %d/%d · 不含 GPU 耗时",
+                metricsLabel.text = String(format: "  回调 %.0f Hz · 间隔 P95 %.1f ms\n  逻辑 %.1f ms · 场景 CPU %.1f ms\n  慢帧 %d/%d · 不含 GPU 耗时",
                                            report.fps, report.p95Milliseconds, report.simulationMilliseconds,
                                            report.sceneMilliseconds, report.slowFrames, report.samples)
+                let stages = ArenaDiagnostics.shared.snapshot()
+                metricsLabel.text! += String(format: "\n  CPU 峰值/次(ms)：模拟 %.1f · AI %.1f\n  骨骼 %.1f · 场景 %.1f（含骨骼）\n  冷加载 %.1f · 建场景 %.1f（含加载）\n  峰值自启动累计；GPU/呈现帧率未测",
+                                             stages[.simulation].peakMilliseconds, stages[.ai].peakMilliseconds,
+                                             stages[.animation].peakMilliseconds, stages[.sceneUpdate].peakMilliseconds,
+                                             stages[.modelLoad].peakMilliseconds, stages[.sceneBuild].peakMilliseconds)
             }
         }
     }

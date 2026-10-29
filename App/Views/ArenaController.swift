@@ -290,10 +290,14 @@ final class ArenaController: ObservableObject {
             remoteGadgets = []
             remoteEmotes = [:]
         }
-        for k in bots.indices {
-            inputs[bots[k].id] = bots[k].input(in: game, dt: Self.step)
+        ArenaDiagnostics.shared.measure(.ai) {
+            for k in bots.indices {
+                inputs[bots[k].id] = bots[k].input(in: game, dt: Self.step)
+            }
         }
-        game.step(Self.step, inputs: inputs)
+        ArenaDiagnostics.shared.measure(.simulation) {
+            game.step(Self.step, inputs: inputs)
+        }
         let events = game.events
         game.events.removeAll()
         sceneEvents += events
@@ -303,6 +307,18 @@ final class ArenaController: ObservableObject {
             ticks += 1
             if ticks % 3 == 0 || game.result != nil { broadcast() }
         }
+    }
+
+    /// Touch-up may never arrive after backgrounding or dismissing the view.
+    func cancelLocalInput() {
+        move = .zero
+        aiming = nil
+        superAiming = nil
+        queuedAttack = nil
+        queuedSpecial = nil
+        queuedGadget = false
+        queuedEmote = nil
+        accumulator = 0
     }
 
     /// 这一帧发生的事（画特效用），拿走就清掉
