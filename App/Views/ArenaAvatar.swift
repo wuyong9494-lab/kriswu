@@ -267,7 +267,7 @@ final class ArenaAvatar {
     // MARK: - 每帧
 
     /// visible：这一队看不看得见他；translucent：自己这边的人躲在草丛里（半透明）；cheering：赢了
-    func update(_ fighter: Fighter, visible: Bool, translucent: Bool, cheering: Bool, dt: Float, clock: Double) {
+    func update(_ fighter: Fighter, visible: Bool, translucent: Bool, cheering: Bool, dt: Float, clock: Double, sampleBones: Bool = true) {
         // 位置：跳起来时往上抛一道弧
         var height: Float = 0
         if let leap = fighter.leap {
@@ -327,7 +327,7 @@ final class ArenaAvatar {
         node.opacity = CGFloat(opacity)
         node.isHidden = opacity < 0.02
         // 不透明时才描边（半透明时会从身子里透出一圈黑）
-        let solid = opacity > 0.97
+        let solid = opacity > 0.97 && ArenaDiagnostics.shared.variant != .noCharacterOutlines
         if solid != outlined {
             outlined = solid
             outlines.forEach { $0.isHidden = !solid }
@@ -365,6 +365,10 @@ final class ArenaAvatar {
             streak?.birthRate = 0
         }
         // 被冰霜打中：身上发蓝
+        if ArenaDiagnostics.shared.variant == .noParticles {
+            sparks?.birthRate = 0
+            streak?.birthRate = 0
+        }
         let frozen = fighter.alive && fighter.slowed > 0
         if frozen != frosted, let instance {
             frosted = frozen
@@ -396,7 +400,7 @@ final class ArenaAvatar {
         let moving = fighter.alive && speed > 0.6
         let wanted = cheering ? BrawlerLook.cheer : (moving ? look.run : look.idle)
         ArenaDiagnostics.shared.measure(.animation) {
-            animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden)
+            animate(dt: dt, moving: moving, base: wanted, samplePose: !node.isHidden && sampleBones)
         }
     }
 

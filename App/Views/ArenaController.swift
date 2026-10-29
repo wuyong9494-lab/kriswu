@@ -95,6 +95,7 @@ final class ArenaController: ObservableObject {
         var botLevel: Int?
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
+        var benchmark = false
 
         enum Demo { case versus, result }
     }
@@ -103,6 +104,10 @@ final class ArenaController: ObservableObject {
 
     let role: Role
     let me: Int
+    private(set) var benchmark = false
+    var benchmarkSnapshotTime: Double {
+        benchmark ? UserDefaults.standard.double(forKey: "arena.snapshotTime") : 0
+    }
     private(set) var game: ArenaGame
     private weak var room: GameRoom?
     private var bots: [ArenaBot]
@@ -179,6 +184,7 @@ final class ArenaController: ObservableObject {
 
     /// 自己和电脑打（冒险的一关也是）
     convenience init(setup: Setup, seed: UInt64 = UInt64.random(in: 0..<UInt64.max)) {
+        let seed: UInt64 = setup.benchmark ? 170017 : seed
         let mine = ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
                                      level: setup.level, lineup: setup.lineup, loadout: setup.loadout.allowed(setup.brawler, level: setup.level))
         let built: ArenaGame
@@ -190,7 +196,7 @@ final class ArenaController: ObservableObject {
             var others = Brawler.allCases.filter { $0 != setup.brawler }
             random.shuffle(&others)
             let maps = ArenaMap.pool(for: setup.mode)
-            let map = maps[random.below(maps.count)]
+            let map = setup.benchmark ? ArenaMap.canyon : maps[random.below(maps.count)]
             let teams = setup.mode.seatTeams
             var entrants = [mine]
             entrants[0].team = teams[0]
@@ -201,9 +207,24 @@ final class ArenaController: ObservableObject {
                 entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
                                                   level: level, loadout: ArenaLoadout.basic(brawler, level: level)))
             }
+            if setup.benchmark {
+                let roster: [Brawler] = [.ranger, .knight, .mage, .ranger, .knight, .mage]
+                for i in entrants.indices {
+                    entrants[i].brawler = roster[i % roster.count]
+                    entrants[i].loadout = ArenaLoadout.basic(entrants[i].brawler, level: setup.level)
+                }
+            }
             built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
         self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
+        benchmark = setup.benchmark
+        if benchmark {
+            let positions = [V2(4.5, 12.5), V2(6.5, 14.5), V2(8.5, 14.5), V2(10.5, 12.5), V2(8.5, 10.5), V2(6.5, 10.5)]
+            for i in game.fighters.indices {
+                game.adjust(i) { $0.pos = positions[i % positions.count] }
+            }
+            bots = game.fighters.map { ArenaBot(id: $0.id, seed: seed) }
+        }
         story = setup.story
         ranked = setup.ranked && setup.story == nil
         switch setup.demo {
@@ -237,6 +258,7 @@ final class ArenaController: ObservableObject {
     private init(role: Role, game: ArenaGame, me: Int, room: GameRoom?, seed: UInt64) {
         self.role = role
         self.game = game
+        self.game.measuresCPU = ArenaDiagnostics.shared.enabled
         self.me = me
         self.room = room
         bots = role == .client ? [] : game.fighters.filter(\.isBot).map { ArenaBot(id: $0.id, seed: seed) }
@@ -247,6 +269,7 @@ final class ArenaController: ObservableObject {
 
     /// 画面每帧调：按真实过去的时间往前算
     func advance(_ elapsed: Double) {
+        if benchmarkSnapshotTime > 0 && game.time >= benchmarkSnapshotTime { return }
         // 开场对阵画面放着的时候不开打（联机时房主也一样等，别人收到的是开场那一帧）
         if introLeft > 0 {
             introLeft -= max(elapsed, 0)
@@ -260,6 +283,7 @@ final class ArenaController: ObservableObject {
                 while accumulator >= Self.step && game.result == nil {
                     accumulator -= Self.step
                     tick()
+                    if benchmarkSnapshotTime > 0 && game.time >= benchmarkSnapshotTime { accumulator = 0; break }
                 }
             }
         case .client:
@@ -298,6 +322,7 @@ final class ArenaController: ObservableObject {
         ArenaDiagnostics.shared.measure(.simulation) {
             game.step(Self.step, inputs: inputs)
         }
+        ArenaDiagnostics.shared.record(.collision, seconds: game.collisionCPUSeconds)
         let events = game.events
         game.events.removeAll()
         sceneEvents += events

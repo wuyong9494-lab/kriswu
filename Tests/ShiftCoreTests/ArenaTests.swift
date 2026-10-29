@@ -24,6 +24,22 @@ final class ArenaTests: XCTestCase {
         }
     }
 
+    func testCPUInstrumentationDoesNotChangeCombatOutcome() {
+        var plain = ArenaGame(mode: .teamFight, entrants: entrants(), seed: 170017, map: .canyon)
+        var measured = plain
+        measured.measuresCPU = true
+        for _ in 0..<600 {
+            let inputs = [0: ArenaInput(move: V2(0.4, -0.8), attack: V2(0, -1))]
+            plain.step(dt, inputs: inputs)
+            measured.step(dt, inputs: inputs)
+            XCTAssertEqual(plain.fighters.map(\.pos), measured.fighters.map(\.pos))
+            XCTAssertEqual(plain.fighters.map(\.health), measured.fighters.map(\.health))
+            XCTAssertEqual(plain.projectiles.count, measured.projectiles.count)
+        }
+        XCTAssertGreaterThan(measured.collisionCPUSeconds, 0)
+        XCTAssertEqual(plain.collisionCPUSeconds, 0)
+    }
+
     /// 地图：分队的中心对称、两边一样；出生点站得下、走得到中间
     func testMapsAreFairAndOpen() {
         let canyon = ArenaMap.canyon

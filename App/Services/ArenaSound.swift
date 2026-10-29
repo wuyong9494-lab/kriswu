@@ -125,6 +125,9 @@ final class ArenaSound {
     private var musicLevel: Float { 0.45 * volume }
 
     private func prepare() {
+        let started = ProcessInfo.processInfo.systemUptime
+        defer { ArenaDiagnostics.shared.record(.audio, seconds: ProcessInfo.processInfo.systemUptime - started) }
+
         if !sessionOn {
             let session = AVAudioSession.sharedInstance()
             try? session.setCategory(.ambient, mode: .default)

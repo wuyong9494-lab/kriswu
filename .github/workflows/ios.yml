@@ -51,6 +51,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           brew install xcodegen
+          python3 .github/scripts/build_identity.py
           xcodegen generate
 
       - name: 编译 App（未签名）
@@ -119,7 +120,7 @@ jobs:
 
       # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
       - name: 发布到 Releases（最新版）
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -219,6 +220,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           brew install xcodegen
+          python3 .github/scripts/build_identity.py
           xcodegen generate
 
       - name: 模拟器里测试同步流程
@@ -273,6 +275,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           brew install xcodegen
+          python3 .github/scripts/build_identity.py
           xcodegen generate
 
       - name: 编译模拟器版本
@@ -445,6 +448,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           brew install xcodegen
+          python3 .github/scripts/build_identity.py
           xcodegen generate
 
       - name: 编译模拟器版本
@@ -532,9 +536,13 @@ jobs:
           simctl install "$DEVICE" "$APP"
           mkdir -p shots
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
-          for s in arena arenaPlay arenaPerf; do
+          for s in arena arenaPlay arenaPerf arenaBaseline arenaPurple; do
             simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
-            if [ "$s" = arenaPerf ]; then
+            if [ "$s" = arenaBaseline ]; then
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample NO -arena.snapshotTime 6
+            elif [ "$s" = arenaPurple ]; then
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaBenchmark -arena.purpleSample YES -arena.snapshotTime 6
+            elif [ "$s" = arenaPerf ]; then
               simctl launch "$DEVICE" "$ID" -demo -screen arenaPlay -arena.performanceOverlay YES
             else
               simctl launch "$DEVICE" "$ID" -demo -screen "$s"
@@ -621,6 +629,7 @@ jobs:
         if: steps.check.outputs.skip != '1'
         run: |
           brew install xcodegen
+          python3 .github/scripts/build_identity.py
           xcodegen generate
 
       - name: 写入 App Store Connect 密钥

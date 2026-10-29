@@ -41,3 +41,30 @@ Build 386: e29d39f54946cc9aaed2cc67a609390def5adc47。2026-10-29 最终结果：
 Build 383: 签名、上传、测试说明任务均成功；无需重新接受 Apple 协议。
 
 本地环境无 Swift/Xcode，新增代码不能在本机编译；必须通过云端核心测试、模拟器回归与 iOS 编译后才能作为已验证结果。不可用旧构建的成功结果为新提交背书。
+
+
+## Build 387 closure and next sample
+
+- Commit `8bad602ac8d9c3f9ce88e68b41dad0f551fc2a90`, run https://github.com/wuyong9494-lab/kriswu/actions/runs/40814402943.
+- Core checks, device compilation, simulator compilation and 7 animation/lifecycle tests passed. Fresh capture simulator resolved Build 386's launch timeout. No duplicate 386 run was started.
+- Actually opened all three engine captures (`arena`, `arenaPlay`, `arenaPerf`): knight is fully visible and colored in this sample; oversized competing lobby buttons, noisy floor and tree-like bushes remain. This is NOT whole-roster visual acceptance.
+- Diagnostic branch deliberately skips TestFlight. Build 383's successful signing/upload/Chinese notes remain the last verified distribution evidence; Apple agreement is not a blocker. Build 386 capture failed and upload was skipped.
+- Simulator overlay is callback timing, NOT device/GPU performance. No claim of stable real-device 60 FPS or thermal acceptance.
+
+### Implemented sample (pending next cloud validation)
+
+Lobby: compact icon menus, 56-point main battle button, bounded central hero framing and static layered backdrop. Hero clarity and menu hierarchy take priority over background complexity. The user's 500×281 Interface In Game blue lobby screenshot is a historical composition reference, not evidence of the current original game or a camera measurement: https://interfaceingame.com/wp-content/uploads/brawl-stars/brawl-stars-main-menu-500x281.png .
+
+Canyon only: opt-in original procedural purple floor/walls/crates and short faceted leaves. Existing map tiles, routes, visibility and collisions unchanged. No new dynamic lights or transparent foliage layers. Other maps retained. Screenshots run the same ranger/knight/mage 3v3 seed 170017 to simulation time 6 seconds, then freeze; compare `arenaBaseline` and `arenaPurple`. Random particle poses and asynchronous render timing may still differ; do not infer a timing improvement from still images.
+
+Readability: target-specific damage/heal merging over 120 ms, 12 reusable visible number nodes, bounded 256 image cache; health/damage calculation unchanged. Visibility is rechecked before queued text appears and while it remains displayed.
+
+Diagnostics: individual toggles for numbers, particles, character outlines and alternate-frame bone sampling; change ONE variable and restart for each run. Animation time still advances when sampling is skipped. Copy report from battle with performance display enabled. Window is last 120 callbacks; slow threshold >34.333 ms. Lifetime callback duration/count/maximum excludes background gaps. Stage CPU counts/mean/peak retain cold load since app launch; nested stages cannot be added. GPU time and actual presented frame rate are explicitly unmeasured. UI/SceneKit internal submission remain uncovered; use Instruments on device. Fixed benchmark is reproducible stress input, not a representative 30-minute session.
+
+### World/camera baseline (unchanged in this batch)
+
+Perspective projection; offset (0,16,12.5), about 52° down from horizontal. Adaptive vertical FOV preserves horizontal half-span 12 in landscape or 6.6 in portrait. Follow look-ahead 4.2, movement lead 1.35. Tile=1 world unit; fighter collision radius=0.42; base model scale=0.95 plus character-specific factors. Canyon actual dimensions 15×25 tiles; this is not the visible screen extent. Accessories and animated model bounds must be measured per character. No reliable matched-aspect original gameplay frame has yet established precise original camera parameters. Camera A/B alternatives are deferred until this visual-only sample is inspected.
+
+### Outstanding acceptance
+
+New sample needs cloud compilation/tests and actual screenshot review. Full lobby character-switch/panel/foreground-background interaction coverage, all-character extremity framing, device first-load/mixed-combat/skill bursts and 20–30-minute thermal run remain UNVERIFIED. Ranger firing/audio/haptic timing polish is a subsequent batch, not claimed complete here. Diagnostics builds must not overwrite the stable latest Release artifact.

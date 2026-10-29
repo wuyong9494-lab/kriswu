@@ -708,6 +708,10 @@ public struct ArenaGame: Sendable {
         }
     }
 
+    /// Optional diagnostics; durations never influence simulation or RNG.
+    public var measuresCPU = false
+    public private(set) var collisionCPUSeconds = 0.0
+
     public static let fighterRadius = 0.42
     public static let goal = 10
     public static let starHold = 15.0
@@ -858,6 +862,7 @@ public struct ArenaGame: Sendable {
     // MARK: 一帧
 
     public mutating func step(_ dt: Double, inputs: [Int: ArenaInput]) {
+        collisionCPUSeconds = 0
         guard result == nil else { return }
         time += dt
         // 进球、一局打完：停一会儿，停完大家回到出发的地方
@@ -957,6 +962,8 @@ public struct ArenaGame: Sendable {
 
     /// 走：先整个走，碰墙了就只走横的或只走竖的（贴着墙滑）
     mutating func walk(_ i: Int, by delta: V2) {
+        let start = measuresCPU ? ProcessInfo.processInfo.systemUptime : 0
+        defer { if measuresCPU { collisionCPUSeconds += ProcessInfo.processInfo.systemUptime - start } }
         fighters[i].pos = blockedByBoxes(fighters[i].pos, Self.walk(from: fighters[i].pos, by: delta, on: map))
     }
 
@@ -1319,6 +1326,9 @@ public struct ArenaGame: Sendable {
     }
 
     private mutating func moveProjectiles(_ dt: Double) {
+        // Includes projectile traversal, collision response and damage dispatch.
+        let start = measuresCPU ? ProcessInfo.processInfo.systemUptime : 0
+        defer { if measuresCPU { collisionCPUSeconds += ProcessInfo.processInfo.systemUptime - start } }
         var kept: [Projectile] = []
         for var p in projectiles {
             if var lob = p.lob {

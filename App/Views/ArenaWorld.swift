@@ -2,6 +2,7 @@ import SceneKit
 import SwiftUI
 import UIKit
 import simd
+import Darwin
 
 /// SwiftUI 里放乱斗的 3D 画面
 struct ArenaWorld: UIViewRepresentable {
@@ -40,6 +41,9 @@ final class ArenaWorldView: SCNView {
         return 2 * atan(tanY) * 180 / .pi
     }
 
+    private var purpleSample: Bool {
+        controller.game.map.id == "canyon" && UserDefaults.standard.bool(forKey: "arena.purpleSample")
+    }
     private let controller: ArenaController
     private let world = SCNScene()
     private let rig = SCNNode()
@@ -55,6 +59,11 @@ final class ArenaWorldView: SCNView {
     private let metricsEnabled = UserDefaults.standard.bool(forKey: "arena.performanceOverlay")
     private var metrics = ArenaFrameMetrics()
     private var nextMetricsAt = 0.0
+    private var diagnosticFrame = 0
+    private var measuredSeconds = 0.0
+    private var measuredCallbacks = 0
+    private var measuredSlowCallbacks = 0
+    private var peakInterval = 0.0
     private let metricsLabel = UILabel()
     private var flipped = false
     private var myTeam = 0
@@ -74,6 +83,8 @@ final class ArenaWorldView: SCNView {
     private var projectiles: [Int: ProjectileView] = [:]
     private var starNodes: [SCNNode] = []
     private var floaters: [Floater] = []
+    private var floaterPool: [SCNNode] = []
+    private var combatText = ArenaCombatText()
     private var zone: (disc: SCNNode, rim: SCNNode, state: Int)?
     /// 毒圈：一圈细边，外面几朵紫雾（牌子，不是整屏透明面）
     private var poison: PoisonField?
@@ -176,12 +187,13 @@ final class ArenaWorldView: SCNView {
         let node: SCNNode
         let at: SIMD3<Float>
         let born: Double
+        let target: Int?
     }
 
     init(controller: ArenaController) {
         self.controller = controller
         super.init(frame: .zero, options: nil)
-        backgroundColor = ArenaPalette.grass
+        backgroundColor = purpleSample ? UIColor(red: 0.12, green: 0.08, blue: 0.22, alpha: 1) : ArenaPalette.grass
         // 不开抗锯齿：整屏 2 倍采样在对局里会把帧率拖得很低。角色描边还在
         antialiasingMode = .none
         preferredFramesPerSecond = 60
@@ -274,15 +286,29 @@ final class ArenaWorldView: SCNView {
         guard link != nil, window != nil, UIApplication.shared.applicationState == .active else { return }
         let elapsed = lastTimestamp.map { timestamp - $0 } ?? 0
         lastTimestamp = timestamp
+        diagnosticFrame += 1
         let started = metricsEnabled ? CACurrentMediaTime() : 0
+        let oldGameTime = controller.game.time
         controller.advance(elapsed)
         let simulated = metricsEnabled ? CACurrentMediaTime() : 0
-        let dt = Float(min(max(elapsed, 0), 0.1))
+        let animationElapsed = controller.benchmark && controller.benchmarkSnapshotTime > 0 ? controller.game.time - oldGameTime : elapsed
+        let dt = Float(min(max(animationElapsed, 0), 0.1))
         clock += Double(dt)
         ArenaDiagnostics.shared.measure(.sceneUpdate) { sync(dt: dt) }
+        if controller.benchmarkSnapshotTime > 0 && controller.game.time >= controller.benchmarkSnapshotTime {
+            world.isPaused = true
+            isPlaying = false
+        }
         if metricsEnabled {
             let finished = CACurrentMediaTime()
             metrics.record(interval: elapsed, simulation: simulated - started, scene: finished - simulated)
+            ArenaDiagnostics.shared.record(.frameUpdate, seconds: finished - started)
+            if elapsed > 0 {
+                measuredSeconds += elapsed
+                measuredCallbacks += 1
+                if elapsed > 1.0 / 30 + 0.001 { measuredSlowCallbacks += 1 }
+                peakInterval = max(peakInterval, elapsed)
+            }
             if timestamp >= nextMetricsAt, let report = metrics.report() {
                 nextMetricsAt = timestamp + 1
                 metricsLabel.text = String(format: "  回调 %.0f Hz · 间隔 P95 %.1f ms\n  逻辑 %.1f ms · 场景 CPU %.1f ms\n  慢帧 %d/%d · 不含 GPU 耗时",
@@ -293,8 +319,53 @@ final class ArenaWorldView: SCNView {
                                              stages[.simulation].peakMilliseconds, stages[.ai].peakMilliseconds,
                                              stages[.animation].peakMilliseconds, stages[.sceneUpdate].peakMilliseconds,
                                              stages[.modelLoad].peakMilliseconds, stages[.sceneBuild].peakMilliseconds)
+                savePerformanceReport(report, stages: stages)
+
             }
         }
+    }
+
+    private func savePerformanceReport(_ frame: ArenaFrameMetrics.Report, stages: ArenaStageMetrics) {
+        var hardware = utsname()
+        uname(&hardware)
+        let machineSize = MemoryLayout.size(ofValue: hardware.machine)
+        let hardwareID = withUnsafePointer(to: &hardware.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: machineSize) { String(cString: $0) }
+        }
+        let environment = ProcessInfo.processInfo.environment
+        let simulator = environment["SIMULATOR_MODEL_IDENTIFIER"]
+        let device = simulator.map { "模拟器 \($0)" } ?? "真机 \(hardwareID)"
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "未知"
+        let build = info["CFBundleVersion"] as? String ?? "未知"
+        let commit = info["ArenaCommitSHA"] as? String ?? "未注入"
+        let thermal: String
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "正常"
+        case .fair: thermal = "轻度"
+        case .serious: thermal = "严重"
+        case .critical: thermal = "临界"
+        @unknown default: thermal = "未知"
+        }
+        let game = controller.game
+        let fx = burstSlots.filter(\.busy).count + flashSlots.filter(\.busy).count + ringSlots.filter(\.busy).count
+        var lines = [
+            "Arena 性能报告 v1 | \(version) (\(build)) | commit \(commit)",
+            "\(device) | \(UIDevice.current.systemName) \(UIDevice.current.systemVersion) | thermal=\(thermal)",
+            "对照项：\(ArenaDiagnostics.shared.variant.title) | 视觉：\(purpleSample ? "紫色样板" : "原版地图样式")",
+            "模式=\(game.mode) 地图=\(game.map.id) 游戏时间=\(String(format: "%.2f", game.time))s",
+            String(format: "有效回调采样 %.2fs / %d次，慢回调 %d，最大间隔 %.2fms（不含后台间隔）", measuredSeconds, measuredCallbacks, measuredSlowCallbacks, peakInterval * 1000),
+            String(format: "最近%d次回调：%.1fHz / P95 %.2fms / 慢回调 %d；阈值 >34.333ms", frame.samples, frame.fps, frame.p95Milliseconds, frame.slowFrames),
+            "活跃角色=\(game.fighters.filter(\.alive).count) 弹道=\(projectiles.count) 飘字=\(floaters.count) 池化特效=\(fx) 治疗区=\(zoneNodes.count)",
+            "CPU阶段自App启动累计，格式：次数 / 平均ms / 单次峰值ms："
+        ]
+        let names = ["模型解析", "模拟总计", "AI", "骨骼采样与写入", "场景更新", "创建场景", "移动碰撞及弹道处理", "飘字创建", "事件特效（含音效/飘字）", "音效资源准备", "回调更新总计"]
+        for stage in ArenaStageMetrics.Stage.allCases {
+            let sample = stages[stage]
+            lines.append(String(format: "\(names[stage.rawValue]): %d / %.3f / %.3f", sample.count, sample.meanMilliseconds, sample.peakMilliseconds))
+        }
+        lines += ["阶段有包含关系，不可求和。未覆盖系统/UI布局、SceneKit内部提交及GPU上传。", "GPU耗时：未测；实际呈现帧率：未测；不能用回调Hz替代。", "持续60FPS、20–30分钟热稳定性：需同场景真机记录，尚未验收。"]
+        ArenaDiagnostics.shared.saveReport(lines.joined(separator: "\n"))
     }
 
     // MARK: - 搭场景
@@ -353,38 +424,38 @@ final class ArenaWorldView: SCNView {
 
         // 地：场地外一大片草，场地里一格格深浅两种绿；上面再铺一层草叶、落叶的细纹
         let lawn = SCNPlane(width: CGFloat(width + 160), height: CGFloat(height + 160))
-        lawn.firstMaterial = grass(look.lawn, repeats: SIMD2(width + 160, height + 160) / 2)
+        lawn.firstMaterial = purpleSample ? ArenaPurpleArt.outside : grass(look.lawn, repeats: SIMD2(width + 160, height + 160) / 2)
         let lawnNode = SCNNode(geometry: lawn)
         lawnNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         lawnNode.simdPosition = SIMD3(width / 2, -0.02, height / 2)
         lawnNode.castsShadow = false
         root.addChildNode(lawnNode)
         let floor = SCNPlane(width: CGFloat(width), height: CGFloat(height))
-        floor.firstMaterial = grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
+        floor.firstMaterial = purpleSample ? ArenaPurpleArt.floor(map) : grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
         let floorNode = SCNNode(geometry: floor)
         floorNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         floorNode.simdPosition = SIMD3(width / 2, 0, height / 2)
         floorNode.castsShadow = false
         root.addChildNode(floorNode)
-        root.addChildNode(ArenaArt.border(width: width, height: height))
+        if !purpleSample { root.addChildNode(ArenaArt.border(width: width, height: height)) }
 
         // 墙：木箱、木桶、石块（同一格每次都一样）；草丛
-        let wallNode = walls(map, look: look)
+        let wallNode = purpleSample ? ArenaPurpleArt.walls(map) : walls(map, look: look)
         wallNode.castsShadow = false
         root.addChildNode(wallNode)
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .bush {
-                let node = SCNNode(geometry: ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
+                let node = SCNNode(geometry: purpleSample ? ArenaPurpleArt.bush : ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
                 node.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
                 node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 12) * .pi / 6, 0)
-                let size = 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
+                let size: Float = purpleSample ? 1 : 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
                 node.simdScale = SIMD3(size, size, size)
                 node.castsShadow = false
                 root.addChildNode(node)
                 bushes.append((node, V2(Double(x) + 0.5, Double(y) + 0.5), false))
             }
         }
-        root.addChildNode(scenery(game))
+        if !purpleSample { root.addChildNode(scenery(game)) }
 
         // 各个玩法的东西
         let center = SIMD3(Float(map.center.x), 0, Float(map.center.y))
@@ -489,6 +560,16 @@ final class ArenaWorldView: SCNView {
         aimNode.isHidden = true
         root.addChildNode(aimNode)
         prepareFx()
+        for _ in 0..<12 {
+            let plane = SCNPlane(width: 0.5, height: 0.5)
+            plane.firstMaterial = ArenaAvatar.decal(UIColor.white)
+            let node = SCNNode(geometry: plane)
+            node.faceCamera()
+            node.castsShadow = false
+            node.isHidden = true
+            world.rootNode.addChildNode(node)
+            floaterPool.append(node)
+        }
     }
 
     /// 地面的材质：底色（颜色或画好的地面）乘上草叶、落叶的细纹（细纹一张铺 2 × 2 格）
@@ -764,14 +845,13 @@ final class ArenaWorldView: SCNView {
             let visible = game.isVisible(fighter, to: myTeam)
             // 自己这边躲在草丛里的、隐身的（对面贴近了才看得见）：半透明
             let hidden = (fighter.team == myTeam && game.map.inBush(fighter.pos)) || fighter.invisible > 0
-            avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock)
+            avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock,
+                          sampleBones: ArenaDiagnostics.shared.variant != .halfAnimation || diagnosticFrame % 2 == 0)
             tags[fighter.id].update(fighter, opacity: avatar.opacity)
             let before = seenHealth[fighter.id] ?? fighter.health
             if fighter.alive, fighter.health > before, game.time - max(fighter.lastHurt, fighter.lastAttack) > 3,
                clock - (regenAt[fighter.id] ?? -1) > 0.55 {
-                floater("+\(fighter.health - before)",
-                        at: avatar.node.simdPosition + SIMD3(0, ArenaAvatar.headHeight + 0.2, 0),
-                        color: UIColor(red: 0.45, green: 1, blue: 0.45, alpha: 1))
+                combatText.add(target: fighter.id, kind: .healing, amount: fighter.health - before, time: clock)
                 regenAt[fighter.id] = clock
                 seenHealth[fighter.id] = fighter.health
             } else if fighter.health <= before || !fighter.alive {
@@ -796,7 +876,7 @@ final class ArenaWorldView: SCNView {
         for k in bushes.indices {
             let fade = openBush.contains(game.map.bushId(at: bushes[k].at))
             if fade != bushes[k].faded {
-                if fade {
+                if fade && !purpleSample {
                     bushes[k].node.scale = SCNVector3(1.12, 0.88, 1.12)
                     bushes[k].node.runAction(.scale(to: 1, duration: 0.16))
                 }
@@ -831,6 +911,17 @@ final class ArenaWorldView: SCNView {
         }
 
         for event in events { effect(event, game: game) }
+        for entry in combatText.drain(at: clock) {
+            // Recheck visibility at display time: queued text must not reveal a hidden enemy.
+            guard game.result == nil, game.fighters.indices.contains(entry.target),
+                  avatars.indices.contains(entry.target), game.isVisible(game.fighters[entry.target], to: myTeam),
+                  avatars[entry.target].opacity > 0.1 else { continue }
+            let heal = entry.kind == .healing
+            let color: UIColor = heal ? UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1)
+                : (game.fighters[entry.target].team == myTeam ? UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1) : .white)
+            let point = avatars[entry.target].node.simdPosition + SIMD3<Float>(heal ? 0.36 : -0.36, ArenaAvatar.headHeight + (heal ? 0.75 : 0.3), 0)
+            floater((heal ? "+" : "") + String(entry.amount), at: point, color: color, target: entry.target)
+        }
         // 结算时镜头凑近自己，头顶的名字、血条、数字都收起来
         if controller.hud.result != nil {
             for tag in tags { tag.node.isHidden = true }
@@ -1330,6 +1421,8 @@ final class ArenaWorldView: SCNView {
     // MARK: - 特效
 
     private func effect(_ event: ArenaGame.Event, game: ArenaGame) {
+        let started = metricsEnabled ? CACurrentMediaTime() : 0
+        defer { if metricsEnabled { ArenaDiagnostics.shared.record(.effects, seconds: CACurrentMediaTime() - started) } }
         switch event {
         case .hit(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
@@ -1340,8 +1433,7 @@ final class ArenaWorldView: SCNView {
             if target == controller.me, amount >= 900 { addShake(0.22) }
             let at = avatars[target].node.simdPosition
             spark(at: at + SIMD3(0, 0.7, 0))
-            floater("\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
-                    color: game.fighters[target].team == myTeam ? UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1) : .white)
+            combatText.add(target: target, kind: .damage, amount: amount, time: clock)
         case .explosion(let point, let radius):
             ArenaSound.shared.play(.boom, volume: loudness(point))
             addShake(Float(radius) * 0.16 * max(0, 1 - Float(point.distance(to: controller.mine.pos)) / 9))
@@ -1413,8 +1505,7 @@ final class ArenaWorldView: SCNView {
             ArenaSound.shared.play(.heal, volume: loudness(game.fighters[target].pos) * 0.7)
             let at = avatars[target].node.simdPosition
             burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 10, speed: 1, size: 0.25, life: 0.5)
-            floater("+\(amount)", at: at + SIMD3(Float.random(in: -0.25...0.25), ArenaAvatar.headHeight + 0.35, 0),
-                    color: UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1))
+            combatText.add(target: target, kind: .healing, amount: amount, time: clock)
         case .goal(let team):
             let ours = team == myTeam
             ArenaSound.shared.play(ours ? .win : .lose, volume: 0.8)
@@ -1631,7 +1722,8 @@ final class ArenaWorldView: SCNView {
 
     /// 一下子炸开的一团光点。系统是开局建好的，这里只挪位置再放一次
     private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
-        guard let slot = burstSlots.first(where: { !$0.busy }) else { return }
+        guard ArenaDiagnostics.shared.variant != .noParticles,
+              let slot = burstSlots.first(where: { !$0.busy }) else { return }
         slot.busy = true
         slot.node.simdPosition = point
         slot.node.isHidden = false
@@ -1667,7 +1759,7 @@ final class ArenaWorldView: SCNView {
         system.particleLifeSpan = life
         system.particleSize = size
         system.particleColor = color
-        system.birthRate = 22
+        system.birthRate = ArenaDiagnostics.shared.variant == .noParticles ? 0 : 22
         return system
     }
 
@@ -1830,7 +1922,7 @@ final class ArenaWorldView: SCNView {
             node.addChildNode(disc)
             node.addChildNode(rim)
             let motes = SCNParticleSystem()
-            motes.birthRate = 40
+            motes.birthRate = ArenaDiagnostics.shared.variant == .noParticles ? 0 : 40
             motes.particleLifeSpan = 0.9
             motes.particleVelocity = 1
             motes.emittingDirection = SCNVector3(0, 1, 0)
@@ -1926,33 +2018,42 @@ final class ArenaWorldView: SCNView {
 
     // MARK: - 伤害数字
 
-    private func floater(_ text: String, at point: SIMD3<Float>, color: UIColor) {
+    private func floater(_ text: String, at point: SIMD3<Float>, color: UIColor, target: Int? = nil) {
+        guard ArenaDiagnostics.shared.variant != .noNumbers else { return }
+        let started = metricsEnabled ? CACurrentMediaTime() : 0
+        defer { if metricsEnabled { ArenaDiagnostics.shared.record(.damageText, seconds: CACurrentMediaTime() - started) } }
         let key = "\(text)-\(color.hash)"
         let image: UIImage
         if let cached = numberImages[key] {
             image = cached
         } else {
             image = ArenaArt.text(text, size: 26, color: color)
-            if numberImages.count > 150 { numberImages.removeAll() }
+            if numberImages.count >= 256, let old = numberImages.keys.first { numberImages.removeValue(forKey: old) }
             numberImages[key] = image
         }
-        let height: CGFloat = 0.62
-        let aspect = image.size.width / max(image.size.height, 1)
-        let plane = SCNPlane(width: height * aspect, height: height)
-        plane.firstMaterial = ArenaArt.flat(image)
-        let node = SCNNode(geometry: plane)
-        node.faceCamera()
+        let node: SCNNode
+        if let reusable = floaterPool.popLast() { node = reusable }
+        else if !floaters.isEmpty { node = floaters.removeFirst().node }
+        else { return }
+        let height: CGFloat = 0.48
+        let plane = node.geometry as! SCNPlane
+        plane.width = height * image.size.width / max(image.size.height, 1)
+        plane.height = height
+        plane.firstMaterial?.diffuse.contents = image
         node.simdPosition = point
-        world.rootNode.addChildNode(node)
-        floaters.append(Floater(node: node, at: point, born: clock))
-        if floaters.count > 24 { floaters.removeFirst().node.removeFromParentNode() }
+        node.isHidden = false
+        node.opacity = 1
+        node.simdScale = SIMD3(repeating: 1)
+        floaters.append(Floater(node: node, at: point, born: clock, target: target))
     }
 
     private func syncFloaters() {
         floaters.removeAll { floater in
             let age = clock - floater.born
-            guard age < 0.75 else {
-                floater.node.removeFromParentNode()
+            let visible = floater.target.map { controller.game.fighters.indices.contains($0) && controller.game.isVisible(controller.game.fighters[$0], to: myTeam) } ?? true
+            guard age < 0.75, visible else {
+                floater.node.isHidden = true
+                floaterPool.append(floater.node)
                 return true
             }
             let rise = Float(age) * 1.1

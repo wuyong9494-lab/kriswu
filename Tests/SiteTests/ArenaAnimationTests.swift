@@ -5,6 +5,23 @@ import simd
 
 @MainActor
 final class ArenaAnimationTests: XCTestCase {
+    func testBenchmarkIsRepeatableAcrossCallbackCadences() {
+        let setup = ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", level: 3,
+                                          loadout: .basic(.ranger, level: 3), benchmark: true)
+        let fast = ArenaController(setup: setup, seed: 1)
+        let slow = ArenaController(setup: setup, seed: 999)
+        for fighter in fast.game.fighters {
+            XCTAssertFalse(fast.game.map.collides(fighter.pos, radius: ArenaGame.fighterRadius))
+        }
+        fast.advance(ArenaController.introLength + 0.1)
+        slow.advance(ArenaController.introLength + 0.1)
+        for _ in 0..<360 { fast.advance(1.0 / 60) }
+        for _ in 0..<180 { slow.advance(1.0 / 30) }
+        XCTAssertEqual(fast.game.time, slow.game.time, accuracy: 0.00001)
+        XCTAssertEqual(fast.game.fighters.map(\.pos), slow.game.fighters.map(\.pos))
+        XCTAssertEqual(fast.game.fighters.map(\.health), slow.game.fighters.map(\.health))
+    }
+
     func testOutlineWindingMatchesOutwardNormals() {
         let positions: [Float] = [0, 0, 0, 1, 0, 0, 0, 1, 0]
         let normals: [Float] = [0, 0, 1, 0, 0, 1, 0, 0, 1]
