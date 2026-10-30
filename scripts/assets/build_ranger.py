@@ -136,6 +136,15 @@ bones={
  'weapon.slide':((0,-.54,1.37),(0,-.74,1.37),'handslot.r'),
  'muzzle':((0,-.93,1.34),(0,-1.00,1.34),'handslot.r')}
 if FACE_SAMPLE:
+ # Lower and project the weapon cradle away from the chest; retain both grips.
+ # Authored adjustment, not a measurement inferred from cropped reference video.
+ cradle=Vector((0,-.12,-.09))
+ for name in ['hand.r','handslot.r','hand.l','handslot.l','weapon.slide','muzzle']:
+  head,tail,parent=bones[name]
+  bones[name]=(tuple(Vector(head)+cradle),tuple(Vector(tail)+cradle),parent)
+ for name in ['lowerarm.r','lowerarm.l']:
+  head,tail,parent=bones[name]
+  bones[name]=(head,tuple(Vector(tail)+cradle),parent)
  for side,x in [('r',-.123),('l',.123)]:
   bones['brow.'+side]=((x,-.23,2.08),(x,-.23,2.14),'head')
   bones['eye.'+side]=((x,-.24,1.978),(x,-.24,2.04),'head')
@@ -286,6 +295,13 @@ for i in range(3):
  x=.265+i*.039
  tube('Spare bolt',[(x,.055,1.12),(x+.025,.055,1.28)],.012,13,'hips',6)
  box('Bolt fletching',(x+.024,.055,1.25),(.027,.05,.06),6,'hips',.004)
+
+if FACE_SAMPLE:
+ # Weapon geometry is authored in rest coordinates above; match the moved anchors.
+ for part in PARTS:
+  groups={g.name for g in part.vertex_groups}
+  if groups and groups.issubset({'handslot.r','weapon.slide'}):
+   for vertex in part.data.vertices: vertex.co += cradle
 
 # Merge to a single skinned primitive / single material. Vertex groups are preserved.
 bpy.ops.object.select_all(action='DESELECT')

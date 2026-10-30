@@ -109,7 +109,7 @@ def main():
   for primitive in mesh['primitives']:
    attrs=primitive['attributes']
    for p,ws,js in zip(acc(attrs['POSITION']),acc(attrs['WEIGHTS_0']),acc(attrs['JOINTS_0'])):
-    if .333<abs(p[0])<.347 and abs(p[1]-1.35)<.009 and abs(p[2]-.63)<.009:
+    if .333<abs(p[0])<.347 and abs(p[1]-(1.26 if face else 1.35))<.009 and abs(p[2]-(.75 if face else .63))<.009:
      out=[0.,0.,0.]
      for weight,joint in zip(ws,js):
       inv=[[bind[joint][c*4+r] for c in range(4)] for r in range(4)]

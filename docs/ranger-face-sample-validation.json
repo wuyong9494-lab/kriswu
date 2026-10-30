@@ -11,8 +11,8 @@
     "clips": 76
   },
   "new": {
-    "bytes": 531272,
-    "sha256": "32a68ddbf361c814a38089d68292dca7b10ae20cdabcf2747ec4b77f7141a9d9",
+    "bytes": 531144,
+    "sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0",
     "meshes": 1,
     "primitives": 1,
     "materials": 1,
@@ -29,12 +29,12 @@
     "max": [
       0.5514980554580688,
       2.41648006439209,
-      0.949999988079071
+      1.0699999332427979
     ]
   },
   "inverseBindMaxError": 8.953190713811843e-07,
   "contactAnkleMaxErrorM": 0.00411583163402518,
-  "bowTipReleaseMaxDriftM": 0.001598519398232964,
+  "bowTipReleaseMaxDriftM": 0.0015986937247195751,
   "clips": [
     "1H_Ranged_Reload",
     "Cheer",
