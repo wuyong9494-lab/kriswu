@@ -12,22 +12,26 @@ import time
 import urllib.parse
 import urllib.request
 
-SAMPLE_RELEASE_470 = {
-    "build_number": "470",
-    "source_sha": "359a63e21bad542d0fecf22bc7d1834e248d0963",
-    "source_run_id": 41052098798,
-    "source_sample_run_id": 41052098772,
+SAMPLE_RELEASE_471 = {
+    "build_number": "471",
+    "source_sha": "719cb8369e2c248a7aa6c86bc3d5022edd63f77c",
+    "source_run_id": 41062131601,
+    "source_sample_run_id": 41062131557,
 }
 
 
 def is_sample_release(request):
     assert request.get("build_number") != "468", "Build 468 was cancelled by the owner"
     assert request.get("build_number") != "469", "Build 469 failed validation"
-    if request.get("build_number") != "470" and "source_sample_run_id" not in request:
+    assert request.get("build_number") != "470", "Build 470 failed validation"
+    if request.get("build_number") != "471" and "source_sample_run_id" not in request:
+        assert not request.get("defer_sample_validation"), "Validation deferral is authorized only for pinned Build 471"
         return False
-    for key, value in SAMPLE_RELEASE_470.items():
+    for key, value in SAMPLE_RELEASE_471.items():
         assert request.get(key) == value, f"Sample promotion identity mismatch: {key}"
-    assert not request.get("skip_visual_capture"), "470 requires full sample validation"
+    assert not request.get("skip_visual_capture"), "471 requires full sample validation"
+    if request.get("defer_sample_validation"):
+        assert request["defer_sample_validation"] is True, "Deferral must be explicitly enabled"
     return True
 
 def call(method, path, body=None):
@@ -59,10 +63,22 @@ def github(path):
 
 
 def validate_source(request, run, jobs):
-    is_sample_release(request)
+    sample_release = is_sample_release(request)
     assert run["head_sha"] == request["source_sha"], "CI checked a different commit"
     assert str(run["run_number"]) == request["build_number"], "CI build number mismatch"
     assert run["path"] == ".github/workflows/ios.yml", "Unexpected source workflow"
+    if request.get("defer_sample_validation"):
+        # The owner explicitly requested 471 uploaded now and the remaining
+        # simulator/hero/media checks deferred. This exception cannot authorize
+        # another source, build or run, nor bypass compilation or core tests.
+        assert sample_release, "Unexpected deferred release"
+        assert run["id"] == request["source_run_id"], "Wrong source run"
+        assert run["head_branch"] == "codex/arena-quality-sample", "Unexpected source branch"
+        assert run["status"] in ("in_progress", "completed"), "Source checks have not run"
+        for name in ("build", "core-tests-linux"):
+            matched = [job for job in jobs if job["name"] == name]
+            assert len(matched) == 1 and matched[0]["conclusion"] == "success", f"Required check failed: {name}"
+        return
     if request.get("skip_visual_capture") is True:
         # Explicit owner-authorized capture exceptions, pinned to immutable CI.
         # Compilation, core tests and actual simulator regressions are mandatory.
@@ -116,6 +132,11 @@ def sample_sources_ready(request):
     assert is_sample_release(request), "Unexpected sample promotion"
     head = github("/git/ref/heads/codex/arena-quality-sample")
     assert head["object"]["sha"] == request["source_sha"], "Source superseded; refusing stale release"
+    if request.get("defer_sample_validation"):
+        run_id = request["source_run_id"]
+        validate_source(request, github(f"/actions/runs/{run_id}"),
+                        github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"])
+        return True
     ready = True
     failed = {"failure", "cancelled", "timed_out", "action_required", "stale", "startup_failure"}
     for key, validator in (("source_run_id", validate_source), ("source_sample_run_id", validate_sample)):
@@ -164,6 +185,9 @@ def save_report(path, request, **values):
     report = {key: request[key] for key in ("build_number", "version", "source_sha", "source_run_id")}
     if "source_sample_run_id" in request:
         report["source_sample_run_id"] = request["source_sample_run_id"]
+    if request.get("defer_sample_validation"):
+        report["owner_requested_validation_deferral"] = True
+        report["deferred_checks"] = ["arena-look", "sample-capture", "three-hero-flow-and-recordings"]
     report.update(values)
     Path(path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(report, ensure_ascii=False), flush=True)
@@ -177,9 +201,9 @@ def wait_for_source(request):
         while time.monotonic() < deadline:
             if sample_sources_ready(request):
                 return
-            print("Waiting for exact 470 iOS and all three hero/sample checks", flush=True)
+            print("Waiting for exact 471 iOS and all three hero/sample checks", flush=True)
             time.sleep(30)
-        raise TimeoutError("470 validation did not finish within 90 minutes; nothing uploaded")
+        raise TimeoutError("471 validation did not finish within 90 minutes; nothing uploaded")
     sources = {
         ("417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"): "codex/arena-audio-performance",
         ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"): "codex/arena-reference-fidelity",
@@ -224,7 +248,7 @@ def preflight(request):
     validate_source(request, github(f"/actions/runs/{run_id}"),
                     github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"])
     if is_sample_release(request):
-        assert sample_sources_ready(request), "470 validation is incomplete"
+        assert sample_sources_ready(request), "471 validation is incomplete"
     build = find_build(request)
     output("upload_required", "false" if build else "true")
     output("source_sha", request["source_sha"])
@@ -322,7 +346,7 @@ def main():
         verify_archive(request, args.path)
     elif args.command == "guard":
         if is_sample_release(request):
-            assert sample_sources_ready(request), "470 validation changed before upload"
+            assert sample_sources_ready(request), "471 validation changed before upload"
         assert find_build(request) is None, "Build already exists; stop before uploading it again"
     else:
         finish(request, args.uploaded)

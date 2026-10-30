@@ -119,6 +119,8 @@ jobs:
             DEFAULT_SITE_URL="$SITE_URL" \
             CURRENT_PROJECT_VERSION="$TARGET_BUILD" 2>&1 | tail -80
       - name: Verify signed app, extension, version, source and ranger asset
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           codesign --verify --deep --strict source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
           python3 .github/scripts/asc_promote.py archive .github/releases/testflight.json --path source/build/ShiftReminder.xcarchive
