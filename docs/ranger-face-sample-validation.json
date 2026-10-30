@@ -11,12 +11,12 @@
     "clips": 76
   },
   "new": {
-    "bytes": 619124,
-    "sha256": "422542ff9820d3530cd182bc6ad312b6aeab65a14ab0d0e7665aecd33bcfa80e",
+    "bytes": 531272,
+    "sha256": "32a68ddbf361c814a38089d68292dca7b10ae20cdabcf2747ec4b77f7141a9d9",
     "meshes": 1,
     "primitives": 1,
     "materials": 1,
-    "triangles": 13724,
+    "triangles": 11034,
     "joints": 27,
     "clips": 8
   },
@@ -28,7 +28,7 @@
     ],
     "max": [
       0.5514980554580688,
-      2.4108164310455322,
+      2.41648006439209,
       0.949999988079071
     ]
   },

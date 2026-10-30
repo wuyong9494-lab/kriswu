@@ -240,20 +240,32 @@ tube('Smile',[(-.092,-.188,1.805),(-.032,-.202,1.792),(.035,-.205,1.794),(.102,-
 tube('Lower lip',[(-.042,-.196,1.779),(.01,-.201,1.778),(.053,-.194,1.786)],.004,14,'mouth' if FACE_SAMPLE else 'head',6)
 # Sculpted hair cap and swept clumps, individually tapered silhouettes.
 loft('Hair cap',[(1.96,.27,.23,.055),(2.08,.29,.25,.04),(2.22,.265,.245,.035),(2.30,.19,.18,.025),(2.33,.025,.025,.025)],8,'head',24)
-# Front fringe: swept from character left to right, clear brows and both eyes.
-for i in range(6):
- x=-.24+i*.087
- pts=[(x+.10,-.09,2.29-i*.003),(x+.055,-.205,2.27),(x-.035,-.267,2.20),(x-.065,-.255,2.095+(i%2)*.035)]
- tube('Swept fringe %d'%i,pts,[(.064,.048),(.078,.055),(.055,.036),(.003,.003)],9 if i in [1,4] else 8,'head',9)
-for side in [-1,1]:
- for i in range(4):
-  pts=[(side*.16,.12-i*.05,2.24),(side*.28,.11-i*.06,2.21-i*.035),
-       (side*(.335+i*.006),.15-i*.075,2.12-i*.048),(side*.345,.18-i*.06,2.14-i*.067)]
-  tube('Side hair',pts,[(.075,.05),(.065,.042),(.033,.025),(.002,.002)],8 if i%2 else 9,'head',8)
- for i in range(3):
-  x=side*(.08+i*.07)
-  tube('Nape hair',[(x,.20,2.12),(x,.267,2.01),(x*.9,.23,1.85+(i*.022))],[(.08,.06),(.075,.04),(.002,.002)],8,'head',8)
-tube('Crown sweep',[(.02,.09,2.27),(-.06,.105,2.32),(-.14,.12,2.37),(-.20,.14,2.41)],[(.09,.07),(.07,.045),(.03,.025),(.001,.001)],9,'head',10)
+# Sample refinement: five broad directional hair masses including the cap.
+# Original geometry stays byte-for-byte reproducible in the comparison branch.
+if FACE_SAMPLE:
+ tube('Swept fringe broad',[(.17,-.075,2.28),(.075,-.21,2.285),(-.13,-.275,2.22),(-.265,-.23,2.10)],
+      [(.13,.075),(.145,.065),(.12,.045),(.009,.008)],8,'head',9)
+ tube('Swept fringe accent',[(.24,-.015,2.25),(.23,-.16,2.245),(.12,-.255,2.18),(.025,-.26,2.11)],
+      [(.085,.06),(.10,.055),(.075,.038),(.006,.006)],9,'head',9)
+ tube('Side hair sweep',[(-.16,.10,2.24),(-.285,.04,2.20),(-.34,.08,2.07),(-.31,.15,1.98)],
+      [(.11,.075),(.12,.065),(.085,.045),(.008,.008)],8,'head',9)
+ tube('Nape hair mass',[(.02,.18,2.18),(0,.28,2.06),(-.015,.265,1.93),(-.035,.21,1.85)],
+      [(.23,.075),(.24,.07),(.18,.045),(.07,.014)],8,'head',10)
+else:
+ # Front fringe: swept from character left to right, clear brows and both eyes.
+ for i in range(6):
+  x=-.24+i*.087
+  pts=[(x+.10,-.09,2.29-i*.003),(x+.055,-.205,2.27),(x-.035,-.267,2.20),(x-.065,-.255,2.095+(i%2)*.035)]
+  tube('Swept fringe %d'%i,pts,[(.064,.048),(.078,.055),(.055,.036),(.003,.003)],9 if i in [1,4] else 8,'head',9)
+ for side in [-1,1]:
+  for i in range(4):
+   pts=[(side*.16,.12-i*.05,2.24),(side*.28,.11-i*.06,2.21-i*.035),
+        (side*(.335+i*.006),.15-i*.075,2.12-i*.048),(side*.345,.18-i*.06,2.14-i*.067)]
+   tube('Side hair',pts,[(.075,.05),(.065,.042),(.033,.025),(.002,.002)],8 if i%2 else 9,'head',8)
+  for i in range(3):
+   x=side*(.08+i*.07)
+   tube('Nape hair',[(x,.20,2.12),(x,.267,2.01),(x*.9,.23,1.85+(i*.022))],[(.08,.06),(.075,.04),(.002,.002)],8,'head',8)
+ tube('Crown sweep',[(.02,.09,2.27),(-.06,.105,2.32),(-.14,.12,2.37),(-.20,.14,2.41)],[(.09,.07),(.07,.045),(.03,.025),(.001,.001)],9,'head',10)
 # Crossbow: broad copper limbs, dark grip, central steel rail and visible release mechanism.
 weapon='handslot.r'
 box('Crossbow stock',(0,-.52,1.31),(.145,.49,.12),7,weapon,.03)
