@@ -13,21 +13,23 @@ struct ArenaSampleReview: View {
     }
 
     var body: some View {
-        ArenaMenuScreen(title: "蓝月港 · 试玩样板", onClose: onClose) {
-            VStack(spacing: 12) {
-                HStack(spacing: 10) {
-                    pageButton("游侠", index: 0)
-                    pageButton("双闸交汇", index: 1)
+        ArenaMenuScreen(title: "蓝月港 · 试玩样板", onClose: onClose, scrollContent: false) {
+            GeometryReader { viewport in
+                let previewHeight = max(1, viewport.size.height - 56)
+                VStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        pageButton("游侠", index: 0)
+                        pageButton("双闸交汇", index: 1)
+                    }
+                    .accessibilityIdentifier("arena.sample.pages")
+                    if page == 0 { hero(height: previewHeight) } else { map(height: previewHeight) }
                 }
-                .accessibilityIdentifier("arena.sample.pages")
-                if page == 0 { hero } else { map }
-
+                .background(GeometryReader { proxy in
+                    Color.clear.onAppear { markReady(proxy.size) }
+                        .onChange(of: proxy.size) { size in markReady(size) }
+                        .onChange(of: page) { _ in markReady(proxy.size) }
+                })
             }
-            .background(GeometryReader { proxy in
-                Color.clear.onAppear { markReady(proxy.size) }
-                    .onChange(of: proxy.size) { size in markReady(size) }
-                    .onChange(of: page) { _ in markReady(proxy.size) }
-            })
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 6) {
@@ -67,45 +69,62 @@ struct ArenaSampleReview: View {
         try? data.write(to: folder.appendingPathComponent("arena-sample-menu-ready.json"), options: .atomic)
     }
 
-    private var hero: some View {
+    private func hero(height: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(spacing: 4) {
                 ArenaShowcase(brawler: .ranger, qualitySample: true)
-                    .frame(width: 220, height: 235)
+                    .frame(width: 220, height: max(1, height - 22))
                     .accessibilityIdentifier("arena.sample.hero")
                 Text("拖动转身 · 轻点观看动作")
                     .font(.caption).foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
+            .frame(width: 220, height: height, alignment: .top)
             ArenaMenuCard {
-                Text("游侠").font(.title2.bold())
-                Text("远程单发 · 把握射线与换弹时机")
-                    .font(.subheadline).foregroundStyle(.cyan)
-                Text(Brawler.ranger.attackNote).font(.subheadline)
-                Text(Brawler.ranger.superNote).font(.subheadline)
-                Divider().overlay(.white.opacity(0.2))
-                Text("基础射程 \(Brawler.ranger.attackRange, specifier: "%.0f") 格 · 每发装填 \(Brawler.ranger.reload, specifier: "%.1f") 秒")
-                    .font(.caption)
-                Text("用短墙遮住换弹空窗；从侧路换角度，避免一直站在中路对射。")
-                    .font(.subheadline).foregroundStyle(.white.opacity(0.8))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("游侠").font(.title2.bold())
+                        Text("远程单发 · 把握射线与换弹时机")
+                            .font(.subheadline).foregroundStyle(.cyan)
+                        Text(Brawler.ranger.attackNote).font(.subheadline)
+                        Text(Brawler.ranger.superNote).font(.subheadline)
+                        Divider().overlay(.white.opacity(0.2))
+                        Text("基础射程 \(Brawler.ranger.attackRange, specifier: "%.0f") 格 · 每发装填 \(Brawler.ranger.reload, specifier: "%.1f") 秒")
+                            .font(.caption)
+                        Text("用短墙遮住换弹空窗；从侧路换角度，避免一直站在中路对射。")
+                            .font(.subheadline).foregroundStyle(.white.opacity(0.8))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
+            .frame(height: height)
         }
+        .frame(height: height)
     }
 
-    private var map: some View {
+    private func map(height: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 16) {
-            ArenaSampleMapPreview().frame(width: 220, height: 275)
+            ArenaSampleMapPreview().frame(width: 220, height: height)
             ArenaMenuCard {
-                Text("双闸交汇").font(.title2.bold())
-                Text("抢占据点 · 蓝月港").foregroundStyle(.cyan)
-                Text("中路快速到点，两侧绕行寻找夹击角度。利用暖金属掩体接近目标，留意草丛里的对手。")
-                    .font(.subheadline)
-                Text("金棕：墙体   绿色：草丛\n蓝点：己方出生   红点：对方出生\n中心白圈：实际据点范围")
-                    .font(.caption).foregroundStyle(.white.opacity(0.8))
-                Text("21 × 29 格 · 三人对三人")
-                    .font(.caption.bold())
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("双闸交汇").font(.title2.bold())
+                        Text("抢占据点 · 蓝月港").foregroundStyle(.cyan)
+                        Text("中路快速到点，两侧绕行寻找夹击角度。利用暖金属掩体接近目标，留意草丛里的对手。")
+                            .font(.subheadline)
+                        Text("金棕：墙体   绿色：草丛\n蓝点：己方出生   红点：对方出生\n中心白圈：实际据点范围")
+                            .font(.caption).foregroundStyle(.white.opacity(0.8))
+                        Text("21 × 29 格 · 三人对三人")
+                            .font(.caption.bold())
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
+            .frame(height: height)
         }
+        .frame(height: height)
     }
+
 }
 
 struct ArenaSampleMapPreview: View {

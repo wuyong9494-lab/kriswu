@@ -10,6 +10,7 @@ enum ArenaMenuTheme {
 struct ArenaMenuScreen<Content: View>: View {
     let title: String
     let onClose: () -> Void
+    var scrollContent = true
     @ViewBuilder var content: Content
     var body: some View {
         ZStack {
@@ -21,7 +22,11 @@ struct ArenaMenuScreen<Content: View>: View {
                     Button(action: onClose) { Image(systemName: "xmark").frame(width: 44, height: 44) }
                         .buttonStyle(ArenaMenuButtonStyle()).accessibilityLabel("关闭\(title)")
                 }
-                ScrollView { content.frame(maxWidth: 720).frame(maxWidth: .infinity) }
+                if scrollContent {
+                    ScrollView { content.frame(maxWidth: 720).frame(maxWidth: .infinity) }
+                } else {
+                    content.frame(maxWidth: 720).frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }.padding(16)
         }
         .foregroundStyle(.white)
