@@ -1,0 +1,81 @@
+name: Arena sample visual validation
+on:
+  push:
+    branches: [codex/arena-quality-sample]
+    paths:
+      - 'App/**'
+      - 'Sources/ShiftCore/**'
+      - '.github/scripts/capture_arena_sample.py'
+      - '.github/workflows/arena-sample-validation.yml'
+      - 'project.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: arena-sample-visual-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+jobs:
+  sample-capture:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Select Xcode
+        shell: bash -eo pipefail {0}
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1) || true
+          [ -n "$XCODE" ] || { echo "Xcode 26 or newer is required"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Validate assets and generate project
+        run: |
+          python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Build simulator application
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath sample-build CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO > sample-build.log 2>&1 || { tail -100 sample-build.log; exit 1; }
+      - name: Capture canyon and Twin Gates with verified scene identity
+        timeout-minutes: 12
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          phones = [d for runtime, entries in sorted(devices.items(), reverse=True) if 'iOS' in runtime for d in entries if d['name'].startswith('iPhone')]
+          print(next((d for d in phones if d['name'] == 'iPhone 17 Pro Max'), phones[0])['udid'])")
+          export DEVICE
+          trap 'xcrun simctl shutdown "$DEVICE" || true' EXIT
+          python3 - <<'PY'
+          import os, subprocess
+          device = os.environ['DEVICE']
+          subprocess.run(['xcrun', 'simctl', 'boot', device], timeout=90, check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device, '-b'], timeout=180, check=True)
+          subprocess.run(['xcrun', 'simctl', 'install', device, 'sample-build/Build/Products/Debug-iphonesimulator/ShiftReminder.app'], timeout=120, check=True)
+          PY
+          swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
+          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/canyon canyon
+          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/harbor harbor
+          for image in sample-shots/canyon/*.png sample-shots/harbor/*.png; do
+            /tmp/check-sample-capture "$image"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arena-sample-${{ github.sha }}
+          path: |
+            sample-shots
+            sample-build.log
+          if-no-files-found: error
+          retention-days: 14
