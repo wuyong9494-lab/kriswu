@@ -172,7 +172,7 @@ final class ArenaController: ObservableObject {
 
     // 房主
     private var seatOfMember: [String: Int] = [:]
-    private var remoteMoves: [Int: V2] = [:]
+    private var remoteMovement: [Int: ArenaRemoteMovement] = [:]
     private var remoteAcks: [Int: Int] = [:]
     private var remoteAttacks: [Int: V2] = [:]
     private var remoteSpecials: [Int: V2] = [:]
@@ -182,6 +182,7 @@ final class ArenaController: ObservableObject {
     private var ticks = 0
 
     // 其他人
+    private var inputCadence = ArenaInputCadence()
     private var sequence = 0
     private var history: [(sequence: Int, move: V2, dt: Double)] = []
     private var lastSnapshot = -1.0
@@ -319,7 +320,12 @@ final class ArenaController: ObservableObject {
         queuedGadget = false
         queuedEmote = nil
         if role == .host {
-            for (seat, move) in remoteMoves { inputs[seat] = ArenaInput(move: move) }
+            let now = ProcessInfo.processInfo.systemUptime
+            for seat in Array(remoteMovement.keys) {
+                let move = remoteMovement[seat]!.consume(at: now)
+                remoteAcks[seat] = remoteMovement[seat]!.appliedSequence
+                inputs[seat] = ArenaInput(move: move)
+            }
             for (seat, aim) in remoteAttacks { inputs[seat, default: ArenaInput()].attack = aim }
             for (seat, aim) in remoteSpecials { inputs[seat, default: ArenaInput()].special = aim }
             for seat in remoteGadgets { inputs[seat, default: ArenaInput()].gadget = true }
@@ -379,6 +385,13 @@ final class ArenaController: ObservableObject {
         queuedGadget = false
         queuedEmote = nil
         accumulator = 0
+        if role == .client, game.result == nil {
+            // A display link may stop immediately after this call. Do not wait
+            // for another frame to tell the host that the joystick was released.
+            sequence += 1
+            _ = inputCadence.takeSend(at: ProcessInfo.processInfo.systemUptime, force: true)
+            sendMovement(delivery: .reliable)
+        }
     }
 
     /// 这一帧发生的事（画特效用），拿走就清掉
@@ -441,21 +454,25 @@ final class ArenaController: ObservableObject {
         sequence += 1
         history.append((sequence, move, dt))
         if history.count > 180 { history.removeFirst(history.count - 180) }
-        // 摇杆每秒发 30 次就够（Game Center 不喜欢发得太勤）
-        if sequence % 2 == 0 {
-            var writer = ByteWriter()
-            writer.u8(Int(Packet.input))
-            writer.u32(sequence)
-            writer.i16(Int((move.x * 1000).rounded()))
-            writer.i16(Int((move.y * 1000).rounded()))
-            room?.sendDirect(writer.data, delivery: .unreliable)
+        if inputCadence.takeSend(at: ProcessInfo.processInfo.systemUptime) {
+            sendMovement(delivery: .unreliable)
         }
         let fighter = game.fighters[me]
         if fighter.alive, !fighter.busy, move.length > 0.05 {
-            game.fighters[me].pos = ArenaGame.walk(from: fighter.pos, by: move.clamped(to: 1) * (game.moveSpeed(fighter) * dt), on: game.map)
+            game.fighters[me].pos = game.walkingPosition(from: fighter.pos, by: move.clamped(to: 1) * (game.moveSpeed(fighter) * dt))
             if aiming == nil && superAiming == nil { game.fighters[me].facing = move.normalized }
         }
         game.extrapolate(dt, except: me)
+    }
+
+    private func sendMovement(delivery: GameRoom.Delivery) {
+        let direction = move.clamped(to: 1)
+        var writer = ByteWriter()
+        writer.u8(Int(Packet.input))
+        writer.u32(sequence)
+        writer.i16(Int((direction.x * 1000).rounded()))
+        writer.i16(Int((direction.y * 1000).rounded()))
+        room?.sendDirect(writer.data, delivery: delivery)
     }
 
     /// 开火、放大招、用小道具、冒表情（小道具、表情是后加的，老版本的房主读不到就不管）
@@ -484,9 +501,9 @@ final class ArenaController: ObservableObject {
         case (.host, Packet.input):
             var reader = ByteReader(Data(body))
             guard let seat = seatOfMember[from], let sequence = reader.u32(), let x = reader.i16(), let y = reader.i16() else { return }
-            guard sequence > remoteAcks[seat] ?? 0 else { return }
-            remoteAcks[seat] = sequence
-            remoteMoves[seat] = V2(Double(x) / 1000, Double(y) / 1000)
+            remoteMovement[seat, default: ArenaRemoteMovement()].receive(
+                sequence: sequence, move: V2(Double(x) / 1000, Double(y) / 1000),
+                at: ProcessInfo.processInfo.systemUptime)
         case (.host, Packet.fire):
             var reader = ByteReader(Data(body))
             guard let seat = seatOfMember[from], let hasAttack = reader.u8(), let attack = reader.v2(),
@@ -518,7 +535,7 @@ final class ArenaController: ObservableObject {
         var position = fighter.pos
         let speed = game.moveSpeed(fighter)
         for step in history where step.move.length > 0.05 {
-            position = ArenaGame.walk(from: position, by: step.move.clamped(to: 1) * (speed * step.dt), on: game.map)
+            position = game.walkingPosition(from: position, by: step.move.clamped(to: 1) * (speed * step.dt))
         }
         game.fighters[me].pos = position
     }
@@ -531,7 +548,8 @@ final class ArenaController: ObservableObject {
         case .host:
             for (member, seat) in seatOfMember where !present.contains(member) {
                 seatOfMember[member] = nil
-                remoteMoves[seat] = nil
+                remoteMovement[seat] = nil
+                remoteAcks[seat] = nil
                 bots.append(ArenaBot(id: seat, seed: UInt64(seat) &+ 99))
             }
         case .client:

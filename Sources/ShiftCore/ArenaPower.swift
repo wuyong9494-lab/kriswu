@@ -73,6 +73,12 @@ extension ArenaGame {
         }
     }
 
+    /// Shared by authoritative walking, client prediction and input replay.
+    /// Static-only walk remains available for projectiles and special abilities.
+    public func walkingPosition(from start: V2, by delta: V2) -> V2 {
+        blockedByBoxes(start, Self.walk(from: start, by: delta, on: map))
+    }
+
     /// 走的时候绕开没碎的能量箱（贴着箱子边停下；推出去会撞墙就不动）
     func blockedByBoxes(_ start: V2, _ next: V2) -> V2 {
         let gap = Self.fighterRadius + PowerBox.radius

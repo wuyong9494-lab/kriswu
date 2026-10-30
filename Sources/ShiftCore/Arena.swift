@@ -964,7 +964,7 @@ public struct ArenaGame: Sendable {
     mutating func walk(_ i: Int, by delta: V2) {
         let start = measuresCPU ? ProcessInfo.processInfo.systemUptime : 0
         defer { if measuresCPU { collisionCPUSeconds += ProcessInfo.processInfo.systemUptime - start } }
-        fighters[i].pos = blockedByBoxes(fighters[i].pos, Self.walk(from: fighters[i].pos, by: delta, on: map))
+        fighters[i].pos = walkingPosition(from: fighters[i].pos, by: delta)
     }
 
     /// 被打倒的这个人还回不回来：大乱斗、三局两胜（这一局）不回来，双人大乱斗要队友还活着，一对一要还有角色没上过
