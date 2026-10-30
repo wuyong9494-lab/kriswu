@@ -1,12 +1,14 @@
 {
-  "build_number": "471",
+  "build_number": "472",
   "version": "1.2",
-  "source_sha": "719cb8369e2c248a7aa6c86bc3d5022edd63f77c",
-  "source_run_id": 41062131601,
-  "source_sample_run_id": 41062131557,
+  "source_sha": "e2244192d499315e8b4715f2198a72e4672879f6",
+  "source_run_id": 41074815710,
+  "source_sample_run_id": 41074815721,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "notes": "• 接入11套CC0素材：蛮王武器、箱桶及自然装饰、菜单按钮与图标、粒子纹理、界面及战斗音效、脚步和胜负提示音。\n• 包含外围树木、灌木、岩石加载修复，菜单按钮与关闭图标显示修复，以及结算入场误触返回大厅修复。\n• 本版按要求提前上传供测试：设备编译和核心逻辑检查通过；三英雄完整对局、大招流程、素材实际显示及录制验收尚未完成，留待后续验证。\n• 保留现有大厅和战斗背景音乐。请重点复测移动、草丛、贴墙和混战表现；真机持续60FPS及长时间热稳定性尚未验收。",
+  "notes": "• 恢复完整大厅：13名英雄的列表与详情、11种玩法、14张原地图和7张扩展地图可选，保留原有奖杯、英雄解锁和皮肤进度。\n• 三英雄试玩改为玩法页独立入口，双闸交汇试玩继续保留。\n• 常规地图加入素材包中的箱桶；保留从11个素材包中选用的28个运行资源，以及自然模型加载修复、现有大厅和战斗配乐。\n• 本版按要求先行上传，发布前核对编译和安装包资源；画面、实战、大招流程与录屏的完整验收留待后续。",
   "wait_for_source": false,
-  "defer_sample_validation": true
+  "defer_sample_validation": true,
+  "verify_vendor_runtime": true,
+  "vendor_manifest_sha256": "f99b3b0153f12f5b28904dbfaaf6838afcb5529b27ad0b5462655344c6473e1d"
 }

@@ -7,10 +7,12 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import struct
 import subprocess
 import time
 import urllib.parse
 import urllib.request
+import zlib
 
 SAMPLE_RELEASE_471 = {
     "build_number": "471",
@@ -18,18 +20,36 @@ SAMPLE_RELEASE_471 = {
     "source_run_id": 41062131601,
     "source_sample_run_id": 41062131557,
 }
+CONTENT_RESTORATION_472 = {
+    "build_number": "472",
+    "source_sha": "e2244192d499315e8b4715f2198a72e4672879f6",
+    "source_run_id": 41074815710,
+    "source_sample_run_id": 41074815721,
+    "defer_sample_validation": True,
+    "verify_vendor_runtime": True,
+    "vendor_manifest_sha256": "f99b3b0153f12f5b28904dbfaaf6838afcb5529b27ad0b5462655344c6473e1d",
+}
+# Add another owner-authorized release only after its immutable source/run
+# identity is known. A manifest cannot grant itself a validation exception.
+PINNED_RELEASES = {"471": SAMPLE_RELEASE_471, "472": CONTENT_RESTORATION_472}
 
 
 def is_sample_release(request):
     assert request.get("build_number") != "468", "Build 468 was cancelled by the owner"
     assert request.get("build_number") != "469", "Build 469 failed validation"
     assert request.get("build_number") != "470", "Build 470 failed validation"
-    if request.get("build_number") != "471" and "source_sample_run_id" not in request:
-        assert not request.get("defer_sample_validation"), "Validation deferral is authorized only for pinned Build 471"
+    identity = PINNED_RELEASES.get(request.get("build_number"))
+    if identity is None and "source_sample_run_id" not in request:
+        assert not request.get("defer_sample_validation"), "Validation deferral requires an explicitly pinned release"
+        assert not request.get("verify_vendor_runtime"), "Vendor release verification requires an explicitly pinned release"
         return False
-    for key, value in SAMPLE_RELEASE_471.items():
+    assert identity is not None, "Unapproved source release identity"
+    for key, value in identity.items():
         assert request.get(key) == value, f"Sample promotion identity mismatch: {key}"
-    assert not request.get("skip_visual_capture"), "471 requires full sample validation"
+    assert not request.get("skip_visual_capture"), "Pinned releases use explicit sample validation or owner deferral"
+    if request.get("verify_vendor_runtime"):
+        assert identity.get("verify_vendor_runtime") is True, "Vendor verification is not pinned for this release"
+        assert request["verify_vendor_runtime"] is True, "Vendor verification must be explicitly enabled"
     if request.get("defer_sample_validation"):
         assert request["defer_sample_validation"] is True, "Deferral must be explicitly enabled"
     return True
@@ -68,7 +88,7 @@ def validate_source(request, run, jobs):
     assert str(run["run_number"]) == request["build_number"], "CI build number mismatch"
     assert run["path"] == ".github/workflows/ios.yml", "Unexpected source workflow"
     if request.get("defer_sample_validation"):
-        # The owner explicitly requested 471 uploaded now and the remaining
+        # The owner explicitly requested this pinned release uploaded now and the remaining
         # simulator/hero/media checks deferred. This exception cannot authorize
         # another source, build or run, nor bypass compilation or core tests.
         assert sample_release, "Unexpected deferred release"
@@ -201,9 +221,9 @@ def wait_for_source(request):
         while time.monotonic() < deadline:
             if sample_sources_ready(request):
                 return
-            print("Waiting for exact 471 iOS and all three hero/sample checks", flush=True)
+            print("Waiting for exact " + request["build_number"] + " iOS and requested sample checks", flush=True)
             time.sleep(30)
-        raise TimeoutError("471 validation did not finish within 90 minutes; nothing uploaded")
+        raise TimeoutError("Pinned release validation did not finish within 90 minutes; nothing uploaded")
     sources = {
         ("417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"): "codex/arena-audio-performance",
         ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"): "codex/arena-reference-fidelity",
@@ -248,7 +268,7 @@ def preflight(request):
     validate_source(request, github(f"/actions/runs/{run_id}"),
                     github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"])
     if is_sample_release(request):
-        assert sample_sources_ready(request), "471 validation is incomplete"
+        assert sample_sources_ready(request), "Pinned source validation is incomplete"
     build = find_build(request)
     output("upload_required", "false" if build else "true")
     output("source_sha", request["source_sha"])
@@ -267,7 +287,71 @@ def stamp(request, source):
     path.write_bytes(plistlib.dumps(info))
 
 
-def verify_archive(request, archive):
+def png_dimensions(data):
+    """Read a valid PNG header, including Xcode's CgBI-optimized PNG files."""
+    assert data.startswith(b"\x89PNG\r\n\x1a\n"), "Invalid PNG signature"
+    offset = 8
+    dimensions = None
+    saw_pixels = False
+    while offset < len(data):
+        assert offset + 12 <= len(data), "Truncated PNG chunk"
+        length = struct.unpack(">I", data[offset:offset + 4])[0]
+        end = offset + 12 + length
+        assert end <= len(data), "Truncated PNG payload"
+        kind = data[offset + 4:offset + 8]
+        payload = data[offset + 8:offset + 8 + length]
+        checksum = struct.unpack(">I", data[offset + 8 + length:end])[0]
+        assert zlib.crc32(kind + payload) & 0xffffffff == checksum, "Invalid PNG chunk checksum"
+        if kind == b"IHDR":
+            assert dimensions is None and length == 13, "Invalid PNG header"
+            dimensions = struct.unpack(">II", payload[:8])
+            assert all(value > 0 for value in dimensions), "Empty PNG dimensions"
+        elif kind == b"IDAT":
+            assert dimensions is not None, "PNG pixels before header"
+            saw_pixels = True
+        elif kind == b"IEND":
+            assert dimensions is not None and saw_pixels and length == 0, "Incomplete PNG"
+            assert end == len(data), "Unexpected trailing PNG data"
+            return dimensions
+        offset = end
+    raise AssertionError("Missing PNG end marker")
+
+
+def verify_vendor_archive(request, app, source):
+    assert source is not None, "Verified source checkout is required for vendor resources"
+    source_dir = source / "App/ArenaVendor"
+    manifest_name = "arena-vendor-runtime.json"
+    source_bytes = (source_dir / manifest_name).read_bytes()
+    assert hashlib.sha256(source_bytes).hexdigest() == request["vendor_manifest_sha256"], "Source vendor manifest differs from pinned release"
+    bundled = list(app.rglob(manifest_name))
+    assert len(bundled) == 1, "Missing or ambiguous bundled vendor manifest"
+    assert bundled[0].read_bytes() == source_bytes, "Bundled vendor manifest differs from source"
+    manifest = json.loads(source_bytes)
+    files = manifest["files"]
+    assert len(files) == 28, "Expected exactly 28 vendor runtime resources"
+    assert manifest["packCount"] == 11 and len({item["pack"] for item in files}) == 11, "Expected all 11 vendor packs"
+    names = [item["file"] for item in files]
+    assert len(set(names)) == len(names), "Duplicate vendor resource name"
+    png_count = 0
+    for item in files:
+        name = item["file"]
+        assert name == Path(name).name and name not in ("", ".", ".."), "Unsafe vendor resource path"
+        original = (source_dir / name).read_bytes()
+        assert hashlib.sha256(original).hexdigest() == item["sha256"], f"Source resource hash mismatch: {name}"
+        matches = list(app.rglob(name))
+        assert len(matches) == 1, f"Missing or ambiguous bundled resource: {name}"
+        actual = matches[0].read_bytes()
+        if name.lower().endswith(".png"):
+            assert png_dimensions(actual) == png_dimensions(original), f"PNG dimensions changed: {name}"
+            png_count += 1
+        else:
+            assert hashlib.sha256(actual).hexdigest() == item["sha256"], f"Bundled resource hash mismatch: {name}"
+    return {"vendor_runtime_verified": True, "vendor_runtime_file_count": len(files),
+            "vendor_pack_count": 11, "vendor_png_count": png_count,
+            "vendor_manifest_sha256": request["vendor_manifest_sha256"]}
+
+
+def verify_archive(request, archive, source=None):
     app = archive / "Products/Applications/ShiftReminder.app"
     info = plistlib.loads((app / "Info.plist").read_bytes())
     assert info["CFBundleIdentifier"] == request["bundle_id"], "Wrong app in archive"
@@ -281,8 +365,12 @@ def verify_archive(request, archive):
     assert len(models) == 1, "Missing or ambiguous original ranger"
     digest = hashlib.sha256(models[0].read_bytes()).hexdigest()
     assert digest == request["ranger_sha256"], "Ranger differs from tested build"
+    vendor_report = {}
+    if request.get("verify_vendor_runtime"):
+        assert is_sample_release(request), "Unexpected vendor-verified release"
+        vendor_report = verify_vendor_archive(request, app, source)
     save_report("promotion-archive.json", request, ranger_sha256=digest,
-                app_and_extension_build_verified=True)
+                app_and_extension_build_verified=True, **vendor_report)
 
 
 def write_notes(request, build):
@@ -335,6 +423,7 @@ def main():
     parser.add_argument("command", choices=("preflight", "stamp", "archive", "guard", "finish"))
     parser.add_argument("manifest")
     parser.add_argument("--path", type=Path)
+    parser.add_argument("--source", type=Path)
     parser.add_argument("--uploaded", action="store_true")
     args = parser.parse_args()
     request = load_request(args.manifest)
@@ -343,10 +432,10 @@ def main():
     elif args.command == "stamp":
         stamp(request, args.path)
     elif args.command == "archive":
-        verify_archive(request, args.path)
+        verify_archive(request, args.path, args.source)
     elif args.command == "guard":
         if is_sample_release(request):
-            assert sample_sources_ready(request), "471 validation changed before upload"
+            assert sample_sources_ready(request), "Pinned source validation changed before upload"
         assert find_build(request) is None, "Build already exists; stop before uploading it again"
     else:
         finish(request, args.uploaded)

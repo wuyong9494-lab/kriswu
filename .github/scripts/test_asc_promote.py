@@ -3,9 +3,11 @@ import hashlib
 import json
 from pathlib import Path
 import plistlib
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
+import zlib
 
 import asc_promote as promotion
 
@@ -321,6 +323,160 @@ class Promotion471Tests(unittest.TestCase):
             with self.assertRaises(TimeoutError):
                 promotion.wait_for_source(self.request)
             output.assert_not_called()
+
+
+class Promotion472Tests(unittest.TestCase):
+    def setUp(self):
+        self.request = dict(promotion.CONTENT_RESTORATION_472, version="1.2", notes="Restored content",
+                            bundle_id="com.kriswu.shiftreminder", wait_for_source=False,
+                            ranger_sha256=hashlib.sha256(b"ranger").hexdigest())
+        self.run = {"id": 41074815710, "head_sha": self.request["source_sha"],
+                    "head_branch": "codex/arena-quality-sample", "run_number": 472,
+                    "path": ".github/workflows/ios.yml", "status": "completed", "conclusion": "success"}
+        self.jobs = [{"name": name, "conclusion": "success"} for name in ("build", "core-tests-linux")]
+        self.jobs.append({"name": "arena-look", "conclusion": "skipped"})
+
+    def test_only_exact_472_with_mandatory_asset_verification_is_accepted(self):
+        self.assertTrue(promotion.is_sample_release(self.request))
+        changes = (("build_number", "473"), ("source_sha", "b" * 40), ("source_run_id", 1),
+                   ("source_sample_run_id", 2), ("defer_sample_validation", False),
+                   ("defer_sample_validation", 1), ("verify_vendor_runtime", False),
+                   ("verify_vendor_runtime", 1), ("vendor_manifest_sha256", "c" * 64))
+        for key, value in changes:
+            with self.subTest(key=key, value=value), self.assertRaises(AssertionError):
+                promotion.is_sample_release(dict(self.request, **{key: value}))
+        for key in promotion.CONTENT_RESTORATION_472:
+            request = dict(self.request); del request[key]
+            with self.subTest(missing=key), self.assertRaises(AssertionError):
+                promotion.is_sample_release(request)
+
+    def test_deferred_visual_jobs_do_not_replace_successful_compilation_and_core(self):
+        promotion.validate_source(self.request, self.run, self.jobs)
+        for index in range(2):
+            for state in (None, "failure", "skipped"):
+                jobs = copy.deepcopy(self.jobs); jobs[index]["conclusion"] = state
+                with self.subTest(index=index, state=state), self.assertRaises(AssertionError):
+                    promotion.validate_source(self.request, self.run, jobs)
+        for key, value in (("id", 1), ("head_sha", "b" * 40), ("run_number", 473),
+                           ("head_branch", "main"), ("path", "other.yml")):
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                promotion.validate_source(self.request, dict(self.run, **{key: value}), self.jobs)
+
+    def test_live_head_is_verified_without_claiming_skipped_sample_passed(self):
+        responses = [{"object": {"sha": self.request["source_sha"]}}, self.run, {"jobs": self.jobs}]
+        with patch.object(promotion, "github", side_effect=responses) as github:
+            self.assertTrue(promotion.sample_sources_ready(self.request))
+            self.assertEqual(len(github.call_args_list), 3)
+            self.assertTrue(all(str(self.request["source_sample_run_id"]) not in call.args[0]
+                                for call in github.call_args_list))
+        with patch.object(promotion, "github", return_value={"object": {"sha": "b" * 40}}):
+            with self.assertRaisesRegex(AssertionError, "superseded"):
+                promotion.sample_sources_ready(self.request)
+
+    def test_pending_source_never_enables_upload(self):
+        jobs = copy.deepcopy(self.jobs); jobs[0]["conclusion"] = None
+        with patch.object(promotion, "github", side_effect=[dict(self.run, status="in_progress"), {"jobs": jobs}]), \
+             patch.object(promotion, "find_build") as find, patch.object(promotion, "output") as output:
+            with self.assertRaises(AssertionError):
+                promotion.preflight(self.request)
+            find.assert_not_called()
+            output.assert_not_called()
+
+
+class VendorArchiveTests(unittest.TestCase):
+    @staticmethod
+    def png(width=2, height=3, optimized=False):
+        def chunk(kind, payload):
+            return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff)
+        header = chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        pixels = zlib.compress((b"\0" + b"\xff\0\0\xff" * width) * height)
+        return (b"\x89PNG\r\n\x1a\n" + (chunk(b"CgBI", b"\x50\0\x20\x02") if optimized else b"")
+                + header + chunk(b"IDAT", pixels) + chunk(b"IEND", b""))
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.source = root / "source"
+        self.resources = self.source / "App/ArenaVendor"
+        self.app = root / "ShiftReminder.app"
+        self.resources.mkdir(parents=True)
+        self.app.mkdir()
+        files = []
+        for index in range(28):
+            name = f"vendor_{index}.png" if index < 9 else f"vendor_{index}.bin"
+            content = self.png() if index < 9 else f"asset-{index}".encode()
+            (self.resources / name).write_bytes(content)
+            # Xcode may transform PNG bytes while preserving dimensions.
+            (self.app / name).write_bytes(self.png(optimized=True) if index < 9 else content)
+            files.append({"file": name, "pack": f"pack-{index % 11}",
+                          "sha256": hashlib.sha256(content).hexdigest()})
+        self.manifest = {"packCount": 11, "files": files}
+        self.request = {}
+        self.write_manifest()
+
+    def write_manifest(self):
+        content = json.dumps(self.manifest).encode()
+        self.request["vendor_manifest_sha256"] = hashlib.sha256(content).hexdigest()
+        for folder in (self.resources, self.app):
+            (folder / "arena-vendor-runtime.json").write_bytes(content)
+
+    def check(self):
+        return promotion.verify_vendor_archive(self.request, self.app, self.source)
+
+    def test_all_resources_verified_with_xcode_reencoded_pngs(self):
+        self.assertNotEqual((self.app / "vendor_0.png").read_bytes(), (self.resources / "vendor_0.png").read_bytes())
+        report = self.check()
+        self.assertTrue(report["vendor_runtime_verified"])
+        self.assertEqual(report["vendor_runtime_file_count"], 28)
+        self.assertEqual(report["vendor_pack_count"], 11)
+        self.assertEqual(report["vendor_png_count"], 9)
+
+    def test_missing_or_changed_non_png_is_rejected(self):
+        path = self.app / "vendor_9.bin"
+        original = path.read_bytes()
+        path.unlink()
+        with self.assertRaisesRegex(AssertionError, "Missing or ambiguous"):
+            self.check()
+        path.write_bytes(original + b"changed")
+        with self.assertRaisesRegex(AssertionError, "Bundled resource hash"):
+            self.check()
+
+    def test_wrong_png_size_or_corrupt_png_is_rejected(self):
+        path = self.app / "vendor_0.png"
+        for bad in (self.png(width=3), self.png()[:-5], b"not an image"):
+            path.write_bytes(bad)
+            with self.subTest(size=len(bad)), self.assertRaises(AssertionError):
+                self.check()
+
+    def test_changed_manifest_cannot_claim_bundled_assets(self):
+        path = self.app / "arena-vendor-runtime.json"
+        original = path.read_bytes()
+        path.write_bytes(original + b" ")
+        with self.assertRaisesRegex(AssertionError, "Bundled vendor manifest"):
+            self.check()
+        path.write_bytes(original)
+        (self.resources / "arena-vendor-runtime.json").write_bytes(original + b" ")
+        with self.assertRaisesRegex(AssertionError, "Source vendor manifest"):
+            self.check()
+
+    def test_missing_pack_or_file_in_manifest_is_rejected(self):
+        self.manifest["files"][10]["pack"] = "pack-0"
+        self.manifest["files"][21]["pack"] = "pack-0"
+        self.write_manifest()
+        with self.assertRaisesRegex(AssertionError, "11 vendor packs"):
+            self.check()
+        self.manifest["files"].pop()
+        self.write_manifest()
+        with self.assertRaisesRegex(AssertionError, "28 vendor runtime"):
+            self.check()
+
+    def test_changed_source_bytes_or_missing_source_is_rejected(self):
+        (self.resources / "vendor_9.bin").write_bytes(b"changed source")
+        with self.assertRaisesRegex(AssertionError, "Source resource hash"):
+            self.check()
+        with self.assertRaisesRegex(AssertionError, "source checkout"):
+            promotion.verify_vendor_archive(self.request, self.app, None)
 
 
 if __name__ == "__main__":

@@ -123,7 +123,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           codesign --verify --deep --strict source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
-          python3 .github/scripts/asc_promote.py archive .github/releases/testflight.json --path source/build/ShiftReminder.xcarchive
+          python3 .github/scripts/asc_promote.py archive .github/releases/testflight.json --path source/build/ShiftReminder.xcarchive --source source
           python3 .github/scripts/asc_promote.py guard .github/releases/testflight.json
       - name: Upload exactly this build to TestFlight
         id: upload
