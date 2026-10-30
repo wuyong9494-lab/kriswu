@@ -26,6 +26,24 @@ def stop_app(device):
         simctl('boot', device, timeout=90)
         simctl('bootstatus', device, '-b', timeout=120)
 
+def capture_visible_frame(device, path, validator=pathlib.Path('/tmp/check-sample-capture')):
+    """Keep rejected screenshots and retry presentation, never fabricate pixels."""
+    for attempt in range(3):
+        simctl('io', device, 'screenshot', str(path))
+        if not validator.exists():
+            return  # Standalone callers retain their existing external validation.
+        result = subprocess.run([str(validator), str(path)], capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            return
+        rejected = path.parent / 'rejected-frames'
+        rejected.mkdir(exist_ok=True)
+        path.rename(rejected / (path.stem + '-attempt-' + str(attempt + 1) + '.png'))
+        print('Rejected capture:', result.stdout, result.stderr, flush=True)
+        if attempt < 2:
+            time.sleep(2)
+    raise RuntimeError('Screenshot stayed blank/invalid after three presentation attempts')
+
+
 def capture_menus(device, output, data):
     marker = data / 'Documents/arena-sample-menu-ready.json'
     model_marker = data / 'Documents/arena-capture-ready.json'
@@ -41,7 +59,7 @@ def capture_menus(device, output, data):
             evidence = json.loads(marker.read_text()) if marker.exists() else {}
             if (evidence.get('scene') == 'sampleReview' and evidence.get('page') == page
                     and evidence.get('map') == 'twin_gates_sample_v1'
-                    and evidence.get('width', 0) > 0 and evidence.get('height', 0) > 0):
+                    and evidence.get('width', 0) > evidence.get('height', 0) > 0):
                 if page == 1:
                     break
                 model = json.loads(model_marker.read_text()) if model_marker.exists() else {}
@@ -62,14 +80,14 @@ def capture_menus(device, output, data):
         current = json.loads(marker.read_text())
         assert current.get('scene') == 'sampleReview' and current.get('page') == page, current
         assert current.get('map') == 'twin_gates_sample_v1', current
-        assert current.get('width', 0) > 0 and current.get('height', 0) > 0, current
+        assert current.get('width', 0) > current.get('height', 0) > 0, current
         if page == 0:
             model = json.loads(model_marker.read_text())
             assert model.get('asset') == 'Ranger_FaceSample.glb' and model.get('qualitySample') is True, model
             current['model'] = model
         evidence = current
         label = 'sample-hero' if page == 0 else 'sample-map'
-        simctl('io', device, 'screenshot', str(output / (label + '.png')))
+        capture_visible_frame(device, output / (label + '.png'))
         (output / (label + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
 
 
@@ -108,9 +126,10 @@ def main():
         assert evidence.get('qualitySample') is True, evidence
         assert evidence.get('map') == expected_map, evidence
         time.sleep(2)
-        simctl('io', device, 'screenshot', str(output / (label + '.png')))
+        capture_visible_frame(device, output / (label + '.png'))
         (output / (label + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
         print(label, evidence['simulationTime'], evidence['rangerAsset'], flush=True)
 
 if __name__ == '__main__':
     main()
+

@@ -1,0 +1,244 @@
+{
+  "sourceCommit": "89d7d2503cd9449e2432fb6e3025388744c810bf",
+  "video": "harbor-traversal.mp4",
+  "frames": 604,
+  "presentationSpanSeconds": 24.94,
+  "duplicatePresentationTimestamps": 2,
+  "softwareDecoded": true,
+  "retimed": false,
+  "videoSHA256": "e9fc01121a3e6fbd24e5c1dff76ffe7349870e0a413d7b388134a980fc407560",
+  "streams": [
+    {
+      "codec_name": "h264",
+      "time_base": "1/600",
+      "start_time": "0.000000",
+      "duration": "24.941667",
+      "nb_frames": "604",
+      "disposition": {
+        "default": 1,
+        "dub": 0,
+        "original": 0,
+        "comment": 0,
+        "lyrics": 0,
+        "karaoke": 0,
+        "forced": 0,
+        "hearing_impaired": 0,
+        "visual_impaired": 0,
+        "clean_effects": 0,
+        "attached_pic": 0,
+        "timed_thumbnails": 0,
+        "non_diegetic": 0,
+        "captions": 0,
+        "descriptions": 0,
+        "metadata": 0,
+        "dependent": 0,
+        "still_image": 0
+      },
+      "tags": {
+        "creation_time": "2026-10-30T06:47:23.000000Z",
+        "language": "und",
+        "handler_name": "Core Media Video",
+        "vendor_id": "[0][0][0][0]",
+        "encoder": "H.264"
+      }
+    }
+  ],
+  "timing": {
+    "duplicateGroups": [
+      {
+        "frameIndices": [
+          20,
+          21
+        ],
+        "pts": 870,
+        "ptsSeconds": "1.450000",
+        "packetEvidence": [
+          {
+            "pts": 870,
+            "pts_time": "1.450000",
+            "dts": -251,
+            "dts_time": "-0.418333",
+            "pos": "129981",
+            "size": "402",
+            "flags": "___"
+          },
+          {
+            "pts": 870,
+            "pts_time": "1.450000",
+            "dts": -247,
+            "dts_time": "-0.411667",
+            "pos": "130850",
+            "size": "161",
+            "flags": "___"
+          }
+        ],
+        "frameContext": [
+          {
+            "frameIndex": 19,
+            "type": "frame",
+            "pts": 868,
+            "pts_time": "1.446667",
+            "pkt_dts_time": "-0.411667",
+            "best_effort_timestamp_time": "1.446667",
+            "pkt_pos": "130383",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          },
+          {
+            "frameIndex": 20,
+            "type": "frame",
+            "pts": 870,
+            "pts_time": "1.450000",
+            "pkt_dts_time": "-0.410000",
+            "best_effort_timestamp_time": "1.450000",
+            "pkt_pos": "130850",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          },
+          {
+            "frameIndex": 21,
+            "type": "frame",
+            "pts": 870,
+            "pts_time": "1.450000",
+            "pkt_dts_time": "-0.408333",
+            "best_effort_timestamp_time": "-0.408333",
+            "pkt_pos": "129981",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "P"
+          },
+          {
+            "frameIndex": 22,
+            "type": "frame",
+            "pts": 871,
+            "pts_time": "1.451667",
+            "pkt_dts_time": "-0.403333",
+            "best_effort_timestamp_time": "-0.403333",
+            "pkt_pos": "131495",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          },
+          {
+            "frameIndex": 23,
+            "type": "frame",
+            "pts": 873,
+            "pts_time": "1.455000",
+            "pkt_dts_time": "-0.401667",
+            "best_effort_timestamp_time": "-0.401667",
+            "pkt_pos": "131280",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          }
+        ]
+      },
+      {
+        "frameIndices": [
+          291,
+          292
+        ],
+        "pts": 7733,
+        "ptsSeconds": "12.888333",
+        "packetEvidence": [
+          {
+            "pts": 7733,
+            "pts_time": "12.888333",
+            "dts": 6610,
+            "dts_time": "11.016667",
+            "pos": "3769220",
+            "size": "16385",
+            "flags": "___"
+          },
+          {
+            "pts": 7733,
+            "pts_time": "12.888333",
+            "dts": 6616,
+            "dts_time": "11.026667",
+            "pos": "3794983",
+            "size": "568",
+            "flags": "___"
+          }
+        ],
+        "frameContext": [
+          {
+            "frameIndex": 290,
+            "type": "frame",
+            "pts": 7732,
+            "pts_time": "12.886667",
+            "pkt_dts_time": "11.026667",
+            "best_effort_timestamp_time": "11.026667",
+            "pkt_pos": "3785605",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          },
+          {
+            "frameIndex": 291,
+            "type": "frame",
+            "pts": 7733,
+            "pts_time": "12.888333",
+            "pkt_dts_time": "11.028333",
+            "best_effort_timestamp_time": "11.028333",
+            "pkt_pos": "3794983",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          },
+          {
+            "frameIndex": 292,
+            "type": "frame",
+            "pts": 7733,
+            "pts_time": "12.888333",
+            "pkt_dts_time": "11.041667",
+            "best_effort_timestamp_time": "11.041667",
+            "pkt_pos": "3769220",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "P"
+          },
+          {
+            "frameIndex": 293,
+            "type": "frame",
+            "pts": 7735,
+            "pts_time": "12.891667",
+            "pkt_dts_time": "11.043333",
+            "best_effort_timestamp_time": "11.043333",
+            "pkt_pos": "3795551",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "I",
+            "side_data_list": [
+              {
+                "side_data_type": "H.26[45] User Data Unregistered SEI message"
+              }
+            ]
+          },
+          {
+            "frameIndex": 294,
+            "type": "frame",
+            "pts": 7743,
+            "pts_time": "12.905000",
+            "pkt_dts_time": "11.045000",
+            "best_effort_timestamp_time": "11.045000",
+            "pkt_pos": "4169940",
+            "width": 1320,
+            "height": 2868,
+            "pict_type": "B"
+          }
+        ]
+      }
+    ],
+    "framesWithoutActualPTS": 0,
+    "timingAcceptance": "needs-review",
+    "interpretation": "Packet PTS collisions originate in the recorded stream; encoder versus source-clock cause is not established."
+  },
+  "limitations": [
+    "Not a presented-device FPS measurement",
+    "Visual/audio acceptance remains separate"
+  ],
+  "artifactID": 12959816135,
+  "analysisBaseCommit": "d0c041d2f912a0e67b4b0da8f320c0b3c1685435"
+}

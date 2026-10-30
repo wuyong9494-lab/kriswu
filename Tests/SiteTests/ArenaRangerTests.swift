@@ -116,11 +116,16 @@ final class ArenaRangerTests: XCTestCase {
                 let shell = try XCTUnwrap(bolt.childNode(withName: "team-shell", recursively: true))
                 let color = try XCTUnwrap(shell.geometry?.firstMaterial?.diffuse.contents as? UIColor)
                 XCTAssertEqual(color, ally ? ArenaPalette.allyShot : ArenaPalette.enemyShot)
-                let footprint = try XCTUnwrap(bolt.childNode(withName: "collision-radius", recursively: true))
-                let tube = try XCTUnwrap(footprint.geometry as? SCNTube)
-                XCTAssertEqual(tube.outerRadius, radius, accuracy: 0.0001)
-                XCTAssertEqual(footprint.position.y + 0.6, 0.04, accuracy: 0.0001)
-                XCTAssertNotNil(bolt.childNode(withName: ally ? "ally-inner-tick" : "enemy-forward-notch", recursively: true))
+                let footprint = bolt.childNode(withName: "collision-radius", recursively: true)
+                if strength == 0 {
+                    XCTAssertNil(footprint, "Normal bolts must not regain decorative floor rings")
+                } else {
+                    let projection = try XCTUnwrap(footprint)
+                    let tube = try XCTUnwrap(projection.geometry as? SCNTube)
+                    XCTAssertEqual(tube.outerRadius, radius, accuracy: 0.0001)
+                    XCTAssertEqual(projection.position.y + 0.6, 0.04, accuracy: 0.0001)
+                    XCTAssertNotNil(projection.childNode(withName: ally ? "ally-inner-tick" : "enemy-forward-notch", recursively: true))
+                }
                 bolt.enumerateChildNodes { node, _ in
                     XCTAssertTrue(node.particleSystems?.isEmpty ?? true)
                     for material in node.geometry?.materials ?? [] {
@@ -208,4 +213,5 @@ final class ArenaRangerTests: XCTestCase {
         }
     }
 }
+
 

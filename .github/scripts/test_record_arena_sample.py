@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import record_arena_sample as capture
-from check_arena_video import validate_frames
+from check_arena_video import validate_frames, timing_evidence
 
 
 class RecordingContractTests(unittest.TestCase):
@@ -112,4 +112,27 @@ class PresentationTimestampTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): validate_frames(frames)
 
 
+class TimingEvidenceTests(unittest.TestCase):
+    def test_packet_collision_is_reported_without_mutating_frames(self):
+        frames = [dict(pts=10, pts_time='0.1'), dict(pts=10, pts_time='0.1'), dict(pts=11, pts_time='0.11')]
+        original = [dict(f) for f in frames]
+        packets = [dict(pts=10, dts=8, pos='100'), dict(pts=10, dts=9, pos='120')]
+        report = timing_evidence(frames, packets)
+        self.assertEqual(report['timingAcceptance'], 'needs-review')
+        self.assertEqual(report['duplicateGroups'][0]['frameIndices'], [0, 1])
+        self.assertEqual(len(report['duplicateGroups'][0]['packetEvidence']), 2)
+        self.assertEqual(frames, original)
+
+    def test_missing_pts_cannot_claim_strict_timing(self):
+        report = timing_evidence([dict(best_effort_timestamp_time='1')], [])
+        self.assertEqual(report['framesWithoutActualPTS'], 1)
+        self.assertEqual(report['timingAcceptance'], 'needs-review')
+
+    def test_unique_pts_have_no_collision(self):
+        report = timing_evidence([dict(pts=1), dict(pts=2)], [])
+        self.assertEqual(report['duplicateGroups'], [])
+        self.assertEqual(report['timingAcceptance'], 'strictly-increasing')
+
+
 if __name__ == '__main__': unittest.main()
+

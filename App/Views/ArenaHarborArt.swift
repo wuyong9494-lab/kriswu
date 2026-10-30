@@ -25,7 +25,8 @@ enum ArenaHarborArt {
         var indices: [Int32] = []
         for leafIndex in 0..<11 {
             let angle = Float(leafIndex) * 2.39996
-            let distance: Float = leafIndex < 3 ? 0.12 : 0.32
+            // Include blade width and outward lean in the tile envelope.
+            let distance: Float = leafIndex < 3 ? 0.12 : 0.285
             let center = SIMD3<Float>(cos(angle) * distance, 0, sin(angle) * distance)
             let height: Float = leafIndex % 2 == 0 ? 0.64 : 0.53
             let base = Int32(vertices.count)
@@ -138,3 +139,4 @@ enum ArenaHarborArt {
         return root
     }
 }
+

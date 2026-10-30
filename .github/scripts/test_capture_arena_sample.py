@@ -102,7 +102,7 @@ class CaptureIdentityTests(unittest.TestCase):
             self.assertFalse((output / 'sample-hero.json').exists())
 
     def test_menu_rejects_wrong_map_or_zero_height(self):
-        for fields in [{'map': 'canyon'}, {'height': 0}]:
+        for fields in [{'map': 'canyon'}, {'height': 0}, {'width': 408, 'height': 683.6667}]:
             with self.subTest(fields=fields), tempfile.TemporaryDirectory() as directory:
                 base = pathlib.Path(directory)
                 (base / 'Documents').mkdir()
@@ -142,5 +142,31 @@ class CaptureIdentityTests(unittest.TestCase):
     def test_old_map_is_rejected_before_harbor_screenshot(self):
         self.run_capture('harbor', wrong_map=True)
 
+class PresentedFrameTests(unittest.TestCase):
+    def exercise(self, results):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            validator = root / 'validator'
+            validator.touch()
+            image = root / 'sample-map.png'
+            def shot(*args, **kwargs):
+                pathlib.Path(args[-1]).write_bytes(b'original capture')
+            from types import SimpleNamespace
+            with patch.object(capture, 'simctl', side_effect=shot), patch.object(capture.time, 'sleep'), patch.object(capture.subprocess, 'run', side_effect=[SimpleNamespace(returncode=x, stdout='', stderr='') for x in results]):
+                if all(results):
+                    with self.assertRaises(RuntimeError): capture.capture_visible_frame('device', image, validator)
+                    self.assertFalse(image.exists())
+                else:
+                    capture.capture_visible_frame('device', image, validator)
+                    self.assertTrue(image.exists())
+            self.assertEqual(len(list((root / 'rejected-frames').glob('*.png'))), sum(bool(x) for x in results))
+
+    def test_blank_then_presented_frame_retains_failure_evidence(self):
+        self.exercise([1, 0])
+
+    def test_persistent_blank_is_rejected(self):
+        self.exercise([1, 1, 1])
+
 if __name__ == '__main__':
     unittest.main()
+
