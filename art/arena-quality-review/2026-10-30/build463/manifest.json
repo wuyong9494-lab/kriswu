@@ -1,0 +1,17 @@
+{
+  "sourceCommit": "04d6cc0ac7cca4d0a025f03e91abfe1af8df15e9",
+  "run": 41019745714,
+  "artifact": 12961389251,
+  "images": [
+    {
+      "file": "combat.jpg",
+      "originalSHA256": "204ba9812fd7e0f7bdaac0f889b5e69acd6454b02b3a3f089393a8a9962a9e51",
+      "transform": "rotate90CCW, fit1434x660, RGB JPEG80; original simulator PNG retained in artifact"
+    },
+    {
+      "file": "early.jpg",
+      "originalSHA256": "d33c2a5f66a029e2467292141546eba007f8478150287c85185c4bae7ed69325",
+      "transform": "rotate90CCW, fit1434x660, RGB JPEG80; original simulator PNG retained in artifact"
+    }
+  ]
+}

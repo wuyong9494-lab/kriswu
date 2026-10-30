@@ -38,4 +38,4 @@
 	- 角色（Knight、Rogue、Rogue_Hooded、Barbarian、Mage）：KayKit Adventurers Character Pack
 	- 场地外的树、石头、旗子（trees_*、rock_single_*、flag_*、hexagons_medieval.png）：KayKit Medieval Hexagon Pack
 	- 骷髅角色（Skeleton_Warrior、Skeleton_Mage、Skeleton_Rogue、Skeleton_Minion）和它们的武器（Skeleton_*.gltf、skeleton_texture.png）：KayKit Character Pack: Skeletons
-	角色模型只留了游戏里用到的几段动作（其余删掉以减小 App 体积），其他没有改动
+	运行时只导入当前职业需要的动作。2026-10-30 实际检查 Barbarian/Mage GLB 各含 76 条动作，不能宣称文件已经裁剪。精确上游版本与文件变更链尚待补齐；见 docs/arena-reuse-assessment.md。

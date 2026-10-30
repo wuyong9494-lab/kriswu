@@ -1,3 +1,5 @@
+> 最新范围更新（2026-10-30）：用户已明确将一个游侠样板扩大为三个完整英雄与主流程。下方旧记录的“不扩角色”仅描述当时范围，不再作为本轮限制。仍保留现有项目，不切换引擎、不合并 main、不发布 TestFlight、不购买。先读 [复用评估](arena-reuse-assessment.md) 与 [Build463 检查及接续](arena-quality-review-463.md)。当前已核实的远程基线是 `04d6cc0`；本提交包含三英雄流程/验证增量，尚待自己的唯一 CI 结果。旧客户端专项查到的项目没有完整可复用游戏客户端源码，不要把协议客户端或 APK 当源码。
+
 # Quality sample handoff — 2026-10-30
 
 Branch: `codex/arena-quality-sample`. Verified remote base: `d0c041d2f912a0e67b4b0da8f320c0b3c1685435`. No rebuild from main, release, TestFlight upload, or new characters/maps. Old local worktree HEAD is `0ab9e94` with API-published changes left uncommitted; do not commit that entire dirty tree. This continuation fetched touched files from the exact remote base.

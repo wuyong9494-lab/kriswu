@@ -9,6 +9,8 @@ import simd
 /// 上边奖杯（点开奖杯之路）、金币、赛季等级、名字，左边「冒险」「角色」「赛季」「和同事打」，
 /// 右下普通 / 排位、带的本事、玩法卡片和大大的「开打」
 struct ArenaHomeView: View {
+    var threeHeroSample = true
+    @State private var sampleHero = ArenaQualitySample.selected(Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.sample.brawler")) ?? .ranger)
     @ObservedObject private var records = ArenaRecords.shared
     @ObservedObject private var growth = ArenaProgressStore.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
@@ -63,7 +65,7 @@ struct ArenaHomeView: View {
            let raw = UserDefaults.standard.string(forKey: "arena.previewBrawler"),
            let number = Int(raw), let preview = Brawler(rawValue: number) { return preview }
         if ProcessInfo.processInfo.arguments.contains("-demo"), UserDefaults.standard.bool(forKey: "arena.previewRanger") { return .ranger }
-        return progress.isUnlocked(brawler) ? brawler : .knight
+        return threeHeroSample ? sampleHero : (progress.isUnlocked(brawler) ? brawler : .knight)
     }
 
     /// 一对一另外带的两个：解锁了的里面奖杯最多的
@@ -83,7 +85,7 @@ struct ArenaHomeView: View {
             ZStack {
                 ArenaLobbyBackground()
                 ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
-                              live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                              live: playing == nil && lobby == nil && !adventure && sheet == nil, qualitySample: threeHeroSample)
                     .frame(width: composition.heroSize.width, height: composition.heroSize.height)
                     .position(composition.heroCenter)
                 VStack(spacing: 0) {
@@ -113,7 +115,7 @@ struct ArenaHomeView: View {
                 }.position(composition.leftCenter)
                 VStack(spacing: composition.railGap) {
                     quietMenu("好友", symbol: "person.2.fill", compact: compact) { sheet = .friends }
-                    quietMenu("战队", symbol: "shield.fill", compact: compact) { sheet = .together }
+                    quietMenu("联机", symbol: "shield.fill", compact: compact) { sheet = .together }
                     quietMenu("组队", symbol: "person.3.fill", compact: compact) { sheet = .party }
                 }.position(composition.socialCenter)
                 Button { adventure = true } label: {
@@ -147,6 +149,7 @@ struct ArenaHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
+        .accessibilityIdentifier("arena.lobby")
         .onAppear {
             if reduceLobbyMotion { lobbyPresented = true }
             else { withAnimation(.easeOut(duration: 0.24)) { lobbyPresented = true } }
@@ -235,6 +238,7 @@ struct ArenaHomeView: View {
             }.foregroundStyle(.white).frame(width: 67, height: compact ? 44 : 49)
         }.buttonStyle(ArenaLobbyRailStyle())
             .accessibilityLabel(title)
+            .accessibilityIdentifier(title == "英雄" ? "arena.openHeroes" : "arena.menu.\(title)")
     }
 
     private func compactTopBar(composition: ArenaLobbyComposition) -> some View {
@@ -330,8 +334,10 @@ struct ArenaHomeView: View {
                 HStack(spacing: 8) {
                     ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.purple).frame(width: 34, height: 39)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
-                        if composition.compact { ArenaLobbyQuestCountdown() }
+                        Text(threeHeroSample ? "双闸交汇" : playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
+                        if threeHeroSample {
+                            Text("本地对战 · 电脑队友 / 对手").font(.system(size: 10, weight: .bold))
+                        } else if composition.compact { ArenaLobbyQuestCountdown() }
                         else {
                             Text(ArenaMap.playPool(for: playMode).first?.title ?? playMode.title)
                                 .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
@@ -342,17 +348,18 @@ struct ArenaHomeView: View {
                 }.padding(.horizontal, 9).frame(width: composition.modeWidth, height: 61)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
                 .overlay(alignment: .topTrailing) {
-                    if !composition.compact {
+                    if !composition.compact && !threeHeroSample {
                         ArenaLobbyQuestCountdown().offset(y: -16).allowsHitTesting(false)
                     }
                 }
             VStack(spacing: 3) {
-                Text(ranked ? "排位对战" : "普通对战").font(.system(size: 11, weight: .black))
+                Text(threeHeroSample ? "三英雄试玩 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
                     .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
                 Button { start() } label: {
                     Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
                         .frame(width: composition.battleWidth, height: 61)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+                    .accessibilityIdentifier("arena.start")
             }
         }.foregroundStyle(.white).frame(height: 92)
     }
@@ -738,7 +745,7 @@ struct ArenaHomeView: View {
     }
 
     /// 排位赛打哪个玩法：选的是 3v3 的就打它，不然打 3v3 团战
-    private var playMode: ArenaGame.Mode { ranked && !ArenaRank.allows(mode) ? .teamFight : mode }
+    private var playMode: ArenaGame.Mode { threeHeroSample ? .zone : (ranked && !ArenaRank.allows(mode) ? .teamFight : mode) }
 
     /// 现在的玩法：颜色、图标、名字、赢了几局（排位赛是段位和分数）；点一下换
     private var modeCard: some View {
@@ -799,6 +806,12 @@ struct ArenaHomeView: View {
     }
 
     private func start() {
+        if threeHeroSample {
+            playing = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: chosen, name: name,
+                level: progress.level(chosen), loadout: progress.loadout(for: chosen),
+                qualitySample: true, threeHeroSample: true))
+            return
+        }
         let level = progress.level(chosen)
         let botLevel = ranked ? max(ArenaRank.tiers[progress.rankTier].botLevel, level) : nil
         playing = ArenaEntry(setup: ArenaController.Setup(mode: playMode, brawler: chosen, name: name, level: level,
@@ -809,7 +822,20 @@ struct ArenaHomeView: View {
     // MARK: 面板
 
     @ViewBuilder private func sheetContent(_ item: Sheet) -> some View {
-        if item == .sample {
+        if threeHeroSample && item == .brawlers {
+            ArenaHeroSelection(selected: chosen, onClose: { sheet = nil }, onSelect: { hero in
+                sampleHero = hero
+                UserDefaults.standard.set(hero.rawValue, forKey: "arena.sample.brawler")
+                sheet = nil
+            })
+        } else if threeHeroSample && item == .modes {
+            ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
+                pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: chosen,
+                    name: name, level: progress.level(chosen), loadout: progress.loadout(for: chosen),
+                    qualitySample: true, threeHeroSample: true))
+                sheet = nil
+            }, initialPage: 1, playHero: chosen)
+        } else if item == .sample {
             ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
                     mode: .zone, brawler: .ranger, name: name, level: progress.level(.ranger),
@@ -1199,7 +1225,7 @@ struct ArenaHomeView: View {
 
     private var togetherList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("和同事开一局。面对面，或者用同一个 4 位房间号。")
+            Text("联机房间入口 · 不是战队系统。连接成功后才能对战；本轮三英雄试玩在大厅开始，使用本地电脑队友和对手。")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
             roomActions(players: 2)
@@ -1306,6 +1332,8 @@ struct ArenaHomeView: View {
 
     private var friendsBoard: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("本机好友名单 · 不代表在线状态，也不会发送好友请求")
+                .font(.caption).foregroundStyle(.white.opacity(0.8))
             HStack(spacing: 8) {
                 TextField("好友的名字", text: $friendName)
                     .font(.system(size: 16, weight: .black, design: .rounded))

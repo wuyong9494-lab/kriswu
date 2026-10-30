@@ -5,6 +5,42 @@ import simd
 
 @MainActor
 final class ArenaRangerTests: XCTestCase {
+    func testThreeHeroTrialsKeepSelectedHeroAndCompleteDistinctModels() throws {
+        var files = Set<String>()
+        for hero in ArenaQualitySample.heroes {
+            let trial = ArenaController(setup: .init(mode: .zone, brawler: hero, name: "试验",
+                qualitySample: true, threeHeroSample: true), seed: 170017)
+            XCTAssertEqual(trial.mine.brawler, hero)
+            XCTAssertEqual(trial.game.map.id, ArenaMap.twinGates.id)
+            for team in 0...1 {
+                XCTAssertEqual(Set(trial.game.fighters.filter { $0.team == team }.map(\.brawler)),
+                               Set(ArenaQualitySample.heroes))
+            }
+            let look = BrawlerLook.of(hero, qualitySample: true)
+            files.insert(look.file)
+            let model = try XCTUnwrap(ArenaModels.shared.character(hero, qualitySample: true))
+            for clip in look.clips { XCTAssertNotNil(model.clips[clip], "\(hero.name): \(clip)") }
+        }
+        XCTAssertEqual(files.count, 3, "Three different models, not palette variants")
+    }
+
+    func testThreeHeroNaturalMatchFinishesWithoutGrowthRewards() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let before = try encoder.encode(ArenaProgressStore.shared.progress)
+        for hero in ArenaQualitySample.heroes {
+            let trial = ArenaController(setup: .init(mode: .zone, brawler: hero, name: "试验",
+                qualitySample: true, threeHeroSample: true), seed: 170017)
+            trial.advance(4) // Intro only; the following calls run the normal 60 Hz rules.
+            for _ in 0..<9_100 { trial.advance(1.0 / 60) }
+            XCTAssertNotNil(trial.hud.result)
+            XCTAssertNil(trial.reward)
+            XCTAssertNil(trial.rankedCoins)
+            XCTAssertNil(trial.seasonGain)
+        }
+        XCTAssertEqual(try encoder.encode(ArenaProgressStore.shared.progress), before)
+    }
+
     func testShowcaseRefitsAfterPortraitToLandscapeTransition() throws {
         let view = ArenaShowcaseView(brawler: .ranger)
         defer { view.stop() }

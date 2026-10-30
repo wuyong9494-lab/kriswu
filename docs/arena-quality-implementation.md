@@ -194,3 +194,10 @@ Actual460 screenshot also showed the large note-shaped marks persisted on other 
 ### Build461 independent audit and continuation
 
 Build461 device/core compilation passed, but simulator regression failed on grass exceeding tile bounds and the stale normal-shot projection assertion. Its actual map PNG is blank with portrait layout metadata; combat/video capture was skipped. Grass centres now account for widened leaves and lean without relaxing the bounds test; bolt tests distinguish normal from super projection. Capture now requires landscape and checks/retries blank presentation while preserving failures. Packet-level audit locates Build460 duplicate timestamps in the source stream and explicitly leaves timing acceptance unresolved; no video retiming.21 local Python tests pass; new Swift/visual checks pending. Full evidence and exact next steps: [current quality handoff](arena-quality-handoff.md).
+
+
+## 三英雄范围与复用核验更新
+
+用户已授权从单英雄样板扩大为游侠、蛮王、法师及完整主流程。本轮保留 Swift/SceneKit 和已有角色/草墙成果，先核验 13 个仓库线索；采用已有 CC0 动作/模型及自制游侠，不移植缺许可或仅有协议/编译产物的客户端。详见 [复用评估](arena-reuse-assessment.md)。
+
+Build463 应用检查通过，但穿行录制在 simctl launch 超时，不能宣称录像问题解决。当前新增三英雄选择/完整详情/固定双闸本地对战/自然结算回大厅，试玩成长隔离；XCUITest 逐英雄驱动真实页面与摇杆，保留原始录屏/事件，缺少玩家普攻或大招则拒收。29 Python 门禁与 21 动作离线检查通过，Swift 编译和实际 UI 录像仍等本提交 CI。准确续接及未验证项见 [Build463 检查](arena-quality-review-463.md)。

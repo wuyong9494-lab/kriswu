@@ -98,6 +98,7 @@ final class ArenaController: ObservableObject {
         var benchmark = false
         var diagnosticScenario: ArenaDiagnosticScenario?
         var qualitySample = false
+        var threeHeroSample = false
         /// Fixed Twin Gates visual capture; does not affect the normal trial entry.
         var benchmarkTwinGates = false
 
@@ -118,6 +119,7 @@ final class ArenaController: ObservableObject {
     let role: Role
     let me: Int
     private(set) var qualitySample = false
+    private(set) var threeHeroSample = false
     private(set) var benchmark = false
     // Opt-in capture fixture only; normal trials and network games never use this route.
     private(set) var captureTraversal = false
@@ -190,6 +192,12 @@ final class ArenaController: ObservableObject {
     private var sceneEvents: [ArenaGame.Event] = []
     private var snapshotDue = false
     private var recorded = false
+    private var flowEvidenceWritten = false
+    private var resultWasInjected = false
+    private var capturesFlow: Bool {
+        threeHeroSample && ProcessInfo.processInfo.arguments.contains("-demo") &&
+            UserDefaults.standard.bool(forKey: "arena.captureFlow")
+    }
 
     // 房主
     private var seatOfMember: [String: Int] = [:]
@@ -228,14 +236,16 @@ final class ArenaController: ObservableObject {
             var entrants = [mine]
             entrants[0].team = teams[0]
             for k in 1..<teams.count {
-                let brawler = others[(k - 1) % others.count]
+                let brawler = setup.threeHeroSample
+                    ? ArenaQualitySample.lineup(selected: setup.brawler)[k % 6]
+                    : others[(k - 1) % others.count]
                 let boss = setup.mode == .boss && teams[k] == 1
                 let level = setup.botLevel ?? setup.level
                 entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
                                                   level: level, loadout: ArenaLoadout.basic(brawler, level: level)))
             }
             if setup.benchmark {
-                let roster: [Brawler] = [.ranger, .knight, .mage, .ranger, .knight, .mage]
+                let roster: [Brawler] = setup.threeHeroSample ? ArenaQualitySample.lineup(selected: setup.brawler) : [.ranger, .knight, .mage, .ranger, .knight, .mage]
                 for i in entrants.indices {
                     entrants[i].brawler = roster[i % roster.count]
                     entrants[i].name = i == 0 ? "我" : "电脑" + entrants[i].brawler.name
@@ -250,6 +260,7 @@ final class ArenaController: ObservableObject {
         }
         self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
         qualitySample = setup.qualitySample
+        threeHeroSample = setup.threeHeroSample
         benchmark = setup.benchmark
         diagnosticScenario = setup.diagnosticScenario
         captureTraversal = setup.benchmark && setup.qualitySample && setup.benchmarkTwinGates &&
@@ -267,6 +278,7 @@ final class ArenaController: ObservableObject {
         case .versus?:
             introLeft = .infinity
         case .result?:
+            resultWasInjected = true
             // 截图用：打完了，自己这队赢、自己是全场最佳
             introLeft = 0
             showingIntro = false
@@ -404,8 +416,8 @@ final class ArenaController: ObservableObject {
             }
         }
         let events = game.events
-        if benchmarkSnapshotTime > 0 {
-            for event in events where captureEvents.count < 256 {
+        if benchmarkSnapshotTime > 0 || capturesFlow {
+            for event in events where captureEvents.count < (capturesFlow ? 4096 : 256) {
                 var record: [String: Any] = ["simulationTime": game.time]
                 switch event {
                 case .attack(let fighter): record["kind"] = "attack"; record["fighter"] = fighter
@@ -674,7 +686,10 @@ final class ArenaController: ObservableObject {
         if feed.contains(where: { game.time - $0.at > 4 || game.time < $0.at }) {
             feed.removeAll { game.time - $0.at > 4 || game.time < $0.at }
         }
-        if hud.result != nil, !recorded {
+        if hud.result != nil, capturesFlow, !flowEvidenceWritten {
+            writeFlowEvidence()
+        }
+        if hud.result != nil, !recorded, !threeHeroSample {
             recorded = true
             let store = ArenaProgressStore.shared
             if let story {
@@ -692,6 +707,31 @@ final class ArenaController: ObservableObject {
             seasonGain = store.recordSeason(stats, draw: hud.result == .draw)
         }
         if hud != self.hud { self.hud = hud }
+    }
+
+    private func writeFlowEvidence() {
+        guard let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        #if targetEnvironment(simulator)
+        let physicalDevice = false
+        #else
+        let physicalDevice = true
+        #endif
+        let evidence: [String: Any] = [
+            "kind": "three-hero-ui-flow", "map": game.map.id, "qualitySample": qualitySample,
+            "playerHero": mine.brawler.rawValue, "simulationTime": game.time,
+            "finishedNaturally": game.result != nil, "forcedResult": resultWasInjected,
+            "renderFPSMeasured": false, "physicalDevice": physicalDevice,
+            "fighters": game.fighters.map { ["id": $0.id, "hero": $0.brawler.rawValue,
+                "team": $0.team, "asset": BrawlerLook.of($0.brawler, qualitySample: qualitySample).file] as [String: Any] },
+            "events": captureEvents, "playerDamage": mine.damageDealt,
+            "playerKills": mine.kills, "playerDeaths": mine.deaths
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]) {
+            do {
+                try data.write(to: folder.appendingPathComponent("arena-flow-hero-\(mine.brawler.rawValue).json"), options: .atomic)
+                flowEvidenceWritten = true
+            } catch { /* Missing evidence is rejected by the external capture gate. */ }
+        }
     }
 
     /// 被打倒了还会回来（画面上显示「几秒后复活」）

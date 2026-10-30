@@ -22,7 +22,7 @@ env:
 jobs:
   sample-capture:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v5
         with:
@@ -39,6 +39,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p 'test_*arena_sample.py'
           python3 scripts/assets/validate_ranger.py
           python3 scripts/assets/validate_ranger.py --face-sample
+          python3 scripts/assets/audit_three_hero_assets.py App/Arena3D sample-asset-audit.json
           brew install xcodegen ffmpeg
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -55,6 +56,7 @@ jobs:
         run: |
           swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
       - name: Boot installed sample application
+        id: sample_boot
         timeout-minutes: 8
         shell: bash -eo pipefail {0}
         run: |
@@ -109,6 +111,26 @@ jobs:
         run: |
           python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion traversal
           python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-traversal.mp4
+      - name: Exercise three real hero flows
+        if: always() && steps.sample_boot.outcome == 'success'
+        timeout-minutes: 24
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -configuration Debug -destination "platform=iOS Simulator,id=$SAMPLE_DEVICE" \
+            -derivedDataPath sample-build -resultBundlePath sample-flow.xcresult \
+            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            > sample-flow.log 2>&1 || { tail -100 sample-flow.log; exit 1; }
+      - name: Preserve flow recordings and scene evidence
+        if: always()
+        timeout-minutes: 8
+        shell: bash -eo pipefail {0}
+        run: |
+          mkdir -p sample-shots/flow
+          if [ -d sample-flow.xcresult ]; then
+            xcrun xcresulttool export attachments --path sample-flow.xcresult --output-path sample-shots/flow
+          fi
+          python3 .github/scripts/collect_arena_flow.py "$SAMPLE_DEVICE" sample-shots/flow
       - name: Shut down sample simulator
         if: always()
         timeout-minutes: 2
@@ -133,5 +155,8 @@ jobs:
           path: |
             sample-shots
             sample-build.log
+            sample-asset-audit.json
+            sample-flow.log
+            sample-flow.xcresult
           if-no-files-found: error
           retention-days: 14

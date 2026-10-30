@@ -1558,7 +1558,8 @@ final class ArenaWorldView: SCNView {
             guard avatars.indices.contains(target) else { return }
             ArenaSound.shared.play(.knockout, volume: target == controller.me ? 1 : loudness(game.fighters[target].pos))
             burst(at: avatars[target].node.simdPosition + SIMD3(0, 0.6, 0), color: UIColor(white: 0.9, alpha: 1),
-                  count: 30, speed: 2, size: 0.4, life: 0.6)
+                  count: controller.qualitySample ? 12 : 30, speed: 2,
+                  size: controller.qualitySample ? 0.16 : 0.4, life: controller.qualitySample ? 0.28 : 0.6)
             if target == controller.me {
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 addShake(0.5)
@@ -1847,6 +1848,8 @@ final class ArenaWorldView: SCNView {
         system.particleVelocity = speed
         system.particleSize = size
         system.particleColor = color
+        // Sample effects must keep the body silhouette under overlapping hits.
+        system.blendMode = controller.qualitySample ? .alpha : .additive
         system.reset()
         slot.expiresAt = effectClock + Double(life) * 1.4 + 0.2
     }

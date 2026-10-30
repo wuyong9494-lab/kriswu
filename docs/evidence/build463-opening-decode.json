@@ -1,0 +1,56 @@
+{
+  "sourceCommit": "04d6cc0ac7cca4d0a025f03e91abfe1af8df15e9",
+  "video": "harbor-opening.mp4",
+  "frames": 822,
+  "presentationSpanSeconds": 37.555,
+  "duplicatePresentationTimestamps": 0,
+  "softwareDecoded": true,
+  "retimed": false,
+  "videoSHA256": "ee7682ee050d55dfefd88b0ba499cb6bd50dd06b71fb212dce2a2a0033a3eab3",
+  "streams": [
+    {
+      "codec_name": "h264",
+      "time_base": "1/600",
+      "start_time": "0.000000",
+      "duration": "37.578333",
+      "nb_frames": "822",
+      "disposition": {
+        "default": 1,
+        "dub": 0,
+        "original": 0,
+        "comment": 0,
+        "lyrics": 0,
+        "karaoke": 0,
+        "forced": 0,
+        "hearing_impaired": 0,
+        "visual_impaired": 0,
+        "clean_effects": 0,
+        "attached_pic": 0,
+        "timed_thumbnails": 0,
+        "non_diegetic": 0,
+        "captions": 0,
+        "descriptions": 0,
+        "metadata": 0,
+        "dependent": 0,
+        "still_image": 0
+      },
+      "tags": {
+        "creation_time": "2026-10-30T07:34:17.000000Z",
+        "language": "und",
+        "handler_name": "Core Media Video",
+        "vendor_id": "[0][0][0][0]",
+        "encoder": "H.264"
+      }
+    }
+  ],
+  "timing": {
+    "duplicateGroups": [],
+    "framesWithoutActualPTS": 0,
+    "timingAcceptance": "strictly-increasing",
+    "interpretation": "Packet PTS collisions originate in the recorded stream; encoder versus source-clock cause is not established."
+  },
+  "limitations": [
+    "Not a presented-device FPS measurement",
+    "Visual/audio acceptance remains separate"
+  ]
+}

@@ -4,11 +4,13 @@ import SwiftUI
 struct ArenaSampleReview: View {
     let onClose: () -> Void
     let onPlay: () -> Void
+    let playHero: Brawler
     @State private var page: Int
 
-    init(onClose: @escaping () -> Void, onPlay: @escaping () -> Void, initialPage: Int = 0) {
+    init(onClose: @escaping () -> Void, onPlay: @escaping () -> Void, initialPage: Int = 0, playHero: Brawler = .ranger) {
         self.onClose = onClose
         self.onPlay = onPlay
+        self.playHero = playHero
         _page = State(initialValue: initialPage)
     }
 
@@ -18,7 +20,7 @@ struct ArenaSampleReview: View {
                 let previewHeight = max(1, viewport.size.height - 56)
                 VStack(spacing: 12) {
                     HStack(spacing: 10) {
-                        pageButton("游侠", index: 0)
+                        pageButton(playHero.name, index: 0)
                         pageButton("双闸交汇", index: 1)
                     }
                     .accessibilityIdentifier("arena.sample.pages")
@@ -34,7 +36,7 @@ struct ArenaSampleReview: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 6) {
                 Button(action: onPlay) {
-                    Label("以游侠进入试玩", systemImage: "play.fill")
+                    Label("以\(playHero.name)进入试玩", systemImage: "play.fill")
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(ArenaMenuButtonStyle())
@@ -72,7 +74,7 @@ struct ArenaSampleReview: View {
     private func hero(height: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(spacing: 4) {
-                ArenaShowcase(brawler: .ranger, qualitySample: true)
+                ArenaShowcase(brawler: playHero, qualitySample: true)
                     .frame(width: 220, height: max(1, height - 22))
                     .accessibilityIdentifier("arena.sample.hero")
                 Text("拖动转身 · 轻点观看动作")
@@ -83,15 +85,15 @@ struct ArenaSampleReview: View {
             ArenaMenuCard {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("游侠").font(.title2.bold())
-                        Text("远程单发 · 把握射线与换弹时机")
+                        Text(playHero.name).font(.title2.bold())
+                        Text(playHero.role)
                             .font(.subheadline).foregroundStyle(.cyan)
-                        Text(Brawler.ranger.attackNote).font(.subheadline)
-                        Text(Brawler.ranger.superNote).font(.subheadline)
+                        Text(playHero.attackNote).font(.subheadline)
+                        Text(playHero.superNote).font(.subheadline)
                         Divider().overlay(.white.opacity(0.2))
-                        Text("基础射程 \(Brawler.ranger.attackRange, specifier: "%.0f") 格 · 每发装填 \(Brawler.ranger.reload, specifier: "%.1f") 秒")
+                        Text("基础射程 \(playHero.attackRange, specifier: "%.0f") 格 · 每发装填 \(playHero.reload, specifier: "%.1f") 秒")
                             .font(.caption)
-                        Text("用短墙遮住换弹空窗；从侧路换角度，避免一直站在中路对射。")
+                        Text("利用短墙和草丛换角度；留意普攻、大招与敌人之间的距离。")
                             .font(.subheadline).foregroundStyle(.white.opacity(0.8))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -88,3 +88,30 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
+
+  ArenaFlowTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/ArenaFlowTests
+    dependencies:
+      - target: ShiftReminder
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder.arenaflowtests
+        TEST_TARGET_NAME: ShiftReminder
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+schemes:
+  ArenaFlow:
+    build:
+      targets:
+        ShiftReminder: all
+        ArenaFlowTests: [test]
+    test:
+      targets:
+        - ArenaFlowTests
+      captureScreenshotsAutomatically: true
+      deleteScreenshotsWhenEachTestSucceeds: false
+      preferredScreenCaptureFormat: screenRecording

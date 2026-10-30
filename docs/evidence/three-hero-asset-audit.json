@@ -1,0 +1,173 @@
+{
+  "Ranger_FaceSample": {
+    "bytes": 531144,
+    "sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0",
+    "meshes": 1,
+    "primitives": 1,
+    "materials": 1,
+    "triangles": 11034,
+    "joints": 27,
+    "clips": 8,
+    "unsupported": [],
+    "actions": {
+      "Ranger_Idle": {
+        "duration": 2.433333396911621,
+        "channels": 5,
+        "poseMatrixDelta20To70Percent": 0.5157266289296965
+      },
+      "Ranger_Run": {
+        "duration": 0.699999988079071,
+        "channels": 9,
+        "poseMatrixDelta20To70Percent": 0.6824208467276562
+      },
+      "Ranger_Shoot": {
+        "duration": 0.36666667461395264,
+        "channels": 9,
+        "poseMatrixDelta20To70Percent": 0.1548594416351292
+      },
+      "Ranger_Skill": {
+        "duration": 0.6666666865348816,
+        "channels": 9,
+        "poseMatrixDelta20To70Percent": 0.271903361502537
+      },
+      "Hit_A": {
+        "duration": 0.2666666805744171,
+        "channels": 7,
+        "poseMatrixDelta20To70Percent": 0.21007498578837092
+      },
+      "Death_A": {
+        "duration": 0.8333333134651184,
+        "channels": 8,
+        "poseMatrixDelta20To70Percent": 1.1780692437472182
+      },
+      "Cheer": {
+        "duration": 1.6333333253860474,
+        "channels": 8,
+        "poseMatrixDelta20To70Percent": 0.2571364011853939
+      }
+    },
+    "geometrySHA256": "f7218a73099781309f4764330f04b7a64d00603b5b0406d994e0c65c2a9378f5",
+    "meshNames": [
+      "Cube.001"
+    ]
+  },
+  "Barbarian": {
+    "bytes": 3808460,
+    "sha256": "681065ca61c267f6466a305ffd0f9f3481dc52d425060bf236c277de9cbec349",
+    "meshes": 9,
+    "primitives": 13,
+    "materials": 9,
+    "triangles": 5690,
+    "joints": 41,
+    "clips": 76,
+    "unsupported": [],
+    "actions": {
+      "2H_Melee_Idle": {
+        "duration": 1.0416666269302368,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.05012492189446216
+      },
+      "Running_B": {
+        "duration": 1.0416666269302368,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.9097041014759788
+      },
+      "2H_Melee_Attack_Chop": {
+        "duration": 1.625,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 1.4644446668670987
+      },
+      "Jump_Full_Short": {
+        "duration": 1.1666666269302368,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.17029394167682996
+      },
+      "Hit_A": {
+        "duration": 0.6666666865348816,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.5636746829353728
+      },
+      "Death_A": {
+        "duration": 0.7916666865348816,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 1.504085879188236
+      },
+      "Cheer": {
+        "duration": 1.6666666269302368,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.35520400055718443
+      }
+    },
+    "geometrySHA256": "ef4081fb3ec7d03332c078bd1569c60665729c5d326ef8fad9335dbcdf81557d",
+    "meshNames": [
+      "ChibiBody.001",
+      "Cube.001",
+      "Cylinder.404",
+      "Cube.12900",
+      "Cube.222",
+      "Cylinder.061",
+      "Cube.166",
+      "Plane.006",
+      "ChibiEyes"
+    ]
+  },
+  "Mage": {
+    "bytes": 3665844,
+    "sha256": "42d90fe6b28e67b97679b30a2f6c1d14afdc5d8b741c2ba8e128e1678d276544",
+    "meshes": 8,
+    "primitives": 12,
+    "materials": 8,
+    "triangles": 4846,
+    "joints": 41,
+    "clips": 76,
+    "unsupported": [],
+    "actions": {
+      "Idle": {
+        "duration": 1.0416666269302368,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.07888966253478558
+      },
+      "Running_A": {
+        "duration": 0.7916666865348816,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 1.0986535575233343
+      },
+      "Spellcast_Shoot": {
+        "duration": 0.9166666865348816,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.6810161096628258
+      },
+      "Spellcast_Long": {
+        "duration": 2.5,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.6822121132042905
+      },
+      "Hit_A": {
+        "duration": 0.6666666865348816,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.5636746829353728
+      },
+      "Death_A": {
+        "duration": 0.7916666865348816,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 1.6689094845637602
+      },
+      "Cheer": {
+        "duration": 1.6666666269302368,
+        "channels": 123,
+        "poseMatrixDelta20To70Percent": 0.35520400055718443
+      }
+    },
+    "geometrySHA256": "08d2adfff29481c993f0d07971be4394c4c2f39fc71bfa4cb5151ccb6c36c167",
+    "meshNames": [
+      "ChibiBody.001",
+      "Cube.12901",
+      "Cube.12902",
+      "Cylinder.018",
+      "Cylinder.039",
+      "Cube.156",
+      "Plane.030",
+      "ChibiEyes"
+    ]
+  }
+}

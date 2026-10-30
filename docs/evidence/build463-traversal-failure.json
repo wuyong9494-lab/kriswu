@@ -1,0 +1,11 @@
+{
+  "sourceCommit": "04d6cc0ac7cca4d0a025f03e91abfe1af8df15e9",
+  "device": "0049367E-0AEA-4656-98F7-F9AB9ED33773",
+  "phase": "finalizing",
+  "mediaFinalized": false,
+  "sceneEvidence": null,
+  "stopMonotonicSeconds": 1251.698456958,
+  "failure": "simctl launch timed out after150s; no verified scene marker. Recorder log says finalized, but local gate rejects fewer than60frames",
+  "run": 41019745714,
+  "artifact": 12961389251
+}

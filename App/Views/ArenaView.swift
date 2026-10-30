@@ -805,6 +805,9 @@ struct ArenaMatchView: View {
 
     private func resultDetails(_ mine: Fighter) -> some View {
         VStack(spacing: wide ? DS.Space.s : DS.Space.m) {
+            if controller.threeHeroSample {
+                Text("本地对战 · 不计排位与成长奖励").font(.caption).foregroundStyle(.white.opacity(0.75))
+            }
             if let story = controller.storyReward {
                 storyStars(story)
             }
@@ -849,6 +852,7 @@ struct ArenaMatchView: View {
                         .buttonStyle(ArenaGameButton.yellow)
                     Button(controller.story == nil ? "回大厅" : "回冒险") { onExit() }
                         .buttonStyle(ArenaGameButton.blue)
+                        .accessibilityIdentifier("arena.result.lobby")
                 } else {
                     Button("回房间") { onExit() }
                         .buttonStyle(ArenaGameButton.yellow)
@@ -1264,6 +1268,14 @@ private struct ArenaStick: View {
     @State private var offset: CGSize = .zero
     @State private var active = false
 
+    private var controlName: String {
+        switch kind {
+        case .move: return "move"
+        case .attack: return "attack"
+        case .special: return "special"
+        }
+    }
+
     private var radius: CGFloat {
         switch kind {
         case .move: return 64
@@ -1317,6 +1329,9 @@ private struct ArenaStick: View {
                 .offset(offset)
         }
         .frame(width: radius * 2, height: radius * 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("arena.control.\(controlName)")
+        .accessibilityLabel(controlName == "move" ? "移动" : (controlName == "attack" ? "普通攻击" : "大招"))
         .contentShape(Circle())
         .gesture(
             DragGesture(minimumDistance: 0)

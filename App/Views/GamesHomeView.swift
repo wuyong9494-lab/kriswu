@@ -22,13 +22,14 @@ struct GamesHomeView: View {
                     showingArena = true
                 } label: {
                     HStack {
-                        row("勇者乱斗", "3D 横屏双摇杆对战：11 种玩法、13 个角色、小道具和星徽，电脑补位，也能和同事一起打", "flame.fill", 3)
+                        row("勇者乱斗", "三英雄试玩：游侠、蛮王、法师；双闸交汇 3 对 3，本地电脑补位", "flame.fill", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
                     .contentShape(Rectangle())
                 }
                 .foregroundStyle(.primary)
+                .accessibilityIdentifier("arena.enter")
                 NavigationLink { TileGameHomeView() } label: {
                     row("叠叠消", "三张一样的凑一起消掉；今日挑战、挑战码、和同事比谁先消完", "square.stack.3d.up.fill", 6)
                 }
