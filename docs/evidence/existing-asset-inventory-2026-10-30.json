@@ -1,0 +1,395 @@
+{
+  "auditedSourceCommit": "7604b56cfd38ef688607488bd705c0120a0f0ea9",
+  "files": [
+    {
+      "path": "App/Arena3D/Barbarian.glb",
+      "bytes": 3808460,
+      "sha256": "681065ca61c267f6466a305ffd0f9f3481dc52d425060bf236c277de9cbec349"
+    },
+    {
+      "path": "App/Arena3D/KayKit-LICENSE.txt",
+      "bytes": 1677,
+      "sha256": "51bbef081c8cc8a45642c74f13faa4a0ec9a6c1c0acfbefcdacd5352725aa143"
+    },
+    {
+      "path": "App/Arena3D/Knight.glb",
+      "bytes": 3836112,
+      "sha256": "f9eaa4d5b19bed86fa0ea8c29abfede3990d3c0726c79a654fa49b1dd8b53089"
+    },
+    {
+      "path": "App/Arena3D/Mage.glb",
+      "bytes": 3665844,
+      "sha256": "42d90fe6b28e67b97679b30a2f6c1d14afdc5d8b741c2ba8e128e1678d276544"
+    },
+    {
+      "path": "App/Arena3D/Ranger_FaceSample.glb",
+      "bytes": 531144,
+      "sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0"
+    },
+    {
+      "path": "App/Arena3D/Ranger_Original.glb",
+      "bytes": 589772,
+      "sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d"
+    },
+    {
+      "path": "App/Arena3D/Rogue.glb",
+      "bytes": 3681628,
+      "sha256": "4b642e0b01baa76e279d666781fe339d51b84f4a43b617d9649dcd23cbe5f30c"
+    },
+    {
+      "path": "App/Arena3D/Rogue_Hooded.glb",
+      "bytes": 3718644,
+      "sha256": "9b34ff6a532b2d77704a714a21fd4e6f9915b45fa9daefda3c1cc22c2dca6f1e"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Axe.bin",
+      "bytes": 25700,
+      "sha256": "51c6dea48aa320f39a32bb13605a204bc01f262fd7e5f564790a4964381a5db5"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Axe.gltf",
+      "bytes": 1923,
+      "sha256": "4052b9639bd556292577fcc8994dd498c2e5166764d8634fdfcb762d84bef16a"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Blade.bin",
+      "bytes": 20056,
+      "sha256": "29fa7b918b46c5a9cd3039f9596522a7455ddc829d3cac8bab4a09bb60443ddc"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Blade.gltf",
+      "bytes": 1925,
+      "sha256": "44387c7e4ab6be15fd37f07f1cb00e37b43e0ffdce839a3261d40beb726bc1ed"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Crossbow.bin",
+      "bytes": 28848,
+      "sha256": "24b2e578174a56fb1e78a51366dc15d19eb7267b42a7ac7ae82d77b0430cc8df"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Crossbow.gltf",
+      "bytes": 1930,
+      "sha256": "3d93707361264c126fee7c7a2386d5d85d574b3d4e806257d7ebd416747e0ed7"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Mage.glb",
+      "bytes": 4790340,
+      "sha256": "ea7a3da78941d65e50e35a5f4c681a62e2ed9d21e6060209755616fa25b5a0b4"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Minion.glb",
+      "bytes": 4769096,
+      "sha256": "3ca64dce65af7acb9f93ebe240b70874382b5d7f253ec8a965a04efdc659d847"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Rogue.glb",
+      "bytes": 4768576,
+      "sha256": "a7f2cc98daab63811a85257a98e5b3ecb6d618edfa287a9b69b5f5a2ba553df1"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Shield_Large_A.bin",
+      "bytes": 34476,
+      "sha256": "717959b294c488211ff9212945f15bf8ae8ac90a8a1bae948bb2c3b19c994a81"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Shield_Large_A.gltf",
+      "bytes": 1949,
+      "sha256": "07a7d15019fdc1aad96b9054682603285c248c90a8ad947f5d0fc231c8a0b211"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Staff.bin",
+      "bytes": 70748,
+      "sha256": "4b586071c01ec91edb12f2f57308f3e5c3ea0bf5ab69a5ff32ca355e7668680d"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Staff.gltf",
+      "bytes": 1935,
+      "sha256": "e2f10f0aca5fdc34b14777cb2954e75efce89008bff0c6de3be663710749b584"
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Warrior.glb",
+      "bytes": 4812380,
+      "sha256": "c2840d10f2b70cb487e24865772db71ceaae713df155496f27a86214ac3250b9"
+    },
+    {
+      "path": "App/Arena3D/flag_blue.bin",
+      "bytes": 2464,
+      "sha256": "2ff9fa2caea9c02a2eda8092c203e378ef92dca7741d41110627740211fc03a7"
+    },
+    {
+      "path": "App/Arena3D/flag_blue.gltf",
+      "bytes": 3023,
+      "sha256": "de33035f0e9945f8d4e6ca3242e18f4822227cc8cc3a1afd9f0d193419573f08"
+    },
+    {
+      "path": "App/Arena3D/flag_red.bin",
+      "bytes": 2464,
+      "sha256": "04aea453efb0632960b2395a356fd0ee2fd4c24e16fe726be956b1ee182cf4b5"
+    },
+    {
+      "path": "App/Arena3D/flag_red.gltf",
+      "bytes": 3020,
+      "sha256": "c1f76b1ca3d47a30a868500ecbe2844e89b75b4bebc7283f41bd37561aa58c1f"
+    },
+    {
+      "path": "App/Arena3D/hexagons_medieval.png",
+      "bytes": 15783,
+      "sha256": "5301a06866ba3be68dcc14cc429bd6d0f69004b72884283715d7e233f2e9782e"
+    },
+    {
+      "path": "App/Arena3D/rock_single_A.bin",
+      "bytes": 1228,
+      "sha256": "0f038d45b8df2c9efa034e5d3c3635a475a2683e2e741aa9a0cd197c5689e2ce"
+    },
+    {
+      "path": "App/Arena3D/rock_single_A.gltf",
+      "bytes": 3031,
+      "sha256": "ddf307987fb18aa8e7594bb399de3943e497b50bc01aae0e7292a38418944915"
+    },
+    {
+      "path": "App/Arena3D/rock_single_B.bin",
+      "bytes": 1628,
+      "sha256": "fcc0d8a45e7f6ad0eb674de934b0fa54be8f3dd61fa389446dd6b7be2cd2e2c1"
+    },
+    {
+      "path": "App/Arena3D/rock_single_B.gltf",
+      "bytes": 3052,
+      "sha256": "2014965b7131e6f9a804be7a90ba3800b6035e8af2ff6f0bf67c5e72cac1bf15"
+    },
+    {
+      "path": "App/Arena3D/rock_single_C.bin",
+      "bytes": 2192,
+      "sha256": "7d63c76a9f576bda17a63c77d8f7c9f617e11ed57e3459d9c8d5da7ebdf0b8f1"
+    },
+    {
+      "path": "App/Arena3D/rock_single_C.gltf",
+      "bytes": 3052,
+      "sha256": "4cbf4a67fa176d2374b4863348fddf7879b892e612dd455ad14173f17172d45b"
+    },
+    {
+      "path": "App/Arena3D/skeleton_texture.png",
+      "bytes": 17037,
+      "sha256": "15741a25c53e04fa9bf3beac3bc0de442359404b1ff9be863b892cb551ad3657"
+    },
+    {
+      "path": "App/Arena3D/trees_A_large.bin",
+      "bytes": 57024,
+      "sha256": "0f4fe0b3677bfc15b841632db34db8b50c45319492a8e89b6663f679b2525227"
+    },
+    {
+      "path": "App/Arena3D/trees_A_large.gltf",
+      "bytes": 3066,
+      "sha256": "8747dd5f3d7209e0b01c4b6af662a776db451374b7ee11671d8fa9676d89c33f"
+    },
+    {
+      "path": "App/Arena3D/trees_A_medium.bin",
+      "bytes": 31680,
+      "sha256": "3cc6f0f007aa2dc0042583741f35d9b0b8e65496e7289b9e312626c3936ff8b2"
+    },
+    {
+      "path": "App/Arena3D/trees_A_medium.gltf",
+      "bytes": 3066,
+      "sha256": "c330d7c775c50b7ccbc6ce7799e699fbdbbeb14a390315e85419dc0dfe5178a6"
+    },
+    {
+      "path": "App/Arena3D/trees_A_small.bin",
+      "bytes": 28512,
+      "sha256": "3f968cff82e97d88c13dc73379606aea406cd2c1c98690e59ef64c5b884da507"
+    },
+    {
+      "path": "App/Arena3D/trees_A_small.gltf",
+      "bytes": 3058,
+      "sha256": "5065a925666cc65caad857bcdebe5dda33aa19dab465504f809a17f6526bfbb4"
+    },
+    {
+      "path": "App/Arena3D/trees_B_large.bin",
+      "bytes": 51960,
+      "sha256": "125ccb49803100448883631c079c5b95c2d4d2cf6551dd59d31f46eb063702af"
+    },
+    {
+      "path": "App/Arena3D/trees_B_large.gltf",
+      "bytes": 3067,
+      "sha256": "96079d9ef389d4f51512bed4a8da3d05f89b8bb6a24e1ef0e04711de27f141fd"
+    },
+    {
+      "path": "App/Arena3D/trees_B_medium.bin",
+      "bytes": 37096,
+      "sha256": "1e9220c141074ce2d530a14996cd1fc1d02dc49f76c1717cd4e55b8cd3cf1936"
+    },
+    {
+      "path": "App/Arena3D/trees_B_medium.gltf",
+      "bytes": 3066,
+      "sha256": "339abd58c47a5d7f2da2b30fe448c72452471a99b22007bc412d7439ef5384ca"
+    },
+    {
+      "path": "App/Arena3D/trees_B_small.bin",
+      "bytes": 22168,
+      "sha256": "82879711b21f0135129abdfe8f1d89d93f88cec35b2f7d63922d871fea46fdd7"
+    },
+    {
+      "path": "App/Arena3D/trees_B_small.gltf",
+      "bytes": 3059,
+      "sha256": "f9a491097a116f98a11022b1b1adb563946ba28751f9184d689a8019ef4d7e41"
+    },
+    {
+      "path": "App/ArenaSounds/arena_blink.wav",
+      "bytes": 14156,
+      "sha256": "ad165cb4dfcbcfe4ca5f5cb165979bb08017c3f08868ebf79940d3b1d8299562"
+    },
+    {
+      "path": "App/ArenaSounds/arena_boom.wav",
+      "bytes": 35324,
+      "sha256": "f4231a575e3b2a14b25f18dd351b45816b1d95aef9089dccc3e1b12a60011fd7"
+    },
+    {
+      "path": "App/ArenaSounds/arena_gadget.wav",
+      "bytes": 15038,
+      "sha256": "db512210215da8f6fe8e73a2b19eeddbab3c1acc69957ddd3cddfa820ad142f1"
+    },
+    {
+      "path": "App/ArenaSounds/arena_heal.wav",
+      "bytes": 28268,
+      "sha256": "f0e44d9d20ac9664ced67073cd592a6a628b2573ab9ebf020c368f3ea31d74ee"
+    },
+    {
+      "path": "App/ArenaSounds/arena_hit.wav",
+      "bytes": 5776,
+      "sha256": "f10787f741aa53de607c3bf7e29c13b3154fe00a6fb2b4b5a8fa23d259c196d3"
+    },
+    {
+      "path": "App/ArenaSounds/arena_hyper.wav",
+      "bytes": 44144,
+      "sha256": "2eb637520fb034b0246c2b6956ef3dba9e1ea41b22eb7266182b25f51de72af8"
+    },
+    {
+      "path": "App/ArenaSounds/arena_ko.wav",
+      "bytes": 30912,
+      "sha256": "cd330cdef4caf114c9f0a71141c1e986f20f771ff0677de08715a064689d9f3a"
+    },
+    {
+      "path": "App/ArenaSounds/arena_lobby.wav",
+      "bytes": 352844,
+      "sha256": "36342050705580c2e586eb7b6fe99bc4723ffa8265089d74f27c8ea2cec115e6"
+    },
+    {
+      "path": "App/ArenaSounds/arena_lose.wav",
+      "bytes": 87362,
+      "sha256": "0e71ec35920526eae83f32c3627705728f7610690f99f86400796bb437743d53"
+    },
+    {
+      "path": "App/ArenaSounds/arena_magic.wav",
+      "bytes": 17684,
+      "sha256": "c4033b73273a86da15b6d2cfc63c8a097643660a08bca993bf425ea68f8ef485"
+    },
+    {
+      "path": "App/ArenaSounds/arena_music.wav",
+      "bytes": 1323044,
+      "sha256": "97f0d9bb57f3088bf5aa1001c0309c7f043a1b546c4f4eb8c4e96ddc8164492d"
+    },
+    {
+      "path": "App/ArenaSounds/arena_pickup.wav",
+      "bytes": 19448,
+      "sha256": "7d81e77f4d5c9cc85a2508d3cc5d21784745744f62c8fe28a0743240201ac382"
+    },
+    {
+      "path": "App/ArenaSounds/arena_respawn.wav",
+      "bytes": 28708,
+      "sha256": "f9e8b3f5701bf483d1492fbe227678258ed4af55ecc258b2778f5f6ab2747702"
+    },
+    {
+      "path": "App/ArenaSounds/arena_shot.wav",
+      "bytes": 7100,
+      "sha256": "28ade3f13f7c2ac98e1e5784dd5a5df3ab0179c5054d85ca85c972a5b5eae95f"
+    },
+    {
+      "path": "App/ArenaSounds/arena_slash.wav",
+      "bytes": 12392,
+      "sha256": "0aae4ce880470219113014c252d7c3daffa54e9ce05f448f5128263217cdfcc7"
+    },
+    {
+      "path": "App/ArenaSounds/arena_super.wav",
+      "bytes": 26504,
+      "sha256": "c3dd4535cd62e6986eaa9d63746582fa2650a8bb48c8347b61394e8695be2ec4"
+    },
+    {
+      "path": "App/ArenaSounds/arena_theme_battle.m4a",
+      "bytes": 515003,
+      "sha256": "b32dc6363813214cf58746fd7a95241a9a4db0b18fa3a111a7ba969067b1e928"
+    },
+    {
+      "path": "App/ArenaSounds/arena_theme_lobby.m4a",
+      "bytes": 571017,
+      "sha256": "09aaba2e90681c928519fbaadc524abdb5805d16021fbd5a3196470d8ef971ef"
+    },
+    {
+      "path": "App/ArenaSounds/arena_theme_lose.m4a",
+      "bytes": 24116,
+      "sha256": "3621cba557dbe736fad73560e10a3a9f578b9a54f59381b528bdca23b56a229b"
+    },
+    {
+      "path": "App/ArenaSounds/arena_theme_win.m4a",
+      "bytes": 24266,
+      "sha256": "232c5e456e0a717d09d87bcde4a8a8604c11ac5bd17a076132a8433d4b1127fd"
+    },
+    {
+      "path": "App/ArenaSounds/arena_win.wav",
+      "bytes": 82952,
+      "sha256": "3ffa54cc74f7d6891cb2aed88be9d9372e4b8efc1e8618101fc4540d218582cd"
+    },
+    {
+      "path": "art/lobby/icons/battle-gear.svg",
+      "bytes": 958,
+      "sha256": "1b3f1949913e05137863345beb747fb9a4ff91fe2e0f82c01220e909d17bcaf9"
+    },
+    {
+      "path": "art/lobby/icons/chest.svg",
+      "bytes": 733,
+      "sha256": "338f01ec81d3b0c8acb4631a4a28224ab44392eb2e04d0ace5611e004fa98391"
+    },
+    {
+      "path": "art/lobby/icons/cog.svg",
+      "bytes": 1651,
+      "sha256": "79adb133e3bc3a9a38a0db715ecd1cb08d55bc012c70157a7bb9d650fb7cea6e"
+    },
+    {
+      "path": "art/lobby/icons/coins-pile.svg",
+      "bytes": 6426,
+      "sha256": "13acaac7dbbecee3492c7137454329a510e5c6ec10be8ac8f7002c9e39bf48c9"
+    },
+    {
+      "path": "art/lobby/icons/crested-helmet.svg",
+      "bytes": 1465,
+      "sha256": "0a818b8bff0bcfc86e8e1cb2119bb49a317ac222496e7467d9558664ae643d91"
+    },
+    {
+      "path": "art/lobby/icons/crossed-swords.svg",
+      "bytes": 1254,
+      "sha256": "d977de17aa347c15a311e96ee4c7194837e47d119d2b5a06bc1dbbd2cd1a92f2"
+    },
+    {
+      "path": "art/lobby/icons/star-medal.svg",
+      "bytes": 557,
+      "sha256": "4ba329751f5b0c1e480006a281c45431628a2f291ded727dda0fbfad6e2fe224"
+    },
+    {
+      "path": "art/lobby/icons/team-upgrade.svg",
+      "bytes": 1270,
+      "sha256": "be6c23ba3cc60be42f95ba1f84a636b2c404d9902d21d7fe0ebd17aa555833ad"
+    },
+    {
+      "path": "art/lobby/icons/three-friends.svg",
+      "bytes": 912,
+      "sha256": "f01a57f0999c2e1369be610e30a75efad8c4b84463adf046d50f3c04128fe167"
+    },
+    {
+      "path": "art/lobby/icons/treasure-map.svg",
+      "bytes": 2145,
+      "sha256": "514ec6a9b97e74f10cbb212357819b44feaac26e0e2d461862d59b58f67ffa52"
+    },
+    {
+      "path": "art/lobby/icons/trophy.svg",
+      "bytes": 2346,
+      "sha256": "7619d146013b40d479cd5ac4190fab026843dec4ebacaf1b89ee21b9ac7dcaf1"
+    }
+  ]
+}
