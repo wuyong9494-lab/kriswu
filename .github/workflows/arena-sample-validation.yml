@@ -7,6 +7,7 @@ on:
       - 'Sources/ShiftCore/**'
       - '.github/scripts/capture_arena_sample.py'
       - '.github/workflows/arena-sample-validation.yml'
+      - '.github/scripts/record_arena_sample.py'
       - 'project.yml'
   workflow_dispatch:
 permissions:
@@ -33,6 +34,7 @@ jobs:
           xcodebuild -version
       - name: Validate assets and generate project
         run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_*arena_sample.py'
           python3 scripts/assets/validate_ranger.py
           python3 scripts/assets/validate_ranger.py --face-sample
           brew install xcodegen
@@ -94,6 +96,9 @@ jobs:
           for image in sample-shots/canyon/*.png sample-shots/harbor/*.png; do
             /tmp/check-sample-capture "$image"
           done
+      - name: Record six-second Twin Gates opening
+        timeout-minutes: 6
+        run: python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion
       - name: Shut down sample simulator
         if: always()
         timeout-minutes: 2
