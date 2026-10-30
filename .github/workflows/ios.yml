@@ -30,7 +30,9 @@ env:
 
 jobs:
   build:
-    runs-on: macos-15
+    # Use the standard Intel pool while hosted macOS ARM runners are capacity constrained.
+    # Xcode 26 still cross-compiles the same iPhone arm64 target.
+    runs-on: macos-15-intel
     concurrency:
       group: build-${{ github.ref }}
       cancel-in-progress: true
