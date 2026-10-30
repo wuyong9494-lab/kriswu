@@ -1,0 +1,137 @@
+{
+  "source_commit": "5b298adf9e4a4adb3e2755daf2491f87b14ff93a",
+  "research_date": "2026-10-30",
+  "method": "Read GLB JSON chunk and accessor counts. All primitives including hidden accessories; not runtime draw calls. No model edits.",
+  "assets": [
+    {
+      "path": "App/Arena3D/Barbarian.glb",
+      "bytes": 3808460,
+      "sha256": "681065ca61c267f6466a305ffd0f9f3481dc52d425060bf236c277de9cbec349",
+      "triangles": 5690,
+      "exported_vertices_across_primitives": 4595,
+      "primitives": 13,
+      "materials": 9,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 76
+    },
+    {
+      "path": "App/Arena3D/Knight.glb",
+      "bytes": 3836112,
+      "sha256": "f9eaa4d5b19bed86fa0ea8c29abfede3990d3c0726c79a654fa49b1dd8b53089",
+      "triangles": 5804,
+      "exported_vertices_across_primitives": 5017,
+      "primitives": 16,
+      "materials": 9,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 76
+    },
+    {
+      "path": "App/Arena3D/Mage.glb",
+      "bytes": 3665844,
+      "sha256": "42d90fe6b28e67b97679b30a2f6c1d14afdc5d8b741c2ba8e128e1678d276544",
+      "triangles": 4846,
+      "exported_vertices_across_primitives": 3991,
+      "primitives": 12,
+      "materials": 8,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 76
+    },
+    {
+      "path": "App/Arena3D/Ranger_Original.glb",
+      "bytes": 589772,
+      "sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
+      "triangles": 13724,
+      "exported_vertices_across_primitives": 7109,
+      "primitives": 1,
+      "materials": 1,
+      "skin_joint_counts": [
+        22
+      ],
+      "animations_in_file": 8
+    },
+    {
+      "path": "App/Arena3D/Rogue.glb",
+      "bytes": 3681628,
+      "sha256": "4b642e0b01baa76e279d666781fe339d51b84f4a43b617d9649dcd23cbe5f30c",
+      "triangles": 5306,
+      "exported_vertices_across_primitives": 4411,
+      "primitives": 12,
+      "materials": 8,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 76
+    },
+    {
+      "path": "App/Arena3D/Rogue_Hooded.glb",
+      "bytes": 3718644,
+      "sha256": "9b34ff6a532b2d77704a714a21fd4e6f9915b45fa9daefda3c1cc22c2dca6f1e",
+      "triangles": 6079,
+      "exported_vertices_across_primitives": 5005,
+      "primitives": 13,
+      "materials": 8,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 76
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Mage.glb",
+      "bytes": 4790340,
+      "sha256": "ea7a3da78941d65e50e35a5f4c681a62e2ed9d21e6060209755616fa25b5a0b4",
+      "triangles": 4178,
+      "exported_vertices_across_primitives": 3097,
+      "primitives": 10,
+      "materials": 9,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 95
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Minion.glb",
+      "bytes": 4769096,
+      "sha256": "3ca64dce65af7acb9f93ebe240b70874382b5d7f253ec8a965a04efdc659d847",
+      "triangles": 3778,
+      "exported_vertices_across_primitives": 2622,
+      "primitives": 9,
+      "materials": 9,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 95
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Rogue.glb",
+      "bytes": 4768576,
+      "sha256": "a7f2cc98daab63811a85257a98e5b3ecb6d618edfa287a9b69b5f5a2ba553df1",
+      "triangles": 4022,
+      "exported_vertices_across_primitives": 2740,
+      "primitives": 10,
+      "materials": 9,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 95
+    },
+    {
+      "path": "App/Arena3D/Skeleton_Warrior.glb",
+      "bytes": 4812380,
+      "sha256": "c2840d10f2b70cb487e24865772db71ceaae713df155496f27a86214ac3250b9",
+      "triangles": 4626,
+      "exported_vertices_across_primitives": 3756,
+      "primitives": 10,
+      "materials": 9,
+      "skin_joint_counts": [
+        41
+      ],
+      "animations_in_file": 95
+    }
+  ]
+}
