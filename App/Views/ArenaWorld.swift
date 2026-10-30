@@ -506,7 +506,7 @@ final class ArenaWorldView: SCNView {
         if !purpleSample && !harborSample { root.addChildNode(ArenaArt.border(width: width, height: height)) }
 
         // 墙：木箱、木桶、石块（同一格每次都一样）；草丛
-        let wallNode = harborSample ? ArenaHarborArt.walls(map).flattenedClone() : purpleSample ? ArenaPurpleArt.walls(map) : walls(map, look: look)
+        let wallNode = harborSample ? ArenaHarborArt.walls(map) : purpleSample ? ArenaPurpleArt.walls(map) : walls(map, look: look)
         wallNode.castsShadow = false
         root.addChildNode(wallNode)
         for y in 0..<map.height {
