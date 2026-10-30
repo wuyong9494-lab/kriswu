@@ -45,6 +45,26 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertLessThan(model.animated.count, 22, "Static anchors should not be sampled every frame")
     }
 
+    func testHarborArtPlacesSolidsOnlyOnDeclaredWallCells() throws {
+        let map = ArenaMap.twinGates
+        let walls = ArenaHarborArt.walls(map)
+        var expected = 0
+        for y in 0..<map.height {
+            for x in 0..<map.width where map.tile(x, y) == .wall {
+                expected += 1
+                let cell = try XCTUnwrap(walls.childNode(withName: "wall-\(x)-\(y)", recursively: false))
+                XCTAssertEqual(cell.position.x, Float(x) + 0.5)
+                XCTAssertEqual(cell.position.z, Float(y) + 0.5)
+                let (low, high) = cell.boundingBox
+                XCTAssertGreaterThanOrEqual(low.x, -0.501)
+                XCTAssertLessThanOrEqual(high.x, 0.501)
+                XCTAssertGreaterThanOrEqual(low.z, -0.501)
+                XCTAssertLessThanOrEqual(high.z, 0.501)
+            }
+        }
+        XCTAssertEqual(walls.childNodes.count, expected)
+    }
+
     func testSampleBoltsKeepTeamSilhouetteAndActualRadiusAcrossStrengths() throws {
         for ally in [true, false] {
             for strength in 0...2 {

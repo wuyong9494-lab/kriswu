@@ -443,6 +443,7 @@ final class ArenaWorldView: SCNView {
         let root = world.rootNode
         let width = Float(map.width), height = Float(map.height)
         let look = ThemeLook.of(map.theme)
+        let harborSample = controller.qualitySample && map.id == ArenaMap.twinGates.id
 
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
@@ -489,23 +490,23 @@ final class ArenaWorldView: SCNView {
 
         // 地：场地外一大片草，场地里一格格深浅两种绿；上面再铺一层草叶、落叶的细纹
         let lawn = SCNPlane(width: CGFloat(width + 160), height: CGFloat(height + 160))
-        lawn.firstMaterial = purpleSample ? ArenaPurpleArt.outside : grass(look.lawn, repeats: SIMD2(width + 160, height + 160) / 2)
+        lawn.firstMaterial = harborSample ? ArenaHarborArt.outside : purpleSample ? ArenaPurpleArt.outside : grass(look.lawn, repeats: SIMD2(width + 160, height + 160) / 2)
         let lawnNode = SCNNode(geometry: lawn)
         lawnNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         lawnNode.simdPosition = SIMD3(width / 2, -0.02, height / 2)
         lawnNode.castsShadow = false
         root.addChildNode(lawnNode)
         let floor = SCNPlane(width: CGFloat(width), height: CGFloat(height))
-        floor.firstMaterial = purpleSample ? ArenaPurpleArt.floor(map) : grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
+        floor.firstMaterial = harborSample ? ArenaHarborArt.floor(map) : purpleSample ? ArenaPurpleArt.floor(map) : grass(groundImage(game, look: look), repeats: SIMD2(width, height) / 2)
         let floorNode = SCNNode(geometry: floor)
         floorNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         floorNode.simdPosition = SIMD3(width / 2, 0, height / 2)
         floorNode.castsShadow = false
         root.addChildNode(floorNode)
-        if !purpleSample { root.addChildNode(ArenaArt.border(width: width, height: height)) }
+        if !purpleSample && !harborSample { root.addChildNode(ArenaArt.border(width: width, height: height)) }
 
         // 墙：木箱、木桶、石块（同一格每次都一样）；草丛
-        let wallNode = purpleSample ? ArenaPurpleArt.walls(map) : walls(map, look: look)
+        let wallNode = harborSample ? ArenaHarborArt.walls(map).flattenedClone() : purpleSample ? ArenaPurpleArt.walls(map) : walls(map, look: look)
         wallNode.castsShadow = false
         root.addChildNode(wallNode)
         for y in 0..<map.height {
@@ -522,7 +523,7 @@ final class ArenaWorldView: SCNView {
                     bends: !purpleSample))
             }
         }
-        if !purpleSample { root.addChildNode(scenery(game)) }
+        if !purpleSample && !harborSample { root.addChildNode(scenery(game)) }
 
         // 各个玩法的东西
         let center = SIMD3(Float(map.center.x), 0, Float(map.center.y))
