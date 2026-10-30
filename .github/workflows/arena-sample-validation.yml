@@ -54,10 +54,13 @@ jobs:
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
-          import json, sys
+          import json, sys, subprocess
           devices = json.load(sys.stdin)['devices']
-          phones = [d for runtime, entries in sorted(devices.items(), reverse=True) if 'iOS' in runtime for d in entries if d['name'].startswith('iPhone')]
-          print(next((d for d in phones if d['name'] == 'iPhone 17 Pro Max'), phones[0])['udid'])")
+          phones = [(runtime, d) for runtime, entries in sorted(devices.items(), reverse=True) if 'iOS' in runtime for d in entries if d['name'].startswith('iPhone')]
+          runtime, phone = next((item for item in phones if item[1]['name'] == 'iPhone 17 Pro Max'), phones[0])
+          print('Capture device: ' + phone['name'] + ' / ' + runtime, file=sys.stderr, flush=True)
+          created = subprocess.run(['xcrun', 'simctl', 'create', 'Arena Sample Capture', phone['deviceTypeIdentifier'], runtime], capture_output=True, text=True, check=True, timeout=60)
+          print(created.stdout.strip())")
           export DEVICE
           echo "SAMPLE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
           python3 - <<'PY'
@@ -72,7 +75,7 @@ jobs:
           print('Application installed', flush=True)
           PY
       - name: Capture sample menu pages
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/menus menus
           for image in sample-shots/menus/*.png; do /tmp/check-sample-capture "$image"; done
@@ -103,6 +106,10 @@ jobs:
                   subprocess.run(['xcrun', 'simctl', 'shutdown', device], timeout=30, check=False)
               except subprocess.TimeoutExpired:
                   print('Simulator shutdown timed out; runner cleanup will handle it')
+              try:
+                  subprocess.run(['xcrun', 'simctl', 'delete', device], timeout=30, check=False)
+              except subprocess.TimeoutExpired:
+                  print('Simulator deletion timed out; runner cleanup will handle it')
           PYCODE
       - uses: actions/upload-artifact@v4
         if: always()

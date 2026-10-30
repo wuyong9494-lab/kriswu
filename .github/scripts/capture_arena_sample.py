@@ -16,13 +16,15 @@ def simctl(*args, check=True, timeout=150):
                           capture_output=True, text=True, timeout=timeout).stdout.strip()
 
 def stop_app(device):
-    # Terminating a never-launched app can hang in CoreSimulator. Treat this as
-    # best effort, then require a freshly written, identity-checked readiness file.
-    # A still-running old scene cannot pass merely because launch returned success.
+    # A timed-out terminate can leave a late stop request racing the next launch.
+    # Recover only the requested simulator; never kill unrelated host processes.
     try:
         simctl('terminate', device, APP_ID, check=False, timeout=20)
     except subprocess.TimeoutExpired:
-        print('Simulator terminate timed out; launch must report fresh scene readiness', flush=True)
+        print('Simulator terminate timed out; restarting this capture device', flush=True)
+        simctl('shutdown', device, check=False, timeout=30)
+        simctl('boot', device, timeout=90)
+        simctl('bootstatus', device, '-b', timeout=120)
 
 def capture_menus(device, output, data):
     marker = data / 'Documents/arena-sample-menu-ready.json'
@@ -62,7 +64,9 @@ def capture_menus(device, output, data):
         assert current.get('map') == 'twin_gates_sample_v1', current
         assert current.get('width', 0) > 0 and current.get('height', 0) > 0, current
         if page == 0:
-            current['model'] = evidence['model']
+            model = json.loads(model_marker.read_text())
+            assert model.get('asset') == 'Ranger_FaceSample.glb' and model.get('qualitySample') is True, model
+            current['model'] = model
         evidence = current
         label = 'sample-hero' if page == 0 else 'sample-map'
         simctl('io', device, 'screenshot', str(output / (label + '.png')))

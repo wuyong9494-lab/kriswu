@@ -63,10 +63,17 @@ class CaptureIdentityTests(unittest.TestCase):
                     (base / 'Documents/arena-capture-ready.json').write_text(json.dumps(
                         {'asset': 'Ranger_FaceSample.glb', 'qualitySample': True}))
                 return ''
-            with patch.object(capture, 'simctl', side_effect=simctl), patch.object(capture.time, 'sleep'):
+            def finish_layout(delay):
+                if delay == 2:
+                    marker = base / 'Documents/arena-capture-ready.json'
+                    model = json.loads(marker.read_text())
+                    model['viewHeight'] = 173
+                    marker.write_text(json.dumps(model))
+            with patch.object(capture, 'simctl', side_effect=simctl), patch.object(capture.time, 'sleep', side_effect=finish_layout):
                 capture.capture_menus('device', output, base)
             hero = json.loads((output / 'sample-hero.json').read_text())
             self.assertEqual(hero['model']['asset'], 'Ranger_FaceSample.glb')
+            self.assertEqual(hero['model']['viewHeight'], 173, 'Record the model after final layout, not its first ready size')
             self.assertEqual(json.loads((output / 'sample-map.json').read_text())['page'], 1)
             self.assertEqual(len([x for x in calls if x[0] == 'io']), 2)
 
@@ -116,10 +123,18 @@ class CaptureIdentityTests(unittest.TestCase):
                 self.assertFalse((output / 'sample-hero.json').exists())
                 self.assertTrue((output / 'failed-page-0.json').exists())
 
-    def test_stop_timeout_is_bounded_and_does_not_mask_launch_failure(self):
-        with patch.object(capture, 'simctl', side_effect=capture.subprocess.TimeoutExpired('terminate', 20)) as command:
+    def test_stop_timeout_restarts_only_the_requested_device(self):
+        with patch.object(capture, 'simctl', side_effect=[capture.subprocess.TimeoutExpired('terminate', 20), '', '', '']) as command:
             capture.stop_app('device')
-        command.assert_called_once_with('terminate', 'device', capture.APP_ID, check=False, timeout=20)
+        self.assertEqual([c.args for c in command.call_args_list], [
+            ('terminate', 'device', capture.APP_ID), ('shutdown', 'device'),
+            ('boot', 'device'), ('bootstatus', 'device', '-b')])
+        self.assertEqual([c.kwargs['timeout'] for c in command.call_args_list], [20, 30, 90, 120])
+
+    def test_failed_recovery_and_launch_timeouts_remain_failures(self):
+        with patch.object(capture, 'simctl', side_effect=[capture.subprocess.TimeoutExpired('terminate', 20), capture.subprocess.TimeoutExpired('shutdown', 30)]):
+            with self.assertRaises(capture.subprocess.TimeoutExpired):
+                capture.stop_app('device')
         with patch.object(capture.subprocess, 'run', side_effect=capture.subprocess.TimeoutExpired('launch', 150)):
             with self.assertRaises(capture.subprocess.TimeoutExpired):
                 capture.simctl('launch', 'device', capture.APP_ID)
