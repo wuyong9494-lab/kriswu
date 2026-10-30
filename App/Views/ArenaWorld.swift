@@ -223,6 +223,7 @@ final class ArenaWorldView: SCNView {
     private var flashSlots: [FxSlot] = []
     private var burstSlots: [BurstSlot] = []
     private var trailPool: [SCNParticleSystem] = []
+    private var sampleBoltTemplates: [String: SCNNode] = [:]
 
     /// 飘起来的伤害数字
     private struct Floater {
@@ -351,7 +352,8 @@ final class ArenaWorldView: SCNView {
                 let evidence: [String: Any] = ["simulationTime": controller.game.time, "seed": 170017,
                     "map": controller.game.map.id, "purple": purpleSample, "camera": "fixed map center",
                     "deviceWidth": bounds.width, "deviceHeight": bounds.height,
-                    "rangerAsset": BrawlerLook.of(.ranger).file,
+                    "rangerAsset": BrawlerLook.of(.ranger, qualitySample: controller.qualitySample).file,
+                    "qualitySample": controller.qualitySample,
                     "fighters": controller.game.fighters.map { ["id": $0.id, "x": $0.pos.x, "y": $0.pos.y,
                         "health": $0.health, "alive": $0.alive] as [String: Any] }]
                 if let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) {
@@ -1318,6 +1320,20 @@ final class ArenaWorldView: SCNView {
         let owner = game.fighters.indices.contains(p.owner) ? game.fighters[p.owner].brawler : .ranger
         // 超级充能开着放的大招：紫的
         let hyper = p.isSuper && game.fighters.indices.contains(p.owner) && game.fighters[p.owner].hyperTime > 0
+        if controller.qualitySample && owner == .ranger && p.lob == nil {
+            let height: Float = 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale
+            let ally = p.team == myTeam
+            let key = "\(p.radius)-\(ally)-\(p.isSuper)-\(hyper)"
+            if sampleBoltTemplates[key] == nil {
+                sampleBoltTemplates[key] = ArenaSampleBolt.make(radius: CGFloat(p.radius), ally: ally,
+                    isSuper: p.isSuper, hyper: hyper, height: height)
+            }
+            let root = sampleBoltTemplates[key]!.clone()
+            root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
+            root.simdPosition = SIMD3(Float(p.pos.x), height, Float(p.pos.y))
+            world.rootNode.addChildNode(root)
+            return ProjectileView(root: root, height: height)
+        }
         let tint = hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
         let tintKey = hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
         // 子弹芯是偏白的亮色，外面一圈光晕，后面拖一条尾巴
@@ -1572,6 +1588,10 @@ final class ArenaWorldView: SCNView {
                 slashArc(at: at, facing: shooter.facing, color: color, reach: 1.8, sweep: 1.3)
             default:
                 let muzzle = avatars[fighter].muzzlePosition ?? SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
+                if controller.qualitySample && shooter.brawler == .ranger {
+                    burst(at: muzzle, color: color, count: 6, speed: 1.4, size: 0.09, life: 0.1)
+                    break
+                }
                 burst(at: muzzle, color: color, count: 10, speed: 2.2, size: 0.28, life: 0.14)
                 burst(at: muzzle, color: .white, count: 4, speed: 1.4, size: 0.14, life: 0.08)
                 shotStreak(from: at, facing: shooter.facing, color: color)

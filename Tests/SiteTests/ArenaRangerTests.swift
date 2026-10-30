@@ -45,6 +45,30 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertLessThan(model.animated.count, 22, "Static anchors should not be sampled every frame")
     }
 
+    func testSampleBoltsKeepTeamSilhouetteAndActualRadiusAcrossStrengths() throws {
+        for ally in [true, false] {
+            for strength in 0...2 {
+                let radius: CGFloat = strength == 0 ? 0.22 : 0.32
+                let bolt = ArenaSampleBolt.make(radius: radius, ally: ally, isSuper: strength > 0,
+                                               hyper: strength == 2, height: 0.6)
+                let shell = try XCTUnwrap(bolt.childNode(withName: "team-shell", recursively: true))
+                let color = try XCTUnwrap(shell.geometry?.firstMaterial?.diffuse.contents as? UIColor)
+                XCTAssertEqual(color, ally ? ArenaPalette.allyShot : ArenaPalette.enemyShot)
+                let footprint = try XCTUnwrap(bolt.childNode(withName: "collision-radius", recursively: true))
+                let tube = try XCTUnwrap(footprint.geometry as? SCNTube)
+                XCTAssertEqual(tube.outerRadius, radius, accuracy: 0.0001)
+                XCTAssertEqual(footprint.position.y + 0.6, 0.04, accuracy: 0.0001)
+                XCTAssertNotNil(bolt.childNode(withName: ally ? "ally-inner-tick" : "enemy-forward-notch", recursively: true))
+                bolt.enumerateChildNodes { node, _ in
+                    XCTAssertTrue(node.particleSystems?.isEmpty ?? true)
+                    for material in node.geometry?.materials ?? [] {
+                        XCTAssertNotEqual(material.blendMode, .add, "Stacking shots must not add a white halo")
+                    }
+                }
+            }
+        }
+    }
+
     func testFaceSampleUsesSeparateAssetAndSamplesFacialChannels() throws {
         XCTAssertEqual(BrawlerLook.of(.ranger).file, "Ranger_Original.glb")
         XCTAssertEqual(BrawlerLook.of(.ranger, qualitySample: true).file, "Ranger_FaceSample.glb")
