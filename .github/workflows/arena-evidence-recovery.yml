@@ -1,0 +1,49 @@
+name: Recover saved arena evidence
+on:
+  push:
+    branches: [codex/arena-quality-sample]
+    paths: ['.github/workflows/arena-evidence-recovery.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          repository: wuyong9494-lab/kriswu
+          run-id: 41026778508
+          artifact-ids: 12965399501
+          github-token: ${{ github.token }}
+          path: recovered
+          merge-multiple: true
+      - name: Extract original diagnostic files without rerunning tests
+        run: |
+          python3 - <<'PY'
+          import pathlib, shutil, json, hashlib
+          root=pathlib.Path('recovered')
+          out=pathlib.Path('diagnostics')
+          entries=[]
+          for p in root.rglob('*'):
+              if not p.is_file() or 'sample-flow.xcresult' in p.parts: continue
+              if p.suffix.lower() not in ('.txt','.json','.png','.log'): continue
+              rel=p.relative_to(root); dest=out/rel
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copyfile(p,dest)
+              entries.append(dict(path=str(rel),bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
+          (out/'recovery-source.json').write_text(json.dumps(dict(run=41026778508,artifact=12965399501,sourceCommit='7604b56cfd38ef688607488bd705c0120a0f0ea9',files=entries),indent=2))
+          for p in root.rglob('sample-flow.log'):
+              for line in p.read_text(errors='replace').splitlines():
+                  if 'error:' in line or ('Test Case' in line and ('passed' in line or 'failed' in line)): print(line)
+          print('Recovered',len(entries),'original diagnostic files; no build/test executed')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build465-original-diagnostics
+          path: diagnostics
+          if-no-files-found: error
+          retention-days: 14
