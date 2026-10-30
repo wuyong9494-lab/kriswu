@@ -36,6 +36,11 @@ def capture_menus(device, output, data):
                     break
             time.sleep(0.5)
         else:
+            diagnostic = {'page': page, 'menu': json.loads(marker.read_text()) if marker.exists() else None,
+                          'model': json.loads(model_marker.read_text()) if model_marker.exists() else None}
+            (output / ('failed-page-' + str(page) + '.json')).write_text(json.dumps(diagnostic, indent=2) + '\n')
+            simctl('io', device, 'screenshot', str(output / ('failed-page-' + str(page) + '.png')), check=False)
+            print('Menu readiness failure:', json.dumps(diagnostic), flush=True)
             raise SystemExit('Sample menu or model did not report readiness')
         time.sleep(2)
         label = 'sample-hero' if page == 0 else 'sample-map'

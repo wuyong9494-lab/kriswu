@@ -1938,7 +1938,23 @@ final class ArenaShowcaseView: SCNView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil { stop() } else { start() }
+        if window == nil { stop() } else {
+            start()
+            retryCaptureReadiness(remaining: 40)
+        }
+    }
+
+    /// Fixed-size previews may not relayout when the enclosing window rotates.
+    /// Recheck only demo capture readiness, on the main actor, without retaining a closed view.
+    private func retryCaptureReadiness(remaining: Int) {
+        guard window != nil, !captureReadyWritten, remaining > 0,
+              ProcessInfo.processInfo.arguments.contains("-demo"),
+              UserDefaults.standard.bool(forKey: "arena.previewRanger") || UserDefaults.standard.string(forKey: "arena.previewBrawler") != nil else { return }
+        fitShowcaseCamera()
+        guard !captureReadyWritten else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.retryCaptureReadiness(remaining: remaining - 1)
+        }
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
