@@ -511,16 +511,16 @@ final class ArenaWorldView: SCNView {
         root.addChildNode(wallNode)
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .bush && ArenaDiagnostics.shared.variant != .noBushes {
-                let node = SCNNode(geometry: purpleSample ? ArenaPurpleArt.bush : ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
+                let node = SCNNode(geometry: harborSample ? ArenaHarborArt.bush : purpleSample ? ArenaPurpleArt.bush : ArenaArt.bushes[(x * 7 + y * 3) % ArenaArt.bushes.count])
                 node.simdPosition = SIMD3(Float(x) + 0.5, 0, Float(y) + 0.5)
                 node.simdEulerAngles = SIMD3(0, Float((x * 7 + y * 13) % 4) * .pi / 2, 0)
-                let size: Float = purpleSample ? 1 : 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
+                let size: Float = (purpleSample || harborSample) ? 1 : 1.45 + Float((x * 5 + y * 3) % 4) * 0.06
                 node.simdScale = SIMD3(1, size, 1)
                 node.castsShadow = false
                 root.addChildNode(node)
                 bushes.append(ArenaBushVisual(node: node,
                     patchID: map.bushId(at: V2(Double(x) + 0.5, Double(y) + 0.5)),
-                    bends: !purpleSample))
+                    bends: !purpleSample && !harborSample))
             }
         }
         if !purpleSample && !harborSample { root.addChildNode(scenery(game)) }
@@ -1335,10 +1335,10 @@ final class ArenaWorldView: SCNView {
             world.rootNode.addChildNode(root)
             return ProjectileView(root: root, height: height)
         }
-        let tint = hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
-        let tintKey = hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
+        let tint = controller.qualitySample ? (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot) : hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
+        let tintKey = controller.qualitySample ? (p.team == myTeam ? "sample-ally" : "sample-enemy") : hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
         // 子弹芯是偏白的亮色，外面一圈光晕，后面拖一条尾巴
-        let core = Self.lighter(tint, 0.72)
+        let core = Self.lighter(tint, controller.qualitySample ? 0.22 : 0.72)
         if let lob = p.lob {
             // 扔出去的火球：天上的球、地上的影子、落点的圈
             let root = SCNNode()
@@ -1351,8 +1351,8 @@ final class ArenaWorldView: SCNView {
                 return sphere
             })
             ball.castsShadow = false
-            ball.addChildNode(halo(hyper ? "hyperfire" : (p.isSuper ? "fire" : tintKey), fire, size: radius * 5))
-            ball.addParticleSystem(trail(fire, size: p.isSuper ? 0.5 : 0.3))
+            if !controller.qualitySample { ball.addChildNode(halo(hyper ? "hyperfire" : (p.isSuper ? "fire" : tintKey), fire, size: radius * 5)) }
+            ball.addParticleSystem(trail(fire, size: controller.qualitySample ? 0.12 : (p.isSuper ? 0.5 : 0.3), life: controller.qualitySample ? 0.12 : 0.3))
             let shadow = SCNNode(geometry: shared("shadow-\(p.isSuper)") {
                 let disc = SCNCylinder(radius: radius * 0.9, height: 0.005)
                 disc.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.3))
@@ -1410,7 +1410,7 @@ final class ArenaWorldView: SCNView {
         piece.castsShadow = false
         let root = SCNNode()
         root.addChildNode(piece)
-        root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.8 : 2.1))
+        if !controller.qualitySample { root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.8 : 2.1)) }
         let mark = SCNNode(geometry: shared("shot-mark-\(tintKey)") {
             let ring = SCNTube(innerRadius: 0.22, outerRadius: 0.4, height: 0.012)
             ring.radialSegmentCount = 24
@@ -1424,7 +1424,7 @@ final class ArenaWorldView: SCNView {
         root.addChildNode(mark)
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
         root.simdPosition = SIMD3(Float(p.pos.x), shotHeight, Float(p.pos.y))
-        root.addParticleSystem(trail(tint, size: p.isSuper ? 0.4 : 0.24, life: p.isSuper ? 0.3 : 0.16))
+        root.addParticleSystem(trail(tint, size: controller.qualitySample ? 0.1 : (p.isSuper ? 0.4 : 0.24), life: controller.qualitySample ? 0.1 : (p.isSuper ? 0.3 : 0.16)))
         world.rootNode.addChildNode(root)
         return ProjectileView(root: root, height: shotHeight)
     }
@@ -1531,11 +1531,11 @@ final class ArenaWorldView: SCNView {
             ArenaSound.shared.play(.boom, volume: loudness(point))
             addShake(Float(radius) * 0.16 * max(0, 1 - Float(point.distance(to: controller.mine.pos)) / 9))
             let at = SIMD3(Float(point.x), 0.05, Float(point.y))
-            burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: 40, speed: 4 * CGFloat(radius), size: 0.45, life: 0.45)
-            burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: 20, speed: 2.5 * CGFloat(radius), size: 0.3, life: 0.35)
+            burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: controller.qualitySample ? 12 : 40, speed: 4 * CGFloat(radius), size: controller.qualitySample ? 0.16 : 0.45, life: controller.qualitySample ? 0.22 : 0.45)
+            burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: controller.qualitySample ? 6 : 20, speed: 2.5 * CGFloat(radius), size: controller.qualitySample ? 0.1 : 0.3, life: controller.qualitySample ? 0.18 : 0.35)
             let disc = SCNCylinder(radius: CGFloat(radius), height: 0.01)
             disc.radialSegmentCount = 40
-            disc.firstMaterial = ArenaAvatar.decal(UIColor.orange.withAlphaComponent(0.55))
+            disc.firstMaterial = ArenaAvatar.decal(UIColor.orange.withAlphaComponent(controller.qualitySample ? 0.22 : 0.55))
             let node = SCNNode(geometry: disc)
             node.simdPosition = at
             node.castsShadow = false
@@ -1741,7 +1741,7 @@ final class ArenaWorldView: SCNView {
 
     /// 放大招：脚下一圈这个角色的颜色往外扩，身上冲起一道光柱、往外蹦光点（超级充能的是紫的）
     private func superFlash(_ caster: Fighter, at point: SIMD3<Float>, size: Float) {
-        if controller.qualitySample && caster.brawler == .ranger {
+        if controller.qualitySample {
             let teamColor = caster.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot
             ring(at: point, color: teamColor, to: CGFloat(1.5 * size))
             let muzzle = avatars.indices.contains(caster.id) ? avatars[caster.id].muzzlePosition : nil
@@ -1842,8 +1842,8 @@ final class ArenaWorldView: SCNView {
 
     /// 打中的地方：一下亮光，几颗火星往外蹦
     private func spark(at point: SIMD3<Float>) {
-        burst(at: point, color: UIColor(red: 1, green: 0.95, blue: 0.7, alpha: 1), count: 14, speed: 3.5, size: 0.13, life: 0.22)
-        guard let slot = take(flashSlots) else { return }
+        burst(at: point, color: UIColor(red: 1, green: 0.95, blue: 0.7, alpha: 1), count: controller.qualitySample ? 8 : 14, speed: 3.5, size: 0.13, life: 0.22)
+        guard !controller.qualitySample, let slot = take(flashSlots) else { return }
         slot.node.simdPosition = point
         slot.node.simdScale = SIMD3(repeating: 0.4)
         slot.node.opacity = 1

@@ -4,7 +4,13 @@ import SwiftUI
 struct ArenaSampleReview: View {
     let onClose: () -> Void
     let onPlay: () -> Void
-    @State private var page = 0
+    @State private var page: Int
+
+    init(onClose: @escaping () -> Void, onPlay: @escaping () -> Void, initialPage: Int = 0) {
+        self.onClose = onClose
+        self.onPlay = onPlay
+        _page = State(initialValue: initialPage)
+    }
 
     var body: some View {
         ArenaMenuScreen(title: "蓝月港 · 试玩样板", onClose: onClose) {
@@ -25,7 +31,21 @@ struct ArenaSampleReview: View {
                 Text("单人＋电脑队友 · 不计排位 · 画面与动作仍在制作")
                     .font(.caption).foregroundStyle(.white.opacity(0.7))
             }
+            .background(GeometryReader { proxy in
+                Color.clear.onAppear { markReady(proxy.size) }
+                    .onChange(of: proxy.size) { size in markReady(size) }
+                    .onChange(of: page) { _ in markReady(proxy.size) }
+            })
         }
+    }
+
+    private func markReady(_ size: CGSize) {
+        guard ProcessInfo.processInfo.arguments.contains("-demo"), size.width > 0, size.height > 0 else { return }
+        let evidence: [String: Any] = ["scene": "sampleReview", "page": page,
+            "width": size.width, "height": size.height, "map": ArenaMap.twinGates.id]
+        guard let data = try? JSONSerialization.data(withJSONObject: evidence),
+              let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        try? data.write(to: folder.appendingPathComponent("arena-sample-menu-ready.json"), options: .atomic)
     }
 
     private var hero: some View {

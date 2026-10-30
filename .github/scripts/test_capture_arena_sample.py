@@ -47,6 +47,29 @@ class CaptureIdentityTests(unittest.TestCase):
             with self.subTest(scene=scene):
                 self.run_capture(scene)
 
+    def test_menu_capture_waits_for_sample_model_and_records_both_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = pathlib.Path(directory)
+            (base / 'Documents').mkdir()
+            output = base / 'shots'
+            output.mkdir()
+            calls = []
+            def simctl(*args, **kwargs):
+                calls.append(args)
+                if args[0] == 'launch':
+                    page = 1 if 'arenaSampleMapReview' in args else 0
+                    (base / 'Documents/arena-sample-menu-ready.json').write_text(json.dumps(
+                        {'scene': 'sampleReview', 'page': page, 'width': 720, 'height': 300}))
+                    (base / 'Documents/arena-capture-ready.json').write_text(json.dumps(
+                        {'asset': 'Ranger_FaceSample.glb', 'qualitySample': True}))
+                return ''
+            with patch.object(capture, 'simctl', side_effect=simctl), patch.object(capture.time, 'sleep'):
+                capture.capture_menus('device', output, base)
+            hero = json.loads((output / 'sample-hero.json').read_text())
+            self.assertEqual(hero['model']['asset'], 'Ranger_FaceSample.glb')
+            self.assertEqual(json.loads((output / 'sample-map.json').read_text())['page'], 1)
+            self.assertEqual(len([x for x in calls if x[0] == 'io']), 2)
+
     def test_old_map_is_rejected_before_harbor_screenshot(self):
         self.run_capture('harbor', wrong_map=True)
 

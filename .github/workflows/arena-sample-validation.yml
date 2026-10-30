@@ -67,7 +67,8 @@ jobs:
           swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
           python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/canyon canyon
           python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/harbor harbor
-          for image in sample-shots/canyon/*.png sample-shots/harbor/*.png; do
+          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/menus menus
+          for image in sample-shots/canyon/*.png sample-shots/harbor/*.png sample-shots/menus/*.png; do
             /tmp/check-sample-capture "$image"
           done
       - uses: actions/upload-artifact@v4

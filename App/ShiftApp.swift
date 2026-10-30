@@ -455,7 +455,7 @@ enum ScreenCatalog {
             ArenaRoomView(lobby: ArenaLobby(room: GameRoom.arenaPreview(waiting: name == "arenaRoomWaiting"),
                                            mode: .teamFight, brawler: .ranger), previewOnly: true)
         #endif
-        case "arenaSampleReview": ArenaSampleReview(onClose: {}, onPlay: {})
+        case "arenaSampleReview", "arenaSampleMapReview": ArenaSampleReview(onClose: {}, onPlay: {}, initialPage: name == "arenaSampleMapReview" ? 1 : 0)
         case "arenaDiagnostics": ArenaDiagnosticSuiteView()
         case "arenaBenchmark": ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", level: 3,
                                                                            loadout: ArenaLoadout.basic(.ranger, level: 3), benchmark: true))

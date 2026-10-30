@@ -16,6 +16,14 @@ enum ArenaHarborArt {
     private static let cap = material(UIColor(red: 0.70, green: 0.52, blue: 0.30, alpha: 1))
     private static let seam = material(UIColor(red: 0.25, green: 0.23, blue: 0.21, alpha: 1))
 
+    static let bush: SCNGeometry = {
+        let geometry = ArenaPurpleArt.bush.copy() as! SCNGeometry
+        let leaf = material(UIColor(red: 0.26, green: 0.48, blue: 0.32, alpha: 1))
+        leaf.isDoubleSided = true
+        geometry.materials = [leaf]
+        return geometry
+    }()
+
     static func floor(_ map: ArenaMap) -> SCNMaterial {
         let cell: CGFloat = 32
         let format = UIGraphicsImageRendererFormat()

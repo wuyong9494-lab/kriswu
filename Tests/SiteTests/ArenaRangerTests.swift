@@ -64,6 +64,16 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertFalse(jointCounts().contains(27))
     }
 
+    func testHarborGrassStaysInsideTileAndBelowStandingCharacter() {
+        let (low, high) = ArenaHarborArt.bush.boundingBox
+        XCTAssertGreaterThanOrEqual(low.x, -0.5)
+        XCTAssertLessThanOrEqual(high.x, 0.5)
+        XCTAssertGreaterThanOrEqual(low.z, -0.5)
+        XCTAssertLessThanOrEqual(high.z, 0.5)
+        XCTAssertGreaterThanOrEqual(low.y, 0)
+        XCTAssertLessThanOrEqual(high.y, 0.65)
+    }
+
     func testHarborArtPlacesSolidsOnlyOnDeclaredWallCells() throws {
         let map = ArenaMap.twinGates
         let walls = ArenaHarborArt.walls(map)
