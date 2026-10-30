@@ -220,12 +220,17 @@ final class GLTFModel: @unchecked Sendable {
                 parentList[child] = index
             }
         }
-        parents = parentList
         let sceneIndex = json["scene"] as? Int ?? 0
         let scenes = json["scenes"] as? [[String: Any]] ?? []
         roots = scenes.indices.contains(sceneIndex)
             ? (scenes[sceneIndex]["nodes"] as? [Int] ?? []).filter { infos.indices.contains($0) }
             : infos.indices.filter { parentList[$0] == nil }
+        // Some source packs keep an unused exporter parent in the node table,
+        // while the selected scene explicitly starts at its mesh child. Honor
+        // the scene roots; attaching them under that unused parent hides the
+        // entire imported model when instantiate() assembles the scene.
+        for index in roots { parentList[index] = nil }
+        parents = parentList
 
         // 骨骼
         skins = (json["skins"] as? [[String: Any]] ?? []).map { skin in

@@ -22,7 +22,13 @@ final class ArenaVendorTests: XCTestCase {
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "ArenaVendor-LICENSES", withExtension: "txt"))
         for file in ArenaVendorAssets.propFiles {
-            XCTAssertNotNil(ArenaModels.shared.prop(file), "Real SceneKit loader rejected \(file)")
+            let model = try XCTUnwrap(ArenaModels.shared.prop(file), "Real SceneKit loader rejected \(file)")
+            let root = model.instantiate(shareMaterials: true).root
+            var vertices = 0
+            root.enumerateChildNodes { node, _ in
+                vertices += node.geometry?.sources(for: .vertex).first?.vectorCount ?? 0
+            }
+            XCTAssertGreaterThan(vertices, 0, "Selected scene has no visible mesh: \(file)")
         }
         XCTAssertNotNil(ArenaVendorAssets.spark)
         XCTAssertNotNil(ArenaVendorAssets.smoke)

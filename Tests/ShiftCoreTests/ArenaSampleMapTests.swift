@@ -44,4 +44,31 @@ final class ArenaSampleMapTests: XCTestCase {
             }
         }
     }
+
+    func testRealTouchApproachLaneClearsWallsWithGestureTolerance() {
+        let map = ArenaMap.twinGates
+        let radius = ArenaGame.fighterRadius
+        // The UI flow approaches from the first southern spawn via x=7,
+        // then turns toward the objective at y=14.5. Cover the allowed
+        // horizontal alignment error and northward gesture overshoot, not
+        // just the ideal waypoint centers.
+        for x in stride(from: 6.65, through: 7.35, by: 0.05) {
+            for y in stride(from: 14.2, through: 25.5, by: 0.05) {
+                XCTAssertFalse(map.collides(V2(x, y), radius: radius),
+                               "Approach lane blocks the fighter at \(x), \(y)")
+            }
+        }
+        for y in stride(from: 14.2, through: 15.2, by: 0.05) {
+            for x in stride(from: 6.65, through: 10.9, by: 0.05) {
+                XCTAssertFalse(map.collides(V2(x, y), radius: radius),
+                               "Objective entrance blocks the fighter at \(x), \(y)")
+            }
+        }
+        let spawn = map.spawns[0][0]
+        for x in stride(from: spawn.x, through: 7.35, by: 0.05) {
+            XCTAssertFalse(map.collides(V2(x, spawn.y), radius: radius))
+        }
+        XCTAssertTrue(map.inBush(V2(7, 16.5)))
+        XCTAssertTrue(map.inBush(V2(7, 17.5)))
+    }
 }

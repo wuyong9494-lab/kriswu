@@ -117,20 +117,26 @@ final class ArenaFlowTests: XCTestCase {
                 }
                 continue
             }
-            if state.y > 15.2 {
-                // Clear the southern wall at x=9 before proceeding north. A
-                // fixed two-second drag ended at x=9.4–9.8 and hit that wall.
-                // Observe actual movement, including after respawn; all actions
-                // still go through the same on-screen stick as a human player.
-                let east = state.y > 19 && abs(state.x - 11) > 0.3
-                let distance = east ? 11 - state.x : 14.5 - state.y
+            let approaching = state.y > 15.2
+            let enteringCover = state.y > 20.8 && abs(state.x - 7) > 0.35
+            let enteringObjective = !approaching && abs(state.x - 10.5) > 0.4
+            if approaching || enteringObjective {
+                // Use the short covered lane: x=7 clears both southern walls
+                // and passes through the grass at y=16–18. The old x=11 route
+                // spent several slow UI actions exposed to enemy ranged fire.
+                // Full stick travel and one continuous northward hold avoid
+                // repeatedly stopping in that lane to fire out of range.
+                let horizontal = enteringCover || enteringObjective
+                let targetX = enteringCover ? 7.0 : 10.5
+                let distance = horizontal ? targetX - state.x : 14.5 - state.y
                 let direction = distance > 0 ? 1.0 : -1.0
-                let dx = east ? CGFloat(direction) * moveFrame.width * 0.4 : 0
-                let dy = east ? 0 : CGFloat(direction) * moveFrame.height * 0.4
+                let dx = horizontal ? CGFloat(direction) * moveFrame.width * 0.5 : 0
+                let dy = horizontal ? 0 : CGFloat(direction) * moveFrame.height * 0.5
                 let toward = from.withOffset(CGVector(dx: dx, dy: dy))
-                let hold = min(2.5, max(0.15, abs(distance) / (state.speed * 0.8)))
+                let hold = min(5, max(0.15, abs(distance) / state.speed))
                 from.press(forDuration: 0.05, thenDragTo: toward, withVelocity: .fast, thenHoldForDuration: hold)
-                // Re-check the result before any attack following this movement.
+                // Re-observe target range, health and result after movement.
+                continue
             }
             if back.exists { break }
             attackPoint.tap()

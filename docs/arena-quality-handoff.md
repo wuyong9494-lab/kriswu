@@ -1,10 +1,12 @@
 ## Current task — integrate all eleven resource packs; do not upload 468
 
-Latest: all assets were publicly committed as `fcb8505` and Build 469 ran. Its three
-hero flows failed the earned-super check; traversal recording failed finalization;
-actual menu PNGs also revealed blank vendor controls. Promotion was blocked and
-upload skipped. See [469 evidence and repairs](arena-flow-recovery-469.md). The next
-commit fixes these observed failures; it must receive its own full validation.
+Latest: Build 470 (`359a63e`) verified the visible button/icon repair, all five
+audio tests and Ranger's complete real UI flow with continuous original recording.
+Nature scenery failed because declared scene roots were omitted by the loader;
+Mage and Barbarian still failed earned-super checks while approaching the battle.
+See [470 evidence and repairs](arena-flow-recovery-470.md). The next commit fixes
+scene-root loading and uses the shorter covered real-touch approach. Do not upload
+468, 469 or 470; the new source must receive its own full validation.
 
 Publication resumed with the owner's explicit authorization. The particle source
 ZIP is stored as two byte-exact parts because the GitHub connector limits requests

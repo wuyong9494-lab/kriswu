@@ -1,0 +1,417 @@
+{
+  "models_checked": 33,
+  "skinned_models_unchanged": 11,
+  "changed": [
+    {
+      "file": "App/ArenaVendor/vendor_bush.glb",
+      "scene_roots": [
+        1
+      ],
+      "node_count": 2,
+      "root_parent_changed": [
+        1
+      ],
+      "meshes_before": 0,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_rock.glb",
+      "scene_roots": [
+        1
+      ],
+      "node_count": 2,
+      "root_parent_changed": [
+        1
+      ],
+      "meshes_before": 0,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_tree.glb",
+      "scene_roots": [
+        1
+      ],
+      "node_count": 2,
+      "root_parent_changed": [
+        1
+      ],
+      "meshes_before": 0,
+      "meshes_after": 1,
+      "skin_count": 0
+    }
+  ],
+  "records": [
+    {
+      "file": "App/Arena3D/Barbarian.glb",
+      "scene_roots": [
+        50
+      ],
+      "node_count": 51,
+      "root_parent_changed": [],
+      "meshes_before": 9,
+      "meshes_after": 9,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Knight.glb",
+      "scene_roots": [
+        52
+      ],
+      "node_count": 53,
+      "root_parent_changed": [],
+      "meshes_before": 11,
+      "meshes_after": 11,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Mage.glb",
+      "scene_roots": [
+        49
+      ],
+      "node_count": 50,
+      "root_parent_changed": [],
+      "meshes_before": 8,
+      "meshes_after": 8,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Ranger_FaceSample.glb",
+      "scene_roots": [
+        28
+      ],
+      "node_count": 29,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Ranger_Original.glb",
+      "scene_roots": [
+        23
+      ],
+      "node_count": 24,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Rogue.glb",
+      "scene_roots": [
+        49
+      ],
+      "node_count": 50,
+      "root_parent_changed": [],
+      "meshes_before": 8,
+      "meshes_after": 8,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Rogue_Hooded.glb",
+      "scene_roots": [
+        50
+      ],
+      "node_count": 51,
+      "root_parent_changed": [],
+      "meshes_before": 9,
+      "meshes_after": 9,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Axe.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Blade.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Crossbow.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Mage.glb",
+      "scene_roots": [
+        47
+      ],
+      "node_count": 48,
+      "root_parent_changed": [],
+      "meshes_before": 6,
+      "meshes_after": 6,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Minion.glb",
+      "scene_roots": [
+        46
+      ],
+      "node_count": 47,
+      "root_parent_changed": [],
+      "meshes_before": 5,
+      "meshes_after": 5,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Rogue.glb",
+      "scene_roots": [
+        47
+      ],
+      "node_count": 48,
+      "root_parent_changed": [],
+      "meshes_before": 6,
+      "meshes_after": 6,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Shield_Large_A.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Staff.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/Skeleton_Warrior.glb",
+      "scene_roots": [
+        47
+      ],
+      "node_count": 48,
+      "root_parent_changed": [],
+      "meshes_before": 6,
+      "meshes_after": 6,
+      "skin_count": 1
+    },
+    {
+      "file": "App/Arena3D/flag_blue.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/flag_red.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/rock_single_A.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/rock_single_B.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/rock_single_C.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/trees_A_large.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/trees_A_medium.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/trees_A_small.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/trees_B_large.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/trees_B_medium.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/Arena3D/trees_B_small.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_axe.gltf",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_barrel.glb",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_bush.glb",
+      "scene_roots": [
+        1
+      ],
+      "node_count": 2,
+      "root_parent_changed": [
+        1
+      ],
+      "meshes_before": 0,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_crates.glb",
+      "scene_roots": [
+        0
+      ],
+      "node_count": 1,
+      "root_parent_changed": [],
+      "meshes_before": 1,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_rock.glb",
+      "scene_roots": [
+        1
+      ],
+      "node_count": 2,
+      "root_parent_changed": [
+        1
+      ],
+      "meshes_before": 0,
+      "meshes_after": 1,
+      "skin_count": 0
+    },
+    {
+      "file": "App/ArenaVendor/vendor_tree.glb",
+      "scene_roots": [
+        1
+      ],
+      "node_count": 2,
+      "root_parent_changed": [
+        1
+      ],
+      "meshes_before": 0,
+      "meshes_after": 1,
+      "skin_count": 0
+    }
+  ],
+  "scope": "Static source-asset graph audit; SceneKit runtime validation must run in iOS CI."
+}
