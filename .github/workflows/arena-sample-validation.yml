@@ -47,7 +47,7 @@ jobs:
             -derivedDataPath sample-build CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO > sample-build.log 2>&1 || { tail -100 sample-build.log; exit 1; }
       - name: Capture canyon and Twin Gates with verified scene identity
-        timeout-minutes: 12
+        timeout-minutes: 16
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
@@ -65,9 +65,9 @@ jobs:
           subprocess.run(['xcrun', 'simctl', 'install', device, 'sample-build/Build/Products/Debug-iphonesimulator/ShiftReminder.app'], timeout=120, check=True)
           PY
           swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
+          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/menus menus
           python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/canyon canyon
           python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/harbor harbor
-          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/menus menus
           for image in sample-shots/canyon/*.png sample-shots/harbor/*.png sample-shots/menus/*.png; do
             /tmp/check-sample-capture "$image"
           done

@@ -11,15 +11,25 @@ import time
 
 APP_ID = 'com.kriswu.shiftreminder'
 
-def simctl(*args, check=True):
+def simctl(*args, check=True, timeout=150):
     return subprocess.run(['xcrun', 'simctl', *args], check=check,
-                          capture_output=True, text=True, timeout=150).stdout.strip()
+                          capture_output=True, text=True, timeout=timeout).stdout.strip()
+
+def stop_app(device):
+    # Terminating a never-launched app can hang in CoreSimulator. Treat this as
+    # best effort, then require a freshly written, identity-checked readiness file.
+    # A still-running old scene cannot pass merely because launch returned success.
+    try:
+        simctl('terminate', device, APP_ID, check=False, timeout=20)
+    except subprocess.TimeoutExpired:
+        print('Simulator terminate timed out; launch must report fresh scene readiness', flush=True)
 
 def capture_menus(device, output, data):
     marker = data / 'Documents/arena-sample-menu-ready.json'
     model_marker = data / 'Documents/arena-capture-ready.json'
     for page, screen in [(0, 'arenaSampleReview'), (1, 'arenaSampleMapReview')]:
-        simctl('terminate', device, APP_ID, check=False)
+        print('Capturing menu:', screen, flush=True)
+        stop_app(device)
         marker.unlink(missing_ok=True)
         model_marker.unlink(missing_ok=True)
         simctl('launch', device, APP_ID, '-demo', '-screen', screen,
@@ -45,6 +55,15 @@ def capture_menus(device, output, data):
             print('Menu readiness failure:', json.dumps(diagnostic), flush=True)
             raise SystemExit('Sample menu or model did not report readiness')
         time.sleep(2)
+        # Rotation may finish after the first nonzero layout marker. Save the
+        # current layout, not the earlier portrait dimensions.
+        current = json.loads(marker.read_text())
+        assert current.get('scene') == 'sampleReview' and current.get('page') == page, current
+        assert current.get('map') == 'twin_gates_sample_v1', current
+        assert current.get('width', 0) > 0 and current.get('height', 0) > 0, current
+        if page == 0:
+            current['model'] = evidence['model']
+        evidence = current
         label = 'sample-hero' if page == 0 else 'sample-map'
         simctl('io', device, 'screenshot', str(output / (label + '.png')))
         (output / (label + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
@@ -67,7 +86,7 @@ def main():
     marker = data / 'Documents/arena-capture-ready.json'
     for label, target in [('sample-early', 0.25), ('sample-combat', 1.2)]:
         label = scene + '-' + label
-        simctl('terminate', device, APP_ID, check=False)
+        stop_app(device)
         marker.unlink(missing_ok=True)
         simctl('launch', device, APP_ID, '-demo', '-screen', screen,
                '-arena.purpleSample', 'NO' if scene == 'harbor' else 'YES', '-arena.snapshotTime', str(target), '-arena.legacyRanger', 'NO')
@@ -87,7 +106,7 @@ def main():
         time.sleep(2)
         simctl('io', device, 'screenshot', str(output / (label + '.png')))
         (output / (label + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
-        print(label, evidence['simulationTime'], evidence['rangerAsset'])
+        print(label, evidence['simulationTime'], evidence['rangerAsset'], flush=True)
 
 if __name__ == '__main__':
     main()

@@ -116,6 +116,14 @@ class CaptureIdentityTests(unittest.TestCase):
                 self.assertFalse((output / 'sample-hero.json').exists())
                 self.assertTrue((output / 'failed-page-0.json').exists())
 
+    def test_stop_timeout_is_bounded_and_does_not_mask_launch_failure(self):
+        with patch.object(capture, 'simctl', side_effect=capture.subprocess.TimeoutExpired('terminate', 20)) as command:
+            capture.stop_app('device')
+        command.assert_called_once_with('terminate', 'device', capture.APP_ID, check=False, timeout=20)
+        with patch.object(capture.subprocess, 'run', side_effect=capture.subprocess.TimeoutExpired('launch', 150)):
+            with self.assertRaises(capture.subprocess.TimeoutExpired):
+                capture.simctl('launch', 'device', capture.APP_ID)
+
     def test_old_map_is_rejected_before_harbor_screenshot(self):
         self.run_capture('harbor', wrong_map=True)
 
