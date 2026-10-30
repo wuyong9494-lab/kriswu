@@ -173,20 +173,20 @@ class Promotion425Tests(unittest.TestCase):
             with self.assertRaises(AssertionError): promotion.wait_for_source(request)
 
 
-class Promotion468Tests(unittest.TestCase):
+class Promotion469Tests(unittest.TestCase):
     def setUp(self):
-        self.request = dict(promotion.SAMPLE_RELEASE_468, version="1.2", notes="Test",
+        self.request = dict(promotion.SAMPLE_RELEASE_469, version="1.2", notes="Test",
                             bundle_id="com.kriswu.shiftreminder",
                             ranger_sha256=hashlib.sha256(b"ranger").hexdigest(), wait_for_source=True)
         self.head = {"object": {"sha": self.request["source_sha"]}}
         self.ios = {"id": self.request["source_run_id"], "head_sha": self.request["source_sha"],
-                    "run_number": 468, "path": ".github/workflows/ios.yml",
+                    "run_number": 469, "path": ".github/workflows/ios.yml",
                     "status": "completed", "conclusion": "success"}
         self.ios_jobs = [{"name": name, "conclusion": "success"}
                          for name in ("build", "core-tests-linux", "arena-look")]
         self.sample = dict(self.ios, id=self.request["source_sample_run_id"],
                            path=".github/workflows/arena-sample-validation.yml",
-                           head_branch="codex/arena-quality-sample", run_number=28)
+                           head_branch="codex/arena-quality-sample", run_number=29)
         self.sample_jobs = [{"name": "sample-capture", "conclusion": "success"}]
         for index, hero in enumerate(("Ranger", "Barbarian", "Mage"), 1):
             self.sample_jobs.append({"name": f"hero-flow ({index}, test{hero}Loop)", "conclusion": "success",
@@ -194,20 +194,26 @@ class Promotion468Tests(unittest.TestCase):
                                          "Record and exercise real hero flow",
                                          "Validate natural result and continuous original recording")]})
 
+    def test_cancelled_468_is_rejected_before_any_network_or_upload(self):
+        with self.assertRaisesRegex(AssertionError, "cancelled"):
+            promotion.is_sample_release(dict(self.request, build_number="468"))
+        with self.assertRaisesRegex(AssertionError, "cancelled"):
+            promotion.is_sample_release({"build_number": "468"})
+
     def responses(self, sample=None, sample_jobs=None):
         return [self.head, self.ios, {"jobs": self.ios_jobs},
                 self.sample if sample is None else sample,
                 {"jobs": self.sample_jobs if sample_jobs is None else sample_jobs}]
 
-    def test_468_rejects_omitted_sample_run_changed_identity_and_capture_exception(self):
+    def test_469_rejects_omitted_sample_run_changed_identity_and_capture_exception(self):
         self.assertTrue(promotion.is_sample_release(self.request))
         for key, value in (("source_sample_run_id", None), ("source_sample_run_id", 41040595536),
                            ("source_run_id", 1), ("source_sha", "b" * 40),
-                           ("build_number", "469"), ("skip_visual_capture", True)):
+                           ("build_number", "470"), ("skip_visual_capture", True)):
             with self.subTest(key=key, value=value), self.assertRaises(AssertionError):
                 promotion.is_sample_release(dict(self.request, **{key: value}))
 
-    def test_468_requires_both_completed_runs_and_all_three_evidence_steps(self):
+    def test_469_requires_both_completed_runs_and_all_three_evidence_steps(self):
         with patch.object(promotion, "github", side_effect=self.responses()):
             self.assertTrue(promotion.sample_sources_ready(self.request))
         pending = dict(self.sample, status="in_progress", conclusion=None)
@@ -227,14 +233,14 @@ class Promotion468Tests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             promotion.validate_sample(self.request, self.sample, self.sample_jobs + [self.sample_jobs[1]])
 
-    def test_468_wait_returns_only_after_both_runs_pass(self):
+    def test_469_wait_returns_only_after_both_runs_pass(self):
         pending = dict(self.sample, status="queued", conclusion=None)
         with patch.object(promotion, "github", side_effect=self.responses(sample=pending) + self.responses()), \
              patch.object(promotion.time, "sleep") as sleep:
             promotion.wait_for_source(self.request)
             sleep.assert_called_once_with(30)
 
-    def test_468_fails_immediately_on_failed_hero_or_replaced_source(self):
+    def test_469_fails_immediately_on_failed_hero_or_replaced_source(self):
         failed = copy.deepcopy(self.sample_jobs); failed[2]["conclusion"] = "failure"
         with patch.object(promotion, "github", side_effect=self.responses(
                 sample=dict(self.sample, status="in_progress", conclusion=None), sample_jobs=failed)), \
@@ -250,7 +256,7 @@ class Promotion468Tests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(AssertionError):
                 promotion.validate_sample(self.request, dict(self.sample, **{key: value}), self.sample_jobs)
 
-    def test_468_pending_preflight_never_enables_upload_even_without_wait(self):
+    def test_469_pending_preflight_never_enables_upload_even_without_wait(self):
         request = dict(self.request, wait_for_source=False)
         pending = dict(self.sample, status="queued", conclusion=None)
         responses = [self.ios, {"jobs": self.ios_jobs}] + self.responses(sample=pending)
@@ -261,7 +267,7 @@ class Promotion468Tests(unittest.TestCase):
             find.assert_not_called()
             output.assert_not_called()
 
-    def test_468_timeout_does_not_enable_upload(self):
+    def test_469_timeout_does_not_enable_upload(self):
         with patch.object(promotion, "sample_sources_ready", return_value=False), \
              patch.object(promotion.time, "monotonic", side_effect=[0, 0, 5401]), \
              patch.object(promotion.time, "sleep"), patch.object(promotion, "output") as output:
