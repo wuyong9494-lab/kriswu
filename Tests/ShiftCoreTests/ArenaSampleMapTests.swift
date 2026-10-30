@@ -12,6 +12,9 @@ final class ArenaSampleMapTests: XCTestCase {
         XCTAssertTrue(map.spawns[1].allSatisfy { $0.y == 3.5 })
         XCTAssertEqual(ArenaMap.named(map.id)?.id, map.id)
         for mode in ArenaGame.Mode.allCases {
+            if mode != .zone {
+                XCTAssertNotEqual(ArenaGame(mode: mode, entrants: [], seed: 1, map: map).map.id, map.id)
+            }
             XCTAssertFalse(ArenaMap.playPool(for: mode).contains { $0.id == map.id })
         }
         for y in 0..<map.height {
