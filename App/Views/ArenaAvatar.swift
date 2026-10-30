@@ -152,6 +152,7 @@ final class ArenaAvatar {
         concealmentMaterials = Array(copies.values)
     }
     private var deadSince: Double?
+    private let qualitySample: Bool
     private var flashUntil: Double = 0
     private var flashing = false
     private var placed = false
@@ -162,6 +163,7 @@ final class ArenaAvatar {
 
     /// skin：穿第几套皮肤（0 原来的样子）
     init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false, qualitySample: Bool = false) {
+        self.qualitySample = qualitySample
         self.brawler = brawler
         self.mine = isMe
         self.teamColor = color
@@ -572,7 +574,7 @@ final class ArenaAvatar {
 
     /// 挨打：白一下。打得重、而且这一下没在出招，才缩一下身子
     func flash(clock: Double, flinch: Bool = false) {
-        flashUntil = clock + 0.09
+        flashUntil = clock + (qualitySample ? 0.055 : 0.09)
         punch = 0.28
         recoil = look.authored ? 0 : 0.2
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
@@ -582,7 +584,7 @@ final class ArenaAvatar {
         }
         guard !flashing, let instance else { return }
         flashing = true
-        instance.materials.forEach { $0.emission.contents = UIColor(white: 0.22, alpha: 1) }
+        instance.materials.forEach { $0.emission.contents = UIColor(white: qualitySample ? 0.055 : 0.22, alpha: 1) }
     }
 
     /// 摆一个静止的姿势（画头像用）

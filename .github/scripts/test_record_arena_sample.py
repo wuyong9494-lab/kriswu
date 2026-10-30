@@ -17,6 +17,7 @@ class RecordingContractTests(unittest.TestCase):
             (root / 'Documents').mkdir()
             output = root / 'capture'
             class Recorder:
+                pid = 987654
                 returncode = None
                 interrupted = False
                 def poll(self): return self.returncode
@@ -36,7 +37,8 @@ class RecordingContractTests(unittest.TestCase):
             with patch.object(sys, 'argv', ['record', 'test-device', str(output)]), \
                  patch.object(capture, 'stop_app'), patch.object(capture, 'simctl', side_effect=sim), \
                  patch.object(capture.subprocess, 'Popen', side_effect=spawn), \
-                 patch.object(capture.time, 'sleep'):
+                 patch.object(capture.time, 'sleep'), \
+                 patch.object(capture.os, 'killpg', side_effect=lambda pid, value: recorder.send_signal(value)):
                 error = None
                 try: capture.main()
                 except (AssertionError, RuntimeError) as caught: error = caught

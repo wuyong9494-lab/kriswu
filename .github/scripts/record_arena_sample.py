@@ -23,8 +23,10 @@ def main():
     marker = data / 'Documents/arena-capture-ready.json'
     marker.unlink(missing_ok=True)
     path = output / 'harbor-opening.mp4'
+    (output / 'harbor-opening.json').unlink(missing_ok=True)
+    path.unlink(missing_ok=True)
     recorder = subprocess.Popen(['xcrun', 'simctl', 'io', device, 'recordVideo',
-                                 '--codec=h264', str(path)], stdout=subprocess.DEVNULL)
+                                 '--codec=h264', str(path)], stdout=subprocess.DEVNULL, start_new_session=True)
     evidence = None
     try:
         time.sleep(1)
@@ -49,11 +51,12 @@ def main():
         time.sleep(1)
     finally:
         if recorder.poll() is None:
-            recorder.send_signal(signal.SIGINT)
+            # Signal only our isolated recording process group, including xcrun children.
+            os.killpg(recorder.pid, signal.SIGINT)
             try:
-                recorder.wait(timeout=30)
+                recorder.wait(timeout=90)
             except subprocess.TimeoutExpired:
-                recorder.kill()
+                os.killpg(recorder.pid, signal.SIGKILL)
                 recorder.wait(timeout=10)
                 raise RuntimeError('Video finalization timed out')
     if recorder.returncode or not path.exists() or path.stat().st_size < 1024:
