@@ -1,0 +1,9 @@
+{
+  "sourceCommit": "8832565bd66b8116ca5ee128cab41be4a5b915b3",
+  "run": 41013347247,
+  "artifact": 12959246246,
+  "source": "harbor-opening.mp4",
+  "frame": "10th frame of a 1fps extraction, approximately 9.5 seconds",
+  "transform": "90 degree counterclockwise rotation; resized to1434x660 for inspection",
+  "acceptance": "Software full-file decode passed; sampled visual review only. Not full real-time playback, audio or device performance acceptance."
+}
