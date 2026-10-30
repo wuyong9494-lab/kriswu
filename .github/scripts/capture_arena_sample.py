@@ -27,7 +27,9 @@ def capture_menus(device, output, data):
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             evidence = json.loads(marker.read_text()) if marker.exists() else {}
-            if evidence.get('scene') == 'sampleReview' and evidence.get('page') == page and evidence.get('width', 0) > 0:
+            if (evidence.get('scene') == 'sampleReview' and evidence.get('page') == page
+                    and evidence.get('map') == 'twin_gates_sample_v1'
+                    and evidence.get('width', 0) > 0 and evidence.get('height', 0) > 0):
                 if page == 1:
                     break
                 model = json.loads(model_marker.read_text()) if model_marker.exists() else {}

@@ -59,7 +59,7 @@ class CaptureIdentityTests(unittest.TestCase):
                 if args[0] == 'launch':
                     page = 1 if 'arenaSampleMapReview' in args else 0
                     (base / 'Documents/arena-sample-menu-ready.json').write_text(json.dumps(
-                        {'scene': 'sampleReview', 'page': page, 'width': 720, 'height': 300}))
+                        {'scene': 'sampleReview', 'page': page, 'width': 720, 'height': 300, 'map': 'twin_gates_sample_v1'}))
                     (base / 'Documents/arena-capture-ready.json').write_text(json.dumps(
                         {'asset': 'Ranger_FaceSample.glb', 'qualitySample': True}))
                 return ''
@@ -81,7 +81,7 @@ class CaptureIdentityTests(unittest.TestCase):
                 calls.append(args)
                 if args[0] == 'launch':
                     (base / 'Documents/arena-sample-menu-ready.json').write_text(json.dumps(
-                        {'scene': 'sampleReview', 'page': 0, 'width': 720}))
+                        {'scene': 'sampleReview', 'page': 0, 'width': 720, 'height': 300, 'map': 'twin_gates_sample_v1'}))
                     (base / 'Documents/arena-capture-ready.json').write_text(json.dumps(
                         {'asset': 'Ranger_Original.glb', 'qualitySample': False}))
                 return ''
@@ -93,6 +93,28 @@ class CaptureIdentityTests(unittest.TestCase):
             self.assertEqual(len(shots), 1)
             self.assertTrue(shots[0][-1].endswith('failed-page-0.png'))
             self.assertFalse((output / 'sample-hero.json').exists())
+
+    def test_menu_rejects_wrong_map_or_zero_height(self):
+        for fields in [{'map': 'canyon'}, {'height': 0}]:
+            with self.subTest(fields=fields), tempfile.TemporaryDirectory() as directory:
+                base = pathlib.Path(directory)
+                (base / 'Documents').mkdir()
+                output = base / 'shots'
+                output.mkdir()
+                def simctl(*args, **kwargs):
+                    if args[0] == 'launch':
+                        evidence = {'scene': 'sampleReview', 'page': 0, 'width': 720,
+                                    'height': 300, 'map': 'twin_gates_sample_v1', **fields}
+                        (base / 'Documents/arena-sample-menu-ready.json').write_text(json.dumps(evidence))
+                        (base / 'Documents/arena-capture-ready.json').write_text(json.dumps(
+                            {'asset': 'Ranger_FaceSample.glb', 'qualitySample': True}))
+                    return ''
+                with patch.object(capture, 'simctl', side_effect=simctl), \
+                     patch.object(capture.time, 'sleep'), patch.object(capture.time, 'monotonic', side_effect=[0, 1, 121]):
+                    with self.assertRaises(SystemExit):
+                        capture.capture_menus('device', output, base)
+                self.assertFalse((output / 'sample-hero.json').exists())
+                self.assertTrue((output / 'failed-page-0.json').exists())
 
     def test_old_map_is_rejected_before_harbor_screenshot(self):
         self.run_capture('harbor', wrong_map=True)

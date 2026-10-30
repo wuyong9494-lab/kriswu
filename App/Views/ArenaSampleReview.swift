@@ -22,6 +22,16 @@ struct ArenaSampleReview: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("arena.sample.pages")
                 if page == 0 { hero } else { map }
+
+            }
+            .background(GeometryReader { proxy in
+                Color.clear.onAppear { markReady(proxy.size) }
+                    .onChange(of: proxy.size) { size in markReady(size) }
+                    .onChange(of: page) { _ in markReady(proxy.size) }
+            })
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 6) {
                 Button(action: onPlay) {
                     Label("以游侠进入试玩", systemImage: "play.fill")
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -31,11 +41,10 @@ struct ArenaSampleReview: View {
                 Text("单人＋电脑队友 · 不计排位 · 画面与动作仍在制作")
                     .font(.caption).foregroundStyle(.white.opacity(0.7))
             }
-            .background(GeometryReader { proxy in
-                Color.clear.onAppear { markReady(proxy.size) }
-                    .onChange(of: proxy.size) { size in markReady(size) }
-                    .onChange(of: page) { _ in markReady(proxy.size) }
-            })
+            .frame(maxWidth: 720)
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(ArenaMenuTheme.canvas)
         }
     }
 
