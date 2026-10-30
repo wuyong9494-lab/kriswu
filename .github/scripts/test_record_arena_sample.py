@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import record_arena_sample as capture
+from check_arena_video import validate_frames
 
 
 class RecordingContractTests(unittest.TestCase):
@@ -87,6 +88,28 @@ class TraversalEvidenceTests(unittest.TestCase):
         evidence = self.fixture()
         evidence['routeTrace'][40]['time'] = 0
         with self.assertRaises(RuntimeError): capture.validate_traversal(evidence)
+
+
+class PresentationTimestampTests(unittest.TestCase):
+    def frames(self):
+        return [dict(pts_time=str(i / 10), best_effort_timestamp_time=str(i / 10), width=1320, height=2868) for i in range(80)]
+
+    def test_duplicate_pts_does_not_use_backward_guessed_time(self):
+        frames = self.frames()
+        frames[21].update(pts_time='2.0', best_effort_timestamp_time='-0.4')
+        span, duplicates = validate_frames(frames)
+        self.assertEqual(duplicates, 1)
+        self.assertAlmostEqual(span, 7.9)
+
+    def test_actual_backward_presentation_time_is_rejected(self):
+        frames = self.frames()
+        frames[21]['pts_time'] = '1.9'
+        with self.assertRaises(RuntimeError): validate_frames(frames)
+
+    def test_nan_presentation_time_is_rejected(self):
+        frames = self.frames()
+        frames[21]['pts_time'] = 'nan'
+        with self.assertRaises(RuntimeError): validate_frames(frames)
 
 
 if __name__ == '__main__': unittest.main()

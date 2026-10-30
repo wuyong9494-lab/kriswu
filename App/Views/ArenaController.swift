@@ -123,6 +123,7 @@ final class ArenaController: ObservableObject {
     private(set) var captureTraversal = false
     private var captureWaypoint = 0
     private(set) var captureTrace: [[String: Double]] = []
+    private(set) var captureEvents: [[String: Any]] = []
     private var nextCaptureTrace = 0.0
     private static let captureRoute = [V2(6.5, 13.5), V2(6.5, 11.5), V2(2.5, 11.5),
         V2(2.5, 9.45), V2(8.5, 9.45), V2(8.5, 13.5)]
@@ -403,6 +404,21 @@ final class ArenaController: ObservableObject {
             }
         }
         let events = game.events
+        if benchmarkSnapshotTime > 0 {
+            for event in events where captureEvents.count < 256 {
+                var record: [String: Any] = ["simulationTime": game.time]
+                switch event {
+                case .attack(let fighter): record["kind"] = "attack"; record["fighter"] = fighter
+                case .special(let fighter): record["kind"] = "super"; record["fighter"] = fighter
+                case .hit(let target, let amount):
+                    record["kind"] = "hit"; record["fighter"] = target; record["amount"] = amount
+                case .knockout(let target, _): record["kind"] = "knockout"; record["fighter"] = target
+                case .respawn(let fighter): record["kind"] = "respawn"; record["fighter"] = fighter
+                default: continue
+                }
+                captureEvents.append(record)
+            }
+        }
         game.events.removeAll()
         sceneEvents += events
         announce(events)

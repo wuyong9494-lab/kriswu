@@ -1,0 +1,9 @@
+{
+  "before": "a5818027e342132e4071135018eecc16447da5a9",
+  "after": "8832565bd66b8116ca5ee128cab41be4a5b915b3",
+  "scene": "twin_gates_sample_v1",
+  "seed": 170017,
+  "targetSimulationTime": 1.2,
+  "transform": "Both actual simulator PNGs rotated90deg counterclockwise, resized1434x660, JPEGquality3.",
+  "limits": "Fixed seed/camera/target time; SceneKit action and display timing may differ. Still comparison only, not motion/FPS proof."
+}

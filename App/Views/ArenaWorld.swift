@@ -357,6 +357,7 @@ final class ArenaWorldView: SCNView {
                     "captureTraversal": controller.captureTraversal,
                     "routeComplete": controller.captureRouteComplete,
                     "routeTrace": controller.captureTrace,
+                    "events": controller.captureEvents,
                     "fighters": controller.game.fighters.map { ["id": $0.id, "x": $0.pos.x, "y": $0.pos.y,
                         "health": $0.health, "alive": $0.alive] as [String: Any] }]
                 if let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) {
@@ -1417,17 +1418,21 @@ final class ArenaWorldView: SCNView {
         let root = SCNNode()
         root.addChildNode(piece)
         if !controller.qualitySample { root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.8 : 2.1)) }
-        let mark = SCNNode(geometry: shared("shot-mark-\(tintKey)") {
-            let ring = SCNTube(innerRadius: 0.22, outerRadius: 0.4, height: 0.012)
-            ring.radialSegmentCount = 24
-            ring.firstMaterial = ArenaAvatar.decal(tint.withAlphaComponent(0.9))
-            return ring
-        })
         let shotHeight: Float = owner == .ranger && !BrawlerLook.legacyRangerComparison ? 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale : 0.6
-        mark.simdPosition = SIMD3(0, 0.04 - shotHeight, 0)
-        mark.castsShadow = false
-        mark.renderingOrder = 6
-        root.addChildNode(mark)
+        // This constant-size ring is decorative, not the projectile collision radius.
+        // Keep actual lob landing indicators and ranger super radius projections above.
+        if !controller.qualitySample {
+            let mark = SCNNode(geometry: shared("shot-mark-\(tintKey)") {
+                let ring = SCNTube(innerRadius: 0.22, outerRadius: 0.4, height: 0.012)
+                ring.radialSegmentCount = 24
+                ring.firstMaterial = ArenaAvatar.decal(tint.withAlphaComponent(0.9))
+                return ring
+            })
+            mark.simdPosition = SIMD3(0, 0.04 - shotHeight, 0)
+            mark.castsShadow = false
+            mark.renderingOrder = 6
+            root.addChildNode(mark)
+        }
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
         root.simdPosition = SIMD3(Float(p.pos.x), shotHeight, Float(p.pos.y))
         root.addParticleSystem(trail(tint, size: controller.qualitySample ? 0.1 : (p.isSuper ? 0.4 : 0.24), life: controller.qualitySample ? 0.1 : (p.isSuper ? 0.3 : 0.16)))
