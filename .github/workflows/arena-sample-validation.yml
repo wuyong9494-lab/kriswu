@@ -8,6 +8,7 @@ on:
       - '.github/scripts/capture_arena_sample.py'
       - '.github/workflows/arena-sample-validation.yml'
       - '.github/scripts/record_arena_sample.py'
+      - '.github/scripts/check_arena_video.swift'
       - 'project.yml'
   workflow_dispatch:
 permissions:
@@ -50,7 +51,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO > sample-build.log 2>&1 || { tail -100 sample-build.log; exit 1; }
       - name: Build screenshot validator
         timeout-minutes: 5
-        run: swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
+        run: |
+          swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
+          swiftc .github/scripts/check_arena_video.swift -o /tmp/check-sample-video
       - name: Boot installed sample application
         timeout-minutes: 8
         shell: bash -eo pipefail {0}
@@ -98,7 +101,9 @@ jobs:
           done
       - name: Record six-second Twin Gates opening
         timeout-minutes: 6
-        run: python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion
+        run: |
+          python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion
+          /tmp/check-sample-video sample-shots/motion/harbor-opening.mp4
       - name: Shut down sample simulator
         if: always()
         timeout-minutes: 2
