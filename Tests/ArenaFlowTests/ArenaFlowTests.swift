@@ -55,8 +55,12 @@ final class ArenaFlowTests: XCTestCase {
         XCTAssertTrue(move.waitForExistence(timeout: 45))
         shot("hero-\(hero)-battle")
         let from = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let right = move.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
         let toward = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
-        from.press(forDuration: 0.1, thenDragTo: toward, withVelocity: .slow, thenHoldForDuration: 4)
+        // The first spawn is behind the south wall. Walk east into the centre lane
+        // before heading north; the previous straight drag stopped against that wall.
+        from.press(forDuration: 0.1, thenDragTo: right, withVelocity: .fast, thenHoldForDuration: 2)
+        from.press(forDuration: 0.1, thenDragTo: toward, withVelocity: .fast, thenHoldForDuration: 4)
         let back = app.buttons["arena.result.lobby"]
         let deadline = Date().addingTimeInterval(360)
         while !back.exists && Date() < deadline {
@@ -73,6 +77,11 @@ final class ArenaFlowTests: XCTestCase {
         evidence.name = "arena-flow-hero-\(hero).json"
         evidence.lifetime = .keepAlways
         add(evidence)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(scene.utf8)) as? [String: Any])
+        let events = try XCTUnwrap(payload["events"] as? [[String: Any]])
+        let playerEvents = events.filter { ($0["fighter"] as? Int) == 0 }
+        XCTAssertTrue(playerEvents.contains { ($0["kind"] as? String) == "attack" }, "No real player attack")
+        XCTAssertTrue(playerEvents.contains { ($0["kind"] as? String) == "super" }, "No earned player super")
         back.tap()
         XCTAssertTrue(heroes.waitForExistence(timeout: 30))
         shot("hero-\(hero)-returned-lobby")

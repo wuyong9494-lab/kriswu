@@ -247,6 +247,10 @@ final class ArenaWorldView: SCNView {
         rendersContinuously = false
         isPlaying = false
         isUserInteractionEnabled = false
+        // SceneKit geometry is visual content; accessible HUD and controls are SwiftUI siblings.
+        // Exposing every mesh creates huge offscreen AX bounds and stalls UI snapshots.
+        isAccessibilityElement = false
+        accessibilityElementsHidden = true
         scene = world
         ArenaDiagnostics.shared.measure(.sceneBuild) { build() }
         pointOfView = cameraNode

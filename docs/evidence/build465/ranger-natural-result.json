@@ -1,0 +1,2350 @@
+{
+  "events" : [
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 1.8833333333333315
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 3.0999999999999939
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 3.4833333333333258
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 3.5666666666666589
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 3.5999999999999921
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 3.8499999999999912
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 3.8499999999999912
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 3.8833333333333244
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 3.9333333333333242
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 3.9333333333333242
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 3.9999999999999907
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 4.1499999999999906
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 4.216666666666657
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.2499999999999902
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 4.2833333333333234
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.2999999999999901
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.2999999999999901
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 4.3833333333333231
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 4.3999999999999897
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 4.4166666666666563
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 4.4333333333333229
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 4.4499999999999895
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 4.4666666666666561
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 4.4833333333333227
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 4.6499999999999888
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.683333333333322
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 4.7166666666666552
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.7166666666666552
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.7166666666666552
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 4.7166666666666552
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 4.7833333333333217
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 4.7833333333333217
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 5.1333333333333204
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 5.1333333333333204
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 5.1333333333333204
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 5.5166666666666524
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 5.5166666666666524
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 5.5166666666666524
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 6.0666666666666504
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 6.1999999999999833
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 6.1999999999999833
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 6.2166666666666499
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 6.9999999999999805
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 7.0999999999999801
+    },
+    {
+      "fighter" : 5,
+      "kind" : "knockout",
+      "simulationTime" : 7.0999999999999801
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 7.1333333333333133
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 7.4666666666666455
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 7.4666666666666455
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 7.7999999999999776
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 8.1499999999999844
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 9.1333333333333666
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 9.5333333333333865
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 9.550000000000054
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 9.8666666666667364
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 9.9000000000000714
+    },
+    {
+      "fighter" : 5,
+      "kind" : "respawn",
+      "simulationTime" : 10.116666666666749
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 10.483333333333434
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 11.133333333333466
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 11.383333333333479
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 12.866666666666886
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 12.883333333333553
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 12.950000000000223
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 12.950000000000223
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 12.983333333333558
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 13.133333333333566
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 13.316666666666908
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 13.333333333333576
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 13.350000000000243
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 13.350000000000243
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 13.350000000000243
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 13.350000000000243
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 13.366666666666911
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 13.366666666666911
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 13.383333333333578
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 13.63333333333359
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 13.816666666666933
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 14.066666666666945
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 14.5000000000003
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 14.683333333333643
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 15.36666666666701
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 15.383333333333677
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 15.516666666667017
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 16.266666666667025
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 16.266666666667025
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 16.366666666667019
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 16.40000000000035
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 17.083333333333645
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 17.133333333333642
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 17.433333333333625
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 17.483333333333622
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 17.500000000000288
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 17.916666666666931
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 18.083333333333588
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 18.166666666666917
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 18.166666666666917
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 18.433333333333568
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 18.600000000000225
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 18.600000000000225
+    },
+    {
+      "fighter" : 5,
+      "kind" : "super",
+      "simulationTime" : 18.616666666666891
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 18.766666666666882
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 19.116666666666863
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 19.116666666666863
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 19.133333333333528
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 19.216666666666857
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 19.28333333333352
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 19.333333333333517
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 19.350000000000183
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 19.500000000000174
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 19.900000000000151
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 20.91666666666676
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 21.133333333333415
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 21.216666666666743
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 21.216666666666743
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 22.133333333333358
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 24.133333333333244
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 24.133333333333244
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 24.233333333333238
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 24.61666666666655
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 24.633333333333216
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 24.816666666666539
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 24.816666666666539
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 24.816666666666539
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 24.833333333333204
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 24.949999999999864
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 25.049999999999859
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 25.299999999999844
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 25.31666666666651
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 25.31666666666651
+    },
+    {
+      "fighter" : 5,
+      "kind" : "super",
+      "simulationTime" : 25.333333333333176
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 25.649999999999824
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 25.716666666666487
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 25.716666666666487
+    },
+    {
+      "fighter" : 5,
+      "kind" : "knockout",
+      "simulationTime" : 25.716666666666487
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 25.866666666666479
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 25.949999999999807
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 25.949999999999807
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 26.033333333333136
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 26.033333333333136
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 26.216666666666459
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 26.216666666666459
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 26.216666666666459
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 26.383333333333116
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 26.383333333333116
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 26.399999999999782
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 26.399999999999782
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 26.416666666666448
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 26.416666666666448
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 26.416666666666448
+    },
+    {
+      "fighter" : 1,
+      "kind" : "super",
+      "simulationTime" : 26.433333333333113
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 26.549999999999773
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 26.549999999999773
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 26.833333333333091
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 27.266666666666399
+    },
+    {
+      "fighter" : 5,
+      "kind" : "respawn",
+      "simulationTime" : 28.733333333332983
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 29.13333333333296
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 29.233333333332954
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 29.24999999999962
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 29.533333333332937
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 29.566666666666269
+    },
+    {
+      "amount" : 700,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 29.633333333332931
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 29.966666666666246
+    },
+    {
+      "amount" : 700,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 30.033333333332909
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 30.399999999999554
+    },
+    {
+      "amount" : 700,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 30.466666666666217
+    },
+    {
+      "fighter" : 3,
+      "kind" : "knockout",
+      "simulationTime" : 30.466666666666217
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 32.983333333332745
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 33.066666666666073
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 33.416666666666053
+    },
+    {
+      "fighter" : 3,
+      "kind" : "respawn",
+      "simulationTime" : 33.483333333332716
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 33.666666666666039
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 33.933333333332691
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 34.099999999999348
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 34.116666666666013
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 34.616666666665985
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 34.716666666665979
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 34.999999999999297
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 34.999999999999297
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 35.316666666665945
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 35.333333333332611
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 35.333333333332611
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 35.399999999999274
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 35.399999999999274
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 35.399999999999274
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 35.41666666666594
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 35.783333333332585
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 36.016666666665905
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 36.216666666665894
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 36.46666666666588
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 36.46666666666588
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 36.666666666665868
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 37.299999999999166
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 37.349999999999163
+    },
+    {
+      "fighter" : 5,
+      "kind" : "knockout",
+      "simulationTime" : 37.349999999999163
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 37.449999999999157
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 37.8666666666658
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 37.883333333332466
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 37.883333333332466
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 37.98333333333246
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 38.116666666665786
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 38.166666666665783
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 38.166666666665783
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 38.416666666665769
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 39.483333333332375
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 40.266666666665664
+    },
+    {
+      "fighter" : 5,
+      "kind" : "respawn",
+      "simulationTime" : 40.366666666665658
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 40.549999999998981
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 40.666666666665641
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 40.783333333332301
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 41.049999999998953
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 41.183333333332278
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 41.483333333332261
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 41.733333333332247
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 41.749999999998913
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 41.983333333332233
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 43.433333333332151
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 43.483333333332148
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 43.866666666665459
+    },
+    {
+      "fighter" : 4,
+      "kind" : "super",
+      "simulationTime" : 44.033333333332116
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 44.116666666665445
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 44.133333333332111
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 44.266666666665436
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 44.333333333332099
+    },
+    {
+      "amount" : 1800,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 44.633333333332082
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 44.633333333332082
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 45.016666666665394
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 45.166666666665385
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 45.483333333332034
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 45.84999999999868
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 45.866666666665346
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 46.866666666665289
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 47.549999999998583
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 47.649999999998577
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 48.316666666665206
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 48.566666666665192
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 48.633333333331855
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 48.733333333331849
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 49.249999999998487
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 49.266666666665152
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 49.849999999998452
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 49.849999999998452
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 49.933333333331781
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 49.966666666665112
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 50.149999999998435
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 50.149999999998435
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 50.216666666665098
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 50.666666666665073
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 50.899999999998393
+    },
+    {
+      "fighter" : 5,
+      "kind" : "super",
+      "simulationTime" : 50.916666666665058
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 51.099999999998381
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 51.349999999998367
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 51.783333333331676
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 51.799999999998342
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 51.799999999998342
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 52.749999999998288
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 52.866666666664948
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 52.866666666664948
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 53.149999999998265
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 53.166666666664931
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 53.166666666664931
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 53.183333333331596
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 53.299999999998256
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 53.549999999998242
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 53.549999999998242
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 53.549999999998242
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 53.549999999998242
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 53.549999999998242
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 53.983333333331551
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 54.816666666664837
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 54.833333333331503
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 55.34999999999814
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 55.399999999998137
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 55.799999999998114
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 55.916666666664774
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 56.033333333331434
+    },
+    {
+      "fighter" : 5,
+      "kind" : "super",
+      "simulationTime" : 56.0499999999981
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 56.566666666664737
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 56.933333333331383
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 57.049999999998043
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 57.266666666664698
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 57.316666666664695
+    },
+    {
+      "amount" : 700,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 57.416666666664689
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 57.533333333331349
+    },
+    {
+      "amount" : 1456,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 57.666666666664675
+    },
+    {
+      "fighter" : 5,
+      "kind" : "knockout",
+      "simulationTime" : 57.666666666664675
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 57.733333333331338
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 59.483333333331238
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 59.583333333331232
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 59.816666666664553
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 59.833333333331218
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 60.016666666664541
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 60.183333333331198
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 60.266666666664527
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 60.283333333331193
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 60.483333333331181
+    },
+    {
+      "fighter" : 5,
+      "kind" : "respawn",
+      "simulationTime" : 60.68333333333117
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 60.699999999997836
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 61.166666666664476
+    },
+    {
+      "fighter" : 3,
+      "kind" : "knockout",
+      "simulationTime" : 61.166666666664476
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 61.166666666664476
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 61.166666666664476
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 61.316666666664467
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 61.999999999997762
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 62.033333333331093
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 62.049999999997759
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 62.116666666664422
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 62.116666666664422
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 62.133333333331088
+    },
+    {
+      "fighter" : 3,
+      "kind" : "respawn",
+      "simulationTime" : 64.183333333330978
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 64.483333333330961
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 65.133333333330924
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 65.933333333330879
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 65.949999999997544
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 66.366666666664187
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 66.383333333330853
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 66.616666666664173
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 66.633333333330839
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 66.633333333330839
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 66.633333333330839
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 66.633333333330839
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 67.049999999997482
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 67.066666666664148
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 67.516666666664122
+    },
+    {
+      "fighter" : 5,
+      "kind" : "knockout",
+      "simulationTime" : 67.516666666664122
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 69.649999999997334
+    },
+    {
+      "fighter" : 5,
+      "kind" : "respawn",
+      "simulationTime" : 70.533333333330617
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 71.4166666666639
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 71.4166666666639
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 71.799999999997212
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 71.816666666663878
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 71.849999999997209
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 72.149999999997192
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 72.233333333330521
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 72.283333333330518
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 72.483333333330506
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 72.483333333330506
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 72.666666666663829
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 73.349999999997124
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 73.349999999997124
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 73.366666666663789
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 73.449999999997118
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 73.533333333330447
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 73.699999999997104
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 73.71666666666377
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 73.816666666663764
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 73.816666666663764
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 73.899999999997092
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 73.899999999997092
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 73.94999999999709
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 74.216666666663741
+    },
+    {
+      "fighter" : 4,
+      "kind" : "attack",
+      "simulationTime" : 74.249999999997073
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 74.249999999997073
+    },
+    {
+      "fighter" : 3,
+      "kind" : "knockout",
+      "simulationTime" : 74.249999999997073
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 74.283333333330404
+    },
+    {
+      "amount" : 700,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 74.333333333330401
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 74.333333333330401
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 74.349999999997067
+    },
+    {
+      "amount" : 700,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 74.366666666663733
+    },
+    {
+      "fighter" : 3,
+      "kind" : "respawn",
+      "simulationTime" : 77.266666666663568
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 77.349999999996896
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 77.833333333330202
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 77.833333333330202
+    },
+    {
+      "fighter" : 5,
+      "kind" : "super",
+      "simulationTime" : 77.833333333330202
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 78.266666666663511
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 78.266666666663511
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 78.516666666663497
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 78.516666666663497
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 78.69999999999682
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 78.69999999999682
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 78.716666666663485
+    },
+    {
+      "fighter" : 2,
+      "kind" : "knockout",
+      "simulationTime" : 78.716666666663485
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 78.81666666666348
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 78.949999999996805
+    },
+    {
+      "amount" : 1456,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 79.233333333330123
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 79.383333333330114
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 79.566666666663437
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 80.249999999996732
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 80.516666666663383
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 80.91666666666336
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 81.049999999996686
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 81.26666666666334
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 81.316666666663338
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 81.483333333329995
+    },
+    {
+      "fighter" : 1,
+      "kind" : "attack",
+      "simulationTime" : 81.633333333329986
+    },
+    {
+      "fighter" : 2,
+      "kind" : "respawn",
+      "simulationTime" : 81.733333333329981
+    },
+    {
+      "amount" : 700,
+      "fighter" : 5,
+      "kind" : "hit",
+      "simulationTime" : 81.733333333329981
+    },
+    {
+      "fighter" : 5,
+      "kind" : "knockout",
+      "simulationTime" : 81.733333333329981
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 81.749999999996646
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 81.766666666663312
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 81.949999999996635
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 82.016666666663298
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 82.016666666663298
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 83.749999999996533
+    },
+    {
+      "fighter" : 2,
+      "kind" : "super",
+      "simulationTime" : 83.749999999996533
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 84.183333333329841
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 84.433333333329827
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 84.633333333329816
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 84.666666666663147
+    },
+    {
+      "fighter" : 5,
+      "kind" : "respawn",
+      "simulationTime" : 84.749999999996476
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 4,
+      "kind" : "hit",
+      "simulationTime" : 84.866666666663136
+    },
+    {
+      "fighter" : 4,
+      "kind" : "knockout",
+      "simulationTime" : 84.866666666663136
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 84.916666666663133
+    },
+    {
+      "fighter" : 1,
+      "kind" : "respawn",
+      "simulationTime" : 85.033333333329793
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 85.31666666666311
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 85.349999999996442
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 85.483333333329767
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 2,
+      "kind" : "hit",
+      "simulationTime" : 85.699999999996422
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 3,
+      "kind" : "hit",
+      "simulationTime" : 86.166666666663062
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 86.549999999996373
+    },
+    {
+      "fighter" : 0,
+      "kind" : "attack",
+      "simulationTime" : 87.016666666663014
+    },
+    {
+      "fighter" : 4,
+      "kind" : "respawn",
+      "simulationTime" : 87.883333333329631
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 88.54999999999626
+    },
+    {
+      "amount" : 1300,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 88.683333333329585
+    },
+    {
+      "fighter" : 3,
+      "kind" : "super",
+      "simulationTime" : 88.699999999996251
+    },
+    {
+      "amount" : 2400,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 88.816666666662911
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 89.049999999996231
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 89.583333333329534
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 89.733333333329526
+    },
+    {
+      "fighter" : 5,
+      "kind" : "super",
+      "simulationTime" : 89.749999999996191
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 90.016666666662843
+    },
+    {
+      "fighter" : 3,
+      "kind" : "attack",
+      "simulationTime" : 90.549999999996146
+    },
+    {
+      "amount" : 2600,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 90.633333333329475
+    },
+    {
+      "amount" : 1200,
+      "fighter" : 1,
+      "kind" : "hit",
+      "simulationTime" : 90.699999999996137
+    },
+    {
+      "fighter" : 1,
+      "kind" : "knockout",
+      "simulationTime" : 90.699999999996137
+    },
+    {
+      "fighter" : 2,
+      "kind" : "attack",
+      "simulationTime" : 91.283333333329438
+    },
+    {
+      "fighter" : 5,
+      "kind" : "attack",
+      "simulationTime" : 91.283333333329438
+    }
+  ],
+  "fighters" : [
+    {
+      "asset" : "Ranger_FaceSample.glb",
+      "hero" : 1,
+      "id" : 0,
+      "team" : 0
+    },
+    {
+      "asset" : "Barbarian.glb",
+      "hero" : 2,
+      "id" : 1,
+      "team" : 0
+    },
+    {
+      "asset" : "Mage.glb",
+      "hero" : 3,
+      "id" : 2,
+      "team" : 0
+    },
+    {
+      "asset" : "Ranger_FaceSample.glb",
+      "hero" : 1,
+      "id" : 3,
+      "team" : 1
+    },
+    {
+      "asset" : "Barbarian.glb",
+      "hero" : 2,
+      "id" : 4,
+      "team" : 1
+    },
+    {
+      "asset" : "Mage.glb",
+      "hero" : 3,
+      "id" : 5,
+      "team" : 1
+    }
+  ],
+  "finishedNaturally" : true,
+  "forcedResult" : false,
+  "kind" : "three-hero-ui-flow",
+  "map" : "twin_gates_sample_v1",
+  "physicalDevice" : false,
+  "playerDamage" : 2156,
+  "playerDeaths" : 0,
+  "playerHero" : 1,
+  "playerKills" : 1,
+  "qualitySample" : true,
+  "renderFPSMeasured" : false,
+  "simulationTime" : 91.533333333329423
+}

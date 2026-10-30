@@ -1,6 +1,6 @@
 import copy
 import unittest
-from collect_arena_flow import validate_scene
+from collect_arena_flow import validate_scene, is_scene_attachment
 
 
 class FlowEvidenceTests(unittest.TestCase):
@@ -32,3 +32,11 @@ class FlowEvidenceTests(unittest.TestCase):
         scene = self.scene()
         scene['events'].reverse()
         with self.assertRaises(ValueError): validate_scene(scene, 1)
+
+class AttachmentNames(unittest.TestCase):
+    def test_xcode_export_normalization(self):
+        self.assertTrue(is_scene_attachment('arena-flow-hero-2_0_F6D924E2.json', 2))
+        self.assertTrue(is_scene_attachment('arena-flow-hero-2.json', 2))
+        self.assertFalse(is_scene_attachment('arena-flow-hero-2_0_F6D924E2.json', 1))
+        self.assertFalse(is_scene_attachment('arena-flow-hero-20_0_id.json', 2))
+        self.assertFalse(is_scene_attachment('arena-flow-hero-2_0_id.png', 2))

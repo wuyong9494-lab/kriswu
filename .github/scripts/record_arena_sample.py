@@ -26,6 +26,11 @@ def validate_traversal(evidence):
 
 
 def prepare_recording_device(device, traversal):
+    if os.environ.get('ARENA_FRESH_RECORDING_DEVICE') == device:
+        # This UUID was just created and installed by prepare_arena_device.py.
+        # Terminating a never-launched app can stall FrontBoard and trigger a
+        # destructive restart of this otherwise healthy fresh simulator.
+        return
     stop_app(device)
 
 

@@ -114,4 +114,4 @@ schemes:
         - ArenaFlowTests
       captureScreenshotsAutomatically: true
       deleteScreenshotsWhenEachTestSucceeds: false
-      preferredScreenCaptureFormat: screenRecording
+      preferredScreenCaptureFormat: screenshots

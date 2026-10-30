@@ -10,6 +10,7 @@ on:
       - '.github/scripts/record_arena_sample.py'
       - '.github/scripts/check_arena_video.swift'
       - '.github/scripts/check_arena_video.py'
+      - '.github/scripts/run_arena_flow.py'
       - 'Tests/ArenaFlowTests/**'
       - '.github/scripts/collect_arena_flow.py'
       - '.github/scripts/prepare_arena_device.py'
@@ -95,33 +96,8 @@ jobs:
       - name: Record fixed wall and grass traversal
         timeout-minutes: 7
         run: |
-          python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion traversal
+          ARENA_FRESH_RECORDING_DEVICE="$SAMPLE_DEVICE" python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion traversal
           python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-traversal.mp4
-      - name: Prepare isolated UI flow simulator
-        id: flow_boot
-        if: always() && steps.sample_boot.outcome == 'success'
-        timeout-minutes: 8
-        run: python3 .github/scripts/prepare_arena_device.py ui-flows
-      - name: Exercise three real hero flows
-        if: always() && steps.flow_boot.outcome == 'success'
-        timeout-minutes: 24
-        shell: bash -eo pipefail {0}
-        run: |
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
-            -configuration Debug -destination "platform=iOS Simulator,id=$SAMPLE_DEVICE" \
-            -derivedDataPath sample-build -resultBundlePath sample-flow.xcresult \
-            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
-            > sample-flow.log 2>&1 || { tail -100 sample-flow.log; exit 1; }
-      - name: Preserve flow recordings and scene evidence
-        if: always()
-        timeout-minutes: 8
-        shell: bash -eo pipefail {0}
-        run: |
-          mkdir -p sample-shots/flow
-          if [ -d sample-flow.xcresult ]; then
-            xcrun xcresulttool export attachments --path sample-flow.xcresult --output-path sample-shots/flow
-          fi
-          python3 .github/scripts/collect_arena_flow.py "$SAMPLE_DEVICE" sample-shots/flow
       - name: Shut down sample simulator
         if: always()
         timeout-minutes: 2
@@ -146,7 +122,98 @@ jobs:
             sample-shots
             sample-build.log
             sample-asset-audit.json
-            sample-flow.log
-            sample-flow.xcresult
           if-no-files-found: error
+          retention-days: 14
+  hero-flow:
+    runs-on: macos-15
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - hero: 1
+            test: testRangerLoop
+          - hero: 2
+            test: testBarbarianLoop
+          - hero: 3
+            test: testMageLoop
+    env:
+      ARENA_FLOW_HERO: ${{ matrix.hero }}
+      ARENA_FLOW_VIDEO: hero-${{ matrix.hero }}-continuous.mp4
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Select Xcode
+        shell: bash -eo pipefail {0}
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1) || true
+          [ -n "$XCODE" ] || { echo "Xcode 26 or newer is required"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Validate assets and generate project
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_*arena_sample.py'
+          python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
+          python3 scripts/assets/audit_three_hero_assets.py App/Arena3D sample-asset-audit.json
+          brew install xcodegen ffmpeg
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Build real UI tests
+        timeout-minutes: 15
+        run: |
+          xcodebuild build-for-testing -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath sample-build CODE_SIGNING_ALLOWED=NO > sample-build.log 2>&1 || { tail -100 sample-build.log; exit 1; }
+      - name: Prepare isolated hero simulator
+        id: flow_boot
+        timeout-minutes: 8
+        run: python3 .github/scripts/prepare_arena_device.py hero-${{ matrix.hero }}
+      - name: Record and exercise real hero flow
+        timeout-minutes: 14
+        run: python3 .github/scripts/run_arena_flow.py '${{ matrix.hero }}' '${{ matrix.test }}'
+      - name: Export original screenshots, trees and scene attachments
+        if: always()
+        run: |
+          mkdir -p sample-shots/flow
+          if [ -d sample-flow.xcresult ]; then
+            xcrun xcresulttool export attachments --path sample-flow.xcresult --output-path sample-shots/flow
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hero-${{ matrix.hero }}-diagnostics-${{ github.sha }}
+          path: |
+            sample-shots/flow/**
+            !sample-shots/flow/*.mp4
+            !sample-shots/flow/*.mov
+            sample-flow.log
+            sample-build.log
+          retention-days: 14
+      - name: Validate natural result and continuous original recording
+        if: always() && steps.flow_boot.outcome == 'success'
+        timeout-minutes: 10
+        run: python3 .github/scripts/collect_arena_flow.py "$SAMPLE_DEVICE" sample-shots/flow
+      - name: Shut down sample simulator
+        if: always()
+        timeout-minutes: 2
+        run: |
+          python3 - <<'PYCODE'
+          import os, subprocess
+          for device in os.environ.get('ARENA_DEVICES', '').split():
+              try:
+                  subprocess.run(['xcrun', 'simctl', 'shutdown', device], timeout=30, check=False)
+              except subprocess.TimeoutExpired:
+                  print('Simulator shutdown timed out; runner cleanup will handle it')
+              try:
+                  subprocess.run(['xcrun', 'simctl', 'delete', device], timeout=30, check=False)
+              except subprocess.TimeoutExpired:
+                  print('Simulator deletion timed out; runner cleanup will handle it')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hero-${{ matrix.hero }}-evidence-${{ github.sha }}
+          path: sample-shots/flow
           retention-days: 14

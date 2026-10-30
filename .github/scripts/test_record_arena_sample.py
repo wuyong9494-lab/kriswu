@@ -150,6 +150,19 @@ class TimingEvidenceTests(unittest.TestCase):
 
 
 class RecordingIsolationTests(unittest.TestCase):
+    def test_fresh_device_never_terminates_or_reboots_an_unlaunched_app(self):
+        with patch.dict(capture.os.environ, {'ARENA_FRESH_RECORDING_DEVICE': 'fresh'}), \
+             patch.object(capture, 'stop_app') as stop, patch.object(capture, 'simctl') as sim:
+            capture.prepare_recording_device('fresh', True)
+        stop.assert_not_called()
+        sim.assert_not_called()
+
+    def test_fresh_flag_for_another_device_does_not_skip_stop(self):
+        with patch.dict(capture.os.environ, {'ARENA_FRESH_RECORDING_DEVICE': 'other'}), \
+             patch.object(capture, 'stop_app') as stop:
+            capture.prepare_recording_device('used', True)
+        stop.assert_called_once_with('used')
+
     def test_recording_does_not_reboot_under_encoder(self):
         for traversal in (False, True):
             with patch.object(capture, 'stop_app') as stop, patch.object(capture, 'simctl') as sim:

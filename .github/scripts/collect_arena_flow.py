@@ -33,6 +33,11 @@ def validate_scene(scene, hero):
     return dict(mine)
 
 
+def is_scene_attachment(name, hero):
+    prefix = f"arena-flow-hero-{hero}"
+    return name == prefix + ".json" or (name.startswith(prefix + "_") and name.endswith(".json"))
+
+
 def main():
     device, destination = sys.argv[1], pathlib.Path(sys.argv[2])
     destination.mkdir(parents=True, exist_ok=True)
@@ -40,6 +45,11 @@ def main():
               'status': 'incomplete', 'heroes': {}, 'media': [],
               'visualAcceptance': 'pending-human-review', 'devicePerformance': 'unmeasured'}
     errors = []
+    heroes = (int(os.environ['ARENA_FLOW_HERO']),) if os.environ.get('ARENA_FLOW_HERO') else (1, 2, 3)
+    def save():
+        report['errors'] = errors
+        (destination / 'flow-manifest.json').write_text(json.dumps(report, indent=2) + '\n')
+    save()
     try:
         # Xcode may install each UI test with a randomized bundle identifier.
         # The test attaches the exact app-written JSON before that sandbox disappears.
@@ -47,26 +57,36 @@ def main():
         for test in manifest:
             for attachment in test.get('attachments', []):
                 name = attachment.get('suggestedHumanReadableName', '')
-                for hero in (1, 2, 3):
-                    if name.startswith(f'arena-flow-hero-{hero}.json'):
+                for hero in heroes:
+                    if is_scene_attachment(name, hero):
                         shutil.copyfile(destination / attachment['exportedFileName'],
                                         destination / f'arena-flow-hero-{hero}.json')
         data = destination
-        for hero in (1, 2, 3):
+        for hero in heroes:
             source = data / f'arena-flow-hero-{hero}.json'
             try:
                 scene = json.loads(source.read_text())
                 report['heroes'][str(hero)] = {'events': validate_scene(scene, hero), 'status': 'scene-verified'}
             except (OSError, ValueError, KeyError) as error:
                 errors.append(f'hero {hero}: {error}')
-        movies = sorted(p for p in destination.rglob('*') if p.suffix.lower() in ('.mp4', '.mov'))
-        if len(movies) < 3:
-            errors.append('Missing continuous Xcode test recordings for the three flows')
+        save()  # Persist scene failures before any long media decoding.
+        movies = ([destination / os.environ['ARENA_FLOW_VIDEO']] if os.environ.get('ARENA_FLOW_VIDEO') else
+                  sorted(p for p in destination.rglob('*') if p.suffix.lower() in ('.mp4', '.mov')))
+        if len(movies) < len(heroes):
+            errors.append('Missing continuous recordings for the requested flows')
         for path in movies:
             result = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('check_arena_video.py')), str(path)], check=False)
             report['media'].append({'path': str(path.relative_to(destination)), 'decodeExit': result.returncode})
+            if not result.returncode and os.environ.get('ARENA_FLOW_VIDEO'):
+                session = json.loads((destination / 'recording-session.json').read_text())
+                decoded = json.loads(path.with_suffix('.decode.json').read_text())
+                if not session.get('complete') or session.get('recorderExit') != 0:
+                    errors.append('Continuous recording/test session did not complete')
+                if decoded['presentationSpanSeconds'] + 5 < session.get('testSeconds', 0):
+                    errors.append('Recording does not cover the full UI test duration (5s startup tolerance)')
             if result.returncode:
                 errors.append(f'Undecodable/invalid movie: {path.name}')
+            save()
     except (OSError, subprocess.SubprocessError) as error:
         errors.append(str(error))
     report['errors'] = errors
