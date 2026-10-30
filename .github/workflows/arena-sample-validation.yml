@@ -10,6 +10,9 @@ on:
       - '.github/scripts/record_arena_sample.py'
       - '.github/scripts/check_arena_video.swift'
       - '.github/scripts/check_arena_video.py'
+      - 'Tests/ArenaFlowTests/**'
+      - '.github/scripts/collect_arena_flow.py'
+      - '.github/scripts/prepare_arena_device.py'
       - 'project.yml'
   workflow_dispatch:
 permissions:
@@ -60,27 +63,7 @@ jobs:
         timeout-minutes: 8
         shell: bash -eo pipefail {0}
         run: |
-          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
-          import json, sys, subprocess
-          devices = json.load(sys.stdin)['devices']
-          phones = [(runtime, d) for runtime, entries in sorted(devices.items(), reverse=True) if 'iOS' in runtime for d in entries if d['name'].startswith('iPhone')]
-          runtime, phone = next((item for item in phones if item[1]['name'] == 'iPhone 17 Pro Max'), phones[0])
-          print('Capture device: ' + phone['name'] + ' / ' + runtime, file=sys.stderr, flush=True)
-          created = subprocess.run(['xcrun', 'simctl', 'create', 'Arena Sample Capture', phone['deviceTypeIdentifier'], runtime], capture_output=True, text=True, check=True, timeout=60)
-          print(created.stdout.strip())")
-          export DEVICE
-          echo "SAMPLE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
-          python3 - <<'PY'
-          import os, subprocess
-          device = os.environ['DEVICE']
-          print('Booting sample simulator', flush=True)
-          subprocess.run(['xcrun', 'simctl', 'boot', device], timeout=90, check=True)
-          print('Waiting for simulator readiness', flush=True)
-          subprocess.run(['xcrun', 'simctl', 'bootstatus', device, '-b'], timeout=180, check=True)
-          print('Installing compiled application', flush=True)
-          subprocess.run(['xcrun', 'simctl', 'install', device, 'sample-build/Build/Products/Debug-iphonesimulator/ShiftReminder.app'], timeout=120, check=True)
-          print('Application installed', flush=True)
-          PY
+          python3 .github/scripts/prepare_arena_device.py menus-opening
       - name: Capture sample menu pages
         timeout-minutes: 10
         run: |
@@ -106,13 +89,21 @@ jobs:
         run: |
           python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion
           python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-opening.mp4
+      - name: Prepare isolated traversal simulator
+        timeout-minutes: 8
+        run: python3 .github/scripts/prepare_arena_device.py traversal
       - name: Record fixed wall and grass traversal
         timeout-minutes: 7
         run: |
           python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion traversal
           python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-traversal.mp4
-      - name: Exercise three real hero flows
+      - name: Prepare isolated UI flow simulator
+        id: flow_boot
         if: always() && steps.sample_boot.outcome == 'success'
+        timeout-minutes: 8
+        run: python3 .github/scripts/prepare_arena_device.py ui-flows
+      - name: Exercise three real hero flows
+        if: always() && steps.flow_boot.outcome == 'success'
         timeout-minutes: 24
         shell: bash -eo pipefail {0}
         run: |
@@ -137,8 +128,7 @@ jobs:
         run: |
           python3 - <<'PYCODE'
           import os, subprocess
-          device = os.environ.get('SAMPLE_DEVICE')
-          if device:
+          for device in os.environ.get('ARENA_DEVICES', '').split():
               try:
                   subprocess.run(['xcrun', 'simctl', 'shutdown', device], timeout=30, check=False)
               except subprocess.TimeoutExpired:

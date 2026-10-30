@@ -1,0 +1,141 @@
+Application, 0x105563c80, pid: 34858, label: '值班提醒' <App element pid: 34858>
+  Window (Main), 0x1052c8bb0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314127200.3>
+    Other, 0x10546e090, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314135296.4>
+      Other, 0x105466420, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314137808.5>
+        Other, 0x1054678a0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4310764112.6>
+          Other, 0x1054679c0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314320496.7>
+            Other, 0x10546e940, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4310865344.8>
+              NavigationBar, 0x10546ea60, {{0.0, 24.0}, {956.0, 54.0}}, identifier: '小游戏' <AX element pid: 34858, elementOrHash.elementID: 4312088032.9>
+                StaticText, 0x105470100, {{452.7, 35.7}, {50.7, 20.7}}, label: '小游戏' <AX element pid: 34858, elementOrHash.elementID: 4310960160.142>
+              Other, 0x105470220, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4310867888.10>
+                Other, 0x10546e3b0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4312167680.13>
+                  Other, 0x10546e4d0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4310781456.15>
+                    Other, 0x10546e5f0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4312504768.16>
+                      CollectionView, 0x105564000, {{118.0, 0.0}, {720.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4337480704.17>
+                        Other, 0x105564390, {{98.0, -802.0}, {760.0, 2052.7}} <AX element pid: 34858, elementOrHash.elementID: 4311038512.18>
+                        Other, 0x105564710, {{118.0, 0.0}, {720.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4313995792.19>
+                          Other, 0x1055654b0, {{118.0, 0.0}, {720.0, 132.8}} <AX element pid: 34858, elementOrHash.elementID: 4313860624.28>
+                        Other, 0x105560570, {{118.0, 0.0}, {720.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314147664.20>
+                        Cell, 0x1052110f0, {{138.0, 113.0}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4320732672.21>
+                          Other, 0x105278650, {{138.0, 113.0}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314204928.29>
+                            Other, 0x105282e40, {{138.0, 113.0}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314206448.38>
+                          Other, 0x105282780, {{138.0, 113.0}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314202464.30>
+                            Other, 0x105282ad0, {{138.0, 113.0}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4337859072.39>
+                              Other, 0x1052820b0, {{138.0, 113.0}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314338448.45>
+                                Button, 0x105565140, {{138.0, 113.0}, {680.0, 70.7}}, identifier: 'arena.enter', label: '勇者乱斗、三英雄试玩：游侠、蛮王、法师；双闸交汇 3 对 3，本地电脑补位' <AX element pid: 34858, elementOrHash.elementID: 4314337552.49>
+                                  Image, 0x105565830, {{169.3, 139.7}, {13.3, 17.3}}, identifier: 'flame.fill', label: '火焰' <AX element pid: 34858, elementOrHash.elementID: 4314333136.53>
+                                  StaticText, 0x105565bc0, {{206.0, 130.0}, {67.7, 20.3}}, label: '勇者乱斗' <AX element pid: 34858, elementOrHash.elementID: 4314334592.54>
+                                  StaticText, 0x1052831e0, {{206.0, 152.3}, {346.3, 14.3}}, label: '三英雄试玩：游侠、蛮王、法师；双闸交汇 3 对 3，本地电脑补位' <AX element pid: 34858, elementOrHash.elementID: 4314336688.55>
+                                  Image, 0x105283540, {{790.7, 142.7}, {6.7, 11.7}}, identifier: 'chevron.right', label: '前进' <AX element pid: 34858, elementOrHash.elementID: 4314337120.56>
+                        Cell, 0x1052838c0, {{138.0, 183.7}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4320974336.22>
+                          Other, 0x105283c50, {{138.0, 183.7}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4311069072.31>
+                            Other, 0x105283ff0, {{138.0, 183.7}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4311069568.40>
+                          Other, 0x105284370, {{138.0, 183.7}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4311067008.32>
+                            Other, 0x105284710, {{138.0, 183.7}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4321204736.41>
+                              Other, 0x105284a70, {{138.0, 183.7}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314345008.46>
+                                Button, 0x105284df0, {{138.0, 183.7}, {680.0, 70.7}}, label: '叠叠消、三张一样的凑一起消掉；今日挑战、挑战码、和同事比谁先消完' <AX element pid: 34858, elementOrHash.elementID: 4314344576.50>
+                                  Image, 0x105285170, {{166.3, 209.7}, {19.3, 19.0}}, identifier: 'square.stack.3d.up.fill', label: 'Hdr' <AX element pid: 34858, elementOrHash.elementID: 4314338880.57>
+                                  StaticText, 0x1052854e0, {{206.0, 200.7}, {50.7, 20.3}}, label: '叠叠消' <AX element pid: 34858, elementOrHash.elementID: 4314341088.58>
+                                  StaticText, 0x105285880, {{206.0, 223.0}, {334.0, 14.3}}, label: '三张一样的凑一起消掉；今日挑战、挑战码、和同事比谁先消完' <AX element pid: 34858, elementOrHash.elementID: 4314343040.59>
+                                  Image, 0x105285c00, {{788.7, 213.0}, {7.0, 12.0}}, identifier: 'chevron.forward' <AX element pid: 34858, elementOrHash.elementID: 4314343472.60>
+                        Other, 0x105565f30, {{206.0, 182.7}, {592.0, 1.0}} <AX element pid: 34858, elementOrHash.elementID: 4311128096.23>
+                        Cell, 0x105566940, {{138.0, 254.3}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4337582592.24>
+                          Other, 0x105566cd0, {{138.0, 254.3}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314223856.33>
+                            Other, 0x105567040, {{138.0, 254.3}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314224352.42>
+                          Other, 0x105567390, {{138.0, 254.3}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314238352.34>
+                            Other, 0x105567720, {{138.0, 254.3}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4337755648.43>
+                              Other, 0x105567a70, {{138.0, 254.3}, {680.0, 70.7}} <AX element pid: 34858, elementOrHash.elementID: 4314351424.47>
+                                Button, 0x105567e00, {{138.0, 254.3}, {680.0, 70.7}}, label: '五子棋、和电脑下、两个人一台手机下、面对面、远程，或者轮流下（不用同时在线）' <AX element pid: 34858, elementOrHash.elementID: 4314350992.51>
+                                  Image, 0x10557d290, {{167.7, 281.7}, {17.0, 16.3}}, identifier: 'circle.grid.3x3.fill', label: 'circle.grid.3x3.fill' <AX element pid: 34858, elementOrHash.elementID: 4314346768.61>
+                                  StaticText, 0x10557e730, {{206.0, 271.3}, {50.7, 20.3}}, label: '五子棋' <AX element pid: 34858, elementOrHash.elementID: 4314348112.62>
+                                  StaticText, 0x10557dad0, {{206.0, 293.7}, {405.3, 14.3}}, label: '和电脑下、两个人一台手机下、面对面、远程，或者轮流下（不用同时在线）' <AX element pid: 34858, elementOrHash.elementID: 4314349456.63>
+                                  Image, 0x105577d90, {{788.7, 283.7}, {7.0, 12.0}}, identifier: 'chevron.forward' <AX element pid: 34858, elementOrHash.elementID: 4314349888.64>
+                        Other, 0x10557ded0, {{206.0, 253.3}, {592.0, 1.0}} <AX element pid: 34858, elementOrHash.elementID: 4311064480.25>
+                        Cell, 0x10557dff0, {{138.0, 325.0}, {680.0, 45.7}} <AX element pid: 34858, elementOrHash.elementID: 4329959936.26>
+                          Other, 0x10557a870, {{138.0, 325.0}, {680.0, 45.7}} <AX element pid: 34858, elementOrHash.elementID: 4312163408.35>
+                          Other, 0x10557a990, {{138.0, 325.0}, {680.0, 45.7}} <AX element pid: 34858, elementOrHash.elementID: 4312310352.36>
+                            Other, 0x10557a420, {{138.0, 325.0}, {680.0, 45.7}} <AX element pid: 34858, elementOrHash.elementID: 4328750080.44>
+                              Other, 0x10557a540, {{138.0, 325.0}, {680.0, 45.7}} <AX element pid: 34858, elementOrHash.elementID: 4314356912.48>
+                                StaticText, 0x10557ef20, {{138.0, 325.0}, {680.0, 45.7}}, label: '面对面：身边的手机直接连，不用联网。远程、轮流下：用苹果的 Game Center，大家在手机「设置 › Game Center」登录自己的 Apple ID；对方手机上也要装着值班提醒，最好是同一个版本。' <AX element pid: 34858, elementOrHash.elementID: 4314355808.52>
+                        Other, 0x10557f040, {{805.0, 78.0}, {30.0, 362.0}}, label: '垂直滚动条, 1页', value: 0% <AX element pid: 34858, elementOrHash.elementID: 4314197536.27>
+                          Other, 0x10557f160, {{832.0, 130.3}, {3.0, 306.7}} <AX element pid: 34858, elementOrHash.elementID: 4314198000.37>
+                        Other, 0x10557f280, {{805.0, 78.0}, {30.0, 362.0}}, label: '垂直滚动条, 1页', value: 0% <AX element pid: 34858, elementOrHash.elementID: 4314197536.27>
+                          Other, 0x105579a50, {{832.0, 130.3}, {3.0, 306.7}} <AX element pid: 34858, elementOrHash.elementID: 4314198000.37>
+              Other, 0x105579b70, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314020880.11>
+                Other, 0x105579c90, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314148080.14>
+    Other, 0x10558eeb0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314435680.66>
+      Other, 0x10558efd0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314390640.67>
+        Other, 0x10558f0f0, {{0.0, 0.0}, {956.0, 440.0}} <AX element pid: 34858, elementOrHash.elementID: 4314351856.68>
+          Image, 0x10558f210, {{0.0, 0.0}, {956.0, 440.0}}, identifier: 'arena.lobby', label: 'ArenaLobbyMoonCity' <AX element pid: 34858, elementOrHash.elementID: 4314512512.69>
+          Image, 0x10558f330, {{87.0, 0.0}, {782.0, 440.0}}, identifier: 'arena.lobby', label: 'ArenaLobbyMoonCity' <AX element pid: 34858, elementOrHash.elementID: 4314388496.70>
+          Other, 0x10558f450, {{286.7, 86.3}, {399.3, 277.3}}, identifier: 'arena.lobby', label: '选的角色，左右拖着转' <AX element pid: 34858, elementOrHash.elementID: 4328720896.71>
+          Button, 0x10558f570, {{72.6, 4.8}, {132.8, 46.5}}, identifier: 'arena.lobby', label: '陈晨、0' <AX element pid: 34858, elementOrHash.elementID: 4314511552.72>
+            Other, 0x10558f690, {{104.7, 13.7}, {29.0, 29.0}} <AX element pid: 34858, elementOrHash.elementID: 4314442048.97>
+            StaticText, 0x10558f7b0, {{141.7, 10.2}, {24.0, 14.3}}, label: '陈晨' <AX element pid: 34858, elementOrHash.elementID: 4314511120.98>
+            Image, 0x10558f8d0, {{143.7, 27.0}, {16.3, 17.7}}, identifier: 'trophy.fill', label: 'trophy.fill' <AX element pid: 34858, elementOrHash.elementID: 4314626464.99>
+            StaticText, 0x10558f9f0, {{165.0, 26.7}, {11.3, 18.0}}, label: '0' <AX element pid: 34858, elementOrHash.elementID: 4314627248.100>
+          Button, 0x10558fb10, {{209.7, 4.8}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '奖杯之路' <AX element pid: 34858, elementOrHash.elementID: 4314630512.73>
+          Button, 0x105285f60, {{487.0, 6.0}, {76.0, 44.0}}, identifier: 'arena.lobby', label: '金币，打开商店，0' <AX element pid: 34858, elementOrHash.elementID: 4314506304.74>
+            Other, 0x1052862b0, {{504.0, 15.7}, {24.7, 25.0}} <AX element pid: 34858, elementOrHash.elementID: 4314630944.101>
+            StaticText, 0x105286dc0, {{533.8, 17.8}, {12.3, 20.3}}, label: '0' <AX element pid: 34858, elementOrHash.elementID: 4314631376.102>
+          Button, 0x105287110, {{570.0, 6.0}, {76.0, 44.0}}, identifier: 'arena.lobby', label: '赛季经验，0' <AX element pid: 34858, elementOrHash.elementID: 4314443776.75>
+            Other, 0x105287480, {{587.0, 15.7}, {25.0, 25.0}} <AX element pid: 34858, elementOrHash.elementID: 4314508704.103>
+            StaticText, 0x1052877c0, {{616.8, 17.8}, {12.3, 20.3}}, label: '0' <AX element pid: 34858, elementOrHash.elementID: 4314509136.104>
+          Button, 0x105466a20, {{653.0, 6.0}, {76.0, 44.0}}, identifier: 'arena.lobby', label: '通行证等级，0' <AX element pid: 34858, elementOrHash.elementID: 4314634448.76>
+            Other, 0x105466b40, {{670.0, 15.7}, {25.0, 25.0}} <AX element pid: 34858, elementOrHash.elementID: 4314632912.105>
+            StaticText, 0x105466c60, {{699.8, 17.8}, {12.3, 20.3}}, label: '0' <AX element pid: 34858, elementOrHash.elementID: 4314633344.106>
+          Button, 0x105466d80, {{734.7, 4.8}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '静音' <AX element pid: 34858, elementOrHash.elementID: 4314636016.77>
+          Button, 0x10546c7a0, {{785.7, 4.8}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '游戏设置' <AX element pid: 34858, elementOrHash.elementID: 4314636448.78>
+          Button, 0x10546c8c0, {{836.7, 4.8}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '离开勇者乱斗' <AX element pid: 34858, elementOrHash.elementID: 4314637584.79>
+          Button, 0x10546c9e0, {{72.7, 339.8}, {112.7, 71.5}}, identifier: 'arena.lobby', label: '0、乱斗通行证、0/100', value: 0% <AX element pid: 34858, elementOrHash.elementID: 4314646432.80>
+            Other, 0x10546cb00, {{84.0, 341.3}, {42.0, 31.0}} <AX element pid: 34858, elementOrHash.elementID: 4314638720.107>
+            StaticText, 0x10546cc20, {{131.0, 343.7}, {16.0, 26.3}}, label: '0' <AX element pid: 34858, elementOrHash.elementID: 4314639152.108>
+            StaticText, 0x10546cd40, {{84.0, 375.3}, {55.0, 13.3}}, label: '乱斗通行证' <AX element pid: 34858, elementOrHash.elementID: 4314640592.109>
+            ProgressIndicator, 0x10546ce60, {{84.0, 391.7}, {90.0, 4.0}}, value: 0% <AX element pid: 34858, elementOrHash.elementID: 4314642160.110>
+              ProgressIndicator, 0x10546ed50, {{84.0, 381.7}, {90.0, 24.0}}, value: 0% <AX element pid: 34858, elementOrHash.elementID: 4314491152.141>
+            StaticText, 0x10546ee70, {{84.0, 398.7}, {31.7, 11.0}}, label: '0/100' <AX element pid: 34858, elementOrHash.elementID: 4314642944.111>
+          Button, 0x10546ef90, {{190.7, 352.8}, {46.6, 58.5}}, identifier: 'arena.lobby', label: '任务' <AX element pid: 34858, elementOrHash.elementID: 4314649072.81>
+            Other, 0x10546f0b0, {{197.0, 357.3}, {34.0, 34.0}} <AX element pid: 34858, elementOrHash.elementID: 4314647328.112>
+            StaticText, 0x10546f1d0, {{202.0, 392.3}, {24.0, 14.3}}, label: '任务' <AX element pid: 34858, elementOrHash.elementID: 4314647760.113>
+          Button, 0x10546f2f0, {{348.6, 347.8}, {342.7, 63.5}}, identifier: 'arena.lobby', label: '双闸交汇、本地对战 · 电脑队友 / 对手' <AX element pid: 34858, elementOrHash.elementID: 4314654928.82>
+            Other, 0x105492120, {{359.0, 360.0}, {34.0, 39.0}} <AX element pid: 34858, elementOrHash.elementID: 4314650128.114>
+            StaticText, 0x105287b10, {{401.0, 359.3}, {80.3, 25.3}}, label: '双闸交汇' <AX element pid: 34858, elementOrHash.elementID: 4314650560.115>
+            StaticText, 0x105492240, {{401.0, 387.7}, {117.7, 12.0}}, label: '本地对战 · 电脑队友 / 对手' <AX element pid: 34858, elementOrHash.elementID: 4314651344.116>
+            Image, 0x105492360, {{664.7, 375.0}, {14.3, 9.0}}, identifier: 'chevron.up', label: '向上移动' <AX element pid: 34858, elementOrHash.elementID: 4314652128.117>
+          StaticText, 0x105287e80, {{746.7, 327.3}, {86.7, 13.3}}, identifier: 'arena.lobby', label: '三英雄试玩 · 本地' <AX element pid: 34858, elementOrHash.elementID: 4314655984.83>
+          Button, 0x1052881f0, {{696.6, 347.8}, {186.7, 63.5}}, identifier: 'arena.lobby', label: '对战' <AX element pid: 34858, elementOrHash.elementID: 4314656416.84>
+          Button, 0x105492480, {{392.7, 68.8}, {187.3, 39.0}}, identifier: 'arena.lobby', label: '游侠，等级1，小道具未解锁，星徽未解锁，超级充能未解锁，打开升级与技能' <AX element pid: 34858, elementOrHash.elementID: 4314665264.85>
+            Other, 0x1054925a0, {{401.7, 76.3}, {22.0, 24.0}} <AX element pid: 34858, elementOrHash.elementID: 4314656848.118>
+            StaticText, 0x1054926c0, {{427.7, 78.0}, {12.3, 20.3}}, label: '0' <AX element pid: 34858, elementOrHash.elementID: 4314657984.119>
+            StaticText, 0x1054927e0, {{464.5, 78.5}, {9.0, 19.3}}, label: '1' <AX element pid: 34858, elementOrHash.elementID: 4314658768.120>
+            Image, 0x105492a10, {{501.0, 81.0}, {10.7, 14.7}}, identifier: 'lock.fill', label: '锁定' <AX element pid: 34858, elementOrHash.elementID: 4314659552.121>
+            Image, 0x105288540, {{529.0, 81.0}, {10.7, 14.7}}, identifier: 'lock.fill', label: '锁定' <AX element pid: 34858, elementOrHash.elementID: 4314660336.122>
+            Image, 0x10558fc30, {{557.0, 81.0}, {10.7, 14.7}}, identifier: 'lock.fill', label: '锁定' <AX element pid: 34858, elementOrHash.elementID: 4314661120.123>
+          Button, 0x10558fd50, {{76.0, 58.7}, {68.0, 47.0}}, identifier: 'arena.lobby', label: '赛季活动' <AX element pid: 34858, elementOrHash.elementID: 4314668096.86>
+            Other, 0x10558fe70, {{95.7, 61.0}, {29.0, 29.0}} <AX element pid: 34858, elementOrHash.elementID: 4314667232.124>
+            StaticText, 0x10558ff90, {{76.0, 58.7}, {68.0, 47.0}}, label: '赛季活动' <AX element pid: 34858, elementOrHash.elementID: 4314667664.125>
+          Button, 0x1055900b0, {{76.7, 139.0}, {67.0, 49.0}}, identifier: 'arena.lobby', label: '商店' <AX element pid: 34858, elementOrHash.elementID: 4314670128.87>
+            Other, 0x1055901d0, {{91.4, 139.9}, {37.6, 33.9}} <AX element pid: 34858, elementOrHash.elementID: 4314668992.126>
+            StaticText, 0x1055903e0, {{76.7, 139.0}, {67.0, 49.0}}, label: '商店' <AX element pid: 34858, elementOrHash.elementID: 4314669696.127>
+          Button, 0x105590500, {{76.7, 198.0}, {67.0, 49.0}}, identifier: 'arena.lobby', label: '英雄' <AX element pid: 34858, elementOrHash.elementID: 4314672592.88>
+            Other, 0x105590620, {{91.4, 198.9}, {37.6, 33.9}} <AX element pid: 34858, elementOrHash.elementID: 4314671728.128>
+            StaticText, 0x105492b30, {{76.7, 198.0}, {67.0, 49.0}}, label: '英雄' <AX element pid: 34858, elementOrHash.elementID: 4314672160.129>
+          Button, 0x105492c50, {{76.7, 257.0}, {67.0, 49.0}}, identifier: 'arena.lobby', label: '活动' <AX element pid: 34858, elementOrHash.elementID: 4314675056.89>
+            Other, 0x105492d70, {{91.4, 257.9}, {37.6, 33.9}} <AX element pid: 34858, elementOrHash.elementID: 4314674192.130>
+            StaticText, 0x105492e90, {{76.7, 257.0}, {67.0, 49.0}}, label: '活动' <AX element pid: 34858, elementOrHash.elementID: 4314674624.131>
+          Button, 0x105492fb0, {{810.7, 84.7}, {67.0, 49.0}}, identifier: 'arena.lobby', label: '好友' <AX element pid: 34858, elementOrHash.elementID: 4314677520.90>
+            Other, 0x1054930d0, {{825.4, 85.2}, {37.6, 33.9}} <AX element pid: 34858, elementOrHash.elementID: 4314676656.132>
+            StaticText, 0x1054931f0, {{810.7, 84.7}, {67.0, 49.0}}, label: '好友' <AX element pid: 34858, elementOrHash.elementID: 4314677088.133>
+          Button, 0x105493310, {{810.7, 143.7}, {67.0, 49.0}}, identifier: 'arena.lobby', label: '联机' <AX element pid: 34858, elementOrHash.elementID: 4314680336.91>
+            Other, 0x105493430, {{825.4, 144.2}, {37.6, 33.9}} <AX element pid: 34858, elementOrHash.elementID: 4314679472.134>
+            StaticText, 0x105493550, {{810.7, 143.7}, {67.0, 49.0}}, label: '联机' <AX element pid: 34858, elementOrHash.elementID: 4314679904.135>
+          Button, 0x105493670, {{810.7, 202.7}, {67.0, 49.0}}, identifier: 'arena.lobby', label: '组队' <AX element pid: 34858, elementOrHash.elementID: 4314683152.92>
+            Other, 0x105493790, {{825.4, 203.2}, {37.6, 33.9}} <AX element pid: 34858, elementOrHash.elementID: 4314682288.136>
+            StaticText, 0x1054938b0, {{810.7, 202.7}, {67.0, 49.0}}, label: '组队' <AX element pid: 34858, elementOrHash.elementID: 4314682720.137>
+          Button, 0x1054939d0, {{744.6, 274.4}, {134.8, 47.5}}, identifier: 'arena.lobby', label: '冒险乐园' <AX element pid: 34858, elementOrHash.elementID: 4314686992.93>
+            Other, 0x105493af0, {{762.3, 280.7}, {35.0, 35.0}} <AX element pid: 34858, elementOrHash.elementID: 4314685104.138>
+            StaticText, 0x105493c10, {{802.2, 289.0}, {59.7, 18.0}}, label: '冒险乐园' <AX element pid: 34858, elementOrHash.elementID: 4314685536.139>
+          Button, 0x105493d30, {{330.0, 219.4}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '金币升级英雄与装备技能' <AX element pid: 34858, elementOrHash.elementID: 4314688832.94>
+            Other, 0x105493e50, {{338.7, 228.3}, {29.0, 29.0}} <AX element pid: 34858, elementOrHash.elementID: 4314688048.140>
+          Button, 0x105493f70, {{330.0, 271.4}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '选择英雄和皮肤' <AX element pid: 34858, elementOrHash.elementID: 4314691088.95>
+          Button, 0x1054941e0, {{612.7, 212.1}, {46.7, 46.5}}, identifier: 'arena.lobby', label: '邀请队友' <AX element pid: 34858, elementOrHash.elementID: 4314691520.96>

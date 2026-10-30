@@ -193,6 +193,15 @@ final class ArenaController: ObservableObject {
     private var snapshotDue = false
     private var recorded = false
     private var flowEvidenceWritten = false
+    var flowEvidenceForUITest: String {
+        #if DEBUG && targetEnvironment(simulator)
+        guard capturesFlow, flowEvidenceWritten,
+              let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return "" }
+        return (try? String(contentsOf: folder.appendingPathComponent("arena-flow-hero-\(mine.brawler.rawValue).json"), encoding: .utf8)) ?? ""
+        #else
+        return ""
+        #endif
+    }
     private var resultWasInjected = false
     private var capturesFlow: Bool {
         threeHeroSample && ProcessInfo.processInfo.arguments.contains("-demo") &&

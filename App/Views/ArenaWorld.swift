@@ -99,6 +99,10 @@ final class ArenaWorldView: SCNView {
     private var nextMetricsAt = 0.0
     private var diagnosticFrame = 0
     private var captureReady = false
+    #if DEBUG && targetEnvironment(simulator)
+    private var recordingGateReleased = false
+    private var recordingGateAnnounced = false
+    #endif
     private var measuredSeconds = 0.0
     private var measuredCallbacks = 0
     private var measuredSlowCallbacks = 0
@@ -331,6 +335,23 @@ final class ArenaWorldView: SCNView {
 
     fileprivate func tick(_ timestamp: CFTimeInterval) {
         guard link != nil, window != nil, UIApplication.shared.applicationState == .active else { return }
+        #if DEBUG && targetEnvironment(simulator)
+        // Load/present before starting the simulator encoder. This gate only waits
+        // at time zero; it never advances the game or manufactures a result.
+        if controller.benchmark && UserDefaults.standard.bool(forKey: "arena.recordingGate") && !recordingGateReleased {
+            let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            if !recordingGateAnnounced {
+                try? Data("ready".utf8).write(to: folder.appendingPathComponent("arena-recording-ready"), options: .atomic)
+                recordingGateAnnounced = true
+            }
+            guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("arena-recording-start").path) else {
+                lastTimestamp = nil
+                return
+            }
+            recordingGateReleased = true
+            lastTimestamp = nil
+        }
+        #endif
         let elapsed = lastTimestamp.map { timestamp - $0 } ?? 0
         lastTimestamp = timestamp
         diagnosticFrame += 1

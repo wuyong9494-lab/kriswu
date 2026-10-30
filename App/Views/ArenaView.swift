@@ -853,6 +853,7 @@ struct ArenaMatchView: View {
                     Button(controller.story == nil ? "回大厅" : "回冒险") { onExit() }
                         .buttonStyle(ArenaGameButton.blue)
                         .accessibilityIdentifier("arena.result.lobby")
+                        .accessibilityValue(controller.flowEvidenceForUITest)
                 } else {
                     Button("回房间") { onExit() }
                         .buttonStyle(ArenaGameButton.yellow)

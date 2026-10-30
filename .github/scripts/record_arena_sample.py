@@ -27,12 +27,6 @@ def validate_traversal(evidence):
 
 def prepare_recording_device(device, traversal):
     stop_app(device)
-    if traversal:
-        # Isolate the second recording from the previous encoder/surface session.
-        # Restart only this dedicated sample simulator; failures remain failures.
-        simctl('shutdown', device, timeout=30)
-        simctl('boot', device, timeout=90)
-        simctl('bootstatus', device, '-b', timeout=180)
 
 
 def main():
@@ -56,6 +50,31 @@ def main():
     def save_diagnostic():
         diagnostic_path.write_text(json.dumps(diagnostic, indent=2) + '\n')
     save_diagnostic()
+    ready = data / 'Documents/arena-recording-ready'
+    start = data / 'Documents/arena-recording-start'
+    ready.unlink(missing_ok=True)
+    start.unlink(missing_ok=True)
+    try:
+        diagnostic['phase'] = 'launching-before-recorder'
+        save_diagnostic()
+        simctl('launch', device, APP_ID, '-demo', '-screen', 'arenaHarborBenchmark',
+               '-arena.purpleSample', 'NO', '-arena.snapshotTime', str(duration), '-arena.legacyRanger', 'NO',
+               '-arena.recordingGate', 'YES', '-arena.captureTraversal', 'YES' if traversal else 'NO')
+        deadline = time.monotonic() + 120
+        while not ready.exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError('Scene did not become ready before recording')
+            time.sleep(0.5)
+        diagnostic['phase'] = 'scene-ready-at-time-zero'
+        save_diagnostic()
+    except Exception as error:
+        diagnostic.update(phase='launch-failed', error=str(error))
+        save_diagnostic()
+        try:
+            simctl('io', device, 'screenshot', str(output / (stem + '-launch-failure.png')), timeout=20)
+        except Exception:
+            pass
+        raise
     with (output / (stem + '.recorder.log')).open('w') as recorder_log:
         recorder = subprocess.Popen(['xcrun', 'simctl', 'io', device, 'recordVideo',
                                      '--codec=h264', str(path)], stdout=recorder_log,
@@ -64,10 +83,8 @@ def main():
     try:
         time.sleep(1)
         if recorder.poll() is not None:
-            raise RuntimeError('Video recorder exited before launch')
-        simctl('launch', device, APP_ID, '-demo', '-screen', 'arenaHarborBenchmark',
-               '-arena.purpleSample', 'NO', '-arena.snapshotTime', str(duration), '-arena.legacyRanger', 'NO',
-               '-arena.captureTraversal', 'YES' if traversal else 'NO')
+            raise RuntimeError('Video recorder exited before simulation start')
+        start.write_text('start')
         deadline = time.monotonic() + (240 if traversal else 120)
         while time.monotonic() < deadline:
             if recorder.poll() is not None:

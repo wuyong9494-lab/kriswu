@@ -149,7 +149,7 @@ struct ArenaHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .accessibilityIdentifier("arena.lobby")
+        // Identifiers on this container propagate to buttons and overwrite their IDs.
         .onAppear {
             if reduceLobbyMotion { lobbyPresented = true }
             else { withAnimation(.easeOut(duration: 0.24)) { lobbyPresented = true } }

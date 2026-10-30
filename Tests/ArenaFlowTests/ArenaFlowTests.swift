@@ -4,6 +4,15 @@ import XCTest
 final class ArenaFlowTests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    override func tearDownWithError() throws {
+        shot("final-state")
+        let tree = XCTAttachment(string: XCUIApplication().debugDescription)
+        tree.name = "final-accessibility-tree"
+        tree.lifetime = .keepAlways
+        add(tree)
+        XCUIApplication().terminate()
+    }
+
     func testRangerLoop() throws { try play(hero: 1) }
     func testBarbarianLoop() throws { try play(hero: 2) }
     func testMageLoop() throws { try play(hero: 3) }
@@ -58,6 +67,12 @@ final class ArenaFlowTests: XCTestCase {
         }
         XCTAssertTrue(back.exists, "Match did not naturally reach results")
         shot("hero-\(hero)-result")
+        let scene = try XCTUnwrap(back.value as? String)
+        XCTAssertFalse(scene.isEmpty, "Natural-result evidence was not saved")
+        let evidence = XCTAttachment(string: scene)
+        evidence.name = "arena-flow-hero-\(hero).json"
+        evidence.lifetime = .keepAlways
+        add(evidence)
         back.tap()
         XCTAssertTrue(heroes.waitForExistence(timeout: 30))
         shot("hero-\(hero)-returned-lobby")

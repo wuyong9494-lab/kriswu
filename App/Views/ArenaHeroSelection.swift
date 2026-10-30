@@ -36,7 +36,7 @@ struct ArenaHeroSelection: View {
                         Text("三种打法 · 选择后返回大厅，再进入双闸交汇")
                             .font(.caption).foregroundStyle(.white.opacity(0.75)).padding(.top, 12)
                     }
-                    .accessibilityIdentifier("arena.heroes")
+
                     .task { await ArenaPortraits.shared.prepare() }
                 }
             }
@@ -87,7 +87,7 @@ struct ArenaHeroSelection: View {
                 }
             }.frame(height: height)
         }
-        .accessibilityIdentifier("arena.hero.detail.\(hero.rawValue)")
+
     }
 
     private func tactics(_ hero: Brawler) -> String {

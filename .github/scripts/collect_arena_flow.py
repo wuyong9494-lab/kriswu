@@ -41,11 +41,20 @@ def main():
               'visualAcceptance': 'pending-human-review', 'devicePerformance': 'unmeasured'}
     errors = []
     try:
-        data = pathlib.Path(simctl('get_app_container', device, APP_ID, 'data')) / 'Documents'
+        # Xcode may install each UI test with a randomized bundle identifier.
+        # The test attaches the exact app-written JSON before that sandbox disappears.
+        manifest = json.loads((destination / 'manifest.json').read_text())
+        for test in manifest:
+            for attachment in test.get('attachments', []):
+                name = attachment.get('suggestedHumanReadableName', '')
+                for hero in (1, 2, 3):
+                    if name.startswith(f'arena-flow-hero-{hero}.json'):
+                        shutil.copyfile(destination / attachment['exportedFileName'],
+                                        destination / f'arena-flow-hero-{hero}.json')
+        data = destination
         for hero in (1, 2, 3):
             source = data / f'arena-flow-hero-{hero}.json'
             try:
-                shutil.copyfile(source, destination / source.name)
                 scene = json.loads(source.read_text())
                 report['heroes'][str(hero)] = {'events': validate_scene(scene, hero), 'status': 'scene-verified'}
             except (OSError, ValueError, KeyError) as error:

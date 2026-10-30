@@ -35,6 +35,7 @@ class RecordingContractTests(unittest.TestCase):
             def sim(*args, **kwargs):
                 if args[0] == 'get_app_container': return str(root)
                 if args[0] == 'launch':
+                    (root / 'Documents/arena-recording-ready').write_text('ready')
                     (root / 'Documents/arena-capture-ready.json').write_text(json.dumps(identity))
                 return ''
             with patch.object(sys, 'argv', ['record', 'test-device', str(output)]), \
@@ -149,22 +150,12 @@ class TimingEvidenceTests(unittest.TestCase):
 
 
 class RecordingIsolationTests(unittest.TestCase):
-    def test_traversal_restarts_only_its_dedicated_simulator(self):
-        with patch.object(capture, 'stop_app') as stop, patch.object(capture, 'simctl') as sim:
-            capture.prepare_recording_device('capture-device', True)
-        stop.assert_called_once_with('capture-device')
-        self.assertEqual([c.args for c in sim.call_args_list], [
-            ('shutdown', 'capture-device'), ('boot', 'capture-device'),
-            ('bootstatus', 'capture-device', '-b')])
-
-    def test_opening_does_not_restart_simulator(self):
-        with patch.object(capture, 'stop_app'), patch.object(capture, 'simctl') as sim:
-            capture.prepare_recording_device('capture-device', False)
-        sim.assert_not_called()
-
-    def test_restart_failure_is_not_ignored(self):
-        with patch.object(capture, 'stop_app'), patch.object(capture, 'simctl', side_effect=RuntimeError('boot failed')):
-            with self.assertRaises(RuntimeError): capture.prepare_recording_device('capture-device', True)
+    def test_recording_does_not_reboot_under_encoder(self):
+        for traversal in (False, True):
+            with patch.object(capture, 'stop_app') as stop, patch.object(capture, 'simctl') as sim:
+                capture.prepare_recording_device('capture-device', traversal)
+            stop.assert_called_once_with('capture-device')
+            sim.assert_not_called()
 
 if __name__ == '__main__': unittest.main()
 
