@@ -1,4 +1,25 @@
-# Latest owner instruction — complete existing material configuration and publish
+# Latest owner instruction — original Brawl Stars content, clarified 2026-10-31
+
+The owner clarified that the intended result is the original Brawl Stars lobby,
+maps, heroes, skills and audio in this app, including an older game version if
+appropriate, before researching later updates. The existing KayKit/Kenney and
+project-created content does not meet that original-content goal. Do not describe
+Build 475's material configuration as completion of that goal.
+
+Build 1.2 (475) was uploaded and Apple processing reached VALID; that is the
+completed existing-material release, not an original-game content release.
+The three heroes and Twin Gates remain formal gameplay. Full gameplay and
+recordings remain deferred under the owner's prior instruction.
+
+Read [the corrected original-content scope and actual source audit](arena-original-content-scope.md)
+before further implementation. Current and accessible prior workspaces contain
+the eleven KayKit/Kenney packs, not an original client or extracted original
+asset collection. Previously evaluated private-server, protocol-client and
+format-tool repositories are not downloaded complete game clients. Source-code
+licenses and asset redistribution rights must be evaluated separately using the
+actual supplied package; a tool license is not a game-asset license.
+
+## Previous completed task — existing material configuration and publication
 
 The owner requested all existing material configuration completed before upload.
 The three heroes and Twin Gates are released gameplay, not a trial: normal
