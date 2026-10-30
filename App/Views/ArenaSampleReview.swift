@@ -15,11 +15,10 @@ struct ArenaSampleReview: View {
     var body: some View {
         ArenaMenuScreen(title: "蓝月港 · 试玩样板", onClose: onClose) {
             VStack(spacing: 12) {
-                Picker("样板页面", selection: $page) {
-                    Text("游侠").tag(0)
-                    Text("双闸交汇").tag(1)
+                HStack(spacing: 10) {
+                    pageButton("游侠", index: 0)
+                    pageButton("双闸交汇", index: 1)
                 }
-                .pickerStyle(.segmented)
                 .accessibilityIdentifier("arena.sample.pages")
                 if page == 0 { hero } else { map }
 
@@ -46,6 +45,17 @@ struct ArenaSampleReview: View {
             .frame(maxWidth: .infinity)
             .background(ArenaMenuTheme.canvas)
         }
+    }
+
+    private func pageButton(_ title: String, index: Int) -> some View {
+        Button { page = index } label: {
+            Text(title).frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(ArenaMenuButtonStyle())
+        .overlay(RoundedRectangle(cornerRadius: 9)
+            .strokeBorder(page == index ? Color.cyan : Color.clear, lineWidth: 2))
+        .accessibilityIdentifier("arena.sample.page.\(index)")
+        .accessibilityAddTraits(page == index ? .isSelected : [])
     }
 
     private func markReady(_ size: CGSize) {
