@@ -60,7 +60,8 @@ jobs:
   testflight:
     needs: verify
     if: needs.verify.outputs.upload_required == 'true'
-    runs-on: macos-15
+    # Standard Intel host avoids the hosted ARM capacity failure; signing and gates are unchanged.
+    runs-on: macos-15-intel
     timeout-minutes: 30
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}

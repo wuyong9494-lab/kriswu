@@ -29,23 +29,62 @@ CONTENT_RESTORATION_472 = {
     "verify_vendor_runtime": True,
     "vendor_manifest_sha256": "f99b3b0153f12f5b28904dbfaaf6838afcb5529b27ad0b5462655344c6473e1d",
 }
+MATERIAL_CONFIGURATION_475 = {
+    "build_number": "475",
+    "source_sha": "2336a8748aaccb0cb1f5e3b6d761e31348cf9cac",
+    "source_run_id": 41089300780,
+    "defer_sample_validation": True,
+    "verify_vendor_runtime": True,
+    "vendor_manifest_sha256": "9e24d8a893cf4432880859992d827059210dbd2753b404a6fc8aee108c29594c",
+    "vendor_runtime_file_count": 104,
+    "asset_configuration_sha256": "91ccd5c6a4c022dd8b01783f2f7e4cf18bbf64e727a4fba3665225baaf84ce9e",
+    "canonical_ranger_file": "Ranger_FaceSample.glb",
+    "canonical_ranger_sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0",
+    "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
+}
 # Add another owner-authorized release only after its immutable source/run
 # identity is known. A manifest cannot grant itself a validation exception.
-PINNED_RELEASES = {"471": SAMPLE_RELEASE_471, "472": CONTENT_RESTORATION_472}
+PINNED_RELEASES = {"471": SAMPLE_RELEASE_471, "472": CONTENT_RESTORATION_472,
+                   "475": MATERIAL_CONFIGURATION_475}
+CONFIGURED_ASSET_IDENTITY_FIELDS = (
+    "vendor_runtime_file_count", "canonical_ranger_file",
+    "canonical_ranger_sha256", "asset_configuration_sha256",
+)
 
 
 def is_sample_release(request):
     assert request.get("build_number") != "468", "Build 468 was cancelled by the owner"
     assert request.get("build_number") != "469", "Build 469 failed validation"
     assert request.get("build_number") != "470", "Build 470 failed validation"
+    assert request.get("build_number") != "473", "Build 473 failed validation"
+    assert request.get("build_number") != "474", "Build 474 has no successful compilation: runner allocation failed"
     identity = PINNED_RELEASES.get(request.get("build_number"))
     if identity is None and "source_sample_run_id" not in request:
         assert not request.get("defer_sample_validation"), "Validation deferral requires an explicitly pinned release"
         assert not request.get("verify_vendor_runtime"), "Vendor release verification requires an explicitly pinned release"
+        assert not any(key in request for key in CONFIGURED_ASSET_IDENTITY_FIELDS), "Configured asset verification requires an explicitly pinned release"
         return False
     assert identity is not None, "Unapproved source release identity"
     for key, value in identity.items():
         assert request.get(key) == value, f"Sample promotion identity mismatch: {key}"
+    if "source_sample_run_id" in request:
+        assert "source_sample_run_id" in identity, "Unpinned sample workflow run"
+    # A release request cannot choose its own resource count or asset identities.
+    # The two existing releases retain their original, immutable requirements.
+    for key in CONFIGURED_ASSET_IDENTITY_FIELDS:
+        if key in request:
+            assert key in identity, f"Unpinned configured asset field: {key}"
+    if identity["build_number"] not in ("471", "472"):
+        assert identity.get("verify_vendor_runtime") is True, "Configured release must pin vendor verification"
+        for key in CONFIGURED_ASSET_IDENTITY_FIELDS:
+            assert key in identity and key in request, f"Configured release requires pinned {key}"
+    if "vendor_runtime_file_count" in request:
+        assert type(request["vendor_runtime_file_count"]) is int and request["vendor_runtime_file_count"] > 0, "Invalid pinned runtime resource count"
+    if "canonical_ranger_file" in request:
+        assert request["canonical_ranger_file"] == "Ranger_FaceSample.glb", "Unexpected canonical ranger file"
+    for key in ("canonical_ranger_sha256", "asset_configuration_sha256"):
+        if key in request:
+            assert isinstance(request[key], str) and re.fullmatch(r"[0-9a-f]{64}", request[key]), f"Invalid pinned asset hash: {key}"
     assert not request.get("skip_visual_capture"), "Pinned releases use explicit sample validation or owner deferral"
     if request.get("verify_vendor_runtime"):
         assert identity.get("verify_vendor_runtime") is True, "Vendor verification is not pinned for this release"
@@ -328,7 +367,9 @@ def verify_vendor_archive(request, app, source):
     assert bundled[0].read_bytes() == source_bytes, "Bundled vendor manifest differs from source"
     manifest = json.loads(source_bytes)
     files = manifest["files"]
-    assert len(files) == 28, "Expected exactly 28 vendor runtime resources"
+    expected_count = request.get("vendor_runtime_file_count", 28)
+    assert type(expected_count) is int and expected_count > 0, "Invalid pinned runtime resource count"
+    assert len(files) == expected_count, f"Expected exactly {expected_count} vendor runtime resources"
     assert manifest["packCount"] == 11 and len({item["pack"] for item in files}) == 11, "Expected all 11 vendor packs"
     names = [item["file"] for item in files]
     assert len(set(names)) == len(names), "Duplicate vendor resource name"
@@ -346,12 +387,41 @@ def verify_vendor_archive(request, app, source):
             png_count += 1
         else:
             assert hashlib.sha256(actual).hexdigest() == item["sha256"], f"Bundled resource hash mismatch: {name}"
-    return {"vendor_runtime_verified": True, "vendor_runtime_file_count": len(files),
-            "vendor_pack_count": 11, "vendor_png_count": png_count,
-            "vendor_manifest_sha256": request["vendor_manifest_sha256"]}
+    report = {"vendor_runtime_verified": True, "vendor_runtime_file_count": len(files),
+              "vendor_pack_count": 11, "vendor_png_count": png_count,
+              "vendor_manifest_sha256": request["vendor_manifest_sha256"]}
+    if "asset_configuration_sha256" in request:
+        config_name = "arena-asset-configuration.json"
+        config_path = source_dir / config_name
+        assert config_path.is_file(), "Missing source asset configuration"
+        config_bytes = config_path.read_bytes()
+        assert hashlib.sha256(config_bytes).hexdigest() == request["asset_configuration_sha256"], "Source asset configuration differs from pinned release"
+        assert isinstance(json.loads(config_bytes), dict), "Invalid asset configuration document"
+        configs = list(app.rglob(config_name))
+        assert len(configs) == 1, "Missing or ambiguous bundled asset configuration"
+        assert configs[0].read_bytes() == config_bytes, "Bundled asset configuration differs from source"
+        report.update(asset_configuration_verified=True,
+                      asset_configuration_sha256=request["asset_configuration_sha256"])
+    return report
+
+
+def verify_canonical_ranger(request, app, source):
+    assert source is not None, "Verified source checkout is required for canonical ranger"
+    name = request["canonical_ranger_file"]
+    assert name == "Ranger_FaceSample.glb", "Unexpected canonical ranger file"
+    expected = request["canonical_ranger_sha256"]
+    path = source / "App/Arena3D" / name
+    assert path.is_file(), "Missing source canonical ranger"
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == expected, "Source canonical ranger differs from pinned release"
+    models = list(app.rglob(name))
+    assert len(models) == 1, "Missing or ambiguous bundled canonical ranger"
+    assert hashlib.sha256(models[0].read_bytes()).hexdigest() == expected, "Bundled canonical ranger differs from pinned release"
+    return {"canonical_ranger_verified": True, "canonical_ranger_file": name,
+            "canonical_ranger_sha256": expected}
 
 
 def verify_archive(request, archive, source=None):
+    sample_release = is_sample_release(request)
     app = archive / "Products/Applications/ShiftReminder.app"
     info = plistlib.loads((app / "Info.plist").read_bytes())
     assert info["CFBundleIdentifier"] == request["bundle_id"], "Wrong app in archive"
@@ -367,10 +437,14 @@ def verify_archive(request, archive, source=None):
     assert digest == request["ranger_sha256"], "Ranger differs from tested build"
     vendor_report = {}
     if request.get("verify_vendor_runtime"):
-        assert is_sample_release(request), "Unexpected vendor-verified release"
+        assert sample_release, "Unexpected vendor-verified release"
         vendor_report = verify_vendor_archive(request, app, source)
+    canonical_report = {}
+    if "canonical_ranger_file" in request:
+        assert sample_release and request.get("verify_vendor_runtime") is True, "Unexpected canonical-verified release"
+        canonical_report = verify_canonical_ranger(request, app, source)
     save_report("promotion-archive.json", request, ranger_sha256=digest,
-                app_and_extension_build_verified=True, **vendor_report)
+                app_and_extension_build_verified=True, **vendor_report, **canonical_report)
 
 
 def write_notes(request, build):

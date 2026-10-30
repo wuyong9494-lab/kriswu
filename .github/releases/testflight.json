@@ -1,14 +1,17 @@
 {
-  "build_number": "472",
+  "build_number": "475",
   "version": "1.2",
-  "source_sha": "e2244192d499315e8b4715f2198a72e4672879f6",
-  "source_run_id": 41074815710,
-  "source_sample_run_id": 41074815721,
+  "source_sha": "2336a8748aaccb0cb1f5e3b6d761e31348cf9cac",
+  "source_run_id": 41089300780,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "notes": "• 恢复完整大厅：13名英雄的列表与详情、11种玩法、14张原地图和7张扩展地图可选，保留原有奖杯、英雄解锁和皮肤进度。\n• 三英雄试玩改为玩法页独立入口，双闸交汇试玩继续保留。\n• 常规地图加入素材包中的箱桶；保留从11个素材包中选用的28个运行资源，以及自然模型加载修复、现有大厅和战斗配乐。\n• 本版按要求先行上传，发布前核对编译和安装包资源；画面、实战、大招流程与录屏的完整验收留待后续。",
+  "notes": "• 完成13名现有英雄的装备、动作和技能素材配置，并为22张地图配置场景主题；保留英雄解锁、升级、皮肤和奖杯进度。\n• 正式游侠统一使用已完成的面部模型；游侠、蛮王、法师和双闸交汇均作为正常玩法，接入正常结算奖励并保持多人版本兼容。\n• 从11个已有素材包选用104个运行文件，扩展武器、墙体、地面、植被、界面控件、图标及战斗和菜单音效。\n• 大厅、战斗、胜利和失败四段原创主题配乐全部接通；未保存过音乐选择时默认开启，保留明确设置的关闭状态和静音偏好。\n• 按要求先行上传，发布前核对编译、模型身份和安装包资源；完整实战、画面、多人真机与录屏验收留待后续。",
   "wait_for_source": false,
   "defer_sample_validation": true,
   "verify_vendor_runtime": true,
-  "vendor_manifest_sha256": "f99b3b0153f12f5b28904dbfaaf6838afcb5529b27ad0b5462655344c6473e1d"
+  "vendor_manifest_sha256": "9e24d8a893cf4432880859992d827059210dbd2753b404a6fc8aee108c29594c",
+  "vendor_runtime_file_count": 104,
+  "asset_configuration_sha256": "91ccd5c6a4c022dd8b01783f2f7e4cf18bbf64e727a4fba3665225baaf84ce9e",
+  "canonical_ranger_file": "Ranger_FaceSample.glb",
+  "canonical_ranger_sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0"
 }

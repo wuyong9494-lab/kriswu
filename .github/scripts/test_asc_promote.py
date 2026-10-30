@@ -202,8 +202,8 @@ class Promotion471Tests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "cancelled"):
             promotion.is_sample_release({"build_number": "468"})
 
-    def test_failed_469_and_470_are_rejected_before_any_network_or_upload(self):
-        for build in ("469", "470"):
+    def test_failed_469_470_and_473_are_rejected_before_any_network_or_upload(self):
+        for build in ("469", "470", "473"):
             with self.subTest(build=build), self.assertRaisesRegex(AssertionError, "failed validation"):
                 promotion.is_sample_release({"build_number": build})
 
@@ -383,6 +383,78 @@ class Promotion472Tests(unittest.TestCase):
             output.assert_not_called()
 
 
+class Promotion475Tests(unittest.TestCase):
+    def setUp(self):
+        self.request = dict(promotion.MATERIAL_CONFIGURATION_475, version="1.2", notes="Configured assets",
+                            bundle_id="com.kriswu.shiftreminder", wait_for_source=False)
+        self.run = {"id": 41089300780, "head_sha": self.request["source_sha"],
+                    "head_branch": "codex/arena-quality-sample", "run_number": 475,
+                    "path": ".github/workflows/ios.yml", "status": "completed", "conclusion": "success"}
+        self.jobs = [{"name": name, "conclusion": "success"} for name in ("build", "core-tests-linux")]
+        self.jobs.append({"name": "arena-look", "conclusion": "skipped"})
+
+    def test_only_exact_475_source_and_complete_asset_pins_are_accepted(self):
+        self.assertTrue(promotion.is_sample_release(self.request))
+        self.assertNotIn("source_sample_run_id", self.request)
+        for key in promotion.MATERIAL_CONFIGURATION_475:
+            missing = dict(self.request); del missing[key]
+            with self.subTest(missing=key), self.assertRaises(AssertionError):
+                promotion.is_sample_release(missing)
+        changes = (("build_number", "476"), ("source_sha", "a" * 40), ("source_run_id", 1),
+                   ("source_sample_run_id", 2), ("defer_sample_validation", False),
+                   ("defer_sample_validation", 1), ("verify_vendor_runtime", False),
+                   ("verify_vendor_runtime", 1), ("vendor_manifest_sha256", "a" * 64),
+                   ("vendor_runtime_file_count", 28), ("vendor_runtime_file_count", "104"),
+                   ("asset_configuration_sha256", "b" * 64),
+                   ("canonical_ranger_file", "Ranger_Original.glb"),
+                   ("canonical_ranger_sha256", "c" * 64), ("ranger_sha256", "d" * 64))
+        for key, value in changes:
+            with self.subTest(key=key, value=value), self.assertRaises(AssertionError):
+                promotion.is_sample_release(dict(self.request, **{key: value}))
+
+    def test_475_still_requires_exact_ci_and_successful_build_and_core_jobs(self):
+        promotion.validate_source(self.request, self.run, self.jobs)
+        for index in range(2):
+            for conclusion in (None, "failure", "skipped", "cancelled"):
+                jobs = copy.deepcopy(self.jobs); jobs[index]["conclusion"] = conclusion
+                with self.subTest(index=index, conclusion=conclusion), self.assertRaises(AssertionError):
+                    promotion.validate_source(self.request, self.run, jobs)
+        for key, value in (("id", 41089300781), ("head_sha", "a" * 40), ("run_number", 476),
+                           ("head_branch", "main"), ("path", "other.yml"), ("status", "queued")):
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                promotion.validate_source(self.request, dict(self.run, **{key: value}), self.jobs)
+        with self.assertRaises(AssertionError):
+            promotion.validate_source(self.request, self.run, self.jobs[:1])
+
+    def test_475_pending_or_superseded_source_never_enables_upload(self):
+        jobs = copy.deepcopy(self.jobs); jobs[0]["conclusion"] = None
+        with patch.object(promotion, "github", side_effect=[dict(self.run, status="in_progress"), {"jobs": jobs}]), \
+             patch.object(promotion, "find_build") as find, patch.object(promotion, "output") as output:
+            with self.assertRaises(AssertionError):
+                promotion.preflight(self.request)
+            find.assert_not_called()
+            output.assert_not_called()
+        with patch.object(promotion, "github", return_value={"object": {"sha": "a" * 40}}):
+            with self.assertRaisesRegex(AssertionError, "superseded"):
+                promotion.sample_sources_ready(self.request)
+
+    def test_475_checks_required_source_without_inventing_a_sample_run(self):
+        responses = [{"object": {"sha": self.request["source_sha"]}}, self.run, {"jobs": self.jobs}]
+        with patch.object(promotion, "github", side_effect=responses) as github:
+            self.assertTrue(promotion.sample_sources_ready(self.request))
+            self.assertEqual([call.args[0] for call in github.call_args_list], [
+                "/git/ref/heads/codex/arena-quality-sample",
+                "/actions/runs/41089300780",
+                "/actions/runs/41089300780/jobs?per_page=100",
+            ])
+        with self.assertRaisesRegex(AssertionError, "Unpinned sample workflow run"):
+            promotion.is_sample_release(dict(self.request, source_sample_run_id=41086430910))
+
+    def test_474_runner_allocation_failure_is_rejected_without_claiming_code_failure(self):
+        with self.assertRaisesRegex(AssertionError, "runner allocation failed"):
+            promotion.is_sample_release({"build_number": "474"})
+
+
 class VendorArchiveTests(unittest.TestCase):
     @staticmethod
     def png(width=2, height=3, optimized=False):
@@ -477,6 +549,171 @@ class VendorArchiveTests(unittest.TestCase):
             self.check()
         with self.assertRaisesRegex(AssertionError, "source checkout"):
             promotion.verify_vendor_archive(self.request, self.app, None)
+
+
+class ConfiguredAssetArchiveTests(unittest.TestCase):
+    # Synthetic identities are installed only inside patch.dict contexts below.
+    # They are not production authorization for any build number.
+    png = staticmethod(VendorArchiveTests.png)
+    setUp = VendorArchiveTests.setUp
+    write_manifest = VendorArchiveTests.write_manifest
+    check = VendorArchiveTests.check
+
+    def add_configuration(self):
+        content = json.dumps({"schemaVersion": 1, "heroes": list(range(13)),
+                              "maps": list(range(22)), "effects": list(range(13))}).encode()
+        self.request["asset_configuration_sha256"] = hashlib.sha256(content).hexdigest()
+        for folder in (self.resources, self.app):
+            (folder / "arena-asset-configuration.json").write_bytes(content)
+        return content
+
+    def add_canonical_ranger(self):
+        name = "Ranger_FaceSample.glb"
+        content = b"canonical-ranger-fixture"
+        self.request.update(canonical_ranger_file=name,
+                            canonical_ranger_sha256=hashlib.sha256(content).hexdigest())
+        model_dir = self.source / "App/Arena3D"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / name).write_bytes(content)
+        (self.app / name).write_bytes(content)
+        return content
+
+    def identity_fixture(self):
+        self.add_configuration()
+        self.add_canonical_ranger()
+        self.request.update(build_number="999999", source_sha="f" * 40,
+                            source_run_id=999001, source_sample_run_id=999002,
+                            defer_sample_validation=True, verify_vendor_runtime=True,
+                            vendor_runtime_file_count=28, version="1.2", notes="Offline fixture",
+                            bundle_id="com.kriswu.shiftreminder",
+                            ranger_sha256=hashlib.sha256(b"ranger").hexdigest())
+        keys = ("build_number", "source_sha", "source_run_id", "source_sample_run_id",
+                "defer_sample_validation", "verify_vendor_runtime", "vendor_manifest_sha256",
+                *promotion.CONFIGURED_ASSET_IDENTITY_FIELDS)
+        return {key: self.request[key] for key in keys}
+
+    def test_exact_pinned_runtime_count_supports_more_resources_and_rejects_mismatch(self):
+        for index in range(28, 33):
+            name, content = f"vendor_{index}.bin", f"asset-{index}".encode()
+            for folder in (self.resources, self.app):
+                (folder / name).write_bytes(content)
+            self.manifest["files"].append({"file": name, "pack": f"pack-{index % 11}",
+                                           "sha256": hashlib.sha256(content).hexdigest()})
+        self.write_manifest()
+        self.request["vendor_runtime_file_count"] = 33
+        self.assertEqual(self.check()["vendor_runtime_file_count"], 33)
+        for wrong in (28, 32, 34, True, "33", None):
+            self.request["vendor_runtime_file_count"] = wrong
+            with self.subTest(count=wrong), self.assertRaises(AssertionError):
+                self.check()
+
+    def test_configuration_requires_pinned_source_and_exact_unique_bundled_bytes(self):
+        content = self.add_configuration()
+        self.assertTrue(self.check()["asset_configuration_verified"])
+        name = "arena-asset-configuration.json"
+        source, bundled = self.resources / name, self.app / name
+        source.unlink()
+        with self.assertRaisesRegex(AssertionError, "Missing source asset configuration"):
+            self.check()
+        source.write_bytes(content + b" ")
+        with self.assertRaisesRegex(AssertionError, "Source asset configuration"):
+            self.check()
+        source.write_bytes(content)
+        bundled.unlink()
+        with self.assertRaisesRegex(AssertionError, "Missing or ambiguous bundled asset configuration"):
+            self.check()
+        bundled.write_bytes(content + b" ")
+        with self.assertRaisesRegex(AssertionError, "Bundled asset configuration"):
+            self.check()
+        bundled.write_bytes(content)
+        nested = self.app / "duplicate"; nested.mkdir()
+        (nested / name).write_bytes(content)
+        with self.assertRaisesRegex(AssertionError, "ambiguous bundled asset configuration"):
+            self.check()
+
+    def test_canonical_ranger_requires_source_archive_and_pinned_hash(self):
+        content = self.add_canonical_ranger()
+        check = lambda: promotion.verify_canonical_ranger(self.request, self.app, self.source)
+        self.assertTrue(check()["canonical_ranger_verified"])
+        name = self.request["canonical_ranger_file"]
+        source, bundled = self.source / "App/Arena3D" / name, self.app / name
+        for target, message in ((source, "Source canonical ranger"), (bundled, "Bundled canonical ranger")):
+            target.write_bytes(b"tampered")
+            with self.subTest(target=target), self.assertRaisesRegex(AssertionError, message):
+                check()
+            target.write_bytes(content)
+        self.request["canonical_ranger_sha256"] = "0" * 64
+        with self.assertRaisesRegex(AssertionError, "Source canonical ranger"):
+            check()
+        self.request["canonical_ranger_sha256"] = hashlib.sha256(content).hexdigest()
+        for target, message in ((source, "Missing source canonical ranger"),
+                                (bundled, "Missing or ambiguous bundled canonical ranger")):
+            target.unlink()
+            with self.subTest(target=target), self.assertRaisesRegex(AssertionError, message):
+                check()
+            target.write_bytes(content)
+        with self.assertRaisesRegex(AssertionError, "source checkout"):
+            promotion.verify_canonical_ranger(self.request, self.app, None)
+
+    def test_new_release_requires_all_explicit_asset_pins(self):
+        identity = self.identity_fixture()
+        with patch.dict(promotion.PINNED_RELEASES, {identity["build_number"]: identity}):
+            self.assertTrue(promotion.is_sample_release(self.request))
+            for field in promotion.CONFIGURED_ASSET_IDENTITY_FIELDS:
+                request = dict(self.request); del request[field]
+                with self.subTest(missing=field), self.assertRaises(AssertionError):
+                    promotion.is_sample_release(request)
+            for field, bad in (("vendor_runtime_file_count", 29),
+                               ("canonical_ranger_file", "Ranger_Original.glb"),
+                               ("canonical_ranger_sha256", "0" * 64),
+                               ("asset_configuration_sha256", "0" * 64)):
+                with self.subTest(field=field), self.assertRaises(AssertionError):
+                    promotion.is_sample_release(dict(self.request, **{field: bad}))
+        # Omitting the field from both sides cannot downgrade a newly pinned release.
+        for field in promotion.CONFIGURED_ASSET_IDENTITY_FIELDS:
+            incomplete = dict(identity); del incomplete[field]
+            request = dict(self.request); del request[field]
+            with patch.dict(promotion.PINNED_RELEASES, {identity["build_number"]: incomplete}), \
+                 self.subTest(unpinned=field), self.assertRaises(AssertionError):
+                promotion.is_sample_release(request)
+        with self.assertRaisesRegex(AssertionError, "Unapproved"):
+            promotion.is_sample_release(self.request)
+
+    def test_existing_releases_cannot_accept_unpinned_configured_fields(self):
+        for identity in (promotion.SAMPLE_RELEASE_471, promotion.CONTENT_RESTORATION_472):
+            for field, value in (("vendor_runtime_file_count", 28),
+                                 ("canonical_ranger_file", "Ranger_FaceSample.glb"),
+                                 ("canonical_ranger_sha256", "a" * 64),
+                                 ("asset_configuration_sha256", "b" * 64)):
+                with self.subTest(build=identity["build_number"], field=field), self.assertRaisesRegex(AssertionError, "Unpinned"):
+                    promotion.is_sample_release(dict(identity, **{field: value}))
+
+    def test_complete_archive_keeps_original_ranger_and_checks_canonical_configuration(self):
+        identity = self.identity_fixture()
+        archive = self.app.parent / "archive"
+        application = archive / "Products/Applications/ShiftReminder.app"
+        application.parent.mkdir(parents=True)
+        self.app.rename(application)
+        self.app = application
+        widget = self.app / "PlugIns/ShiftWidget.appex"; widget.mkdir(parents=True)
+        info = {"CFBundleIdentifier": self.request["bundle_id"], "CFBundleVersion": self.request["build_number"],
+                "CFBundleShortVersionString": "1.2", "ArenaCommitSHA": self.request["source_sha"]}
+        (self.app / "Info.plist").write_bytes(plistlib.dumps(info))
+        (widget / "Info.plist").write_bytes(plistlib.dumps({"CFBundleVersion": self.request["build_number"]}))
+        original = self.app / "Ranger_Original.glb"; original.write_bytes(b"ranger")
+        with patch.dict(promotion.PINNED_RELEASES, {identity["build_number"]: identity}), \
+             patch.object(promotion, "save_report") as save:
+            promotion.verify_archive(self.request, archive, self.source)
+            self.assertTrue(save.call_args.kwargs["canonical_ranger_verified"])
+            self.assertTrue(save.call_args.kwargs["asset_configuration_verified"])
+            self.assertEqual(save.call_args.kwargs["ranger_sha256"], self.request["ranger_sha256"])
+            original.write_bytes(b"changed")
+            with self.assertRaisesRegex(AssertionError, "Ranger differs"):
+                promotion.verify_archive(self.request, archive, self.source)
+            original.write_bytes(b"ranger")
+            (self.app / "Ranger_FaceSample.glb").write_bytes(b"changed")
+            with self.assertRaisesRegex(AssertionError, "Bundled canonical ranger"):
+                promotion.verify_archive(self.request, archive, self.source)
 
 
 if __name__ == "__main__":
