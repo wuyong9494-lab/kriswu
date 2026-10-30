@@ -23,9 +23,9 @@ enum ArenaHarborArt {
         var vertices: [SCNVector3] = []
         var normals: [SCNVector3] = []
         var indices: [Int32] = []
-        for leafIndex in 0..<7 {
+        for leafIndex in 0..<11 {
             let angle = Float(leafIndex) * 2.39996
-            let distance: Float = leafIndex == 0 ? 0 : 0.32
+            let distance: Float = leafIndex < 3 ? 0.12 : 0.30
             let center = SIMD3<Float>(cos(angle) * distance, 0, sin(angle) * distance)
             let height: Float = leafIndex % 2 == 0 ? 0.60 : 0.49
             let base = Int32(vertices.count)
@@ -40,8 +40,8 @@ enum ArenaHarborArt {
                 for side in 0..<6 {
                     let phi = Float(side) * .pi / 3
                     let localX = radius * cos(phi)
-                    let localZ = radius * sin(phi) * 0.55
-                    let n = simd_normalize(SIMD3<Float>(cos(phi), -drdy, sin(phi) / 0.55))
+                    let localZ = radius * sin(phi) * 0.80
+                    let n = simd_normalize(SIMD3<Float>(cos(phi), -drdy, sin(phi) / 0.80))
                     vertices.append(SCNVector3(center.x + localX * cos(angle) - localZ * sin(angle) + lean * cos(angle),
                         height * (1 - t), center.z + localX * sin(angle) + localZ * cos(angle) + lean * sin(angle)))
                     normals.append(SCNVector3(n.x * cos(angle) - n.z * sin(angle), n.y,

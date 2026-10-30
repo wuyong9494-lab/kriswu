@@ -988,7 +988,10 @@ final class ArenaWorldView: SCNView {
             let heal = entry.kind == .healing
             let color: UIColor = heal ? UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1)
                 : (game.fighters[entry.target].team == myTeam ? UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1) : .white)
-            let point = avatars[entry.target].node.simdPosition + SIMD3<Float>(heal ? 0.36 : -0.36, ArenaAvatar.headHeight + (heal ? 0.75 : 0.3), 0)
+            let textOffset: SIMD3<Float> = controller.qualitySample
+                ? SIMD3(heal ? 0.78 : -0.78, ArenaAvatar.headHeight + (heal ? 0.95 : 0.65), 0)
+                : SIMD3(heal ? 0.36 : -0.36, ArenaAvatar.headHeight + (heal ? 0.75 : 0.3), 0)
+            let point = avatars[entry.target].node.simdPosition + textOffset
             floater((heal ? "+" : "") + String(entry.amount), at: point, color: color, target: entry.target)
         }
         // 结算时镜头凑近自己，头顶的名字、血条、数字都收起来
@@ -2164,7 +2167,7 @@ final class ArenaWorldView: SCNView {
         if let reusable = floaterPool.popLast() { node = reusable }
         else if !floaters.isEmpty { node = floaters.removeFirst().node }
         else { return }
-        let height: CGFloat = 0.48
+        let height: CGFloat = controller.qualitySample ? 0.40 : 0.48
         let plane = node.geometry as! SCNPlane
         plane.width = height * image.size.width / max(image.size.height, 1)
         plane.height = height

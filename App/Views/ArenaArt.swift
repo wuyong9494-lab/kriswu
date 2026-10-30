@@ -33,6 +33,17 @@ enum ArenaArt {
         return material
     }()
 
+    /// Trial compatibility: an opaque, thinner silhouette; no new pass or alpha layer.
+    static let sampleOutline: SCNMaterial = {
+        let material = outline.copy() as! SCNMaterial
+        material.diffuse.contents = rgb(0.10, 0.13, 0.16)
+        material.shaderModifiers = [.geometry: """
+            float outlineScale = max(length(scn_node.modelTransform[0].xyz), 0.0001);
+            _geometry.position.xyz += normalize(_geometry.normal) * (0.024 / outlineScale);
+            """]
+        return material
+    }()
+
     /// 角色：贴图当颜色，自己算一层柔和的明暗和边光。不走兰伯特，免得贴图上的颜色被灯压灰
     static let characterToon = """
         #pragma body

@@ -171,7 +171,7 @@ final class ArenaAvatar {
         look = BrawlerLook.of(brawler, qualitySample: qualitySample)
         model = ArenaModels.shared.character(brawler, qualitySample: qualitySample)
         if let model {
-            instance = model.instantiate(outline: look.authored ? nil : ArenaArt.outline)
+            instance = model.instantiate(outline: look.authored ? nil : (qualitySample ? ArenaArt.sampleOutline : ArenaArt.outline))
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
             swingBones = ["upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r"].compactMap { model.node(named: $0) }
             torsoBones = ["spine", "chest", "head"].compactMap { model.node(named: $0) }
@@ -202,7 +202,7 @@ final class ArenaAvatar {
             for weapon in look.weapons {
                 guard let piece = ArenaModels.shared.prop(weapon.file),
                       let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else { continue }
-                let held = piece.instantiate(shareMaterials: false, outline: ArenaArt.outline)
+                let held = piece.instantiate(shareMaterials: false, outline: qualitySample ? ArenaArt.sampleOutline : ArenaArt.outline)
                 held.root.simdPosition = weapon.position
                 held.root.simdOrientation = weapon.rotation
                 bone.addChildNode(held.root)
