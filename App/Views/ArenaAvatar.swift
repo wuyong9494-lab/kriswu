@@ -185,6 +185,18 @@ final class ArenaAvatar {
             for name in look.hidden {
                 instance.root.childNode(withName: name, recursively: true)?.isHidden = true
             }
+            // Trial compatibility: reduce accessory coverage without enlarging bodies.
+            // These are rigid attachment nodes; skin and gameplay radii stay unchanged.
+            if qualitySample {
+                if brawler == .mage,
+                   let hat = instance.root.childNode(withName: "Mage_Hat", recursively: true) {
+                    hat.simdScale *= SIMD3<Float>(0.72, 0.90, 0.72)
+                }
+                if brawler == .knight,
+                   let sword = instance.root.childNode(withName: "1H_Sword", recursively: true) {
+                    sword.simdScale *= SIMD3<Float>(repeating: 0.80)
+                }
+            }
             for weapon in look.weapons {
                 guard let piece = ArenaModels.shared.prop(weapon.file),
                       let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else { continue }

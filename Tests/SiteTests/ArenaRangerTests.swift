@@ -64,6 +64,19 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertFalse(jointCounts().contains(27))
     }
 
+    func testSampleAccessoryCoverageDoesNotChangeDefaultModels() throws {
+        for (brawler, name, factor) in [(Brawler.mage, "Mage_Hat", Float(0.72)),
+                                       (Brawler.knight, "1H_Sword", Float(0.80))] {
+            let baseline = ArenaAvatar(brawler: brawler, color: .blue, isMe: false)
+            let sample = ArenaAvatar(brawler: brawler, color: .blue, isMe: false, qualitySample: true)
+            let original = try XCTUnwrap(baseline.node.childNode(withName: name, recursively: true))
+            let adjusted = try XCTUnwrap(sample.node.childNode(withName: name, recursively: true))
+            XCTAssertEqual(adjusted.simdScale.x, original.simdScale.x * factor, accuracy: 0.0001)
+            XCTAssertEqual(adjusted.simdScale.z, original.simdScale.z * factor, accuracy: 0.0001)
+            XCTAssertEqual(adjusted.simdPosition, original.simdPosition)
+        }
+    }
+
     func testHarborGrassStaysInsideTileAndBelowStandingCharacter() {
         let (low, high) = ArenaHarborArt.bush.boundingBox
         XCTAssertGreaterThanOrEqual(low.x, -0.5)
