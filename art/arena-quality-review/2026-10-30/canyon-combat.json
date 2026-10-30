@@ -1,0 +1,55 @@
+{
+  "camera": "fixed map center",
+  "deviceHeight": 440,
+  "deviceWidth": 956,
+  "fighters": [
+    {
+      "alive": true,
+      "health": 520,
+      "id": 0,
+      "x": 5.014877921910572,
+      "y": 13.172441623218846
+    },
+    {
+      "alive": true,
+      "health": 2263,
+      "id": 1,
+      "x": 5.962417039655858,
+      "y": 13.588881132388002
+    },
+    {
+      "alive": false,
+      "health": 0,
+      "id": 2,
+      "x": 9.016545456735654,
+      "y": 14.398873907086834
+    },
+    {
+      "alive": true,
+      "health": 2240,
+      "id": 3,
+      "x": 10.610487463861444,
+      "y": 9.642299912048868
+    },
+    {
+      "alive": false,
+      "health": 0,
+      "id": 4,
+      "x": 7.35242731598726,
+      "y": 12.37236717581003
+    },
+    {
+      "alive": false,
+      "health": 0,
+      "id": 5,
+      "x": 2.0164860359062953,
+      "y": 11.749627002522095
+    }
+  ],
+  "map": "canyon",
+  "purple": true,
+  "qualitySample": true,
+  "rangerAsset": "Ranger_FaceSample.glb",
+  "seed": 170017,
+  "simulationTime": 1.2000000000000006
+}

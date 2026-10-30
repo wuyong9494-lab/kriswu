@@ -1,0 +1,21 @@
+{
+  "scene": "sampleReview",
+  "height": 243.66666666666669,
+  "width": 720,
+  "map": "twin_gates_sample_v1",
+  "page": 0,
+  "model": {
+    "asset": "Ranger_FaceSample.glb",
+    "brawler": 1,
+    "cameraDistance": 2.795198917388916,
+    "framing": "visible-model-envelope",
+    "legacy": false,
+    "qualitySample": true,
+    "scene": "rangerLobby",
+    "still": true,
+    "viewHeight": 165.66666666666666,
+    "viewWidth": 220,
+    "windowHeight": 440,
+    "windowWidth": 956
+  }
+}

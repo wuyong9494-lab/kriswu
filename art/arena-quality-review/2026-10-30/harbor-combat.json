@@ -1,0 +1,55 @@
+{
+  "camera": "fixed map center",
+  "deviceHeight": 440,
+  "deviceWidth": 956,
+  "fighters": [
+    {
+      "alive": true,
+      "health": 2558,
+      "id": 0,
+      "x": 6.6241611109382275,
+      "y": 12.41816136247957
+    },
+    {
+      "alive": true,
+      "health": 383,
+      "id": 1,
+      "x": 8.162811919519614,
+      "y": 15.417782219714585
+    },
+    {
+      "alive": true,
+      "health": 1568,
+      "id": 2,
+      "x": 13.056368545986487,
+      "y": 12.972605647388812
+    },
+    {
+      "alive": false,
+      "health": 0,
+      "id": 3,
+      "x": 6.718968970571714,
+      "y": 16.6895175854072
+    },
+    {
+      "alive": true,
+      "health": 1972,
+      "id": 4,
+      "x": 10.89837735696674,
+      "y": 14.347189861353122
+    },
+    {
+      "alive": true,
+      "health": 2912,
+      "id": 5,
+      "x": 14.039904982887741,
+      "y": 15.426435512652144
+    }
+  ],
+  "map": "twin_gates_sample_v1",
+  "purple": false,
+  "qualitySample": true,
+  "rangerAsset": "Ranger_FaceSample.glb",
+  "seed": 170017,
+  "simulationTime": 1.2000000000000006
+}

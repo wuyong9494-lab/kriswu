@@ -1,0 +1,77 @@
+{
+  "kind": "iOS Simulator visual evidence",
+  "date": "2026-10-30",
+  "images": [
+    {
+      "name": "canyon-early",
+      "sourceCommit": "48024a552277afe4c9f280843360c7b9b7f46e48",
+      "workflowRun": 41004031848,
+      "artifact": 12955286512,
+      "image": "canyon-early.png",
+      "identity": "canyon-early.json",
+      "sha256": "1622d1d842b37d0d42192db2102d1c5ae9b7490d47af839839791d25550d1c69",
+      "map": "canyon",
+      "simulationTime": 0.26666666666666666,
+      "rangerAsset": "Ranger_FaceSample.glb"
+    },
+    {
+      "name": "canyon-combat",
+      "sourceCommit": "48024a552277afe4c9f280843360c7b9b7f46e48",
+      "workflowRun": 41004031848,
+      "artifact": 12955286512,
+      "image": "canyon-combat.png",
+      "identity": "canyon-combat.json",
+      "sha256": "52170e4f098054c2952933c6cf174fa58e146c144b554ef80f1d1610a0554916",
+      "map": "canyon",
+      "simulationTime": 1.2000000000000006,
+      "rangerAsset": "Ranger_FaceSample.glb"
+    },
+    {
+      "name": "harbor-early",
+      "sourceCommit": "48024a552277afe4c9f280843360c7b9b7f46e48",
+      "workflowRun": 41004031848,
+      "artifact": 12955286512,
+      "image": "harbor-early.png",
+      "identity": "harbor-early.json",
+      "sha256": "3ea4eeb765fcc672ae61a28c3abf849e8374bc121d49cab5dc1c513c1baeb2f1",
+      "map": "twin_gates_sample_v1",
+      "simulationTime": 0.26666666666666666,
+      "rangerAsset": "Ranger_FaceSample.glb"
+    },
+    {
+      "name": "harbor-combat",
+      "sourceCommit": "48024a552277afe4c9f280843360c7b9b7f46e48",
+      "workflowRun": 41004031848,
+      "artifact": 12955286512,
+      "image": "harbor-combat.png",
+      "identity": "harbor-combat.json",
+      "sha256": "a1a190f363cf3f4583a9d4915515e66b85af42cd714a05825f9c127aab0b0aa3",
+      "map": "twin_gates_sample_v1",
+      "simulationTime": 1.2000000000000006,
+      "rangerAsset": "Ranger_FaceSample.glb"
+    },
+    {
+      "name": "sample-hero",
+      "sourceCommit": "ebd6c173c83a2c34f32855da9ef28e9321ee9a61",
+      "workflowRun": 41006620721,
+      "artifact": 12955857837,
+      "image": "sample-hero.png",
+      "identity": "sample-hero.json",
+      "sha256": "6835abf78a100aa0df243320a1cfc8892221c976f34c7a8c1f5c1a1d21251912"
+    },
+    {
+      "name": "sample-map",
+      "sourceCommit": "ebd6c173c83a2c34f32855da9ef28e9321ee9a61",
+      "workflowRun": 41006620721,
+      "artifact": 12955857837,
+      "image": "sample-map.png",
+      "identity": "sample-map.json",
+      "sha256": "40272b594376b28a25804a208874cae12d6a6b0cc85a5bb009ccbd8e5942540f"
+    }
+  ],
+  "limitations": [
+    "Not physical-device performance evidence",
+    "Simulation identity is controlled; animation and particle phases are not pixel deterministic",
+    "No original-game visual parity acceptance"
+  ]
+}
