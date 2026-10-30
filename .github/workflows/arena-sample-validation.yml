@@ -13,7 +13,7 @@ permissions:
   contents: read
 concurrency:
   group: arena-sample-visual-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 env:
   HOMEBREW_NO_AUTO_UPDATE: 1
 jobs:
