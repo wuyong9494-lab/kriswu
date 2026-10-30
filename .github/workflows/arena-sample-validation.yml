@@ -46,8 +46,8 @@ jobs:
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath sample-build CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO > sample-build.log 2>&1 || { tail -100 sample-build.log; exit 1; }
-      - name: Capture canyon and Twin Gates with verified scene identity
-        timeout-minutes: 16
+      - name: Boot installed sample application
+        timeout-minutes: 5
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
@@ -56,7 +56,7 @@ jobs:
           phones = [d for runtime, entries in sorted(devices.items(), reverse=True) if 'iOS' in runtime for d in entries if d['name'].startswith('iPhone')]
           print(next((d for d in phones if d['name'] == 'iPhone 17 Pro Max'), phones[0])['udid'])")
           export DEVICE
-          trap 'xcrun simctl shutdown "$DEVICE" || true' EXIT
+          echo "SAMPLE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
           python3 - <<'PY'
           import os, subprocess
           device = os.environ['DEVICE']
@@ -65,12 +65,39 @@ jobs:
           subprocess.run(['xcrun', 'simctl', 'install', device, 'sample-build/Build/Products/Debug-iphonesimulator/ShiftReminder.app'], timeout=120, check=True)
           PY
           swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
-          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/menus menus
-          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/canyon canyon
-          python3 .github/scripts/capture_arena_sample.py "$DEVICE" sample-shots/harbor harbor
-          for image in sample-shots/canyon/*.png sample-shots/harbor/*.png sample-shots/menus/*.png; do
+      - name: Capture sample menu pages
+        timeout-minutes: 5
+        run: |
+          python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/menus menus
+          for image in sample-shots/menus/*.png; do /tmp/check-sample-capture "$image"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arena-sample-menus-${{ github.sha }}
+          path: sample-shots/menus
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Capture canyon and Twin Gates with verified scene identity
+        timeout-minutes: 10
+        run: |
+          python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/canyon canyon
+          python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/harbor harbor
+          for image in sample-shots/canyon/*.png sample-shots/harbor/*.png; do
             /tmp/check-sample-capture "$image"
           done
+      - name: Shut down sample simulator
+        if: always()
+        timeout-minutes: 2
+        run: |
+          python3 - <<'PYCODE'
+          import os, subprocess
+          device = os.environ.get('SAMPLE_DEVICE')
+          if device:
+              try:
+                  subprocess.run(['xcrun', 'simctl', 'shutdown', device], timeout=30, check=False)
+              except subprocess.TimeoutExpired:
+                  print('Simulator shutdown timed out; runner cleanup will handle it')
+          PYCODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
