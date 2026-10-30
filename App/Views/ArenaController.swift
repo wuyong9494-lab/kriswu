@@ -98,12 +98,22 @@ final class ArenaController: ObservableObject {
         var benchmark = false
         var diagnosticScenario: ArenaDiagnosticScenario?
         var qualitySample = false
+        /// Fixed Twin Gates visual capture; does not affect the normal trial entry.
+        var benchmarkTwinGates = false
 
         enum Demo { case versus, result }
     }
 
     static let step = 1.0 / 60
     private static let diagnosticPositions = [V2(4.5, 12.5), V2(6.5, 14.5), V2(8.5, 14.5), V2(10.5, 12.5), V2(8.5, 10.5), V2(6.5, 10.5)]
+
+    private var benchmarkPositions: [V2] {
+        if game.map.id == ArenaMap.twinGates.id {
+            return [V2(8.5, 13.5), V2(10.5, 13.5), V2(12.5, 13.5),
+                    V2(8.5, 15.5), V2(10.5, 15.5), V2(12.5, 15.5)]
+        }
+        return Self.diagnosticPositions
+    }
 
     let role: Role
     let me: Int
@@ -203,7 +213,7 @@ final class ArenaController: ObservableObject {
             var others = Brawler.allCases.filter { $0 != setup.brawler }
             random.shuffle(&others)
             let maps = ArenaMap.playPool(for: setup.mode)
-            let map = setup.benchmark ? ArenaMap.canyon :
+            let map = setup.benchmark ? (setup.qualitySample && setup.benchmarkTwinGates && setup.mode == .zone ? ArenaMap.twinGates : ArenaMap.canyon) :
                 (setup.qualitySample && setup.mode == .zone ? ArenaMap.twinGates : maps[random.below(maps.count)])
             let teams = setup.mode.seatTeams
             var entrants = [mine]
@@ -233,7 +243,7 @@ final class ArenaController: ObservableObject {
         benchmark = setup.benchmark
         diagnosticScenario = setup.diagnosticScenario
         if benchmark {
-            let positions = Self.diagnosticPositions
+            let positions = benchmarkPositions
             for i in game.fighters.indices {
                 game.adjust(i) { $0.pos = positions[i % positions.count] }
             }
@@ -364,7 +374,8 @@ final class ArenaController: ObservableObject {
             // Stress-fixture respawns rejoin the center; normal matches keep their spawn rules.
             for event in game.events {
                 if case .respawn(let id) = event {
-                    game.adjust(id) { $0.pos = Self.diagnosticPositions[id % Self.diagnosticPositions.count] }
+                    let positions = benchmarkPositions
+                    game.adjust(id) { $0.pos = positions[id % positions.count] }
                 }
             }
         }

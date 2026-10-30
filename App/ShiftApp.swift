@@ -458,8 +458,8 @@ enum ScreenCatalog {
         case "arenaDiagnostics": ArenaDiagnosticSuiteView()
         case "arenaBenchmark": ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "压测", level: 3,
                                                                            loadout: ArenaLoadout.basic(.ranger, level: 3), benchmark: true))
-        case "arenaSampleBenchmark": ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "样板对照", level: 3,
-            loadout: ArenaLoadout.basic(.ranger, level: 3), benchmark: true, qualitySample: true))
+        case "arenaSampleBenchmark", "arenaHarborBenchmark": ArenaPlayView(setup: ArenaController.Setup(mode: .zone, brawler: .ranger, name: "样板对照", level: 3,
+            loadout: ArenaLoadout.basic(.ranger, level: 3), benchmark: true, qualitySample: true, benchmarkTwinGates: name == "arenaHarborBenchmark"))
         case "arenaPlay": ArenaPlayView(setup: ArenaController.Setup(mode: .teamFight, brawler: .knight, name: "我", level: 3,
                                                                      loadout: ArenaLoadout.basic(.knight, level: 3)))
         case "arenaShowdown": ArenaPlayView(setup: ArenaController.Setup(mode: .showdown, brawler: .mage, name: "我"))

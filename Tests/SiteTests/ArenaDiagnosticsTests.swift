@@ -18,6 +18,24 @@ final class ArenaDiagnosticsTests: XCTestCase {
         XCTAssertGreaterThan(controller.game.time, 0)
     }
 
+    func testHarborCaptureUsesClearFixedPositionsAndPreservesCanyonComparison() {
+        let harbor = ArenaController(setup: .init(mode: .zone, brawler: .ranger,
+            name: "截图", benchmark: true, qualitySample: true, benchmarkTwinGates: true), seed: 7)
+        XCTAssertEqual(harbor.game.map.id, ArenaMap.twinGates.id)
+        XCTAssertTrue(harbor.benchmark)
+        XCTAssertTrue(harbor.qualitySample)
+        XCTAssertEqual(harbor.game.fighters.count, 6)
+        for fighter in harbor.game.fighters {
+            XCTAssertFalse(harbor.game.map.collides(fighter.pos, radius: ArenaGame.fighterRadius))
+        }
+        let repeatCapture = ArenaController(setup: .init(mode: .zone, brawler: .ranger,
+            name: "截图", benchmark: true, qualitySample: true, benchmarkTwinGates: true), seed: 99)
+        XCTAssertEqual(harbor.game.fighters.map(\.pos), repeatCapture.game.fighters.map(\.pos))
+        let canyon = ArenaController(setup: .init(mode: .zone, brawler: .ranger,
+            name: "对照", benchmark: true, qualitySample: true), seed: 7)
+        XCTAssertEqual(canyon.game.map.id, ArenaMap.canyon.id)
+    }
+
     func testAudioDiagnosticRetainsCombatSimulation() {
         let old = ArenaDiagnostics.shared.variant, enabled = ArenaDiagnostics.shared.enabled
         defer { ArenaDiagnostics.shared.configureCapture(old, enabled: enabled) }
