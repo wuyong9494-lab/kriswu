@@ -256,6 +256,11 @@ final class ArenaWorldView: SCNView {
         pointOfView = cameraNode
         // Upload scene resources before starting the display link, not on first movement.
         ArenaDiagnostics.shared.measure(.scenePrepare) { _ = prepare(world, shouldAbortBlock: nil) }
+        // UI automation has its own element list, separate from VoiceOver's
+        // accessibilityElementsHidden flag. SceneKit otherwise exports every
+        // mesh (including offscreen geometry) to XCTest snapshots.
+        accessibilityElements = []
+        if #available(iOS 17.0, *) { automationElements = [] }
         if metricsEnabled {
             metricsLabel.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
             metricsLabel.textColor = .white

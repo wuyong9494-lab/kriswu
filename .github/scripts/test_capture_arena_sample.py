@@ -47,7 +47,7 @@ class CaptureIdentityTests(unittest.TestCase):
             with self.subTest(scene=scene):
                 self.run_capture(scene)
 
-    def test_menu_capture_waits_for_sample_model_and_records_both_pages(self):
+    def exercise_menu_capture(self, fresh=False):
         with tempfile.TemporaryDirectory() as directory:
             base = pathlib.Path(directory)
             (base / 'Documents').mkdir()
@@ -70,12 +70,41 @@ class CaptureIdentityTests(unittest.TestCase):
                     model['viewHeight'] = 173
                     marker.write_text(json.dumps(model))
             with patch.object(capture, 'simctl', side_effect=simctl), patch.object(capture.time, 'sleep', side_effect=finish_layout):
-                capture.capture_menus('device', output, base)
+                capture.capture_menus('device', output, base, fresh=fresh)
             hero = json.loads((output / 'sample-hero.json').read_text())
             self.assertEqual(hero['model']['asset'], 'Ranger_FaceSample.glb')
             self.assertEqual(hero['model']['viewHeight'], 173, 'Record the model after final layout, not its first ready size')
             self.assertEqual(json.loads((output / 'sample-map.json').read_text())['page'], 1)
             self.assertEqual(len([x for x in calls if x[0] == 'io']), 2)
+            self.assertEqual(calls[0][0], 'launch' if fresh else 'terminate')
+            self.assertEqual(len([x for x in calls if x[0] == 'terminate']), 1 if fresh else 2)
+
+    def test_menu_capture_waits_for_sample_model_and_records_both_pages(self):
+        self.exercise_menu_capture()
+
+    def test_fresh_menu_device_only_terminates_between_real_launches(self):
+        self.exercise_menu_capture(fresh=True)
+
+    def test_fresh_menu_flag_for_another_device_does_not_skip_stop(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(capture.os.environ, {'ARENA_FRESH_CAPTURE_DEVICE': 'another-device'}), \
+             patch.object(capture.sys, 'argv', ['capture', 'device', directory, 'menus']), \
+             patch.object(capture, 'simctl', return_value=directory), \
+             patch.object(capture, 'capture_menus') as menus:
+            capture.main()
+            self.assertFalse(menus.call_args.kwargs['fresh'])
+
+    def test_launch_timeout_preserves_original_failure_even_if_diagnostics_timeout(self):
+        error = capture.subprocess.TimeoutExpired(['xcrun', 'simctl', 'launch', 'device', capture.APP_ID], 150)
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(capture.sys, 'argv', ['capture', 'device', directory, 'menus']), \
+             patch.object(capture, 'main', side_effect=error), \
+             patch.object(capture, 'simctl', side_effect=capture.subprocess.TimeoutExpired('diagnostic', 20)):
+            self.assertEqual(capture.run(), 1)
+            failure = json.loads((pathlib.Path(directory) / 'capture-failure.json').read_text())
+            self.assertEqual(failure['command'], error.cmd)
+            self.assertEqual(failure['timeout'], 150)
+            self.assertTrue((pathlib.Path(directory) / 'failed-screenshot.log.error').exists())
 
     def test_menu_rejects_original_model_before_screenshot(self):
         with tempfile.TemporaryDirectory() as directory:

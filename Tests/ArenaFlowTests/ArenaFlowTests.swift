@@ -24,6 +24,12 @@ final class ArenaFlowTests: XCTestCase {
         add(attachment)
     }
 
+    private struct ControlState: Codable {
+        let x, y, time, speed, charge: Double
+        let alive: Bool
+        let health, damage: Int
+    }
+
     private func play(hero: Int) throws {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "game", "-arena.snapshotTime", "0",
@@ -58,24 +64,52 @@ final class ArenaFlowTests: XCTestCase {
         XCTAssertTrue(move.isHittable, "Move control is still covered by the intro")
         XCTAssertFalse(app.otherElements["harbor-wall-cells"].exists, "Decorative SceneKit mesh leaked into accessibility")
         shot("hero-\(hero)-battle")
+        let battleTree = XCTAttachment(string: app.debugDescription)
+        battleTree.name = "hero-\(hero)-battle-accessibility-tree"
+        battleTree.lifetime = .keepAlways
+        add(battleTree)
         // Cache stable on-screen control positions after the overlay has gone.
         // Querying every control and waitForExistence on every shot creates a
         // failure-triage snapshot each second even while the match is healthy.
         let screen = app.coordinate(withNormalizedOffset: .zero)
         let attackFrame = attack.frame
         let specialFrame = special.frame
+        let moveFrame = move.frame
         let attackPoint = screen.withOffset(CGVector(dx: attackFrame.midX, dy: attackFrame.midY))
         let specialPoint = screen.withOffset(CGVector(dx: specialFrame.midX, dy: specialFrame.midY))
-        let from = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let right = move.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
-        let toward = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
-        // The first spawn is behind the south wall. Walk east into the centre lane
-        // before heading north; the previous straight drag stopped against that wall.
-        from.press(forDuration: 0.1, thenDragTo: right, withVelocity: .fast, thenHoldForDuration: 2)
-        from.press(forDuration: 0.1, thenDragTo: toward, withVelocity: .fast, thenHoldForDuration: 4)
+        let from = screen.withOffset(CGVector(dx: moveFrame.midX, dy: moveFrame.midY))
+        var trace: [ControlState] = []
+        defer {
+            if let data = try? JSONEncoder().encode(trace) {
+                let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+                attachment.name = "hero-\(hero)-control-trace.json"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
+        }
         let back = app.buttons["arena.result.lobby"]
+        // The clock remains mounted when the result hides the control sticks,
+        // so a natural result arriving between queries cannot invalidate it.
+        let clock = app.staticTexts["arena.match.clock"]
         let deadline = Date().addingTimeInterval(360)
         while !back.exists && Date() < deadline {
+            let value = try XCTUnwrap(clock.value as? String, "Missing read-only movement feedback")
+            let state = try JSONDecoder().decode(ControlState.self, from: Data(value.utf8))
+            trace.append(state)
+            if state.alive && state.y > 15.2 {
+                // Clear the southern wall at x=9 before proceeding north. A
+                // fixed two-second drag ended at x=9.4–9.8 and hit that wall.
+                // Observe actual movement, including after respawn; all actions
+                // still go through the same on-screen stick as a human player.
+                let east = state.y > 19 && abs(state.x - 11) > 0.3
+                let distance = east ? 11 - state.x : 14.5 - state.y
+                let direction = distance > 0 ? 1.0 : -1.0
+                let dx = east ? CGFloat(direction) * moveFrame.width * 0.4 : 0
+                let dy = east ? 0 : CGFloat(direction) * moveFrame.height * 0.4
+                let toward = from.withOffset(CGVector(dx: dx, dy: dy))
+                let hold = min(1, max(0.15, abs(distance) / (state.speed * 0.8)))
+                from.press(forDuration: 0.05, thenDragTo: toward, withVelocity: .fast, thenHoldForDuration: hold)
+            }
             attackPoint.tap()
             specialPoint.tap() // The app itself rejects this until charge is earned.
             // Real input only; no failed waitForExistence diagnostics in the combat loop.
@@ -96,6 +130,8 @@ final class ArenaFlowTests: XCTestCase {
         XCTAssertTrue(playerEvents.contains { ($0["kind"] as? String) == "super" }, "No earned player super")
         back.tap()
         XCTAssertTrue(heroes.waitForExistence(timeout: 30))
+        XCTAssertTrue(heroes.isHittable, "Lobby is still covered by the finished match")
+        XCTAssertFalse(back.exists, "Result screen was not dismissed")
         shot("hero-\(hero)-returned-lobby")
         app.terminate()
     }

@@ -4,6 +4,7 @@ Usage: python3 .github/scripts/capture_arena_sample.py DEVICE_UUID OUTPUT_DIR [c
 Requires a booted iOS simulator and an installed Debug build containing arenaSampleBenchmark.
 """
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -44,12 +45,13 @@ def capture_visible_frame(device, path, validator=pathlib.Path('/tmp/check-sampl
     raise RuntimeError('Screenshot stayed blank/invalid after three presentation attempts')
 
 
-def capture_menus(device, output, data):
+def capture_menus(device, output, data, fresh=False):
     marker = data / 'Documents/arena-sample-menu-ready.json'
     model_marker = data / 'Documents/arena-capture-ready.json'
     for page, screen in [(0, 'arenaSampleReview'), (1, 'arenaSampleMapReview')]:
         print('Capturing menu:', screen, flush=True)
-        stop_app(device)
+        if not (fresh and page == 0):
+            stop_app(device)
         marker.unlink(missing_ok=True)
         model_marker.unlink(missing_ok=True)
         simctl('launch', device, APP_ID, '-demo', '-screen', screen,
@@ -103,7 +105,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     data = pathlib.Path(simctl('get_app_container', device, APP_ID, 'data'))
     if scene == 'menus':
-        capture_menus(device, output, data)
+        capture_menus(device, output, data, fresh=os.environ.get('ARENA_FRESH_CAPTURE_DEVICE') == device)
         return
     marker = data / 'Documents/arena-capture-ready.json'
     for label, target in [('sample-early', 0.25), ('sample-combat', 1.2)]:
@@ -130,6 +132,30 @@ def main():
         (output / (label + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
         print(label, evidence['simulationTime'], evidence['rangerAsset'], flush=True)
 
+def run():
+    try:
+        main()
+        return 0
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        device, output = sys.argv[1], pathlib.Path(sys.argv[2])
+        output.mkdir(parents=True, exist_ok=True)
+        # Preserve the original failing command before attempting bounded diagnostics.
+        (output / 'capture-failure.json').write_text(json.dumps({
+            'sourceCommit': os.environ.get('GITHUB_SHA'), 'device': device,
+            'command': error.cmd, 'error': str(error),
+            'timeout': getattr(error, 'timeout', None)}, indent=2) + '\n')
+        for arguments, log_name in [
+            (('io', device, 'screenshot', str(output / 'failed-launch.png')), 'failed-screenshot.log'),
+            (('list', 'devices', '-j'), 'failed-devices.json')]:
+            try:
+                result = simctl(*arguments, check=False, timeout=20)
+                (output / log_name).write_text(result)
+            except subprocess.SubprocessError as diagnostic_error:
+                (output / (log_name + '.error')).write_text(str(diagnostic_error))
+        print(error, file=sys.stderr)
+        return 1
+
+
 if __name__ == '__main__':
-    main()
+    raise SystemExit(run())
 

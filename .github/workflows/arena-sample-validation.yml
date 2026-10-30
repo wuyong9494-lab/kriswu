@@ -68,7 +68,7 @@ jobs:
       - name: Capture sample menu pages
         timeout-minutes: 10
         run: |
-          python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/menus menus
+          ARENA_FRESH_CAPTURE_DEVICE="$SAMPLE_DEVICE" python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/menus menus
           for image in sample-shots/menus/*.png; do /tmp/check-sample-capture "$image"; done
       - uses: actions/upload-artifact@v4
         if: always()

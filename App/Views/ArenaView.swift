@@ -492,6 +492,8 @@ struct ArenaMatchView: View {
                 .arenaInk()
                 .frame(width: 60, height: 36)
                 .background(.black.opacity(0.35), in: Capsule())
+                .accessibilityIdentifier("arena.match.clock")
+                .accessibilityValue(hud.flowControlState)
         }
         .padding(.horizontal, DS.Space.m)
         .padding(.top, DS.Space.xs)

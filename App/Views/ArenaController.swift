@@ -76,6 +76,9 @@ final class ArenaController: ObservableObject {
         var dead = false
         var respawnIn = 0
         var result: ArenaGame.Result?
+        /// Empty outside explicit simulator flow capture. Position changes must
+        /// refresh the read-only feedback even between whole clock seconds.
+        var flowControlState = ""
     }
 
     struct Setup: Equatable {
@@ -198,6 +201,20 @@ final class ArenaController: ObservableObject {
         guard capturesFlow, flowEvidenceWritten,
               let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return "" }
         return (try? String(contentsOf: folder.appendingPathComponent("arena-flow-hero-\(mine.brawler.rawValue).json"), encoding: .utf8)) ?? ""
+        #else
+        return ""
+        #endif
+    }
+    /// Read-only feedback for real-touch UI tests. Never changes gameplay state.
+    var flowControlStateForUITest: String {
+        #if DEBUG && targetEnvironment(simulator)
+        guard capturesFlow else { return "" }
+        let fighter = mine
+        let state: [String: Any] = ["x": fighter.pos.x, "y": fighter.pos.y,
+            "time": game.time, "speed": fighter.brawler.speed, "alive": fighter.alive,
+            "health": fighter.health, "charge": fighter.superCharge, "damage": fighter.damageDealt]
+        guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
         #else
         return ""
         #endif
@@ -683,6 +700,7 @@ final class ArenaController: ObservableObject {
         hud.hyperTime = (fighter.hyperTime * 10).rounded() / 10
         hud.dead = !fighter.alive
         hud.respawnIn = Int(fighter.respawnIn.rounded(.up))
+        hud.flowControlState = flowControlStateForUITest
         // 大乱斗被打倒、双人大乱斗自己这队出局就算结束（不用看别人打完）
         if game.mode == .showdown, !fighter.alive, game.result == nil {
             hud.result = .survivor(-1)
