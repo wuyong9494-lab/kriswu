@@ -3,6 +3,21 @@ import XCTest
 
 @MainActor
 final class ArenaDiagnosticsTests: XCTestCase {
+    func testQualitySampleUsesDeclaredMapWithoutBenchmarkOrRankedRules() {
+        let controller = ArenaController(setup: .init(mode: .zone, brawler: .ranger,
+            name: "样板", qualitySample: true), seed: 7)
+        XCTAssertEqual(controller.game.map.id, ArenaMap.twinGates.id)
+        XCTAssertFalse(controller.benchmark)
+        XCTAssertFalse(controller.ranked)
+        XCTAssertEqual(controller.game.fighters.count, 6)
+        controller.advance(ArenaController.introLength + 0.1)
+        controller.move = V2(0, -1)
+        let start = controller.mine.pos
+        for _ in 0..<30 { controller.advance(1.0 / 60) }
+        XCTAssertNotEqual(controller.mine.pos, start)
+        XCTAssertGreaterThan(controller.game.time, 0)
+    }
+
     func testAudioDiagnosticRetainsCombatSimulation() {
         let old = ArenaDiagnostics.shared.variant, enabled = ArenaDiagnostics.shared.enabled
         defer { ArenaDiagnostics.shared.configureCapture(old, enabled: enabled) }

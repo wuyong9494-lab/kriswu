@@ -1072,6 +1072,27 @@ struct ArenaHomeView: View {
                     rankedSwitch
                 }.padding(.bottom, 6)
 
+                Button {
+                    pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
+                        mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
+                        loadout: progress.loadout(for: chosen), qualitySample: true))
+                    sheet = nil
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("双闸交汇 · 地图试玩", systemImage: "map.fill")
+                            .font(.system(size: 18, weight: .black, design: .rounded))
+                        Text("抢占据点 · 单人 + 电脑队友 · 不计排位")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("中路抢点，两侧包抄。地图布局试玩，美术仍在制作。")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face,
+                                            edge: ArenaGameButton.blue.edge, height: 104))
+                .accessibilityIdentifier("arena.sample.twinGates")
+
                 ForEach(ArenaGame.Mode.allCases, id: \.self) { item in
                     Button {
                         mode = item

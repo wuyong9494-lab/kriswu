@@ -97,6 +97,7 @@ final class ArenaController: ObservableObject {
         var demo: Demo?
         var benchmark = false
         var diagnosticScenario: ArenaDiagnosticScenario?
+        var qualitySample = false
 
         enum Demo { case versus, result }
     }
@@ -201,7 +202,8 @@ final class ArenaController: ObservableObject {
             var others = Brawler.allCases.filter { $0 != setup.brawler }
             random.shuffle(&others)
             let maps = ArenaMap.playPool(for: setup.mode)
-            let map = setup.benchmark ? ArenaMap.canyon : maps[random.below(maps.count)]
+            let map = setup.benchmark ? ArenaMap.canyon :
+                (setup.qualitySample && setup.mode == .zone ? ArenaMap.twinGates : maps[random.below(maps.count)])
             let teams = setup.mode.seatTeams
             var entrants = [mine]
             entrants[0].team = teams[0]

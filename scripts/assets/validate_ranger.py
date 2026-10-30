@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Dependency-free GLB contract check, including inverse binds and animated foot contact."""
 import struct,json,pathlib,math,hashlib,bisect
+from gltf_contract import unsupported_features
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 
 def load(path):
@@ -54,6 +55,7 @@ def stats(j,b):
 
 def main():
  j,acc,b=load(ROOT/'App/Arena3D/Ranger_Original.glb');old,_,oldb=load(ROOT/'App/Arena3D/Rogue.glb')
+ errors=unsupported_features(j);assert not errors,'Unsupported Arena features: '+ '; '.join(errors)
  required={'Ranger_Idle','Ranger_Run','Ranger_Shoot','Ranger_Skill','Hit_A','1H_Ranged_Reload','Death_A','Cheer'}
  clips={a['name']:a for a in j['animations']};assert required==set(clips)
  names={n.get('name'):i for i,n in enumerate(j['nodes'])};assert {'muzzle','handslot.r','spine','chest','head','foot.l','foot.r'}<=names.keys()

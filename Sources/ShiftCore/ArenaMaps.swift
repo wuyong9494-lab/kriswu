@@ -310,7 +310,7 @@ extension ArenaMap {
 
     /// 按名字找（联机开局时房主发来的）
     public static func named(_ id: String) -> ArenaMap? {
-        all.first { $0.id == id } ?? expandedMaps.first { $0.id == id }
+        id == twinGates.id ? twinGates : (all.first { $0.id == id } ?? expandedMaps.first { $0.id == id })
     }
 }
 
