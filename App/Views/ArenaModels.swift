@@ -75,7 +75,7 @@ struct BrawlerLook {
     static let death = Move(clip: "Death_A", seconds: 0.8)
     static let cheer = "Cheer"
 
-    static func of(_ brawler: Brawler) -> BrawlerLook {
+    static func of(_ brawler: Brawler, qualitySample: Bool = false) -> BrawlerLook {
         switch brawler {
         case .knight:
             // This bundled helmet mesh contains a duplicate, unskinned copy of ChibiEyes
@@ -86,13 +86,13 @@ struct BrawlerLook {
                                special: Move(clip: "1H_Melee_Attack_Stab", from: 0.12, to: 0.72, seconds: 0.42),
                                scale: 1.05)
         case .ranger:
-            if legacyRangerComparison {
+            if legacyRangerComparison && !qualitySample {
                 return BrawlerLook(file: "Rogue.glb", hidden: ["Knife_Offhand", "2H_Crossbow", "Knife", "Throwable"],
                                    idle: "Idle", run: "Running_A",
                                    attack: Move(clip: "1H_Ranged_Shoot", from: 0.15, to: 0.7, seconds: 0.32),
                                    special: Move(clip: "2H_Ranged_Shoot", from: 0.1, to: 0.85, seconds: 0.62), scale: 0.96)
             }
-            return BrawlerLook(file: "Ranger_Original.glb", hidden: [],
+            return BrawlerLook(file: qualitySample ? "Ranger_FaceSample.glb" : "Ranger_Original.glb", hidden: [],
                                idle: "Ranger_Idle", run: "Ranger_Run",
                                attack: Move(clip: "Ranger_Shoot", seconds: 0.32),
                                special: Move(clip: "Ranger_Skill", seconds: 0.62), scale: Self.rangerScale, authored: true)
@@ -220,8 +220,8 @@ final class ArenaModels: @unchecked Sendable {
         return result
     }()
 
-    func character(_ brawler: Brawler) -> GLTFModel? {
-        let look = BrawlerLook.of(brawler)
+    func character(_ brawler: Brawler, qualitySample: Bool = false) -> GLTFModel? {
+        let look = BrawlerLook.of(brawler, qualitySample: qualitySample)
         return model(look.file, animations: Self.characterClips[look.file] ?? look.clips, smooth: true)
     }
 
@@ -238,7 +238,7 @@ final class ArenaModels: @unchecked Sendable {
         let name = (file as NSString).deletingPathExtension
         let type = (file as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: name, withExtension: type),
-              let parsed = try? ArenaDiagnostics.shared.measure(.modelLoad, { try GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth && file != "Ranger_Original.glb") }) else {
+              let parsed = try? ArenaDiagnostics.shared.measure(.modelLoad, { try GLTFModel(url: url, animations: animations, maxTexture: smooth ? 1024 : 512, smoothNormals: smooth && file != "Ranger_Original.glb" && file != "Ranger_FaceSample.glb") }) else {
             missing.insert(file)
             return nil
         }

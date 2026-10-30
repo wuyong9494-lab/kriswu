@@ -58,6 +58,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/assets -p test_gltf_contract.py
           python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -230,6 +231,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -286,6 +288,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
@@ -461,6 +464,7 @@ jobs:
       - name: 生成 Xcode 工程
         run: |
           python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate

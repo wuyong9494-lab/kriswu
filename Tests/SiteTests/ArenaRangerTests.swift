@@ -45,6 +45,27 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertLessThan(model.animated.count, 22, "Static anchors should not be sampled every frame")
     }
 
+    func testFaceSampleUsesSeparateAssetAndSamplesFacialChannels() throws {
+        XCTAssertEqual(BrawlerLook.of(.ranger).file, "Ranger_Original.glb")
+        XCTAssertEqual(BrawlerLook.of(.ranger, qualitySample: true).file, "Ranger_FaceSample.glb")
+        let model = try XCTUnwrap(ArenaModels.shared.character(.ranger, qualitySample: true))
+        let eye = try XCTUnwrap(model.node(named: "eye.r"))
+        let brow = try XCTUnwrap(model.node(named: "brow.r"))
+        let mouth = try XCTUnwrap(model.node(named: "mouth"))
+        var pose = model.restPose
+        let idle = try XCTUnwrap(model.clips["Ranger_Idle"])
+        idle.sample(at: idle.duration * 0.72, into: &pose)
+        XCTAssertLessThan(pose.scale[eye].y, 0.35, "Blink must survive GLB import")
+        pose.reset(from: model.restPose)
+        let shot = try XCTUnwrap(model.clips["Ranger_Shoot"])
+        shot.sample(at: 0, into: &pose)
+        XCTAssertGreaterThan(simd_length(pose.rotation[brow].vector - model.restPose.rotation[brow].vector), 0.02)
+        pose.reset(from: model.restPose)
+        let cheer = try XCTUnwrap(model.clips["Cheer"])
+        cheer.sample(at: cheer.duration * 0.5, into: &pose)
+        XCTAssertGreaterThan(simd_distance(pose.translation[mouth], model.restPose.translation[mouth]), 0.01)
+    }
+
     func testOriginalRangerFitsExistingWorldScaleAndGroundPlane() {
         let avatar = ArenaAvatar(brawler: .ranger, color: .blue, isMe: true, decorated: false)
         var low = Float.greatestFiniteMagnitude

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Dependency-free GLB contract check, including inverse binds and animated foot contact."""
-import struct,json,pathlib,math,hashlib,bisect
+import struct,json,pathlib,math,hashlib,bisect,sys
 from gltf_contract import unsupported_features
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 
@@ -54,12 +54,21 @@ def stats(j,b):
  'joints':len(j['skins'][0]['joints']),'clips':len(j.get('animations',[]))}
 
 def main():
- j,acc,b=load(ROOT/'App/Arena3D/Ranger_Original.glb');old,_,oldb=load(ROOT/'App/Arena3D/Rogue.glb')
+ face='--face-sample' in sys.argv
+ asset='Ranger_FaceSample' if face else 'Ranger_Original'
+ j,acc,b=load(ROOT/f'App/Arena3D/{asset}.glb');old,_,oldb=load(ROOT/'App/Arena3D/Rogue.glb')
  errors=unsupported_features(j);assert not errors,'Unsupported Arena features: '+ '; '.join(errors)
  required={'Ranger_Idle','Ranger_Run','Ranger_Shoot','Ranger_Skill','Hit_A','1H_Ranged_Reload','Death_A','Cheer'}
  clips={a['name']:a for a in j['animations']};assert required==set(clips)
  names={n.get('name'):i for i,n in enumerate(j['nodes'])};assert {'muzzle','handslot.r','spine','chest','head','foot.l','foot.r'}<=names.keys()
- newstats=stats(j,b);assert newstats['primitives']==1 and newstats['materials']==1 and newstats['joints']<=24
+ if face:
+  assert {'eye.r','eye.l','brow.r','brow.l','mouth'}<=names.keys()
+  for clip,node,path in [('Ranger_Idle','eye.r','scale'),('Ranger_Shoot','brow.r','rotation'),('Cheer','mouth','translation')]:
+   channels=[c for c in clips[clip]['channels'] if c['target']['node']==names[node] and c['target']['path']==path]
+   assert channels,(clip,node,path)
+   values=acc(clips[clip]['samplers'][channels[0]['sampler']]['output'])
+   assert max(max(abs(a-b) for a,b in zip(v,values[0])) for v in values)>.01,(clip,node,'static channel')
+ newstats=stats(j,b);assert newstats['primitives']==1 and newstats['materials']==1 and newstats['joints']<=(28 if face else 24)
  assert newstats['triangles']<=16000 and len(b)<1000000
  assert j['materials'][0].get('alphaMode','OPAQUE')=='OPAQUE'
  world=worlds(j);skin=j['skins'][0];bind=acc(skin['inverseBindMatrices'])
@@ -108,9 +117,9 @@ def main():
       for r in range(3):out[r]+=weight*(sum(m[r][c]*p[c] for c in range(3))+m[r][3])
      tip_drifts.append(math.sqrt(sum((x-y)**2 for x,y in zip(p,out))))
  assert len(tip_drifts)>=10 and max(tip_drifts)<.005,('bow string tip detached',tip_drifts)
- report={'asset':'Ranger_Original','legacy':stats(old,oldb),'new':newstats,'bounds':{'min':low,'max':high},
+ report={'asset':asset,'legacy':stats(old,oldb),'new':newstats,'bounds':{'min':low,'max':high},
  'inverseBindMaxError':err,'contactAnkleMaxErrorM':max(contact),'bowTipReleaseMaxDriftM':max(tip_drifts),'clips':sorted(clips),
  'source':'Original Blender geometry / atlas / rig / actions. No third-party character asset.',
  'limits':['CPU asset validation; not iOS visual acceptance','No physical-device FPS, GPU or thermal evidence']}
- out=ROOT/'docs/ranger-asset-validation.json';out.write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
+ out=ROOT/('docs/ranger-face-sample-validation.json' if face else 'docs/ranger-asset-validation.json');out.write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
 if __name__=='__main__':main()

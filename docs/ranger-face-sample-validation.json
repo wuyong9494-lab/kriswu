@@ -1,0 +1,53 @@
+{
+  "asset": "Ranger_FaceSample",
+  "legacy": {
+    "bytes": 3681628,
+    "sha256": "4b642e0b01baa76e279d666781fe339d51b84f4a43b617d9649dcd23cbe5f30c",
+    "meshes": 8,
+    "primitives": 12,
+    "materials": 8,
+    "triangles": 5306,
+    "joints": 41,
+    "clips": 76
+  },
+  "new": {
+    "bytes": 619124,
+    "sha256": "422542ff9820d3530cd182bc6ad312b6aeab65a14ab0d0e7665aecd33bcfa80e",
+    "meshes": 1,
+    "primitives": 1,
+    "materials": 1,
+    "triangles": 13724,
+    "joints": 27,
+    "clips": 8
+  },
+  "bounds": {
+    "min": [
+      -0.5520156621932983,
+      0.0,
+      -0.36000001430511475
+    ],
+    "max": [
+      0.5514980554580688,
+      2.4108164310455322,
+      0.949999988079071
+    ]
+  },
+  "inverseBindMaxError": 8.953190713811843e-07,
+  "contactAnkleMaxErrorM": 0.00411583163402518,
+  "bowTipReleaseMaxDriftM": 0.001598519398232964,
+  "clips": [
+    "1H_Ranged_Reload",
+    "Cheer",
+    "Death_A",
+    "Hit_A",
+    "Ranger_Idle",
+    "Ranger_Run",
+    "Ranger_Shoot",
+    "Ranger_Skill"
+  ],
+  "source": "Original Blender geometry / atlas / rig / actions. No third-party character asset.",
+  "limits": [
+    "CPU asset validation; not iOS visual acceptance",
+    "No physical-device FPS, GPU or thermal evidence"
+  ]
+}

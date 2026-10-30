@@ -161,13 +161,13 @@ final class ArenaAvatar {
     private var layer = GLTFModel.Pose(translation: [], rotation: [], scale: [])
 
     /// skin：穿第几套皮肤（0 原来的样子）
-    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false) {
+    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false, qualitySample: Bool = false) {
         self.brawler = brawler
         self.mine = isMe
         self.teamColor = color
         self.size = size
-        look = BrawlerLook.of(brawler)
-        model = ArenaModels.shared.character(brawler)
+        look = BrawlerLook.of(brawler, qualitySample: qualitySample)
+        model = ArenaModels.shared.character(brawler, qualitySample: qualitySample)
         if let model {
             instance = model.instantiate(outline: look.authored ? nil : ArenaArt.outline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []

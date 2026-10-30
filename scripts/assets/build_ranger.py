@@ -6,7 +6,9 @@ import bpy, math, json, pathlib, sys, struct
 from mathutils import Vector, Quaternion, Matrix
 from math import sin, cos, pi
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-OUT = ROOT / 'art/ranger'
+FACE_SAMPLE = '--face-sample' in sys.argv
+ASSET_NAME = 'Ranger_FaceSample' if FACE_SAMPLE else 'Ranger_Original'
+OUT = ROOT / ('art/ranger-face-sample' if FACE_SAMPLE else 'art/ranger')
 OUT.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
 scene = bpy.context.scene
@@ -133,6 +135,11 @@ bones={
  'foot.l':((.19,0,.18),(.19,-.28,.12),'lowerleg.l'),
  'weapon.slide':((0,-.54,1.37),(0,-.74,1.37),'handslot.r'),
  'muzzle':((0,-.93,1.34),(0,-1.00,1.34),'handslot.r')}
+if FACE_SAMPLE:
+ for side,x in [('r',-.123),('l',.123)]:
+  bones['brow.'+side]=((x,-.23,2.08),(x,-.23,2.14),'head')
+  bones['eye.'+side]=((x,-.24,1.978),(x,-.24,2.04),'head')
+ bones['mouth']=((0,-.20,1.80),(0,-.20,1.86),'head')
 arm=bpy.data.armatures.new('Ranger_Rig');rig=bpy.data.objects.new('Ranger_Rig',arm);scene.collection.objects.link(rig)
 bpy.context.view_layer.objects.active=rig;rig.select_set(True);bpy.ops.object.mode_set(mode='EDIT')
 for name,(head,tail,parent) in bones.items():
@@ -212,23 +219,25 @@ for x in [-.283,.283]:
  ellipsoid('Ear inset',(x,-.038,1.92),(.042,.012,.069),1,'head',12,8)
 # Eyes follow the face surface: almond patches with low-relief lids, no separate floating eyeballs.
 for side,x in [('r',-.123),('l',.123)]:
+ eye_bone='eye.'+side if FACE_SAMPLE else 'head'
+ brow_bone='brow.'+side if FACE_SAMPLE else 'head'
  def eye_patch(name,cx,y,z,width,height,color):
   ps=[(cx-width/2,y+.015,z),(cx-width*.40,y+.001,z+height*.29),(cx-width*.20,y-.007,z+height*.46),(cx+width*.12,y-.008,z+height*.48),(cx+width*.35,y+.001,z+height*.32),(cx+width/2,y+.015,z),
       (cx+width*.32,y+.001,z-height*.29),(cx+width*.10,y-.008,z-height*.40),(cx-width*.20,y-.007,z-height*.36),(cx-width*.40,y+.001,z-height*.19)]
-  ps.append((cx,y-.015,z));return mesh(name,ps,[(10,i,(i+1)%10) for i in range(10)],color,'head')
+  ps.append((cx,y-.015,z));return mesh(name,ps,[(10,i,(i+1)%10) for i in range(10)],color,eye_bone)
  eye_patch('Eye lid '+side,x,-.212,1.978,.193,.105,8)
  eye_patch('Eye white '+side,x,-.221,1.978,.169,.083,11)
- ellipsoid('Iris '+side,(x+.007,-.244,1.978),(.034,.006,.039),12,'head',16,8)
- ellipsoid('Pupil '+side,(x+.007,-.253,1.978),(.017,.004,.028),10,'head',14,8)
- ellipsoid('Eye glint '+side,(x-.005,-.261,1.997),(.011,.005,.014),11,'head',10,6)
+ ellipsoid('Iris '+side,(x+.007,-.244,1.978),(.034,.006,.039),12,eye_bone,16,8)
+ ellipsoid('Pupil '+side,(x+.007,-.253,1.978),(.017,.004,.028),10,eye_bone,14,8)
+ ellipsoid('Eye glint '+side,(x-.005,-.261,1.997),(.011,.005,.014),11,eye_bone,10,6)
  s=-1 if x<0 else 1
- tube('Expressive brow '+side,[(x-s*.09,-.218,2.062),(x,-.246,2.079),(x+s*.081,-.206,2.094)],[(.018,.021),(.024,.024),(.010,.012)],8,'head',7)
+ tube('Expressive brow '+side,[(x-s*.09,-.218,2.062),(x,-.246,2.079),(x+s*.081,-.206,2.094)],[(.018,.021),(.024,.024),(.010,.012)],8,brow_bone,7)
 # Low-poly shaped nose has actual bridge and soft wings, not a spherical button.
 mesh('Nose', [(-.043,-.224,1.94),(.043,-.224,1.94),(-.045,-.236,1.865),(.045,-.236,1.865),
               (0,-.27,1.88),(0,-.24,1.965),(0,-.25,1.855)],
      [(0,1,5),(0,5,4),(5,1,4),(0,4,2),(4,1,3),(2,4,6),(4,3,6),(2,6,3)],0,'head')
-tube('Smile',[(-.092,-.188,1.805),(-.032,-.202,1.792),(.035,-.205,1.794),(.102,-.189,1.817)],.0045,7,'head',6)
-tube('Lower lip',[(-.042,-.196,1.779),(.01,-.201,1.778),(.053,-.194,1.786)],.004,14,'head',6)
+tube('Smile',[(-.092,-.188,1.805),(-.032,-.202,1.792),(.035,-.205,1.794),(.102,-.189,1.817)],.0045,7,'mouth' if FACE_SAMPLE else 'head',6)
+tube('Lower lip',[(-.042,-.196,1.779),(.01,-.201,1.778),(.053,-.194,1.786)],.004,14,'mouth' if FACE_SAMPLE else 'head',6)
 # Sculpted hair cap and swept clumps, individually tapered silhouettes.
 loft('Hair cap',[(1.96,.27,.23,.055),(2.08,.29,.25,.04),(2.22,.265,.245,.035),(2.30,.19,.18,.025),(2.33,.025,.025,.025)],8,'head',24)
 # Front fringe: swept from character left to right, clear brows and both eyes.
@@ -350,6 +359,17 @@ def pose(clip,t,duration):
   rotate('upperarm.r',(1,0,0),-.55*wave);rotate('upperarm.l',(0,0,1),-.3*wave)
   rotate('head',(1,0,0),-.07*wave);rotate('cape',(1,0,0),.08*wave)
 
+ # Bone-only facial compatibility sample: all channels use the existing TRS loader.
+ if FACE_SAMPLE:
+  blink=max(0,1-abs(u-.72)/.055) if clip=='Ranger_Idle' else 0
+  focus=max(0,1-u) if clip in ['Ranger_Shoot','Ranger_Skill'] else 0
+  hurt=sin(pi*u) if clip=='Hit_A' else 0
+  joy=sin(pi*u)**2 if clip=='Cheer' else 0
+  for side,sign in [('r',-1),('l',1)]:
+   rotate('brow.'+side,(0,1,0),sign*(.18*focus+.12*hurt-.12*joy))
+   rig.pose.bones['eye.'+side].scale=(1,max(.08,1-.92*blink-.35*hurt),1)
+  translate_world('mouth',(0,0,.018*joy-.01*hurt))
+
 actions=[('Ranger_Idle',2.4),('Ranger_Run',.6666667),('Ranger_Shoot',.32),('Ranger_Skill',.62),
          ('Hit_A',.24),('1H_Ranged_Reload',.65),('Death_A',.8),('Cheer',1.6)]
 rig.animation_data_create()
@@ -361,14 +381,15 @@ for name,duration in actions:
   frame=i+1
   for b in rig.pose.bones:
    b.keyframe_insert('rotation_quaternion',frame=frame,group=b.name)
-   if b.name in ['hips','weapon.slide']:b.keyframe_insert('location',frame=frame,group=b.name)
+   if b.name in ['hips','weapon.slide'] or (FACE_SAMPLE and b.name=='mouth'):b.keyframe_insert('location',frame=frame,group=b.name)
+   if FACE_SAMPLE and b.name.startswith('eye.'):b.keyframe_insert('scale',frame=frame,group=b.name)
  for curve in action.fcurves:
   for k in curve.keyframe_points:k.interpolation='LINEAR'
  action.use_fake_user=True
 rig.animation_data.action=None;reset();scene.frame_set(1)
 # Export only the actual asset, not the QA stage/cameras/lights.
 bpy.ops.object.select_all(action='DESELECT');body.select_set(True);rig.select_set(True);bpy.context.view_layer.objects.active=rig
-path=ROOT/'App/Arena3D/Ranger_Original.glb'
+path=ROOT/'App/Arena3D'/f'{ASSET_NAME}.glb'
 bpy.ops.export_scene.gltf(filepath=str(path),export_format='GLB',use_selection=True,
  export_animations=True,export_animation_mode='ACTIONS',export_frame_range=False,
  export_force_sampling=True,export_optimize_animation_size=True,
@@ -393,11 +414,13 @@ for animation in gltf['animations']:
 json_bytes=json.dumps(gltf,separators=(',',':')).encode();json_bytes+=b' '*((-len(json_bytes))%4)
 path.write_bytes(struct.pack('<4sII',b'glTF',2,28+len(json_bytes)+len(binary))+struct.pack('<I4s',len(json_bytes),b'JSON')+json_bytes+struct.pack('<I4s',len(binary),b'BIN\0')+binary)
 # Editable source includes original topology / UVs / groups and every action.
-bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'Ranger_Original.blend'), compress=True)
+bpy.ops.wm.save_as_mainfile(filepath=str(OUT/f'{ASSET_NAME}.blend'), compress=True)
 
 # Actual asset renders; never labelled game screenshots. CPU Cycles is reproducible headlessly.
 scene.render.engine='CYCLES';scene.cycles.device='CPU';scene.cycles.samples=32
 scene.cycles.use_denoising=True;scene.render.resolution_x=720;scene.render.resolution_y=900;scene.render.resolution_percentage=100
+if '--quick-qa' in sys.argv:
+ scene.cycles.samples=16;scene.render.resolution_percentage=67
 scene.render.image_settings.file_format='JPEG';scene.render.image_settings.quality=92
 scene.world.color=(.22,.22,.22)
 scene.view_settings.view_transform='Standard';scene.view_settings.look='Medium High Contrast';scene.view_settings.exposure=0;scene.view_settings.gamma=1
@@ -412,6 +435,12 @@ if '--no-render' not in sys.argv:
  for label,loc in [('front',(0,-6,2.0)),('side',(6,0,1.7)),('back',(0,6,2.0)),('combat',(3,-5,7.0))]:
   cam.location=loc;target=Vector((0,-.08,1.19));cam.rotation_euler=(target-cam.location).to_track_quat('-Z','Y').to_euler()
   scene.render.filepath=str(OUT/f'model-{label}.jpg');bpy.ops.render.render(write_still=True)
+ if FACE_SAMPLE:
+  cam.location=(0,-6,2.0);cam.rotation_euler=(Vector((0,-.08,1.19))-cam.location).to_track_quat('-Z','Y').to_euler()
+  for name,fraction in [('Ranger_Idle',.72),('Ranger_Shoot',0),('Cheer',.5)]:
+   action=bpy.data.actions.get(name);rig.animation_data.action=action
+   start,end=action.frame_range;scene.frame_set(int(start+(end-start)*fraction))
+   scene.render.filepath=str(OUT/f'face-{name}.jpg');bpy.ops.render.render(write_still=True)
  if '--motions' in sys.argv:
   cam.location=(3,-5,4.8);cam.rotation_euler=(Vector((0,0,1.15))-cam.location).to_track_quat('-Z','Y').to_euler()
   for name,fraction in [('Ranger_Run',.15),('Ranger_Run',.75),('Ranger_Shoot',.15),('1H_Ranged_Reload',.5),('Death_A',1.0)]:

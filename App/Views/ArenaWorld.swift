@@ -609,7 +609,7 @@ final class ArenaWorldView: SCNView {
             let isMe = fighter.id == controller.me
             let ally = fighter.team == myTeam
             let avatar = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red, isMe: isMe,
-                                     size: fighter.isBoss ? 2.2 : 1, skin: fighter.isBoss ? 0 : fighter.skin)
+                                     size: fighter.isBoss ? 2.2 : 1, skin: fighter.isBoss ? 0 : fighter.skin, qualitySample: controller.qualitySample)
             root.addChildNode(avatar.node)
             avatars.append(avatar)
             let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
@@ -900,7 +900,7 @@ final class ArenaWorldView: SCNView {
                 avatars[fighter.id].node.removeFromParentNode()
                 let ally = fighter.team == myTeam
                 let replacement = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red,
-                                              isMe: fighter.id == controller.me, skin: fighter.skin)
+                                              isMe: fighter.id == controller.me, skin: fighter.skin, qualitySample: controller.qualitySample)
                 world.rootNode.addChildNode(replacement.node)
                 let tag = tags[fighter.id]
                 tag.node.removeFromParentNode()

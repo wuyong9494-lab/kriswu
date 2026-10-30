@@ -107,6 +107,7 @@ final class ArenaController: ObservableObject {
 
     let role: Role
     let me: Int
+    private(set) var qualitySample = false
     private(set) var benchmark = false
     private(set) var diagnosticScenario: ArenaDiagnosticScenario?
     var benchmarkSnapshotTime: Double {
@@ -228,6 +229,7 @@ final class ArenaController: ObservableObject {
             built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
         }
         self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
+        qualitySample = setup.qualitySample
         benchmark = setup.benchmark
         diagnosticScenario = setup.diagnosticScenario
         if benchmark {
