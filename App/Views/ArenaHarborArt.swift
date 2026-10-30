@@ -1,5 +1,6 @@
 import SceneKit
 import UIKit
+import simd
 
 /// Original Blue Moon Harbor study for Twin Gates. All solids follow wall cells.
 @MainActor
@@ -17,9 +18,41 @@ enum ArenaHarborArt {
     private static let seam = material(UIColor(red: 0.25, green: 0.23, blue: 0.21, alpha: 1))
 
     static let bush: SCNGeometry = {
-        let geometry = ArenaPurpleArt.bush.copy() as! SCNGeometry
+        // Closed, rounded leaf volumes: one shared mesh and material per tile.
+        // No alpha cutouts, extra lights, or change to gameplay visibility.
+        var vertices: [SCNVector3] = []
+        var normals: [SCNVector3] = []
+        var indices: [Int32] = []
+        for leafIndex in 0..<7 {
+            let angle = Float(leafIndex) * 2.39996
+            let distance: Float = leafIndex == 0 ? 0 : 0.23
+            let center = SIMD3<Float>(cos(angle) * distance, 0, sin(angle) * distance)
+            let height: Float = leafIndex % 2 == 0 ? 0.60 : 0.49
+            let base = Int32(vertices.count)
+            for ring in 0...6 {
+                let theta = Float(ring) * .pi / 6
+                let radius = max(0.001, sin(theta)) * 0.14
+                for side in 0..<6 {
+                    let phi = Float(side) * .pi / 3
+                    let n = simd_normalize(SIMD3<Float>(sin(theta) * cos(phi) / 0.14,
+                        cos(theta) / (height * 0.5), sin(theta) * sin(phi) / 0.14))
+                    vertices.append(SCNVector3(center.x + radius * cos(phi),
+                        height * (1 + cos(theta)) * 0.5, center.z + radius * sin(phi)))
+                    normals.append(SCNVector3(n.x, n.y, n.z))
+                }
+            }
+            for ring in 0..<6 {
+                for side in 0..<6 {
+                    let a = base + Int32(ring * 6 + side)
+                    let b = base + Int32(ring * 6 + (side + 1) % 6)
+                    indices += [a, b, a + 6, b, b + 6, a + 6]
+                }
+            }
+        }
+        let geometry = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices),
+            SCNGeometrySource(normals: normals)],
+            elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
         let leaf = material(UIColor(red: 0.26, green: 0.48, blue: 0.32, alpha: 1))
-        leaf.isDoubleSided = true
         geometry.materials = [leaf]
         return geometry
     }()
@@ -60,11 +93,11 @@ enum ArenaHarborArt {
     static func walls(_ map: ArenaMap) -> SCNNode {
         let root = SCNNode()
         root.name = "harbor-wall-cells"
-        let body = SCNBox(width: 1, height: 0.9, length: 1, chamferRadius: 0.035)
-        body.chamferSegmentCount = 1
+        let body = SCNBox(width: 1, height: 0.9, length: 1, chamferRadius: 0.10)
+        body.chamferSegmentCount = 3
         body.materials = [metal]
-        let lid = SCNBox(width: 1, height: 0.12, length: 1, chamferRadius: 0.025)
-        lid.chamferSegmentCount = 1
+        let lid = SCNBox(width: 1, height: 0.12, length: 1, chamferRadius: 0.055)
+        lid.chamferSegmentCount = 3
         lid.materials = [cap]
         let rib = SCNBox(width: 0.08, height: 0.014, length: 0.86, chamferRadius: 0)
         rib.materials = [seam]
