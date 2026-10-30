@@ -6,8 +6,27 @@ import UIKit
 enum ArenaVendorAssets {
     static let propFiles = ["vendor_axe.gltf", "vendor_crates.glb", "vendor_barrel.glb",
                             "vendor_bush.glb", "vendor_rock.glb", "vendor_tree.glb"]
-    @MainActor static let spark = UIImage(named: "vendor_spark_01.png")
-    @MainActor static let smoke = UIImage(named: "vendor_smoke_01.png")
+    static let imageFiles = ["vendor_button_blue.png", "vendor_button_yellow.png",
+                             "vendor_icon_arrowLeft.png", "vendor_icon_checkmark.png",
+                             "vendor_icon_cross.png", "vendor_icon_star.png",
+                             "vendor_spark_01.png", "vendor_smoke_01.png"]
+    // These are loose bundle resources, not asset-catalog names. Resolve the
+    // file explicitly and share the decoded images between SwiftUI and SceneKit.
+    @MainActor private static let images: [String: UIImage] = {
+        var result: [String: UIImage] = [:]
+        for file in imageFiles {
+            let path = file as NSString
+            if let url = Bundle.main.url(forResource: path.deletingPathExtension,
+                                         withExtension: path.pathExtension),
+               let image = UIImage(contentsOfFile: url.path) {
+                result[file] = image
+            }
+        }
+        return result
+    }()
+    @MainActor static func image(_ file: String) -> UIImage? { images[file] }
+    @MainActor static var spark: UIImage? { image("vendor_spark_01.png") }
+    @MainActor static var smoke: UIImage? { image("vendor_smoke_01.png") }
 
     /// Fit imported scenery inside the existing cell; gameplay collision is unchanged.
     @MainActor static func prop(_ file: String, width: Float, height: Float) -> SCNNode? {
@@ -57,9 +76,11 @@ enum ArenaVendorAssets {
 struct ArenaVendorIcon: View {
     let name: String
     var body: some View {
-        Image("vendor_icon_" + name + ".png")
-            .renderingMode(.template).resizable().scaledToFit()
-            .accessibilityHidden(true)
+        if let image = ArenaVendorAssets.image("vendor_icon_" + name + ".png") {
+            Image(uiImage: image)
+                .renderingMode(.template).resizable().scaledToFit()
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -67,9 +88,11 @@ struct ArenaVendorButtonFace: View {
     var primary = false
     var pressed = false
     var body: some View {
-        Image(primary ? "vendor_button_yellow.png" : "vendor_button_blue.png")
-            .resizable(capInsets: EdgeInsets(top: 14, leading: 14, bottom: 18, trailing: 14))
-            .brightness(pressed ? -0.08 : 0)
-            .accessibilityHidden(true)
+        if let image = ArenaVendorAssets.image(primary ? "vendor_button_yellow.png" : "vendor_button_blue.png") {
+            Image(uiImage: image)
+                .resizable(capInsets: EdgeInsets(top: 14, leading: 14, bottom: 18, trailing: 14))
+                .brightness(pressed ? -0.08 : 0)
+                .accessibilityHidden(true)
+        }
     }
 }

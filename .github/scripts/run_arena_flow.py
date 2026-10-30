@@ -17,6 +17,22 @@ def actual_test_duration(log, test):
     return float(matches[0])
 
 
+def run_xctest(command, log):
+    runner = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        return runner.wait(timeout=720)
+    except subprocess.TimeoutExpired:
+        # A timed-out run still fails. Give xcodebuild a bounded chance to flush
+        # xcresult attachments instead of immediately destroying its bundle.
+        os.killpg(runner.pid, signal.SIGINT)
+        try:
+            runner.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            os.killpg(runner.pid, signal.SIGKILL)
+            runner.wait(timeout=10)
+        raise
+
+
 def main():
     hero, test = sys.argv[1:]
     device = os.environ['SAMPLE_DEVICE']
@@ -38,19 +54,19 @@ def main():
         meta['recordingReadyBeforeTestCommand'] = True
         started = time.monotonic()
         with open('sample-flow.log', 'w') as log:
-            result = subprocess.run(['xcodebuild', 'test-without-building', '-project', 'ShiftReminder.xcodeproj',
+            test_exit = run_xctest(['xcodebuild', 'test-without-building', '-project', 'ShiftReminder.xcodeproj',
                 '-scheme', 'ArenaFlow', '-configuration', 'Debug', '-destination', f'platform=iOS Simulator,id={device}',
                 '-derivedDataPath', 'sample-build', '-resultBundlePath', 'sample-flow.xcresult',
                 '-parallel-testing-enabled', 'NO', f'-only-testing:ArenaFlowTests/ArenaFlowTests/{test}',
-                'CODE_SIGNING_ALLOWED=NO'], stdout=log, stderr=subprocess.STDOUT, timeout=720)
-        meta.update(xcodeCommandSeconds=time.monotonic()-started, testExit=result.returncode)
+                'CODE_SIGNING_ALLOWED=NO'], log)
+        meta.update(xcodeCommandSeconds=time.monotonic()-started, testExit=test_exit)
         # The command also includes test-runner installation and post-test xcresult
         # processing. Require coverage of the actual XCTest, not those inactive periods.
         meta['testSeconds'] = actual_test_duration(Path('sample-flow.log').read_text(errors='replace'), test)
-        status = result.returncode
+        status = test_exit
         if recorder.poll() is not None:
             raise RuntimeError('Continuous recorder stopped before UI test ended')
-        meta['complete'] = result.returncode == 0
+        meta['complete'] = test_exit == 0
     except Exception as error:
         meta['error'] = str(error)
         status = 1

@@ -1,6 +1,7 @@
 import XCTest
 import SceneKit
 import UIKit
+import SwiftUI
 @testable import ShiftReminder
 
 @MainActor
@@ -25,6 +26,35 @@ final class ArenaVendorTests: XCTestCase {
         }
         XCTAssertNotNil(ArenaVendorAssets.spark)
         XCTAssertNotNil(ArenaVendorAssets.smoke)
+        for file in ArenaVendorAssets.imageFiles {
+            XCTAssertNotNil(ArenaVendorAssets.image(file), "Missing runtime image: \(file)")
+        }
+    }
+
+    func testImportedButtonsAndCloseIconRenderVisiblePixels() throws {
+        // A decodable bundled PNG alone did not guarantee that SwiftUI rendered
+        // it in 469. Inspect the actual rendered controls, not just file presence.
+        let blue = try pixels(ArenaVendorButtonFace().frame(width: 160, height: 50))
+        XCTAssertGreaterThan(blue.filter { $0.3 > 200 && $0.2 > $0.0 && $0.1 > $0.0 }.count, 4000)
+        let yellow = try pixels(ArenaVendorButtonFace(primary: true).frame(width: 160, height: 50))
+        XCTAssertGreaterThan(yellow.filter { $0.3 > 200 && $0.0 > 180 && $0.1 > 120 && $0.2 < 120 }.count, 4000)
+        let close = try pixels(ArenaVendorIcon(name: "cross").foregroundStyle(.white).frame(width: 32, height: 32))
+        XCTAssertGreaterThan(close.filter { $0.3 > 200 }.count, 60)
+    }
+
+    private func pixels<V: View>(_ view: V) throws -> [(UInt8, UInt8, UInt8, UInt8)] {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.uiImage?.cgImage)
+        let count = image.width * image.height
+        var bytes = [UInt8](repeating: 0, count: count * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: image.width, height: image.height,
+                bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(image.width), height: CGFloat(image.height)))
+        }
+        return stride(from: 0, to: bytes.count, by: 4).map { (bytes[$0], bytes[$0+1], bytes[$0+2], bytes[$0+3]) }
     }
 
     func testImportedCargoFitsOneExistingCollisionCell() throws {

@@ -1,5 +1,11 @@
 ## Current task — integrate all eleven resource packs; do not upload 468
 
+Latest: all assets were publicly committed as `fcb8505` and Build 469 ran. Its three
+hero flows failed the earned-super check; traversal recording failed finalization;
+actual menu PNGs also revealed blank vendor controls. Promotion was blocked and
+upload skipped. See [469 evidence and repairs](arena-flow-recovery-469.md). The next
+commit fixes these observed failures; it must receive its own full validation.
+
 Publication resumed with the owner's explicit authorization. The particle source
 ZIP is stored as two byte-exact parts because the GitHub connector limits requests
 to 16 MiB; offline import reconstructs and checks the original ZIP SHA-256. All

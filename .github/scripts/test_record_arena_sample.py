@@ -31,6 +31,8 @@ class RecordingContractTests(unittest.TestCase):
             recorder = Recorder()
             def spawn(args, **kwargs):
                 pathlib.Path(args[-1]).write_bytes(b'fixture' * 200)
+                kwargs['stdout'].write('Recording started\n')
+                kwargs['stdout'].flush()
                 return recorder
             def sim(*args, **kwargs):
                 if args[0] == 'get_app_container': return str(root)
@@ -80,6 +82,34 @@ class RecordingContractTests(unittest.TestCase):
         self.assertIsInstance(error, RuntimeError)
         self.assertTrue(stopped)
         self.assertFalse(exists)
+
+
+class RecorderReadinessTests(unittest.TestCase):
+    def test_scene_start_waits_for_encoder_readiness(self):
+        from unittest.mock import Mock
+        recorder, log = Mock(), Mock()
+        recorder.poll.return_value = None
+        log.read_text.side_effect = ['', 'Recording started']
+        with patch.object(capture.time, 'sleep') as sleep:
+            capture.wait_for_recorder(recorder, log)
+            sleep.assert_called_once_with(0.2)
+
+    def test_exited_recorder_is_rejected(self):
+        from unittest.mock import Mock
+        recorder, log = Mock(), Mock()
+        recorder.poll.return_value = 1
+        log.read_text.return_value = ''
+        with self.assertRaisesRegex(RuntimeError, 'exited'):
+            capture.wait_for_recorder(recorder, log)
+
+    def test_missing_readiness_fails_instead_of_starting_scene(self):
+        from unittest.mock import Mock
+        recorder, log = Mock(), Mock()
+        recorder.poll.return_value = None
+        log.read_text.return_value = ''
+        with patch.object(capture.time, 'monotonic', side_effect=[0, 46]), \
+             self.assertRaisesRegex(RuntimeError, 'readiness'):
+            capture.wait_for_recorder(recorder, log)
 
 
 class TraversalEvidenceTests(unittest.TestCase):

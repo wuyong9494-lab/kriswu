@@ -210,9 +210,19 @@ final class ArenaController: ObservableObject {
         #if DEBUG && targetEnvironment(simulator)
         guard capturesFlow else { return "" }
         let fighter = mine
+        let nearest = game.fighters.filter {
+            $0.alive && $0.team != fighter.team && game.isVisible($0, to: fighter.team)
+        }.min { $0.pos.distance(to: fighter.pos) < $1.pos.distance(to: fighter.pos) }
+        // Read-only observation of a visible target. Tests still use real stick
+        // gestures; no input, ammo, charge, AI or match outcome is injected.
+        let targetReachable = nearest.map {
+            $0.pos.distance(to: fighter.pos) <= fighter.brawler.attackRange - 0.25 &&
+                (fighter.brawler == .mage || game.map.lineOfSight(fighter.pos, $0.pos))
+        } ?? false
         let state: [String: Any] = ["x": fighter.pos.x, "y": fighter.pos.y,
             "time": game.time, "speed": fighter.brawler.speed, "alive": fighter.alive,
-            "health": fighter.health, "charge": fighter.superCharge, "damage": fighter.damageDealt]
+            "health": fighter.health, "charge": fighter.superCharge, "damage": fighter.damageDealt,
+            "targetReachable": targetReachable]
         guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) else { return "" }
         return String(data: data, encoding: .utf8) ?? ""
         #else

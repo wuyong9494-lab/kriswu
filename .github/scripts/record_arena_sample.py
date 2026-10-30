@@ -34,6 +34,16 @@ def prepare_recording_device(device, traversal):
     stop_app(device)
 
 
+def wait_for_recorder(recorder, log, timeout=45):
+    deadline = time.monotonic() + timeout
+    while 'Recording started' not in log.read_text(errors='replace'):
+        if recorder.poll() is not None:
+            raise RuntimeError('Video recorder exited before reporting readiness')
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Video recorder did not report readiness')
+        time.sleep(0.2)
+
+
 def main():
     if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "traversal"):
         raise SystemExit(__doc__)
@@ -80,15 +90,18 @@ def main():
         except Exception:
             pass
         raise
-    with (output / (stem + '.recorder.log')).open('w') as recorder_log:
+    recorder_log_path = output / (stem + '.recorder.log')
+    with recorder_log_path.open('w') as recorder_log:
         recorder = subprocess.Popen(['xcrun', 'simctl', 'io', device, 'recordVideo',
                                      '--codec=h264', str(path)], stdout=recorder_log,
                                      stderr=subprocess.STDOUT, start_new_session=True)
     evidence = None
     try:
-        time.sleep(1)
+        wait_for_recorder(recorder, recorder_log_path)
         if recorder.poll() is not None:
             raise RuntimeError('Video recorder exited before simulation start')
+        diagnostic['recordingReadyBeforeSimulationStart'] = True
+        save_diagnostic()
         start.write_text('start')
         deadline = time.monotonic() + (240 if traversal else 120)
         while time.monotonic() < deadline:

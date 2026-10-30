@@ -66,10 +66,26 @@ jobs:
         shell: bash -eo pipefail {0}
         run: |
           python3 .github/scripts/prepare_arena_device.py menus-opening
+      - name: Verify bundled vendor models, textures, collision bounds and audio
+        timeout-minutes: 12
+        run: |
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Debug -destination "platform=iOS Simulator,id=$SAMPLE_DEVICE" \
+            -derivedDataPath sample-build -resultBundlePath vendor-tests.xcresult \
+            -parallel-testing-enabled NO -only-testing:SiteTests/ArenaVendorTests \
+            -only-testing:SiteTests/ArenaAudioTests CODE_SIGNING_ALLOWED=NO > vendor-tests.log 2>&1 || { tail -100 vendor-tests.log; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arena-vendor-tests-${{ github.sha }}
+          path: |
+            vendor-tests.log
+            vendor-tests.xcresult
+          retention-days: 14
       - name: Capture sample menu pages
         timeout-minutes: 10
         run: |
-          ARENA_FRESH_CAPTURE_DEVICE="$SAMPLE_DEVICE" python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/menus menus
+          python3 .github/scripts/capture_arena_sample.py "$SAMPLE_DEVICE" sample-shots/menus menus
           for image in sample-shots/menus/*.png; do /tmp/check-sample-capture "$image"; done
       - uses: actions/upload-artifact@v4
         if: always()
@@ -99,22 +115,6 @@ jobs:
         run: |
           ARENA_FRESH_RECORDING_DEVICE="$SAMPLE_DEVICE" python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion traversal
           python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-traversal.mp4
-      - name: Verify bundled vendor models, textures, collision bounds and audio
-        timeout-minutes: 12
-        run: |
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-            -configuration Debug -destination "platform=iOS Simulator,id=$SAMPLE_DEVICE" \
-            -derivedDataPath sample-build -resultBundlePath vendor-tests.xcresult \
-            -parallel-testing-enabled NO -only-testing:SiteTests/ArenaVendorTests \
-            -only-testing:SiteTests/ArenaAudioTests CODE_SIGNING_ALLOWED=NO > vendor-tests.log 2>&1 || { tail -100 vendor-tests.log; exit 1; }
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: arena-vendor-tests-${{ github.sha }}
-          path: |
-            vendor-tests.log
-            vendor-tests.xcresult
-          retention-days: 14
       - name: Shut down sample simulator
         if: always()
         timeout-minutes: 2

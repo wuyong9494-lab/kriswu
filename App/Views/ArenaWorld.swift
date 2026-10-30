@@ -377,7 +377,10 @@ final class ArenaWorldView: SCNView {
         ArenaDiagnostics.shared.measure(.sceneUpdate) { sync(dt: dt) }
         if controller.benchmarkSnapshotTime > 0 && controller.game.time >= controller.benchmarkSnapshotTime {
             world.isPaused = true
-            isPlaying = false
+            // Freeze simulation/animation, but keep presenting the frozen surface
+            // while simctl is recording. Stopping presentation before its encoder
+            // drains can leave recordVideo waiting indefinitely at SIGINT.
+            isPlaying = UserDefaults.standard.bool(forKey: "arena.recordingGate")
             if !captureReady {
                 captureReady = true
                 let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

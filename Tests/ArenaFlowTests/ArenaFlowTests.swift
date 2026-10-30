@@ -35,6 +35,7 @@ final class ArenaFlowTests: XCTestCase {
     private struct ControlState: Codable {
         let x, y, time, speed, charge: Double
         let alive: Bool
+        let targetReachable: Bool
         let health, damage: Int
     }
 
@@ -97,7 +98,26 @@ final class ArenaFlowTests: XCTestCase {
             let value = try XCTUnwrap(clock.value as? String, "Missing read-only movement feedback")
             let state = try JSONDecoder().decode(ControlState.self, from: Data(value.utf8))
             controlTrace.append(state)
-            if state.alive && state.y > 15.2 {
+            if !state.alive {
+                Thread.sleep(forTimeInterval: 0.15)
+                continue
+            }
+            if back.exists { break }
+            if state.charge >= 1 {
+                specialPoint.tap()
+                if back.exists { break }
+            }
+            if state.targetReachable {
+                // Fight visible opponents before advancing again. The previous
+                // route ignored combat until y=15.2, dying en route with zero damage.
+                for _ in 0..<3 {
+                    if back.exists { break }
+                    attackPoint.tap()
+                    Thread.sleep(forTimeInterval: 0.45) // normal 0.4s attack cooldown
+                }
+                continue
+            }
+            if state.y > 15.2 {
                 // Clear the southern wall at x=9 before proceeding north. A
                 // fixed two-second drag ended at x=9.4–9.8 and hit that wall.
                 // Observe actual movement, including after respawn; all actions
@@ -110,15 +130,9 @@ final class ArenaFlowTests: XCTestCase {
                 let toward = from.withOffset(CGVector(dx: dx, dy: dy))
                 let hold = min(2.5, max(0.15, abs(distance) / (state.speed * 0.8)))
                 from.press(forDuration: 0.05, thenDragTo: toward, withVelocity: .fast, thenHoldForDuration: hold)
-                // Navigation and combat are separate real-touch actions. Re-read
-                // position/result after moving instead of firing a stale batch.
-                continue
+                // Re-check the result before any attack following this movement.
             }
             if back.exists { break }
-            if state.alive && state.charge >= 1 {
-                specialPoint.tap()
-                if back.exists { break }
-            }
             attackPoint.tap()
             // Build 468's special tap hit Return to lobby after the result
             // appeared during its preceding attack. Never send that stale tap.

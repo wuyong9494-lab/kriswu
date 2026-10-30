@@ -2,6 +2,8 @@ import copy
 import unittest
 from collect_arena_flow import validate_scene, is_scene_attachment, validate_recording_session
 from run_arena_flow import actual_test_duration
+import run_arena_flow as flow
+from unittest.mock import Mock, patch
 
 
 class FlowEvidenceTests(unittest.TestCase):
@@ -72,3 +74,29 @@ class ContinuousRecordingTests(unittest.TestCase):
     def test_truncated_continuous_recording_still_fails(self):
         with self.assertRaises(ValueError):
             validate_recording_session(self.session(), dict(presentationSpanSeconds=280))
+
+
+class XCTestFinalizationTests(unittest.TestCase):
+    def test_success_does_not_interrupt_runner(self):
+        runner = Mock(pid=123)
+        runner.wait.return_value = 0
+        with patch.object(flow.subprocess, 'Popen', return_value=runner), patch.object(flow.os, 'killpg') as kill:
+            self.assertEqual(flow.run_xctest(['xcodebuild'], Mock()), 0)
+            kill.assert_not_called()
+
+    def test_timeout_flushes_result_but_remains_failure(self):
+        runner = Mock(pid=123)
+        runner.wait.side_effect = [flow.subprocess.TimeoutExpired('xcodebuild', 720), 0]
+        with patch.object(flow.subprocess, 'Popen', return_value=runner), patch.object(flow.os, 'killpg') as kill:
+            with self.assertRaises(flow.subprocess.TimeoutExpired):
+                flow.run_xctest(['xcodebuild'], Mock())
+            kill.assert_called_once_with(123, flow.signal.SIGINT)
+
+    def test_stuck_finalization_is_killed_and_never_passes(self):
+        runner = Mock(pid=123)
+        runner.wait.side_effect = [flow.subprocess.TimeoutExpired('xcodebuild', 720),
+                                  flow.subprocess.TimeoutExpired('xcodebuild', 30), -9]
+        with patch.object(flow.subprocess, 'Popen', return_value=runner), patch.object(flow.os, 'killpg') as kill:
+            with self.assertRaises(flow.subprocess.TimeoutExpired):
+                flow.run_xctest(['xcodebuild'], Mock())
+            self.assertEqual([c.args[1] for c in kill.call_args_list], [flow.signal.SIGINT, flow.signal.SIGKILL])
