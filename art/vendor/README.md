@@ -8,7 +8,7 @@ GitHub 中保存 11 个原始 ZIP（`archives/`）、逐文件索引、独立许
 
 所有素材来自作者官方 GitHub 或 Kenney 官方下载入口，包内许可证明确为 CC0-1.0。允许修改、个人及商业使用，不强制署名；仍保留作者和原始许可。作者品牌预览/标识仅作出处记录，不作为本项目品牌。没有下载付费 EXTRA/SOURCE、原版游戏提取素材或许可不明的转载包。
 
-11 个包均已有实际游戏调用。`scripts/assets/integrate_vendor_assets.py` 从完整来源库生成 `App/ArenaVendor` 中的 28 个运行文件，覆盖蛮王武器、场景货物与自然装饰、按钮/图标、粒子、菜单/战斗/脚步声音及结算短音乐。运行选择约 0.88 MiB；源包、重复制作格式和完整索引保留在 `art/vendor`，不在每次战斗中加载。`prepared/audio` 保存早期转换候选；当前采用文件以 `App/ArenaVendor/arena-vendor-runtime.json` 为准。原项目已有 KayKit 衍生模型与 game-icons.net 图标的许可仍分别保留，后者不是 CC0。
+11 个包均已有实际游戏调用。`scripts/assets/integrate_vendor_assets.py` 从完整来源库生成 `App/ArenaVendor` 中的 104 个运行文件，覆盖 13 名英雄装备与技能效果、22 张地图主题与铺路、完整菜单控件、战斗/脚步/成长反馈音频。运行选择约 2.16 MiB；源包、重复制作格式和完整索引保留在 `art/vendor`，不在每次战斗中加载。`prepared/audio` 保存早期转换候选；当前采用文件以 `App/ArenaVendor/arena-vendor-runtime.json` 为准。原项目已有 KayKit 衍生模型与 game-icons.net 图标的许可仍分别保留，后者不是 CC0。
 
 |素材包 / 官方来源|固定版本|实际文件|体积 MiB|当前用途|
 |---|---|---:|---:|---|
@@ -24,13 +24,17 @@ GitHub 中保存 11 个原始 ZIP（`archives/`）、逐文件索引、独立许
 |[Kenney Particle Pack](https://kenney.nl/assets/particle-pack)|1.1|194|9.25|透明火焰、烟、光点与命中特效纹理|
 |[Kenney Nature Kit](https://kenney.nl/assets/nature-kit)|2.1|3615|28.08|草、灌木、石块、树和围栏候选|
 
+## 当前配置与原始导入记录
+
+`manifest.json` 中的 `runtimeIntegration: none` 和 `source-staged-not-in-app` 保留的是首次导入来源快照。当前应用配置以 `App/ArenaVendor/arena-vendor-runtime.json` 与 `arena-asset-configuration.json` 为准，不能用首次导入状态推断尚未接入。完整配置范围与发布前检查见 `docs/arena-material-configuration.md`。
+
 ## 已完成的最小验证
 
 - 6,675 个源文件与逐文件 SHA-256 清单一致；6,001 个不同内容哈希。原 ZIP 的 SHA-256、下载来源、版本及排除项也记录在清单。
 - 3,142 张 PNG 已完整解码；436 个 SVG 已解析并检查无脚本或外部引用。
 - 564 个 GLB/glTF 的缓冲区、访问器、索引、依赖文件和动作时间检查通过；没有命中现有 `gltf_contract` 不支持的特性。不是完整 Khronos 标准认证，也不是 SceneKit 实际画面验收。
 - 426 个 OGG 全量软件解码通过。额外导出选择、返回、确认、点击、草地脚步、石地脚步、身体命中、木材命中、切割和斩击共 10 个单声道 44.1 kHz / 16-bit PCM WAV；记录转换参数、源/输出哈希和峰值，未替换原音轨。
-- KayKit 角色源包包含 5 个模型文件（4 个基础角色，Rogue_Hooded 是 Rogue 的变体），每个 76 段动作；不能把变体当作新增独立英雄。当前玩法仍为游侠、蛮王、法师三人。
+- KayKit 角色源包包含 5 个模型文件（4 个基础角色，Rogue_Hooded 是 Rogue 的变体），每个 76 段动作；不能把变体当作新增独立英雄。现有 13 名英雄均已有正式配置；游侠、蛮王、法师同时提供双闸交汇三英雄对战入口，正常获得成长奖励。
 - FBX、DAE、OBJ/MTL、STL、AI、TTF、图集 XML 只完成内容哈希核验，没有安装或运行相应编辑器。TTF 为拉丁字体，不替换中文字体。
 - 从展开目录排除 15 个网站快捷方式和 1 个 Unity 专用重复打包文件（原始 ZIP 不改写）；粒子 PNG 原文件已导入。未运行第三方脚本、插件、安装程序。
 

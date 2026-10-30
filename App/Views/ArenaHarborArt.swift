@@ -2,7 +2,8 @@ import SceneKit
 import UIKit
 import simd
 
-/// Original Blue Moon Harbor study for Twin Gates. All solids follow wall cells.
+/// Blue Moon Harbor presentation for the playable Twin Gates arena.
+/// All solids follow the existing collision cells.
 @MainActor
 enum ArenaHarborArt {
     private static func material(_ color: UIColor) -> SCNMaterial {
@@ -119,15 +120,23 @@ enum ArenaHarborArt {
         let panel = SCNBox(width: 0.68, height: 0.018, length: 0.68, chamferRadius: 0.008)
         panel.chamferSegmentCount = 2
         panel.materials = [inset]
+        let palette = ArenaMapAssets.palette(for: map)
+        let cargoFiles = palette.crates + palette.barrels
+        let templates = cargoFiles.compactMap { ArenaVendorAssets.prop($0, width: 0.96, height: 1.02) }
+        let wallCount = map.tiles.filter { $0 == .wall }.count
+        let cargoCount = min(ArenaMapAssets.wallLimit, wallCount)
+        let cargoSlots: Set<Int> = cargoCount == 0 ? [] : Set((0..<cargoCount).map { $0 * wallCount / cargoCount })
+        var wallIndex = 0
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .wall {
                 let cell = SCNNode()
                 cell.name = "wall-\(x)-\(y)"
                 cell.position = SCNVector3(Float(x) + 0.5, 0, Float(y) + 0.5)
                 // Imported dock cargo fits the same solid cell and retains its name.
-                if (x * 7 + y * 11) % 5 == 0,
-                   let cargo = ArenaVendorAssets.prop((x + y) % 2 == 0 ? "vendor_crates.glb" : "vendor_barrel.glb",
-                                                      width: 0.96, height: 1.02) {
+                let cargoSlot = cargoSlots.contains(wallIndex)
+                wallIndex += 1
+                if cargoSlot, !templates.isEmpty {
+                    let cargo = templates[(x + y) % templates.count].clone()
                     cell.addChildNode(cargo)
                     root.addChildNode(cell)
                     continue

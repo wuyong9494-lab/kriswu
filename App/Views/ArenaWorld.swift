@@ -150,6 +150,7 @@ final class ArenaWorldView: SCNView {
     private var chestViews: [ChestView] = []
     private var lastFootstepPosition: V2?
     private var lastFootstepTime: Double = -1
+    private var woodPavingCells: Set<Int> = []
     /// 地上快要炸的红圈
     private var warningNodes: [SCNNode] = []
     /// 大乱斗的能量箱（和 game.boxes 一个对一个）、地上的能量块
@@ -482,7 +483,8 @@ final class ArenaWorldView: SCNView {
         let root = world.rootNode
         let width = Float(map.width), height = Float(map.height)
         let look = ThemeLook.of(map.theme)
-        let harborSample = controller.qualitySample && map.id == ArenaMap.twinGates.id
+        let harborSample = map.id == ArenaMap.twinGates.id
+        woodPavingCells = ArenaMapAssets.woodPavingCells(in: map)
 
         // 镜头：装在一个跟着自己走的架子上；上边那一队的人整个架子转半圈
         let camera = SCNCamera()
@@ -563,7 +565,7 @@ final class ArenaWorldView: SCNView {
             }
         }
         if !purpleSample && !harborSample { root.addChildNode(scenery(game)) }
-        root.addChildNode(ArenaVendorAssets.border(width: width, height: height))
+        root.addChildNode(ArenaMapAssets.scenery(map))
 
         // 各个玩法的东西
         let center = SIMD3(Float(map.center.x), 0, Float(map.center.y))
@@ -836,7 +838,7 @@ final class ArenaWorldView: SCNView {
                 cells.append((x: x, y: y, kind: kind))
             }
         }
-        return ArenaArt.walls(cells)
+        return ArenaArt.walls(cells, palette: ArenaMapAssets.palette(for: map))
     }
 
     /// 场地外两圈树、几块石头，分队玩法两头插旗。网格大家共用，不描边、不投影。不压成一整块：那一下会卡住进对局
@@ -981,7 +983,8 @@ final class ArenaWorldView: SCNView {
                 lastFootstepPosition = me.pos
             } else if distance >= 0.55 && clock - lastFootstepTime >= 0.28 {
                 let grass = game.map.tile(Int(me.pos.x), Int(me.pos.y)) == .bush
-                ArenaSound.shared.play(grass ? .stepGrass : .stepStone, volume: 0.14)
+                let wood = woodPavingCells.contains(Int(me.pos.y) * game.map.width + Int(me.pos.x))
+                ArenaSound.shared.play(grass ? .stepGrass : (wood ? .stepWood : .stepStone), volume: 0.14)
                 lastFootstepPosition = me.pos
                 lastFootstepTime = clock
             }
@@ -1039,9 +1042,7 @@ final class ArenaWorldView: SCNView {
             let heal = entry.kind == .healing
             let color: UIColor = heal ? UIColor(red: 0.45, green: 1, blue: 0.5, alpha: 1)
                 : (game.fighters[entry.target].team == myTeam ? UIColor(red: 1, green: 0.45, blue: 0.4, alpha: 1) : .white)
-            let textOffset: SIMD3<Float> = controller.qualitySample
-                ? SIMD3(heal ? 0.78 : -0.78, ArenaAvatar.headHeight + (heal ? 0.95 : 0.65), 0)
-                : SIMD3(heal ? 0.36 : -0.36, ArenaAvatar.headHeight + (heal ? 0.75 : 0.3), 0)
+            let textOffset = SIMD3<Float>(heal ? 0.78 : -0.78, ArenaAvatar.headHeight + (heal ? 0.95 : 0.65), 0)
             let point = avatars[entry.target].node.simdPosition + textOffset
             floater((heal ? "+" : "") + String(entry.amount), at: point, color: color, target: entry.target)
         }
@@ -1375,8 +1376,8 @@ final class ArenaWorldView: SCNView {
         let owner = game.fighters.indices.contains(p.owner) ? game.fighters[p.owner].brawler : .ranger
         // 超级充能开着放的大招：紫的
         let hyper = p.isSuper && game.fighters.indices.contains(p.owner) && game.fighters[p.owner].hyperTime > 0
-        if controller.qualitySample && owner == .ranger && p.lob == nil {
-            let height: Float = 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale
+        if owner == .ranger && !BrawlerLook.legacyRangerComparison && p.lob == nil {
+            let height: Float = BrawlerLook.rangerMuzzleHeight * ArenaAvatar.scale * BrawlerLook.rangerScale
             let ally = p.team == myTeam
             let key = "\(p.radius)-\(ally)-\(p.isSuper)-\(hyper)"
             if sampleBoltTemplates[key] == nil {
@@ -1389,10 +1390,10 @@ final class ArenaWorldView: SCNView {
             world.rootNode.addChildNode(root)
             return ProjectileView(root: root, height: height)
         }
-        let tint = controller.qualitySample ? (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot) : hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
-        let tintKey = controller.qualitySample ? (p.team == myTeam ? "sample-ally" : "sample-enemy") : hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
+        let tint = hyper ? ArenaPalette.hyper : (p.isSuper ? ArenaPalette.gold : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot))
+        let tintKey = hyper ? "hyper" : (p.isSuper ? "gold" : (p.team == myTeam ? "ally" : "enemy"))
         // 子弹芯是偏白的亮色，外面一圈光晕，后面拖一条尾巴
-        let core = Self.lighter(tint, controller.qualitySample ? 0.22 : 0.72)
+        let core = Self.lighter(tint, 0.22)
         if let lob = p.lob {
             // 扔出去的火球：天上的球、地上的影子、落点的圈
             let root = SCNNode()
@@ -1405,8 +1406,8 @@ final class ArenaWorldView: SCNView {
                 return sphere
             })
             ball.castsShadow = false
-            if !controller.qualitySample { ball.addChildNode(halo(hyper ? "hyperfire" : (p.isSuper ? "fire" : tintKey), fire, size: radius * 5)) }
-            ball.addParticleSystem(trail(fire, size: controller.qualitySample ? 0.12 : (p.isSuper ? 0.5 : 0.3), life: controller.qualitySample ? 0.12 : 0.3))
+            ball.addParticleSystem(trail(fire, size: 0.12, life: 0.12,
+                                         style: ArenaEffectAssets.profile(for: owner).trail))
             let shadow = SCNNode(geometry: shared("shadow-\(p.isSuper)") {
                 let disc = SCNCylinder(radius: radius * 0.9, height: 0.005)
                 disc.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.3))
@@ -1437,7 +1438,8 @@ final class ArenaWorldView: SCNView {
                 sphere.firstMaterial = ArenaAvatar.material(core, lit: false)
                 return sphere
             }
-            piece.addParticleSystem(trail(UIColor(red: 0.5, green: 1, blue: 0.6, alpha: 1), size: 0.35))
+            piece.addParticleSystem(trail(UIColor(red: 0.5, green: 1, blue: 0.6, alpha: 1), size: 0.18,
+                                          style: .magic))
         case .knight, .barbarian, .guardian, .swordsman:
             piece.geometry = shared("slash-fly-\(tintKey)") {
                 Self.crescent(color: core, wide: owner == .guardian ? 1.5 : 1.15)
@@ -1464,25 +1466,11 @@ final class ArenaWorldView: SCNView {
         piece.castsShadow = false
         let root = SCNNode()
         root.addChildNode(piece)
-        if !controller.qualitySample { root.addChildNode(halo(tintKey, tint, size: p.isSuper ? 2.8 : 2.1)) }
-        let shotHeight: Float = owner == .ranger && !BrawlerLook.legacyRangerComparison ? 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale : 0.6
-        // This constant-size ring is decorative, not the projectile collision radius.
-        // Keep actual lob landing indicators and ranger super radius projections above.
-        if !controller.qualitySample {
-            let mark = SCNNode(geometry: shared("shot-mark-\(tintKey)") {
-                let ring = SCNTube(innerRadius: 0.22, outerRadius: 0.4, height: 0.012)
-                ring.radialSegmentCount = 24
-                ring.firstMaterial = ArenaAvatar.decal(tint.withAlphaComponent(0.9))
-                return ring
-            })
-            mark.simdPosition = SIMD3(0, 0.04 - shotHeight, 0)
-            mark.castsShadow = false
-            mark.renderingOrder = 6
-            root.addChildNode(mark)
-        }
+        let shotHeight: Float = owner == .ranger && !BrawlerLook.legacyRangerComparison ? BrawlerLook.rangerMuzzleHeight * ArenaAvatar.scale * BrawlerLook.rangerScale : 0.6
         root.simdEulerAngles = SIMD3(0, atan2(Float(p.velocity.x), Float(p.velocity.y)), 0)
         root.simdPosition = SIMD3(Float(p.pos.x), shotHeight, Float(p.pos.y))
-        root.addParticleSystem(trail(tint, size: controller.qualitySample ? 0.1 : (p.isSuper ? 0.4 : 0.24), life: controller.qualitySample ? 0.1 : (p.isSuper ? 0.3 : 0.16)))
+        root.addParticleSystem(trail(tint, size: 0.1, life: 0.12,
+                                    style: ArenaEffectAssets.profile(for: owner).trail))
         world.rootNode.addChildNode(root)
         return ProjectileView(root: root, height: shotHeight)
     }
@@ -1589,11 +1577,11 @@ final class ArenaWorldView: SCNView {
             ArenaSound.shared.play(.boom, volume: loudness(point))
             addShake(Float(radius) * 0.16 * max(0, 1 - Float(point.distance(to: controller.mine.pos)) / 9))
             let at = SIMD3(Float(point.x), 0.05, Float(point.y))
-            burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: controller.qualitySample ? 12 : 40, speed: 4 * CGFloat(radius), size: controller.qualitySample ? 0.16 : 0.45, life: controller.qualitySample ? 0.22 : 0.45)
-            burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: controller.qualitySample ? 6 : 20, speed: 2.5 * CGFloat(radius), size: controller.qualitySample ? 0.1 : 0.3, life: controller.qualitySample ? 0.18 : 0.35)
+            burst(at: at + SIMD3(0, 0.3, 0), color: .orange, count: 12, speed: 4 * CGFloat(radius), size: 0.16, life: 0.22, style: .fire)
+            burst(at: at + SIMD3(0, 0.3, 0), color: ArenaPalette.gold, count: 6, speed: 2.5 * CGFloat(radius), size: 0.1, life: 0.18, style: .spark)
             let disc = SCNCylinder(radius: CGFloat(radius), height: 0.01)
             disc.radialSegmentCount = 40
-            disc.firstMaterial = ArenaAvatar.decal(UIColor.orange.withAlphaComponent(controller.qualitySample ? 0.22 : 0.55))
+            disc.firstMaterial = ArenaAvatar.decal(UIColor.orange.withAlphaComponent(0.22))
             let node = SCNNode(geometry: disc)
             node.simdPosition = at
             node.castsShadow = false
@@ -1605,8 +1593,7 @@ final class ArenaWorldView: SCNView {
             guard avatars.indices.contains(target) else { return }
             ArenaSound.shared.play(.knockout, volume: target == controller.me ? 1 : loudness(game.fighters[target].pos))
             burst(at: avatars[target].node.simdPosition + SIMD3(0, 0.6, 0), color: UIColor(white: 0.9, alpha: 1),
-                  count: controller.qualitySample ? 12 : 30, speed: 2,
-                  size: controller.qualitySample ? 0.16 : 0.4, life: controller.qualitySample ? 0.28 : 0.6)
+                  count: 12, speed: 2, size: 0.16, life: 0.28, style: .smoke)
             if target == controller.me {
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 addShake(0.5)
@@ -1628,8 +1615,9 @@ final class ArenaWorldView: SCNView {
             guard avatars.indices.contains(fighter) else { return }
             let sound: ArenaSound.Effect
             switch game.fighters[fighter].brawler {
-            case .knight, .barbarian, .guardian: sound = .slash
-            case .mage, .necromancer: sound = .magic
+            case .knight, .barbarian, .guardian, .swordsman: sound = .slash
+            case .mage, .necromancer, .summoner, .shade: sound = .magic
+            case .scholar: sound = .pageTurn
             default: sound = .shot
             }
             // 看不见的人开火也听得见一点（草丛里有人）
@@ -1639,6 +1627,7 @@ final class ArenaWorldView: SCNView {
             let shooter = game.fighters[fighter]
             let color = shooter.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot
             let at = SIMD3(Float(shooter.pos.x), 0, Float(shooter.pos.y))
+            let attackStyle = ArenaEffectAssets.profile(for: shooter.brawler).attack
             switch shooter.brawler {
             case .swordsman:
                 slashArc(at: at, facing: shooter.facing, color: color, reach: 2.6, sweep: 2.6)
@@ -1648,26 +1637,29 @@ final class ArenaWorldView: SCNView {
                 slashArc(at: at, facing: shooter.facing, color: color, reach: 1.8, sweep: 1.3)
             default:
                 let muzzle = avatars[fighter].muzzlePosition ?? SIMD3(Float(shooter.pos.x + shooter.facing.x * 0.55), 0.75, Float(shooter.pos.y + shooter.facing.y * 0.55))
-                if controller.qualitySample && shooter.brawler == .ranger {
-                    burst(at: muzzle, color: color, count: 6, speed: 1.4, size: 0.09, life: 0.1)
+                if shooter.brawler == .ranger {
+                    burst(at: muzzle, color: color, count: 6, speed: 1.4, size: 0.09, life: 0.1, style: attackStyle)
                     break
                 }
-                burst(at: muzzle, color: color, count: 10, speed: 2.2, size: 0.28, life: 0.14)
-                burst(at: muzzle, color: .white, count: 4, speed: 1.4, size: 0.14, life: 0.08)
+                burst(at: muzzle, color: color, count: 8, speed: 2.2, size: 0.16, life: 0.14, style: attackStyle)
                 shotStreak(from: at, facing: shooter.facing, color: color)
+            }
+            if attackStyle == .slash {
+                burst(at: at + SIMD3(Float(shooter.facing.x) * 1.2, 0.8, Float(shooter.facing.y) * 1.2),
+                      color: color, count: 4, speed: 1.8, size: 0.16, life: 0.12, style: attackStyle)
             }
         case .heal(let target, let amount):
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
             ArenaSound.shared.play(.heal, volume: loudness(game.fighters[target].pos) * 0.7)
             let at = avatars[target].node.simdPosition
-            burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 10, speed: 1, size: 0.25, life: 0.5)
+            burst(at: at + SIMD3(0, 0.5, 0), color: UIColor(red: 0.4, green: 1, blue: 0.5, alpha: 1), count: 8, speed: 1, size: 0.18, life: 0.4, style: .heal)
             combatText.add(target: target, kind: .healing, amount: amount, time: clock)
         case .goal(let team):
             let ours = team == myTeam
             ArenaSound.shared.play(ours ? .win : .lose, volume: 0.8)
             if let ball = game.ball {
                 let at = SIMD3(Float(ball.pos.x), 0.7, Float(ball.pos.y))
-                burst(at: at, color: ArenaPalette.gold, count: 70, speed: 5, size: 0.35, life: 0.9)
+                burst(at: at, color: ArenaPalette.gold, count: 40, speed: 5, size: 0.25, life: 0.6, style: .star)
                 burst(at: at, color: ours ? ArenaPalette.blue : ArenaPalette.red, count: 50, speed: 4, size: 0.3, life: 0.8)
             }
             if ours { UINotificationFeedbackGenerator().notificationOccurred(.success) }
@@ -1694,15 +1686,16 @@ final class ArenaWorldView: SCNView {
             guard game.isVisible(user, to: myTeam) || user.team == myTeam else { return }
             ArenaSound.shared.play(.gadget, volume: loudness(user.pos))
             ring(at: at, color: ArenaPalette.gadget, to: 1.6)
-            burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.gadget, count: 18, speed: 1.8, size: 0.24, life: 0.4)
+            burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.gadget, count: 12, speed: 1.8, size: 0.18, life: 0.3,
+                  style: ArenaEffectAssets.style(for: user.gadget))
             switch user.gadget {
             case .frost?:
                 ring(at: at, color: ArenaPalette.frost, to: 6.5)
-                burst(at: at + SIMD3(0, 0.4, 0), color: ArenaPalette.frost, count: 60, speed: 5, size: 0.3, life: 0.5)
+                burst(at: at + SIMD3(0, 0.4, 0), color: ArenaPalette.frost, count: 24, speed: 5, size: 0.18, life: 0.35, style: .magic)
             case .potion?:
-                burst(at: at + SIMD3(0, 0.6, 0), color: UIColor(red: 1, green: 0.4, blue: 0.6, alpha: 1), count: 24, speed: 1.2, size: 0.3, life: 0.6)
+                burst(at: at + SIMD3(0, 0.6, 0), color: UIColor(red: 1, green: 0.4, blue: 0.6, alpha: 1), count: 12, speed: 1.2, size: 0.18, life: 0.4, style: .heal)
             case .vanish?:
-                burst(at: at + SIMD3(0, 0.7, 0), color: UIColor(white: 0.85, alpha: 1), count: 40, speed: 1.4, size: 0.5, life: 0.6)
+                burst(at: at + SIMD3(0, 0.7, 0), color: UIColor(white: 0.85, alpha: 1), count: 18, speed: 1.4, size: 0.3, life: 0.4, style: .smoke)
             case .ward?, .reload?:
                 ring(at: at, color: ArenaPalette.gold, to: 2.2)
             default:
@@ -1716,8 +1709,8 @@ final class ArenaWorldView: SCNView {
             ArenaSound.shared.play(.hyper, volume: fighter == controller.me ? 1 : loudness(user.pos))
             ring(at: at, color: ArenaPalette.hyper, to: 3.2)
             ring(at: at, color: .white, to: 2.2)
-            burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.hyper, count: 70, speed: 4, size: 0.4, life: 0.6)
-            burst(at: at + SIMD3(0, 0.8, 0), color: .white, count: 24, speed: 2.5, size: 0.25, life: 0.4)
+            burst(at: at + SIMD3(0, 0.8, 0), color: ArenaPalette.hyper, count: 24, speed: 4, size: 0.2, life: 0.35, style: .magic)
+            burst(at: at + SIMD3(0, 0.8, 0), color: .white, count: 8, speed: 2.5, size: 0.13, life: 0.25, style: .star)
             if fighter == controller.me {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 addShake(0.35)
@@ -1743,7 +1736,7 @@ final class ArenaWorldView: SCNView {
             let ours = game.fighters[fighter].team == myTeam
             ArenaSound.shared.play(ours ? .pickup : .power, volume: ours ? 1 : 0.45)
             let tint = ours ? ArenaPalette.gold : ArenaPalette.red
-            burst(at: avatars[fighter].node.simdPosition + SIMD3(0, 0.8, 0), color: tint, count: 18, speed: 1.8, size: 0.22, life: 0.45)
+            burst(at: avatars[fighter].node.simdPosition + SIMD3(0, 0.8, 0), color: tint, count: 12, speed: 1.8, size: 0.18, life: 0.35, style: .star)
             floater(ours ? "能量" : "对方能量", at: avatars[fighter].node.simdPosition + SIMD3(0, ArenaAvatar.headHeight + 0.15, 0), color: tint)
         case .respawn(let fighter):
             guard avatars.indices.contains(fighter) else { return }
@@ -1798,39 +1791,15 @@ final class ArenaWorldView: SCNView {
         return shape
     }
 
-    /// 放大招：脚下一圈这个角色的颜色往外扩，身上冲起一道光柱、往外蹦光点（超级充能的是紫的）
+    /// Released heroes use their assigned skill texture and the shared effect pool.
     private func superFlash(_ caster: Fighter, at point: SIMD3<Float>, size: Float) {
-        if controller.qualitySample {
-            let teamColor = caster.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot
-            ring(at: point, color: teamColor, to: CGFloat(1.5 * size))
-            let muzzle = avatars.indices.contains(caster.id) ? avatars[caster.id].muzzlePosition : nil
-            burst(at: muzzle ?? point + SIMD3(0, size, 0), color: teamColor,
-                  count: 16, speed: 2, size: 0.1, life: 0.18)
-            return
-        }
-        let color = caster.hyperTime > 0 ? ArenaPalette.hyper : Self.superColor(caster.brawler)
-        ring(at: point, color: color, to: CGFloat(2.6 * size))
-        ring(at: point, color: .white, to: CGFloat(1.6 * size))
-        let tube = SCNCylinder(radius: CGFloat(0.55 * size), height: CGFloat(3.4 * size))
-        tube.radialSegmentCount = 24
-        let glow = SCNMaterial()
-        glow.lightingModel = .constant
-        glow.diffuse.contents = ArenaArt.beam
-        glow.multiply.contents = color
-        glow.blendMode = .add
-        glow.writesToDepthBuffer = false
-        glow.isDoubleSided = true
-        let cap = SCNMaterial()
-        cap.transparency = 0
-        tube.materials = [glow, cap, cap]
-        let beam = SCNNode(geometry: tube)
-        beam.simdPosition = point + SIMD3(0, 1.7 * size, 0)
-        beam.castsShadow = false
-        beam.renderingOrder = 30
-        beam.simdScale = SIMD3(0.6, 0.2, 0.6)
-        world.rootNode.addChildNode(beam)
-        beam.runAction(.sequence([.group([.scale(to: 1, duration: 0.14), .fadeOut(duration: 0.45)]), .removeFromParentNode()]))
-        burst(at: point + SIMD3(0, size, 0), color: color, count: 40, speed: 3.5, size: 0.3, life: 0.5)
+        let color = caster.hyperTime > 0 ? ArenaPalette.hyper
+            : (caster.team == myTeam ? Self.superColor(caster.brawler) : ArenaPalette.enemyShot)
+        ring(at: point, color: color, to: CGFloat(1.5 * size))
+        let muzzle = avatars.indices.contains(caster.id) ? avatars[caster.id].muzzlePosition : nil
+        burst(at: muzzle ?? point + SIMD3(0, size, 0), color: color,
+              count: 16, speed: 2, size: 0.14, life: 0.24,
+              style: ArenaEffectAssets.profile(for: caster.brawler).special)
     }
 
     /// 每个角色大招的颜色
@@ -1881,7 +1850,8 @@ final class ArenaWorldView: SCNView {
     }
 
     /// 一下子炸开的一团光点。系统是开局建好的，这里只挪位置再放一次
-    private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat) {
+    private func burst(at point: SIMD3<Float>, color: UIColor, count: CGFloat, speed: CGFloat, size: CGFloat, life: CGFloat,
+                       style: ArenaEffectAssets.Style? = nil) {
         guard ![.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant),
               let slot = burstSlots.first(where: { !$0.busy }) else { return }
         let started = metricsEnabled ? CACurrentMediaTime() : 0
@@ -1895,30 +1865,27 @@ final class ArenaWorldView: SCNView {
         system.particleVelocity = speed
         system.particleSize = size
         system.particleColor = color
-        system.particleImage = size >= 0.28 ? ArenaVendorAssets.smoke : ArenaVendorAssets.spark
-        // Sample effects must keep the body silhouette under overlapping hits.
-        system.blendMode = controller.qualitySample ? .alpha : .additive
+        system.particleImage = ArenaEffectAssets.image(style ?? (size >= 0.28 ? .smoke : .spark)) ?? ArenaArt.dot
+        // All released heroes keep their silhouette visible under overlapping effects.
+        system.blendMode = .alpha
         system.reset()
         slot.expiresAt = effectClock + Double(life) * 1.4 + 0.2
     }
 
-    /// 打中的地方：一下亮光，几颗火星往外蹦
+    /// Brief impact flecks leave the hero visible in every entry path.
     private func spark(at point: SIMD3<Float>) {
-        burst(at: point, color: UIColor(red: 1, green: 0.95, blue: 0.7, alpha: 1), count: controller.qualitySample ? 8 : 14, speed: 3.5, size: 0.13, life: 0.22)
-        guard !controller.qualitySample, let slot = take(flashSlots) else { return }
-        slot.node.simdPosition = point
-        slot.node.simdScale = SIMD3(repeating: 0.4)
-        slot.node.opacity = 1
-        slot.expiresAt = effectClock + 0.16
-        slot.node.runAction(.group([.scale(to: 1.2, duration: 0.12), .fadeOut(duration: 0.16)]))
+        burst(at: point, color: UIColor(red: 1, green: 0.95, blue: 0.7, alpha: 1),
+              count: 8, speed: 3.5, size: 0.13, life: 0.22, style: .spark)
     }
 
     /// 子弹后面拖的尾巴。优先用开局建好的那一批
-    private func trail(_ color: UIColor, size: CGFloat, life: CGFloat = 0.3) -> SCNParticleSystem {
+    private func trail(_ color: UIColor, size: CGFloat, life: CGFloat = 0.3,
+                       style: ArenaEffectAssets.Style = .trace) -> SCNParticleSystem {
         let system = trailPool.popLast() ?? Self.makeTrail()
         system.particleLifeSpan = life
         system.particleSize = size
         system.particleColor = color
+        system.particleImage = ArenaEffectAssets.image(style) ?? ArenaArt.dot
         system.birthRate = [.noParticles, .noNumbersOrParticles].contains(ArenaDiagnostics.shared.variant) ? 0 : 22
         return system
     }
@@ -1956,6 +1923,7 @@ final class ArenaWorldView: SCNView {
 
     /// 刀光、地上的线、圈、命中、拖尾都在进场时做好。打架时只拿一个出来用
     private func prepareFx() {
+        ArenaEffectAssets.prepare()
         _ = ArenaVendorAssets.spark
         _ = ArenaVendorAssets.smoke
         let crescent = Self.crescent(color: .white, wide: 1)
@@ -2228,7 +2196,7 @@ final class ArenaWorldView: SCNView {
         if let reusable = floaterPool.popLast() { node = reusable }
         else if !floaters.isEmpty { node = floaters.removeFirst().node }
         else { return }
-        let height: CGFloat = controller.qualitySample ? 0.40 : 0.48
+        let height: CGFloat = 0.40
         let plane = node.geometry as! SCNPlane
         plane.width = height * image.size.width / max(image.size.height, 1)
         plane.height = height
@@ -2382,20 +2350,20 @@ private struct ThemeLook {
     static func of(_ theme: ArenaMap.Theme) -> ThemeLook {
         switch theme {
         case .sand:
-            return ThemeLook(floor: color(0.58, 0.79, 0.30), floorDark: color(0.54, 0.75, 0.28), patch: color(0.93, 0.80, 0.52),
-                             bushGround: color(0.16, 0.38, 0.12), lawn: color(0.45, 0.67, 0.26), sunlight: color(1.0, 0.97, 0.9),
+            return ThemeLook(floor: color(0.72, 0.58, 0.36), floorDark: color(0.67, 0.53, 0.32), patch: color(0.78, 0.65, 0.44),
+                             bushGround: color(0.25, 0.35, 0.15), lawn: color(0.47, 0.39, 0.26), sunlight: color(1.0, 0.97, 0.9),
                              flowers: false, walls: [(kind: .crate, weight: 7), (kind: .barrel, weight: 3)])
         case .meadow:
             return ThemeLook(floor: color(0.53, 0.80, 0.31), floorDark: color(0.49, 0.76, 0.29), patch: color(0.36, 0.62, 0.22),
                              bushGround: color(0.14, 0.36, 0.11), lawn: color(0.42, 0.66, 0.25), sunlight: color(1.0, 0.98, 0.92),
                              flowers: true, walls: [(kind: .crate, weight: 5), (kind: .barrel, weight: 5)])
         case .stone:
-            return ThemeLook(floor: color(0.52, 0.77, 0.34), floorDark: color(0.48, 0.73, 0.32), patch: color(0.74, 0.74, 0.70),
-                             bushGround: color(0.15, 0.36, 0.13), lawn: color(0.42, 0.64, 0.28), sunlight: color(0.96, 0.98, 1.0),
+            return ThemeLook(floor: color(0.43, 0.49, 0.53), floorDark: color(0.38, 0.44, 0.48), patch: color(0.53, 0.55, 0.54),
+                             bushGround: color(0.15, 0.33, 0.22), lawn: color(0.27, 0.33, 0.35), sunlight: color(0.96, 0.98, 1.0),
                              flowers: false, walls: [(kind: .stone, weight: 6), (kind: .crate, weight: 4)])
         case .dusk:
-            return ThemeLook(floor: color(0.60, 0.77, 0.30), floorDark: color(0.56, 0.73, 0.28), patch: color(0.82, 0.63, 0.38),
-                             bushGround: color(0.16, 0.34, 0.12), lawn: color(0.47, 0.64, 0.26), sunlight: color(1.0, 0.88, 0.72),
+            return ThemeLook(floor: color(0.43, 0.40, 0.55), floorDark: color(0.38, 0.35, 0.49), patch: color(0.54, 0.45, 0.53),
+                             bushGround: color(0.16, 0.31, 0.24), lawn: color(0.27, 0.27, 0.38), sunlight: color(1.0, 0.88, 0.72),
                              flowers: false, walls: [(kind: .crate, weight: 5), (kind: .barrel, weight: 5)])
         }
     }

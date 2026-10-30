@@ -1,4 +1,5 @@
-/// The focused playable slice. Existing heroes and modes remain available to legacy callers.
+/// The balanced three-hero matchup used by the released Twin Gates quick entry.
+/// The historical type name remains compatible with diagnostic capture scripts.
 public enum ArenaQualitySample {
     public static let heroes: [Brawler] = [.ranger, .barbarian, .mage]
 

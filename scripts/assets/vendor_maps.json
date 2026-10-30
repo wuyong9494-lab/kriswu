@@ -1,0 +1,158 @@
+[
+  {
+    "pack": "kaykit-dungeon-remastered",
+    "source": "Assets/gltf/barrel_small_stack.gltf.glb",
+    "file": "vendor_barrel_stack.glb",
+    "usage": "map.wallCargoAndDockBorder"
+  },
+  {
+    "pack": "kaykit-dungeon-remastered",
+    "source": "Assets/gltf/rubble_half.gltf.glb",
+    "file": "vendor_rubble.glb",
+    "usage": "map.ruinWallsAndBorder"
+  },
+  {
+    "pack": "kaykit-dungeon-remastered",
+    "source": "Assets/gltf/pillar.gltf.glb",
+    "file": "vendor_pillar.glb",
+    "usage": "map.fortressAndHarborBorder"
+  },
+  {
+    "pack": "kaykit-dungeon-remastered",
+    "source": "Assets/gltf/floor_tile_small.gltf.glb",
+    "file": "vendor_floor_stone.glb",
+    "usage": "map.stonePaving"
+  },
+  {
+    "pack": "kaykit-dungeon-remastered",
+    "source": "Assets/gltf/floor_tile_small_broken_A.gltf.glb",
+    "file": "vendor_floor_broken.glb",
+    "usage": "map.ruinPaving"
+  },
+  {
+    "pack": "kaykit-dungeon-remastered",
+    "source": "Assets/gltf/floor_wood_small.gltf.glb",
+    "file": "vendor_floor_wood.glb",
+    "usage": "map.harborWoodPaving"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/cliff_block_stone.glb",
+    "file": "vendor_stone_block.glb",
+    "usage": "map.stoneWallCell"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/cliff_block_rock.glb",
+    "file": "vendor_sandstone_block.glb",
+    "usage": "map.sandWallCell"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/cactus_tall.glb",
+    "file": "vendor_cactus_tall.glb",
+    "usage": "map.desertBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/cactus_short.glb",
+    "file": "vendor_cactus_short.glb",
+    "usage": "map.desertBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/tree_palm.glb",
+    "file": "vendor_palm.glb",
+    "usage": "map.coastBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/tree_pineTallA.glb",
+    "file": "vendor_pine.glb",
+    "usage": "map.forestBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/tree_default_fall.glb",
+    "file": "vendor_tree_autumn.glb",
+    "usage": "map.autumnBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/tree_oak_dark.glb",
+    "file": "vendor_tree_dark.glb",
+    "usage": "map.forestAndLairBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/rock_tallC.glb",
+    "file": "vendor_desert_rock.glb",
+    "usage": "map.desertBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/rock_smallFlatA.glb",
+    "file": "vendor_flat_rock.glb",
+    "usage": "map.lowFloorDetail"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/log_stack.glb",
+    "file": "vendor_log_stack.glb",
+    "usage": "map.forestAndHarborBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/stump_round.glb",
+    "file": "vendor_stump.glb",
+    "usage": "map.forestBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/flower_yellowA.glb",
+    "file": "vendor_flower_yellow.glb",
+    "usage": "map.lowGardenDetail"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/flower_purpleA.glb",
+    "file": "vendor_flower_purple.glb",
+    "usage": "map.lowGardenDetail"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/mushroom_redGroup.glb",
+    "file": "vendor_mushrooms.glb",
+    "usage": "map.lowForestDetail"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/grass_leafs.glb",
+    "file": "vendor_ground_leaves.glb",
+    "usage": "map.lowGroundDetail"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/path_stone.glb",
+    "file": "vendor_stone_path.glb",
+    "usage": "map.desertAndForestPaving"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/path_stoneCircle.glb",
+    "file": "vendor_stone_circle.glb",
+    "usage": "map.gardenPaving"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/statue_columnDamaged.glb",
+    "file": "vendor_column_ruin.glb",
+    "usage": "map.ruinAndLairBorder"
+  },
+  {
+    "pack": "kenney-nature-kit",
+    "source": "Models/GLTF format/statue_obelisk.glb",
+    "file": "vendor_obelisk.glb",
+    "usage": "map.ruinAndLairBorder"
+  }
+]

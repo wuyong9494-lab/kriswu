@@ -4,7 +4,22 @@ import SwiftUI
 struct ArenaLobbyIcon: View {
     let asset: String
     init(_ asset: String) { self.asset = asset }
+    private static let bundled: Set<String> = [
+        "ArenaIconAdventure", "ArenaIconHero", "ArenaIconSeason", "ArenaIconSettings",
+        "ArenaIconShop", "ArenaIconFriends", "ArenaIconParty", "ArenaIconSkill",
+        "ArenaIconTrophy", "ArenaIconCoins", "ArenaIconBattle"
+    ]
     var body: some View {
+        if Self.bundled.contains(asset) {
+            Image(asset).renderingMode(.template).resizable().scaledToFit()
+                .accessibilityHidden(true)
+        } else {
+            supplementalIcon
+        }
+    }
+
+    /// Supplementary badges have no downloaded equivalent in the existing catalog.
+    private var supplementalIcon: some View {
         Canvas { context, size in
             context.scaleBy(x: size.width / 40, y: size.height / 40)
             let ink = Color(red: 0.06, green: 0.08, blue: 0.16)

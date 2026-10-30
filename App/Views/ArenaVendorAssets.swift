@@ -4,8 +4,7 @@ import UIKit
 
 /// Runtime files have unique names; the full licensed source packs live in art/vendor.
 enum ArenaVendorAssets {
-    static let propFiles = ["vendor_axe.gltf", "vendor_crates.glb", "vendor_barrel.glb",
-                            "vendor_bush.glb", "vendor_rock.glb", "vendor_tree.glb"]
+    static let propFiles = ["vendor_axe.gltf"] + ArenaMapAssets.propFiles
     static let imageFiles = ["vendor_button_blue.png", "vendor_button_yellow.png",
                              "vendor_icon_arrowLeft.png", "vendor_icon_checkmark.png",
                              "vendor_icon_cross.png", "vendor_icon_star.png",
@@ -29,16 +28,20 @@ enum ArenaVendorAssets {
     @MainActor static var smoke: UIImage? { image("vendor_smoke_01.png") }
 
     /// Fit imported scenery inside the existing cell; gameplay collision is unchanged.
-    @MainActor static func prop(_ file: String, width: Float, height: Float) -> SCNNode? {
+    @MainActor static func prop(_ file: String, width: Float, height: Float, flatten: Bool = false) -> SCNNode? {
         guard let model = ArenaModels.shared.prop(file) else { return nil }
         let content = model.instantiate(shareMaterials: true).root
         let (low, high) = content.boundingBox
         let span = SIMD3<Float>(high.x - low.x, high.y - low.y, high.z - low.z)
         guard span.x > 0, span.y > 0, span.z > 0 else { return nil }
-        let scale = min(width / max(span.x, span.z), height / span.y)
-        content.simdScale = SIMD3(repeating: scale)
-        content.simdPosition = SIMD3(-(low.x + high.x) * scale / 2, -low.y * scale,
-                                    -(low.z + high.z) * scale / 2)
+        let horizontal = width / max(span.x, span.z)
+        let uniform = min(horizontal, height / span.y)
+        // Only authored floor slabs are flattened: keep their full tile footprint
+        // while making their top low enough to remain a walkable visual surface.
+        let scale = flatten ? SIMD3(horizontal, height / span.y, horizontal) : SIMD3(repeating: uniform)
+        content.simdScale = scale
+        content.simdPosition = SIMD3(-(low.x + high.x) * scale.x / 2, -low.y * scale.y,
+                                    -(low.z + high.z) * scale.z / 2)
         content.enumerateChildNodes { node, _ in node.castsShadow = false }
         content.castsShadow = false
         let root = SCNNode()

@@ -109,7 +109,13 @@ final class ArenaTests: XCTestCase {
                                "Selected map silently fell back: \(mode.rawValue) / \(map.id)")
             }
         }
-        XCTAssertEqual(selectable, Set((ArenaMap.all + ArenaMap.expandedMaps).map(\.id)))
+        XCTAssertEqual(selectable, Set(ArenaMap.playableMaps.map(\.id)))
+        for mode in [ArenaGame.Mode.teamFight, .stars, .bounty, .zone, .knockout] {
+            XCTAssertTrue(ArenaMap.playPool(for: mode).contains { $0.id == ArenaMap.twinGates.id })
+        }
+        for mode in [ArenaGame.Mode.ball, .heist, .duel, .boss, .showdown, .duo] {
+            XCTAssertFalse(ArenaMap.selectionPool(for: mode).contains { $0.id == ArenaMap.twinGates.id })
+        }
         XCTAssertEqual(ArenaGame(mode: .ball, entrants: [], seed: 1, map: ArenaMap.canyon).map.id,
                        ArenaMap.pitch.id, "Maps for another mode must still be rejected")
     }

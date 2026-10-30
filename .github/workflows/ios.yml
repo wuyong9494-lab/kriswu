@@ -60,6 +60,8 @@ jobs:
           python3 -m unittest discover -s scripts/assets -p test_gltf_contract.py
           python3 scripts/assets/validate_ranger.py
           python3 scripts/assets/validate_ranger.py --face-sample
+          python3 scripts/assets/verify_vendor_runtime.py
+          python3 scripts/assets/build_asset_configuration.py --check
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate

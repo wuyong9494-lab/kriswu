@@ -104,7 +104,7 @@ final class ArenaController: ObservableObject {
         var diagnosticScenario: ArenaDiagnosticScenario?
         var qualitySample = false
         var threeHeroSample = false
-        /// Fixed Twin Gates visual capture; does not affect the normal trial entry.
+        /// Fixed Twin Gates visual capture; does not affect ordinary matches.
         var benchmarkTwinGates = false
 
         enum Demo { case versus, result }
@@ -136,6 +136,9 @@ final class ArenaController: ObservableObject {
         V2(2.5, 9.45), V2(8.5, 9.45), V2(8.5, 13.5)]
     var captureRouteComplete: Bool { captureTraversal && captureWaypoint == Self.captureRoute.count }
     private(set) var diagnosticScenario: ArenaDiagnosticScenario?
+    /// Production matches, including the balanced three-hero entry, share progress.
+    /// Explicit recording and performance fixtures never alter the player's save.
+    var recordsProgress: Bool { !capturesFlow && !benchmark && diagnosticScenario == nil && !resultWasInjected }
     var benchmarkSnapshotTime: Double {
         benchmark && diagnosticScenario == nil ? UserDefaults.standard.double(forKey: "arena.snapshotTime") : 0
     }
@@ -271,6 +274,8 @@ final class ArenaController: ObservableObject {
             let map: ArenaMap
             if setup.benchmark {
                 map = setup.qualitySample && setup.benchmarkTwinGates && setup.mode == .zone ? ArenaMap.twinGates : ArenaMap.canyon
+            } else if let selected = ArenaMap.selectionPool(for: setup.mode).first(where: { $0.id == setup.mapID }) {
+                map = selected
             } else if setup.qualitySample && setup.mode == .zone {
                 map = ArenaMap.twinGates
             } else {
@@ -735,7 +740,9 @@ final class ArenaController: ObservableObject {
         if hud.result != nil, capturesFlow, !flowEvidenceWritten {
             writeFlowEvidence()
         }
-        if hud.result != nil, !recorded, !threeHeroSample {
+        // Three-hero matches are ordinary play and earn the same rewards.
+        // Only explicitly launched recording/diagnostic fixtures stay outside progress.
+        if hud.result != nil, !recorded, recordsProgress {
             recorded = true
             let store = ArenaProgressStore.shared
             if let story {
@@ -1013,7 +1020,8 @@ final class ArenaLobby: ObservableObject {
     private var round = 0
     /// Revision 2 advertised expanded maps but its game initializer discarded
     /// those IDs. Only peers with the fixed initializer may share that pool.
-    private static let mapRevision = 3
+    /// Revision 4 additionally supports Twin Gates in all five central-objective modes.
+    private static let mapRevision = 4
     private var arenaRevisions: [String: Int] = [:]
 
     init(room: GameRoom, mode: ArenaGame.Mode, brawler: Brawler) {

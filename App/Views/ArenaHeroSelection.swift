@@ -38,7 +38,7 @@ struct ArenaHeroSelection: View {
                                 .accessibilityIdentifier("arena.hero.\(hero.rawValue)")
                             }
                         }
-                        Text(startsMatch ? "三种打法 · 选择英雄后进入双闸交汇试玩" : "三种打法 · 选择后返回大厅，再进入双闸交汇")
+                        Text(startsMatch ? "三种打法 · 选择英雄后进入双闸交汇对战" : "三种打法 · 选择后返回大厅，再进入双闸交汇")
                             .font(.caption).foregroundStyle(.white.opacity(0.75)).padding(.top, 12)
                     }
 
@@ -58,7 +58,7 @@ struct ArenaHeroSelection: View {
                         .buttonStyle(ArenaMenuButtonStyle())
                         .accessibilityIdentifier("arena.hero.back")
                     Button { ArenaSound.shared.menu(.uiSelect); onSelect(hero) } label: {
-                        Text(startsMatch ? "使用\(hero.name)开始试玩" : "选择\(hero.name)").frame(maxWidth: .infinity, minHeight: 44)
+                        Text(startsMatch ? "使用\(hero.name)开始对战" : "选择\(hero.name)").frame(maxWidth: .infinity, minHeight: 44)
                     }
                         .buttonStyle(ArenaMenuButtonStyle())
                         .accessibilityIdentifier("arena.hero.select")

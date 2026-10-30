@@ -14,24 +14,59 @@ final class ArenaSound: NSObject {
     nonisolated static let effectsVolumeKey = "arena.effectsVolume"
     nonisolated static let musicMuteKey = "arena.musicMute"
     nonisolated static let effectsMuteKey = "arena.effectsMute"
+    nonisolated static let themeKey = "arena.themeAudio"
+
+    /// New installs use the completed score; an explicit earlier choice is retained.
+    nonisolated static func prefersTheme(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: themeKey) as? Bool ?? true
+    }
 
     enum Effect: String, CaseIterable {
         case shot, slash, magic, boom, hit, knockout = "ko", power = "super", pickup, heal, respawn, blink, win, lose, gadget, hyper
         case uiClick = "ui_click", uiToggle = "ui_toggle", uiSelect = "ui_select"
         case uiConfirm = "ui_confirm", uiBack = "ui_back"
-        case stepGrass = "step_grass", stepStone = "step_stone"
+        case uiError = "ui_error", uiUpgrade = "ui_upgrade", uiReward = "ui_reward"
+        case stepGrass = "step_grass", stepStone = "step_stone", stepWood = "step_wood"
+        case pageTurn = "page_turn"
+
+        struct Resource: Equatable {
+            let name: String
+            let ext: String
+        }
 
         var file: String {
             switch self {
-            case .slash, .magic, .hit, .win, .lose, .uiClick, .uiToggle, .uiSelect,
-                 .uiConfirm, .uiBack, .stepGrass, .stepStone: return "vendor_" + rawValue
-            default: return "arena_" + rawValue
+            case .slash, .hit, .knockout, .pickup, .blink, .gadget, .win, .lose,
+                 .uiClick, .uiToggle, .uiSelect, .uiConfirm, .uiBack,
+                 .uiError, .uiUpgrade, .uiReward, .stepGrass, .stepStone, .stepWood:
+                return "vendor_" + rawValue
+            case .pageTurn: return "vendor_magic"
+            case .shot, .magic, .boom, .power, .heal, .respawn, .hyper:
+                return "arena_" + rawValue
             }
+        }
+
+        /// The selected sound, then its existing fallback. Both missing and undecodable
+        /// files fall back during preparation, never during a combat callback.
+        func resources(theme: Bool) -> [Resource] {
+            var result: [Resource] = []
+            if theme && (self == .win || self == .lose) {
+                result.append(Resource(name: "arena_theme_" + rawValue, ext: "m4a"))
+            }
+            result.append(Resource(name: file, ext: "wav"))
+            switch self {
+            case .slash, .hit, .knockout, .pickup, .blink, .gadget, .win, .lose:
+                result.append(Resource(name: "arena_" + rawValue, ext: "wav"))
+            case .pageTurn:
+                result.append(Resource(name: "arena_magic", ext: "wav"))
+            default: break
+            }
+            return result
         }
         /// 同时能响几个（电脑一起开火时叠得起来）
         var voices: Int {
             switch self {
-            case .shot, .slash, .magic, .hit: return 5
+            case .shot, .slash, .magic, .pageTurn, .hit: return 5
             case .boom: return 3
             default: return 2
             }
@@ -215,7 +250,8 @@ final class ArenaSound: NSObject {
 
     /// Menus share the same bounded PCM mixer and the user's effects/mute settings.
     func menu(_ effect: Effect) {
-        guard [.uiClick, .uiToggle, .uiSelect, .uiConfirm, .uiBack].contains(effect),
+        guard [.uiClick, .uiToggle, .uiSelect, .uiConfirm, .uiBack,
+               .uiError, .uiUpgrade, .uiReward].contains(effect),
               state.canPlay, !effectsMuted else { return }
         prepare()
         guard sessionOn else { return }
@@ -250,22 +286,26 @@ final class ArenaSound: NSObject {
     private func load() {
         guard !assetsLoaded else { return }
         assetsLoaded = true
-        let theme = UserDefaults.standard.bool(forKey: "arena.themeAudio")
+        let theme = Self.prefersTheme()
         effects.load(theme: theme)
-        if let url = (theme ? Bundle.main.url(forResource: "arena_theme_lobby", withExtension: "m4a") : nil) ?? Bundle.main.url(forResource: "arena_lobby", withExtension: "wav") {
-            beds[.lobby] = loop(url)
-            if beds[.lobby] != nil { loadedMusicFiles["lobby"] = url.lastPathComponent }
-        }
-        if let url = (theme ? Bundle.main.url(forResource: "arena_theme_battle", withExtension: "m4a") : nil) ?? Bundle.main.url(forResource: "arena_music", withExtension: "wav") {
-            beds[.battle] = loop(url)
-            if beds[.battle] != nil { loadedMusicFiles["battle"] = url.lastPathComponent }
+        for (role, bed, legacy) in [("lobby", Bed.lobby, "arena_lobby"),
+                                    ("battle", Bed.battle, "arena_music")] {
+            let candidates = (theme ? [Effect.Resource(name: "arena_theme_" + role, ext: "m4a")] : [])
+                + [Effect.Resource(name: legacy, ext: "wav")]
+            for candidate in candidates {
+                guard let url = Bundle.main.url(forResource: candidate.name, withExtension: candidate.ext),
+                      let player = loop(url) else { continue }
+                beds[bed] = player
+                loadedMusicFiles[role] = url.lastPathComponent
+                break
+            }
         }
     }
 
     private func loop(_ url: URL) -> AVAudioPlayer? {
-        let player = try? AVAudioPlayer(contentsOf: url)
-        player?.numberOfLoops = -1
-        player?.prepareToPlay()
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.numberOfLoops = -1
+        guard player.prepareToPlay() else { return nil }
         return player
     }
 

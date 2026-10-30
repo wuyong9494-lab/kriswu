@@ -1,0 +1,132 @@
+[
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/sword_1handed.gltf",
+    "file": "vendor_sword.gltf",
+    "usage": "knight.equipment",
+    "dependencyRenames": {
+      "sword_1handed.bin": "vendor_sword.bin",
+      "knight_texture.png": "vendor_knight_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/sword_1handed.bin",
+    "file": "vendor_sword.bin",
+    "usage": "knight.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/shield_badge.gltf",
+    "file": "vendor_shield.gltf",
+    "usage": "knight.equipment",
+    "dependencyRenames": {
+      "shield_badge.bin": "vendor_shield.bin",
+      "knight_texture.png": "vendor_knight_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/shield_badge.bin",
+    "file": "vendor_shield.bin",
+    "usage": "knight.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/staff.gltf",
+    "file": "vendor_staff.gltf",
+    "usage": "mage.equipment",
+    "dependencyRenames": {
+      "staff.bin": "vendor_staff.bin",
+      "mage_texture.png": "vendor_mage_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/staff.bin",
+    "file": "vendor_staff.bin",
+    "usage": "mage.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/dagger.gltf",
+    "file": "vendor_dagger.gltf",
+    "usage": "assassin.and.darter.equipment",
+    "dependencyRenames": {
+      "dagger.bin": "vendor_dagger.bin",
+      "rogue_texture.png": "vendor_rogue_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/dagger.bin",
+    "file": "vendor_dagger.bin",
+    "usage": "assassin.and.darter.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/sword_2handed_color.gltf",
+    "file": "vendor_greatsword.gltf",
+    "usage": "swordsman.equipment",
+    "dependencyRenames": {
+      "sword_2handed_color.bin": "vendor_greatsword.bin",
+      "knight_texture.png": "vendor_knight_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/sword_2handed_color.bin",
+    "file": "vendor_greatsword.bin",
+    "usage": "swordsman.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/mug_full.gltf",
+    "file": "vendor_mug.gltf",
+    "usage": "brewer.equipment",
+    "dependencyRenames": {
+      "mug_full.bin": "vendor_mug.bin",
+      "barbarian_texture.png": "vendor_axe_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/mug_full.bin",
+    "file": "vendor_mug.bin",
+    "usage": "brewer.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/spellbook_open.gltf",
+    "file": "vendor_spellbook.gltf",
+    "usage": "scholar.equipment",
+    "dependencyRenames": {
+      "spellbook_open.bin": "vendor_spellbook.bin",
+      "mage_texture.png": "vendor_mage_texture.png"
+    }
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/spellbook_open.bin",
+    "file": "vendor_spellbook.bin",
+    "usage": "scholar.equipment"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/knight_texture.png",
+    "file": "vendor_knight_texture.png",
+    "usage": "heroes.equipmentMaterial"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/mage_texture.png",
+    "file": "vendor_mage_texture.png",
+    "usage": "heroes.equipmentMaterial"
+  },
+  {
+    "pack": "kaykit-adventurers",
+    "source": "Assets/gltf/rogue_texture.png",
+    "file": "vendor_rogue_texture.png",
+    "usage": "heroes.equipmentMaterial"
+  }
+]

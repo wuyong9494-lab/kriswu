@@ -152,7 +152,6 @@ final class ArenaAvatar {
         concealmentMaterials = Array(copies.values)
     }
     private var deadSince: Double?
-    private let qualitySample: Bool
     private var flashUntil: Double = 0
     private var flashing = false
     private var placed = false
@@ -163,7 +162,6 @@ final class ArenaAvatar {
 
     /// skin：穿第几套皮肤（0 原来的样子）
     init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false, qualitySample: Bool = false) {
-        self.qualitySample = qualitySample
         self.brawler = brawler
         self.mine = isMe
         self.teamColor = color
@@ -171,7 +169,7 @@ final class ArenaAvatar {
         look = BrawlerLook.of(brawler, qualitySample: qualitySample)
         model = ArenaModels.shared.character(brawler, qualitySample: qualitySample)
         if let model {
-            instance = model.instantiate(outline: look.authored ? nil : (qualitySample ? ArenaArt.sampleOutline : ArenaArt.outline))
+            instance = model.instantiate(outline: look.authored ? nil : ArenaArt.sampleOutline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
             swingBones = ["upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r"].compactMap { model.node(named: $0) }
             torsoBones = ["spine", "chest", "head"].compactMap { model.node(named: $0) }
@@ -187,24 +185,37 @@ final class ArenaAvatar {
             for name in look.hidden {
                 instance.root.childNode(withName: name, recursively: true)?.isHidden = true
             }
-            // Trial compatibility: reduce accessory coverage without enlarging bodies.
-            // These are rigid attachment nodes; skin and gameplay radii stay unchanged.
-            if qualitySample {
-                if brawler == .mage,
-                   let hat = instance.root.childNode(withName: "Mage_Hat", recursively: true) {
-                    hat.simdScale *= SIMD3<Float>(0.72, 0.90, 0.72)
-                }
-                if brawler == .knight,
-                   let sword = instance.root.childNode(withName: "1H_Sword", recursively: true) {
-                    sword.simdScale *= SIMD3<Float>(repeating: 0.80)
-                }
+            // The finished accessory proportions apply to the normal roster too.
+            // These rigid nodes do not change bodies, skins or collision radii.
+            if brawler == .mage || brawler == .scholar,
+               let hat = instance.root.childNode(withName: "Mage_Hat", recursively: true) {
+                hat.simdScale *= SIMD3<Float>(0.72, 0.90, 0.72)
+            }
+            if brawler == .knight,
+               let sword = instance.root.childNode(withName: "1H_Sword", recursively: true) {
+                sword.simdScale *= SIMD3<Float>(repeating: 0.80)
             }
             for weapon in look.weapons {
+                let embedded = weapon.replacing.flatMap {
+                    instance.root.childNode(withName: $0, recursively: true)
+                }
+                // A replacement requires its authored source anchor. Never guess
+                // a transform if a later asset revision removes that source node.
+                if weapon.replacing != nil && embedded == nil { continue }
                 guard let piece = ArenaModels.shared.prop(weapon.file),
-                      let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else { continue }
-                let held = piece.instantiate(shareMaterials: false, outline: qualitySample ? ArenaArt.sampleOutline : ArenaArt.outline)
-                held.root.simdPosition = weapon.position
-                held.root.simdOrientation = weapon.rotation
+                      let bone = instance.root.childNode(withName: weapon.bone, recursively: true) else {
+                    embedded?.isHidden = false
+                    continue
+                }
+                let held = piece.instantiate(shareMaterials: false, outline: ArenaArt.sampleOutline)
+                held.root.name = "arena-equipped-" + weapon.file
+                if let embedded {
+                    held.root.simdTransform = embedded.simdTransform
+                    embedded.isHidden = true
+                } else {
+                    held.root.simdPosition = weapon.position
+                    held.root.simdOrientation = weapon.rotation
+                }
                 bone.addChildNode(held.root)
                 outlines += held.outlines
                 Self.paint(held.root, stage: stageLit)
@@ -574,7 +585,7 @@ final class ArenaAvatar {
 
     /// 挨打：白一下。打得重、而且这一下没在出招，才缩一下身子
     func flash(clock: Double, flinch: Bool = false) {
-        flashUntil = clock + (qualitySample ? 0.055 : 0.09)
+        flashUntil = clock + 0.055
         punch = 0.28
         recoil = look.authored ? 0 : 0.2
         if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
@@ -584,7 +595,7 @@ final class ArenaAvatar {
         }
         guard !flashing, let instance else { return }
         flashing = true
-        instance.materials.forEach { $0.emission.contents = UIColor(white: qualitySample ? 0.055 : 0.22, alpha: 1) }
+        instance.materials.forEach { $0.emission.contents = UIColor(white: 0.055, alpha: 1) }
     }
 
     /// 摆一个静止的姿势（画头像用）

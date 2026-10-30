@@ -1,0 +1,905 @@
+{
+  "audioFiles": [
+    "vendor_blink.wav",
+    "vendor_gadget.wav",
+    "vendor_hit.wav",
+    "vendor_ko.wav",
+    "vendor_lose.wav",
+    "vendor_magic.wav",
+    "vendor_pickup.wav",
+    "vendor_slash.wav",
+    "vendor_step_grass.wav",
+    "vendor_step_stone.wav",
+    "vendor_step_wood.wav",
+    "vendor_ui_back.wav",
+    "vendor_ui_click.wav",
+    "vendor_ui_confirm.wav",
+    "vendor_ui_error.wav",
+    "vendor_ui_reward.wav",
+    "vendor_ui_select.wav",
+    "vendor_ui_toggle.wav",
+    "vendor_ui_upgrade.wav",
+    "vendor_win.wav"
+  ],
+  "canonicalRanger": {
+    "file": "Ranger_FaceSample.glb",
+    "sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0"
+  },
+  "checkedAnimationBindings": 112,
+  "configurationSources": {
+    "App/Services/ArenaEffectMixer.swift": "8356e1a9e1ee7889f619bcf587001b8fa7cad49986ed94174b439082c00bd35f",
+    "App/Services/ArenaSound.swift": "6b67b05276eaa0671b8ad8d13d548bc023fbedfb28329dfabe0b760a1a5b27a5",
+    "App/Views/ArenaAvatar.swift": "41a538bc88932f82f820e22e977ef46ac6071404e9c48aef7e0f955e35e22a97",
+    "App/Views/ArenaEffectAssets.swift": "4a613b75d74f3ea36392fac8399212323f84c42704a7df1d4b9cc64295c78749",
+    "App/Views/ArenaInterfaceAssets.swift": "341ed8eb67d4b99b29fff5f052498f591399ffb8046c3633dbbf7f0af6fe7541",
+    "App/Views/ArenaMapAssets.swift": "d90042a82dbfc8ebe1732e598ced4b0fd0e1a136cf19309b04feaf356413771c",
+    "App/Views/ArenaModels.swift": "d0c6a60c074a9e105fc2f1659951b5d75fe92ce9fa85b60abbccb913c28ce8a5"
+  },
+  "effectProfiles": [
+    {
+      "attack": "slash",
+      "hero": "knight",
+      "special": "star",
+      "trail": "slash"
+    },
+    {
+      "attack": "muzzle",
+      "hero": "ranger",
+      "special": "trace",
+      "trail": "trace"
+    },
+    {
+      "attack": "slash",
+      "hero": "barbarian",
+      "special": "dirt",
+      "trail": "slash"
+    },
+    {
+      "attack": "flame",
+      "hero": "mage",
+      "special": "fire",
+      "trail": "flame"
+    },
+    {
+      "attack": "trace",
+      "hero": "assassin",
+      "special": "slash",
+      "trail": "trace"
+    },
+    {
+      "attack": "slash",
+      "hero": "guardian",
+      "special": "circle",
+      "trail": "slash"
+    },
+    {
+      "attack": "magic",
+      "hero": "necromancer",
+      "special": "magic",
+      "trail": "magic"
+    },
+    {
+      "attack": "magic",
+      "hero": "shade",
+      "special": "twirl",
+      "trail": "trace"
+    },
+    {
+      "attack": "magic",
+      "hero": "summoner",
+      "special": "circle",
+      "trail": "magic"
+    },
+    {
+      "attack": "slash",
+      "hero": "swordsman",
+      "special": "slash",
+      "trail": "slash"
+    },
+    {
+      "attack": "smoke",
+      "hero": "brewer",
+      "special": "dirt",
+      "trail": "circle"
+    },
+    {
+      "attack": "heal",
+      "hero": "scholar",
+      "special": "heal",
+      "trail": "heal"
+    },
+    {
+      "attack": "trace",
+      "hero": "darter",
+      "special": "star",
+      "trail": "trace"
+    }
+  ],
+  "existingLobbyIcons": [
+    "ArenaIconAdventure",
+    "ArenaIconHero",
+    "ArenaIconSeason",
+    "ArenaIconSettings",
+    "ArenaIconShop",
+    "ArenaIconFriends",
+    "ArenaIconParty",
+    "ArenaIconSkill",
+    "ArenaIconTrophy",
+    "ArenaIconCoins",
+    "ArenaIconBattle"
+  ],
+  "fullGameplayValidation": "deferred at owner request",
+  "gadgetEffects": [
+    "blink",
+    "frost",
+    "potion",
+    "reload",
+    "roll",
+    "shockwave",
+    "sprint",
+    "vanish",
+    "ward"
+  ],
+  "heroes": [
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Melee_Attack_Slice_Diagonal": 1.0,
+            "1H_Melee_Attack_Stab": 1.5833333730697632,
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.3270678778098954e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  2.276502097942057e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  -2.882388550062842e-09,
+                  0.033309340476989746,
+                  6.51589289191179e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_sword.gltf",
+              "geometryBoundsMaximumDifference": 8.940696716308594e-08,
+              "replaces": "1H_Sword"
+            },
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -7.450496752881008e-08,
+                  1.6853417150741734e-07,
+                  1.4002977195559652e-06,
+                  1
+                ],
+                "scale": [
+                  1,
+                  0.9999999403953552,
+                  0.9999999403953552
+                ],
+                "translation": [
+                  -3.845825702342154e-08,
+                  0.01701177842915058,
+                  0.1558855026960373
+                ]
+              },
+              "bone": "handslot.l",
+              "file": "vendor_shield.gltf",
+              "geometryBoundsMaximumDifference": 8.940696716308594e-08,
+              "replaces": "Badge_Shield"
+            }
+          ],
+          "file": "Knight.glb",
+          "hidden": [
+            "Knight_Helmet",
+            "1H_Sword",
+            "1H_Sword_Offhand",
+            "Rectangle_Shield",
+            "Round_Shield",
+            "Spike_Shield",
+            "Badge_Shield",
+            "2H_Sword"
+          ],
+          "joints": 41,
+          "sha256": "f9eaa4d5b19bed86fa0ea8c29abfede3990d3c0726c79a654fa49b1dd8b53089"
+        }
+      ],
+      "hero": "knight"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "1H_Ranged_Shoot": 1.0416666269302368,
+            "2H_Ranged_Shoot": 1.0416666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816
+          },
+          "equipment": [],
+          "file": "Rogue.glb",
+          "hidden": [
+            "Knife_Offhand",
+            "2H_Crossbow",
+            "Knife",
+            "Throwable"
+          ],
+          "joints": 41,
+          "sha256": "4b642e0b01baa76e279d666781fe339d51b84f4a43b617d9649dcd23cbe5f30c"
+        },
+        {
+          "clips": {
+            "1H_Ranged_Reload": 0.699999988079071,
+            "Cheer": 1.6333333253860474,
+            "Death_A": 0.8333333134651184,
+            "Hit_A": 0.2666666805744171,
+            "Ranger_Idle": 2.433333396911621,
+            "Ranger_Run": 0.699999988079071,
+            "Ranger_Shoot": 0.36666667461395264,
+            "Ranger_Skill": 0.6666666865348816
+          },
+          "equipment": [],
+          "file": "Ranger_FaceSample.glb",
+          "hidden": [],
+          "joints": 27,
+          "sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0"
+        }
+      ],
+      "hero": "ranger"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "2H_Melee_Attack_Chop": 1.625,
+            "2H_Melee_Idle": 1.0416666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Jump_Full_Short": 1.1666666269302368,
+            "Running_B": 1.0416666269302368
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.4007358117851254e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  9.119483834751918e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  -2.882388550062842e-09,
+                  0.033309340476989746,
+                  6.51589289191179e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_axe.gltf",
+              "geometryBoundsMaximumDifference": 1.1920928955078125e-07,
+              "replaces": "2H_Axe"
+            }
+          ],
+          "file": "Barbarian.glb",
+          "hidden": [
+            "1H_Axe_Offhand",
+            "Barbarian_Round_Shield",
+            "1H_Axe",
+            "Mug",
+            "2H_Axe"
+          ],
+          "joints": 41,
+          "sha256": "681065ca61c267f6466a305ffd0f9f3481dc52d425060bf236c277de9cbec349"
+        }
+      ],
+      "hero": "barbarian"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816,
+            "Spellcast_Long": 2.5,
+            "Spellcast_Shoot": 0.9166666865348816
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.3270678778098954e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  2.276502097942057e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  -6.254081341694473e-08,
+                  3.807993778082164e-07,
+                  6.519400130855502e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_staff.gltf",
+              "geometryBoundsMaximumDifference": 5.960464477539063e-08,
+              "replaces": "2H_Staff"
+            }
+          ],
+          "file": "Mage.glb",
+          "hidden": [
+            "Spellbook",
+            "Spellbook_open",
+            "1H_Wand",
+            "2H_Staff"
+          ],
+          "joints": 41,
+          "sha256": "42d90fe6b28e67b97679b30a2f6c1d14afdc5d8b741c2ba8e128e1678d276544"
+        }
+      ],
+      "hero": "mage"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Dualwield_Melee_Attack_Slice": 1.1666666269302368,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_B": 1.0416666269302368,
+            "Throw": 1.3333333730697632
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.4007358117851254e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  9.119483834751918e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  -1.2214547950861743e-07,
+                  -1.531757334305439e-05,
+                  5.327308940650255e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_dagger.gltf",
+              "geometryBoundsMaximumDifference": 2.9802322387695312e-08,
+              "replaces": "Knife"
+            },
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -7.450571359868263e-08,
+                  -1.9698373421306314e-07,
+                  1.4007348170252953e-07,
+                  1
+                ],
+                "scale": [
+                  1,
+                  0.9999999403953552,
+                  0.9999999403953552
+                ],
+                "translation": [
+                  -5.667653368846004e-08,
+                  -1.56370169861475e-05,
+                  2.8646556415878877e-07
+                ]
+              },
+              "bone": "handslot.l",
+              "file": "vendor_dagger.gltf",
+              "geometryBoundsMaximumDifference": 2.9802322387695312e-08,
+              "replaces": "Knife_Offhand"
+            }
+          ],
+          "file": "Rogue_Hooded.glb",
+          "hidden": [
+            "1H_Crossbow",
+            "2H_Crossbow",
+            "Throwable",
+            "Knife",
+            "Knife_Offhand"
+          ],
+          "joints": 41,
+          "sha256": "9b34ff6a532b2d77704a714a21fd4e6f9915b45fa9daefda3c1cc22c2dca6f1e"
+        }
+      ],
+      "hero": "assassin"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Melee_Attack_Slice_Horizontal": 1.0416666269302368,
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Block": 1.0416666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_B": 1.0416666269302368
+          },
+          "equipment": [
+            {
+              "bone": "handslot.r",
+              "file": "Skeleton_Axe.gltf"
+            },
+            {
+              "bone": "handslot.l",
+              "file": "Skeleton_Shield_Large_A.gltf"
+            }
+          ],
+          "file": "Skeleton_Warrior.glb",
+          "hidden": [],
+          "joints": 41,
+          "sha256": "c2840d10f2b70cb487e24865772db71ceaae713df155496f27a86214ac3250b9"
+        }
+      ],
+      "hero": "guardian"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816,
+            "Spellcast_Shoot": 0.9166666865348816,
+            "Spellcast_Summon": 4.291666507720947
+          },
+          "equipment": [
+            {
+              "bone": "handslot.r",
+              "file": "Skeleton_Staff.gltf"
+            }
+          ],
+          "file": "Skeleton_Mage.glb",
+          "hidden": [],
+          "joints": 41,
+          "sha256": "ea7a3da78941d65e50e35a5f4c681a62e2ed9d21e6060209755616fa25b5a0b4"
+        }
+      ],
+      "hero": "necromancer"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "1H_Ranged_Shoot": 1.0416666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Dodge_Forward": 0.375,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816
+          },
+          "equipment": [
+            {
+              "bone": "handslot.r",
+              "file": "Skeleton_Crossbow.gltf"
+            }
+          ],
+          "file": "Skeleton_Rogue.glb",
+          "hidden": [],
+          "joints": 41,
+          "sha256": "a7f2cc98daab63811a85257a98e5b3ecb6d618edfa287a9b69b5f5a2ba553df1"
+        }
+      ],
+      "hero": "shade"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816,
+            "Throw": 1.3333333730697632,
+            "Use_Item": 1.5833333730697632
+          },
+          "equipment": [
+            {
+              "bone": "handslot.r",
+              "file": "Skeleton_Blade.gltf"
+            }
+          ],
+          "file": "Skeleton_Minion.glb",
+          "hidden": [],
+          "joints": 41,
+          "sha256": "3ca64dce65af7acb9f93ebe240b70874382b5d7f253ec8a965a04efdc659d847"
+        }
+      ],
+      "hero": "summoner"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "2H_Melee_Attack_Spin": 2.375,
+            "2H_Melee_Attack_Spinning": 0.6666666865348816,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_B": 1.0416666269302368
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.4007358117851254e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  9.119483834751918e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  -2.882388550062842e-09,
+                  0.033309340476989746,
+                  6.51589289191179e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_greatsword.gltf",
+              "geometryBoundsMaximumDifference": 1.4901161193847656e-07,
+              "replaces": "2H_Sword"
+            }
+          ],
+          "file": "Knight.glb",
+          "hidden": [
+            "Knight_Helmet",
+            "1H_Sword",
+            "1H_Sword_Offhand",
+            "Rectangle_Shield",
+            "Round_Shield",
+            "Spike_Shield",
+            "Badge_Shield",
+            "2H_Sword"
+          ],
+          "joints": 41,
+          "sha256": "f9eaa4d5b19bed86fa0ea8c29abfede3990d3c0726c79a654fa49b1dd8b53089"
+        }
+      ],
+      "hero": "swordsman"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "2H_Melee_Idle": 1.0416666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Running_A": 0.7916666865348816,
+            "Throw": 1.3333333730697632,
+            "Use_Item": 1.5833333730697632
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.4007358117851254e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  9.119483834751918e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  0.30056607723236084,
+                  -0.015636758878827095,
+                  4.3270898686387227e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_mug.gltf",
+              "geometryBoundsMaximumDifference": 5.960464477539063e-08,
+              "replaces": "Mug"
+            }
+          ],
+          "file": "Barbarian.glb",
+          "hidden": [
+            "1H_Axe_Offhand",
+            "Barbarian_Round_Shield",
+            "1H_Axe",
+            "2H_Axe",
+            "Mug"
+          ],
+          "joints": 41,
+          "sha256": "681065ca61c267f6466a305ffd0f9f3481dc52d425060bf236c277de9cbec349"
+        }
+      ],
+      "hero": "brewer"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816,
+            "Spellcast_Shoot": 0.9166666865348816,
+            "Spellcasting": 0.6666666865348816
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  8.953746544193564e-08,
+                  -0.7071067690849304,
+                  -0.7071067690849304,
+                  9.8138393411773e-08
+                ],
+                "scale": [
+                  1,
+                  1.0000001192092896,
+                  1.0000001192092896
+                ],
+                "translation": [
+                  -1.5926107721497829e-07,
+                  0.14538809657096863,
+                  1.6665838131757482e-07
+                ]
+              },
+              "bone": "handslot.l",
+              "file": "vendor_spellbook.gltf",
+              "geometryBoundsMaximumDifference": 8.940696716308594e-08,
+              "replaces": "Spellbook_open"
+            }
+          ],
+          "file": "Mage.glb",
+          "hidden": [
+            "Spellbook",
+            "Spellbook_open",
+            "1H_Wand",
+            "2H_Staff"
+          ],
+          "joints": 41,
+          "sha256": "42d90fe6b28e67b97679b30a2f6c1d14afdc5d8b741c2ba8e128e1678d276544"
+        }
+      ],
+      "hero": "scholar"
+    },
+    {
+      "configurations": [
+        {
+          "clips": {
+            "1H_Ranged_Reload": 1.1666666269302368,
+            "Cheer": 1.6666666269302368,
+            "Death_A": 0.7916666865348816,
+            "Dodge_Backward": 0.375,
+            "Hit_A": 0.6666666865348816,
+            "Idle": 1.0416666269302368,
+            "Running_A": 0.7916666865348816,
+            "Throw": 1.3333333730697632
+          },
+          "equipment": [
+            {
+              "authoredTransform": {
+                "rotation": [
+                  -1.4007358117851254e-07,
+                  -1,
+                  8.195615919248667e-08,
+                  9.119483834751918e-09
+                ],
+                "scale": [
+                  1,
+                  0.9999998807907104,
+                  1
+                ],
+                "translation": [
+                  -1.2214547950861743e-07,
+                  -1.531757334305439e-05,
+                  5.327308940650255e-07
+                ]
+              },
+              "bone": "handslot.r",
+              "file": "vendor_dagger.gltf",
+              "geometryBoundsMaximumDifference": 2.9802322387695312e-08,
+              "replaces": "Knife"
+            }
+          ],
+          "file": "Rogue_Hooded.glb",
+          "hidden": [
+            "1H_Crossbow",
+            "2H_Crossbow",
+            "Knife_Offhand",
+            "Knife",
+            "Throwable"
+          ],
+          "joints": 41,
+          "sha256": "9b34ff6a532b2d77704a714a21fd4e6f9915b45fa9daefda3c1cc22c2dca6f1e"
+        }
+      ],
+      "hero": "darter"
+    }
+  ],
+  "interfaceImages": [
+    "vendor_button_blue.png",
+    "vendor_button_yellow.png",
+    "vendor_icon_arrowLeft.png",
+    "vendor_icon_checkmark.png",
+    "vendor_icon_cross.png",
+    "vendor_icon_star.png",
+    "vendor_interface_check_off.png",
+    "vendor_interface_check_on.png",
+    "vendor_interface_home.png",
+    "vendor_interface_panel.png",
+    "vendor_interface_settings.png",
+    "vendor_interface_slider_fill.png",
+    "vendor_interface_slider_thumb.png",
+    "vendor_interface_slider_track.png"
+  ],
+  "mapBudgets": {
+    "borderInstances": 10,
+    "importedWallInstances": 24,
+    "interiorDetailInstances": 16
+  },
+  "mapIDs": [
+    "canyon",
+    "crossroads",
+    "fortress",
+    "garden",
+    "plaza",
+    "ruins",
+    "grove",
+    "pitch",
+    "sandPitch",
+    "vault",
+    "cove",
+    "ring",
+    "glade",
+    "lair",
+    "canyon_expanded_v2",
+    "crossroads_expanded_v2",
+    "fortress_expanded_v2",
+    "garden_expanded_v2",
+    "plaza_expanded_v2",
+    "ruins_expanded_v2",
+    "grove_expanded_v2",
+    "twin_gates_sample_v1"
+  ],
+  "mapPaletteIDs": [
+    "canyon",
+    "crossroads",
+    "fortress",
+    "garden",
+    "plaza",
+    "ruins",
+    "grove",
+    "pitch",
+    "sandPitch",
+    "vault",
+    "cove",
+    "ring",
+    "glade",
+    "lair",
+    "twin_gates_sample_v1"
+  ],
+  "mapResources": [
+    "vendor_barrel.glb",
+    "vendor_barrel_stack.glb",
+    "vendor_bush.glb",
+    "vendor_cactus_short.glb",
+    "vendor_cactus_tall.glb",
+    "vendor_column_ruin.glb",
+    "vendor_crates.glb",
+    "vendor_desert_rock.glb",
+    "vendor_flat_rock.glb",
+    "vendor_floor_broken.glb",
+    "vendor_floor_stone.glb",
+    "vendor_floor_wood.glb",
+    "vendor_flower_purple.glb",
+    "vendor_flower_yellow.glb",
+    "vendor_ground_leaves.glb",
+    "vendor_log_stack.glb",
+    "vendor_mushrooms.glb",
+    "vendor_obelisk.glb",
+    "vendor_palm.glb",
+    "vendor_pillar.glb",
+    "vendor_pine.glb",
+    "vendor_rock.glb",
+    "vendor_rubble.glb",
+    "vendor_sandstone_block.glb",
+    "vendor_stone_block.glb",
+    "vendor_stone_circle.glb",
+    "vendor_stone_path.glb",
+    "vendor_stump.glb",
+    "vendor_tree.glb",
+    "vendor_tree_autumn.glb",
+    "vendor_tree_dark.glb"
+  ],
+  "schemaVersion": 1,
+  "scope": "Complete assignments for the existing 13 heroes, 22 maps, 9 gadgets, interface and four music stages; alternate source formats remain archived",
+  "sourceFileCount": 6675,
+  "sourcePackCount": 11,
+  "themeMusic": [
+    {
+      "bytes": 571017,
+      "file": "arena_theme_lobby.m4a",
+      "sha256": "09aaba2e90681c928519fbaadc524abdb5805d16021fbd5a3196470d8ef971ef",
+      "stage": "lobby"
+    },
+    {
+      "bytes": 515003,
+      "file": "arena_theme_battle.m4a",
+      "sha256": "b32dc6363813214cf58746fd7a95241a9a4db0b18fa3a111a7ba969067b1e928",
+      "stage": "battle"
+    },
+    {
+      "bytes": 24266,
+      "file": "arena_theme_win.m4a",
+      "sha256": "232c5e456e0a717d09d87bcde4a8a8604c11ac5bd17a076132a8433d4b1127fd",
+      "stage": "win"
+    },
+    {
+      "bytes": 24116,
+      "file": "arena_theme_lose.m4a",
+      "sha256": "3621cba557dbe736fad73560e10a3a9f578b9a54f59381b528bdca23b56a229b",
+      "stage": "lose"
+    }
+  ],
+  "vendorManifestSHA256": "9e24d8a893cf4432880859992d827059210dbd2753b404a6fc8aee108c29594c",
+  "vendorRuntimeBytes": 2261973,
+  "vendorRuntimeFileCount": 104
+}

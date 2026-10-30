@@ -355,7 +355,7 @@ struct ArenaHomeView: View {
                     }
                 }
             VStack(spacing: 3) {
-                Text(threeHeroSample ? "三英雄试玩 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
+                Text(threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
                     .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
                 Button { start() } label: {
                     Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
@@ -647,7 +647,7 @@ struct ArenaHomeView: View {
             .arenaInk()
             if let cost = progress.upgradeCost(chosen) {
                 Button {
-                    growth.upgrade(chosen)
+                    ArenaSound.shared.menu(growth.upgrade(chosen) ? .uiUpgrade : .uiError)
                 } label: {
                     HStack(spacing: 4) {
                         Text("升到 \(level + 1) 级")
@@ -815,6 +815,7 @@ struct ArenaHomeView: View {
         if threeHeroSample {
             playing = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: chosen, name: name,
                 level: progress.level(chosen), loadout: progress.loadout(for: chosen),
+                mapID: ArenaMap.twinGates.id,
                 qualitySample: true, threeHeroSample: true))
             return
         }
@@ -838,25 +839,29 @@ struct ArenaHomeView: View {
             ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: chosen,
                     name: name, level: progress.level(chosen), loadout: progress.loadout(for: chosen),
+                    mapID: ArenaMap.twinGates.id,
                     qualitySample: true, threeHeroSample: true))
                 sheet = nil
             }, initialPage: 1, playHero: chosen)
         } else if item == .threeHeroes {
             ArenaHeroSelection(selected: sampleHero, startsMatch: true, onClose: { sheet = nil }, onSelect: { hero in
                 sampleHero = hero
+                brawler = hero
                 UserDefaults.standard.set(hero.rawValue, forKey: "arena.sample.brawler")
+                UserDefaults.standard.set(hero.rawValue, forKey: "arena.brawler")
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: hero,
                     name: name, level: progress.level(hero), loadout: progress.loadout(for: hero),
+                    mapID: ArenaMap.twinGates.id,
                     qualitySample: true, threeHeroSample: true))
                 sheet = nil
             })
         } else if item == .sample {
             ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
-                    mode: .zone, brawler: .ranger, name: name, level: progress.level(.ranger),
-                    loadout: progress.loadout(for: .ranger), qualitySample: true))
+                    mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
+                    loadout: progress.loadout(for: chosen), mapID: ArenaMap.twinGates.id))
                 sheet = nil
-            })
+            }, playHero: chosen)
         } else if item == .diagnostics {
             ArenaDiagnosticSuiteView()
         } else if item == .settings {
@@ -896,8 +901,8 @@ struct ArenaHomeView: View {
         case .season: return "赛季"
         case .settings: return "设置"
         case .diagnostics: return "持续性能诊断"
-        case .sample: return "蓝月港试玩"
-        case .threeHeroes: return "三英雄试玩"
+        case .sample: return "双闸交汇 · 作战指南"
+        case .threeHeroes: return "三英雄对战"
         }
     }
 
@@ -1062,6 +1067,7 @@ struct ArenaHomeView: View {
                 .buttonStyle(ArenaGameButton(face: Color(red: 0.45, green: 0.5, blue: 0.58), edge: Color(red: 0.22, green: 0.25, blue: 0.3), height: 36))
                 Button {
                     guard unlocked else { return }
+                    ArenaSound.shared.menu(.uiSelect)
                     brawler = item
                     UserDefaults.standard.set(item.rawValue, forKey: "arena.brawler")
                     self.inspected = nil
@@ -1085,7 +1091,7 @@ struct ArenaHomeView: View {
             BrawlerBadge(brawler: item, size: 70, selected: chosen == item)
                 .overlay(alignment: .bottomTrailing) {
                     if !unlocked {
-                        Image(systemName: "lock.fill").font(.caption.weight(.bold)).foregroundStyle(.white)
+                        ArenaInterfaceIcon(.locked).frame(width: 14, height: 14).foregroundStyle(.white)
                             .padding(5).background(Circle().fill(.black.opacity(0.6)))
                     }
                 }
@@ -1132,9 +1138,9 @@ struct ArenaHomeView: View {
 
                 Button { sheet = .threeHeroes } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label("三英雄试玩 · 双闸交汇", systemImage: "person.3.fill")
+                        Label("三英雄对战 · 双闸交汇", systemImage: "person.3.fill")
                             .font(.system(size: 18, weight: .black, design: .rounded))
-                        Text("游侠、蛮王、法师 · 本地 3 对 3 · 不计奖杯与排位")
+                        Text("游侠、蛮王、法师 · 本地 3 对 3 · 正常获得奖杯、金币与赛季经验")
                             .font(.system(size: 12, weight: .bold))
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                 }
@@ -1145,15 +1151,15 @@ struct ArenaHomeView: View {
                 Button {
                     pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
                         mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
-                        loadout: progress.loadout(for: chosen), qualitySample: true))
+                        loadout: progress.loadout(for: chosen), mapID: ArenaMap.twinGates.id))
                     sheet = nil
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("双闸交汇 · 地图试玩", systemImage: "map.fill")
+                        Label("双闸交汇 · 抢占据点", systemImage: "map.fill")
                             .font(.system(size: 18, weight: .black, design: .rounded))
-                        Text("抢占据点 · 单人 + 电脑队友 · 不计排位")
+                        Text("使用当前英雄 · 本地普通对战 · 正常结算奖励")
                             .font(.system(size: 13, weight: .bold))
-                        Text("中路抢点，两侧包抄。地图布局试玩，美术仍在制作。")
+                        Text("中路抢点，两侧包抄；也可在常规地图选择中选用。")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1164,7 +1170,7 @@ struct ArenaHomeView: View {
                 .accessibilityIdentifier("arena.sample.twinGates")
 
                 Button { sheet = .sample } label: {
-                    Label("查看游侠与双闸地图", systemImage: "viewfinder")
+                    Label("英雄与双闸地图指南", systemImage: "map")
                         .font(.system(size: 15, weight: .bold))
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
@@ -1213,6 +1219,7 @@ struct ArenaHomeView: View {
     private func mapChoice(_ map: ArenaMap?) -> some View {
         let selected = selectedMap?.id == map?.id
         return Button {
+            ArenaSound.shared.menu(.uiSelect)
             selectedMapID = map?.id
             if let id = map?.id { UserDefaults.standard.set(id, forKey: "arena.map") }
             else { UserDefaults.standard.removeObject(forKey: "arena.map") }
@@ -1290,7 +1297,7 @@ struct ArenaHomeView: View {
         Section {
             if let cost = progress.upgradeCost(chosen) {
                 Button {
-                    growth.upgrade(chosen)
+                    ArenaSound.shared.menu(growth.upgrade(chosen) ? .uiUpgrade : .uiError)
                 } label: {
                     HStack {
                         Label("\(chosen.name)升到 \(level + 1) 级", systemImage: "arrow.up.circle.fill")
@@ -1310,7 +1317,7 @@ struct ArenaHomeView: View {
 
     private var togetherList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("与同事连接后一起对战。单人对战可在大厅选择玩法和地图；三英雄试玩在玩法页单独进入。")
+            Text("与同事连接后一起对战。单人对战可在大厅选择英雄、玩法和地图；双闸交汇已加入常规地图轮换。")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
             roomActions(players: 2)
@@ -1330,7 +1337,7 @@ struct ArenaHomeView: View {
             if let cost {
                 Button {
                     guard progress.isUnlocked(chosen) else { return }
-                    growth.upgrade(chosen)
+                    ArenaSound.shared.menu(growth.upgrade(chosen) ? .uiUpgrade : .uiError)
                 } label: {
                     Text("升到 \(level + 1) 级 · \(cost) 金币")
                         .frame(maxWidth: .infinity)
@@ -1621,7 +1628,7 @@ struct ArenaHomeView: View {
                     .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face, edge: ArenaGameButton.blue.edge, height: 36))
             } else {
                 Button {
-                    _ = growth.buy(skin, price: price)
+                    ArenaSound.shared.menu(growth.buy(skin, price: price) ? .uiReward : .uiError)
                 } label: {
                     Label("\(price)", systemImage: "dollarsign.circle.fill")
                 }
@@ -1644,7 +1651,7 @@ struct ArenaHomeView: View {
                 Text("有了").font(.system(size: 13, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.8))
             } else if let price = emote.price {
                 Button {
-                    _ = growth.buy(emote)
+                    ArenaSound.shared.menu(growth.buy(emote) ? .uiReward : .uiError)
                 } label: {
                     Label("\(price)", systemImage: "dollarsign.circle.fill")
                 }

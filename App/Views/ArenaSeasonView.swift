@@ -211,7 +211,7 @@ struct ArenaSeasonSheet: View {
             if claimed {
                 Label("领过了", systemImage: "checkmark").font(DS.Font.caption).foregroundStyle(.secondary)
             } else if reached {
-                Button("领取") { growth.claim(tier) }
+                Button("领取") { ArenaSound.shared.menu(growth.claim(tier) != nil ? .uiReward : .uiError) }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(red: 0.55, green: 0.35, blue: 0.95))
             } else {
@@ -280,7 +280,7 @@ struct ArenaSeasonSheet: View {
                 Label("有了", systemImage: "checkmark").font(DS.Font.caption).foregroundStyle(.secondary)
             } else {
                 Button {
-                    growth.buy(skin)
+                    ArenaSound.shared.menu(growth.buy(skin) ? .uiReward : .uiError)
                 } label: {
                     Label("\(skin.price)", systemImage: "dollarsign.circle.fill")
                 }
@@ -300,7 +300,7 @@ struct ArenaSeasonSheet: View {
                 Label("有了", systemImage: "checkmark").font(DS.Font.caption).foregroundStyle(.secondary)
             } else if let price = emote.price {
                 Button {
-                    growth.buy(emote)
+                    ArenaSound.shared.menu(growth.buy(emote) ? .uiReward : .uiError)
                 } label: {
                     Label("\(price)", systemImage: "dollarsign.circle.fill")
                 }

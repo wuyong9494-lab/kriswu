@@ -1,7 +1,8 @@
 import Foundation
 
 extension ArenaMap {
-    /// A-map graybox from arena-map-production-spec. Not in random/network pools.
+    /// Released Twin Gates layout. Keep its established wire ID for saved maps
+    /// and diagnostics; the player-facing name and ordinary pools are production.
     public static let twinGates = ArenaMap(id: "twin_gates_sample_v1", title: "双闸交汇", theme: .dusk, rows: [
         "#####################",
         "#...................#",

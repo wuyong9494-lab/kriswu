@@ -824,7 +824,7 @@ struct ArenaMatchView: View {
     private func resultDetails(_ mine: Fighter) -> some View {
         VStack(spacing: wide ? DS.Space.s : DS.Space.m) {
             if controller.threeHeroSample {
-                Text("本地对战 · 不计排位与成长奖励").font(.caption).foregroundStyle(.white.opacity(0.75))
+                Text("三英雄对战 · 双闸交汇").font(.caption).foregroundStyle(.white.opacity(0.75))
             }
             if let story = controller.storyReward {
                 storyStars(story)

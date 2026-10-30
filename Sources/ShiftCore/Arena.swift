@@ -772,7 +772,6 @@ public struct ArenaGame: Sendable {
         self.mode = mode
         let pool = ArenaMap.selectionPool(for: mode)
         if let chosen, pool.contains(where: { $0.id == chosen.id })
-            || (mode == .zone && chosen.id == ArenaMap.twinGates.id)
             || (chosen.id == "custom" && chosen.spawns.count == (mode.isTeams ? 2 : 1)) {
             map = chosen
         } else {

@@ -1,0 +1,79 @@
+[
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/slash_01.png",
+    "file": "vendor_effect_slash.png",
+    "usage": "hero.knight,barbarian,guardian,swordsman,assassin.attack",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/muzzle_01.png",
+    "file": "vendor_effect_muzzle.png",
+    "usage": "hero.ranger.attack",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/magic_01.png",
+    "file": "vendor_effect_magic.png",
+    "usage": "hero.necromancer,shade,summoner.attackAndSpecial",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/flame_01.png",
+    "file": "vendor_effect_flame.png",
+    "usage": "hero.mage.attackAndTrail",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/fire_01.png",
+    "file": "vendor_effect_fire.png",
+    "usage": "combat.explosion,hero.mage.special",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/circle_02.png",
+    "file": "vendor_effect_circle.png",
+    "usage": "hero.guardian.special,hero.brewer.trail",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/twirl_01.png",
+    "file": "vendor_effect_twirl.png",
+    "usage": "hero.shade.special",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/symbol_01.png",
+    "file": "vendor_effect_heal.png",
+    "usage": "combat.heal,hero.scholar.attackAndSpecial",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/star_01.png",
+    "file": "vendor_effect_star.png",
+    "usage": "combat.pickup,goal,respawn,hero.darter.special",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/dirt_01.png",
+    "file": "vendor_effect_dirt.png",
+    "usage": "hero.barbarian,brewer.special",
+    "imageSize": 256
+  },
+  {
+    "pack": "kenney-particle-pack",
+    "source": "PNG (Transparent)/trace_01.png",
+    "file": "vendor_effect_trace.png",
+    "usage": "hero.ranger,assassin,darter.attackAndTrail",
+    "imageSize": 256
+  }
+]

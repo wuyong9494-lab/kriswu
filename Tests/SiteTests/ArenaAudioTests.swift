@@ -5,6 +5,34 @@ import UIKit
 
 @MainActor
 final class ArenaAudioTests: XCTestCase {
+    func testCompletedThemeDefaultsOnAndPreservesExplicitChoice() throws {
+        let suite = "ArenaAudioTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(ArenaSound.prefersTheme(in: defaults))
+        XCTAssertNil(defaults.object(forKey: ArenaSound.themeKey))
+        defaults.set(false, forKey: ArenaSound.themeKey)
+        XCTAssertFalse(ArenaSound.prefersTheme(in: defaults))
+        defaults.set(true, forKey: ArenaSound.themeKey)
+        XCTAssertTrue(ArenaSound.prefersTheme(in: defaults))
+    }
+
+    func testMixerActuallySelectsBothCompletedResultThemesAndLegacyChoice() {
+        let mixer = ArenaEffectMixer()
+        mixer.load(theme: true)
+        XCTAssertEqual(mixer.loadedFiles[.win], "arena_theme_win.m4a")
+        XCTAssertEqual(mixer.loadedFiles[.lose], "arena_theme_lose.m4a")
+        XCTAssertEqual(mixer.loadedCount, ArenaSound.Effect.allCases.count)
+        mixer.unload()
+        mixer.load(theme: false)
+        XCTAssertEqual(mixer.loadedFiles[.win], "vendor_win.wav")
+        XCTAssertEqual(mixer.loadedFiles[.lose], "vendor_lose.wav")
+        XCTAssertEqual(mixer.loadedFiles[.pageTurn], "vendor_magic.wav")
+        XCTAssertEqual(mixer.loadedFiles[.magic], "arena_magic.wav")
+        XCTAssertEqual(mixer.loadedCount, ArenaSound.Effect.allCases.count)
+        mixer.unload()
+    }
+
     func testThemeReplacementPreservesPausedBattleAndDoesNotRestartAudio() {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: ArenaSound.muteKey)

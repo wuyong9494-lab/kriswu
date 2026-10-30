@@ -19,7 +19,9 @@ def build():
     packs = {p['id']: p for p in manifest['packs']}
     records = []
 
-    def put(pack, relative, name, usage, audio=False):
+    def put(pack, relative, name, usage, audio=False, dependencyRenames=None, imageSize=None):
+        assert name == Path(name).name and name not in ('', '.', '..'), name
+        assert not any(r['file'] == name for r in records), f'Duplicate runtime resource: {name}'
         src = SOURCE / pack / relative
         expected = next(f['sha256'] for f in packs[pack]['files'] if f['path'] == relative)
         assert digest(src) == expected, f'Changed source: {src}'
@@ -30,8 +32,31 @@ def build():
                             '-c:a', 'pcm_s16le', str(dst)], check=True)
         else:
             shutil.copy2(src, dst)
-        records.append(dict(pack=pack, source=relative, sourceSHA256=expected,
-                            file=name, sha256=digest(dst), bytes=dst.stat().st_size, usage=usage))
+        conversions = []
+        if dependencyRenames:
+            assert dst.suffix == '.gltf', 'Dependency rewriting requires JSON glTF'
+            document = json.loads(dst.read_text())
+            seen = set()
+            for item in document.get('buffers', []) + document.get('images', []):
+                if item.get('uri') in dependencyRenames:
+                    old = item['uri']
+                    item['uri'] = dependencyRenames[old]
+                    seen.add(old)
+            assert seen == set(dependencyRenames), f'Unknown dependency rename: {name}'
+            dst.write_text(json.dumps(document, separators=(',', ':')) + '\n')
+            conversions.append('Rename dependency URIs only; geometry unchanged')
+        if imageSize:
+            from PIL import Image
+            with Image.open(dst) as image:
+                image = image.convert('RGBA')
+                image.thumbnail((int(imageSize), int(imageSize)), Image.Resampling.LANCZOS)
+                image.save(dst, format='PNG', optimize=True)
+            conversions.append(f'Downsample to at most {imageSize}px for the shared effect texture cache')
+        record = dict(pack=pack, source=relative, sourceSHA256=expected,
+                      file=name, sha256=digest(dst), bytes=dst.stat().st_size, usage=usage)
+        if conversions:
+            record['conversion'] = '; '.join(conversions)
+        records.append(record)
         return dst
 
     # Keep the original characters and their clip timing; mount the source axe on
@@ -68,15 +93,33 @@ def build():
         ('kenney-impact-sounds', 'Audio/footstep_grass_000.ogg', 'step_grass', 'player.grassFootstep'),
         ('kenney-impact-sounds', 'Audio/footstep_concrete_000.ogg', 'step_stone', 'player.groundFootstep'),
         ('kenney-rpg-audio', 'Audio/knifeSlice.ogg', 'slash', 'combat.melee'),
-        ('kenney-rpg-audio', 'Audio/bookFlip1.ogg', 'magic', 'combat.cast'),
+        ('kenney-rpg-audio', 'Audio/bookFlip1.ogg', 'magic', 'combat.scholarPageTurn'),
         ('kenney-music-jingles', 'Audio/Pizzicato jingles/jingles_PIZZI00.ogg', 'win', 'match.victory'),
         ('kenney-music-jingles', 'Audio/Pizzicato jingles/jingles_PIZZI03.ogg', 'lose', 'match.defeat'),
     ]
     for pack, source, name, usage in audio:
         put(pack, source, f'vendor_{name}.wav', usage, audio=True)
+    # All production areas declare their additional assets in reviewable recipes.
+    # The source archives remain complete; alternate authoring formats and preview
+    # files are kept out of the app's runtime resource namespace.
+    recipe_names = ['vendor_heroes.json', 'vendor_maps.json',
+                    'vendor_interface_audio.json', 'vendor_effects.json']
+    recipes = []
+    for recipe_name in recipe_names:
+        path = ROOT / 'scripts/assets' / recipe_name
+        if not path.is_file():
+            continue
+        entries = json.loads(path.read_text())
+        if isinstance(entries, dict):
+            entries = entries['assets']
+        for entry in entries:
+            put(entry['pack'], entry['source'], entry['file'], entry['usage'],
+                audio=entry.get('audio', False),
+                dependencyRenames=entry.get('dependencyRenames'), imageSize=entry.get('imageSize'))
+        recipes.append(dict(file=recipe_name, sha256=digest(path), assetCount=len(entries)))
     used = {r['pack'] for r in records}
     assert used == set(packs), f'Missing runtime pack: {set(packs) - used}'
-    result = dict(schemaVersion=1, packCount=len(used), files=records,
+    result = dict(schemaVersion=2, packCount=len(used), files=records, recipes=recipes,
                   packs=[{k: p[k] for k in ('id', 'name', 'author', 'source', 'license')} for p in packs.values()])
     (DEST / 'arena-vendor-runtime.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
     notices = '\n\n'.join(p['name'] + '\n' + p['source'] + '\n' +

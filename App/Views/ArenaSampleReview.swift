@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trial entry and two review pages share the arena menu components.
+/// Hero and map guides for the released Twin Gates match.
 struct ArenaSampleReview: View {
     let onClose: () -> Void
     let onPlay: () -> Void
@@ -15,7 +15,7 @@ struct ArenaSampleReview: View {
     }
 
     var body: some View {
-        ArenaMenuScreen(title: "蓝月港 · 试玩样板", onClose: onClose, scrollContent: false) {
+        ArenaMenuScreen(title: "双闸交汇 · 作战指南", onClose: onClose, scrollContent: false) {
             GeometryReader { viewport in
                 let previewHeight = max(1, viewport.size.height - 56)
                 VStack(spacing: 12) {
@@ -36,12 +36,12 @@ struct ArenaSampleReview: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 6) {
                 Button(action: onPlay) {
-                    Label("以\(playHero.name)进入试玩", systemImage: "play.fill")
+                    Label("以\(playHero.name)开始对战", systemImage: "play.fill")
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(ArenaMenuButtonStyle())
                 .accessibilityIdentifier("arena.sample.play")
-                Text("单人＋电脑队友 · 不计排位 · 画面与动作仍在制作")
+                Text("单人＋电脑队友 · 普通对战 · 正常结算奖杯、金币与赛季经验")
                     .font(.caption).foregroundStyle(.white.opacity(0.7))
             }
             .frame(maxWidth: 720)

@@ -5,11 +5,12 @@ import simd
 
 @MainActor
 final class ArenaRangerTests: XCTestCase {
-    func testThreeHeroTrialsKeepSelectedHeroAndCompleteDistinctModels() throws {
+    func testThreeHeroMatchesKeepSelectedHeroAndRecordNormalProgress() throws {
         var files = Set<String>()
         for hero in ArenaQualitySample.heroes {
-            let trial = ArenaController(setup: .init(mode: .zone, brawler: hero, name: "试验",
+            let trial = ArenaController(setup: .init(mode: .zone, brawler: hero, name: "竞技",
                 qualitySample: true, threeHeroSample: true), seed: 170017)
+            XCTAssertTrue(trial.recordsProgress, "The three-hero format is a normal progression match")
             XCTAssertEqual(trial.mine.brawler, hero)
             XCTAssertEqual(trial.game.map.id, ArenaMap.twinGates.id)
             for team in 0...1 {
@@ -24,13 +25,15 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertEqual(files.count, 3, "Three different models, not palette variants")
     }
 
-    func testThreeHeroNaturalMatchFinishesWithoutGrowthRewards() throws {
+    func testExplicitBenchmarkFinishesNaturallyWithoutChangingSavedProgress() throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         let before = try encoder.encode(ArenaProgressStore.shared.progress)
         for hero in ArenaQualitySample.heroes {
-            let trial = ArenaController(setup: .init(mode: .zone, brawler: hero, name: "试验",
-                qualitySample: true, threeHeroSample: true), seed: 170017)
+            let trial = ArenaController(setup: .init(mode: .zone, brawler: hero, name: "诊断",
+                benchmark: true, qualitySample: true, threeHeroSample: true,
+                benchmarkTwinGates: true), seed: 170017)
+            XCTAssertFalse(trial.recordsProgress, "Only the explicit benchmark suppresses progress here")
             trial.advance(4) // Intro only; the following calls run the normal 60 Hz rules.
             for _ in 0..<9_100 { trial.advance(1.0 / 60) }
             XCTAssertNotNil(trial.hud.result)
@@ -61,7 +64,7 @@ final class ArenaRangerTests: XCTestCase {
 
     func testIndependentAssetImportsAllGameplayActionsAndAnchors() throws {
         let look = BrawlerLook.of(.ranger)
-        XCTAssertEqual(look.file, "Ranger_Original.glb")
+        XCTAssertEqual(look.file, "Ranger_FaceSample.glb")
         XCTAssertTrue(look.authored)
         let model = try XCTUnwrap(ArenaModels.shared.character(.ranger))
         for name in look.clips { XCTAssertNotNil(model.clips[name], name) }
@@ -74,14 +77,14 @@ final class ArenaRangerTests: XCTestCase {
         instance.root.enumerateChildNodes { node, _ in
             if let skin = node.skinner {
                 skinners += 1
-                XCTAssertEqual(skin.bones.count, 22)
+                XCTAssertEqual(skin.bones.count, 27)
             }
         }
         XCTAssertEqual(skinners, 1)
-        XCTAssertLessThan(model.animated.count, 22, "Static anchors should not be sampled every frame")
+        XCTAssertLessThan(model.animated.count, 27, "Static anchors should not be sampled every frame")
     }
 
-    func testShowcaseCanSwitchBetweenOriginalAndSampleWithoutStaleModel() {
+    func testShowcaseCanSwitchBetweenDifferentHeroRigsWithoutStaleModel() {
         let view = ArenaShowcaseView(brawler: .ranger)
         defer { view.stop() }
         func jointCounts() -> [Int] {
@@ -91,24 +94,27 @@ final class ArenaRangerTests: XCTestCase {
             }
             return counts
         }
-        XCTAssertTrue(jointCounts().contains(22))
-        view.show(.ranger, qualitySample: true)
         XCTAssertTrue(jointCounts().contains(27))
-        XCTAssertFalse(jointCounts().contains(22))
-        view.show(.ranger)
-        XCTAssertTrue(jointCounts().contains(22))
+        view.show(.knight)
+        XCTAssertTrue(jointCounts().contains(41))
         XCTAssertFalse(jointCounts().contains(27))
+        view.show(.ranger)
+        XCTAssertTrue(jointCounts().contains(27))
+        XCTAssertFalse(jointCounts().contains(41))
     }
 
-    func testSampleAccessoryCoverageDoesNotChangeDefaultModels() throws {
+    func testFinishedAccessoryProportionsApplyToAllEntryPoints() throws {
         for (brawler, name, factor) in [(Brawler.mage, "Mage_Hat", Float(0.72)),
                                        (Brawler.knight, "1H_Sword", Float(0.80))] {
+            let authored = try XCTUnwrap(ArenaModels.shared.character(brawler)).instantiate()
+            let source = try XCTUnwrap(authored.root.childNode(withName: name, recursively: true))
             let baseline = ArenaAvatar(brawler: brawler, color: .blue, isMe: false)
             let sample = ArenaAvatar(brawler: brawler, color: .blue, isMe: false, qualitySample: true)
             let original = try XCTUnwrap(baseline.node.childNode(withName: name, recursively: true))
             let adjusted = try XCTUnwrap(sample.node.childNode(withName: name, recursively: true))
-            XCTAssertEqual(adjusted.simdScale.x, original.simdScale.x * factor, accuracy: 0.0001)
-            XCTAssertEqual(adjusted.simdScale.z, original.simdScale.z * factor, accuracy: 0.0001)
+            XCTAssertEqual(original.simdScale.x, source.simdScale.x * factor, accuracy: 0.0001)
+            XCTAssertEqual(original.simdScale.z, source.simdScale.z * factor, accuracy: 0.0001)
+            XCTAssertEqual(adjusted.simdScale, original.simdScale)
             XCTAssertEqual(adjusted.simdPosition, original.simdPosition)
         }
     }
@@ -172,8 +178,8 @@ final class ArenaRangerTests: XCTestCase {
         }
     }
 
-    func testFaceSampleUsesSeparateAssetAndSamplesFacialChannels() throws {
-        XCTAssertEqual(BrawlerLook.of(.ranger).file, "Ranger_Original.glb")
+    func testNormalRangerUsesFinishedAssetAndSamplesFacialChannels() throws {
+        XCTAssertEqual(BrawlerLook.of(.ranger).file, "Ranger_FaceSample.glb")
         XCTAssertEqual(BrawlerLook.of(.ranger, qualitySample: true).file, "Ranger_FaceSample.glb")
         let model = try XCTUnwrap(ArenaModels.shared.character(.ranger, qualitySample: true))
         let eye = try XCTUnwrap(model.node(named: "eye.r"))
@@ -193,7 +199,7 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertGreaterThan(simd_distance(pose.translation[mouth], model.restPose.translation[mouth]), 0.01)
     }
 
-    func testOriginalRangerFitsExistingWorldScaleAndGroundPlane() {
+    func testCompletedRangerFitsExistingWorldScaleAndGroundPlane() {
         let avatar = ArenaAvatar(brawler: .ranger, color: .blue, isMe: true, decorated: false)
         var low = Float.greatestFiniteMagnitude
         var high = -Float.greatestFiniteMagnitude
@@ -225,13 +231,13 @@ final class ArenaRangerTests: XCTestCase {
         avatar.update(fighter, visible: true, translucent: false, cheering: false, dt: 1 / 60, clock: 1 / 60)
         avatar.attack()
         let muzzle = try XCTUnwrap(avatar.muzzlePosition)
-        XCTAssertEqual(muzzle.x - 5, 0.93 * ArenaAvatar.scale * BrawlerLook.rangerScale, accuracy: 0.03)
+        XCTAssertEqual(muzzle.x - 5, BrawlerLook.rangerMuzzleReach * ArenaAvatar.scale * BrawlerLook.rangerScale, accuracy: 0.03)
         XCTAssertEqual(muzzle.z, 5, accuracy: 0.05)
-        XCTAssertEqual(muzzle.y, 1.34 * ArenaAvatar.scale * BrawlerLook.rangerScale, accuracy: 0.03)
+        XCTAssertEqual(muzzle.y, BrawlerLook.rangerMuzzleHeight * ArenaAvatar.scale * BrawlerLook.rangerScale, accuracy: 0.03)
         XCTAssertEqual(avatar.node.simdPosition, SIMD3<Float>(5, 0, 5))
     }
 
-    func testEveryOriginalClipProducesFiniteSkinnedTransforms() throws {
+    func testEveryCompletedRangerClipProducesFiniteSkinnedTransforms() throws {
         let model = try XCTUnwrap(ArenaModels.shared.character(.ranger))
         var pose = model.restPose
         for clip in model.clips.values {

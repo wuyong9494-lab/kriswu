@@ -49,6 +49,8 @@ struct BrawlerLook {
         let bone: String
         let position: SIMD3<Float>
         let rotation: simd_quatf
+        /// Reuse the embedded item's exact authored transform; keep it as an import fallback.
+        var replacing: String? = nil
     }
 
     let file: String
@@ -67,6 +69,9 @@ struct BrawlerLook {
     // New source is 2.411 m; legacy body is 1.581 m before its 0.96 look scale.
     // Normalize this authored rig to a 1.51 m in-game silhouette (legacy ~1.44 m).
     static let rangerScale: Float = 0.66
+    /// Authored muzzle in the completed facial rig, before world/body scaling.
+    static let rangerMuzzleHeight: Float = 1.25
+    static let rangerMuzzleReach: Float = 1.05
 
     static var legacyRangerComparison: Bool {
         ProcessInfo.processInfo.arguments.contains("-demo") && UserDefaults.standard.bool(forKey: "arena.legacyRanger")
@@ -80,11 +85,13 @@ struct BrawlerLook {
         case .knight:
             // This bundled helmet mesh contains a duplicate, unskinned copy of ChibiEyes
             // in body coordinates; displaying it on the head produces floating eyes.
-            return BrawlerLook(file: "Knight.glb", hidden: ["Knight_Helmet", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "2H_Sword"],
+            return BrawlerLook(file: "Knight.glb", hidden: ["Knight_Helmet", "1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield", "2H_Sword"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "1H_Melee_Attack_Slice_Diagonal", from: 0.12, to: 0.82, seconds: 0.38),
                                special: Move(clip: "1H_Melee_Attack_Stab", from: 0.12, to: 0.72, seconds: 0.42),
-                               scale: 1.05)
+                               scale: 1.05,
+                               weapons: [Weapon(file: "vendor_sword.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned, replacing: "1H_Sword"),
+                                         Weapon(file: "vendor_shield.gltf", bone: "handslot.l", position: .zero, rotation: Self.turned, replacing: "Badge_Shield")])
         case .ranger:
             if legacyRangerComparison && !qualitySample {
                 return BrawlerLook(file: "Rogue.glb", hidden: ["Knife_Offhand", "2H_Crossbow", "Knife", "Throwable"],
@@ -92,7 +99,9 @@ struct BrawlerLook {
                                    attack: Move(clip: "1H_Ranged_Shoot", from: 0.15, to: 0.7, seconds: 0.32),
                                    special: Move(clip: "2H_Ranged_Shoot", from: 0.1, to: 0.85, seconds: 0.62), scale: 0.96)
             }
-            return BrawlerLook(file: qualitySample ? "Ranger_FaceSample.glb" : "Ranger_Original.glb", hidden: [],
+            // The completed facial rig is the normal playable Ranger. Keep the
+            // earlier model bundled for explicit diagnostics and provenance.
+            return BrawlerLook(file: "Ranger_FaceSample.glb", hidden: [],
                                idle: "Ranger_Idle", run: "Ranger_Run",
                                attack: Move(clip: "Ranger_Shoot", seconds: 0.32),
                                special: Move(clip: "Ranger_Skill", seconds: 0.62), scale: Self.rangerScale, authored: true)
@@ -103,19 +112,22 @@ struct BrawlerLook {
                                special: Move(clip: "Jump_Full_Short", from: 0.1, to: 0.9, seconds: Float(Fighter.Leap.duration)),
                                scale: 1.14,
                                weapons: [Weapon(file: "vendor_axe.gltf", bone: "handslot.r",
-                                                position: SIMD3(0, 0.03330934, 0), rotation: Self.turned)])
+                                                position: SIMD3(0, 0.03330934, 0), rotation: Self.turned, replacing: "2H_Axe")])
         case .mage:
-            return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "Spellbook_open", "1H_Wand"],
+            return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "Spellcast_Shoot", from: 0.12, to: 0.8, seconds: 0.46),
                                special: Move(clip: "Spellcast_Long", from: 0.1, to: 0.85, seconds: 0.85),
-                               scale: 0.98)
+                               scale: 0.98,
+                               weapons: [Weapon(file: "vendor_staff.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned, replacing: "2H_Staff")])
         case .assassin:
-            return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Throwable"],
+            return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Throwable", "Knife", "Knife_Offhand"],
                                idle: "Idle", run: "Running_B",
                                attack: Move(clip: "Throw", from: 0.2, to: 0.72, seconds: 0.3),
                                special: Move(clip: "Dualwield_Melee_Attack_Slice", from: 0.08, to: 0.8, seconds: 0.46),
-                               scale: 0.94)
+                               scale: 0.94,
+                               weapons: [Weapon(file: "vendor_dagger.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned, replacing: "Knife"),
+                                         Weapon(file: "vendor_dagger.gltf", bone: "handslot.l", position: .zero, rotation: Self.turned, replacing: "Knife_Offhand")])
         case .guardian:
             return BrawlerLook(file: "Skeleton_Warrior.glb", hidden: [], idle: "Idle", run: "Running_B",
                                attack: Move(clip: "1H_Melee_Attack_Slice_Horizontal", from: 0.12, to: 0.82, seconds: 0.4),
@@ -145,29 +157,33 @@ struct BrawlerLook {
                                weapons: [Weapon(file: "Skeleton_Blade.gltf", bone: "handslot.r", position: SIMD3(0, 0.033, 0), rotation: Self.turned)])
         // 后加的四个和前面共用模型，但出手的那一段、快慢、个子都不一样
         case .swordsman:
-            return BrawlerLook(file: "Knight.glb", hidden: ["1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield"],
+            return BrawlerLook(file: "Knight.glb", hidden: ["Knight_Helmet", "1H_Sword", "1H_Sword_Offhand", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "Badge_Shield", "2H_Sword"],
                                idle: "Idle", run: "Running_B",
                                attack: Move(clip: "2H_Melee_Attack_Spin", from: 0.05, to: 0.95, seconds: 0.5),
                                special: Move(clip: "2H_Melee_Attack_Spinning", from: 0, to: 1, seconds: 0.62),
-                               scale: 1.1)
+                               scale: 1.1,
+                               weapons: [Weapon(file: "vendor_greatsword.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned, replacing: "2H_Sword")])
         case .brewer:
-            return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe"],
+            return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],
                                idle: "2H_Melee_Idle", run: "Running_A",
                                attack: Move(clip: "Throw", from: 0.18, to: 0.78, seconds: 0.42),
                                special: Move(clip: "Use_Item", from: 0.08, to: 0.62, seconds: 0.7),
-                               scale: 1.12)
+                               scale: 1.12,
+                               weapons: [Weapon(file: "vendor_mug.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned, replacing: "Mug")])
         case .scholar:
-            return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "1H_Wand", "2H_Staff"],
+            return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "Spellcast_Shoot", from: 0.1, to: 0.8, seconds: 0.42),
                                special: Move(clip: "Spellcasting", from: 0.05, to: 0.9, seconds: 0.85),
-                               scale: 0.97)
+                               scale: 0.97,
+                               weapons: [Weapon(file: "vendor_spellbook.gltf", bone: "handslot.l", position: .zero, rotation: Self.turned, replacing: "Spellbook_open")])
         case .darter:
-            return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Knife_Offhand"],
+            return BrawlerLook(file: "Rogue_Hooded.glb", hidden: ["1H_Crossbow", "2H_Crossbow", "Knife_Offhand", "Knife", "Throwable"],
                                idle: "Idle", run: "Running_A",
                                attack: Move(clip: "Throw", from: 0.12, to: 0.7, seconds: 0.28),
                                special: Move(clip: "Dodge_Backward", from: 0.05, to: 0.9, seconds: 0.36),
-                               scale: 0.95)
+                               scale: 0.95,
+                               weapons: [Weapon(file: "vendor_dagger.gltf", bone: "handslot.r", position: .zero, rotation: Self.turned, replacing: "Knife")])
         }
     }
 
@@ -202,11 +218,15 @@ final class ArenaModels: @unchecked Sendable {
     static let shared = ArenaModels()
 
     /// 骷髅武器、场外树石旗帜，以及普通地图与样板共用的第三方箱桶和装饰。
-    static let props = ["Skeleton_Axe.gltf", "Skeleton_Shield_Large_A.gltf", "Skeleton_Staff.gltf", "Skeleton_Crossbow.gltf", "Skeleton_Blade.gltf",
+    static let props: [String] = {
+        let scenery = ["Skeleton_Axe.gltf", "Skeleton_Shield_Large_A.gltf", "Skeleton_Staff.gltf", "Skeleton_Crossbow.gltf", "Skeleton_Blade.gltf",
                         "trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
                         "trees_B_small.gltf", "trees_B_medium.gltf", "trees_B_large.gltf",
                         "rock_single_A.gltf", "rock_single_B.gltf", "rock_single_C.gltf",
                         "flag_blue.gltf", "flag_red.gltf"] + ArenaVendorAssets.propFiles
+        let held = Brawler.allCases.flatMap { BrawlerLook.of($0).weapons.map(\.file) }
+        return Array(Set(scenery + held)).sorted()
+    }()
 
     private var models: [String: GLTFModel] = [:]
     private var missing: Set<String> = []

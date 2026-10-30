@@ -14,16 +14,19 @@ final class ArenaEffectMixer {
     private var buffers: [ArenaSound.Effect: AVAudioPCMBuffer] = [:]
     private var budget = ArenaVoiceBudget()
     private(set) var running = false
+    private(set) var loadedFiles: [ArenaSound.Effect: String] = [:]
     var loadedCount: Int { buffers.count }
 
     func load(theme: Bool) {
         guard nodes.isEmpty else { return }
         for effect in ArenaSound.Effect.allCases {
-            let themeFile = effect == .win ? "arena_theme_win" : (effect == .lose ? "arena_theme_lose" : nil)
-            let sample = theme && !effect.file.hasPrefix("vendor_") ? themeFile.flatMap { Bundle.main.url(forResource: $0, withExtension: "m4a") } : nil
-            guard let url = sample ?? Bundle.main.url(forResource: effect.file, withExtension: "wav"),
-                  let buffer = try? Self.decode(url, format: format) else { continue }
-            buffers[effect] = buffer
+            for resource in effect.resources(theme: theme) {
+                guard let url = Bundle.main.url(forResource: resource.name, withExtension: resource.ext),
+                      let buffer = try? Self.decode(url, format: format) else { continue }
+                buffers[effect] = buffer
+                loadedFiles[effect] = url.lastPathComponent
+                break
+            }
         }
         for _ in 0..<12 {
             let node = AVAudioPlayerNode()
@@ -98,6 +101,7 @@ final class ArenaEffectMixer {
         nodes.forEach { engine.detach($0) }
         nodes.removeAll()
         buffers.removeAll()
+        loadedFiles.removeAll()
         budget.reset()
     }
 

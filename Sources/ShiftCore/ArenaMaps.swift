@@ -245,7 +245,7 @@ extension ArenaMap {
         }
     }
 
-    /// 所有的地图
+    /// Historical map pool, retained for story references and older network peers.
     public static let all: [ArenaMap] = [canyon, crossroads, fortress, garden, plaza, ruins, grove, pitch, sandPitch, vault, cove,
                                          ring, glade, lair]
 
@@ -305,7 +305,7 @@ extension ArenaMap {
     public static func playPool(for mode: ArenaGame.Mode) -> [ArenaMap] {
         let ids = Set(pool(for: mode).map { $0.id + "_expanded_v2" })
         let expanded = expandedMaps.filter { ids.contains($0.id) }
-        return expanded.isEmpty ? pool(for: mode) : expanded
+        return (expanded.isEmpty ? pool(for: mode) : expanded) + additionalMaps(for: mode)
     }
 
     /// Keep every original map selectable alongside its expanded variant.
@@ -314,7 +314,19 @@ extension ArenaMap {
     public static func selectionPool(for mode: ArenaGame.Mode) -> [ArenaMap] {
         let original = pool(for: mode)
         let ids = Set(original.map { $0.id + "_expanded_v2" })
-        return original + expandedMaps.filter { ids.contains($0.id) }
+        return original + expandedMaps.filter { ids.contains($0.id) } + additionalMaps(for: mode)
+    }
+
+    /// All released layouts, including Twin Gates, without duplicate format variants.
+    public static var playableMaps: [ArenaMap] { all + expandedMaps + [twinGates] }
+
+    /// Twin Gates has two teams and a central objective; modes with special goals,
+    /// vaults, solo spawns or a boss retain their purpose-built layouts.
+    private static func additionalMaps(for mode: ArenaGame.Mode) -> [ArenaMap] {
+        switch mode {
+        case .teamFight, .stars, .bounty, .zone, .knockout: return [twinGates]
+        default: return []
+        }
     }
 
     /// 按名字找（联机开局时房主发来的）

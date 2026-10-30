@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "packCount": 11,
   "files": [
     {
@@ -235,7 +235,7 @@
       "file": "vendor_magic.wav",
       "sha256": "6f2fc6cac661fa41f1fac4e4f98c53b036fbd30ed667e0ecaf09e3d0e6f1e582",
       "bytes": 67874,
-      "usage": "combat.cast"
+      "usage": "combat.scholarPageTurn"
     },
     {
       "pack": "kenney-music-jingles",
@@ -254,6 +254,730 @@
       "sha256": "627d784e5cf802eeeb2df792cf77d5e1d357a5090f82ac3d20eb507310e26506",
       "bytes": 101232,
       "usage": "match.defeat"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/sword_1handed.gltf",
+      "sourceSHA256": "f88345d0c89d52710ddb00555964fe7a6f4024874d7ee902ee4c742c048a1958",
+      "file": "vendor_sword.gltf",
+      "sha256": "ec7c490b6d73d6fcb2dd29764af0ec16e30a37fb7be933e12775a48102c3d24b",
+      "bytes": 1370,
+      "usage": "knight.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/sword_1handed.bin",
+      "sourceSHA256": "780ebfd002cd181fd5b1626f5a6ae8dda0ff2df58c3ff1fd6e7584f53a969d8a",
+      "file": "vendor_sword.bin",
+      "sha256": "780ebfd002cd181fd5b1626f5a6ae8dda0ff2df58c3ff1fd6e7584f53a969d8a",
+      "bytes": 13256,
+      "usage": "knight.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/shield_badge.gltf",
+      "sourceSHA256": "51b687316b2f9bfe89e586a6ef5f91cface8a326c9d604c8acea7699d6f3523d",
+      "file": "vendor_shield.gltf",
+      "sha256": "8c1f5e480b3ad7830b193bef18ee676fa03773766f7a7fbd104085b1d683d76e",
+      "bytes": 1372,
+      "usage": "knight.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/shield_badge.bin",
+      "sourceSHA256": "3c0f04767c839868df1f852cb335848c3ba7d94da3078e4c7f8a422f2369560c",
+      "file": "vendor_shield.bin",
+      "sha256": "3c0f04767c839868df1f852cb335848c3ba7d94da3078e4c7f8a422f2369560c",
+      "bytes": 10628,
+      "usage": "knight.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/staff.gltf",
+      "sourceSHA256": "eb2e277510325a242974ee842453882de2d55b09ec94a43148aff1dd4237c67a",
+      "file": "vendor_staff.gltf",
+      "sha256": "a9c866585b233613938f76c1cbbd675d0a918e96a10ebffe7b91c186158731f1",
+      "bytes": 1359,
+      "usage": "mage.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/staff.bin",
+      "sourceSHA256": "acf921e547edd8e05e24e0b2edec74fec7c987ccad1ee73549a0726a8059ebce",
+      "file": "vendor_staff.bin",
+      "sha256": "acf921e547edd8e05e24e0b2edec74fec7c987ccad1ee73549a0726a8059ebce",
+      "bytes": 18576,
+      "usage": "mage.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/dagger.gltf",
+      "sourceSHA256": "33c577d4d5d268295f13494c930d20d11bf1a82e862aa7bdab4d7d51bc26fcd0",
+      "file": "vendor_dagger.gltf",
+      "sha256": "1fb7c79cd9d94e2c625a857c4baae7149dac0052f5c403fb49c42662f60abdbd",
+      "bytes": 1363,
+      "usage": "assassin.and.darter.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/dagger.bin",
+      "sourceSHA256": "2ef02dbdc53839cd2506f9dea40dcc401cdda830ae6a887f499333cce0d11be3",
+      "file": "vendor_dagger.bin",
+      "sha256": "2ef02dbdc53839cd2506f9dea40dcc401cdda830ae6a887f499333cce0d11be3",
+      "bytes": 7656,
+      "usage": "assassin.and.darter.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/sword_2handed_color.gltf",
+      "sourceSHA256": "fd45e23a61d09b46bad57925fb5edea4a633fde06bd1444b77659ffc35660955",
+      "file": "vendor_greatsword.gltf",
+      "sha256": "69a9b248dab2ee667056a7b574ce6c480a8f32fd543bb81fc987f4ecbc229ba9",
+      "bytes": 1382,
+      "usage": "swordsman.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/sword_2handed_color.bin",
+      "sourceSHA256": "8c6a20309dfa812e4683794a110c7ab359da38c8126d2249d7190899ca1af294",
+      "file": "vendor_greatsword.bin",
+      "sha256": "8c6a20309dfa812e4683794a110c7ab359da38c8126d2249d7190899ca1af294",
+      "bytes": 19880,
+      "usage": "swordsman.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/mug_full.gltf",
+      "sourceSHA256": "354aa166f25c2e2f88b309129fb5638f98f852358f638293865c7b8767516fda",
+      "file": "vendor_mug.gltf",
+      "sha256": "10ea24dd7ba0da030f8059a6842a7affab8310d37786b1a17a80c52737e21a74",
+      "bytes": 1371,
+      "usage": "brewer.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/mug_full.bin",
+      "sourceSHA256": "b79442e95a5f2d02aec88fca5ea16574e5a5210daf1bc6e294a39a4c7d1aeecb",
+      "file": "vendor_mug.bin",
+      "sha256": "b79442e95a5f2d02aec88fca5ea16574e5a5210daf1bc6e294a39a4c7d1aeecb",
+      "bytes": 15772,
+      "usage": "brewer.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/spellbook_open.gltf",
+      "sourceSHA256": "5a7891f8fe12a0c84dfbb64454b0b6b51328894011021e5c664bc8701aaf40ad",
+      "file": "vendor_spellbook.gltf",
+      "sha256": "5f8f821d884c7cf37f8627c446fabc544170c8d7df0cedaa53b527a3f686cd1e",
+      "bytes": 1369,
+      "usage": "scholar.equipment",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/spellbook_open.bin",
+      "sourceSHA256": "888e45aff64aba1bea6ef3abfad27024b2697f7adbab319c089bc70c077c4a5b",
+      "file": "vendor_spellbook.bin",
+      "sha256": "888e45aff64aba1bea6ef3abfad27024b2697f7adbab319c089bc70c077c4a5b",
+      "bytes": 15128,
+      "usage": "scholar.equipment"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/knight_texture.png",
+      "sourceSHA256": "5d250ccc5da020e6126bfa3839f83bd9a465a951ed223e4d13c08b1925e154d4",
+      "file": "vendor_knight_texture.png",
+      "sha256": "5d250ccc5da020e6126bfa3839f83bd9a465a951ed223e4d13c08b1925e154d4",
+      "bytes": 14172,
+      "usage": "heroes.equipmentMaterial"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/mage_texture.png",
+      "sourceSHA256": "ea49f094b960402635fe51db9f1864960c97271b17f2e3554e5aca1b2bbba144",
+      "file": "vendor_mage_texture.png",
+      "sha256": "ea49f094b960402635fe51db9f1864960c97271b17f2e3554e5aca1b2bbba144",
+      "bytes": 16311,
+      "usage": "heroes.equipmentMaterial"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/rogue_texture.png",
+      "sourceSHA256": "a4032e877c3b91939f5cdbb630349c1998fdbc3211bbd587c111125500fe4cc5",
+      "file": "vendor_rogue_texture.png",
+      "sha256": "a4032e877c3b91939f5cdbb630349c1998fdbc3211bbd587c111125500fe4cc5",
+      "bytes": 16670,
+      "usage": "heroes.equipmentMaterial"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/barrel_small_stack.gltf.glb",
+      "sourceSHA256": "c23dc73a11c5a57ed33cb8a9df99f2b2793517341c5d62c6e50b0150652e8e99",
+      "file": "vendor_barrel_stack.glb",
+      "sha256": "c23dc73a11c5a57ed33cb8a9df99f2b2793517341c5d62c6e50b0150652e8e99",
+      "bytes": 98092,
+      "usage": "map.wallCargoAndDockBorder"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/rubble_half.gltf.glb",
+      "sourceSHA256": "7514ccbda643c13d5a782579e4f01ee6402eec5519590d3f048d396cdaedec24",
+      "file": "vendor_rubble.glb",
+      "sha256": "7514ccbda643c13d5a782579e4f01ee6402eec5519590d3f048d396cdaedec24",
+      "bytes": 38836,
+      "usage": "map.ruinWallsAndBorder"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/pillar.gltf.glb",
+      "sourceSHA256": "e31da496461921475384c62ce761cd23924892bd6f32aeea68bd913545caee33",
+      "file": "vendor_pillar.glb",
+      "sha256": "e31da496461921475384c62ce761cd23924892bd6f32aeea68bd913545caee33",
+      "bytes": 25552,
+      "usage": "map.fortressAndHarborBorder"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/floor_tile_small.gltf.glb",
+      "sourceSHA256": "645f02c82d1fa15e3e1daa7892b70c8a9d44f44d0e520d76ae6afd08633c5b34",
+      "file": "vendor_floor_stone.glb",
+      "sha256": "645f02c82d1fa15e3e1daa7892b70c8a9d44f44d0e520d76ae6afd08633c5b34",
+      "bytes": 20740,
+      "usage": "map.stonePaving"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/floor_tile_small_broken_A.gltf.glb",
+      "sourceSHA256": "d1acc3407f941623b3b01ec9a1751c36a5ca82bb14721fc8f28e5559317edad4",
+      "file": "vendor_floor_broken.glb",
+      "sha256": "d1acc3407f941623b3b01ec9a1751c36a5ca82bb14721fc8f28e5559317edad4",
+      "bytes": 22132,
+      "usage": "map.ruinPaving"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/floor_wood_small.gltf.glb",
+      "sourceSHA256": "9e11192df05527eb112128cc06515be4a3a350b765ce974666c7b1c37715aa63",
+      "file": "vendor_floor_wood.glb",
+      "sha256": "9e11192df05527eb112128cc06515be4a3a350b765ce974666c7b1c37715aa63",
+      "bytes": 22156,
+      "usage": "map.harborWoodPaving"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/cliff_block_stone.glb",
+      "sourceSHA256": "5c73f45e20848747b38695ba155882f8645630fb47f7d4f80ab565786fcf65a3",
+      "file": "vendor_stone_block.glb",
+      "sha256": "5c73f45e20848747b38695ba155882f8645630fb47f7d4f80ab565786fcf65a3",
+      "bytes": 2780,
+      "usage": "map.stoneWallCell"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/cliff_block_rock.glb",
+      "sourceSHA256": "2f31de8502288d6adcdae4d5605cfe65d4bcd4369dd0decd116c2615b9d3d01f",
+      "file": "vendor_sandstone_block.glb",
+      "sha256": "2f31de8502288d6adcdae4d5605cfe65d4bcd4369dd0decd116c2615b9d3d01f",
+      "bytes": 2776,
+      "usage": "map.sandWallCell"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/cactus_tall.glb",
+      "sourceSHA256": "d43a1aca5952e1f8a104d64a0edfec09c39f15102ca6bdc531460dd5a2c53d25",
+      "file": "vendor_cactus_tall.glb",
+      "sha256": "d43a1aca5952e1f8a104d64a0edfec09c39f15102ca6bdc531460dd5a2c53d25",
+      "bytes": 9668,
+      "usage": "map.desertBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/cactus_short.glb",
+      "sourceSHA256": "81ac9fc4c66eacceaf4aebcb6df3468ea450a2f5081151bb11400282efbc51bd",
+      "file": "vendor_cactus_short.glb",
+      "sha256": "81ac9fc4c66eacceaf4aebcb6df3468ea450a2f5081151bb11400282efbc51bd",
+      "bytes": 8844,
+      "usage": "map.desertBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/tree_palm.glb",
+      "sourceSHA256": "27bbb23d26ed788d84de6df2f7fab0acc3fe0ff16c7d08cdcfa1fffcb11de324",
+      "file": "vendor_palm.glb",
+      "sha256": "27bbb23d26ed788d84de6df2f7fab0acc3fe0ff16c7d08cdcfa1fffcb11de324",
+      "bytes": 13616,
+      "usage": "map.coastBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/tree_pineTallA.glb",
+      "sourceSHA256": "e0a56eb196d8a64ba86c7304d607136e17e6f9ad748dffcf86bd53b18b91b196",
+      "file": "vendor_pine.glb",
+      "sha256": "e0a56eb196d8a64ba86c7304d607136e17e6f9ad748dffcf86bd53b18b91b196",
+      "bytes": 7200,
+      "usage": "map.forestBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/tree_default_fall.glb",
+      "sourceSHA256": "f8e90ed7f7771644998a7c361302213af04350150b3ea0631e8384d26506efa2",
+      "file": "vendor_tree_autumn.glb",
+      "sha256": "f8e90ed7f7771644998a7c361302213af04350150b3ea0631e8384d26506efa2",
+      "bytes": 16940,
+      "usage": "map.autumnBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/tree_oak_dark.glb",
+      "sourceSHA256": "f2c455bb433fe98522d1b9391d5b587e7324176ecaee29ceefe55350a7e3fd47",
+      "file": "vendor_tree_dark.glb",
+      "sha256": "f2c455bb433fe98522d1b9391d5b587e7324176ecaee29ceefe55350a7e3fd47",
+      "bytes": 14648,
+      "usage": "map.forestAndLairBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/rock_tallC.glb",
+      "sourceSHA256": "87943b8b0d244ec9832d5dca9bf3cee2ab62aaa81797749f21a972f85c1f3be4",
+      "file": "vendor_desert_rock.glb",
+      "sha256": "87943b8b0d244ec9832d5dca9bf3cee2ab62aaa81797749f21a972f85c1f3be4",
+      "bytes": 5184,
+      "usage": "map.desertBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/rock_smallFlatA.glb",
+      "sourceSHA256": "40ceafacfaabb0f04f93688fd8696c1464c65512bef219e1459c1f238cbbbe21",
+      "file": "vendor_flat_rock.glb",
+      "sha256": "40ceafacfaabb0f04f93688fd8696c1464c65512bef219e1459c1f238cbbbe21",
+      "bytes": 3300,
+      "usage": "map.lowFloorDetail"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/log_stack.glb",
+      "sourceSHA256": "90eaae4a01ba1f25c2f0c6d83087e4a7a8fac684f2452615245333968d118d68",
+      "file": "vendor_log_stack.glb",
+      "sha256": "90eaae4a01ba1f25c2f0c6d83087e4a7a8fac684f2452615245333968d118d68",
+      "bytes": 10896,
+      "usage": "map.forestAndHarborBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/stump_round.glb",
+      "sourceSHA256": "e9b0f385f0ef98493ef716a055aa51e0b99efb8445279be7bb8bd83329a4c4af",
+      "file": "vendor_stump.glb",
+      "sha256": "e9b0f385f0ef98493ef716a055aa51e0b99efb8445279be7bb8bd83329a4c4af",
+      "bytes": 5644,
+      "usage": "map.forestBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/flower_yellowA.glb",
+      "sourceSHA256": "8a3b08cd2ca411c21f9c581d5bda651d78b13c50cba45ad8fa0389398ead6d1d",
+      "file": "vendor_flower_yellow.glb",
+      "sha256": "8a3b08cd2ca411c21f9c581d5bda651d78b13c50cba45ad8fa0389398ead6d1d",
+      "bytes": 7120,
+      "usage": "map.lowGardenDetail"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/flower_purpleA.glb",
+      "sourceSHA256": "f6fc34c96a03420a74fe36d4c2d0ec88f15204fcad99cd1416c3c4ecb22e48c4",
+      "file": "vendor_flower_purple.glb",
+      "sha256": "f6fc34c96a03420a74fe36d4c2d0ec88f15204fcad99cd1416c3c4ecb22e48c4",
+      "bytes": 7112,
+      "usage": "map.lowGardenDetail"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/mushroom_redGroup.glb",
+      "sourceSHA256": "29f02df0589dd2b09e8d2aff6a4662394dac5cfcf1fec701640dcbd6127e0802",
+      "file": "vendor_mushrooms.glb",
+      "sha256": "29f02df0589dd2b09e8d2aff6a4662394dac5cfcf1fec701640dcbd6127e0802",
+      "bytes": 14960,
+      "usage": "map.lowForestDetail"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/grass_leafs.glb",
+      "sourceSHA256": "8bc4c0b17c2e64c34e1acbf7c4a2fd8c04cfcd7155328e61767887b2ced112c7",
+      "file": "vendor_ground_leaves.glb",
+      "sha256": "8bc4c0b17c2e64c34e1acbf7c4a2fd8c04cfcd7155328e61767887b2ced112c7",
+      "bytes": 4608,
+      "usage": "map.lowGroundDetail"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/path_stone.glb",
+      "sourceSHA256": "06f2eb4f914df4dd419b7fb33e81059bc0b1a5b941a193b7c9f8ffd8851146c5",
+      "file": "vendor_stone_path.glb",
+      "sha256": "06f2eb4f914df4dd419b7fb33e81059bc0b1a5b941a193b7c9f8ffd8851146c5",
+      "bytes": 12392,
+      "usage": "map.desertAndForestPaving"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/path_stoneCircle.glb",
+      "sourceSHA256": "d3f2044acdaeb7100d82aca702207e9c2f198aa0f03b9aef79a714e3a4a563f5",
+      "file": "vendor_stone_circle.glb",
+      "sha256": "d3f2044acdaeb7100d82aca702207e9c2f198aa0f03b9aef79a714e3a4a563f5",
+      "bytes": 13100,
+      "usage": "map.gardenPaving"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/statue_columnDamaged.glb",
+      "sourceSHA256": "ce8f21c31ec16ad67759dd171860bd85fd57fc3857963610c4ed8a39c8d91b95",
+      "file": "vendor_column_ruin.glb",
+      "sha256": "ce8f21c31ec16ad67759dd171860bd85fd57fc3857963610c4ed8a39c8d91b95",
+      "bytes": 8824,
+      "usage": "map.ruinAndLairBorder"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/statue_obelisk.glb",
+      "sourceSHA256": "e18013044ad6453a1850226be29f63c37d67e0002141f5f6a4d14a46bde69e00",
+      "file": "vendor_obelisk.glb",
+      "sha256": "e18013044ad6453a1850226be29f63c37d67e0002141f5f6a4d14a46bde69e00",
+      "bytes": 4416,
+      "usage": "map.ruinAndLairBorder"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Extra/Double/input_square.png",
+      "sourceSHA256": "ac5d617f6ba445cec03ec149e3c0142bcaf8998636400611ef1cbd75775710bb",
+      "file": "vendor_interface_panel.png",
+      "sha256": "ac5d617f6ba445cec03ec149e3c0142bcaf8998636400611ef1cbd75775710bb",
+      "bytes": 563,
+      "usage": "menu.cardBackground"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Blue/Double/check_square_color_checkmark.png",
+      "sourceSHA256": "5efd935d12dc685035ddd4f3c916c29e0d73c3ce5cb3fd32199b3d922e8a6ff3",
+      "file": "vendor_interface_check_on.png",
+      "sha256": "5efd935d12dc685035ddd4f3c916c29e0d73c3ce5cb3fd32199b3d922e8a6ff3",
+      "bytes": 950,
+      "usage": "menu.enabledToggle"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Grey/Double/check_square_grey.png",
+      "sourceSHA256": "120583be2f663a0cb862b93ed462bb817e320368c4f6d7339aa086811687d436",
+      "file": "vendor_interface_check_off.png",
+      "sha256": "120583be2f663a0cb862b93ed462bb817e320368c4f6d7339aa086811687d436",
+      "bytes": 466,
+      "usage": "menu.disabledToggle"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Blue/Double/slide_horizontal_grey.png",
+      "sourceSHA256": "1767133c7c59221ea6be5586464a7fb68dee748fc00f28e6f5e28c428524ba2b",
+      "file": "vendor_interface_slider_track.png",
+      "sha256": "1767133c7c59221ea6be5586464a7fb68dee748fc00f28e6f5e28c428524ba2b",
+      "bytes": 614,
+      "usage": "menu.volumeTrack"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Blue/Double/slide_horizontal_color.png",
+      "sourceSHA256": "b3566029e1a092b53138ce257af5576aeb6c6efbb144d707d7bf5abc0f2ec9e8",
+      "file": "vendor_interface_slider_fill.png",
+      "sha256": "b3566029e1a092b53138ce257af5576aeb6c6efbb144d707d7bf5abc0f2ec9e8",
+      "bytes": 614,
+      "usage": "menu.volumeFill"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Blue/Double/slide_hangle.png",
+      "sourceSHA256": "402e915d3548b4a892af0fc3a77831431eb5469fb2c49c224493b269a1404694",
+      "file": "vendor_interface_slider_thumb.png",
+      "sha256": "402e915d3548b4a892af0fc3a77831431eb5469fb2c49c224493b269a1404694",
+      "bytes": 440,
+      "usage": "menu.volumeThumb"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/musicOn.png",
+      "sourceSHA256": "9998567109c4ad007ad796091b4f1d7774779f6f96c8b4b615f215f7d74c5230",
+      "file": "vendor_interface_music_on.png",
+      "sha256": "9998567109c4ad007ad796091b4f1d7774779f6f96c8b4b615f215f7d74c5230",
+      "bytes": 15537,
+      "usage": "settings.musicEnabled"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/musicOff.png",
+      "sourceSHA256": "ee0901ab81572df6dd47400b5694c0c41d8ccb1c3bf24485b4414dfb4c1172ea",
+      "file": "vendor_interface_music_off.png",
+      "sha256": "ee0901ab81572df6dd47400b5694c0c41d8ccb1c3bf24485b4414dfb4c1172ea",
+      "bytes": 15721,
+      "usage": "settings.musicMuted"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/audioOn.png",
+      "sourceSHA256": "aee49ff7b9151214178079eb860a341958ba54627c93d0b2636b05670a37a585",
+      "file": "vendor_interface_sound_on.png",
+      "sha256": "aee49ff7b9151214178079eb860a341958ba54627c93d0b2636b05670a37a585",
+      "bytes": 15628,
+      "usage": "settings.effectsEnabled"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/audioOff.png",
+      "sourceSHA256": "c82e3784acee369264aa9e6cfc91973729982db5a2154d6ecddfd1927414d676",
+      "file": "vendor_interface_sound_off.png",
+      "sha256": "c82e3784acee369264aa9e6cfc91973729982db5a2154d6ecddfd1927414d676",
+      "bytes": 15311,
+      "usage": "settings.effectsMuted"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/gear.png",
+      "sourceSHA256": "50b313ffe97db1733e529d5b0f5ac91eed5c0c8ffee1034bbb7766508e4f720c",
+      "file": "vendor_interface_settings.png",
+      "sha256": "50b313ffe97db1733e529d5b0f5ac91eed5c0c8ffee1034bbb7766508e4f720c",
+      "bytes": 16228,
+      "usage": "menu.settingsHeading"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/home.png",
+      "sourceSHA256": "1f6d39df47cb8849feb8f01aad329583f5f014c449c622b39aa154a3eca55160",
+      "file": "vendor_interface_home.png",
+      "sha256": "1f6d39df47cb8849feb8f01aad329583f5f014c449c622b39aa154a3eca55160",
+      "bytes": 15222,
+      "usage": "menu.heading"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/locked.png",
+      "sourceSHA256": "b83e9f3d17e94a054fa0add775e89eb6973052dca9185a4b5fface1d14cf9cd1",
+      "file": "vendor_interface_locked.png",
+      "sha256": "b83e9f3d17e94a054fa0add775e89eb6973052dca9185a4b5fface1d14cf9cd1",
+      "bytes": 15262,
+      "usage": "hero.locked"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/information.png",
+      "sourceSHA256": "dc6909b9d262528156a8afd6247696d0ea39ff533a722ca8d3432c5957544e05",
+      "file": "vendor_interface_information.png",
+      "sha256": "dc6909b9d262528156a8afd6247696d0ea39ff533a722ca8d3432c5957544e05",
+      "bytes": 15443,
+      "usage": "settings.audioInformation"
+    },
+    {
+      "pack": "kenney-impact-sounds",
+      "source": "Audio/impactPunch_heavy_000.ogg",
+      "sourceSHA256": "b33a8f14068aec24ec69ba85e5e87fdc41228975f6a1a3e44a6e7d6fc3d9f8d8",
+      "file": "vendor_ko.wav",
+      "sha256": "3d2746ba3cd5f519d3b713bb7f0da7d1be6d3bac06f964abd78248ca16f982c7",
+      "bytes": 57322,
+      "usage": "combat.knockout"
+    },
+    {
+      "pack": "kenney-rpg-audio",
+      "source": "Audio/handleCoins2.ogg",
+      "sourceSHA256": "4b857968d64f9ac9336a10ffac6694d7547e1f01566ad6857b30bc8db3ee6c32",
+      "file": "vendor_pickup.wav",
+      "sha256": "328b459f4f7c304b908a8bbfe9d57a3b9a5f2d9519d6907d3f40870383367a0e",
+      "bytes": 29908,
+      "usage": "combat.pickup"
+    },
+    {
+      "pack": "kenney-rpg-audio",
+      "source": "Audio/cloth1.ogg",
+      "sourceSHA256": "ddb93a3671233f95da0e0b10367f082f7eb42fa6caaddcf776410aa8833c747d",
+      "file": "vendor_blink.wav",
+      "sha256": "28daf177236e5fd7e3834702d0d391a6157f32c385daebf30185a3f64df49be4",
+      "bytes": 58382,
+      "usage": "combat.blink"
+    },
+    {
+      "pack": "kenney-rpg-audio",
+      "source": "Audio/metalLatch.ogg",
+      "sourceSHA256": "ba9ba60b172b3ebc131a940f25793cd2e207aca7af73dc80d637277f060f1708",
+      "file": "vendor_gadget.wav",
+      "sha256": "83f573ea9e48c6cf318a91a07a2bc6d680cba816611b40f2b6ac25a1728c2721",
+      "bytes": 23128,
+      "usage": "combat.gadget"
+    },
+    {
+      "pack": "kenney-interface-sounds",
+      "source": "Audio/error_001.ogg",
+      "sourceSHA256": "46e67425d16339772e8d328fb36a49426c9467418686e11beeb71ff84b0f6433",
+      "file": "vendor_ui_error.wav",
+      "sha256": "4b00f4586b27a47217f47ea37e1b885f5316eae2c9b0a6407f2741863fd2b8bd",
+      "bytes": 14336,
+      "usage": "menu.rejectedAction"
+    },
+    {
+      "pack": "kenney-interface-sounds",
+      "source": "Audio/confirmation_003.ogg",
+      "sourceSHA256": "3091bf0be0497f825769ee0733ca7bdc3bcd59bd6c6e8f2ba8f93d580ff38022",
+      "file": "vendor_ui_upgrade.wav",
+      "sha256": "57183cae9b42838fe715bf019206d0f2d9d9909839b571c3165833390dc4e7b1",
+      "bytes": 28480,
+      "usage": "hero.upgrade"
+    },
+    {
+      "pack": "kenney-music-jingles",
+      "source": "Audio/Pizzicato jingles/jingles_PIZZI01.ogg",
+      "sourceSHA256": "3f8f2534a297d19386c233a7ee4fa8737cc40870dd206010263760e1983dde46",
+      "file": "vendor_ui_reward.wav",
+      "sha256": "1b01715b15a01ff936ddcde78742cc1db8080309bd74ef204f5f2d788c4a7ce5",
+      "bytes": 88486,
+      "usage": "progress.rewardClaim"
+    },
+    {
+      "pack": "kenney-impact-sounds",
+      "source": "Audio/footstep_wood_000.ogg",
+      "sourceSHA256": "5f1c252942a220d658121bd9417448cd19649ded9fff2ff15f6e50899373ce8e",
+      "file": "vendor_step_wood.wav",
+      "sha256": "dc0a8518d1989142ab6ceb3f62ca948d9fdd582945e0824b94d240a7bf9a8d1e",
+      "bytes": 24014,
+      "usage": "player.woodPavingFootstep"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/slash_01.png",
+      "sourceSHA256": "cb4787978122bb863866a1681af22a7dec39a4566f08c400f233740eb1d3730c",
+      "file": "vendor_effect_slash.png",
+      "sha256": "ffbed2a909fbb10b38eb724d9f6b46a234a53b74eb81ddde8cc23c492531d321",
+      "bytes": 14668,
+      "usage": "hero.knight,barbarian,guardian,swordsman,assassin.attack",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/muzzle_01.png",
+      "sourceSHA256": "08f650f6a615b65024b48d8da32178158d74307d7c235f214f0c075b7aa688b9",
+      "file": "vendor_effect_muzzle.png",
+      "sha256": "fa7c4899be8d7c7912f4a83955958eaff8f4386ad6c79e96e6795b51c295e385",
+      "bytes": 42047,
+      "usage": "hero.ranger.attack",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/magic_01.png",
+      "sourceSHA256": "398479ea280c8161d0b6d509ca97eefb27e989c7832b404abcb65faae3e922ff",
+      "file": "vendor_effect_magic.png",
+      "sha256": "5c718408c64e12632969856f4381f496fe0b8629a8a65d29eecee028bb718e02",
+      "bytes": 42420,
+      "usage": "hero.necromancer,shade,summoner.attackAndSpecial",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/flame_01.png",
+      "sourceSHA256": "92a70bcb90b1e21c57b2dae42843135703b2e988abee97433f84c3119723d144",
+      "file": "vendor_effect_flame.png",
+      "sha256": "0c41812983675f44be8eab045e28d1e313e54a61cf51b059bb3740d99192c74c",
+      "bytes": 29856,
+      "usage": "hero.mage.attackAndTrail",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/fire_01.png",
+      "sourceSHA256": "9727a9743ac6ab8dd4dd79f5fc5b0266290efae45f4d4452279eb5e4bcf3a978",
+      "file": "vendor_effect_fire.png",
+      "sha256": "52153261ccf4fd842312f63cb7bec3b965d63d559edd3a5dea7c385c21c54d82",
+      "bytes": 57763,
+      "usage": "combat.explosion,hero.mage.special",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/circle_02.png",
+      "sourceSHA256": "8a2112a6a5610c7cdcbfe8af0a5162b42dfb3431c63f494743945337b7981e51",
+      "file": "vendor_effect_circle.png",
+      "sha256": "f3e86acbe5d7774c0d1a66f8482937c791673f38f822344bf092b6e129b5e417",
+      "bytes": 29500,
+      "usage": "hero.guardian.special,hero.brewer.trail",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/twirl_01.png",
+      "sourceSHA256": "ba3f4996a5a91ea3cba6817a9b4770a385a82ef0b9350cbda5c0f140d182af7e",
+      "file": "vendor_effect_twirl.png",
+      "sha256": "ddde545302cf59e3e7a9c64da48a3229f0561df6aa40a5d5bbd3c7121d95c1ea",
+      "bytes": 28926,
+      "usage": "hero.shade.special",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/symbol_01.png",
+      "sourceSHA256": "3eb3988f3e80acf3fda9df07733f49c3585eafa7d6a7ce5b31765fe180dd6d9c",
+      "file": "vendor_effect_heal.png",
+      "sha256": "823cfe256dcb87f9e4c4386909b0e0724c33179b3395f7f8be895b82151b2ef6",
+      "bytes": 8107,
+      "usage": "combat.heal,hero.scholar.attackAndSpecial",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/star_01.png",
+      "sourceSHA256": "3ba3999c944a0767677449412d306c1f230daa1743b31f929533cf77a22ecf5d",
+      "file": "vendor_effect_star.png",
+      "sha256": "3760ea31de258f019c004c82cae5fe068da527426c702c43f4818daf76dca59d",
+      "bytes": 20602,
+      "usage": "combat.pickup,goal,respawn,hero.darter.special",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/dirt_01.png",
+      "sourceSHA256": "6827a0a32a293ec9570fb98d63963b8dd6e6aaba9e1096afad932e93a378bea9",
+      "file": "vendor_effect_dirt.png",
+      "sha256": "e316a1de3f945561e5a50fdeb7c2fd61f79fe921898f4df8ef060243adf4457d",
+      "bytes": 45181,
+      "usage": "hero.barbarian,brewer.special",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/trace_01.png",
+      "sourceSHA256": "34de69bc3f665b23fe9bed15f388efd8e8e4dc1a99f2fc5db9ba8715c525711f",
+      "file": "vendor_effect_trace.png",
+      "sha256": "9328125d23b63d66b554519b74b2d68525ef50512b07e21aff179c506ec0761d",
+      "bytes": 12017,
+      "usage": "hero.ranger,assassin,darter.attackAndTrail",
+      "conversion": "Downsample to at most 256px for the shared effect texture cache"
+    }
+  ],
+  "recipes": [
+    {
+      "file": "vendor_heroes.json",
+      "sha256": "62df4d65df55ec63589234970e8bdec389f9e5558b7ab443237d134f08b33ae7",
+      "assetCount": 17
+    },
+    {
+      "file": "vendor_maps.json",
+      "sha256": "bd35d49613598f6cd9011945e3c814e1ed53a6e99fb9dcd2b9d39c2adb738ec4",
+      "assetCount": 26
+    },
+    {
+      "file": "vendor_interface_audio.json",
+      "sha256": "28e1100a4e647d99a2ffc7a753928d5d793c44e9c176969790ccdf17c537cce7",
+      "assetCount": 22
+    },
+    {
+      "file": "vendor_effects.json",
+      "sha256": "3c3a5297650ed0285f812831e60a315fd22875b063eb071cfcf54e4c43724e3c",
+      "assetCount": 11
     }
   ],
   "packs": [

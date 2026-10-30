@@ -1,3 +1,14 @@
+# Latest owner instruction — complete existing material configuration and publish
+
+The owner requested all existing material configuration completed before upload.
+The three heroes and Twin Gates are released gameplay, not a trial: normal
+rewards, ordinary map selection and compatible network rotation are required.
+Build 472 is the preceding release. Current changes are described in
+[arena-material-configuration.md](arena-material-configuration.md).
+The latest instruction to defer full gameplay/recordings remains in force;
+compilation, core checks, resource identities and archive inclusion remain required.
+Historical sections below describe earlier stages and are not current scope gates.
+
 ## Current task — restore the complete game after Build 471
 
 2026-10-30: The owner reported that 471 shows only three heroes and no old maps.

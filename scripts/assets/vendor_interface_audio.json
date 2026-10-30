@@ -1,0 +1,142 @@
+[
+  {
+    "pack": "kenney-ui-pack",
+    "source": "PNG/Extra/Double/input_square.png",
+    "file": "vendor_interface_panel.png",
+    "usage": "menu.cardBackground"
+  },
+  {
+    "pack": "kenney-ui-pack",
+    "source": "PNG/Blue/Double/check_square_color_checkmark.png",
+    "file": "vendor_interface_check_on.png",
+    "usage": "menu.enabledToggle"
+  },
+  {
+    "pack": "kenney-ui-pack",
+    "source": "PNG/Grey/Double/check_square_grey.png",
+    "file": "vendor_interface_check_off.png",
+    "usage": "menu.disabledToggle"
+  },
+  {
+    "pack": "kenney-ui-pack",
+    "source": "PNG/Blue/Double/slide_horizontal_grey.png",
+    "file": "vendor_interface_slider_track.png",
+    "usage": "menu.volumeTrack"
+  },
+  {
+    "pack": "kenney-ui-pack",
+    "source": "PNG/Blue/Double/slide_horizontal_color.png",
+    "file": "vendor_interface_slider_fill.png",
+    "usage": "menu.volumeFill"
+  },
+  {
+    "pack": "kenney-ui-pack",
+    "source": "PNG/Blue/Double/slide_hangle.png",
+    "file": "vendor_interface_slider_thumb.png",
+    "usage": "menu.volumeThumb"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/musicOn.png",
+    "file": "vendor_interface_music_on.png",
+    "usage": "settings.musicEnabled"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/musicOff.png",
+    "file": "vendor_interface_music_off.png",
+    "usage": "settings.musicMuted"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/audioOn.png",
+    "file": "vendor_interface_sound_on.png",
+    "usage": "settings.effectsEnabled"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/audioOff.png",
+    "file": "vendor_interface_sound_off.png",
+    "usage": "settings.effectsMuted"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/gear.png",
+    "file": "vendor_interface_settings.png",
+    "usage": "menu.settingsHeading"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/home.png",
+    "file": "vendor_interface_home.png",
+    "usage": "menu.heading"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/locked.png",
+    "file": "vendor_interface_locked.png",
+    "usage": "hero.locked"
+  },
+  {
+    "pack": "kenney-game-icons",
+    "source": "PNG/White/2x/information.png",
+    "file": "vendor_interface_information.png",
+    "usage": "settings.audioInformation"
+  },
+  {
+    "pack": "kenney-impact-sounds",
+    "source": "Audio/impactPunch_heavy_000.ogg",
+    "file": "vendor_ko.wav",
+    "usage": "combat.knockout",
+    "audio": true
+  },
+  {
+    "pack": "kenney-rpg-audio",
+    "source": "Audio/handleCoins2.ogg",
+    "file": "vendor_pickup.wav",
+    "usage": "combat.pickup",
+    "audio": true
+  },
+  {
+    "pack": "kenney-rpg-audio",
+    "source": "Audio/cloth1.ogg",
+    "file": "vendor_blink.wav",
+    "usage": "combat.blink",
+    "audio": true
+  },
+  {
+    "pack": "kenney-rpg-audio",
+    "source": "Audio/metalLatch.ogg",
+    "file": "vendor_gadget.wav",
+    "usage": "combat.gadget",
+    "audio": true
+  },
+  {
+    "pack": "kenney-interface-sounds",
+    "source": "Audio/error_001.ogg",
+    "file": "vendor_ui_error.wav",
+    "usage": "menu.rejectedAction",
+    "audio": true
+  },
+  {
+    "pack": "kenney-interface-sounds",
+    "source": "Audio/confirmation_003.ogg",
+    "file": "vendor_ui_upgrade.wav",
+    "usage": "hero.upgrade",
+    "audio": true
+  },
+  {
+    "pack": "kenney-music-jingles",
+    "source": "Audio/Pizzicato jingles/jingles_PIZZI01.ogg",
+    "file": "vendor_ui_reward.wav",
+    "usage": "progress.rewardClaim",
+    "audio": true
+  },
+  {
+    "pack": "kenney-impact-sounds",
+    "source": "Audio/footstep_wood_000.ogg",
+    "file": "vendor_step_wood.wav",
+    "usage": "player.woodPavingFootstep",
+    "audio": true
+  }
+]

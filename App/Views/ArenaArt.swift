@@ -224,12 +224,13 @@ enum ArenaArt {
         return material
     }
 
-    /// 普通地图也使用已打包的箱桶。其余墙仍合并绘制，模型共享网格并限制数量。
-    static func walls(_ cells: [(x: Int, y: Int, kind: Wall)]) -> SCNNode {
+    /// 按地图配置选择已下载的木箱、桶和石材；其余墙保持合并绘制。
+    static func walls(_ cells: [(x: Int, y: Int, kind: Wall)], palette: ArenaMapAssets.Palette? = nil) -> SCNNode {
         var mesh = Mesh(parts: 10)
         let root = SCNNode()
         root.name = "arena-wall-cells"
         let cargoCount = cells.reduce(0) { count, cell in
+            if palette != nil { return count + 1 }
             switch cell.kind {
             case .crate, .barrel: return count + 1
             case .stone: return count
@@ -237,24 +238,34 @@ enum ArenaArt {
         }
         // Spread at most 24 instances across the whole map instead of adding
         // a separate model to every wall. Existing collision cells do not move.
-        let shown = min(cargoCount, 24)
+        let shown = min(cargoCount, ArenaMapAssets.wallLimit)
         let cargoSlots: Set<Int> = shown == 0 ? [] : Set((0..<shown).map { $0 * cargoCount / shown })
-        let crate = shown > 0 ? ArenaVendorAssets.prop("vendor_crates.glb", width: 0.96, height: 1.02) : nil
-        let barrel = shown > 0 ? ArenaVendorAssets.prop("vendor_barrel.glb", width: 0.96, height: 1.02) : nil
+        let files = palette.map { Set($0.crates + $0.barrels + $0.stones) }
+            ?? Set(["vendor_crates.glb", "vendor_barrel.glb"])
+        var templates: [String: SCNNode] = [:]
+        if shown > 0 {
+            for file in files {
+                templates[file] = ArenaVendorAssets.prop(file, width: 0.96, height: 1.02)
+            }
+        }
         var cargoIndex = 0
         var hasProceduralWalls = false
         for cell in cells {
             let foot = SIMD3(Float(cell.x) + 0.5, 0, Float(cell.y) + 0.5)
-            let template: SCNNode?
-            switch cell.kind {
-            case .crate: template = crate
-            case .barrel: template = barrel
-            case .stone: template = nil
+            let file: String?
+            if let palette {
+                file = palette.wall(cell.kind, variant: cell.x * 7 + cell.y * 11)
+            } else {
+                switch cell.kind {
+                case .crate: file = "vendor_crates.glb"
+                case .barrel: file = "vendor_barrel.glb"
+                case .stone: file = nil
+                }
             }
-            if cell.kind != .stone {
+            if let file {
                 let useCargo = cargoSlots.contains(cargoIndex)
                 cargoIndex += 1
-                if useCargo, let template {
+                if useCargo, let template = templates[file] {
                     let cargo = template.clone()
                     cargo.simdPosition = foot
                     cargo.castsShadow = false
