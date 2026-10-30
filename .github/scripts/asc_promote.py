@@ -12,21 +12,22 @@ import time
 import urllib.parse
 import urllib.request
 
-SAMPLE_RELEASE_469 = {
-    "build_number": "469",
-    "source_sha": "fcb8505682f9d065edfcf196f5554863d95d8a2a",
-    "source_run_id": 41048809336,
-    "source_sample_run_id": 41048809190,
+SAMPLE_RELEASE_470 = {
+    "build_number": "470",
+    "source_sha": "359a63e21bad542d0fecf22bc7d1834e248d0963",
+    "source_run_id": 41052098798,
+    "source_sample_run_id": 41052098772,
 }
 
 
 def is_sample_release(request):
     assert request.get("build_number") != "468", "Build 468 was cancelled by the owner"
-    if request.get("build_number") != "469" and "source_sample_run_id" not in request:
+    assert request.get("build_number") != "469", "Build 469 failed validation"
+    if request.get("build_number") != "470" and "source_sample_run_id" not in request:
         return False
-    for key, value in SAMPLE_RELEASE_469.items():
+    for key, value in SAMPLE_RELEASE_470.items():
         assert request.get(key) == value, f"Sample promotion identity mismatch: {key}"
-    assert not request.get("skip_visual_capture"), "469 requires full sample validation"
+    assert not request.get("skip_visual_capture"), "470 requires full sample validation"
     return True
 
 def call(method, path, body=None):
@@ -176,9 +177,9 @@ def wait_for_source(request):
         while time.monotonic() < deadline:
             if sample_sources_ready(request):
                 return
-            print("Waiting for exact 469 iOS and all three hero/sample checks", flush=True)
+            print("Waiting for exact 470 iOS and all three hero/sample checks", flush=True)
             time.sleep(30)
-        raise TimeoutError("469 validation did not finish within 90 minutes; nothing uploaded")
+        raise TimeoutError("470 validation did not finish within 90 minutes; nothing uploaded")
     sources = {
         ("417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"): "codex/arena-audio-performance",
         ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"): "codex/arena-reference-fidelity",
@@ -223,7 +224,7 @@ def preflight(request):
     validate_source(request, github(f"/actions/runs/{run_id}"),
                     github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"])
     if is_sample_release(request):
-        assert sample_sources_ready(request), "469 validation is incomplete"
+        assert sample_sources_ready(request), "470 validation is incomplete"
     build = find_build(request)
     output("upload_required", "false" if build else "true")
     output("source_sha", request["source_sha"])
@@ -321,7 +322,7 @@ def main():
         verify_archive(request, args.path)
     elif args.command == "guard":
         if is_sample_release(request):
-            assert sample_sources_ready(request), "469 validation changed before upload"
+            assert sample_sources_ready(request), "470 validation changed before upload"
         assert find_build(request) is None, "Build already exists; stop before uploading it again"
     else:
         finish(request, args.uploaded)
