@@ -119,6 +119,14 @@ final class ArenaController: ObservableObject {
     let me: Int
     private(set) var qualitySample = false
     private(set) var benchmark = false
+    // Opt-in capture fixture only; normal trials and network games never use this route.
+    private(set) var captureTraversal = false
+    private var captureWaypoint = 0
+    private(set) var captureTrace: [[String: Double]] = []
+    private var nextCaptureTrace = 0.0
+    private static let captureRoute = [V2(6.5, 13.5), V2(6.5, 11.5), V2(2.5, 11.5),
+        V2(2.5, 9.45), V2(8.5, 9.45), V2(8.5, 13.5)]
+    var captureRouteComplete: Bool { captureTraversal && captureWaypoint == Self.captureRoute.count }
     private(set) var diagnosticScenario: ArenaDiagnosticScenario?
     var benchmarkSnapshotTime: Double {
         benchmark && diagnosticScenario == nil ? UserDefaults.standard.double(forKey: "arena.snapshotTime") : 0
@@ -233,7 +241,8 @@ final class ArenaController: ObservableObject {
                     entrants[i].loadout = ArenaLoadout.basic(entrants[i].brawler, level: setup.level)
                 }
             }
-            if setup.diagnosticScenario == .empty || setup.diagnosticScenario == .soloWalk || setup.diagnosticScenario == .manualTraversal {
+            if setup.diagnosticScenario == .empty || setup.diagnosticScenario == .soloWalk || setup.diagnosticScenario == .manualTraversal ||
+                (setup.benchmark && setup.qualitySample && setup.benchmarkTwinGates && UserDefaults.standard.bool(forKey: "arena.captureTraversal")) {
                 entrants = Array(entrants.prefix(1))
             }
             built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
@@ -242,6 +251,8 @@ final class ArenaController: ObservableObject {
         qualitySample = setup.qualitySample
         benchmark = setup.benchmark
         diagnosticScenario = setup.diagnosticScenario
+        captureTraversal = setup.benchmark && setup.qualitySample && setup.benchmarkTwinGates &&
+            UserDefaults.standard.bool(forKey: "arena.captureTraversal")
         if benchmark {
             let positions = benchmarkPositions
             for i in game.fighters.indices {
@@ -350,7 +361,7 @@ final class ArenaController: ObservableObject {
             remoteEmotes = [:]
         }
         ArenaDiagnostics.shared.measure(.ai) {
-            if ArenaDiagnostics.shared.variant != .noAI && diagnosticScenario != .empty && diagnosticScenario != .soloWalk && diagnosticScenario != .manualTraversal {
+            if !captureTraversal && ArenaDiagnostics.shared.variant != .noAI && diagnosticScenario != .empty && diagnosticScenario != .soloWalk && diagnosticScenario != .manualTraversal {
                 for k in bots.indices {
                     var input = bots[k].input(in: game, dt: Self.step)
                     if diagnosticScenario == .crowdWalk {
@@ -366,8 +377,20 @@ final class ArenaController: ObservableObject {
                 inputs[me] = ArenaInput()
             }
         }
+        if captureTraversal {
+            if captureWaypoint < Self.captureRoute.count {
+                let delta = Self.captureRoute[captureWaypoint] - mine.pos
+                if delta.length < 0.09 { captureWaypoint += 1 }
+                inputs[me] = ArenaInput(move: delta.length < 0.09 ? .zero : delta.normalized)
+            } else { inputs[me] = ArenaInput() }
+        }
         ArenaDiagnostics.shared.measure(.simulation) {
             game.step(Self.step, inputs: inputs)
+        }
+        if captureTraversal && game.time >= nextCaptureTrace {
+            captureTrace.append(["time": game.time, "x": mine.pos.x, "y": mine.pos.y,
+                                 "waypoint": Double(captureWaypoint)])
+            nextCaptureTrace = game.time + 0.1
         }
         ArenaDiagnostics.shared.record(.collision, seconds: game.collisionCPUSeconds)
         if diagnosticScenario == .combat {

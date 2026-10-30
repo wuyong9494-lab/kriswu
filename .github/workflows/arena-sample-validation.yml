@@ -9,6 +9,7 @@ on:
       - '.github/workflows/arena-sample-validation.yml'
       - '.github/scripts/record_arena_sample.py'
       - '.github/scripts/check_arena_video.swift'
+      - '.github/scripts/check_arena_video.py'
       - 'project.yml'
   workflow_dispatch:
 permissions:
@@ -38,7 +39,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p 'test_*arena_sample.py'
           python3 scripts/assets/validate_ranger.py
           python3 scripts/assets/validate_ranger.py --face-sample
-          brew install xcodegen
+          brew install xcodegen ffmpeg
           python3 .github/scripts/build_identity.py
           xcodegen generate
       - name: Build simulator application
@@ -53,7 +54,6 @@ jobs:
         timeout-minutes: 5
         run: |
           swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
-          swiftc .github/scripts/check_arena_video.swift -o /tmp/check-sample-video
       - name: Boot installed sample application
         timeout-minutes: 8
         shell: bash -eo pipefail {0}
@@ -103,7 +103,12 @@ jobs:
         timeout-minutes: 6
         run: |
           python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion
-          /tmp/check-sample-video sample-shots/motion/harbor-opening.mp4
+          python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-opening.mp4
+      - name: Record fixed wall and grass traversal
+        timeout-minutes: 7
+        run: |
+          python3 .github/scripts/record_arena_sample.py "$SAMPLE_DEVICE" sample-shots/motion traversal
+          python3 .github/scripts/check_arena_video.py sample-shots/motion/harbor-traversal.mp4
       - name: Shut down sample simulator
         if: always()
         timeout-minutes: 2

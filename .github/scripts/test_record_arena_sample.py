@@ -66,4 +66,27 @@ class RecordingContractTests(unittest.TestCase):
         self.assertFalse(exists)
 
 
+class TraversalEvidenceTests(unittest.TestCase):
+    def fixture(self):
+        trace = [dict(time=i * .1, x=2.5, y=10.5) for i in range(80)]
+        trace[40].update(x=5.5, y=9.45)
+        return dict(captureTraversal=True, routeComplete=True, routeTrace=trace)
+
+    def test_completed_route_requires_both_wall_and_grass_positions(self):
+        evidence = self.fixture()
+        capture.validate_traversal(evidence)
+        evidence['routeTrace'][40]['y'] = 10.5
+        with self.assertRaises(RuntimeError): capture.validate_traversal(evidence)
+
+    def test_stalled_route_cannot_pass(self):
+        evidence = self.fixture()
+        evidence['routeComplete'] = False
+        with self.assertRaises(RuntimeError): capture.validate_traversal(evidence)
+
+    def test_nonmonotonic_trace_cannot_pass(self):
+        evidence = self.fixture()
+        evidence['routeTrace'][40]['time'] = 0
+        with self.assertRaises(RuntimeError): capture.validate_traversal(evidence)
+
+
 if __name__ == '__main__': unittest.main()

@@ -35,7 +35,7 @@ def capture_menus(device, output, data):
         marker.unlink(missing_ok=True)
         model_marker.unlink(missing_ok=True)
         simctl('launch', device, APP_ID, '-demo', '-screen', screen,
-               '-arena.previewRanger', 'YES', '-arena.rangerStill', 'YES', '-arena.legacyRanger', 'NO')
+               '-arena.previewRanger', 'YES', '-arena.rangerStill', 'YES', '-arena.legacyRanger', 'NO', '-arena.captureTraversal', 'NO')
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             evidence = json.loads(marker.read_text()) if marker.exists() else {}
@@ -93,7 +93,7 @@ def main():
         stop_app(device)
         marker.unlink(missing_ok=True)
         simctl('launch', device, APP_ID, '-demo', '-screen', screen,
-               '-arena.purpleSample', 'NO' if scene == 'harbor' else 'YES', '-arena.snapshotTime', str(target), '-arena.legacyRanger', 'NO')
+               '-arena.purpleSample', 'NO' if scene == 'harbor' else 'YES', '-arena.snapshotTime', str(target), '-arena.legacyRanger', 'NO', '-arena.captureTraversal', 'NO')
         deadline = time.monotonic() + 120
         evidence = None
         while time.monotonic() < deadline:

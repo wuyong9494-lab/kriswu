@@ -2,26 +2,29 @@ import SceneKit
 import UIKit
 
 /// Trial-only ranger projectile. Team silhouette survives super/hyper accents.
-/// The floor ring is the projectile radius, not a promise about target-centre hits.
+/// Only supers project their radius onto the floor; normal bolts keep a clean airborne silhouette.
 @MainActor
 enum ArenaSampleBolt {
     static func make(radius: CGFloat, ally: Bool, isSuper: Bool, hyper: Bool, height: Float) -> SCNNode {
         let root = SCNNode()
         root.name = "sample-ranger-bolt"
         let team = ally ? ArenaPalette.allyShot : ArenaPalette.enemyShot
-        let length: CGFloat = isSuper ? 0.9 : 0.65
-        root.addChildNode(wedge(name: "team-shell", width: radius * 2, length: length, color: team))
+        let length: CGFloat = isSuper ? 0.78 : 0.55
+        root.addChildNode(wedge(name: "team-shell", width: radius * 1.55, length: length, color: team))
         let accent = isSuper ? (hyper ? ArenaPalette.hyper : ArenaPalette.gold) : UIColor(white: 0.85, alpha: 1)
-        let core = wedge(name: "strength-core", width: radius * 0.9, length: length * 0.72, color: accent)
+        let core = wedge(name: "strength-core", width: radius * 0.6, length: length * 0.64, color: accent)
         core.position.y = 0.012
         root.addChildNode(core)
-        let tail = wedge(name: "short-tail", width: radius * 0.7, length: 0.35, color: team.withAlphaComponent(0.3))
-        tail.position.z = -Float(length * 0.5 + 0.12)
+        let tail = wedge(name: "short-tail", width: radius * 0.45, length: 0.22, color: team.withAlphaComponent(0.3))
+        tail.position.z = -Float(length * 0.5 + 0.08)
         root.addChildNode(tail)
 
-        let tube = SCNTube(innerRadius: max(0, radius - 0.035), outerRadius: radius, height: 0.008)
+        // The airborne shell communicates team/strength. Repeated normal-shot
+        // ground rings visually joined the tips into musical-note silhouettes.
+        guard isSuper else { return root }
+        let tube = SCNTube(innerRadius: max(0, radius - 0.018), outerRadius: radius, height: 0.008)
         tube.radialSegmentCount = 24
-        tube.firstMaterial = material(team.withAlphaComponent(0.85))
+        tube.firstMaterial = material(team.withAlphaComponent(0.42))
         let footprint = SCNNode(geometry: tube)
         footprint.name = "collision-radius"
         footprint.position.y = 0.04 - height
@@ -48,9 +51,9 @@ enum ArenaSampleBolt {
     private static func wedge(name: String, width: CGFloat, length: CGFloat, color: UIColor) -> SCNNode {
         // XZ plane, facing +Z (same convention as the simulation velocity).
         let vertices = [SCNVector3(0, 0, Float(length / 2)),
-                        SCNVector3(-Float(width / 2), 0, -Float(length / 2)),
-                        SCNVector3(0, 0, -Float(length * 0.3)),
-                        SCNVector3(Float(width / 2), 0, -Float(length / 2))]
+                        SCNVector3(-Float(width / 2), 0, -Float(length * 0.12)),
+                        SCNVector3(0, 0, -Float(length / 2)),
+                        SCNVector3(Float(width / 2), 0, -Float(length * 0.12))]
         let geometry = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices)],
                                   elements: [SCNGeometryElement(indices: [Int32(0), 1, 2, 0, 2, 3], primitiveType: .triangles)])
         geometry.firstMaterial = material(color)

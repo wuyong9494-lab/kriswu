@@ -354,6 +354,9 @@ final class ArenaWorldView: SCNView {
                     "deviceWidth": bounds.width, "deviceHeight": bounds.height,
                     "rangerAsset": BrawlerLook.of(.ranger, qualitySample: controller.qualitySample).file,
                     "qualitySample": controller.qualitySample,
+                    "captureTraversal": controller.captureTraversal,
+                    "routeComplete": controller.captureRouteComplete,
+                    "routeTrace": controller.captureTrace,
                     "fighters": controller.game.fighters.map { ["id": $0.id, "x": $0.pos.x, "y": $0.pos.y,
                         "health": $0.health, "alive": $0.alive] as [String: Any] }]
                 if let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) {

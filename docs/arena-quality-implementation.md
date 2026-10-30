@@ -169,3 +169,11 @@ d4301a5应用运行41010956860与专项41010956923均成功。artifact1295744383
 人物信息层级增量：样板非原创角色及手持道具的描边由世界宽0.048改为0.024米，颜色改为暗蓝灰；复制独立材质，仍为不透明正面剔除壳，不新增pass或透明层，普通模式保留原描边，原创游侠仍不加壳。样板伤害/治疗数字分置左右0.78格并提高起点，浮字高度0.48降为0.40；保留可见性过滤、合并金额与伤害规则。该增量尚未编译/截图验收，不能据代码宣称遮挡已解决。
 
 a581802应用及专项检查通过，实际查看双闸combat：尖端轮廓出现，但草过稀、方形底色明显，不通过草丛视觉验收。完整rawvideo解码零错误，仅证明媒体完整。继续改11叶内外两层、扁平比例0.8，维持低高度/共享网格/单材质，不动地图和碰撞；每格三角形由504升为792，成本增加须真机验证。与薄描边/数字错位一起进入下一轮。
+
+### 2026-10-30 — fixed traversal capture and ranger bolt readability (pending CI)
+
+- Added an opt-in Twin Gates capture route, isolated from normal trials/network play. One ranger follows actual movement/collision around the west wall and through grass, then returns. Position/time/waypoint traces and completion are exported. The recording gate rejects stalled, missing wall/grass, or nonmonotonic evidence. This zone fixture has no power boxes; box traversal remains unverified.
+- Kept opening combat recording separately. Added a 16-second traversal recording and full-file decode check; explicitly resets the fixture flag for normal captures. Thirteen Python capture tests pass locally. Swift compilation and route completion require the next macOS CI; no local Swift runtime is available.
+- Actual a581802 combat screenshot showed ranger projectile floor rings visually joining their airborne wedges. Normal bolts now omit the floor ring and use a shorter, narrower kite-shaped core/tail. Super radius projection remains exact but thinner/fainter. No simulation radius, damage, timing or cooldown changes. Visual result pending capture.
+
+- Build 459 (`8832565`) application/core/44 animation tests passed. Actual combat screenshot confirms thinner outlines and separated damage text; denser grass still has tiled gaps, not accepted as final. Six screenshots captured. Its 33.468-second H.264 recording contains 760 frames and fully software-decodes with zero errors locally. CI AVFoundation reported `AppleM2ScalerParavirtDriver` then -11821/-12137 decode failure. This identifies a decoder-path discrepancy, not evidence of a gameplay rendering failure. Replaced the CI gate with explicit software decoding plus strict frame timestamps/dimensions/duration validation; no claim of successful AVFoundation playback.
