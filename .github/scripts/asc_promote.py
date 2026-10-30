@@ -12,6 +12,22 @@ import time
 import urllib.parse
 import urllib.request
 
+SAMPLE_RELEASE_468 = {
+    "build_number": "468",
+    "source_sha": "64edcdb84fa1590324c7e441e742dfd88b0730ed",
+    "source_run_id": 41040595403,
+    "source_sample_run_id": 41040595535,
+}
+
+
+def is_sample_release(request):
+    if request.get("build_number") != "468" and "source_sample_run_id" not in request:
+        return False
+    for key, value in SAMPLE_RELEASE_468.items():
+        assert request.get(key) == value, f"Sample promotion identity mismatch: {key}"
+    assert not request.get("skip_visual_capture"), "468 requires full sample validation"
+    return True
+
 def call(method, path, body=None):
     # Keep offline validation independent of signing/network dependencies.
     from asc_whats_new import call as asc_call
@@ -27,6 +43,7 @@ def load_request(path):
     assert isinstance(request["source_run_id"], int), "Source CI run required"
     assert isinstance(request["version"], str) and request["version"], "Marketing version required"
     assert request["notes"], "Testing notes required"
+    is_sample_release(request)
     return request
 
 
@@ -40,6 +57,7 @@ def github(path):
 
 
 def validate_source(request, run, jobs):
+    is_sample_release(request)
     assert run["head_sha"] == request["source_sha"], "CI checked a different commit"
     assert str(run["run_number"]) == request["build_number"], "CI build number mismatch"
     assert run["path"] == ".github/workflows/ios.yml", "Unexpected source workflow"
@@ -73,6 +91,46 @@ def validate_source(request, run, jobs):
         assert len(matched) == 1 and matched[0]["conclusion"] == "success", f"Required check failed: {name}"
 
 
+def validate_sample(request, run, jobs):
+    assert is_sample_release(request), "Unexpected sample promotion"
+    assert run["id"] == request["source_sample_run_id"], "Wrong sample run"
+    assert run["head_sha"] == request["source_sha"], "Sample checked a different commit"
+    assert run["head_branch"] == "codex/arena-quality-sample", "Unexpected sample branch"
+    assert run["path"] == ".github/workflows/arena-sample-validation.yml", "Unexpected sample workflow"
+    assert run["status"] == "completed" and run["conclusion"] == "success", "Sample CI did not pass"
+    for name in ("sample-capture", "hero-flow (1, testRangerLoop)",
+                 "hero-flow (2, testBarbarianLoop)", "hero-flow (3, testMageLoop)"):
+        matched = [job for job in jobs if job["name"] == name]
+        assert len(matched) == 1 and matched[0]["conclusion"] == "success", f"Required sample check failed: {name}"
+        if name != "sample-capture":
+            steps = matched[0].get("steps") or []
+            for step_name in ("Record and exercise real hero flow",
+                              "Validate natural result and continuous original recording"):
+                found = [step for step in steps if step["name"] == step_name]
+                assert len(found) == 1 and found[0]["conclusion"] == "success", f"Missing passed evidence step: {name}/{step_name}"
+
+
+def sample_sources_ready(request):
+    assert is_sample_release(request), "Unexpected sample promotion"
+    head = github("/git/ref/heads/codex/arena-quality-sample")
+    assert head["object"]["sha"] == request["source_sha"], "Source superseded; refusing stale release"
+    ready = True
+    failed = {"failure", "cancelled", "timed_out", "action_required", "stale", "startup_failure"}
+    for key, validator in (("source_run_id", validate_source), ("source_sample_run_id", validate_sample)):
+        run_id = request[key]
+        run = github(f"/actions/runs/{run_id}")
+        assert run["id"] == run_id and run["head_sha"] == request["source_sha"], "Unexpected source run"
+        assert run.get("conclusion") not in failed, f"Required validation failed: {run_id}"
+        jobs = github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"]
+        for job in jobs:
+            assert job.get("conclusion") not in failed, f"Required validation failed: {job['name']}"
+        if run["status"] == "completed":
+            validator(request, run, jobs)
+        else:
+            ready = False
+    return ready
+
+
 def find_build(request):
     query = urllib.parse.urlencode({"filter[bundleId]": request["bundle_id"]})
     apps = call("GET", "/apps?" + query)["data"]
@@ -102,6 +160,8 @@ def output(name, value):
 
 def save_report(path, request, **values):
     report = {key: request[key] for key in ("build_number", "version", "source_sha", "source_run_id")}
+    if "source_sample_run_id" in request:
+        report["source_sample_run_id"] = request["source_sample_run_id"]
     report.update(values)
     Path(path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(report, ensure_ascii=False), flush=True)
@@ -110,6 +170,14 @@ def save_report(path, request, **values):
 def wait_for_source(request):
     if not request.get("wait_for_source"):
         return
+    if is_sample_release(request):
+        deadline = time.monotonic() + 5400
+        while time.monotonic() < deadline:
+            if sample_sources_ready(request):
+                return
+            print("Waiting for exact 468 iOS and all three hero/sample checks", flush=True)
+            time.sleep(30)
+        raise TimeoutError("468 validation did not finish within 90 minutes; nothing uploaded")
     sources = {
         ("417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"): "codex/arena-audio-performance",
         ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"): "codex/arena-reference-fidelity",
@@ -153,6 +221,8 @@ def preflight(request):
     run_id = request["source_run_id"]
     validate_source(request, github(f"/actions/runs/{run_id}"),
                     github(f"/actions/runs/{run_id}/jobs?per_page=100")["jobs"])
+    if is_sample_release(request):
+        assert sample_sources_ready(request), "468 validation is incomplete"
     build = find_build(request)
     output("upload_required", "false" if build else "true")
     output("source_sha", request["source_sha"])
@@ -249,6 +319,8 @@ def main():
     elif args.command == "archive":
         verify_archive(request, args.path)
     elif args.command == "guard":
+        if is_sample_release(request):
+            assert sample_sources_ready(request), "468 validation changed before upload"
         assert find_build(request) is None, "Build already exists; stop before uploading it again"
     else:
         finish(request, args.uploaded)
@@ -256,4 +328,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

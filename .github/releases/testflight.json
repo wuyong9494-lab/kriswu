@@ -1,11 +1,11 @@
 {
-  "build_number": "425",
+  "build_number": "468",
   "version": "1.2",
-  "source_sha": "5b298adf9e4a4adb3e2755daf2491f87b14ff93a",
-  "source_run_id": 40908539488,
+  "source_sha": "64edcdb84fa1590324c7e441e742dfd88b0730ed",
+  "source_run_id": 41040595403,
+  "source_sample_run_id": 41040595535,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "notes": "大厅更新：月夜城市背景、资源栏、角色徽章与装备状态、升级及皮肤入口、通行证与任务刷新提示、对战区域和多尺寸布局。修复冒险入口、顶部重叠及窄屏溢出。按用户最新授权直接发布，跳过截图验收，保留设备编译、核心测试及iOS专项测试。原版大厅完全一致性和真机表现尚未验证。",
-  "wait_for_source": true,
-  "skip_visual_capture": true
+  "notes": "本版用于测试游侠、蛮王、法师的英雄选择、地图选择、移动、普攻、超级技能、自然结算及返回大厅流程。修复入场动画期间误操作、场景自动化节点暴露及首次启动采集；改进真实摇杆导航和连续录像验证。发布要求同一源码的设备构建、核心测试、iOS专项回归、场景采集及三英雄完整流程全部通过。现有模型、素材和引擎保留。真机持续60FPS、长时间热稳定性及最终美术／音效效果仍需实机复测。",
+  "wait_for_source": true
 }
