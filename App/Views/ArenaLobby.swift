@@ -51,7 +51,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics
+        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics, sample
         var id: String { rawValue }
     }
 
@@ -809,7 +809,14 @@ struct ArenaHomeView: View {
     // MARK: 面板
 
     @ViewBuilder private func sheetContent(_ item: Sheet) -> some View {
-        if item == .diagnostics {
+        if item == .sample {
+            ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
+                pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
+                    mode: .zone, brawler: .ranger, name: name, level: progress.level(.ranger),
+                    loadout: progress.loadout(for: .ranger), qualitySample: true))
+                sheet = nil
+            })
+        } else if item == .diagnostics {
             ArenaDiagnosticSuiteView()
         } else if item == .settings {
             ArenaMenuScreen(title: "设置", onClose: { sheet = nil }) { settingsPanel }
@@ -829,7 +836,7 @@ struct ArenaHomeView: View {
             case .shop: shopBoard
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
-            case .diagnostics: EmptyView()
+            case .diagnostics, .sample: EmptyView()
             }
         }
         }
@@ -848,6 +855,7 @@ struct ArenaHomeView: View {
         case .season: return "赛季"
         case .settings: return "设置"
         case .diagnostics: return "持续性能诊断"
+        case .sample: return "蓝月港试玩"
         }
     }
 
@@ -864,6 +872,7 @@ struct ArenaHomeView: View {
         case .season: return Color(red: 0.6, green: 0.4, blue: 0.95)
         case .settings: return Color(red: 0.45, green: 0.5, blue: 0.58)
         case .diagnostics: return .purple
+        case .sample: return .cyan
         }
     }
 
@@ -1092,6 +1101,13 @@ struct ArenaHomeView: View {
                 .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face,
                                             edge: ArenaGameButton.blue.edge, height: 104))
                 .accessibilityIdentifier("arena.sample.twinGates")
+
+                Button { sheet = .sample } label: {
+                    Label("查看游侠与双闸地图", systemImage: "viewfinder")
+                        .font(.system(size: 15, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .accessibilityIdentifier("arena.sample.review")
 
                 ForEach(ArenaGame.Mode.allCases, id: \.self) { item in
                     Button {
@@ -1669,13 +1685,14 @@ struct ArenaShowcase: UIViewRepresentable {
     var skin = 0
     /// 大厅被盖住（进对局、开房间、冒险、二级菜单）时停掉，避免两套 SceneKit 一起画
     var live = true
+    var qualitySample = false
 
     func makeUIView(context: Context) -> ArenaShowcaseView {
-        ArenaShowcaseView(brawler: brawler, skin: skin)
+        ArenaShowcaseView(brawler: brawler, skin: skin, qualitySample: qualitySample)
     }
 
     func updateUIView(_ view: ArenaShowcaseView, context: Context) {
-        view.show(brawler, skin: skin)
+        view.show(brawler, skin: skin, qualitySample: qualitySample)
         if live { view.start() } else { view.stop() }
     }
 
@@ -1705,11 +1722,12 @@ final class ArenaShowcaseView: SCNView {
     private var taps = 0
     /// 现在穿的第几套皮肤
     private var wearing = 0
+    private(set) var qualitySample = false
     private var showcaseMaterials: [SCNMaterial] = []
     private var captureReadyWritten = false
     private var captureLayoutSize = CGSize.zero
 
-    init(brawler: Brawler, skin: Int = 0) {
+    init(brawler: Brawler, skin: Int = 0, qualitySample: Bool = false) {
         fighter = Fighter(id: 0, name: "", team: 0, brawler: brawler, isBot: false, level: 1, pos: .zero, facing: V2(0, 1), health: 1)
         super.init(frame: .zero, options: nil)
         backgroundColor = .clear
@@ -1720,7 +1738,7 @@ final class ArenaShowcaseView: SCNView {
         world.background.contents = UIColor.clear
         scene = world
         build()
-        show(brawler, skin: skin)
+        show(brawler, skin: skin, qualitySample: qualitySample)
         addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         isAccessibilityElement = true
@@ -1845,7 +1863,7 @@ final class ArenaShowcaseView: SCNView {
               window.bounds.width > window.bounds.height,
               ProcessInfo.processInfo.arguments.contains("-demo"),
               UserDefaults.standard.bool(forKey: "arena.previewRanger") || UserDefaults.standard.string(forKey: "arena.previewBrawler") != nil else { return }
-        let evidence: [String: Any] = ["scene": "rangerLobby", "asset": BrawlerLook.of(fighter.brawler).file, "brawler": fighter.brawler.rawValue,
+        let evidence: [String: Any] = ["scene": "rangerLobby", "asset": BrawlerLook.of(fighter.brawler, qualitySample: qualitySample).file, "qualitySample": qualitySample, "brawler": fighter.brawler.rawValue,
             "legacy": BrawlerLook.legacyRangerComparison, "still": comparisonStill,
             "viewWidth": bounds.width, "viewHeight": bounds.height,
             "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
@@ -1859,10 +1877,11 @@ final class ArenaShowcaseView: SCNView {
     }
 
     /// 换角色、换皮肤：换模型，先欢呼一下
-    func show(_ brawler: Brawler, skin: Int = 0) {
-        guard avatar?.brawler != brawler || skin != wearing else { return }
+    func show(_ brawler: Brawler, skin: Int = 0, qualitySample: Bool = false) {
+        guard avatar?.brawler != brawler || skin != wearing || self.qualitySample != qualitySample else { return }
+        self.qualitySample = qualitySample
         avatar?.node.removeFromParentNode()
-        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.86, skin: skin, stageLit: true)
+        let made = ArenaAvatar(brawler: brawler, color: .clear, isMe: false, decorated: false, size: 0.86, skin: skin, stageLit: true, qualitySample: qualitySample)
         stage.addChildNode(made.node)
         avatar = made
         configureShowcaseMaterials(made.node)

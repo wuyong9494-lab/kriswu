@@ -45,6 +45,25 @@ final class ArenaRangerTests: XCTestCase {
         XCTAssertLessThan(model.animated.count, 22, "Static anchors should not be sampled every frame")
     }
 
+    func testShowcaseCanSwitchBetweenOriginalAndSampleWithoutStaleModel() {
+        let view = ArenaShowcaseView(brawler: .ranger)
+        defer { view.stop() }
+        func jointCounts() -> [Int] {
+            var counts: [Int] = []
+            view.scene?.rootNode.enumerateChildNodes { node, _ in
+                if let skinner = node.skinner { counts.append(skinner.bones.count) }
+            }
+            return counts
+        }
+        XCTAssertTrue(jointCounts().contains(22))
+        view.show(.ranger, qualitySample: true)
+        XCTAssertTrue(jointCounts().contains(27))
+        XCTAssertFalse(jointCounts().contains(22))
+        view.show(.ranger)
+        XCTAssertTrue(jointCounts().contains(22))
+        XCTAssertFalse(jointCounts().contains(27))
+    }
+
     func testHarborArtPlacesSolidsOnlyOnDeclaredWallCells() throws {
         let map = ArenaMap.twinGates
         let walls = ArenaHarborArt.walls(map)

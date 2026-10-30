@@ -120,6 +120,25 @@ final class ArenaDiagnosticsTests: XCTestCase {
         XCTAssertEqual(controller.game.fighters.map(\.pos), positions)
         XCTAssertTrue(controller.game.projectiles.isEmpty)
     }
+    func testHarborPerformanceReportLabelsSceneAndRejectsWrongMap() throws {
+        let recorder = ArenaPerfRecorder.shared
+        recorder.beginSuite(variant: .baseline, seconds: 10, expectedCases: 1, scene: .harborSample)
+        defer { recorder.stop() }
+        recorder.beginCase(.empty)
+        recorder.record(controller: make(.empty), interval: 1.0 / 60, simulation: 0, scene: 0,
+                        battleDrivers: 1, lobbyDrivers: 0)
+        let file = try recorder.export()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        XCTAssertEqual(object["map"] as? String, ArenaMap.twinGates.id)
+        XCTAssertEqual(object["map_art"] as? String, "harbor")
+        XCTAssertEqual(object["ranger_asset"] as? String, "Ranger_FaceSample.glb")
+        XCTAssertEqual(object["complete"] as? Bool, false)
+        XCTAssertNotEqual(object["interruption"] as? String, "none")
+        let results = try XCTUnwrap(object["results"] as? [[String: Any]])
+        XCTAssertEqual((results.first?["frames"] as? [[Double]])?.count, 0)
+    }
+
     func testManualCaptureExportsInputAndCompletesOneCase() throws {
         let recorder = ArenaPerfRecorder.shared
         recorder.beginSuite(variant: .baseline, seconds: 10, expectedCases: 1)

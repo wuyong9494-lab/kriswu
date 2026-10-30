@@ -3,6 +3,19 @@ import UIKit
 import Darwin
 import Combine
 
+enum ArenaPerfScene: String, CaseIterable {
+    case current, rangerSample, harborSample
+    var title: String {
+        switch self {
+        case .current: return "峡谷 · 当前角色"
+        case .rangerSample: return "峡谷 · 游侠样板"
+        case .harborSample: return "双闸 · 完整样板"
+        }
+    }
+    var qualitySample: Bool { self != .current }
+    var mapID: String { self == .harborSample ? ArenaMap.twinGates.id : ArenaMap.canyon.id }
+}
+
 enum ArenaDiagnosticScenario: String, CaseIterable {
     case empty, soloWalk, crowdWalk, combat, manualTraversal
     var title: String {
@@ -36,6 +49,9 @@ final class ArenaPerfRecorder: ObservableObject {
     private var startDate = Date()
     private var previousVariant: ArenaDiagnostics.Variant = .baseline
     private var previousEnabled = false
+    private var captureScene: ArenaPerfScene = .current
+    private var capturedMapArt = "legacy"
+    private var capturedRangerAsset = ""
 
     static var identity: String {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -49,10 +65,13 @@ final class ArenaPerfRecorder: ObservableObject {
         }
         return ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"].map { "模拟器 \($0)" } ?? "真机 \(model)"
     }
-    func beginSuite(variant: ArenaDiagnostics.Variant, seconds: Double = 30, expectedCases: Int = 4) {
+    func beginSuite(variant: ArenaDiagnostics.Variant, seconds: Double = 30, expectedCases: Int = 4, scene: ArenaPerfScene = .current) {
         previousVariant = ArenaDiagnostics.shared.variant
         previousEnabled = ArenaDiagnostics.shared.enabled
         self.variant = variant
+        captureScene = scene
+        capturedMapArt = scene == .harborSample ? "harbor" : (UserDefaults.standard.bool(forKey: "arena.purpleSample") ? "purple" : "legacy")
+        capturedRangerAsset = BrawlerLook.of(.ranger, qualitySample: scene.qualitySample).file
         self.expectedCases = expectedCases
         duration = min(max(seconds, 10), 60)
         results.removeAll(keepingCapacity: true)
@@ -75,6 +94,12 @@ final class ArenaPerfRecorder: ObservableObject {
                 battleDrivers: Int, lobbyDrivers: Int) {
         guard let scenario = activeScenario, controller.diagnosticScenario == scenario,
               interval > 0, interval.isFinite, !finishedCase else { return }
+        guard controller.game.map.id == captureScene.mapID,
+              controller.qualitySample == captureScene.qualitySample else {
+            interruption = "实际地图或角色样板与采样配置不一致"
+            finishCase()
+            return
+        }
         elapsed += interval
         if elapsed >= nextStatus {
             nextStatus = elapsed + 1
@@ -124,8 +149,9 @@ final class ArenaPerfRecorder: ObservableObject {
             "schema": 2, "identity": Self.identity, "device": Self.device,
             "system": UIDevice.current.systemName + " " + UIDevice.current.systemVersion,
             "started_utc": ISO8601DateFormatter().string(from: startDate),
-            "variant": variant.rawValue, "seed": 170017, "map": "canyon", "camera": "fixed center, perspective, offset 0/16/12.5",
-            "map_art": UserDefaults.standard.bool(forKey: "arena.purpleSample") ? "purple" : "legacy",
+            "variant": variant.rawValue, "seed": 170017, "map": captureScene.mapID, "camera": "fixed center, perspective, offset 0/16/12.5",
+            "map_art": capturedMapArt, "ranger_asset": capturedRangerAsset,
+            "capture_scene": captureScene.rawValue, "quality_sample": captureScene.qualitySample,
             "seconds_per_case": duration, "warmup_seconds_per_case": 3,
             "effect_backend": "persistent AVAudioEngine, predecoded PCM, 12 bounded voices",
             "audio_theme_sample": UserDefaults.standard.bool(forKey: "arena.themeAudio"),

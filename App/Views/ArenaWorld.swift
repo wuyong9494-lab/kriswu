@@ -1741,6 +1741,14 @@ final class ArenaWorldView: SCNView {
 
     /// 放大招：脚下一圈这个角色的颜色往外扩，身上冲起一道光柱、往外蹦光点（超级充能的是紫的）
     private func superFlash(_ caster: Fighter, at point: SIMD3<Float>, size: Float) {
+        if controller.qualitySample && caster.brawler == .ranger {
+            let teamColor = caster.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot
+            ring(at: point, color: teamColor, to: CGFloat(1.5 * size))
+            let muzzle = avatars.indices.contains(caster.id) ? avatars[caster.id].muzzlePosition : nil
+            burst(at: muzzle ?? point + SIMD3(0, size, 0), color: teamColor,
+                  count: 16, speed: 2, size: 0.1, life: 0.18)
+            return
+        }
         let color = caster.hyperTime > 0 ? ArenaPalette.hyper : Self.superColor(caster.brawler)
         ring(at: point, color: color, to: CGFloat(2.6 * size))
         ring(at: point, color: .white, to: CGFloat(1.6 * size))
