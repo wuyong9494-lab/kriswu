@@ -784,11 +784,17 @@
     "vendor_interface_check_off.png",
     "vendor_interface_check_on.png",
     "vendor_interface_home.png",
+    "vendor_interface_information.png",
+    "vendor_interface_locked.png",
+    "vendor_interface_music_off.png",
+    "vendor_interface_music_on.png",
     "vendor_interface_panel.png",
     "vendor_interface_settings.png",
     "vendor_interface_slider_fill.png",
     "vendor_interface_slider_thumb.png",
-    "vendor_interface_slider_track.png"
+    "vendor_interface_slider_track.png",
+    "vendor_interface_sound_off.png",
+    "vendor_interface_sound_on.png"
   ],
   "mapBudgets": {
     "borderInstances": 10,

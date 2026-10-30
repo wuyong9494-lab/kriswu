@@ -94,7 +94,9 @@ def build():
                 mapIDs=map_ids, mapPaletteIDs=palette_ids, mapResources=map_resources,
                 mapBudgets=dict(importedWallInstances=24, borderInstances=10, interiorDetailInstances=16),
                 effectProfiles=effects, gadgetEffects=sorted(gadgets),
-                interfaceImages=sorted(item['file'] for item in vendor['files'] if item['usage'].startswith(('ui.', 'menu.', 'lobby.')) and item['file'].endswith('.png')),
+                interfaceImages=sorted(item['file'] for item in vendor['files']
+                                       if item['pack'] in ('kenney-ui-pack', 'kenney-game-icons')
+                                       and item['file'].endswith('.png')),
                 existingLobbyIcons=icons, themeMusic=themes,
                 audioFiles=sorted(item['file'] for item in vendor['files'] if item['file'].endswith('.wav')),
                 configurationSources={path: sha(ROOT / path) for path in config_code},

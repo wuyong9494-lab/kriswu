@@ -2,7 +2,7 @@ import XCTest
 @testable import ShiftCore
 
 final class ArenaSampleMapTests: XCTestCase {
-    func testSampleIdentitySymmetryAndPoolIsolation() {
+    func testReleasedMapIdentitySymmetryAndCompatiblePools() {
         let map = ArenaMap.twinGates
         XCTAssertEqual(map.width, 21)
         XCTAssertEqual(map.height, 29)
@@ -11,11 +11,15 @@ final class ArenaSampleMapTests: XCTestCase {
         XCTAssertTrue(map.spawns[0].allSatisfy { $0.y == 25.5 })
         XCTAssertTrue(map.spawns[1].allSatisfy { $0.y == 3.5 })
         XCTAssertEqual(ArenaMap.named(map.id)?.id, map.id)
+        let compatible: Set<ArenaGame.Mode> = [.teamFight, .stars, .bounty, .zone, .knockout]
         for mode in ArenaGame.Mode.allCases {
-            if mode != .zone {
-                XCTAssertNotEqual(ArenaGame(mode: mode, entrants: [], seed: 1, map: map).map.id, map.id)
-            }
-            XCTAssertFalse(ArenaMap.playPool(for: mode).contains { $0.id == map.id })
+            let supported = compatible.contains(mode)
+            XCTAssertEqual(ArenaGame(mode: mode, entrants: [], seed: 1, map: map).map.id == map.id, supported,
+                           "Twin Gates must be accepted only by compatible released modes: \(mode)")
+            XCTAssertEqual(ArenaMap.playPool(for: mode).contains { $0.id == map.id }, supported)
+            XCTAssertEqual(ArenaMap.selectionPool(for: mode).contains { $0.id == map.id }, supported)
+            XCTAssertFalse(ArenaMap.pool(for: mode).contains { $0.id == map.id },
+                           "Legacy peers must keep their original compatible pool")
         }
         for y in 0..<map.height {
             for x in 0..<map.width {
