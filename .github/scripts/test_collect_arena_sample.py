@@ -1,6 +1,7 @@
 import copy
 import unittest
-from collect_arena_flow import validate_scene, is_scene_attachment
+from collect_arena_flow import validate_scene, is_scene_attachment, validate_recording_session
+from run_arena_flow import actual_test_duration
 
 
 class FlowEvidenceTests(unittest.TestCase):
@@ -40,3 +41,34 @@ class AttachmentNames(unittest.TestCase):
         self.assertFalse(is_scene_attachment('arena-flow-hero-2_0_F6D924E2.json', 1))
         self.assertFalse(is_scene_attachment('arena-flow-hero-20_0_id.json', 2))
         self.assertFalse(is_scene_attachment('arena-flow-hero-2_0_id.png', 2))
+
+
+class ContinuousRecordingTests(unittest.TestCase):
+    def session(self):
+        return dict(complete=True, testExit=0, recorderExit=0,
+                    recordingReadyBeforeTestCommand=True, testSeconds=290.072,
+                    xcodeCommandSeconds=414.446)
+
+    def test_uses_actual_test_not_installation_and_result_processing_time(self):
+        log = "Test Case '-[ArenaFlowTests.ArenaFlowTests testBarbarianLoop]' failed (290.072 seconds)."
+        self.assertEqual(actual_test_duration(log, 'testBarbarianLoop'), 290.072)
+        validate_recording_session(self.session(), dict(presentationSpanSeconds=350.063))
+
+    def test_missing_or_ambiguous_test_duration_fails(self):
+        line = "Test Case '-[ArenaFlowTests.ArenaFlowTests testMageLoop]' passed (400.846 seconds)."
+        for log, test in [('', 'testMageLoop'), (line + '\n' + line, 'testMageLoop'),
+                          (line, 'testRangerLoop')]:
+            with self.assertRaises(ValueError): actual_test_duration(log, test)
+
+    def test_failed_test_unready_recorder_or_missing_duration_cannot_pass(self):
+        for key, value in [('complete', False), ('testExit', 65), ('recorderExit', 1),
+                           ('recordingReadyBeforeTestCommand', False), ('testSeconds', None),
+                           ('testSeconds', float('nan')), ('testSeconds', 0)]:
+            session = self.session()
+            session[key] = value
+            with self.assertRaises(ValueError):
+                validate_recording_session(session, dict(presentationSpanSeconds=350.063))
+
+    def test_truncated_continuous_recording_still_fails(self):
+        with self.assertRaises(ValueError):
+            validate_recording_session(self.session(), dict(presentationSpanSeconds=280))

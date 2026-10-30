@@ -2,6 +2,7 @@
 """Preserve and validate real UI-flow evidence; never synthesize results or retime media."""
 import collections
 import json
+import math
 import os
 import pathlib
 import shutil
@@ -36,6 +37,18 @@ def validate_scene(scene, hero):
 def is_scene_attachment(name, hero):
     prefix = f"arena-flow-hero-{hero}"
     return name == prefix + ".json" or (name.startswith(prefix + "_") and name.endswith(".json"))
+
+
+def validate_recording_session(session, decoded):
+    if (not session.get('complete') or session.get('testExit') != 0
+            or session.get('recorderExit') != 0
+            or not session.get('recordingReadyBeforeTestCommand')):
+        raise ValueError('Continuous recording/test session did not complete')
+    duration = session.get('testSeconds')
+    if not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0:
+        raise ValueError('Missing valid actual XCTest duration')
+    if decoded['presentationSpanSeconds'] + 5 < duration:
+        raise ValueError('Recording does not cover the full UI test duration (5s startup tolerance)')
 
 
 def main():
@@ -80,10 +93,10 @@ def main():
             if not result.returncode and os.environ.get('ARENA_FLOW_VIDEO'):
                 session = json.loads((destination / 'recording-session.json').read_text())
                 decoded = json.loads(path.with_suffix('.decode.json').read_text())
-                if not session.get('complete') or session.get('recorderExit') != 0:
-                    errors.append('Continuous recording/test session did not complete')
-                if decoded['presentationSpanSeconds'] + 5 < session.get('testSeconds', 0):
-                    errors.append('Recording does not cover the full UI test duration (5s startup tolerance)')
+                try:
+                    validate_recording_session(session, decoded)
+                except ValueError as error:
+                    errors.append(str(error))
             if result.returncode:
                 errors.append(f'Undecodable/invalid movie: {path.name}')
             save()

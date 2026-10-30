@@ -1,0 +1,84 @@
+{
+  "sourceCommit": "bc8f5fe557d994dd03a1d3961942ff48859a0b7a",
+  "run": 41034343639,
+  "accepted": false,
+  "attachments": [
+    {
+      "hero": "mage466",
+      "name": "final-accessibility-tree_0_72A470F3-7159-4B51-BDD0-97F58E327651.txt",
+      "exportedFileName": "469674F5-6ACA-4707-B1F2-7F075C95C74F.txt",
+      "sha256": "7374a19d040f715c8224b521b5c6cca51277d672e4b5ef4e7a00cea6bc7c0285",
+      "bytes": 113513
+    },
+    {
+      "hero": "mage466",
+      "name": "final-state_0_3321302E-292B-4B78-B22F-164ECBA07A65.png",
+      "exportedFileName": "33A66ED1-D84B-4C9C-800F-64C776AA9D0C.png",
+      "sha256": "9d3afb98193577a78d0b29b74826bb88709cc9f9df584f50587fe2cf07ea4a9d",
+      "bytes": 691855
+    },
+    {
+      "hero": "mage466",
+      "name": "arena-flow-hero-3_0_6B514243-2F6E-4113-AADA-191EADD9E23F.json",
+      "exportedFileName": "D5E03901-913A-4768-83ED-248D806BD0FD.txt",
+      "sha256": "3fb2153aff4c030a961195f0dbf14f50caa1aa58b042365a70b0ab0c9d936946",
+      "bytes": 60059
+    },
+    {
+      "hero": "mage466",
+      "name": "hero-3-battle_0_5598F133-D81F-4BC2-9306-6AE7F53317E4.png",
+      "exportedFileName": "BF143DFB-7E57-4C7A-A0B1-EF2A3043926D.png",
+      "sha256": "d30ddf22dd69b4e6dcbe68633ffa080694a94a3b72cdd5eadb5a891aa33197a8",
+      "bytes": 505482
+    },
+    {
+      "hero": "ranger466",
+      "name": "final-accessibility-tree_0_08A2AB33-C77D-4C36-BCE3-00B68511DF12.txt",
+      "exportedFileName": "FB28DAEB-BF85-4954-BC14-76147CE9A1AB.txt",
+      "sha256": "8438f5685ebb434edc6688d33f6c9c3b38d04262c1a10103bbbaaac38398e16e",
+      "bytes": 111753
+    },
+    {
+      "hero": "ranger466",
+      "name": "final-state_0_623818C5-E10F-415E-BD11-AB1347E4952E.png",
+      "exportedFileName": "8F1C22B6-84FE-4327-94F9-A17294A7F55B.png",
+      "sha256": "f1090082197be83cf99fd8297f58a2e5df37b93c316f4da493e5db5ded8afe47",
+      "bytes": 563854
+    },
+    {
+      "hero": "ranger466",
+      "name": "hero-1-battle_0_E534AE16-25FA-485F-AF5B-F7A2F7BCEF15.png",
+      "exportedFileName": "113E65F6-C385-416D-A772-C8DFEBB0AFF9.png",
+      "sha256": "480f0784ac2b989667de43aae1a994dc7301c84822eef3cac3d2ea78ff9848b8",
+      "bytes": 504039
+    },
+    {
+      "hero": "barbarian466",
+      "name": "final-accessibility-tree_0_43E35EE0-F339-4C5A-A328-0349CF28A202.txt",
+      "exportedFileName": "7094A4B0-18EE-4B4B-A1CA-702F9E153E52.txt",
+      "sha256": "3e82e86253bfc33b124d12af7b8accd22dce2d19eca355aa49cf70fa6d4a3da6",
+      "bytes": 114583
+    },
+    {
+      "hero": "barbarian466",
+      "name": "final-state_0_BA491B56-55AB-4268-B9F6-4EB9D472D00C.png",
+      "exportedFileName": "57B24668-CB9E-4671-AC5B-E771C7CF9E40.png",
+      "sha256": "9f9a8f82fe5db248f70019effc9f0dec2396d98703de3bce0b174fadcc93a9a0",
+      "bytes": 648717
+    },
+    {
+      "hero": "barbarian466",
+      "name": "arena-flow-hero-2_0_95141283-A80F-47CF-8B5A-08BA0C27C806.json",
+      "exportedFileName": "7502618A-35A4-4466-861A-C0952100F0AD.txt",
+      "sha256": "fa312f2c65e56fd73f1844601e9a5808488e4ecbdc36a67cfa157813abd0ddfc",
+      "bytes": 61965
+    },
+    {
+      "hero": "barbarian466",
+      "name": "hero-2-battle_0_8779BA1A-C85A-4959-8440-E9F8F7FDCC26.png",
+      "exportedFileName": "0B3F9264-0522-4170-B992-EC1FF1A58A9D.png",
+      "sha256": "c1bb3005782ec958fa05ec8456830c7e6daa7fcddd1946b2106d55b976073ace",
+      "bytes": 506871
+    }
+  ]
+}

@@ -380,6 +380,10 @@ struct ArenaMatchView: View {
         ZStack {
             ArenaWorld(controller: controller)
                 .ignoresSafeArea()
+                // Hide at the SwiftUI bridge too: UIViewRepresentable can override
+                // the underlying SCNView accessibility flags when mounting it.
+                .accessibilityElement(children: .ignore)
+                .accessibilityHidden(true)
             VStack(spacing: DS.Space.xs) {
                 topBar
                 if emoting && hud.result == nil {
@@ -645,6 +649,10 @@ struct ArenaMatchView: View {
         .padding(.horizontal, wide ? DS.Space.m : DS.Space.l)
         .padding(.bottom, wide ? DS.Space.s : DS.Space.m)
         .opacity(hud.result == nil ? 1 : 0)
+        // The VS overlay covers the sticks. Do not expose or accept input until
+        // the real match begins (the controls already exist underneath it).
+        .allowsHitTesting(!controller.showingIntro && hud.result == nil)
+        .accessibilityHidden(controller.showingIntro || hud.result != nil)
         // Recreate sticks when the modal opens/closes so cancelled drags cannot
         // leave a displaced thumb or deliver a release attack after dismissal.
         .id(blockingDialog)

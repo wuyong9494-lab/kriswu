@@ -450,6 +450,9 @@ enum ScreenCatalog {
         case "tiles": TileGameHomeView()
         case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
         case "arena": ArenaHomeView()
+        // Preserve the original/legacy asset comparison fixture independently
+        // from the three-hero lobby used by the real entry flow.
+        case "arenaRangerComparison": ArenaHomeView(threeHeroSample: false)
         #if DEBUG
         case "arenaRoomReady", "arenaRoomWaiting":
             ArenaRoomView(lobby: ArenaLobby(room: GameRoom.arenaPreview(waiting: name == "arenaRoomWaiting"),

@@ -595,13 +595,15 @@ jobs:
           before=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'ShiftReminder*' 2>/dev/null | wc -l | tr -d ' ')
           # Early combat checks the asset before the clustered hits obscure it;
           # retain the crowded 1.2 s pair as separate readability evidence.
+          CAPTURE_APP_LAUNCHED=0
           for s in rangerLobbyBefore rangerLobbyAfter rangerBattleBefore rangerBattleAfter rangerCombatBefore rangerCombatAfter arenaExitDialog arenaDisconnectedDialog; do
             rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
-            simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
+            if [ "$CAPTURE_APP_LAUNCHED" = 1 ]; then simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true; fi
+            CAPTURE_APP_LAUNCHED=1
             TARGET_TIME=6
             if [ "$s" = rangerLobbyBefore ] || [ "$s" = rangerLobbyAfter ]; then
               LEGACY=NO; [ "$s" != rangerLobbyBefore ] || LEGACY=YES
-              simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.previewRanger YES -arena.rangerStill YES -arena.legacyRanger "$LEGACY"
+              simctl launch "$DEVICE" "$ID" -demo -screen arenaRangerComparison -arena.previewRanger YES -arena.rangerStill YES -arena.legacyRanger "$LEGACY"
               wait_lobby "$LEGACY"
               cp "$CAPTURE_DATA/Documents/arena-capture-ready.json" "shots/$s.json"
             else
@@ -664,7 +666,7 @@ jobs:
           # Record the implemented ranger in the real lobby, including automatic idle/shoot cycles.
           simctl terminate "$DEVICE" "$ID" >/dev/null 2>&1 || true
           rm -f "$CAPTURE_DATA/Documents/arena-capture-ready.json"
-          simctl launch "$DEVICE" "$ID" -demo -screen arena -arena.previewRanger YES -arena.rangerStill NO -arena.legacyRanger NO
+          simctl launch "$DEVICE" "$ID" -demo -screen arenaRangerComparison -arena.previewRanger YES -arena.rangerStill NO -arena.legacyRanger NO
           wait_lobby NO
           python3 - "$DEVICE" <<'PYCODE'
           import signal, subprocess, sys, time

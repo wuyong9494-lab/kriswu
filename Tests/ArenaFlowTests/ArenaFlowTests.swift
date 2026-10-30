@@ -53,7 +53,19 @@ final class ArenaFlowTests: XCTestCase {
         let attack = app.descendants(matching: .any).matching(identifier: "arena.control.attack").firstMatch
         let special = app.descendants(matching: .any).matching(identifier: "arena.control.special").firstMatch
         XCTAssertTrue(move.waitForExistence(timeout: 45))
+        XCTAssertTrue(attack.exists)
+        XCTAssertTrue(special.exists)
+        XCTAssertTrue(move.isHittable, "Move control is still covered by the intro")
+        XCTAssertFalse(app.otherElements["harbor-wall-cells"].exists, "Decorative SceneKit mesh leaked into accessibility")
         shot("hero-\(hero)-battle")
+        // Cache stable on-screen control positions after the overlay has gone.
+        // Querying every control and waitForExistence on every shot creates a
+        // failure-triage snapshot each second even while the match is healthy.
+        let screen = app.coordinate(withNormalizedOffset: .zero)
+        let attackFrame = attack.frame
+        let specialFrame = special.frame
+        let attackPoint = screen.withOffset(CGVector(dx: attackFrame.midX, dy: attackFrame.midY))
+        let specialPoint = screen.withOffset(CGVector(dx: specialFrame.midX, dy: specialFrame.midY))
         let from = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let right = move.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
         let toward = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
@@ -64,10 +76,10 @@ final class ArenaFlowTests: XCTestCase {
         let back = app.buttons["arena.result.lobby"]
         let deadline = Date().addingTimeInterval(360)
         while !back.exists && Date() < deadline {
-            if attack.exists && attack.isHittable { attack.tap() }
-            if special.exists && special.isHittable { special.tap() }
-            // Wait for the naturally completed match; do not inject a win or rewrite time.
-            _ = back.waitForExistence(timeout: 1)
+            attackPoint.tap()
+            specialPoint.tap() // The app itself rejects this until charge is earned.
+            // Real input only; no failed waitForExistence diagnostics in the combat loop.
+            Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(back.exists, "Match did not naturally reach results")
         shot("hero-\(hero)-result")
