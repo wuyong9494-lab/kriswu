@@ -2,9 +2,17 @@ import XCTest
 
 /// Drives real pages and real controls. No forced result or accelerated simulation.
 final class ArenaFlowTests: XCTestCase {
+    private var controlTrace: [ControlState] = []
+    private var activeHero = 0
     override func setUpWithError() throws { continueAfterFailure = false }
 
     override func tearDownWithError() throws {
+        if let data = try? JSONEncoder().encode(controlTrace) {
+            let trace = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+            trace.name = "hero-\(activeHero)-control-trace.json"
+            trace.lifetime = .keepAlways
+            add(trace)
+        }
         shot("final-state")
         let tree = XCTAttachment(string: XCUIApplication().debugDescription)
         tree.name = "final-accessibility-tree"
@@ -31,6 +39,8 @@ final class ArenaFlowTests: XCTestCase {
     }
 
     private func play(hero: Int) throws {
+        activeHero = hero
+        controlTrace.removeAll()
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "game", "-arena.snapshotTime", "0",
                                "-arena.captureTraversal", "NO", "-arena.captureFlow", "YES", "-arena.previewRanger", "NO"]
@@ -78,24 +88,15 @@ final class ArenaFlowTests: XCTestCase {
         let attackPoint = screen.withOffset(CGVector(dx: attackFrame.midX, dy: attackFrame.midY))
         let specialPoint = screen.withOffset(CGVector(dx: specialFrame.midX, dy: specialFrame.midY))
         let from = screen.withOffset(CGVector(dx: moveFrame.midX, dy: moveFrame.midY))
-        var trace: [ControlState] = []
-        defer {
-            if let data = try? JSONEncoder().encode(trace) {
-                let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
-                attachment.name = "hero-\(hero)-control-trace.json"
-                attachment.lifetime = .keepAlways
-                add(attachment)
-            }
-        }
         let back = app.buttons["arena.result.lobby"]
         // The clock remains mounted when the result hides the control sticks,
         // so a natural result arriving between queries cannot invalidate it.
-        let clock = app.staticTexts["arena.match.clock"]
+        let clock = app.descendants(matching: .any).matching(identifier: "arena.match.clock").firstMatch
         let deadline = Date().addingTimeInterval(360)
         while !back.exists && Date() < deadline {
             let value = try XCTUnwrap(clock.value as? String, "Missing read-only movement feedback")
             let state = try JSONDecoder().decode(ControlState.self, from: Data(value.utf8))
-            trace.append(state)
+            controlTrace.append(state)
             if state.alive && state.y > 15.2 {
                 // Clear the southern wall at x=9 before proceeding north. A
                 // fixed two-second drag ended at x=9.4–9.8 and hit that wall.
@@ -107,11 +108,21 @@ final class ArenaFlowTests: XCTestCase {
                 let dx = east ? CGFloat(direction) * moveFrame.width * 0.4 : 0
                 let dy = east ? 0 : CGFloat(direction) * moveFrame.height * 0.4
                 let toward = from.withOffset(CGVector(dx: dx, dy: dy))
-                let hold = min(1, max(0.15, abs(distance) / (state.speed * 0.8)))
+                let hold = min(2.5, max(0.15, abs(distance) / (state.speed * 0.8)))
                 from.press(forDuration: 0.05, thenDragTo: toward, withVelocity: .fast, thenHoldForDuration: hold)
+                // Navigation and combat are separate real-touch actions. Re-read
+                // position/result after moving instead of firing a stale batch.
+                continue
+            }
+            if back.exists { break }
+            if state.alive && state.charge >= 1 {
+                specialPoint.tap()
+                if back.exists { break }
             }
             attackPoint.tap()
-            specialPoint.tap() // The app itself rejects this until charge is earned.
+            // Build 468's special tap hit Return to lobby after the result
+            // appeared during its preceding attack. Never send that stale tap.
+            if back.exists { break }
             // Real input only; no failed waitForExistence diagnostics in the combat loop.
             Thread.sleep(forTimeInterval: 0.15)
         }
@@ -128,6 +139,10 @@ final class ArenaFlowTests: XCTestCase {
         let playerEvents = events.filter { ($0["fighter"] as? Int) == 0 }
         XCTAssertTrue(playerEvents.contains { ($0["kind"] as? String) == "attack" }, "No real player attack")
         XCTAssertTrue(playerEvents.contains { ($0["kind"] as? String) == "super" }, "No earned player super")
+        let resultReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: back)
+        XCTAssertEqual(XCTWaiter.wait(for: [resultReady], timeout: 5), .completed,
+                       "Result actions never became ready after their entry animation")
         back.tap()
         XCTAssertTrue(heroes.waitForExistence(timeout: 30))
         XCTAssertTrue(heroes.isHittable, "Lobby is still covered by the finished match")

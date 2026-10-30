@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-10-30",
+  "packs": [
+    {
+      "id": "kaykit-adventurers",
+      "name": "KayKit Adventurers",
+      "version": "1.0",
+      "author": "Kay Lousberg",
+      "source": "https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0",
+      "revision": "672074b73ba276876a19e8816ecdc5241817ab47",
+      "publishedDate": "2023-09-16",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "角色、武器、已有动作的源文件；不增加可玩英雄",
+      "archive": {
+        "filename": "kaykit-adventurers.zip",
+        "bytes": 6147593,
+        "sha256": "00777a7b9811a7c7f8dd3fda4e56604f6a93b33673d64557153f354d677b47af"
+      },
+      "stripPrefix": "KayKit-Character-Pack-Adventures-1.0-672074b73ba276876a19e8816ecdc5241817ab47/addons/kaykit_character_pack_adventures/",
+      "archiveURL": "https://codeload.github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/zip/672074b73ba276876a19e8816ecdc5241817ab47"
+    },
+    {
+      "id": "kaykit-dungeon-remastered",
+      "name": "KayKit Dungeon Remastered",
+      "version": "1.0",
+      "author": "Kay Lousberg",
+      "source": "https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0",
+      "revision": "b0ca9bd96a8072ab36a3a5464f00ed1e06a16d07",
+      "publishedDate": "2023-09-29",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "墙、地板、木箱、桶、旗帜的同风格候选",
+      "archive": {
+        "filename": "kaykit-dungeon-remastered.zip",
+        "bytes": 6357418,
+        "sha256": "e96a65ce4040b6b630f04470a60fd523d621c124cfbad062809cf7b94ccf714b"
+      },
+      "stripPrefix": "KayKit-Dungeon-Remastered-1.0-b0ca9bd96a8072ab36a3a5464f00ed1e06a16d07/addons/kaykit_dungeon_remastered/",
+      "archiveURL": "https://codeload.github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0/zip/b0ca9bd96a8072ab36a3a5464f00ed1e06a16d07"
+    },
+    {
+      "id": "kenney-ui-audio",
+      "name": "Kenney UI Audio",
+      "version": "1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/ui-audio",
+      "revision": null,
+      "publishedDate": "2012-10-07",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "选择、返回、确认的音效候选",
+      "archive": {
+        "filename": "kenney-ui-audio.zip",
+        "bytes": 411949,
+        "sha256": "946fc23a63d535d693eb31b2eabb80c8c28d6351e2186b344ceb71b2cb1d5eb6"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "858b0dd6536e2cd312a79152a33c811d970614dac402b83815042ef959d3703a",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-interface-sounds",
+      "name": "Kenney Interface Sounds",
+      "version": "1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/interface-sounds",
+      "revision": null,
+      "publishedDate": "2020-02-11",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "菜单反馈音效候选",
+      "archive": {
+        "filename": "kenney-interface-sounds.zip",
+        "bytes": 834536,
+        "sha256": "f2193d072726d6758a5f7871b2dcc54dcce0d5c35c6f0a62f92549b327c81232"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "e17a961288c2f81572457f82592977b12a03600f17f18a7b83779852aad9b839",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-impact-sounds",
+      "name": "Kenney Impact Sounds",
+      "version": "1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/impact-sounds",
+      "revision": null,
+      "publishedDate": "2019-12-19",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "命中、脚步、碰撞音效候选",
+      "archive": {
+        "filename": "kenney-impact-sounds.zip",
+        "bytes": 800850,
+        "sha256": "029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "f14a01829b52e4f43bf7f507e673e71987cf20a5004ed5913cd627832b0abcd1",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-rpg-audio",
+      "name": "Kenney RPG Audio",
+      "version": "1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/rpg-audio",
+      "revision": null,
+      "publishedDate": "2014-03-17",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "武器、布料、道具声音候选",
+      "archive": {
+        "filename": "kenney-rpg-audio.zip",
+        "bytes": 964837,
+        "sha256": "6dbeaf8544da958d8f2adcb4a4a4b76c1ade34a05f8ab9edccd327da7375f38b"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "52d6c63c94061fd5a7b1d7d8ec5f879eba8c04a125fb223911270e3994633856",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-music-jingles",
+      "name": "Kenney Music Jingles",
+      "version": "1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/music-jingles",
+      "revision": null,
+      "publishedDate": "2014-03-17",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "结算短句候选；不是完整大厅/战斗循环配乐",
+      "archive": {
+        "filename": "kenney-music-jingles.zip",
+        "bytes": 1239525,
+        "sha256": "b729ba57959bd58793d2c5cafa348aaf2655d354f3da35ec4729e03ec77197b8"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "dcfc622385d84e16c3169deaedb088fb92e60ee7a6e3e41073e4c4a0f8d91cba",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-ui-pack",
+      "name": "Kenney UI Pack",
+      "version": "2.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/ui-pack",
+      "revision": null,
+      "publishedDate": "2024-06-12",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "按钮、面板、滑杆、拉丁字体；不替换中文字体",
+      "archive": {
+        "filename": "kenney-ui-pack.zip",
+        "bytes": 1229750,
+        "sha256": "a8a14a234911eb648c062622915c93e79e94e97cb7f9f375a70f6617f1174318"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "f147a5bb0b420da1ab5f53f7fe58ba38c3e98a932dccc2ab93965c60cb74891a",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-game-icons",
+      "name": "Kenney Game Icons",
+      "version": "1.0",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/game-icons",
+      "revision": null,
+      "publishedDate": "2014-11-03",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "通用菜单/控制图标候选；与 game-icons.net 许可不同",
+      "archive": {
+        "filename": "kenney-game-icons.zip",
+        "bytes": 1045980,
+        "sha256": "7a86d8d58e0b851e22004b3c70bf90b003632bbf9ac633424daa3bb17d9e7e4e"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "266096ca33ab553a316b600b22fcaed474542a702dc750c6bcaa99c44940286e",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-particle-pack",
+      "name": "Kenney Particle Pack",
+      "version": "1.1",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/particle-pack",
+      "revision": null,
+      "publishedDate": null,
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "透明火焰、烟、光点与命中特效纹理",
+      "archive": {
+        "filename": "kenney-particle-pack.zip",
+        "bytes": 15001764,
+        "sha256": "b631d4b07f7002549fdcf155f01141ad482f79f3440e4e301eed49ce5f1d8958"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "56bc1533c0ecc82decd33399ad9056a95e4ff015209dfb8fa9d3152fc441e5a6",
+      "downloadHost": "kenney.nl"
+    },
+    {
+      "id": "kenney-nature-kit",
+      "name": "Kenney Nature Kit",
+      "version": "2.1",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/nature-kit",
+      "revision": null,
+      "publishedDate": null,
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attributionRequired": false,
+      "purpose": "草、灌木、石块、树和围栏候选",
+      "archive": {
+        "filename": "kenney-nature-kit.zip",
+        "bytes": 10537521,
+        "sha256": "fa7974a0d342bfe63c38664ba9f8ec1a4aab8ea25f099bdc56870e33588c4d9d"
+      },
+      "stripPrefix": "",
+      "sourcePageSHA256": "8129347f4bc7b9c7853f6fa87a0df3dd3fd80202d61e4ad7efce42376cb62e17",
+      "downloadHost": "kenney.nl"
+    }
+  ]
+}

@@ -945,6 +945,10 @@ struct ArenaHomeView: View {
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
                 Link("Game-icons.net", destination: URL(string: "https://game-icons.net")!)
                 Link("CC BY 3.0 许可", destination: URL(string: "https://creativecommons.org/licenses/by/3.0/")!)
+                Text("角色武器与场景：Kay Lousberg / KayKit。自然场景、界面、图标、粒子及声音：Kenney。11 个素材包采用 CC0 1.0，完整来源与许可随 App 保存。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Link("Kenney", destination: URL(string: "https://kenney.nl")!)
+                Link("KayKit", destination: URL(string: "https://kaylousberg.com")!)
             }
             settingsCard {
                 Text("怎么打")

@@ -148,6 +148,8 @@ final class ArenaWorldView: SCNView {
     private var lastBallSpot: V2?
     /// 宝箱攻防的宝箱（和 game.chests 一个对一个）
     private var chestViews: [ChestView] = []
+    private var lastFootstepPosition: V2?
+    private var lastFootstepTime: Double = -1
     /// 地上快要炸的红圈
     private var warningNodes: [SCNNode] = []
     /// 大乱斗的能量箱（和 game.boxes 一个对一个）、地上的能量块
@@ -558,6 +560,7 @@ final class ArenaWorldView: SCNView {
             }
         }
         if !purpleSample && !harborSample { root.addChildNode(scenery(game)) }
+        root.addChildNode(ArenaVendorAssets.border(width: width, height: height))
 
         // 各个玩法的东西
         let center = SIMD3(Float(map.center.x), 0, Float(map.center.y))
@@ -969,6 +972,17 @@ final class ArenaWorldView: SCNView {
 
         // 自己旁边的草丛平滑拨低，保持不透明深度遮挡。
         let me = controller.mine
+        if let last = lastFootstepPosition {
+            let distance = last.distance(to: me.pos)
+            if !me.alive || distance > 3 {
+                lastFootstepPosition = me.pos
+            } else if distance >= 0.55 && clock - lastFootstepTime >= 0.28 {
+                let grass = game.map.tile(Int(me.pos.x), Int(me.pos.y)) == .bush
+                ArenaSound.shared.play(grass ? .stepGrass : .stepStone, volume: 0.14)
+                lastFootstepPosition = me.pos
+                lastFootstepTime = clock
+            }
+        } else { lastFootstepPosition = me.pos }
         let inside = me.alive && game.map.inBush(me.pos)
         if inside, !wasInBush {
             ring(at: SIMD3(Float(me.pos.x), 0.05, Float(me.pos.y)),
@@ -1878,6 +1892,7 @@ final class ArenaWorldView: SCNView {
         system.particleVelocity = speed
         system.particleSize = size
         system.particleColor = color
+        system.particleImage = size >= 0.28 ? ArenaVendorAssets.smoke : ArenaVendorAssets.spark
         // Sample effects must keep the body silhouette under overlapping hits.
         system.blendMode = controller.qualitySample ? .alpha : .additive
         system.reset()
@@ -1938,6 +1953,8 @@ final class ArenaWorldView: SCNView {
 
     /// 刀光、地上的线、圈、命中、拖尾都在进场时做好。打架时只拿一个出来用
     private func prepareFx() {
+        _ = ArenaVendorAssets.spark
+        _ = ArenaVendorAssets.smoke
         let crescent = Self.crescent(color: .white, wide: 1)
         for _ in 0..<10 {
             let geometry = (crescent.copy() as? SCNGeometry) ?? crescent
@@ -2056,7 +2073,7 @@ final class ArenaWorldView: SCNView {
         system.spreadingAngle = 180
         system.emittingDirection = SCNVector3(0, 1, 0)
         system.particleSize = 0.13
-        system.particleImage = ArenaArt.dot
+        system.particleImage = ArenaVendorAssets.spark ?? ArenaArt.dot
         system.blendMode = .additive
         system.isAffectedByGravity = false
         system.dampingFactor = 2

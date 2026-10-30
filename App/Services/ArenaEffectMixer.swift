@@ -20,7 +20,7 @@ final class ArenaEffectMixer {
         guard nodes.isEmpty else { return }
         for effect in ArenaSound.Effect.allCases {
             let themeFile = effect == .win ? "arena_theme_win" : (effect == .lose ? "arena_theme_lose" : nil)
-            let sample = theme ? themeFile.flatMap { Bundle.main.url(forResource: $0, withExtension: "m4a") } : nil
+            let sample = theme && !effect.file.hasPrefix("vendor_") ? themeFile.flatMap { Bundle.main.url(forResource: $0, withExtension: "m4a") } : nil
             guard let url = sample ?? Bundle.main.url(forResource: effect.file, withExtension: "wav"),
                   let buffer = try? Self.decode(url, format: format) else { continue }
             buffers[effect] = buffer

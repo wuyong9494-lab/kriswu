@@ -350,6 +350,7 @@ struct ArenaMatchView: View {
     @State private var confirmingExit = false
     @State private var previewDisconnect = false
     @State private var resultShown = false
+    @State private var resultActionsReady = false
     /// 表情那一排打开着
     @State private var emoting = false
     @State private var copiedPerformance = false
@@ -785,6 +786,13 @@ struct ArenaMatchView: View {
         .onAppear {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.62).delay(0.15)) { resultShown = true }
         }
+        .task {
+            // Absorb the last combat taps while the result panel animates in.
+            // This applies to normal play as well as simulator validation.
+            resultActionsReady = false
+            do { try await Task.sleep(nanoseconds: 800_000_000) } catch { return }
+            resultActionsReady = true
+        }
     }
 
     private func resultTitle(_ result: ArenaGame.Result, mine: Fighter) -> (String, Color) {
@@ -869,6 +877,7 @@ struct ArenaMatchView: View {
                         .buttonStyle(ArenaGameButton.yellow)
                 }
             }
+            .disabled(!resultActionsReady)
         }
     }
 

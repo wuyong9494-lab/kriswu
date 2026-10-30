@@ -19,7 +19,9 @@ struct ArenaMenuScreen<Content: View>: View {
                 HStack {
                     Text(title).font(.system(size: 23, weight: .bold, design: .rounded))
                     Spacer()
-                    Button(action: onClose) { Image(systemName: "xmark").frame(width: 44, height: 44) }
+                    Button { ArenaSound.shared.menu(.uiBack); onClose() } label: {
+                        ArenaVendorIcon(name: "cross").frame(width: 20, height: 20).frame(width: 44, height: 44)
+                    }
                         .buttonStyle(ArenaMenuButtonStyle()).accessibilityLabel("关闭\(title)")
                 }
                 if scrollContent {
@@ -51,13 +53,15 @@ struct ArenaMenuButtonStyle: ButtonStyle {
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .foregroundStyle(.white)
             .background {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(configuration.isPressed ? Color(red: 0.22, green: 0.16, blue: 0.36) : Color(red: 0.30, green: 0.23, blue: 0.46))
+                ArenaVendorButtonFace(pressed: configuration.isPressed)
                     .shadow(color: Color(red: 0.06, green: 0.04, blue: 0.12), radius: 0, y: configuration.isPressed ? 1 : 4)
             }
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color(red: 0.49, green: 0.38, blue: 0.66), lineWidth: 2))
             .offset(y: configuration.isPressed ? 3 : 0)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { pressed in
+                if pressed { ArenaSound.shared.menu(.uiClick) }
+            }
     }
 }
 
@@ -65,7 +69,7 @@ struct ArenaMenuToggle: View {
     let title: String
     @Binding var isOn: Bool
     var body: some View {
-        Button { isOn.toggle() } label: {
+        Button { isOn.toggle(); ArenaSound.shared.menu(.uiToggle) } label: {
             HStack {
                 Text(title).font(.system(size: 15, weight: .semibold, design: .rounded))
                 Spacer()

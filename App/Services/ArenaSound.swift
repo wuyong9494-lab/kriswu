@@ -17,8 +17,17 @@ final class ArenaSound: NSObject {
 
     enum Effect: String, CaseIterable {
         case shot, slash, magic, boom, hit, knockout = "ko", power = "super", pickup, heal, respawn, blink, win, lose, gadget, hyper
+        case uiClick = "ui_click", uiToggle = "ui_toggle", uiSelect = "ui_select"
+        case uiConfirm = "ui_confirm", uiBack = "ui_back"
+        case stepGrass = "step_grass", stepStone = "step_stone"
 
-        var file: String { "arena_" + rawValue }
+        var file: String {
+            switch self {
+            case .slash, .magic, .hit, .win, .lose, .uiClick, .uiToggle, .uiSelect,
+                 .uiConfirm, .uiBack, .stepGrass, .stepStone: return "vendor_" + rawValue
+            default: return "arena_" + rawValue
+            }
+        }
         /// 同时能响几个（电脑一起开火时叠得起来）
         var voices: Int {
             switch self {
@@ -202,6 +211,15 @@ final class ArenaSound: NSObject {
         let started = ProcessInfo.processInfo.systemUptime
         defer { ArenaDiagnostics.shared.record(.audio, seconds: ProcessInfo.processInfo.systemUptime - started) }
         effects.play(effect, volume: min(volume, 1) * level(Self.effectsVolumeKey))
+    }
+
+    /// Menus share the same bounded PCM mixer and the user's effects/mute settings.
+    func menu(_ effect: Effect) {
+        guard [.uiClick, .uiToggle, .uiSelect, .uiConfirm, .uiBack].contains(effect),
+              state.canPlay, !effectsMuted else { return }
+        prepare()
+        guard sessionOn else { return }
+        effects.play(effect, volume: 0.55 * level(Self.effectsVolumeKey))
     }
 
     private var musicLevel: Float { 0.45 * level(Self.musicVolumeKey) }

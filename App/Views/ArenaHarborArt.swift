@@ -124,6 +124,14 @@ enum ArenaHarborArt {
                 let cell = SCNNode()
                 cell.name = "wall-\(x)-\(y)"
                 cell.position = SCNVector3(Float(x) + 0.5, 0, Float(y) + 0.5)
+                // Imported dock cargo fits the same solid cell and retains its name.
+                if (x * 7 + y * 11) % 5 == 0,
+                   let cargo = ArenaVendorAssets.prop((x + y) % 2 == 0 ? "vendor_crates.glb" : "vendor_barrel.glb",
+                                                      width: 0.96, height: 1.02) {
+                    cell.addChildNode(cargo)
+                    root.addChildNode(cell)
+                    continue
+                }
                 let base = SCNNode(geometry: body)
                 base.position.y = 0.45
                 let top = SCNNode(geometry: lid)

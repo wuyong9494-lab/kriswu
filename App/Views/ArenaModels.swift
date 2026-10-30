@@ -97,11 +97,13 @@ struct BrawlerLook {
                                attack: Move(clip: "Ranger_Shoot", seconds: 0.32),
                                special: Move(clip: "Ranger_Skill", seconds: 0.62), scale: Self.rangerScale, authored: true)
         case .barbarian:
-            return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
+            return BrawlerLook(file: "Barbarian.glb", hidden: ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug", "2H_Axe"],
                                idle: "2H_Melee_Idle", run: "Running_B",
                                attack: Move(clip: "2H_Melee_Attack_Chop", from: 0.25, to: 0.7, seconds: 0.4),
                                special: Move(clip: "Jump_Full_Short", from: 0.1, to: 0.9, seconds: Float(Fighter.Leap.duration)),
-                               scale: 1.14)
+                               scale: 1.14,
+                               weapons: [Weapon(file: "vendor_axe.gltf", bone: "handslot.r",
+                                                position: SIMD3(0, 0.03330934, 0), rotation: Self.turned)])
         case .mage:
             return BrawlerLook(file: "Mage.glb", hidden: ["Spellbook", "Spellbook_open", "1H_Wand"],
                                idle: "Idle", run: "Running_A",
@@ -204,7 +206,7 @@ final class ArenaModels: @unchecked Sendable {
                         "trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
                         "trees_B_small.gltf", "trees_B_medium.gltf", "trees_B_large.gltf",
                         "rock_single_A.gltf", "rock_single_B.gltf", "rock_single_C.gltf",
-                        "flag_blue.gltf", "flag_red.gltf"]
+                        "flag_blue.gltf", "flag_red.gltf"] + ArenaVendorAssets.propFiles
 
     private var models: [String: GLTFModel] = [:]
     private var missing: Set<String> = []
@@ -338,6 +340,11 @@ struct BrawlerBadge: View {
                     .font(.system(size: size * 0.42, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .arenaOutline(max(1, size * 0.04))
+            }
+            if selected {
+                ArenaVendorIcon(name: "star").foregroundStyle(.yellow)
+                    .frame(width: size * 0.22, height: size * 0.22)
+                    .offset(x: size * 0.32, y: size * 0.32)
             }
         }
         .frame(width: size, height: size)

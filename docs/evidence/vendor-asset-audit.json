@@ -1,0 +1,3984 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-30",
+  "fileHashesVerified": 6675,
+  "uniqueFileHashes": 6001,
+  "decodedImages": 3142,
+  "parsedSVGs": 436,
+  "decodedAudioFiles": 426,
+  "checkedGLBOrGLTF": 564,
+  "modelsWithUnsupportedArenaFeatures": 0,
+  "animatedSourceModels": {
+    "kaykit-adventurers/Characters/gltf/Barbarian.glb": 76,
+    "kaykit-adventurers/Characters/gltf/Knight.glb": 76,
+    "kaykit-adventurers/Characters/gltf/Mage.glb": 76,
+    "kaykit-adventurers/Characters/gltf/Rogue.glb": 76,
+    "kaykit-adventurers/Characters/gltf/Rogue_Hooded.glb": 76
+  },
+  "hashOnlyFormats": {
+    ".ai": 2,
+    ".dae": 329,
+    ".fbx": 329,
+    ".mtl": 537,
+    ".obj": 537,
+    ".stl": 329,
+    ".ttf": 2,
+    ".xml": 4
+  },
+  "limitations": [
+    "No automatic runtime replacement or new playable characters.",
+    "Format checks are not a full Khronos conformance test.",
+    "No iOS rendering, subjective audio/visual review or physical-device performance approval.",
+    "The source archive contains duplicate formats, color variants and preview files; file count is not unique prop count."
+  ],
+  "models": [
+    {
+      "path": "kaykit-adventurers/Assets/gltf/arrow.gltf",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/arrow_bundle.gltf",
+      "triangles": 280,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/axe_1handed.gltf",
+      "triangles": 274,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/axe_2handed.gltf",
+      "triangles": 508,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/crossbow_1handed.gltf",
+      "triangles": 584,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/crossbow_2handed.gltf",
+      "triangles": 792,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/dagger.gltf",
+      "triangles": 172,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/mug_empty.gltf",
+      "triangles": 366,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/mug_full.gltf",
+      "triangles": 426,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/quiver.gltf",
+      "triangles": 255,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_badge.gltf",
+      "triangles": 262,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_badge_color.gltf",
+      "triangles": 262,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_round.gltf",
+      "triangles": 284,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_round_barbarian.gltf",
+      "triangles": 284,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_round_color.gltf",
+      "triangles": 284,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_spikes.gltf",
+      "triangles": 420,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_spikes_color.gltf",
+      "triangles": 420,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_square.gltf",
+      "triangles": 262,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/shield_square_color.gltf",
+      "triangles": 262,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/smokebomb.gltf",
+      "triangles": 310,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/spellbook_closed.gltf",
+      "triangles": 292,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/spellbook_open.gltf",
+      "triangles": 292,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/staff.gltf",
+      "triangles": 440,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/sword_1handed.gltf",
+      "triangles": 300,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/sword_2handed.gltf",
+      "triangles": 412,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/sword_2handed_color.gltf",
+      "triangles": 412,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Assets/gltf/wand.gltf",
+      "triangles": 150,
+      "animations": 0,
+      "externalResources": 2,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Characters/gltf/Barbarian.glb",
+      "triangles": 6543,
+      "animations": 76,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Characters/gltf/Knight.glb",
+      "triangles": 6952,
+      "animations": 76,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Characters/gltf/Mage.glb",
+      "triangles": 5683,
+      "animations": 76,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Characters/gltf/Rogue.glb",
+      "triangles": 6377,
+      "animations": 76,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-adventurers/Characters/gltf/Rogue_Hooded.glb",
+      "triangles": 6035,
+      "animations": 76,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_blue.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_brown.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_green.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternA_blue.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternA_brown.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternA_green.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternA_red.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternA_white.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternA_yellow.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternB_blue.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternB_brown.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternB_green.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternB_red.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternB_white.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternB_yellow.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternC_blue.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternC_brown.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternC_green.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternC_red.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternC_white.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_patternC_yellow.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_red.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_shield_blue.gltf.glb",
+      "triangles": 639,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_shield_brown.gltf.glb",
+      "triangles": 639,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_shield_green.gltf.glb",
+      "triangles": 639,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_shield_red.gltf.glb",
+      "triangles": 639,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_shield_white.gltf.glb",
+      "triangles": 639,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_shield_yellow.gltf.glb",
+      "triangles": 639,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_thin_blue.gltf.glb",
+      "triangles": 83,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_thin_brown.gltf.glb",
+      "triangles": 83,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_thin_green.gltf.glb",
+      "triangles": 83,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_thin_red.gltf.glb",
+      "triangles": 83,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_thin_white.gltf.glb",
+      "triangles": 83,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_thin_yellow.gltf.glb",
+      "triangles": 83,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_triple_blue.gltf.glb",
+      "triangles": 263,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_triple_brown.gltf.glb",
+      "triangles": 263,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_triple_green.gltf.glb",
+      "triangles": 263,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_triple_red.gltf.glb",
+      "triangles": 263,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_triple_white.gltf.glb",
+      "triangles": 263,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_triple_yellow.gltf.glb",
+      "triangles": 263,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_white.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/banner_yellow.gltf.glb",
+      "triangles": 97,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrel_large.gltf.glb",
+      "triangles": 561,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrel_large_decorated.gltf.glb",
+      "triangles": 1047,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrel_small.gltf.glb",
+      "triangles": 207,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrel_small_stack.gltf.glb",
+      "triangles": 1149,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrier.gltf.glb",
+      "triangles": 90,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrier_colum_half.gltf.glb",
+      "triangles": 86,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrier_column.gltf.glb",
+      "triangles": 110,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrier_corner.gltf.glb",
+      "triangles": 128,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/barrier_half.gltf.glb",
+      "triangles": 42,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bed_decorated.gltf.glb",
+      "triangles": 1410,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bed_floor.gltf.glb",
+      "triangles": 232,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bed_frame.gltf.glb",
+      "triangles": 304,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_A_brown.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_A_green.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_A_labeled_brown.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_A_labeled_green.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_B_brown.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_B_green.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_C_brown.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/bottle_C_green.gltf.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/box_large.gltf.glb",
+      "triangles": 188,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/box_small.gltf.glb",
+      "triangles": 188,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/box_small_decorated.gltf.glb",
+      "triangles": 928,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/box_stacked.gltf.glb",
+      "triangles": 2173,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/candle.gltf.glb",
+      "triangles": 66,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/candle_lit.gltf.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/candle_melted.gltf.glb",
+      "triangles": 66,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/candle_thin.gltf.glb",
+      "triangles": 66,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/candle_thin_lit.gltf.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/candle_triple.gltf.glb",
+      "triangles": 198,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/chair.gltf.glb",
+      "triangles": 294,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/chest.glb",
+      "triangles": 728,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/chest_gold.glb",
+      "triangles": 1568,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/coin.gltf.glb",
+      "triangles": 80,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/coin_stack_large.gltf.glb",
+      "triangles": 1776,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/coin_stack_medium.gltf.glb",
+      "triangles": 968,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/coin_stack_small.gltf.glb",
+      "triangles": 416,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/column.gltf.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/crates_stacked.gltf.glb",
+      "triangles": 1331,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_large.gltf.glb",
+      "triangles": 104,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_large_rocky.gltf.glb",
+      "triangles": 187,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_small_A.gltf.glb",
+      "triangles": 45,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_small_B.gltf.glb",
+      "triangles": 36,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_small_C.gltf.glb",
+      "triangles": 33,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_small_D.gltf.glb",
+      "triangles": 20,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_small_corner.gltf.glb",
+      "triangles": 56,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_dirt_small_weeds.gltf.glb",
+      "triangles": 416,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_foundation_allsides.gltf.glb",
+      "triangles": 360,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_foundation_corner.gltf.glb",
+      "triangles": 202,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_foundation_diagonal_corner.gltf.glb",
+      "triangles": 111,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_foundation_front.gltf.glb",
+      "triangles": 123,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_foundation_front_and_back.gltf.glb",
+      "triangles": 202,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_foundation_front_and_sides.gltf.glb",
+      "triangles": 281,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_big_grate.gltf.glb",
+      "triangles": 292,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_big_grate_open.gltf.glb",
+      "triangles": 284,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_big_spikes.glb",
+      "triangles": 638,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_extralarge_grates.gltf.glb",
+      "triangles": 772,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_extralarge_grates_open.gltf.glb",
+      "triangles": 764,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_grate.gltf.glb",
+      "triangles": 142,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_grate_open.gltf.glb",
+      "triangles": 140,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_large.gltf.glb",
+      "triangles": 188,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_large_rocks.gltf.glb",
+      "triangles": 338,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small.gltf.glb",
+      "triangles": 66,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small_broken_A.gltf.glb",
+      "triangles": 94,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small_broken_B.gltf.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small_corner.gltf.glb",
+      "triangles": 31,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small_decorated.gltf.glb",
+      "triangles": 390,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small_weeds_A.gltf.glb",
+      "triangles": 589,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_tile_small_weeds_B.gltf.glb",
+      "triangles": 447,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_wood_large.gltf.glb",
+      "triangles": 272,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_wood_large_dark.gltf.glb",
+      "triangles": 272,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_wood_small.gltf.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/floor_wood_small_dark.gltf.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/keg.gltf.glb",
+      "triangles": 807,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/keg_decorated.gltf.glb",
+      "triangles": 2058,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/key.gltf.glb",
+      "triangles": 160,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/keyring.gltf.glb",
+      "triangles": 728,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/keyring_hanging.gltf.glb",
+      "triangles": 728,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/pillar.gltf.glb",
+      "triangles": 136,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/pillar_decorated.gltf.glb",
+      "triangles": 761,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/plate.gltf.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/plate_food_A.gltf.glb",
+      "triangles": 547,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/plate_food_B.gltf.glb",
+      "triangles": 306,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/plate_small.gltf.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/plate_stack.gltf.glb",
+      "triangles": 360,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/rubble_half.gltf.glb",
+      "triangles": 390,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/rubble_large.gltf.glb",
+      "triangles": 788,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/shelf_large.gltf.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/shelf_small.gltf.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/shelf_small_candles.gltf.glb",
+      "triangles": 231,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/shelves.gltf.glb",
+      "triangles": 152,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs.gltf.glb",
+      "triangles": 358,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_narrow.gltf.glb",
+      "triangles": 358,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_wall_left.gltf.glb",
+      "triangles": 574,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_wall_right.gltf.glb",
+      "triangles": 574,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_walled.gltf.glb",
+      "triangles": 790,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_wide.gltf.glb",
+      "triangles": 358,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_wood.gltf.glb",
+      "triangles": 296,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stairs_wood_decorated.gltf.glb",
+      "triangles": 2537,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/stool.gltf.glb",
+      "triangles": 172,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/sword_shield.gltf.glb",
+      "triangles": 542,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/sword_shield_broken.gltf.glb",
+      "triangles": 396,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/sword_shield_gold.gltf.glb",
+      "triangles": 542,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_long.gltf.glb",
+      "triangles": 280,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_long_broken.gltf.glb",
+      "triangles": 550,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_long_decorated_A.gltf.glb",
+      "triangles": 1961,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_long_decorated_C.gltf.glb",
+      "triangles": 3499,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_long_tablecloth.gltf.glb",
+      "triangles": 354,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_long_tablecloth_decorated_A.gltf.glb",
+      "triangles": 2035,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_medium.gltf.glb",
+      "triangles": 256,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_medium_broken.gltf.glb",
+      "triangles": 247,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_medium_decorated_A.gltf.glb",
+      "triangles": 1186,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_medium_tablecloth.gltf.glb",
+      "triangles": 270,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_medium_tablecloth_decorated_B.gltf.glb",
+      "triangles": 1200,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_small.gltf.glb",
+      "triangles": 192,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_small_decorated_A.gltf.glb",
+      "triangles": 986,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/table_small_decorated_B.gltf.glb",
+      "triangles": 1576,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/torch.gltf.glb",
+      "triangles": 216,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/torch_lit.gltf.glb",
+      "triangles": 270,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/torch_mounted.gltf.glb",
+      "triangles": 278,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_large_A.gltf.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_large_B.gltf.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_large_C.gltf.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_medium_A.gltf.glb",
+      "triangles": 148,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_medium_B.gltf.glb",
+      "triangles": 148,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_medium_C.gltf.glb",
+      "triangles": 148,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_small_A.gltf.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_small_B.gltf.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/trunk_small_C.gltf.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall.gltf.glb",
+      "triangles": 494,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_Tsplit.gltf.glb",
+      "triangles": 596,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_Tsplit_sloped.gltf.glb",
+      "triangles": 555,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_arched.gltf.glb",
+      "triangles": 724,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_archedwindow_gated.gltf.glb",
+      "triangles": 732,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_archedwindow_gated_scaffold.gltf.glb",
+      "triangles": 674,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_archedwindow_open.gltf.glb",
+      "triangles": 635,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_broken.gltf.glb",
+      "triangles": 784,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_corner.gltf.glb",
+      "triangles": 443,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_corner_gated.gltf.glb",
+      "triangles": 557,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_corner_scaffold.gltf.glb",
+      "triangles": 515,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_corner_small.gltf.glb",
+      "triangles": 223,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_cracked.gltf.glb",
+      "triangles": 2010,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_crossing.gltf.glb",
+      "triangles": 698,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_doorway.glb",
+      "triangles": 1068,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_doorway_Tsplit.gltf.glb",
+      "triangles": 1096,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_doorway_scaffold.glb",
+      "triangles": 1150,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_doorway_sides.gltf.glb",
+      "triangles": 1160,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_endcap.gltf.glb",
+      "triangles": 222,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_gated.gltf.glb",
+      "triangles": 449,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_half.gltf.glb",
+      "triangles": 272,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_half_endcap.gltf.glb",
+      "triangles": 268,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_half_endcap_sloped.gltf.glb",
+      "triangles": 230,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_open_scaffold.gltf.glb",
+      "triangles": 196,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_pillar.gltf.glb",
+      "triangles": 540,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_scaffold.gltf.glb",
+      "triangles": 584,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_shelves.gltf.glb",
+      "triangles": 1582,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_sloped.gltf.glb",
+      "triangles": 257,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_window_closed.gltf.glb",
+      "triangles": 664,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_window_closed_scaffold.gltf.glb",
+      "triangles": 736,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_window_open.gltf.glb",
+      "triangles": 604,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kaykit-dungeon-remastered/Assets/gltf/wall_window_open_scaffold.gltf.glb",
+      "triangles": 676,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bed.glb",
+      "triangles": 268,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bed_floor.glb",
+      "triangles": 124,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_center_stone.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_center_stoneRound.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_center_wood.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_center_woodRound.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_side_stone.glb",
+      "triangles": 152,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_side_stoneRound.glb",
+      "triangles": 198,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_side_wood.glb",
+      "triangles": 136,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_side_woodRound.glb",
+      "triangles": 190,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_stone.glb",
+      "triangles": 252,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_stoneNarrow.glb",
+      "triangles": 252,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_stoneRound.glb",
+      "triangles": 360,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_stoneRoundNarrow.glb",
+      "triangles": 360,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_wood.glb",
+      "triangles": 220,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_woodNarrow.glb",
+      "triangles": 220,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_woodRound.glb",
+      "triangles": 336,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/bridge_woodRoundNarrow.glb",
+      "triangles": 336,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cactus_short.glb",
+      "triangles": 116,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cactus_tall.glb",
+      "triangles": 122,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/campfire_bricks.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/campfire_logs.glb",
+      "triangles": 112,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/campfire_planks.glb",
+      "triangles": 108,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/campfire_stones.glb",
+      "triangles": 264,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/canoe.glb",
+      "triangles": 200,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/canoe_paddle.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockCave_rock.glb",
+      "triangles": 56,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockCave_stone.glb",
+      "triangles": 56,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockDiagonal_rock.glb",
+      "triangles": 8,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockDiagonal_stone.glb",
+      "triangles": 8,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockHalf_rock.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockHalf_stone.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockQuarter_rock.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockQuarter_stone.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockSlopeHalfWalls_rock.glb",
+      "triangles": 106,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockSlopeHalfWalls_stone.glb",
+      "triangles": 106,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockSlopeWalls_rock.glb",
+      "triangles": 106,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockSlopeWalls_stone.glb",
+      "triangles": 106,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockSlope_rock.glb",
+      "triangles": 70,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_blockSlope_stone.glb",
+      "triangles": 70,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_block_rock.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_block_stone.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cave_rock.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cave_stone.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerInnerLarge_rock.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerInnerLarge_stone.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerInnerTop_rock.glb",
+      "triangles": 89,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerInnerTop_stone.glb",
+      "triangles": 89,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerInner_rock.glb",
+      "triangles": 56,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerInner_stone.glb",
+      "triangles": 112,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerLarge_rock.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerLarge_stone.glb",
+      "triangles": 24,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerTop_rock.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_cornerTop_stone.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_corner_rock.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_corner_stone.glb",
+      "triangles": 12,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_diagonal_rock.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_diagonal_stone.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_halfCornerInner_rock.glb",
+      "triangles": 89,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_halfCornerInner_stone.glb",
+      "triangles": 89,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_halfCorner_rock.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_halfCorner_stone.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_half_rock.glb",
+      "triangles": 53,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_half_stone.glb",
+      "triangles": 53,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_large_rock.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_large_stone.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_rock.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_stepsCornerInner_rock.glb",
+      "triangles": 213,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_stepsCornerInner_stone.glb",
+      "triangles": 213,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_stepsCorner_rock.glb",
+      "triangles": 245,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_stepsCorner_stone.glb",
+      "triangles": 245,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_steps_rock.glb",
+      "triangles": 219,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_steps_stone.glb",
+      "triangles": 219,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_stone.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_topDiagonal_rock.glb",
+      "triangles": 66,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_topDiagonal_stone.glb",
+      "triangles": 132,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_top_rock.glb",
+      "triangles": 53,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_top_stone.glb",
+      "triangles": 53,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_waterfallTop_rock.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_waterfallTop_stone.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_waterfall_rock.glb",
+      "triangles": 34,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/cliff_waterfall_stone.glb",
+      "triangles": 68,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_bambooStageA.glb",
+      "triangles": 276,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_bambooStageB.glb",
+      "triangles": 564,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_cornStageA.glb",
+      "triangles": 100,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_cornStageB.glb",
+      "triangles": 116,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_cornStageC.glb",
+      "triangles": 148,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_cornStageD.glb",
+      "triangles": 300,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtDoubleRow.glb",
+      "triangles": 88,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtDoubleRowCorner.glb",
+      "triangles": 50,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtDoubleRowEnd.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtRow.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtRowCorner.glb",
+      "triangles": 19,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtRowEnd.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_dirtSingle.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_leafsStageA.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_leafsStageB.glb",
+      "triangles": 84,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_wheatStageA.glb",
+      "triangles": 720,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crops_wheatStageB.glb",
+      "triangles": 360,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crop_carrot.glb",
+      "triangles": 148,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crop_melon.glb",
+      "triangles": 236,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crop_pumpkin.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/crop_turnip.glb",
+      "triangles": 168,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_bend.glb",
+      "triangles": 240,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_bendCenter.glb",
+      "triangles": 298,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_corner.glb",
+      "triangles": 116,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_gate.glb",
+      "triangles": 524,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_planks.glb",
+      "triangles": 96,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_planksDouble.glb",
+      "triangles": 152,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_simple.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_simpleCenter.glb",
+      "triangles": 116,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_simpleDiagonal.glb",
+      "triangles": 80,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_simpleDiagonalCenter.glb",
+      "triangles": 148,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_simpleHigh.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/fence_simpleLow.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_purpleA.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_purpleB.glb",
+      "triangles": 98,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_purpleC.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_redA.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_redB.glb",
+      "triangles": 98,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_redC.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_yellowA.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_yellowB.glb",
+      "triangles": 154,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/flower_yellowC.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/grass.glb",
+      "triangles": 132,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/grass_large.glb",
+      "triangles": 224,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/grass_leafs.glb",
+      "triangles": 36,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/grass_leafsLarge.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_grass.glb",
+      "triangles": 2,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathBend.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathBendBank.glb",
+      "triangles": 38,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathCorner.glb",
+      "triangles": 22,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathCornerSmall.glb",
+      "triangles": 24,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathCross.glb",
+      "triangles": 74,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathEnd.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathEndClosed.glb",
+      "triangles": 68,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathOpen.glb",
+      "triangles": 8,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathRocks.glb",
+      "triangles": 102,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathSide.glb",
+      "triangles": 34,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathSideOpen.glb",
+      "triangles": 40,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathSplit.glb",
+      "triangles": 68,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathStraight.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_pathTile.glb",
+      "triangles": 86,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverBend.glb",
+      "triangles": 54,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverBendBank.glb",
+      "triangles": 54,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverCorner.glb",
+      "triangles": 40,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverCornerSmall.glb",
+      "triangles": 26,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverCross.glb",
+      "triangles": 82,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverEnd.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverEndClosed.glb",
+      "triangles": 84,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverOpen.glb",
+      "triangles": 8,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverRocks.glb",
+      "triangles": 102,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverSide.glb",
+      "triangles": 34,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverSideOpen.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverSplit.glb",
+      "triangles": 72,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverStraight.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/ground_riverTile.glb",
+      "triangles": 128,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/hanging_moss.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/lily_large.glb",
+      "triangles": 86,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/lily_small.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/log.glb",
+      "triangles": 200,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/log_large.glb",
+      "triangles": 96,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/log_stack.glb",
+      "triangles": 184,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/log_stackLarge.glb",
+      "triangles": 310,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/mushroom_red.glb",
+      "triangles": 48,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/mushroom_redGroup.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/mushroom_redTall.glb",
+      "triangles": 48,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/mushroom_tan.glb",
+      "triangles": 48,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/mushroom_tanGroup.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/mushroom_tanTall.glb",
+      "triangles": 48,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_stone.glb",
+      "triangles": 136,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_stoneCircle.glb",
+      "triangles": 164,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_stoneCorner.glb",
+      "triangles": 112,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_stoneEnd.glb",
+      "triangles": 92,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_wood.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_woodCorner.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/path_woodEnd.glb",
+      "triangles": 36,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_bush.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_bushDetailed.glb",
+      "triangles": 104,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_bushLarge.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_bushLargeTriangle.glb",
+      "triangles": 39,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_bushSmall.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_bushTriangle.glb",
+      "triangles": 30,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_flatShort.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/plant_flatTall.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/platform_beach.glb",
+      "triangles": 192,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/platform_grass.glb",
+      "triangles": 186,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/platform_stone.glb",
+      "triangles": 192,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/pot_large.glb",
+      "triangles": 68,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/pot_small.glb",
+      "triangles": 72,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_largeA.glb",
+      "triangles": 80,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_largeB.glb",
+      "triangles": 85,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_largeC.glb",
+      "triangles": 72,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_largeD.glb",
+      "triangles": 80,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_largeE.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_largeF.glb",
+      "triangles": 73,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallA.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallB.glb",
+      "triangles": 24,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallC.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallD.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallE.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallF.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallFlatA.glb",
+      "triangles": 20,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallFlatB.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallFlatC.glb",
+      "triangles": 40,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallG.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallH.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallI.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallTopA.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_smallTopB.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallA.glb",
+      "triangles": 136,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallB.glb",
+      "triangles": 172,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallC.glb",
+      "triangles": 37,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallD.glb",
+      "triangles": 38,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallE.glb",
+      "triangles": 38,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallF.glb",
+      "triangles": 46,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallG.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallH.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallI.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/rock_tallJ.glb",
+      "triangles": 42,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/sign.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/statue_block.glb",
+      "triangles": 140,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/statue_column.glb",
+      "triangles": 122,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/statue_columnDamaged.glb",
+      "triangles": 108,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/statue_head.glb",
+      "triangles": 196,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/statue_obelisk.glb",
+      "triangles": 38,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/statue_ring.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_largeA.glb",
+      "triangles": 80,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_largeB.glb",
+      "triangles": 85,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_largeC.glb",
+      "triangles": 72,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_largeD.glb",
+      "triangles": 80,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_largeE.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_largeF.glb",
+      "triangles": 73,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallA.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallB.glb",
+      "triangles": 24,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallC.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallD.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallE.glb",
+      "triangles": 64,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallF.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallFlatA.glb",
+      "triangles": 20,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallFlatB.glb",
+      "triangles": 16,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallFlatC.glb",
+      "triangles": 40,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallG.glb",
+      "triangles": 32,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallH.glb",
+      "triangles": 60,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallI.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallTopA.glb",
+      "triangles": 52,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_smallTopB.glb",
+      "triangles": 76,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallA.glb",
+      "triangles": 136,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallB.glb",
+      "triangles": 172,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallC.glb",
+      "triangles": 37,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallD.glb",
+      "triangles": 38,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallE.glb",
+      "triangles": 38,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallF.glb",
+      "triangles": 46,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallG.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallH.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallI.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stone_tallJ.glb",
+      "triangles": 42,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_old.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_oldTall.glb",
+      "triangles": 120,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_round.glb",
+      "triangles": 56,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_roundDetailed.glb",
+      "triangles": 96,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_square.glb",
+      "triangles": 44,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_squareDetailed.glb",
+      "triangles": 84,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/stump_squareDetailedWide.glb",
+      "triangles": 84,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tent_detailedClosed.glb",
+      "triangles": 228,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tent_detailedOpen.glb",
+      "triangles": 232,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tent_smallClosed.glb",
+      "triangles": 220,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tent_smallOpen.glb",
+      "triangles": 224,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_blocks.glb",
+      "triangles": 132,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_blocks_dark.glb",
+      "triangles": 132,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_blocks_fall.glb",
+      "triangles": 264,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_cone.glb",
+      "triangles": 132,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_cone_dark.glb",
+      "triangles": 264,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_cone_fall.glb",
+      "triangles": 132,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_default.glb",
+      "triangles": 114,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_default_dark.glb",
+      "triangles": 114,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_default_fall.glb",
+      "triangles": 228,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_detailed.glb",
+      "triangles": 402,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_detailed_dark.glb",
+      "triangles": 402,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_detailed_fall.glb",
+      "triangles": 402,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_fat.glb",
+      "triangles": 50,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_fat_darkh.glb",
+      "triangles": 50,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_fat_fall.glb",
+      "triangles": 50,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_oak.glb",
+      "triangles": 196,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_oak_dark.glb",
+      "triangles": 196,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_oak_fall.glb",
+      "triangles": 196,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_palm.glb",
+      "triangles": 186,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_palmBend.glb",
+      "triangles": 200,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_palmDetailedShort.glb",
+      "triangles": 336,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_palmDetailedTall.glb",
+      "triangles": 336,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_palmShort.glb",
+      "triangles": 190,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_palmTall.glb",
+      "triangles": 190,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineDefaultA.glb",
+      "triangles": 230,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineDefaultB.glb",
+      "triangles": 246,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineGroundA.glb",
+      "triangles": 82,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineGroundB.glb",
+      "triangles": 82,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineRoundA.glb",
+      "triangles": 204,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineRoundB.glb",
+      "triangles": 262,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineRoundC.glb",
+      "triangles": 206,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineRoundD.glb",
+      "triangles": 170,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineRoundE.glb",
+      "triangles": 198,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineRoundF.glb",
+      "triangles": 214,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineSmallA.glb",
+      "triangles": 164,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineSmallB.glb",
+      "triangles": 86,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineSmallC.glb",
+      "triangles": 54,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineSmallD.glb",
+      "triangles": 54,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallA.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallA_detailed.glb",
+      "triangles": 134,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallB.glb",
+      "triangles": 78,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallB_detailed.glb",
+      "triangles": 166,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallC.glb",
+      "triangles": 98,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallC_detailed.glb",
+      "triangles": 154,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallD.glb",
+      "triangles": 98,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_pineTallD_detailed.glb",
+      "triangles": 170,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_plateau.glb",
+      "triangles": 215,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_plateau_dark.glb",
+      "triangles": 215,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_plateau_fall.glb",
+      "triangles": 215,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_simple.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_simple_dark.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_simple_fall.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_small.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_small_dark.glb",
+      "triangles": 124,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_small_fall.glb",
+      "triangles": 62,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_tall.glb",
+      "triangles": 72,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_tall_dark.glb",
+      "triangles": 72,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_tall_fall.glb",
+      "triangles": 144,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_thin.glb",
+      "triangles": 228,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_thin_dark.glb",
+      "triangles": 456,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    },
+    {
+      "path": "kenney-nature-kit/Models/GLTF format/tree_thin_fall.glb",
+      "triangles": 228,
+      "animations": 0,
+      "externalResources": 0,
+      "unsupportedArenaFeatures": []
+    }
+  ]
+}

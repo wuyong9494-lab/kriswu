@@ -114,11 +114,7 @@ struct ArenaLobbyButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(primary ? Color(red: 0.24, green: 0.13, blue: 0.05) : .white)
             .background {
-                ArenaLobbyPlate()
-                    .fill(LinearGradient(colors: primary
-                        ? [Color(red: 1, green: 0.88, blue: 0.34), Color(red: 1, green: 0.66, blue: 0.12)]
-                        : [Color(red: 0.22, green: 0.29, blue: 0.40), Color(red: 0.10, green: 0.16, blue: 0.26)],
-                                         startPoint: .top, endPoint: .bottom))
+                ArenaVendorButtonFace(primary: primary, pressed: configuration.isPressed)
                     .overlay {
                         ArenaLobbyPlate().stroke(Color(red: 0.025, green: 0.045, blue: 0.12), lineWidth: 2.5)
                     }
@@ -131,6 +127,9 @@ struct ArenaLobbyButtonStyle: ButtonStyle {
             }
             .offset(y: configuration.isPressed ? 3 : 0)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { pressed in
+                if pressed { ArenaSound.shared.menu(primary ? .uiConfirm : .uiClick) }
+            }
     }
 }
 

@@ -1,3 +1,45 @@
+## Current task — integrate all eleven resource packs; do not upload 468
+
+Publication resumed with the owner's explicit authorization. The particle source
+ZIP is stored as two byte-exact parts because the GitHub connector limits requests
+to 16 MiB; offline import reconstructs and checks the original ZIP SHA-256. All
+runtime assets remain ordinary bundled files. 37 capture tests and the runtime /
+three-hero asset contracts passed again before publication. New CI is still required.
+
+Recovery checkpoint (2026-10-30): restored the uncommitted integration from
+`/workspace/scratch/5f0f6e97c066/kriswu` into a clean checkout at remote `64edcdb`.
+Current workspace: `/workspace/scratch/ce39013f0f8e/kriswu`.
+All 6,675 source hashes, image/audio/model checks, 28 runtime file checks and
+37 capture tests passed again. Result return now explicitly waits for the real
+button's enabled/hittable state after the existing animation guard.
+GitHub create_tree was rejected by automatic approval because publishing local
+source and 43 MiB of asset archives to this public repository needs explicit
+confirmation. No new remote commit, CI run or TestFlight upload was created.
+The user explicitly approved this exact public repository publication in the next
+turn (2026-10-30). Resume publication and validation from this checkpoint; do not
+claim a successful remote commit or upload until independently verified.
+
+User explicitly cancelled 468 and requested all downloaded packs integrated into the game, then a new TestFlight version without reconfirmation. The 468 condition watch is disabled. Its promotion run 41042204824 failed in verification; testflight and apple-status were skipped. Build468 iOS build/arena-look jobs were cancelled (the workflow reports failure); it did not establish a passed Mac build or three-hero flow. Its sample capture passed; Ranger/Barbarian flow failed and Mage was cancelled.
+
+468 follow-up: downloaded Ranger diagnostic artifact 12972200841 and inspected the actual result screenshot, final lobby screenshot, battle/final accessibility trees and XCTest log. Entry, hero list/detail and combat controls worked. At test seconds 184.86–189.76 a natural result appeared between the cached attack and special taps; the latter overlapped Return to lobby. The following clock query failed in the lobby. The next test checks result between actions, only uses an earned super, and navigates in observed real-touch segments up to 2.5 seconds (no accelerated simulation). Traces now persist in tearDown even after assertion failure. Normal result actions also absorb the 0.8-second entry animation taps. Existing natural-result, real attack/super, returned-lobby, original recording and media assertions remain.
+
+Current remote source base: `64edcdb84fa1590324c7e441e742dfd88b0730ed`. Do not push local snapshot history wholesale. New integration is being published as a leased child of the remote source head.
+
+All eleven original CC0 ZIPs, 6,675 indexed source files, original licenses and audit tools have been recovered from the prior workspace. Sources stay reproducible under art/vendor; the App has a deterministic 28-file runtime selection (919,660 bytes), with actual calls covering all 11 packs:
+
+- KayKit Adventurers: Barbarian's axe on the existing animated right-hand attachment.
+- KayKit Dungeon Remastered: crates/barrels inside existing Twin Gates wall cells.
+- Kenney Nature Kit: bounded shared tree/bush/rock decoration outside playable cells.
+- Kenney UI Pack / Game Icons: menu button faces and navigation/selection icons.
+- Kenney Particle Pack: pooled spark/smoke textures, loaded at scene setup.
+- Kenney UI Audio / Interface Sounds: menu press/toggle/back/select/start feedback.
+- Kenney Impact Sounds / RPG Audio: hits, distance-triggered player footsteps, melee/cast sounds.
+- Kenney Music Jingles: actual win/loss result cues; existing full lobby/battle loops remain.
+
+Full source integrity, 3,142 PNG decode, 436 SVG parse, 426 OGG decode, 564 model checks passed locally. 37 capture/recording tests and runtime source/hash/dependency checks passed. Added real iOS loader, cell-bounds, animated-hand and border tests; they run alongside audio rendering tests in the contents-read-only sample-capture workflow. The existing ios.yml is unchanged: automatic approval rejected rewriting that workflow because of its unrelated privileged release/certificate paths. Swift compilation, screenshots, audio playback and three-hero flow still require the new producing CI. No physical-device 60FPS claim.
+
+Do not upload 468 or reuse its release manifest. After the new iOS and sample/three-hero CI pass, pin the new exact SHA/build/run IDs in promotion and upload. Keep duplicate/archive/source/asset gates. Do not weaken or skip failed UI/evidence assertions. Older checkpoints below are historical and superseded by this task.
+
 > 最新接续（467 后）：基线 `67ac1a5`，iOS 编译、46 项回归与旧模型对照通过；游侠/蛮王仍被场景自动化节点泄漏断言拦下，菜单首次启动超时，法师未开始。所有已运行任务证据已保存后，提交补充修复替换未启动的旧验证。见 [467 诊断和下一轮](arena-flow-recovery-467.md)。不能宣称三英雄通过。
 
 > 当前接续（Build 466）：远程基线 `bc8f5fe`；466 的编译/回归/穿行通过，三英雄流程仍失败，旧模型截图任务也失败。见 [466 证据与修复](arena-flow-recovery-466.md)。本次增量尚待新一轮 CI，不可引用下方旧状态宣称通过。

@@ -1,0 +1,338 @@
+{
+  "schemaVersion": 1,
+  "packCount": 11,
+  "files": [
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/axe_2handed.gltf",
+      "sourceSHA256": "9570c2300c57db64a412a377c78f1681a66d7c47d75bb7643e69573e66a3a1d5",
+      "file": "vendor_axe.gltf",
+      "sha256": "0393ffc72a3d10bed25fc339ec82492cba9dd381ba8f5b97498718c7615c5060",
+      "bytes": 1367,
+      "usage": "barbarian.hand",
+      "conversion": "Rename dependency URIs only; geometry unchanged"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/axe_2handed.bin",
+      "sourceSHA256": "e5ca2d08f8baa12b510fb27c6a01bb711f102107c8f672443d1d1945f1fb40c0",
+      "file": "vendor_axe.bin",
+      "sha256": "e5ca2d08f8baa12b510fb27c6a01bb711f102107c8f672443d1d1945f1fb40c0",
+      "bytes": 21960,
+      "usage": "barbarian.hand"
+    },
+    {
+      "pack": "kaykit-adventurers",
+      "source": "Assets/gltf/barbarian_texture.png",
+      "sourceSHA256": "7329b2ff9709e8d54c886d5ef49c08bd42b12be3bbb2facb1488a6b48b1e8a80",
+      "file": "vendor_axe_texture.png",
+      "sha256": "7329b2ff9709e8d54c886d5ef49c08bd42b12be3bbb2facb1488a6b48b1e8a80",
+      "bytes": 15089,
+      "usage": "barbarian.hand"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/crates_stacked.gltf.glb",
+      "sourceSHA256": "43182b077ead9b033804300ef453b7402bdc979f00cfce2d7f0c91dcf6bb5d3c",
+      "file": "vendor_crates.glb",
+      "sha256": "43182b077ead9b033804300ef453b7402bdc979f00cfce2d7f0c91dcf6bb5d3c",
+      "bytes": 103704,
+      "usage": "arena.blockedCell"
+    },
+    {
+      "pack": "kaykit-dungeon-remastered",
+      "source": "Assets/gltf/barrel_large.gltf.glb",
+      "sourceSHA256": "9fae6a79056241baf253fe9272dc7a7ddb174e1caf153eb5013c58a596722148",
+      "file": "vendor_barrel.glb",
+      "sha256": "9fae6a79056241baf253fe9272dc7a7ddb174e1caf153eb5013c58a596722148",
+      "bytes": 44292,
+      "usage": "arena.blockedCell"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/plant_bushSmall.glb",
+      "sourceSHA256": "a9620a7d1fb165ae68d323676f80dbb2a9e3aafb21110d18d18d90b07026b91d",
+      "file": "vendor_bush.glb",
+      "sha256": "a9620a7d1fb165ae68d323676f80dbb2a9e3aafb21110d18d18d90b07026b91d",
+      "bytes": 3212,
+      "usage": "arena.border"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/rock_smallA.glb",
+      "sourceSHA256": "df9fff9d711e61370e8df0caa2514c89b8f8a8dc6c6fafaf4eb2ec79c5ae07c1",
+      "file": "vendor_rock.glb",
+      "sha256": "df9fff9d711e61370e8df0caa2514c89b8f8a8dc6c6fafaf4eb2ec79c5ae07c1",
+      "bytes": 3044,
+      "usage": "arena.border"
+    },
+    {
+      "pack": "kenney-nature-kit",
+      "source": "Models/GLTF format/tree_oak.glb",
+      "sourceSHA256": "d7fd8773674928c50c11b66d12c636d49bdcc15a8b1c7fbb98e6f63a3439a3f3",
+      "file": "vendor_tree.glb",
+      "sha256": "d7fd8773674928c50c11b66d12c636d49bdcc15a8b1c7fbb98e6f63a3439a3f3",
+      "bytes": 14644,
+      "usage": "arena.border"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Blue/Double/button_rectangle_depth_flat.png",
+      "sourceSHA256": "91fbaa6c2568e832fc2f72c574535d55673e8a2a7f5df9da260ca449c5c228f2",
+      "file": "vendor_button_blue.png",
+      "sha256": "91fbaa6c2568e832fc2f72c574535d55673e8a2a7f5df9da260ca449c5c228f2",
+      "bytes": 785,
+      "usage": "lobby.menuButton"
+    },
+    {
+      "pack": "kenney-ui-pack",
+      "source": "PNG/Yellow/Double/button_rectangle_depth_flat.png",
+      "sourceSHA256": "0c43a01a95270167be8c05a68c45a2709e60177d9dfa59bedb56fd0802659e52",
+      "file": "vendor_button_yellow.png",
+      "sha256": "0c43a01a95270167be8c05a68c45a2709e60177d9dfa59bedb56fd0802659e52",
+      "bytes": 784,
+      "usage": "lobby.menuButton"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/cross.png",
+      "sourceSHA256": "8293e3758e7df2eb1c5bb8d6979cccc826e66c28f8c703e6cbb0a54a3c0efc33",
+      "file": "vendor_icon_cross.png",
+      "sha256": "8293e3758e7df2eb1c5bb8d6979cccc826e66c28f8c703e6cbb0a54a3c0efc33",
+      "bytes": 15480,
+      "usage": "menu.navigation"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/checkmark.png",
+      "sourceSHA256": "00e3025322ddb4948598b7fb8d385762073de7b2b534d2cfd44372072608a92a",
+      "file": "vendor_icon_checkmark.png",
+      "sha256": "00e3025322ddb4948598b7fb8d385762073de7b2b534d2cfd44372072608a92a",
+      "bytes": 15751,
+      "usage": "menu.navigation"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/arrowLeft.png",
+      "sourceSHA256": "ae31db60393c860e404cda7193c843fe027a1542202bf7ffbab90b774f342cb6",
+      "file": "vendor_icon_arrowLeft.png",
+      "sha256": "ae31db60393c860e404cda7193c843fe027a1542202bf7ffbab90b774f342cb6",
+      "bytes": 15286,
+      "usage": "menu.navigation"
+    },
+    {
+      "pack": "kenney-game-icons",
+      "source": "PNG/White/2x/star.png",
+      "sourceSHA256": "8e10578b82d6d46aff27a9939f4c1adccd1be6dc93c8302c9e28d281e126aae2",
+      "file": "vendor_icon_star.png",
+      "sha256": "8e10578b82d6d46aff27a9939f4c1adccd1be6dc93c8302c9e28d281e126aae2",
+      "bytes": 15648,
+      "usage": "menu.navigation"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/spark_01.png",
+      "sourceSHA256": "5902da3a324cad0a4b5a88ce1e3c9cc18fee50922c358ce93d8c9f1ad7708f0a",
+      "file": "vendor_spark_01.png",
+      "sha256": "5902da3a324cad0a4b5a88ce1e3c9cc18fee50922c358ce93d8c9f1ad7708f0a",
+      "bytes": 95070,
+      "usage": "combat.pooledParticles"
+    },
+    {
+      "pack": "kenney-particle-pack",
+      "source": "PNG (Transparent)/smoke_01.png",
+      "sourceSHA256": "e8724c219e8d35859167fc0a7e207e13c72ccf0c29704909b9bb3d3dc71c6cf7",
+      "file": "vendor_smoke_01.png",
+      "sha256": "e8724c219e8d35859167fc0a7e207e13c72ccf0c29704909b9bb3d3dc71c6cf7",
+      "bytes": 97452,
+      "usage": "combat.pooledParticles"
+    },
+    {
+      "pack": "kenney-ui-audio",
+      "source": "Audio/click4.ogg",
+      "sourceSHA256": "9c02bbfc872b50eb8750adf4b7c343120f19f5d2f04ab06a7a8948368a77b872",
+      "file": "vendor_ui_click.wav",
+      "sha256": "5987781e10311d74cd3d1d4944395779ab021c4502b07d011bc36adbe97fffe4",
+      "bytes": 3406,
+      "usage": "menu.press"
+    },
+    {
+      "pack": "kenney-ui-audio",
+      "source": "Audio/switch2.ogg",
+      "sourceSHA256": "aa8ad6e4745e87c84c24a0335e0e0f8629ccbbc474ccfd544fe07d7f3a1b2280",
+      "file": "vendor_ui_toggle.wav",
+      "sha256": "bdce917a97e0595701b0b2f44c4d37cb198d03c6d221c4821b15b44aa0fcf645",
+      "bytes": 28110,
+      "usage": "menu.toggle"
+    },
+    {
+      "pack": "kenney-interface-sounds",
+      "source": "Audio/select_001.ogg",
+      "sourceSHA256": "aec0c31ea934a35936ae0d2ab8fac8123c93aa5647f935853a58dbaf90278b7a",
+      "file": "vendor_ui_select.wav",
+      "sha256": "95a267765d6039845416095f460f77dc43bc671d8758effd5bd5c50bef00f8b3",
+      "bytes": 3640,
+      "usage": "hero.select"
+    },
+    {
+      "pack": "kenney-interface-sounds",
+      "source": "Audio/confirmation_001.ogg",
+      "sourceSHA256": "063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+      "file": "vendor_ui_confirm.wav",
+      "sha256": "04b8b49f2a268df8685cd0fb3b52ae81835155a5965f54e35d4bf7b2c99aeaec",
+      "bytes": 25642,
+      "usage": "match.start"
+    },
+    {
+      "pack": "kenney-interface-sounds",
+      "source": "Audio/back_001.ogg",
+      "sourceSHA256": "07db973f79f6ae0f2edc34561e7592e24d0577455919fb602cb8ecc0da991dcf",
+      "file": "vendor_ui_back.wav",
+      "sha256": "21926cffd4ff715b238c5b7a29ff5facff99e6c19b7e5611cdc8a8ccbd7d178d",
+      "bytes": 5456,
+      "usage": "menu.back"
+    },
+    {
+      "pack": "kenney-impact-sounds",
+      "source": "Audio/impactSoft_heavy_000.ogg",
+      "sourceSHA256": "49e7ca88743fca974bb8676ea138b751cfd8f9033b5e7af8736c2a215d6edbc1",
+      "file": "vendor_hit.wav",
+      "sha256": "20d57d42840b29b7119734946d4a71cec370a4e2d995fb83ab7117df47b8a4a4",
+      "bytes": 46542,
+      "usage": "combat.hit"
+    },
+    {
+      "pack": "kenney-impact-sounds",
+      "source": "Audio/footstep_grass_000.ogg",
+      "sourceSHA256": "9d49497777405d78d7cf7f2888e28277f3a23192300cfd1d79d54876b20f479f",
+      "file": "vendor_step_grass.wav",
+      "sha256": "dc40bec63646c0287b0a077bd95e8c3755beb112e20e36215f3807932f9d61fa",
+      "bytes": 68404,
+      "usage": "player.grassFootstep"
+    },
+    {
+      "pack": "kenney-impact-sounds",
+      "source": "Audio/footstep_concrete_000.ogg",
+      "sourceSHA256": "d7267e183067757c92c169de2a379abea592cfca6b39bb2e8feea15221ad79fe",
+      "file": "vendor_step_stone.wav",
+      "sha256": "15fa6276929c9cdaf17e51749d0d794eeddd47d28ae4390d3b81289d3a8987a6",
+      "bytes": 9164,
+      "usage": "player.groundFootstep"
+    },
+    {
+      "pack": "kenney-rpg-audio",
+      "source": "Audio/knifeSlice.ogg",
+      "sourceSHA256": "4cd96dc630bed9840c15f1dd2306da2cc56a4da26a5d3f1a03c5a7265ac5e54f",
+      "file": "vendor_slash.wav",
+      "sha256": "46c32b12008aae0a65e9e1d05129db573e88c45795a319854eaa94ce3144de79",
+      "bytes": 52958,
+      "usage": "combat.melee"
+    },
+    {
+      "pack": "kenney-rpg-audio",
+      "source": "Audio/bookFlip1.ogg",
+      "sourceSHA256": "fa81ac2fedc8c641661b87e349630a36c9800e795e0c800e029214efdbe26a7d",
+      "file": "vendor_magic.wav",
+      "sha256": "6f2fc6cac661fa41f1fac4e4f98c53b036fbd30ed667e0ecaf09e3d0e6f1e582",
+      "bytes": 67874,
+      "usage": "combat.cast"
+    },
+    {
+      "pack": "kenney-music-jingles",
+      "source": "Audio/Pizzicato jingles/jingles_PIZZI00.ogg",
+      "sourceSHA256": "b442ade3308a2bbda4b8c572c86f9f1071c7bdbcfb1e6f915d35c605b61bd475",
+      "file": "vendor_win.wav",
+      "sha256": "28d7296ba82de11f9b2c49c2bcf226b03492f1aef1dc515ee1613852d6cfbb95",
+      "bytes": 43664,
+      "usage": "match.victory"
+    },
+    {
+      "pack": "kenney-music-jingles",
+      "source": "Audio/Pizzicato jingles/jingles_PIZZI03.ogg",
+      "sourceSHA256": "88da900ec74a79fb845f2dcf2068383998833a9ee1b87a23f074924781af5700",
+      "file": "vendor_lose.wav",
+      "sha256": "627d784e5cf802eeeb2df792cf77d5e1d357a5090f82ac3d20eb507310e26506",
+      "bytes": 101232,
+      "usage": "match.defeat"
+    }
+  ],
+  "packs": [
+    {
+      "id": "kaykit-adventurers",
+      "name": "KayKit Adventurers",
+      "author": "Kay Lousberg",
+      "source": "https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kaykit-dungeon-remastered",
+      "name": "KayKit Dungeon Remastered",
+      "author": "Kay Lousberg",
+      "source": "https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-ui-audio",
+      "name": "Kenney UI Audio",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/ui-audio",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-interface-sounds",
+      "name": "Kenney Interface Sounds",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/interface-sounds",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-impact-sounds",
+      "name": "Kenney Impact Sounds",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/impact-sounds",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-rpg-audio",
+      "name": "Kenney RPG Audio",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/rpg-audio",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-music-jingles",
+      "name": "Kenney Music Jingles",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/music-jingles",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-ui-pack",
+      "name": "Kenney UI Pack",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/ui-pack",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-game-icons",
+      "name": "Kenney Game Icons",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/game-icons",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-particle-pack",
+      "name": "Kenney Particle Pack",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/particle-pack",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "kenney-nature-kit",
+      "name": "Kenney Nature Kit",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0"
+    }
+  ]
+}

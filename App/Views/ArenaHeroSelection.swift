@@ -23,8 +23,12 @@ struct ArenaHeroSelection: View {
                                         BrawlerBadge(brawler: hero, size: 76, selected: hero == selected)
                                         Text(hero.name).font(.title3.bold())
                                         Text(hero.role).font(.subheadline)
-                                        Text(hero == selected ? "已选择 · 查看详情" : "查看详情")
-                                            .font(.caption).foregroundStyle(.cyan)
+                                        HStack(spacing: 5) {
+                                            if hero == selected {
+                                                ArenaVendorIcon(name: "checkmark").frame(width: 14, height: 14)
+                                            }
+                                            Text(hero == selected ? "已选择 · 查看详情" : "查看详情")
+                                        }.font(.caption).foregroundStyle(.cyan)
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 180)
                                     .padding(10)
@@ -44,12 +48,15 @@ struct ArenaHeroSelection: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let hero = inspected {
                 HStack(spacing: 12) {
-                    Button { inspected = nil } label: {
-                        Text("返回英雄列表").frame(maxWidth: .infinity, minHeight: 44)
+                    Button { ArenaSound.shared.menu(.uiBack); inspected = nil } label: {
+                        HStack(spacing: 8) {
+                            ArenaVendorIcon(name: "arrowLeft").frame(width: 16, height: 16)
+                            Text("返回英雄列表")
+                        }.frame(maxWidth: .infinity, minHeight: 44)
                     }
                         .buttonStyle(ArenaMenuButtonStyle())
                         .accessibilityIdentifier("arena.hero.back")
-                    Button { onSelect(hero) } label: {
+                    Button { ArenaSound.shared.menu(.uiSelect); onSelect(hero) } label: {
                         Text("选择\(hero.name)").frame(maxWidth: .infinity, minHeight: 44)
                     }
                         .buttonStyle(ArenaMenuButtonStyle())
