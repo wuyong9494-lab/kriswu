@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "2b3cc7dca4e94e812a7eea3dc16b28fb69cc4ed6",
+  "artifactID": 12960502734,
+  "transform": "Original simulator PNG rotated90deg counterclockwise and resized to1434x660; RGB JPEGquality80. Still review only. Original MP4 untouched.",
+  "files": [
+    {
+      "file": "combat.jpg",
+      "originalPNG_SHA256": "c43b26090368a63061775699ecda45b7253c810060a7533258947053930d8dba"
+    },
+    {
+      "file": "map.jpg",
+      "originalPNG_SHA256": "9e685e6ede941ba2e27f448547952f99424fe7e6d4feb23f8d76a1c140b19967"
+    }
+  ]
+}

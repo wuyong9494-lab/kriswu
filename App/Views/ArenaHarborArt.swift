@@ -15,7 +15,7 @@ enum ArenaHarborArt {
     static let outside = material(UIColor(red: 0.09, green: 0.18, blue: 0.23, alpha: 1))
     private static let metal = material(UIColor(red: 0.27, green: 0.35, blue: 0.37, alpha: 1))
     private static let cap = material(UIColor(red: 0.70, green: 0.52, blue: 0.30, alpha: 1))
-    private static let seam = material(UIColor(red: 0.49, green: 0.37, blue: 0.24, alpha: 1))
+    private static let inset = material(UIColor(red: 0.52, green: 0.39, blue: 0.24, alpha: 1))
 
     static let bush: SCNGeometry = {
         // Closed, rounded leaf volumes: one shared mesh and material per tile.
@@ -114,8 +114,11 @@ enum ArenaHarborArt {
         let lid = SCNBox(width: 1, height: 0.12, length: 1, chamferRadius: 0.055)
         lid.chamferSegmentCount = 3
         lid.materials = [cap]
-        let rib = SCNBox(width: 0.035, height: 0.008, length: 0.76, chamferRadius: 0)
-        rib.materials = [seam]
+        // A broad inset reads as a dock cap instead of repeated railway-like ribs.
+        // The brighter rounded lid remains a rim; shared geometry replaces both strips.
+        let panel = SCNBox(width: 0.68, height: 0.018, length: 0.68, chamferRadius: 0.008)
+        panel.chamferSegmentCount = 2
+        panel.materials = [inset]
         for y in 0..<map.height {
             for x in 0..<map.width where map.tile(x, y) == .wall {
                 let cell = SCNNode()
@@ -127,11 +130,10 @@ enum ArenaHarborArt {
                 top.position.y = 0.96
                 cell.addChildNode(base)
                 cell.addChildNode(top)
-                for side in [Float(-0.28), Float(0.28)] {
-                    let strip = SCNNode(geometry: rib)
-                    strip.position = SCNVector3(side, 1.027, 0)
-                    cell.addChildNode(strip)
-                }
+                let recess = SCNNode(geometry: panel)
+                recess.name = "cap-inset"
+                recess.position = SCNVector3(0, 1.022, 0)
+                cell.addChildNode(recess)
                 root.addChildNode(cell)
             }
         }

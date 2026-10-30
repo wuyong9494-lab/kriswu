@@ -12,7 +12,7 @@ from check_arena_video import validate_frames, timing_evidence
 
 
 class RecordingContractTests(unittest.TestCase):
-    def exercise(self, identity, recorder_failure=False):
+    def exercise(self, identity, recorder_failure=False, finalization_timeout=False):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             (root / 'Documents').mkdir()
@@ -24,6 +24,8 @@ class RecordingContractTests(unittest.TestCase):
                 def poll(self): return self.returncode
                 def send_signal(self, value): self.interrupted = True
                 def wait(self, timeout):
+                    if finalization_timeout and timeout == 90:
+                        raise capture.subprocess.TimeoutExpired('recordVideo', timeout)
                     self.returncode = 1 if recorder_failure else 0
                     return self.returncode
             recorder = Recorder()
@@ -43,6 +45,11 @@ class RecordingContractTests(unittest.TestCase):
                 error = None
                 try: capture.main()
                 except (AssertionError, RuntimeError) as caught: error = caught
+            if finalization_timeout:
+                diagnostic = json.loads((output / 'harbor-opening.recording.json').read_text())
+                self.assertEqual(diagnostic['phase'], 'finalization-timeout')
+                self.assertFalse(diagnostic['mediaFinalized'])
+                self.assertEqual(diagnostic['sceneEvidence']['map'], identity['map'])
             return error, recorder.interrupted, (output / 'harbor-opening.json').exists()
 
     def test_only_verified_recording_receives_identity_record(self):
@@ -62,6 +69,13 @@ class RecordingContractTests(unittest.TestCase):
     def test_failed_recorder_is_not_certified(self):
         error, stopped, exists = self.exercise(dict(simulationTime=6.0,
             map='twin_gates_sample_v1', rangerAsset='Ranger_FaceSample.glb', qualitySample=True), True)
+        self.assertIsInstance(error, RuntimeError)
+        self.assertTrue(stopped)
+        self.assertFalse(exists)
+
+    def test_finalization_timeout_retains_scene_without_certifying_video(self):
+        error, stopped, exists = self.exercise(dict(simulationTime=6.0,
+            map='twin_gates_sample_v1', rangerAsset='Ranger_FaceSample.glb', qualitySample=True), finalization_timeout=True)
         self.assertIsInstance(error, RuntimeError)
         self.assertTrue(stopped)
         self.assertFalse(exists)
@@ -133,6 +147,24 @@ class TimingEvidenceTests(unittest.TestCase):
         self.assertEqual(report['duplicateGroups'], [])
         self.assertEqual(report['timingAcceptance'], 'strictly-increasing')
 
+
+class RecordingIsolationTests(unittest.TestCase):
+    def test_traversal_restarts_only_its_dedicated_simulator(self):
+        with patch.object(capture, 'stop_app') as stop, patch.object(capture, 'simctl') as sim:
+            capture.prepare_recording_device('capture-device', True)
+        stop.assert_called_once_with('capture-device')
+        self.assertEqual([c.args for c in sim.call_args_list], [
+            ('shutdown', 'capture-device'), ('boot', 'capture-device'),
+            ('bootstatus', 'capture-device', '-b')])
+
+    def test_opening_does_not_restart_simulator(self):
+        with patch.object(capture, 'stop_app'), patch.object(capture, 'simctl') as sim:
+            capture.prepare_recording_device('capture-device', False)
+        sim.assert_not_called()
+
+    def test_restart_failure_is_not_ignored(self):
+        with patch.object(capture, 'stop_app'), patch.object(capture, 'simctl', side_effect=RuntimeError('boot failed')):
+            with self.assertRaises(RuntimeError): capture.prepare_recording_device('capture-device', True)
 
 if __name__ == '__main__': unittest.main()
 

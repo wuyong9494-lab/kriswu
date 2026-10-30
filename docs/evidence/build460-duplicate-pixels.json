@@ -1,0 +1,28 @@
+[
+  {
+    "indices": [
+      20,
+      21
+    ],
+    "sha256": [
+      "796c1e5a2e09becac31f7b024e15d6bd7d0614a314c665680ff304401241e130",
+      "ca3758e674e9f1832da3772cc6bd8f8b3906559a6214d47359c193d4cc95ef52"
+    ],
+    "changedPixels": 529,
+    "meanAbsoluteChannelDifference": 0.00016245086851781414,
+    "pixels": 3785760
+  },
+  {
+    "indices": [
+      291,
+      292
+    ],
+    "sha256": [
+      "cd3dc9c3e957f8972f31f86e2ba596079f17e38e2cee057d2dc95c0a49e23553",
+      "f0a5cbf7d652af999cf8db790772fbc7d2a3671c0b183dd8d787b932714c7765"
+    ],
+    "changedPixels": 12072,
+    "meanAbsoluteChannelDifference": 0.0032742875054590534,
+    "pixels": 3785760
+  }
+]

@@ -25,6 +25,16 @@ def validate_traversal(evidence):
         raise RuntimeError('Invalid traversal timestamps')
 
 
+def prepare_recording_device(device, traversal):
+    stop_app(device)
+    if traversal:
+        # Isolate the second recording from the previous encoder/surface session.
+        # Restart only this dedicated sample simulator; failures remain failures.
+        simctl('shutdown', device, timeout=30)
+        simctl('boot', device, timeout=90)
+        simctl('bootstatus', device, '-b', timeout=180)
+
+
 def main():
     if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "traversal"):
         raise SystemExit(__doc__)
@@ -33,15 +43,23 @@ def main():
     duration = 16 if traversal else 6
     stem = 'harbor-traversal' if traversal else 'harbor-opening'
     output.mkdir(parents=True, exist_ok=True)
-    stop_app(device)
+    prepare_recording_device(device, traversal)
     data = pathlib.Path(simctl('get_app_container', device, APP_ID, 'data'))
     marker = data / 'Documents/arena-capture-ready.json'
     marker.unlink(missing_ok=True)
     path = output / (stem + '.mp4')
     (output / (stem + '.json')).unlink(missing_ok=True)
     path.unlink(missing_ok=True)
-    recorder = subprocess.Popen(['xcrun', 'simctl', 'io', device, 'recordVideo',
-                                 '--codec=h264', str(path)], stdout=subprocess.DEVNULL, start_new_session=True)
+    diagnostic = dict(sourceCommit=os.environ.get('GITHUB_SHA'), device=device,
+                      phase='starting', mediaFinalized=False, sceneEvidence=None)
+    diagnostic_path = output / (stem + '.recording.json')
+    def save_diagnostic():
+        diagnostic_path.write_text(json.dumps(diagnostic, indent=2) + '\n')
+    save_diagnostic()
+    with (output / (stem + '.recorder.log')).open('w') as recorder_log:
+        recorder = subprocess.Popen(['xcrun', 'simctl', 'io', device, 'recordVideo',
+                                     '--codec=h264', str(path)], stdout=recorder_log,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
     evidence = None
     try:
         time.sleep(1)
@@ -66,19 +84,29 @@ def main():
         assert evidence.get('qualitySample') is True, evidence
         if traversal:
             validate_traversal(evidence)
+        diagnostic.update(phase='scene-verified', sceneEvidence=evidence)
+        save_diagnostic()
         time.sleep(1)
     finally:
         if recorder.poll() is None:
             # Signal only our isolated recording process group, including xcrun children.
+            diagnostic.update(phase='finalizing', stopMonotonicSeconds=time.monotonic())
+            save_diagnostic()
             os.killpg(recorder.pid, signal.SIGINT)
             try:
                 recorder.wait(timeout=90)
             except subprocess.TimeoutExpired:
                 os.killpg(recorder.pid, signal.SIGKILL)
                 recorder.wait(timeout=10)
+                diagnostic.update(phase='finalization-timeout', recorderReturncode=recorder.returncode)
+                save_diagnostic()
                 raise RuntimeError('Video finalization timed out')
     if recorder.returncode or not path.exists() or path.stat().st_size < 1024:
+        diagnostic.update(phase='recorder-failed', recorderReturncode=recorder.returncode)
+        save_diagnostic()
         raise RuntimeError('Video output missing or recorder failed')
+    diagnostic.update(phase='finalized', mediaFinalized=True, recorderReturncode=recorder.returncode)
+    save_diagnostic()
     evidence.update(sourceCommit=os.environ.get('GITHUB_SHA'),
                     capture='simulator-wall-grass-route' if traversal else 'simulator-opening-six-seconds',
                     limitations=['Includes launch and final frozen frame',
@@ -90,3 +118,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

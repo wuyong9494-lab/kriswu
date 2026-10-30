@@ -21,3 +21,11 @@ Branch: `codex/arena-quality-sample`. Verified remote base: `d0c041d2f912a0e67b4
 Remote tree contains reference prose/URLs but no identifiable original battle screenshot or continuous source video. Local official-0/1 PNGs were viewed and show event/reward menus, not battle; they do not validate grass/combat design. Missing: the two user battle reference images as repository assets, locally saved original battle video with provenance and timecoded observations, same-build physical-device capture/performance data. Do not claim those were watched this turn.
 
 First collect the next unique build's grass bounds/tests and landscape map screenshot; then inspect actual Twin Gates combat and opening/traversal video. Compare grass continuity, cool wall sides and removal of generic decorative projectile rings only using their actual producing SHA. If timestamps recur, keep packet evidence and investigate recorder/source clocks; do not retime the output. Preserve fixed movement route and combat rules. Character/skill visual acceptance, full motion/audio, box traversal and iPhone17 Pro Max long-run/60fps remain unverified.
+
+
+## Build462 continuation (latest)
+
+Application41017743379 passed;44 simulator tests/0 failures. Actual map screenshot recovered with landscape bounds720x243.6667. Full sample41017743617 failed only at traversal movie finalization (90s timeout, moov missing); opening fully decodes448 frames with zero duplicate PTS. Current stills viewed: generic decorative rings removed, grass remains clumpy, early white impact overlap unresolved. Original two user battle reference images were recovered and viewed this turn. Details, hashes and visual evidence: [Build462 review](arena-quality-review-462.md).
+
+This commit changes wall-top surface detail and isolates the second recorder by restarting only its dedicated simulator; it also retains scene evidence/logs before finalization.25 Python tests pass locally. Next: inspect the unique automatic successor build and capture; confirm wall cap readability and traversal media. Do not claim recorder root cause solved, final visual acceptance, full real-time/audio review, or device60fps. No release/TestFlight.
+
