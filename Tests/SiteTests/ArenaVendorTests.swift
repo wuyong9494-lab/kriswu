@@ -76,6 +76,24 @@ final class ArenaVendorTests: XCTestCase {
         }
     }
 
+    func testNormalMapWallsUseImportedCargoWithoutCoveringWalkableCells() {
+        let cells: [(x: Int, y: Int, kind: ArenaArt.Wall)] = (0..<48).map {
+            (x: $0 % 8, y: $0 / 8, kind: $0 % 3 == 0 ? .barrel : .crate)
+        }
+        let walls = ArenaArt.walls(cells + [(x: 10, y: 10, kind: .stone)])
+        XCTAssertEqual(walls.childNodes.count, 24)
+        XCTAssertGreaterThan(walls.geometry?.sources(for: .vertex).first?.vectorCount ?? 0, 0)
+        XCTAssertTrue(walls.childNodes.contains { $0.name == "vendor-vendor_crates.glb" })
+        XCTAssertTrue(walls.childNodes.contains { $0.name == "vendor-vendor_barrel.glb" })
+        for node in walls.childNodes {
+            let position = node.simdPosition
+            XCTAssertTrue(cells.contains {
+                position.x == Float($0.x) + 0.5 && position.z == Float($0.y) + 0.5
+            })
+            XCTAssertEqual(position.y, 0)
+        }
+    }
+
     func testBarbarianUsesImportedAxeOnExistingAnimatedHand() throws {
         let look = BrawlerLook.of(.barbarian)
         XCTAssertTrue(look.hidden.contains("2H_Axe"))

@@ -96,6 +96,8 @@ final class ArenaController: ObservableObject {
         /// 排位赛（只打 3v3，不加减奖杯，按段位加减排位分）；电脑补位的等级（nil：和自己一样）
         var ranked = false
         var botLevel: Int?
+        /// A user-selected map; nil retains the normal random rotation.
+        var mapID: String?
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
         var benchmark = false
@@ -266,8 +268,15 @@ final class ArenaController: ObservableObject {
             var others = Brawler.allCases.filter { $0 != setup.brawler }
             random.shuffle(&others)
             let maps = ArenaMap.playPool(for: setup.mode)
-            let map = setup.benchmark ? (setup.qualitySample && setup.benchmarkTwinGates && setup.mode == .zone ? ArenaMap.twinGates : ArenaMap.canyon) :
-                (setup.qualitySample && setup.mode == .zone ? ArenaMap.twinGates : maps[random.below(maps.count)])
+            let map: ArenaMap
+            if setup.benchmark {
+                map = setup.qualitySample && setup.benchmarkTwinGates && setup.mode == .zone ? ArenaMap.twinGates : ArenaMap.canyon
+            } else if setup.qualitySample && setup.mode == .zone {
+                map = ArenaMap.twinGates
+            } else {
+                map = ArenaMap.selectionPool(for: setup.mode).first { $0.id == setup.mapID }
+                    ?? maps[random.below(maps.count)]
+            }
             let teams = setup.mode.seatTeams
             var entrants = [mine]
             entrants[0].team = teams[0]
@@ -1002,6 +1011,9 @@ final class ArenaLobby: ObservableObject {
     @Published var playing: Playing?
     @Published private(set) var myPick: Brawler
     private var round = 0
+    /// Revision 2 advertised expanded maps but its game initializer discarded
+    /// those IDs. Only peers with the fixed initializer may share that pool.
+    private static let mapRevision = 3
     private var arenaRevisions: [String: Int] = [:]
 
     init(room: GameRoom, mode: ArenaGame.Mode, brawler: Brawler) {
@@ -1018,7 +1030,7 @@ final class ArenaLobby: ObservableObject {
         send(.pick(myPick))
         send(.level(myLevel))
         send(.loadout(myLoadout))
-        send(.arenaRevision(2))
+        send(.arenaRevision(Self.mapRevision))
         if room.isHost { send(.mode(mode)) }
         playing?.controller.membersChanged()
     }
@@ -1069,7 +1081,7 @@ final class ArenaLobby: ObservableObject {
     func start() {
         guard room.isHost, fits else { return }
         round += 1
-        let supportsExpanded = room.members.allSatisfy { $0.id == room.me.id || arenaRevisions[$0.id] == 2 }
+        let supportsExpanded = room.members.allSatisfy { $0.id == room.me.id || arenaRevisions[$0.id] == Self.mapRevision }
         let maps = supportsExpanded ? ArenaMap.playPool(for: mode) : ArenaMap.pool(for: mode)
         let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats(),
                                map: maps.randomElement()?.id)
@@ -1134,7 +1146,7 @@ final class ArenaLobby: ObservableObject {
         case .arenaRevision(let revision):
             let first = arenaRevisions[from] == nil
             arenaRevisions[from] = revision
-            if first { send(.arenaRevision(2)) }
+            if first { send(.arenaRevision(Self.mapRevision)) }
         case .pick(let brawler):
             picks[from] = brawler
         case .level(let level):

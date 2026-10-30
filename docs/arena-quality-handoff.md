@@ -1,4 +1,18 @@
-## Current task — integrate all eleven resource packs; do not upload 468
+## Current task — restore the complete game after Build 471
+
+2026-10-30: The owner reported that 471 shows only three heroes and no old maps.
+The normal lobby incorrectly defaulted to `threeHeroSample = true`; the original
+13-hero roster, 11 modes and 14 original maps were still present. Restore the full
+entry, keep the sample explicit, and expose the 7 expanded maps alongside the
+originals. See [content restoration](arena-content-restoration.md).
+
+The owner explicitly requested upload first and gameplay/recording tests later.
+This corrective push uses `[defer-arena-validation]` to defer the long simulator
+and media jobs, while preserving device compilation, core checks and exact-source
+signing/upload guards. Do not describe deferred checks as passed. Builds 468, 469
+and 470 remain excluded. Build 471 was uploaded but has this content-entry defect.
+
+## Previous task — integrate all eleven resource packs; do not upload 468
 
 Latest: Build 470 (`359a63e`) verified the visible button/icon repair, all five
 audio tests and Ranger's complete real UI flow with continuous original recording.

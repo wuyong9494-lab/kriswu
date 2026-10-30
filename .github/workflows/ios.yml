@@ -450,7 +450,9 @@ jobs:
       group: arena-look-${{ github.ref }}
       # Preserve running visual evidence; a newer capture waits instead of cancelling it.
       cancel-in-progress: false
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-quality-sample' || github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-diagnostics-2' || github.ref == 'refs/heads/codex/arena-bush-stability' || github.ref == 'refs/heads/codex/arena-audio-performance' || github.ref == 'refs/heads/codex/arena-reference-fidelity'))
+    # An owner-requested early upload can defer simulator/media acceptance for
+    # this push; a later manual extras run still performs the complete checks.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && !contains(github.event.head_commit.message, '[defer-arena-validation]') && (github.ref == 'refs/heads/codex/arena-quality-sample' || github.ref == 'refs/heads/codex/arena-performance-1' || github.ref == 'refs/heads/codex/arena-diagnostics-2' || github.ref == 'refs/heads/codex/arena-bush-stability' || github.ref == 'refs/heads/codex/arena-audio-performance' || github.ref == 'refs/heads/codex/arena-reference-fidelity'))
     steps:
       - uses: actions/checkout@v5
 

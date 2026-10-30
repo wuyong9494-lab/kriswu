@@ -22,7 +22,7 @@ struct GamesHomeView: View {
                     showingArena = true
                 } label: {
                     HStack {
-                        row("勇者乱斗", "三英雄试玩：游侠、蛮王、法师；双闸交汇 3 对 3，本地电脑补位", "flame.fill", 3)
+                        row("勇者乱斗", "13 位英雄、11 种玩法；原地图与扩展地图可选，也能和同事联机", "flame.fill", 3)
                         Spacer()
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
@@ -43,7 +43,8 @@ struct GamesHomeView: View {
         .appList()
         .navigationTitle("小游戏")
         .fullScreenCover(isPresented: $showingArena) {
-            ArenaHomeView()
+            ArenaHomeView(threeHeroSample: ProcessInfo.processInfo.arguments.contains("-demo") &&
+                          UserDefaults.standard.bool(forKey: "arena.captureFlow"))
         }
     }
 

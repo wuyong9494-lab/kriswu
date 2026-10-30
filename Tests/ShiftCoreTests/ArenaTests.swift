@@ -93,6 +93,25 @@ final class ArenaTests: XCTestCase {
         XCTAssertTrue(ArenaMap.playPool(for: .teamFight).allSatisfy { $0.width == 21 })
         XCTAssertTrue(ArenaMap.playPool(for: .showdown).allSatisfy { $0.width == 25 })
         XCTAssertEqual(ArenaMap.canyon.width, 15, "Historical map IDs must not change under older peers")
+        var selectable = Set<String>()
+        for mode in ArenaGame.Mode.allCases {
+            let maps = ArenaMap.selectionPool(for: mode)
+            XCTAssertEqual(maps.count, Set(maps.map(\.id)).count, "Duplicate selectable map IDs")
+            for map in ArenaMap.pool(for: mode) {
+                XCTAssertTrue(maps.contains { $0.id == map.id }, "Original map missing: \(map.id)")
+            }
+            for map in ArenaMap.playPool(for: mode) {
+                XCTAssertTrue(maps.contains { $0.id == map.id }, "Rotation map missing: \(map.id)")
+            }
+            for map in maps {
+                selectable.insert(map.id)
+                XCTAssertEqual(ArenaGame(mode: mode, entrants: [], seed: 1, map: map).map.id, map.id,
+                               "Selected map silently fell back: \(mode.rawValue) / \(map.id)")
+            }
+        }
+        XCTAssertEqual(selectable, Set((ArenaMap.all + ArenaMap.expandedMaps).map(\.id)))
+        XCTAssertEqual(ArenaGame(mode: .ball, entrants: [], seed: 1, map: ArenaMap.canyon).map.id,
+                       ArenaMap.pitch.id, "Maps for another mode must still be rejected")
     }
 
     func testEveryMapIsFairAndOpen() {

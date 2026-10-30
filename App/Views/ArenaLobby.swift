@@ -9,11 +9,14 @@ import simd
 /// 上边奖杯（点开奖杯之路）、金币、赛季等级、名字，左边「冒险」「角色」「赛季」「和同事打」，
 /// 右下普通 / 排位、带的本事、玩法卡片和大大的「开打」
 struct ArenaHomeView: View {
-    var threeHeroSample = true
+    /// The normal entry keeps the full roster and all modes. The focused slice
+    /// is opt-in through its own entry or the explicit simulator flow capture.
+    var threeHeroSample = false
     @State private var sampleHero = ArenaQualitySample.selected(Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.sample.brawler")) ?? .ranger)
     @ObservedObject private var records = ArenaRecords.shared
     @ObservedObject private var growth = ArenaProgressStore.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
+    @State private var selectedMapID = UserDefaults.standard.string(forKey: "arena.map")
     @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .knight
     @State private var playing: ArenaEntry?
     @State private var lobby: LobbyEntry?
@@ -53,7 +56,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics, sample
+        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics, sample, threeHeroes
         var id: String { rawValue }
     }
 
@@ -337,9 +340,8 @@ struct ArenaHomeView: View {
                         Text(threeHeroSample ? "双闸交汇" : playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
                         if threeHeroSample {
                             Text("本地对战 · 电脑队友 / 对手").font(.system(size: 10, weight: .bold))
-                        } else if composition.compact { ArenaLobbyQuestCountdown() }
-                        else {
-                            Text(ArenaMap.playPool(for: playMode).first?.title ?? playMode.title)
+                        } else {
+                            Text(selectedMap?.title ?? "地图随机轮换")
                                 .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
                         }
                     }.lineLimit(1).minimumScaleFactor(0.7)
@@ -747,6 +749,10 @@ struct ArenaHomeView: View {
     /// 排位赛打哪个玩法：选的是 3v3 的就打它，不然打 3v3 团战
     private var playMode: ArenaGame.Mode { threeHeroSample ? .zone : (ranked && !ArenaRank.allows(mode) ? .teamFight : mode) }
 
+    private var selectedMap: ArenaMap? {
+        ArenaMap.selectionPool(for: playMode).first { $0.id == selectedMapID }
+    }
+
     /// 现在的玩法：颜色、图标、名字、赢了几局（排位赛是段位和分数）；点一下换
     private var modeCard: some View {
         Button {
@@ -816,7 +822,7 @@ struct ArenaHomeView: View {
         let botLevel = ranked ? max(ArenaRank.tiers[progress.rankTier].botLevel, level) : nil
         playing = ArenaEntry(setup: ArenaController.Setup(mode: playMode, brawler: chosen, name: name, level: level,
                                                           lineup: duelPartners, loadout: progress.loadout(for: chosen),
-                                                          ranked: ranked, botLevel: botLevel))
+                                                          ranked: ranked, botLevel: botLevel, mapID: selectedMap?.id))
     }
 
     // MARK: 面板
@@ -835,6 +841,15 @@ struct ArenaHomeView: View {
                     qualitySample: true, threeHeroSample: true))
                 sheet = nil
             }, initialPage: 1, playHero: chosen)
+        } else if item == .threeHeroes {
+            ArenaHeroSelection(selected: sampleHero, startsMatch: true, onClose: { sheet = nil }, onSelect: { hero in
+                sampleHero = hero
+                UserDefaults.standard.set(hero.rawValue, forKey: "arena.sample.brawler")
+                pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: hero,
+                    name: name, level: progress.level(hero), loadout: progress.loadout(for: hero),
+                    qualitySample: true, threeHeroSample: true))
+                sheet = nil
+            })
         } else if item == .sample {
             ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
@@ -862,7 +877,7 @@ struct ArenaHomeView: View {
             case .shop: shopBoard
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
-            case .diagnostics, .sample: EmptyView()
+            case .diagnostics, .sample, .threeHeroes: EmptyView()
             }
         }
         }
@@ -882,6 +897,7 @@ struct ArenaHomeView: View {
         case .settings: return "设置"
         case .diagnostics: return "持续性能诊断"
         case .sample: return "蓝月港试玩"
+        case .threeHeroes: return "三英雄试玩"
         }
     }
 
@@ -899,6 +915,7 @@ struct ArenaHomeView: View {
         case .settings: return Color(red: 0.45, green: 0.5, blue: 0.58)
         case .diagnostics: return .purple
         case .sample: return .cyan
+        case .threeHeroes: return .cyan
         }
     }
 
@@ -1111,6 +1128,20 @@ struct ArenaHomeView: View {
                     rankedSwitch
                 }.padding(.bottom, 6)
 
+                mapPicker
+
+                Button { sheet = .threeHeroes } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("三英雄试玩 · 双闸交汇", systemImage: "person.3.fill")
+                            .font(.system(size: 18, weight: .black, design: .rounded))
+                        Text("游侠、蛮王、法师 · 本地 3 对 3 · 不计奖杯与排位")
+                            .font(.system(size: 12, weight: .bold))
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                }
+                .buttonStyle(ArenaGameButton(face: ArenaGameButton.blue.face,
+                                            edge: ArenaGameButton.blue.edge, height: 76))
+                .accessibilityIdentifier("arena.sample.threeHeroes")
+
                 Button {
                     pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
                         mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
@@ -1143,11 +1174,14 @@ struct ArenaHomeView: View {
                     Button {
                         mode = item
                         UserDefaults.standard.set(item.rawValue, forKey: "arena.mode")
+                        selectedMapID = nil
+                        UserDefaults.standard.removeObject(forKey: "arena.map")
                         sheet = nil
                     } label: {
                         modeRow(item)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("arena.mode.\(item.rawValue)")
                 }
                 Text("一对一带：" + ([chosen] + duelPartners).map(\.name).joined(separator: "、"))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -1155,6 +1189,53 @@ struct ArenaHomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private var mapPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(playMode.title) · 选择地图")
+                .font(.system(size: 16, weight: .black, design: .rounded))
+            ScrollView(.horizontal, showsIndicators: true) {
+                HStack(spacing: 10) {
+                    mapChoice(nil)
+                    ForEach(ArenaMap.selectionPool(for: playMode), id: \.id) { map in
+                        mapChoice(map)
+                    }
+                }.padding(.vertical, 4)
+            }
+            Text("左右滑动查看原地图和扩展地图；切换玩法后可选择对应地图。")
+                .font(.caption).foregroundStyle(.white.opacity(0.75))
+        }
+        .foregroundStyle(.white).padding(12)
+        .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func mapChoice(_ map: ArenaMap?) -> some View {
+        let selected = selectedMap?.id == map?.id
+        return Button {
+            selectedMapID = map?.id
+            if let id = map?.id { UserDefaults.standard.set(id, forKey: "arena.map") }
+            else { UserDefaults.standard.removeObject(forKey: "arena.map") }
+            sheet = nil
+        } label: {
+            VStack(spacing: 5) {
+                if let map {
+                    ArenaMapThumb(map: map).frame(width: 82, height: 54)
+                } else {
+                    Image(systemName: "shuffle").font(.title2).frame(width: 82, height: 54)
+                }
+                Text(map?.title ?? "随机轮换")
+                    .font(.system(size: 12, weight: .bold)).lineLimit(2)
+                    .frame(height: 32)
+            }
+            .frame(width: 112).padding(8)
+            .background(selected ? Color.blue.opacity(0.5) : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected ? Color.yellow : Color.white.opacity(0.25), lineWidth: selected ? 3 : 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(map?.title ?? "地图随机轮换")
+        .accessibilityValue(selected ? "已选择" : "未选择")
+        .accessibilityIdentifier("arena.map.\(map?.id ?? "random")")
     }
 
     private func modeRow(_ item: ArenaGame.Mode) -> some View {
@@ -1229,7 +1310,7 @@ struct ArenaHomeView: View {
 
     private var togetherList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("联机房间入口 · 不是战队系统。连接成功后才能对战；本轮三英雄试玩在大厅开始，使用本地电脑队友和对手。")
+            Text("与同事连接后一起对战。单人对战可在大厅选择玩法和地图；三英雄试玩在玩法页单独进入。")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
             roomActions(players: 2)

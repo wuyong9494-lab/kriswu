@@ -308,6 +308,15 @@ extension ArenaMap {
         return expanded.isEmpty ? pool(for: mode) : expanded
     }
 
+    /// Keep every original map selectable alongside its expanded variant.
+    /// Random rotation continues to use playPool; stored and network map IDs
+    /// resolve against this complete, mode-specific list.
+    public static func selectionPool(for mode: ArenaGame.Mode) -> [ArenaMap] {
+        let original = pool(for: mode)
+        let ids = Set(original.map { $0.id + "_expanded_v2" })
+        return original + expandedMaps.filter { ids.contains($0.id) }
+    }
+
     /// 按名字找（联机开局时房主发来的）
     public static func named(_ id: String) -> ArenaMap? {
         id == twinGates.id ? twinGates : (all.first { $0.id == id } ?? expandedMaps.first { $0.id == id })

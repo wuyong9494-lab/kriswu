@@ -2,7 +2,7 @@ import SceneKit
 import UIKit
 import simd
 
-/// 乱斗场地上的东西都是代码现画的（不用图片文件）：草地的细纹、木箱、木桶、石块、草丛、发光的子弹、粗边字和圆头血条。
+/// 场地结合共享的第三方箱桶模型与程序网格：草地、石块、草丛、子弹、文字和血条。
 /// 卡通的样子：颜色亮，东西外面一圈深色的粗边（描边的做法：同样的形状放大一点、只画朝里的那面，露在外面的一圈就是边）
 @MainActor
 enum ArenaArt {
@@ -224,11 +224,45 @@ enum ArenaArt {
         return material
     }
 
-    /// 整张地图的墙拼成一个网格（按材质分几份，画几次就够）
+    /// 普通地图也使用已打包的箱桶。其余墙仍合并绘制，模型共享网格并限制数量。
     static func walls(_ cells: [(x: Int, y: Int, kind: Wall)]) -> SCNNode {
         var mesh = Mesh(parts: 10)
+        let root = SCNNode()
+        root.name = "arena-wall-cells"
+        let cargoCount = cells.reduce(0) { count, cell in
+            switch cell.kind {
+            case .crate, .barrel: return count + 1
+            case .stone: return count
+            }
+        }
+        // Spread at most 24 instances across the whole map instead of adding
+        // a separate model to every wall. Existing collision cells do not move.
+        let shown = min(cargoCount, 24)
+        let cargoSlots: Set<Int> = shown == 0 ? [] : Set((0..<shown).map { $0 * cargoCount / shown })
+        let crate = shown > 0 ? ArenaVendorAssets.prop("vendor_crates.glb", width: 0.96, height: 1.02) : nil
+        let barrel = shown > 0 ? ArenaVendorAssets.prop("vendor_barrel.glb", width: 0.96, height: 1.02) : nil
+        var cargoIndex = 0
+        var hasProceduralWalls = false
         for cell in cells {
             let foot = SIMD3(Float(cell.x) + 0.5, 0, Float(cell.y) + 0.5)
+            let template: SCNNode?
+            switch cell.kind {
+            case .crate: template = crate
+            case .barrel: template = barrel
+            case .stone: template = nil
+            }
+            if cell.kind != .stone {
+                let useCargo = cargoSlots.contains(cargoIndex)
+                cargoIndex += 1
+                if useCargo, let template {
+                    let cargo = template.clone()
+                    cargo.simdPosition = foot
+                    cargo.castsShadow = false
+                    root.addChildNode(cargo)
+                    continue
+                }
+            }
+            hasProceduralWalls = true
             let cap = 6 + (cell.x * 3 + cell.y) % 4
             switch cell.kind {
             case .crate:
@@ -245,10 +279,14 @@ enum ArenaArt {
                 mesh.box(center: foot + SIMD3(0, 0.9, 0), size: SIMD3(0.5, 0.08, 0.5), part: cap)
             }
         }
-        return SCNNode(geometry: mesh.geometry([
-            crateMaterial, stoneMaterial, barrelSideMaterial, barrelTopMaterial, woodEdge, stoneEdge,
-            flat(0.95, 0.28, 0.22), flat(0.25, 0.55, 1), flat(1, 0.78, 0.2), flat(0.25, 0.78, 0.35),
-        ]))
+        if hasProceduralWalls {
+            root.geometry = mesh.geometry([
+                crateMaterial, stoneMaterial, barrelSideMaterial, barrelTopMaterial, woodEdge, stoneEdge,
+                flat(0.95, 0.28, 0.22), flat(0.25, 0.55, 1), flat(1, 0.78, 0.2), flat(0.25, 0.78, 0.35),
+            ])
+        }
+        root.castsShadow = false
+        return root
     }
 
     /// 大乱斗的能量箱：一个木箱，顶上嵌着一块发绿光的能量晶（挨打时木头闪白用 wood）

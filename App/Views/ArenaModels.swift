@@ -201,7 +201,7 @@ struct BrawlerLook {
 final class ArenaModels: @unchecked Sendable {
     static let shared = ArenaModels()
 
-    /// 骷髅的武器，场地外的树、石头、旗子（墙的箱子、桶是代码画的，见 ArenaArt）
+    /// 骷髅武器、场外树石旗帜，以及普通地图与样板共用的第三方箱桶和装饰。
     static let props = ["Skeleton_Axe.gltf", "Skeleton_Shield_Large_A.gltf", "Skeleton_Staff.gltf", "Skeleton_Crossbow.gltf", "Skeleton_Blade.gltf",
                         "trees_A_small.gltf", "trees_A_medium.gltf", "trees_A_large.gltf",
                         "trees_B_small.gltf", "trees_B_medium.gltf", "trees_B_large.gltf",

@@ -770,7 +770,7 @@ public struct ArenaGame: Sendable {
     /// bossLevel：讨伐骷髅王时骷髅王几级（nil：按勇者们的平均等级；冒险里每关定好）
     public init(mode: Mode, entrants: [Entrant], seed: UInt64, map chosen: ArenaMap? = nil, bossLevel: Int? = nil) {
         self.mode = mode
-        let pool = ArenaMap.pool(for: mode)
+        let pool = ArenaMap.selectionPool(for: mode)
         if let chosen, pool.contains(where: { $0.id == chosen.id })
             || (mode == .zone && chosen.id == ArenaMap.twinGates.id)
             || (chosen.id == "custom" && chosen.spawns.count == (mode.isTeams ? 2 : 1)) {

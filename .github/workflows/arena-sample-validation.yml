@@ -25,6 +25,8 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
 jobs:
   sample-capture:
+    # Defer only this push when requested; workflow_dispatch always runs it.
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[defer-arena-validation]')
     runs-on: macos-15
     timeout-minutes: 55
     steps:
@@ -142,6 +144,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   hero-flow:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[defer-arena-validation]')
     runs-on: macos-15
     timeout-minutes: 40
     strategy:
