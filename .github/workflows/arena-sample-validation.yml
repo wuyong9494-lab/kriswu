@@ -46,8 +46,11 @@ jobs:
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath sample-build CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO > sample-build.log 2>&1 || { tail -100 sample-build.log; exit 1; }
-      - name: Boot installed sample application
+      - name: Build screenshot validator
         timeout-minutes: 5
+        run: swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
+      - name: Boot installed sample application
+        timeout-minutes: 8
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
@@ -60,11 +63,14 @@ jobs:
           python3 - <<'PY'
           import os, subprocess
           device = os.environ['DEVICE']
+          print('Booting sample simulator', flush=True)
           subprocess.run(['xcrun', 'simctl', 'boot', device], timeout=90, check=True)
+          print('Waiting for simulator readiness', flush=True)
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device, '-b'], timeout=180, check=True)
+          print('Installing compiled application', flush=True)
           subprocess.run(['xcrun', 'simctl', 'install', device, 'sample-build/Build/Products/Debug-iphonesimulator/ShiftReminder.app'], timeout=120, check=True)
+          print('Application installed', flush=True)
           PY
-          swiftc .github/scripts/check_arena_capture.swift -o /tmp/check-sample-capture
       - name: Capture sample menu pages
         timeout-minutes: 5
         run: |
