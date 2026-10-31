@@ -22,6 +22,27 @@ targets:
         excludes:
           - Info.plist
           - Resources/*.arenapack
+          - Arena3D/hexagons_medieval.png
+          - Arena3D/skeleton_texture.png
+          - ArenaVendor/vendor_axe_texture.png
+          - ArenaVendor/vendor_knight_texture.png
+          - ArenaVendor/vendor_mage_texture.png
+          - ArenaVendor/vendor_rogue_texture.png
+      # Bypass CopyPNGFile: glTF's source RGB, including alpha-zero color,
+      # must reach the main App resource directory without PNG rewriting.
+      - path: App
+        type: group
+        includes:
+          - Arena3D/hexagons_medieval.png
+          - Arena3D/skeleton_texture.png
+          - ArenaVendor/vendor_axe_texture.png
+          - ArenaVendor/vendor_knight_texture.png
+          - ArenaVendor/vendor_mage_texture.png
+          - ArenaVendor/vendor_rogue_texture.png
+        buildPhase:
+          copyFiles:
+            destination: resources
+            subpath: ""
       # Scan the existing directory: only an installed private pack is copied.
       # The broad App source above excludes this file to avoid duplicate copies.
       - path: App
@@ -53,6 +74,7 @@ targets:
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         # Keep glTF's external PNG RGB samples, including color at alpha zero.
         COMPRESS_PNG_FILES: NO
+        APPLY_RULES_IN_COPY_FILES: NO
         # iPhone 和 iPad 都能装（iPad 上内容限宽居中，可以横着用）
         TARGETED_DEVICE_FAMILY: "1,2"
         # 完整的并发检查（Swift 5 模式下是警告，CI 会列出来）
