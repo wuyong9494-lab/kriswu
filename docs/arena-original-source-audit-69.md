@@ -78,10 +78,14 @@ shader、换表情逻辑、动作选择、特效和技能。
 严格拒绝记录，另外产出只修正两处法线的适配候选，来源变化单独记录。
 Chuck 的重复 joint 通过 identity child alias 保留不同 inverse bind，
 29 个源帧的全局骨矩阵与 `W * IBM` 差均为零，没有合并或覆盖原绑定矩阵。
-当前 App 子集合同为 85 份通过、29 份需要透明度/材质支持、1 份材质贴图
-仍未指定；这些都是离线特性检查，不是 iOS 运行验收。动作的直接映射、
+当前 App 子集合同有 86 份通过，其中 85 份贴图配置齐全，另 1 份仍有源材质
+未指定贴图；29 份需要透明度/材质支持。这些都是离线特性检查，不是 iOS
+运行验收。动作的直接映射、
 世界矩阵烘焙、单帧静态 pose 和 Lola 剪切矩阵阻塞分别记录，以最终
-`audit/adapted/hero-models/manifest.json` 为准。
+`audit/adapted/hero-models/manifest.json` 和
+`audit/compatibility-final-model-report.json` 为准。115 个严格模型里 114 个含
+animation，共 116 个 clip（115 个多帧、1 个原本的单帧 pose）；Lola 仅输出
+几何/骨架。Surge 修复候选另有 39 帧动作，未并入严格批次计数。
 
 默认 IdleFace/LobbyFace 共 236 个用途槽位，其中 216 个指定引用去重为
 209 个 SC export，已全部导出第 0 帧；另外 20 个槽位原本没有指定 Face。
