@@ -27,6 +27,14 @@ DEFERRED_MODE = "resource-runtime-gameplay-deferred"
 DEFERRED_NOTE = "完整对局与录像验收已延期，本版未完成该项验证。"
 SOURCE_BRANCH = "codex/arena-quality-sample"
 ARCHIVE_REPORT = "promotion-private-resources.json"
+OPAQUE_TEXTURE_SOURCES = (
+    "App/Arena3D/hexagons_medieval.png",
+    "App/Arena3D/skeleton_texture.png",
+    "App/ArenaVendor/vendor_axe_texture.png",
+    "App/ArenaVendor/vendor_knight_texture.png",
+    "App/ArenaVendor/vendor_mage_texture.png",
+    "App/ArenaVendor/vendor_rogue_texture.png",
+)
 
 
 def specification(request):
@@ -383,6 +391,48 @@ def verify_existing_resources(source, app):
             "canonical_ranger_sha256": expected}
 
 
+def opaque_png_dimensions(data):
+    """Require the standard RGB8/RGBA8 PNG format used by the opaque decoder."""
+    dimensions = png_dimensions(data)
+    if (data[8:16] != b"\x00\x00\x00\x0dIHDR" or data[24] != 8
+            or data[25] not in (2, 6) or data[26:29] != b"\x00\x00\x00"):
+        raise ValueError("Opaque texture requires standard noninterlaced RGB8/RGBA8 PNG")
+    offset = 8
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset:offset + 4])[0]
+        if data[offset + 4:offset + 8] == b"CgBI":
+            raise ValueError("Opaque texture cannot use Xcode CgBI PNG encoding")
+        offset += length + 12  # png_dimensions already checked every chunk and CRC.
+    return dimensions
+
+
+def verify_opaque_textures(source, app):
+    """Preserve hidden RGB at alpha zero by binding these PNG bytes to source."""
+    matches = {Path(relative).name.casefold(): [] for relative in OPAQUE_TEXTURE_SOURCES}
+    for path in app.rglob("*"):
+        if path.name.casefold() in matches:
+            matches[path.name.casefold()].append(path)
+    verified = []
+    for relative in OPAQUE_TEXTURE_SOURCES:
+        name = Path(relative).name
+        paths = matches[name.casefold()]
+        if (len(paths) != 1 or paths[0] != app / name
+                or paths[0].is_symlink() or not paths[0].is_file()):
+            raise ValueError("Missing or ambiguous main-app opaque texture: " + name)
+        original = source_file(source / relative)
+        actual = paths[0].read_bytes()
+        dimensions = opaque_png_dimensions(original)
+        opaque_png_dimensions(actual)
+        expected = hashlib.sha256(original).hexdigest()
+        if hashlib.sha256(actual).hexdigest() != expected:
+            raise ValueError("Bundled opaque texture differs from verified source: " + name)
+        verified.append({"file": name, "source_file": relative, "bytes": len(original),
+                         "width": dimensions[0], "height": dimensions[1], "sha256": expected})
+    return {"opaque_textures_verified": True, "opaque_texture_count": len(verified),
+            "opaque_texture_verification": "standard-png-exact-source-sha256",
+            "opaque_textures": verified}
+
+
 def archive(expected, source, archive_path):
     app = archive_path / "Products/Applications/ShiftReminder.app"
     paths = list(app.rglob(PACK_NAME))
@@ -390,7 +440,7 @@ def archive(expected, source, archive_path):
     if len(paths) != 1 or paths[0] != expected_path:
         raise ValueError("Signed main app must contain exactly one private resource pack at its bundle root")
     report = verify(expected_path, expected, source)
-    return {**report, **verify_existing_resources(source, app)}
+    return {**report, **verify_existing_resources(source, app), **verify_opaque_textures(source, app)}
 
 
 def main():

@@ -26,10 +26,10 @@ builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 
 
-def synthetic_png(width=2, height=3, optimized=False):
+def synthetic_png(width=2, height=3, optimized=False, pixel=b"\xff\0\0\xff"):
     def chunk(kind, content):
         return struct.pack(">I", len(content)) + kind + content + struct.pack(">I", zlib.crc32(kind + content) & 0xffffffff)
-    pixels = zlib.compress((b"\0" + b"\xff\0\0\xff" * width) * height)
+    pixels = zlib.compress((b"\0" + pixel * width) * height)
     return (b"\x89PNG\r\n\x1a\n" + (chunk(b"CgBI", b"\x50\0\x20\x02") if optimized else b"")
             + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
             + chunk(b"IDAT", pixels) + chunk(b"IEND", b""))
@@ -56,6 +56,11 @@ def existing_asset_fixture(root, app):
     for folder in (vendor, app):
         (folder / "arena-vendor-runtime.json").write_text(json.dumps({"packCount": 11, "files": files}))
         (folder / "arena-asset-configuration.json").write_text(json.dumps(configuration))
+    for relative in release.OPAQUE_TEXTURE_SOURCES:
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(synthetic_png())
+        (app / path.name).write_bytes(path.read_bytes())
     (source / "App/Info.plist").write_bytes(plistlib.dumps({"ArenaResourcePackRequiredForPromotion": True}))
     (source / "scripts/assets").mkdir(parents=True)
     shutil.copyfile(SOURCE / "scripts/assets/build_resource_pack.py", source / "scripts/assets/build_resource_pack.py")
@@ -111,8 +116,16 @@ class PrivatePackReleaseTests(unittest.TestCase):
         self.assertTrue(report["asset_configuration_verified"])
         self.assertEqual(report["vendor_runtime_file_count"], 104)
         self.assertEqual(report["vendor_pack_count"], 11)
+        self.assertTrue(report["opaque_textures_verified"])
+        self.assertEqual(report["opaque_texture_count"], 6)
         self.assertNotIn("path", report)
         self.assertEqual(report["sha256"], self.expected["sha256"])
+        texture = app / "hexagons_medieval.png"
+        original = texture.read_bytes()
+        texture.write_bytes(synthetic_png(optimized=True))
+        with self.assertRaises(ValueError):
+            release.archive(self.expected, source, archive)
+        texture.write_bytes(original)
         (app / "duplicate").mkdir()
         shutil.copyfile(self.pack, app / "duplicate" / release.PACK_NAME)
         with self.assertRaisesRegex(ValueError, "exactly one"):
@@ -136,6 +149,8 @@ class PrivatePackReleaseTests(unittest.TestCase):
         self.assertEqual(report["vendor_runtime_file_count"], 104)
         self.assertTrue(report["canonical_ranger_verified"])
         self.assertFalse(any("url" in key or "payload" in key and key != "all_payload_hashes_verified" for key in report))
+        self.assertEqual(report["opaque_texture_count"], 6)
+        self.assertTrue(report["opaque_textures_verified"])
 
     def testEvenRehashedOuterFileCannotConcealBadInternalPayload(self):
         data = bytearray(self.pack.read_bytes())
@@ -426,6 +441,67 @@ class ExistingResourceArchiveTests(unittest.TestCase):
         self.app = self.root / "ShiftReminder.app"
         self.source = existing_asset_fixture(self.root, self.app)
         self.vendor = self.source / "App/ArenaVendor"
+
+    def testOpaqueTexturesReportAllSixExactSourceHashes(self):
+        report = release.verify_opaque_textures(self.source, self.app)
+        self.assertTrue(report["opaque_textures_verified"])
+        self.assertEqual(report["opaque_texture_count"], 6)
+        self.assertEqual(report["opaque_texture_verification"], "standard-png-exact-source-sha256")
+        self.assertEqual({entry["file"] for entry in report["opaque_textures"]}, {
+            "hexagons_medieval.png", "skeleton_texture.png", "vendor_axe_texture.png",
+            "vendor_knight_texture.png", "vendor_mage_texture.png", "vendor_rogue_texture.png"})
+        for entry in report["opaque_textures"]:
+            original = (self.source / entry["source_file"]).read_bytes()
+            self.assertEqual(entry["sha256"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(entry["bytes"], len(original))
+            self.assertEqual((entry["width"], entry["height"]), (2, 3))
+
+    def testOpaqueTexturesRejectCgBIAndChangedPixelsWithTheSameDimensions(self):
+        for relative in release.OPAQUE_TEXTURE_SOURCES:
+            path = self.app / Path(relative).name
+            original = path.read_bytes()
+            for content in (synthetic_png(optimized=True), synthetic_png(pixel=b"\0\xff\0\xff")):
+                with self.subTest(file=path.name, cgbi=b"CgBI" in content):
+                    self.assertEqual(release.png_dimensions(original), release.png_dimensions(content))
+                    path.write_bytes(content)
+                    with self.assertRaises(ValueError):
+                        release.verify_opaque_textures(self.source, self.app)
+                    path.write_bytes(original)
+
+    def testOpaqueTexturesRejectMissingDuplicateAndExtensionOnlyCopies(self):
+        copies = self.app / "Copies"
+        widget = self.app / "PlugIns/Widget.appex"
+        copies.mkdir()
+        widget.mkdir(parents=True)
+        for relative in release.OPAQUE_TEXTURE_SOURCES:
+            path = self.app / Path(relative).name
+            original = path.read_bytes()
+            path.unlink()
+            with self.subTest(file=path.name, case="missing"), self.assertRaisesRegex(ValueError, "main-app"):
+                release.verify_opaque_textures(self.source, self.app)
+            path.write_bytes(original)
+            for name in (path.name, path.name.upper()):
+                duplicate = copies / name
+                duplicate.write_bytes(original)
+                with self.subTest(file=path.name, case=name), self.assertRaisesRegex(ValueError, "ambiguous"):
+                    release.verify_opaque_textures(self.source, self.app)
+                duplicate.unlink()
+            extension = widget / path.name
+            path.rename(extension)
+            with self.subTest(file=path.name, case="widget-only"), self.assertRaisesRegex(ValueError, "main-app"):
+                release.verify_opaque_textures(self.source, self.app)
+            extension.rename(path)
+
+    def testOpaqueTextureSourceMustBeStandardPNGEvenWhenArchiveBytesMatch(self):
+        relative = release.OPAQUE_TEXTURE_SOURCES[0]
+        source = self.source / relative
+        archived = self.app / source.name
+        for content in (synthetic_png(optimized=True), synthetic_png()[:-1], b"not PNG"):
+            with self.subTest(content_length=len(content)):
+                source.write_bytes(content)
+                archived.write_bytes(content)
+                with self.assertRaises(ValueError):
+                    release.verify_opaque_textures(self.source, self.app)
 
     def testVerifiedSourceDeterminesResourceCountsAndAcceptsXcodePNGEncoding(self):
         report = release.verify_existing_resources(self.source, self.app)
