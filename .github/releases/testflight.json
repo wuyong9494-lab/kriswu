@@ -1,17 +1,23 @@
 {
-  "build_number": "475",
+  "build_number": "482",
   "version": "1.2",
-  "source_sha": "2336a8748aaccb0cb1f5e3b6d761e31348cf9cac",
-  "source_run_id": 41089300780,
+  "source_sha": "eb4ebf086486f5a08194d40fae76577537130bc0",
+  "source_run_id": 41177261481,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "notes": "• 完成13名现有英雄的装备、动作和技能素材配置，并为22张地图配置场景主题；保留英雄解锁、升级、皮肤和奖杯进度。\n• 正式游侠统一使用已完成的面部模型；游侠、蛮王、法师和双闸交汇均作为正常玩法，接入正常结算奖励并保持多人版本兼容。\n• 从11个已有素材包选用104个运行文件，扩展武器、墙体、地面、植被、界面控件、图标及战斗和菜单音效。\n• 大厅、战斗、胜利和失败四段原创主题配乐全部接通；未保存过音乐选择时默认开启，保留明确设置的关闭状态和静音偏好。\n• 按要求先行上传，发布前核对编译、模型身份和安装包资源；完整实战、画面、多人真机与录屏验收留待后续。",
-  "wait_for_source": false,
-  "defer_sample_validation": true,
-  "verify_vendor_runtime": true,
-  "vendor_manifest_sha256": "9e24d8a893cf4432880859992d827059210dbd2753b404a6fc8aee108c29594c",
-  "vendor_runtime_file_count": 104,
-  "asset_configuration_sha256": "91ccd5c6a4c022dd8b01783f2f7e4cf18bbf64e727a4fba3665225baaf84ce9e",
-  "canonical_ranger_file": "Ranger_FaceSample.glb",
-  "canonical_ranger_sha256": "4ec9d2cb4eed289be37d8832f57e2c6af45f4d8746452772a247eef9514bdcf0"
+  "source_validation": {
+    "mode": "resource-runtime-gameplay-deferred",
+    "resource_run_id": 41177261525
+  },
+  "private_resource_pack": {
+    "id": "brawl69-c037c57e132b",
+    "bytes": 852915256,
+    "sha256": "a7d14fe4e028a89de7e90dce274cc7d0050b700ed55b7c533370ff16a717ca83"
+  },
+  "private_resource_pack_transport": {
+    "encoding": "gzip",
+    "bytes": 513291258,
+    "sha256": "014f308baae24d1ea44d54c649facbb18b85b09a32d6a0424b02a34a17640281"
+  },
+  "notes": "• 将本次提供客户端的派生资源包内置到 App，首次进入勇者乱斗大厅时校验并导入。包内含 5,469 个文件、118 条英雄配置（含形态）、370 张地图布局、70 首音乐及 4,011 个游戏音频文件。\n• 首批可对战的原版英雄为雪莉、柯尔特、瑞科、斯派克；其余 114 条英雄配置尚未完成完整战斗适配，不能视为全部英雄已实装。\n• 接入 119 个受支持的地图／模式配置，涉及 111 张不同布局；370 张布局可浏览，其余 349 个地点配置仍待适配。\n• 应用 8 套大厅背景首帧及菜单素材，提供原版音乐选择和已支持的音频事件；完整动态大厅、部分音效事件及循环音效仍待完善。\n• 修正 3D 角色和场景材质的透明度与颜色处理，避免不透明表面发暗和透明材质颜色过亮，并保留角色淡出效果。\n• 保留项目原有英雄、存档和进度；游侠、蛮王、法师与双闸交汇继续作为正式玩法。\n• 完整对局与录像验收已延期，本版未完成该项验证。\n• 部分特殊材质、区域特效和地图动画仍需完善；真机画面、帧率、多人对局与热稳定性尚未验收。"
 }
