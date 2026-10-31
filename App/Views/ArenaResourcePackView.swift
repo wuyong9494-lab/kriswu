@@ -23,19 +23,41 @@ struct ArenaResourcePackView: View {
                     if let manifest = store.manifest {
                         Text("\(manifest.heroes.count) 条英雄配置 · \(manifest.maps.count) 个布局 · \(manifest.music.count) 首音乐")
                             .font(.caption).foregroundStyle(.white.opacity(0.8))
+                    } else if store.hasBundledPack {
+                        Text(store.error == nil ? "正在自动准备内置资源…" : "内置资源暂未加载完成")
+                            .font(.subheadline)
                     } else {
-                        Text("导入资源包后查看角色与地图，并应用大厅主题和音乐。")
+                        Text("此版本尚未包含内置的原版资源。")
                             .font(.subheadline)
                     }
                     Spacer()
                     if let onProjectHeroes {
                         Button("项目英雄", action: onProjectHeroes).buttonStyle(ArenaMenuButtonStyle())
                     }
-                    Button(store.importing ? "正在导入" : "导入资源包") { picking = true }
-                        .buttonStyle(ArenaMenuButtonStyle()).disabled(store.importing)
+                    if store.hasBundledPack, store.error != nil {
+                        Button("重新加载") {
+                            Task { await store.loadBundledPackIfNeeded() }
+                        }.buttonStyle(ArenaMenuButtonStyle()).disabled(store.preparingResources)
+                    }
+                    Menu("更多") {
+                        Button("从文件导入其他资源包") { picking = true }
+                    }.buttonStyle(ArenaMenuButtonStyle()).disabled(store.preparingResources)
                 }
-                if store.importing { ProgressView(value: store.progress).tint(.cyan) }
+                if store.preparingResources {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: store.importing ? store.progress : nil).tint(.cyan)
+                        Text(store.importing ? "正在准备资源 · \(Int(store.progress * 100))%" : "正在检查内置资源…")
+                            .font(.caption).foregroundStyle(.white.opacity(0.8))
+                    }
+                }
                 if let error = store.error ?? importError { Text(error).font(.caption).foregroundStyle(.orange) }
+                if let error = store.lobbySceneError {
+                    HStack {
+                        Text(error).font(.caption).foregroundStyle(.orange)
+                        Button("重新加载大厅动画") { store.retryLobbyScene() }
+                            .buttonStyle(ArenaMenuButtonStyle())
+                    }
+                }
                 if let manifest = store.manifest {
                     Picker("资源类别", selection: $page) {
                         ForEach(Page.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -50,7 +72,15 @@ struct ArenaResourcePackView: View {
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Spacer()
-                    Text("资源包格式为 .arenapack。导入后保存在此设备，原有英雄、地图和进度继续保留。")
+                    VStack(spacing: 12) {
+                        Image(systemName: store.hasBundledPack ? "shippingbox.fill" : "arrow.down.app")
+                            .font(.system(size: 34))
+                        Text(store.hasBundledPack
+                             ? "大厅、英雄、地图和音乐已随 App 提供，首次进入时会自动准备，无需选择文件。"
+                             : "更新到含内置资源的版本后，大厅、英雄、地图和音乐会自动加载。")
+                            .multilineTextAlignment(.center)
+                    }.frame(maxWidth: 460)
+                        .frame(maxWidth: .infinity)
                         .foregroundStyle(.white.opacity(0.75)).font(.subheadline)
                     Spacer()
                 }
@@ -151,8 +181,10 @@ struct ArenaResourcePackView: View {
     private func themes(_ manifest: ArenaResourcePackManifest) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Toggle("在大厅使用导入的背景和音乐", isOn: Binding(get: { store.enabled }, set: { store.setEnabled($0) }))
-                Text("背景使用原资源首帧；大厅按钮继续操作当前 App 的实际功能。")
+                Toggle("在大厅使用原版背景和音乐", isOn: Binding(get: { store.enabled }, set: { store.setEnabled($0) }))
+                Text(manifest.themes.contains(where: { $0.sceneFile != nil })
+                     ? "选择后用于大厅，背景随原资源的动画时间轴播放。"
+                     : "当前资源包提供静态背景；大厅按钮操作当前 App 的实际功能。")
                     .font(.caption).foregroundStyle(.white.opacity(0.8))
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 180))], spacing: 12) {
                     ForEach(manifest.themes) { theme in

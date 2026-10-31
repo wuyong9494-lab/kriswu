@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 
 PACK_NAME = "arena-original-resources.arenapack"
-MAX_BYTES = 1024 * 1024 * 1024 + 8 * 1024 * 1024 + 15
+MAX_BYTES = 2 * 1024 * 1024 * 1024 + 16 * 1024 * 1024 + 15
 
 
 def specification(request):

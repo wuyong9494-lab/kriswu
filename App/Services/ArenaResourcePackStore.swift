@@ -9,8 +9,11 @@ final class ArenaResourcePackStore: ObservableObject {
     static let shared = ArenaResourcePackStore()
     @Published private(set) var manifest: ArenaResourcePackManifest?
     @Published private(set) var importing = false
+    @Published private(set) var loadingBundledPack = false
     @Published private(set) var progress = 0.0
     @Published private(set) var error: String?
+    @Published private(set) var lobbySceneError: String?
+    @Published private(set) var lobbySceneReload = 0
     @Published private(set) var themeID: String?
     @Published private(set) var lobbyMusicID: String?
     @Published private(set) var selectedHeroID: String?
@@ -20,6 +23,12 @@ final class ArenaResourcePackStore: ObservableObject {
     private var approvedPaths = Set<String>()
     private let defaults: UserDefaults
     private let directory: URL
+
+    var hasBundledPack: Bool {
+        Bundle.main.url(forResource: "arena-original-resources", withExtension: "arenapack") != nil
+    }
+
+    var preparingResources: Bool { loadingBundledPack || importing }
 
     var currentTheme: ArenaResourcePackManifest.Theme? {
         guard enabled, let manifest else { return nil }
@@ -55,6 +64,7 @@ final class ArenaResourcePackStore: ObservableObject {
     func selectTheme(id: String) {
         guard manifest?.themes.contains(where: { $0.id == id }) == true else { return }
         themeID = id
+        lobbySceneError = nil
         lobbyMusicID = nil
         defaults.set(id, forKey: "arena.resources.theme")
         defaults.removeObject(forKey: "arena.resources.lobbyMusic")
@@ -87,6 +97,7 @@ final class ArenaResourcePackStore: ObservableObject {
     func setEnabled(_ value: Bool) {
         enabled = value
         defaults.set(value, forKey: "arena.resources.enabled")
+        Task { await ArenaImportedSourceRules.shared.loadIfNeeded(store: self) }
         ArenaSound.shared.themeChanged()
     }
 
@@ -106,11 +117,24 @@ final class ArenaResourcePackStore: ObservableObject {
 
     func clearError() { error = nil }
 
+    func reportLobbySceneFailure(themeID: String) {
+        guard currentTheme?.id == themeID else { return }
+        lobbySceneError = "大厅动画暂未加载，当前显示静态背景。"
+    }
+
+    func retryLobbyScene() {
+        lobbySceneError = nil
+        lobbySceneReload &+= 1
+    }
+
     /// The same verified archive can be injected into an authorized private build
     /// or picked in Files. No network token or remote download URL enters the App.
     func loadBundledPackIfNeeded() async {
-        guard !importing,
+        guard !preparingResources,
               let url = Bundle.main.url(forResource: "arena-original-resources", withExtension: "arenapack") else { return }
+        loadingBundledPack = true
+        error = nil
+        defer { loadingBundledPack = false }
         do {
             let bundled = try await Task.detached(priority: .utility) {
                 try ArenaResourcePackArchive.readManifest(from: url)
@@ -170,6 +194,9 @@ final class ArenaResourcePackStore: ObservableObject {
         self.root = root
         approvedPaths = Set(value.files.map(\.path))
         manifest = value
+        lobbySceneError = nil
+        ArenaImportedFonts.prepare(manifest: value, resourceURL: url(for:))
+        Task { await ArenaImportedSourceRules.shared.loadIfNeeded(store: self) }
         if !value.themes.contains(where: { $0.id == themeID }) { themeID = value.defaultThemeID ?? value.themes.first?.id }
         if !value.heroes.contains(where: { $0.id == selectedHeroID }) { selectedHeroID = nil }
         if value.combatFile == nil || !value.heroes.contains(where: { $0.id == combatHeroID }) {
@@ -188,6 +215,7 @@ final class ArenaResourcePackStore: ObservableObject {
         guard let raw = try? Data(contentsOf: location.appendingPathComponent("manifest.json")),
               raw.count <= ArenaResourcePackManifest.maximumHeaderBytes,
               let value = try? JSONDecoder().decode(ArenaResourcePackManifest.self, from: raw),
+              raw.count <= value.headerByteLimit,
               (try? value.validate()) != nil else { return }
         // The marker is written only after every asset was hashed. Check size here
         // without rereading hundreds of megabytes on every lobby entry.

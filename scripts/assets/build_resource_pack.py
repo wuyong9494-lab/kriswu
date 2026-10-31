@@ -14,10 +14,15 @@ import unicodedata
 from pathlib import Path, PurePosixPath
 
 MAGIC = b"KRISARENA1\n"
-MAX_HEADER = 8 * 1024 * 1024
-MAX_PAYLOAD = 1024 * 1024 * 1024
+MAX_HEADER = 16 * 1024 * 1024
+MAX_PAYLOAD = 2 * 1024 * 1024 * 1024
+VERSION_LIMITS = {
+    1: {"header": 8 * 1024 * 1024, "payload": 1024 * 1024 * 1024, "files": 10000},
+    2: {"header": MAX_HEADER, "payload": MAX_PAYLOAD, "files": 20000},
+}
 KINDS = {"model": {".glb"}, "image": {".png", ".jpg", ".jpeg"},
-         "music": {".m4a", ".wav"}, "data": {".json"}, "notice": {".txt"}}
+         "music": {".m4a", ".wav"}, "data": {".json"}, "notice": {".txt"},
+         "font": {".ttf", ".otf"}}
 
 
 def safe_path(name):
@@ -34,10 +39,11 @@ def sha_file(path):
 
 
 def validate_files(manifest):
-    assert manifest["schemaVersion"] == 1
+    assert manifest["schemaVersion"] in VERSION_LIMITS
+    limits = VERSION_LIMITS[manifest["schemaVersion"]]
     files = manifest["files"]
-    assert 0 < len(files) <= 10000
-    assert sum(f["bytes"] for f in files) <= MAX_PAYLOAD
+    assert 0 < len(files) <= limits["files"]
+    assert sum(f["bytes"] for f in files) <= limits["payload"]
     seen = set()
     for item in files:
         name = item["path"]
@@ -62,11 +68,30 @@ def validate_files(manifest):
             bounds = hero["modelBounds"]
             assert len(bounds) == 6 and all(isinstance(v, (int, float)) and math.isfinite(v) and abs(v) < 100000 for v in bounds)
             assert all(bounds[i + 3] >= bounds[i] for i in range(3))
-    for field in ["gameAudioFile", "menuArtworkFile", "combatFile", "playableMapsFile", "mapArtworkFile", "skillArtworkFile"]:
+    for field in ["gameAudioFile", "menuArtworkFile", "combatFile", "playableMapsFile", "mapArtworkFile", "skillArtworkFile",
+                  "sourceRulesFile", "sourceMapCatalogFile", "sourceAssetIndexFile", "lobbyLayoutFile"]:
         if manifest.get(field):
             assert table.get(manifest[field]) == "data"
     for theme in manifest["themes"]:
         assert table.get(theme["backgroundFile"]) == "image"
+        for file_field, export_field in [("sceneFile", "sceneExport"), ("loadingSceneFile", "loadingSceneExport")]:
+            assert (theme.get(file_field) is None) == (theme.get(export_field) is None)
+            if theme.get(file_field) is not None:
+                assert table.get(theme[file_field]) == "data"
+                assert isinstance(theme[export_field], str) and 0 < len(theme[export_field].encode()) <= 240
+        if theme.get("sceneSourceRect") is not None:
+            rect = theme["sceneSourceRect"]
+            assert theme.get("sceneFile") is not None and len(rect) == 4
+            assert all(isinstance(x, (int, float)) and math.isfinite(x) and abs(x) <= 100000 for x in rect)
+            assert rect[2] > rect[0] and rect[3] > rect[1]
+        if theme.get("loadingJingleID") is not None:
+            cue = theme["loadingJingleID"]
+            assert isinstance(cue, str) and 0 < len(cue.encode()) <= 240
+    fonts = manifest.get("fonts") or []
+    assert len(fonts) <= 100 and len({f["id"] for f in fonts}) == len(fonts)
+    for font in fonts:
+        assert table.get(font["file"]) == "font"
+        assert isinstance(font["postScriptName"], str) and 0 < len(font["postScriptName"].encode()) <= 240
     for track in manifest["music"]:
         assert table.get(track["file"]) == "music"
     for map_ in manifest["maps"]:
@@ -86,6 +111,7 @@ def verify(path):
         assert 0 < length <= MAX_HEADER
         manifest = json.loads(source.read(length))
         validate_files(manifest)
+        assert length <= VERSION_LIMITS[manifest["schemaVersion"]]["header"]
         for item in manifest["files"]:
             digest = hashlib.sha256()
             remaining = item["bytes"]
@@ -106,7 +132,7 @@ def build(manifest_path, root, output):
     manifest = json.loads(manifest_path.read_text())
     validate_files(manifest)
     raw = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-    assert len(raw) <= MAX_HEADER
+    assert len(raw) <= VERSION_LIMITS[manifest["schemaVersion"]]["header"]
     root = root.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(output.name + ".partial")

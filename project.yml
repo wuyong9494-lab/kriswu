@@ -111,6 +111,10 @@ targets:
       - path: App/Services/ArenaResourcePackArchive.swift
       - path: App/Services/ArenaFaceScene.swift
       - path: App/Services/ArenaColorGrade.swift
+      - path: App/Services/ArenaLobbyTimelineScene.swift
+      - path: App/Services/ArenaLobbyTimelineShaders.swift
+      - path: App/Services/ArenaLobbyTimelineRenderer.swift
+      - path: App/Services/ArenaAudioDecoder.swift
     settings:
       base:
         PRODUCT_MODULE_NAME: ArenaResourceRuntime
@@ -130,6 +134,9 @@ targets:
       - path: Tests/SiteTests/GLTFMaterialTests.swift
       - path: Tests/SiteTests/ArenaResourcePackTests.swift
       - path: Tests/SiteTests/ArenaImportedFaceTests.swift
+      - path: Tests/SiteTests/ArenaLobbyTimelineTests.swift
+      - path: Tests/SiteTests/ArenaALACStorageTests.swift
+      - path: Tests/SiteTests/ArenaALACStorageFixtures.swift
     dependencies:
       - target: ArenaResourceRuntime
         embed: false

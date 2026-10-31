@@ -1,16 +1,18 @@
 import SwiftUI
 import UIKit
 
-/// The selected local theme's static source frame. The lobby keeps its own live
-/// controls and hero view above this non-interactive layer.
+/// The selected source timeline, with its verified still as a loading fallback.
+/// Controls and the hero remain independent interactive layers.
 @MainActor
 struct ArenaImportedLobbyBackground: View {
     @ObservedObject private var store: ArenaResourcePackStore
     @State private var image: UIImage?
     @State private var loadedRequest: ImageRequest?
+    private let live: Bool
 
-    init(store: ArenaResourcePackStore = .shared) {
+    init(store: ArenaResourcePackStore = .shared, live: Bool = true) {
         self.store = store
+        self.live = live
     }
 
     var body: some View {
@@ -24,6 +26,14 @@ struct ArenaImportedLobbyBackground: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                }
+                if let scene = sceneRequest {
+                    ArenaImportedLobbySceneView(sceneURL: scene.url, exportName: scene.exportName,
+                        sourceRect: scene.rect, sceneSHA256: scene.sha256, live: live, resourceURL: store.url(for:),
+                        onFailure: { _ in store.reportLobbySceneFailure(themeID: scene.themeID) })
+                        .id(scene)
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
                 }
@@ -54,5 +64,26 @@ struct ArenaImportedLobbyBackground: View {
     private struct ImageRequest: Equatable {
         let url: URL
         let sha256: String
+    }
+
+    private var sceneRequest: SceneRequest? {
+        guard let theme = store.currentTheme, let path = theme.sceneFile, let name = theme.sceneExport,
+              let url = store.url(for: path),
+              let file = store.manifest?.files.first(where: { $0.path == path && $0.kind == .data }) else { return nil }
+        return SceneRequest(url: url, sha256: file.sha256, exportName: name, sourceRect: theme.sceneSourceRect,
+                            themeID: theme.id, reload: store.lobbySceneReload)
+    }
+
+    private struct SceneRequest: Hashable {
+        let url: URL
+        let sha256: String
+        let exportName: String
+        let sourceRect: [Double]?
+        let themeID: String
+        let reload: Int
+        var rect: CGRect? {
+            guard let values = sourceRect, values.count == 4 else { return nil }
+            return CGRect(x: values[0], y: values[1], width: values[2] - values[0], height: values[3] - values[1])
+        }
     }
 }

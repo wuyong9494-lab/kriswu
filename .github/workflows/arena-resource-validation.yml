@@ -11,6 +11,9 @@ on:
       - 'Tests/SiteTests/GLTFMaterialTests.swift'
       - 'Tests/SiteTests/ArenaResourcePackTests.swift'
       - 'Tests/SiteTests/ArenaImportedFaceTests.swift'
+      - 'Tests/SiteTests/ArenaLobbyTimelineTests.swift'
+      - 'Tests/SiteTests/ArenaALACStorageTests.swift'
+      - 'Tests/SiteTests/ArenaALACStorageFixtures.swift'
       - '.github/workflows/arena-resource-validation.yml'
   workflow_dispatch:
 
@@ -61,7 +64,7 @@ jobs:
               subprocess.run(['xcrun','simctl','boot',device['udid']],check=True,timeout=120)
           subprocess.run(['xcrun','simctl','bootstatus',device['udid'],'-b'],check=True,timeout=600)
           PY
-      - name: Check synthetic materials and transactional resource import
+      - name: Check synthetic materials, lobby compositing and resource import
         shell: bash -eo pipefail {0}
         run: |
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaResourceValidation \
@@ -70,6 +73,8 @@ jobs:
             -parallel-testing-enabled NO -only-testing:ArenaResourceTests/GLTFMaterialTests \
             -only-testing:ArenaResourceTests/ArenaResourcePackTests \
             -only-testing:ArenaResourceTests/ArenaImportedFaceTests \
+            -only-testing:ArenaResourceTests/ArenaLobbyTimelineTests \
+            -only-testing:ArenaResourceTests/ArenaALACStorageTests \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee resource-tests.log
       - uses: actions/upload-artifact@v4
         if: always()

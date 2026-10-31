@@ -88,7 +88,7 @@ struct ArenaHomeView: View {
             let composition = ArenaLobbyComposition(size: geo.size)
             let compact = composition.compact
             ZStack {
-                ArenaLobbyBackground()
+                ArenaLobbyBackground(live: playing == nil && lobby == nil && !adventure && sheet == nil)
                 Group {
                     if let hero = sourceHero, let entry = resourcePack.manifest?.heroes.first(where: { $0.id == hero.id }),
                        let path = entry.modelFile, let url = resourcePack.url(for: path) {
@@ -169,6 +169,24 @@ struct ArenaHomeView: View {
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
                     .position(composition.inviteCenter)
                     .accessibilityLabel("邀请队友")
+            }
+            .overlay(alignment: .top) {
+                if resourcePack.hasBundledPack,
+                   resourcePack.preparingResources || resourcePack.error != nil || resourcePack.lobbySceneError != nil {
+                    Button { sheet = .resources } label: {
+                        HStack(spacing: 8) {
+                            if resourcePack.preparingResources { ProgressView().tint(.white) }
+                            else { Image(systemName: "exclamationmark.circle") }
+                            Text(resourcePack.preparingResources
+                                 ? "正在准备内置大厅和游戏资源…"
+                                 : resourcePack.lobbySceneError != nil
+                                 ? "大厅动画未加载，查看并重试"
+                                 : "内置资源加载未完成，查看并重试")
+                                .font(.caption).multilineTextAlignment(.leading)
+                        }.foregroundStyle(.white).padding(10)
+                            .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+                    }.buttonStyle(.plain).frame(maxWidth: 300).padding(.top, 52)
+                }
             }
         }
         .modifier(ArenaLandscape())
@@ -1908,10 +1926,11 @@ extension ArenaGame.Mode {
 
 /// 大厅的底：蓝到紫的渐变，后面一圈光芒慢慢转，中间亮一点
 private struct ArenaLobbyBackground: View {
+    var live = true
     var body: some View {
         ZStack {
             ArenaLobbyBackdrop()
-            ArenaImportedLobbyBackground()
+            ArenaImportedLobbyBackground(live: live)
         }.ignoresSafeArea()
     }
 }

@@ -4,7 +4,7 @@ import Foundation
 /// registered, playable hero or map. The existing roster and save IDs are unchanged.
 public struct ArenaResourcePackManifest: Codable, Sendable {
     public struct File: Codable, Sendable {
-        public enum Kind: String, Codable, Sendable, Hashable { case model, image, music, data, notice }
+        public enum Kind: String, Codable, Sendable, Hashable { case model, image, music, data, notice, font }
         public let path: String
         public let bytes: Int
         public let sha256: String
@@ -33,6 +33,19 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
         public let title: String
         public let backgroundFile: String
         public let musicCue: String?
+        /// Complete nested timelines; backgroundFile remains the still preview.
+        public let sceneFile: String?
+        public let sceneExport: String?
+        public let sceneSourceRect: [Double]?
+        public let loadingSceneFile: String?
+        public let loadingSceneExport: String?
+        public let loadingJingleID: String?
+    }
+
+    public struct Font: Codable, Identifiable, Sendable {
+        public let id: String
+        public let file: String
+        public let postScriptName: String
     }
 
     public struct Music: Codable, Identifiable, Sendable {
@@ -73,6 +86,12 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
     public let playableMapsFile: String?
     public let mapArtworkFile: String?
     public let skillArtworkFile: String?
+    /// Complete source definitions are distinct from executable combat support.
+    public let sourceRulesFile: String?
+    public let sourceMapCatalogFile: String?
+    public let sourceAssetIndexFile: String?
+    public let lobbyLayoutFile: String?
+    public let fonts: [Font]?
 
     public enum ValidationError: Error, Equatable, LocalizedError {
         case invalid(String)
@@ -81,8 +100,13 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
         }
     }
 
-    public static let maximumHeaderBytes = 8 * 1024 * 1024
-    public static let maximumPayloadBytes = 1024 * 1024 * 1024
+    // Schema 2 accommodates the measured full audio/layout/timeline catalogue.
+    // Both limits are bounded; schema 1 retains its original acceptance limits.
+    public static let maximumHeaderBytes = 16 * 1024 * 1024
+    public static let maximumPayloadBytes = 2 * 1024 * 1024 * 1024
+    public var headerByteLimit: Int { schemaVersion == 1 ? 8 * 1024 * 1024 : Self.maximumHeaderBytes }
+    public var payloadByteLimit: Int { schemaVersion == 1 ? 1024 * 1024 * 1024 : Self.maximumPayloadBytes }
+    public var fileCountLimit: Int { schemaVersion == 1 ? 10_000 : 20_000 }
 
     /// This validates the manifest and every reference. Archive extraction also
     /// verifies exact byte counts, each SHA-256, and the absence of trailing bytes.
@@ -90,11 +114,11 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
         func require(_ condition: Bool, _ detail: String) throws {
             if !condition { throw ValidationError.invalid(detail) }
         }
-        try require(schemaVersion == 1, "不支持的版本")
+        try require(schemaVersion == 1 || schemaVersion == 2, "不支持的版本")
         try require(Self.safeIdentifier(id), "包标识")
         try require(!title.isEmpty && title.count <= 200 && sourceDescription.count <= 2_000, "包说明")
         try require(Self.isSHA256(sourceSHA256), "来源校验值")
-        try require(!files.isEmpty && files.count <= 10_000, "文件数量")
+        try require(!files.isEmpty && files.count <= fileCountLimit, "文件数量")
         var seen = Set<String>()
         var byPath: [String: File] = [:]
         var total = 0
@@ -106,11 +130,11 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
             try require(file.bytes > 0 && file.bytes <= 128 * 1024 * 1024, "文件大小")
             try require(Self.isSHA256(file.sha256), "文件校验值")
             total += file.bytes
-            try require(total <= Self.maximumPayloadBytes, "资源包超过大小限制")
+            try require(total <= payloadByteLimit, "资源包超过大小限制")
             let suffix = (file.path as NSString).pathExtension.lowercased()
             let allowed: [File.Kind: Set<String>] = [
                 .model: ["glb"], .image: ["png", "jpg", "jpeg"], .music: ["m4a", "wav"],
-                .data: ["json"], .notice: ["txt"]
+                .data: ["json"], .notice: ["txt"], .font: ["ttf", "otf"]
             ]
             try require(allowed[file.kind]?.contains(suffix) == true, "文件类型")
             byPath[file.path] = file
@@ -150,6 +174,25 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
         for theme in themes {
             try require(!theme.title.isEmpty && theme.title.count <= 150, "主题名称")
             try reference(theme.backgroundFile, .image)
+            try require((theme.sceneFile == nil) == (theme.sceneExport == nil), "大厅动画引用不完整")
+            if let path = theme.sceneFile { try reference(path, .data) }
+            if let name = theme.sceneExport { try require(!name.isEmpty && name.utf8.count <= 240, "大厅动画名称") }
+            if let rect = theme.sceneSourceRect {
+                try require(theme.sceneFile != nil && rect.count == 4
+                            && rect.allSatisfy { $0.isFinite && abs($0) <= 100_000 }, "大厅画面范围")
+                try require(rect[2] > rect[0] && rect[3] > rect[1], "大厅画面范围方向")
+            }
+            try require((theme.loadingSceneFile == nil) == (theme.loadingSceneExport == nil), "加载动画引用不完整")
+            if let path = theme.loadingSceneFile { try reference(path, .data) }
+            if let name = theme.loadingSceneExport { try require(!name.isEmpty && name.utf8.count <= 240, "加载动画名称") }
+            if let cue = theme.loadingJingleID { try require(!cue.isEmpty && cue.utf8.count <= 240, "加载音效名称") }
+        }
+        if let fonts {
+            try identifiers(fonts.map(\.id), "字体", maximum: 100)
+            for font in fonts {
+                try reference(font.file, .font)
+                try require(!font.postScriptName.isEmpty && font.postScriptName.utf8.count <= 240, "字体名称")
+            }
         }
         if let defaultThemeID { try require(themes.contains { $0.id == defaultThemeID }, "默认主题") }
         for track in music {
@@ -167,7 +210,8 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
             try require((0...(map.width * map.height)).contains(map.unresolvedCells) && map.modes.count <= 100, "地图信息")
             try reference(map.layoutFile, .data)
         }
-        for path in [gameAudioFile, menuArtworkFile, combatFile, playableMapsFile, mapArtworkFile, skillArtworkFile].compactMap({ $0 }) {
+        for path in [gameAudioFile, menuArtworkFile, combatFile, playableMapsFile, mapArtworkFile, skillArtworkFile,
+                     sourceRulesFile, sourceMapCatalogFile, sourceAssetIndexFile, lobbyLayoutFile].compactMap({ $0 }) {
             try reference(path, .data)
         }
     }

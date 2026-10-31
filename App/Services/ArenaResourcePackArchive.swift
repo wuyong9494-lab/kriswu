@@ -15,6 +15,7 @@ enum ArenaResourcePackArchive {
         guard length > 0, length <= ArenaResourcePackManifest.maximumHeaderBytes else { throw invalid("资源清单大小") }
         let value = try JSONDecoder().decode(ArenaResourcePackManifest.self, from: read(input, count: length))
         try value.validate()
+        guard length <= value.headerByteLimit else { throw invalid("资源清单超过版本大小限制") }
         let expected = magic.count + 4 + length + value.files.reduce(0) { $0 + $1.bytes }
         guard try source.resourceValues(forKeys: [.fileSizeKey]).fileSize == expected else { throw invalid("资源包长度与清单不符") }
         return value
@@ -38,6 +39,7 @@ enum ArenaResourcePackArchive {
         let raw = try read(input, count: length)
         let manifest = try JSONDecoder().decode(ArenaResourcePackManifest.self, from: raw)
         try manifest.validate()
+        guard length <= manifest.headerByteLimit else { throw invalid("资源清单超过版本大小限制") }
         let expectedBytes = manifest.files.reduce(0) { $0 + $1.bytes }
         let sourceBytes = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize
         guard sourceBytes == magic.count + 4 + length + expectedBytes else { throw invalid("资源包长度与清单不符") }
