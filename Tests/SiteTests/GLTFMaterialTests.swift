@@ -23,6 +23,19 @@ final class GLTFMaterialTests: XCTestCase {
         XCTAssertTrue(alpha.materials[0].writesToDepthBuffer)
     }
 
+    func testOpaquePreservesOriginalRGBAtZeroAlphaBeforeResizing() throws {
+        // Fixed RGBA8 PNG pixels are [255, 0, 0, 0]. Do not let a fixture
+        // encoder discard the hidden RGB before the loader can be tested.
+        let png = try zeroAlphaRedPNG()
+        for embedded in [false, true] {
+            let instance = try fixture(factor: [1, 1, 1, 0], texturePNG: png,
+                embeddedTexture: embedded, maxTexture: 1).instantiate()
+            assertPixel(try snapshot(instance).center, equals: SIMD3(255, 0, 0))
+            instance.root.opacity = 0.5
+            assertPixel(try snapshot(instance).center, equals: SIMD3(128, 0, 128), accuracy: 15)
+        }
+    }
+
     func testTexturedFactorMatchesLinearSolidColorAndRemainsIndependentOfTint() throws {
         let factor = [0.25, 0.5, 0.75, 1.0]
         let model = try fixture(factor: factor)
@@ -52,6 +65,16 @@ final class GLTFMaterialTests: XCTestCase {
         assertPixel(try snapshot(aboveOne).center, equals: SIMD3(0, 0, 255))
     }
 
+    func testMaskRestoresOpaqueColorForAcceptedFractionalAndZeroAlpha() throws {
+        let accepted = try fixture(alphaMode: "MASK", factor: [1, 1, 1, 1],
+            pixel: [255, 0, 0, 128], cutoff: 0.5).instantiate()
+        assertPixel(try snapshot(accepted).center, equals: SIMD3(255, 0, 0))
+        // With cutoff zero, even zero-alpha source pixels are fully opaque.
+        let zero = try fixture(alphaMode: "MASK", factor: [1, 1, 1, 0], cutoff: 0,
+            texturePNG: zeroAlphaRedPNG()).instantiate()
+        assertPixel(try snapshot(zero).center, equals: SIMD3(255, 0, 0))
+    }
+
     func testBlendMultipliesTextureAndFactorAlphaExactlyOnce() throws {
         let factorOnly = try fixture(alphaMode: "BLEND", factor: [1, 1, 1, 0.25],
                                       pixel: [255, 0, 0, 255]).instantiate(outline: SCNMaterial())
@@ -65,6 +88,13 @@ final class GLTFMaterialTests: XCTestCase {
         XCTAssertTrue(factorOnly.outlines.isEmpty)
         factorOnly.root.opacity = 0.5
         assertPixel(try snapshot(factorOnly).center, equals: SIMD3(32, 0, 223), accuracy: 15)
+    }
+
+    func testBlendZeroFactorAlphaLeavesBackgroundUntouched() throws {
+        for pixel: [UInt8]? in [[255, 0, 0, 255], [255, 0, 0, 128], nil] {
+            let instance = try fixture(alphaMode: "BLEND", factor: [1, 0, 0, 0], pixel: pixel).instantiate()
+            assertPixel(try snapshot(instance).center, equals: SIMD3(0, 0, 255))
+        }
     }
 
     func testSamplerWrapAndFilterModesArePreserved() throws {
@@ -179,10 +209,19 @@ final class GLTFMaterialTests: XCTestCase {
         return Pixels(center: center, redPixelCount: red.count, redCenterX: red.isEmpty ? -1 : Float(sum) / Float(red.count))
     }
 
+    private func zeroAlphaRedPNG() throws -> Data {
+        // 2x2, RGBA8, no color conversion metadata; each scanline retains red
+        // at alpha zero. The opaque test downsizes this image to one pixel.
+        try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DAAMIMMAYAKegD/QE6Y34AAAAASUVORK5CYII="))
+    }
+
     private func fixture(alphaMode: String = "OPAQUE", factor: [Double] = [1, 1, 1, 1],
                          pixel: [UInt8]? = [255, 255, 255, 255], cutoff: Double? = nil,
                          sampler: [String: Int]? = nil, uv: [Float]? = nil,
-                         skinned: Bool = false, explicitRoot: Bool = false) throws -> GLTFModel {
+                         skinned: Bool = false, explicitRoot: Bool = false,
+                         texturePNG: Data? = nil, embeddedTexture: Bool = false,
+                         maxTexture: CGFloat = 512) throws -> GLTFModel {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("gltf-material-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
@@ -219,7 +258,7 @@ final class GLTFMaterialTests: XCTestCase {
                      ["name": "mesh", "mesh": 0, "skin": 0, "translation": [40, 0, 0]]]
         }
         var pbr: [String: Any] = ["baseColorFactor": factor]
-        if pixel != nil { pbr["baseColorTexture"] = ["index": 0] }
+        if pixel != nil || texturePNG != nil { pbr["baseColorTexture"] = ["index": 0] }
         var material: [String: Any] = ["name": "synthetic", "alphaMode": alphaMode, "pbrMetallicRoughness": pbr]
         if let cutoff { material["alphaCutoff"] = cutoff }
         var document: [String: Any] = ["asset": ["version": "2.0"], "scene": 0, "scenes": [["nodes": [0]]],
@@ -227,19 +266,35 @@ final class GLTFMaterialTests: XCTestCase {
             "materials": [material], "buffers": [["uri": "mesh.bin", "byteLength": binary.count]],
             "bufferViews": views, "accessors": accessors]
         if let skin { document["skins"] = [skin] }
-        if let pixel {
-            let data = Data(pixel)
-            let provider = try XCTUnwrap(CGDataProvider(data: data as CFData))
-            let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
-            let image = try XCTUnwrap(CGImage(width: pixel.count / 4, height: 1, bitsPerComponent: 8, bitsPerPixel: 32,
-                bytesPerRow: pixel.count, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
-                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
-            let png = NSMutableData()
-            let destination = try XCTUnwrap(CGImageDestinationCreateWithData(png as CFMutableData, UTType.png.identifier as CFString, 1, nil))
-            CGImageDestinationAddImage(destination, image, nil)
-            XCTAssertTrue(CGImageDestinationFinalize(destination))
-            try (png as Data).write(to: folder.appendingPathComponent("color.png"))
-            document["images"] = [["uri": "color.png"]]
+        if pixel != nil || texturePNG != nil {
+            let png: Data
+            if let texturePNG {
+                png = texturePNG
+            } else {
+                let pixel = try XCTUnwrap(pixel)
+                let data = Data(pixel)
+                let provider = try XCTUnwrap(CGDataProvider(data: data as CFData))
+                let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+                let image = try XCTUnwrap(CGImage(width: pixel.count / 4, height: 1, bitsPerComponent: 8, bitsPerPixel: 32,
+                    bytesPerRow: pixel.count, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                    provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+                let encoded = NSMutableData()
+                let destination = try XCTUnwrap(CGImageDestinationCreateWithData(encoded as CFMutableData, UTType.png.identifier as CFString, 1, nil))
+                CGImageDestinationAddImage(destination, image, nil)
+                XCTAssertTrue(CGImageDestinationFinalize(destination))
+                png = encoded as Data
+            }
+            if embeddedTexture {
+                while !binary.count.isMultiple(of: 4) { binary.append(0) }
+                document["images"] = [["bufferView": views.count, "mimeType": "image/png"]]
+                views.append(["buffer": 0, "byteOffset": binary.count, "byteLength": png.count])
+                binary.append(png)
+                document["bufferViews"] = views
+                document["buffers"] = [["uri": "mesh.bin", "byteLength": binary.count]]
+            } else {
+                try png.write(to: folder.appendingPathComponent("color.png"))
+                document["images"] = [["uri": "color.png"]]
+            }
             var texture: [String: Any] = ["source": 0]
             if let sampler { document["samplers"] = [sampler]; texture["sampler"] = 0 }
             document["textures"] = [texture]
@@ -247,6 +302,6 @@ final class GLTFMaterialTests: XCTestCase {
         try binary.write(to: folder.appendingPathComponent("mesh.bin"))
         let url = folder.appendingPathComponent("fixture.gltf")
         try JSONSerialization.data(withJSONObject: document).write(to: url)
-        return try GLTFModel(url: url)
+        return try GLTFModel(url: url, maxTexture: maxTexture)
     }
 }

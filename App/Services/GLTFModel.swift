@@ -1,5 +1,6 @@
 import SceneKit
 import UIKit
+import ImageIO
 import simd
 
 /// 读 glTF 2.0 的 3D 模型（.glb，或 .gltf 加旁边的 .bin、贴图），做成 SceneKit 的节点。
@@ -106,21 +107,33 @@ final class GLTFModel: @unchecked Sendable {
         let reader = AccessorReader(buffers: buffers, views: json["bufferViews"] as? [[String: Any]] ?? [],
                                     accessors: json["accessors"] as? [[String: Any]] ?? [])
 
-        // 贴图
-        let images: [UIImage?] = (json["images"] as? [[String: Any]] ?? []).map { image in
-            if let uri = image["uri"] as? String {
-                return TextureCache.shared.image(at: folder.appendingPathComponent(uri), maxSize: maxTexture)
+        // A source image can be shared by opaque and transparent materials.
+        // Keep separate variants, before UIKit/SceneKit can premultiply RGB.
+        let imageDefinitions = json["images"] as? [[String: Any]] ?? []
+        var imageVariants: [String: UIImage] = [:]
+        func loadImage(_ index: Int, _ ignoringAlpha: Bool) throws -> UIImage {
+            guard imageDefinitions.indices.contains(index) else { throw LoadError.badFormat }
+            let key = "\(index):\(ignoringAlpha)"
+            if let image = imageVariants[key] { return image }
+            let definition = imageDefinitions[index]
+            let decoded: UIImage?
+            if let uri = definition["uri"] as? String {
+                decoded = TextureCache.shared.image(at: folder.appendingPathComponent(uri),
+                    maxSize: maxTexture, ignoringAlpha: ignoringAlpha)
+            } else if let view = definition["bufferView"] as? Int, let data = reader.viewData(view) {
+                decoded = TextureCache.image(data: data, maxSize: maxTexture, ignoringAlpha: ignoringAlpha)
+            } else {
+                decoded = nil
             }
-            if let view = image["bufferView"] as? Int, let data = reader.viewData(view), let decoded = UIImage(data: data) {
-                return TextureCache.shrink(decoded, to: maxTexture)
-            }
-            return nil
+            guard let decoded else { throw LoadError.badFormat }
+            imageVariants[key] = decoded
+            return decoded
         }
         let textures = json["textures"] as? [[String: Any]] ?? []
         let materialDefinitions = json["materials"] as? [[String: Any]] ?? []
         let samplers = json["samplers"] as? [[String: Any]] ?? []
         let materials: [SCNMaterial] = try materialDefinitions.map { info in
-            try Self.material(info, images: images, textures: textures, samplers: samplers)
+            try Self.material(info, textures: textures, samplers: samplers, image: loadImage)
         }
 
         // 网格
@@ -288,8 +301,8 @@ final class GLTFModel: @unchecked Sendable {
 
     private enum AlphaMode: String { case opaque = "OPAQUE", mask = "MASK", blend = "BLEND" }
 
-    private static func material(_ info: [String: Any], images: [UIImage?],
-                                 textures: [[String: Any]], samplers: [[String: Any]]) throws -> SCNMaterial {
+    private static func material(_ info: [String: Any], textures: [[String: Any]],
+                                 samplers: [[String: Any]], image: (Int, Bool) throws -> UIImage) throws -> SCNMaterial {
         let pbr = info["pbrMetallicRoughness"] as? [String: Any] ?? [:]
         let factor: [Double]
         if let value = pbr["baseColorFactor"] {
@@ -298,6 +311,13 @@ final class GLTFModel: @unchecked Sendable {
             factor = components
         } else { factor = [1, 1, 1, 1] }
         guard let alpha = AlphaMode(rawValue: info["alphaMode"] as? String ?? "OPAQUE") else { throw LoadError.badFormat }
+        let cutoff = info["alphaCutoff"] as? Double ?? 0.5
+        if alpha == .mask {
+            guard cutoff.isFinite, cutoff >= 0 else { throw LoadError.badFormat }
+        }
+        // MASK with cutoff zero accepts every pixel, including zero alpha.
+        // Like OPAQUE it must preserve the original RGB before premultiplication.
+        let ignoresTextureAlpha = alpha == .opaque || (alpha == .mask && cutoff == 0)
         let material = SCNMaterial()
         material.name = info["name"] as? String ?? ""
         material.lightingModel = .lambert
@@ -315,9 +335,8 @@ final class GLTFModel: @unchecked Sendable {
             guard let reference = value as? [String: Any], (reference["texCoord"] as? Int ?? 0) == 0,
                   (reference["extensions"] as? [String: Any] ?? [:]).isEmpty,
                   let index = reference["index"] as? Int, textures.indices.contains(index),
-                  let source = textures[index]["source"] as? Int, images.indices.contains(source),
-                  let image = images[source] else { throw LoadError.badFormat }
-            material.diffuse.contents = image
+                  let source = textures[index]["source"] as? Int else { throw LoadError.badFormat }
+            material.diffuse.contents = try image(source, ignoresTextureAlpha)
             let sampler: [String: Any]
             if let index = textures[index]["sampler"] as? Int {
                 guard samplers.indices.contains(index) else { throw LoadError.badFormat }
@@ -333,19 +352,28 @@ final class GLTFModel: @unchecked Sendable {
             multiplier = [1, 1, 1, factor[3]]
         }
         let components = multiplier.map { String(Float($0)) }.joined(separator: ", ")
-        var body = "float4 gltfBaseColor = _surface.diffuse * float4(\(components));\n"
+        var body = "float gltfSampleAlpha = _surface.diffuse.a;\n"
+        body += "float4 gltfBaseColor = _surface.diffuse * float4(\(components));\n"
         switch alpha {
         case .opaque:
             body += "gltfBaseColor.a = 1.0;\n"
         case .mask:
-            let cutoff = info["alphaCutoff"] as? Double ?? 0.5
-            guard cutoff.isFinite, cutoff >= 0 else { throw LoadError.badFormat }
             // All thresholds > 1 reject every fragment; cap only the literal to
             // keep very large valid JSON values representable by the GPU float.
-            body += "if (gltfBaseColor.a < \(String(Float(min(cutoff, 2))))) { discard_fragment(); }\n"
+            // A positive Double cutoff may underflow when encoded as a Float;
+            // zero coverage must still be rejected before unpremultiplication.
+            let emptyCoverage = cutoff > 0 ? "gltfBaseColor.a <= 0.0 || " : ""
+            body += "if (\(emptyCoverage)gltfBaseColor.a < \(String(Float(min(cutoff, 2))))) { discard_fragment(); }\n"
+            // SceneKit samples premultiplied RGB. A surviving masked pixel is
+            // opaque, so remove its original sample alpha, not factor alpha.
+            // At cutoff zero the source was made opaque before sampling;
+            // otherwise a zero-alpha sample has already been discarded.
+            body += "gltfBaseColor.rgb /= gltfSampleAlpha;\n"
             body += "gltfBaseColor.a = 1.0;\n"
         case .blend:
-            break
+            // Keep premultiplied RGB consistent with the factor-adjusted alpha.
+            // Texture alpha and node opacity must not be multiplied twice.
+            body += "gltfBaseColor.rgb *= \(String(Float(multiplier[3])));\n"
         }
         body += "_surface.diffuse = gltfBaseColor;"
         material.shaderModifiers = [.surface: "\(materialSurfaceMarker)\n#pragma body\n{\n\(body)\n}"]
@@ -659,15 +687,73 @@ private final class TextureCache: @unchecked Sendable {
     private let lock = NSLock()
     private var images: [String: UIImage] = [:]
 
-    func image(at url: URL, maxSize: CGFloat) -> UIImage? {
+    func image(at url: URL, maxSize: CGFloat, ignoringAlpha: Bool) -> UIImage? {
         lock.lock()
         defer { lock.unlock() }
-        let key = "\(url.path)@\(Int(maxSize))"
+        let key = "\(url.path)@\(Int(maxSize)):\(ignoringAlpha)"
         if let image = images[key] { return image }
-        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
-        let shrunk = Self.shrink(image, to: maxSize)
+        let decoded: UIImage?
+        if ignoringAlpha {
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+            decoded = Self.opaqueImage(data: data)
+        } else {
+            decoded = UIImage(contentsOfFile: url.path)
+        }
+        guard let decoded else { return nil }
+        let shrunk = Self.shrink(decoded, to: maxSize)
         images[key] = shrunk
         return shrunk
+    }
+
+    static func image(data: Data, maxSize: CGFloat, ignoringAlpha: Bool) -> UIImage? {
+        guard let decoded = ignoringAlpha ? opaqueImage(data: data) : UIImage(data: data) else { return nil }
+        return shrink(decoded, to: maxSize)
+    }
+
+    private static func opaqueImage(data: Data) -> UIImage? {
+        // Read original, unpremultiplied pixels before any UIImage drawing or
+        // resizing. In particular RGB at alpha zero cannot be recovered later.
+        // Apple's Image I/O raw-provider path (Listing 11-5):
+        // https://developer.apple.com/library/archive/documentation/GraphicsImaging/Conceptual/OpenGL-MacProgGuide/opengl_texturedata/opengl_texturedata.html
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        let byteLimit = 64 * 1024 * 1024
+        guard data.count <= byteLimit,
+              let source = CGImageSourceCreateWithData(data as CFData, options),
+              CGImageSourceGetCount(source) == 1,
+              let image = CGImageSourceCreateImageAtIndex(source, 0, options),
+              image.width > 0, image.height > 0,
+              image.width <= 8192, image.height <= 8192,
+              image.width * image.height <= byteLimit / 4,
+              image.bitsPerComponent == 8, !image.bitmapInfo.contains(.floatComponents),
+              let space = image.colorSpace, space.model == .rgb else { return nil }
+        let opaqueAlpha: CGImageAlphaInfo
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast:
+            return UIImage(cgImage: image)
+        case .first:
+            opaqueAlpha = .noneSkipFirst
+        case .last:
+            opaqueAlpha = .noneSkipLast
+        default:
+            // Premultiplied input has already lost hidden RGB; fail rather than
+            // pretending division by epsilon can restore it.
+            return nil
+        }
+        guard image.bitsPerPixel == 32, image.bytesPerRow >= image.width * 4,
+              image.bytesPerRow <= byteLimit / image.height,
+              let pixels = image.dataProvider?.data,
+              CFDataGetLength(pixels) >= image.bytesPerRow * image.height,
+              CFDataGetLength(pixels) <= byteLimit,
+              let provider = CGDataProvider(data: pixels) else { return nil }
+        // Keep byte order, stride and color space; only ignore the alpha field.
+        let bitmap = CGBitmapInfo(rawValue: (image.bitmapInfo.rawValue & ~CGBitmapInfo.alphaInfoMask.rawValue)
+            | opaqueAlpha.rawValue)
+        guard let opaque = CGImage(width: image.width, height: image.height,
+            bitsPerComponent: image.bitsPerComponent, bitsPerPixel: image.bitsPerPixel,
+            bytesPerRow: image.bytesPerRow, space: space, bitmapInfo: bitmap,
+            provider: provider, decode: image.decode, shouldInterpolate: image.shouldInterpolate,
+            intent: image.renderingIntent) else { return nil }
+        return UIImage(cgImage: opaque)
     }
 
     static func shrink(_ image: UIImage, to maxSize: CGFloat) -> UIImage {
