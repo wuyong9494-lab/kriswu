@@ -51,6 +51,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # 把 IconA…IconE、IconRest 也编进去，供每天切换图标
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        # Keep glTF's external PNG RGB samples, including color at alpha zero.
+        COMPRESS_PNG_FILES: NO
         # iPhone 和 iPad 都能装（iPad 上内容限宽居中，可以横着用）
         TARGETED_DEVICE_FAMILY: "1,2"
         # 完整的并发检查（Swift 5 模式下是警告，CI 会列出来）
@@ -81,6 +83,7 @@ targets:
     platform: iOS
     sources:
       - path: App/Services/GLTFModel.swift
+      - path: App/Services/ArenaOpaquePNG.swift
       - path: Sources/ShiftCore/BoneSampler.swift
       - path: Sources/ShiftCore/ArenaResourcePack.swift
       - path: App/Services/ArenaResourcePackArchive.swift

@@ -711,10 +711,24 @@ private final class TextureCache: @unchecked Sendable {
     }
 
     private static func opaqueImage(data: Data) -> UIImage? {
-        // Read original, unpremultiplied pixels before any UIImage drawing or
-        // resizing. In particular RGB at alpha zero cannot be recovered later.
-        // Apple's Image I/O raw-provider path (Listing 11-5):
-        // https://developer.apple.com/library/archive/documentation/GraphicsImaging/Conceptual/OpenGL-MacProgGuide/opengl_texturedata/opengl_texturedata.html
+        if ArenaOpaquePNG.isPNG(data) {
+            // Decode PNG samples before Image I/O or UIKit can premultiply them:
+            // alpha-zero RGB cannot be recovered from a premultiplied image.
+            // glTF baseColor uses sRGB and ignores image color-profile metadata.
+            // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#images
+            guard let pixels = ArenaOpaquePNG.decode(data),
+                  let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let provider = CGDataProvider(data: pixels.rgba as CFData) else { return nil }
+            let bitmap = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
+                .union(.byteOrder32Big)
+            guard let image = CGImage(width: pixels.width, height: pixels.height,
+                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels.width * 4,
+                space: space, bitmapInfo: bitmap, provider: provider, decode: nil,
+                shouldInterpolate: true, intent: .defaultIntent) else { return nil }
+            return UIImage(cgImage: image)
+        }
+
+        // JPEG and other Image I/O formats are safe only when they have no alpha.
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         let byteLimit = 64 * 1024 * 1024
         guard data.count <= byteLimit,
@@ -726,34 +740,13 @@ private final class TextureCache: @unchecked Sendable {
               image.width * image.height <= byteLimit / 4,
               image.bitsPerComponent == 8, !image.bitmapInfo.contains(.floatComponents),
               let space = image.colorSpace, space.model == .rgb else { return nil }
-        let opaqueAlpha: CGImageAlphaInfo
         switch image.alphaInfo {
         case .none, .noneSkipFirst, .noneSkipLast:
             return UIImage(cgImage: image)
-        case .first:
-            opaqueAlpha = .noneSkipFirst
-        case .last:
-            opaqueAlpha = .noneSkipLast
         default:
-            // Premultiplied input has already lost hidden RGB; fail rather than
-            // pretending division by epsilon can restore it.
+            // Alpha-bearing formats need a decoder that preserves source RGB.
             return nil
         }
-        guard image.bitsPerPixel == 32, image.bytesPerRow >= image.width * 4,
-              image.bytesPerRow <= byteLimit / image.height,
-              let pixels = image.dataProvider?.data,
-              CFDataGetLength(pixels) >= image.bytesPerRow * image.height,
-              CFDataGetLength(pixels) <= byteLimit,
-              let provider = CGDataProvider(data: pixels) else { return nil }
-        // Keep byte order, stride and color space; only ignore the alpha field.
-        let bitmap = CGBitmapInfo(rawValue: (image.bitmapInfo.rawValue & ~CGBitmapInfo.alphaInfoMask.rawValue)
-            | opaqueAlpha.rawValue)
-        guard let opaque = CGImage(width: image.width, height: image.height,
-            bitsPerComponent: image.bitsPerComponent, bitsPerPixel: image.bitsPerPixel,
-            bytesPerRow: image.bytesPerRow, space: space, bitmapInfo: bitmap,
-            provider: provider, decode: image.decode, shouldInterpolate: image.shouldInterpolate,
-            intent: image.renderingIntent) else { return nil }
-        return UIImage(cgImage: opaque)
     }
 
     static func shrink(_ image: UIImage, to maxSize: CGFloat) -> UIImage {
