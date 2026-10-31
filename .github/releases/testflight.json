@@ -1,13 +1,13 @@
 {
-  "build_number": "482",
+  "build_number": "483",
   "version": "1.2",
-  "source_sha": "eb4ebf086486f5a08194d40fae76577537130bc0",
-  "source_run_id": 41177261481,
+  "source_sha": "30aee6ad5066b2ccd376f8cc59b810f649aa0e7d",
+  "source_run_id": 41179523583,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
   "source_validation": {
     "mode": "resource-runtime-gameplay-deferred",
-    "resource_run_id": 41177261525
+    "resource_run_id": 41179523569
   },
   "private_resource_pack": {
     "id": "brawl69-c037c57e132b",
