@@ -15,7 +15,9 @@ struct ArenaHomeView: View {
     @State private var sampleHero = ArenaQualitySample.selected(Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.sample.brawler")) ?? .ranger)
     @ObservedObject private var records = ArenaRecords.shared
     @ObservedObject private var growth = ArenaProgressStore.shared
+    @ObservedObject private var resourcePack = ArenaResourcePackStore.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
+    @State private var mapSelectionError: String?
     @State private var selectedMapID = UserDefaults.standard.string(forKey: "arena.map")
     @State private var brawler = Brawler(rawValue: UserDefaults.standard.integer(forKey: "arena.brawler")) ?? .knight
     @State private var playing: ArenaEntry?
@@ -56,7 +58,7 @@ struct ArenaHomeView: View {
     }
 
     enum Sheet: String, Identifiable {
-        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics, sample, threeHeroes
+        case brawlers, modes, loadout, road, together, season, settings, friends, party, shop, diagnostics, sample, threeHeroes, resources
         var id: String { rawValue }
     }
 
@@ -87,8 +89,16 @@ struct ArenaHomeView: View {
             let compact = composition.compact
             ZStack {
                 ArenaLobbyBackground()
-                ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
-                              live: playing == nil && lobby == nil && !adventure && sheet == nil, qualitySample: threeHeroSample)
+                Group {
+                    if let hero = sourceHero, let entry = resourcePack.manifest?.heroes.first(where: { $0.id == hero.id }),
+                       let path = entry.modelFile, let url = resourcePack.url(for: path) {
+                        ArenaImportedHeroView(url: url, name: hero.name, idleAnimation: entry.idleAnimation, heroID: hero.id,
+                            live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                    } else {
+                        ArenaShowcase(brawler: chosen, skin: progress.skin(chosen),
+                            live: playing == nil && lobby == nil && !adventure && sheet == nil, qualitySample: threeHeroSample)
+                    }
+                }
                     .frame(width: composition.heroSize.width, height: composition.heroSize.height)
                     .position(composition.heroCenter)
                 VStack(spacing: 0) {
@@ -98,7 +108,18 @@ struct ArenaHomeView: View {
                 }.padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
                     .offset(y: lobbyPresented || reduceLobbyMotion ? 0 : 12)
                     .opacity(lobbyPresented || reduceLobbyMotion ? 1 : 0)
-                heroStatus
+                Group {
+                    if let hero = sourceHero {
+                        Button { sheet = .resources } label: {
+                            VStack(spacing: 3) {
+                                Text(hero.name).font(.headline)
+                                Text("生命 \(hero.health) · \(hero.weapon?.ammoCapacity ?? 0) 发弹药").font(.caption)
+                                let record = ArenaSourceProgressStore.shared.record(for: hero.id)
+                                Text("\(record.matches) 场 · \(record.wins) 胜").font(.caption2)
+                            }.foregroundStyle(.white).padding(8).background(.black.opacity(0.45), in: Capsule())
+                        }.buttonStyle(.plain)
+                    } else { heroStatus }
+                }
                     .frame(width: composition.heroBadgeFrame.width, height: composition.heroBadgeFrame.height)
                     .position(composition.heroBadgeCenter)
                     .opacity(lobbyPresented ? 1 : 0)
@@ -113,15 +134,17 @@ struct ArenaHomeView: View {
                     .position(x: compact ? 120 : 48, y: 82)
                 VStack(spacing: composition.railGap) {
                     quietMenu("商店", symbol: "bag.fill", compact: compact) { sheet = .shop }
-                    quietMenu("英雄", symbol: "person.crop.square.fill", compact: compact) { sheet = .brawlers }
+                    quietMenu("英雄", symbol: "person.crop.square.fill", compact: compact) {
+                        sheet = resourcePack.manifest?.heroes.isEmpty == false ? .resources : .brawlers
+                    }
                     quietMenu("活动", symbol: "star.circle.fill", compact: compact) { sheet = .season }
                 }.position(composition.leftCenter)
                 VStack(spacing: composition.railGap) {
                     quietMenu("好友", symbol: "person.2.fill", compact: compact) { sheet = .friends }
-                    quietMenu("联机", symbol: "shield.fill", compact: compact) { sheet = .together }
-                    quietMenu("组队", symbol: "person.3.fill", compact: compact) { sheet = .party }
+                    quietMenu("联机", symbol: "shield.fill", compact: compact) { withClassicHero { sheet = .together } }
+                    quietMenu("组队", symbol: "person.3.fill", compact: compact) { withClassicHero { sheet = .party } }
                 }.position(composition.socialCenter)
-                Button { adventure = true } label: {
+                Button { withClassicHero { adventure = true } } label: {
                     HStack(spacing: 5) {
                         ArenaLobbyIcon("ArenaIconAdventure").frame(width: 35, height: 35)
                         Text("冒险乐园").font(.system(size: 15, weight: .black))
@@ -129,18 +152,18 @@ struct ArenaHomeView: View {
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
                     .position(composition.adventureCenter)
                 VStack(spacing: 8) {
-                    Button { sheet = .loadout } label: {
-                        ArenaLobbyIcon("ArenaIconUpgrade").frame(width: 29, height: 29)
+                    Button { sheet = sourceHero == nil ? .loadout : .resources } label: {
+                        ArenaLobbyIcon(sourceHero == nil ? "ArenaIconUpgrade" : "ArenaIconHero").frame(width: 29, height: 29)
                             .frame(width: 44, height: 44)
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
-                        .accessibilityLabel("金币升级英雄与装备技能")
+                        .accessibilityLabel(sourceHero == nil ? "金币升级英雄与装备技能" : "原版英雄资料")
                     Button { sheet = .brawlers } label: {
                         Image(systemName: "tshirt.fill").font(.system(size: 23, weight: .heavy))
                             .frame(width: 44, height: 44)
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
                         .accessibilityLabel("选择英雄和皮肤")
                 }.position(composition.equipmentCenter)
-                Button { sheet = .party } label: {
+                Button { withClassicHero { sheet = .party } } label: {
                     Image(systemName: "plus").font(.system(size: 28, weight: .black))
                         .frame(width: 44, height: 44)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
@@ -160,7 +183,20 @@ struct ArenaHomeView: View {
             if UserDefaults.standard.bool(forKey: "arena.openSettings") { sheet = .settings }
             ArenaSound.shared.enterLobby()
         }
+        .alert("暂时无法开始对战", isPresented: Binding(get: { mapSelectionError != nil }, set: { if !$0 { mapSelectionError = nil } })) {
+            Button("知道了", role: .cancel) { mapSelectionError = nil }
+        } message: { Text(mapSelectionError ?? "") }
         .onChange(of: volume) { _ in ArenaSound.shared.volumeChanged() }
+        .onChange(of: resourcePack.combatHeroID) { id in
+            guard id != nil else { return }
+            ranked = false
+            if ArenaImportedMapAssets.shared.maps(for: mode).isEmpty { mode = .stars }
+            if !ArenaImportedMapAssets.shared.maps(for: mode).contains(where: { $0.id == selectedMapID }) {
+                selectedMapID = ArenaImportedMapAssets.shared.maps(for: mode).first?.id
+                UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
+            }
+        }
+        .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
         .fullScreenCover(item: $sheet, onDismiss: {
             if let entry = pendingBenchmark {
                 pendingBenchmark = nil
@@ -234,8 +270,12 @@ struct ArenaHomeView: View {
         let item = ArenaLobbyEmblem.menu(symbol)
         return Button(action: action) {
             VStack(spacing: -2) {
-                ArenaLobbyIcon(item.asset).foregroundStyle(item.tint)
-                    .frame(width: 35, height: 31).rotationEffect(.degrees(-5))
+                Group {
+                    if let role = ["英雄": "heroes", "商店": "shop", "好友": "friends"][title],
+                       let image = ArenaImportedMenuAssets.shared.image(for: role) {
+                        Image(uiImage: image).resizable().scaledToFit()
+                    } else { ArenaLobbyIcon(item.asset).foregroundStyle(item.tint) }
+                }.frame(width: 35, height: 31).rotationEffect(.degrees(-5))
                     .shadow(color: .black.opacity(0.8), radius: 0, x: 1, y: 2)
                 Text(title).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
             }.foregroundStyle(.white).frame(width: 67, height: compact ? 44 : 49)
@@ -272,7 +312,11 @@ struct ArenaHomeView: View {
                     .frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel(muted ? "打开声音" : "静音")
             Button { sheet = .settings } label: {
-                Image(systemName: "line.3.horizontal").font(.system(size: 22, weight: .black)).frame(width: 44, height: 44)
+                Group {
+                    if let image = ArenaImportedMenuAssets.shared.image(for: "settings") {
+                        Image(uiImage: image).resizable().scaledToFit().padding(9)
+                    } else { Image(systemName: "line.3.horizontal").font(.system(size: 22, weight: .black)) }
+                }.frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("游戏设置")
             Button {
                 ArenaOrientation.releaseAll(); ArenaSound.shared.leaveLobby(); dismiss()
@@ -337,11 +381,11 @@ struct ArenaHomeView: View {
                 HStack(spacing: 8) {
                     ArenaLobbyIcon("ArenaIconBattle").foregroundStyle(.purple).frame(width: 34, height: 39)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(threeHeroSample ? "双闸交汇" : playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
-                        if threeHeroSample {
+                        Text(threeHeroSample && sourceHero == nil ? "双闸交汇" : playMode.title).font(.system(size: 21, weight: .black, design: .rounded))
+                        if threeHeroSample && sourceHero == nil {
                             Text("本地对战 · 电脑队友 / 对手").font(.system(size: 10, weight: .bold))
                         } else {
-                            Text(selectedMap?.title ?? "地图随机轮换")
+                            Text(selectedMapTitle)
                                 .font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
                         }
                     }.lineLimit(1).minimumScaleFactor(0.7)
@@ -355,11 +399,16 @@ struct ArenaHomeView: View {
                     }
                 }
             VStack(spacing: 3) {
-                Text(threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
+                Text(sourceHero != nil ? "原版英雄 · 本地对战" : threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
                     .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
                 Button { start() } label: {
                     Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
                         .frame(width: composition.battleWidth, height: 61)
+                        .background {
+                            if let image = ArenaImportedMenuAssets.shared.image(for: "play") {
+                                Image(uiImage: image).resizable(capInsets: ArenaImportedMenuAssets.shared.capInsets(for: "play"), resizingMode: .stretch).allowsHitTesting(false)
+                            }
+                        }
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
                     .accessibilityIdentifier("arena.start")
             }
@@ -739,6 +788,7 @@ struct ArenaHomeView: View {
                         .background(Capsule().fill(ranked == item ? (item ? Color(red: 0.86, green: 0.3, blue: 0.3) : Color(red: 0.25, green: 0.55, blue: 1)) : .clear))
                 }
                 .buttonStyle(.plain)
+                .disabled(item && sourceHero != nil)
             }
         }
         .padding(4)
@@ -747,10 +797,26 @@ struct ArenaHomeView: View {
     }
 
     /// 排位赛打哪个玩法：选的是 3v3 的就打它，不然打 3v3 团战
-    private var playMode: ArenaGame.Mode { threeHeroSample ? .zone : (ranked && !ArenaRank.allows(mode) ? .teamFight : mode) }
+    private var sourceHero: ArenaSourceHero? {
+        guard resourcePack.enabled, let id = resourcePack.combatHeroID else { return nil }
+        return ArenaImportedCombatAssets.shared.hero(id: id)
+    }
+    private func withClassicHero(_ action: () -> Void) {
+        guard sourceHero == nil else {
+            mapSelectionError = "原版英雄目前可参加本地普通对战；此入口请先选择项目英雄。"
+            return
+        }
+        action()
+    }
+    private var playMode: ArenaGame.Mode { threeHeroSample && sourceHero == nil ? .zone : (ranked && !ArenaRank.allows(mode) ? .teamFight : mode) }
 
     private var selectedMap: ArenaMap? {
         ArenaMap.selectionPool(for: playMode).first { $0.id == selectedMapID }
+    }
+    private var selectedMapTitle: String {
+        let maps = ArenaImportedMapAssets.shared.maps(for: playMode)
+        if sourceHero != nil { return maps.first(where: { $0.id == selectedMapID })?.title ?? maps.first?.title ?? "请选择地图" }
+        return selectedMap?.title ?? maps.first(where: { $0.id == selectedMapID })?.title ?? "地图随机轮换"
     }
 
     /// 现在的玩法：颜色、图标、名字、赢了几局（排位赛是段位和分数）；点一下换
@@ -812,18 +878,39 @@ struct ArenaHomeView: View {
     }
 
     private func start() {
-        if threeHeroSample {
+        if threeHeroSample && sourceHero == nil {
             playing = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: chosen, name: name,
                 level: progress.level(chosen), loadout: progress.loadout(for: chosen),
                 mapID: ArenaMap.twinGates.id,
                 qualitySample: true, threeHeroSample: true))
             return
         }
+        var imported: ArenaImportedMapChoice?
+        if let id = selectedMapID, id.hasPrefix("imported:") {
+            do { imported = try ArenaImportedMapAssets.shared.choice(id: id) }
+            catch { mapSelectionError = error.localizedDescription; return }
+            guard imported?.plan.mode == playMode, !ranked else {
+                mapSelectionError = "这张地图暂时只能在对应的普通对战中使用。"; return
+            }
+        }
+        if let sourceHero {
+            guard sourceHero.canPlay, !ranked, playMode != .duel, playMode != .boss else {
+                mapSelectionError = "请选择原版英雄支持的普通对战玩法。"; return
+            }
+            if imported == nil {
+                guard let entry = ArenaImportedMapAssets.shared.maps(for: playMode).first else {
+                    mapSelectionError = "此玩法暂没有完成适配的原版地图，请选择其他玩法。"; return
+                }
+                do { imported = try ArenaImportedMapAssets.shared.choice(id: entry.id) }
+                catch { mapSelectionError = error.localizedDescription; return }
+            }
+        }
         let level = progress.level(chosen)
         let botLevel = ranked ? max(ArenaRank.tiers[progress.rankTier].botLevel, level) : nil
         playing = ArenaEntry(setup: ArenaController.Setup(mode: playMode, brawler: chosen, name: name, level: level,
                                                           lineup: duelPartners, loadout: progress.loadout(for: chosen),
-                                                          ranked: ranked, botLevel: botLevel, mapID: selectedMap?.id))
+                                                          ranked: ranked, botLevel: botLevel, mapID: selectedMap?.id, importedMap: imported,
+                                                          sourceHero: sourceHero))
     }
 
     // MARK: 面板
@@ -831,11 +918,12 @@ struct ArenaHomeView: View {
     @ViewBuilder private func sheetContent(_ item: Sheet) -> some View {
         if threeHeroSample && item == .brawlers {
             ArenaHeroSelection(selected: chosen, onClose: { sheet = nil }, onSelect: { hero in
+                resourcePack.selectCombatHero(id: nil)
                 sampleHero = hero
                 UserDefaults.standard.set(hero.rawValue, forKey: "arena.sample.brawler")
                 sheet = nil
-            })
-        } else if threeHeroSample && item == .modes {
+            }, onSourceHeroes: { sheet = .resources })
+        } else if threeHeroSample && sourceHero == nil && item == .modes {
             ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(mode: .zone, brawler: chosen,
                     name: name, level: progress.level(chosen), loadout: progress.loadout(for: chosen),
@@ -845,6 +933,7 @@ struct ArenaHomeView: View {
             }, initialPage: 1, playHero: chosen)
         } else if item == .threeHeroes {
             ArenaHeroSelection(selected: sampleHero, startsMatch: true, onClose: { sheet = nil }, onSelect: { hero in
+                resourcePack.selectCombatHero(id: nil)
                 sampleHero = hero
                 brawler = hero
                 UserDefaults.standard.set(hero.rawValue, forKey: "arena.sample.brawler")
@@ -864,6 +953,13 @@ struct ArenaHomeView: View {
             }, playHero: chosen)
         } else if item == .diagnostics {
             ArenaDiagnosticSuiteView()
+        } else if item == .resources {
+            ArenaResourcePackView(onClose: { sheet = nil }, onSelectHero: { _ in
+                mode = .stars; ranked = false
+                selectedMapID = ArenaImportedMapAssets.shared.maps(for: .stars).first?.id
+                UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
+                sheet = nil
+            }, onProjectHeroes: { sheet = .brawlers })
         } else if item == .settings {
             ArenaMenuScreen(title: "设置", onClose: { sheet = nil }) { settingsPanel }
         } else {
@@ -882,7 +978,7 @@ struct ArenaHomeView: View {
             case .shop: shopBoard
             case .season: ArenaSeasonSheet()
             case .settings: settingsPanel
-            case .diagnostics, .sample, .threeHeroes: EmptyView()
+            case .diagnostics, .sample, .threeHeroes, .resources: EmptyView()
             }
         }
         }
@@ -903,6 +999,7 @@ struct ArenaHomeView: View {
         case .diagnostics: return "持续性能诊断"
         case .sample: return "双闸交汇 · 作战指南"
         case .threeHeroes: return "三英雄对战"
+        case .resources: return "原版资源"
         }
     }
 
@@ -921,6 +1018,7 @@ struct ArenaHomeView: View {
         case .diagnostics: return .purple
         case .sample: return .cyan
         case .threeHeroes: return .cyan
+        case .resources: return .cyan
         }
     }
 
@@ -932,6 +1030,12 @@ struct ArenaHomeView: View {
                     .padding(12).buttonStyle(ArenaMenuButtonStyle())
             }
             ArenaAudioSettingsView()
+            settingsCard {
+                Button("原版资源：英雄、地图、大厅和音乐") { sheet = .resources }
+                    .padding(12).buttonStyle(ArenaMenuButtonStyle())
+                Text("导入后可应用大厅背景和音乐，查看原始角色模型与地图布局。")
+                    .font(.caption).foregroundStyle(.white.opacity(0.8))
+            }
             settingsCard {
                 ArenaMenuToggle(title: "显示对局性能", isOn: $performanceOverlay)
                     .font(.system(size: 17, weight: .bold, design: .rounded))
@@ -1016,6 +1120,8 @@ struct ArenaHomeView: View {
     private var brawlerGrid: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
+                Button("查看已导入的原版英雄资源") { sheet = .resources }
+                    .padding(.bottom, 8).buttonStyle(ArenaMenuButtonStyle())
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 10)], spacing: 10) {
                     ForEach(Brawler.allCases, id: \.self) { item in
                         Button {
@@ -1068,6 +1174,7 @@ struct ArenaHomeView: View {
                 Button {
                     guard unlocked else { return }
                     ArenaSound.shared.menu(.uiSelect)
+                    resourcePack.selectCombatHero(id: nil)
                     brawler = item
                     UserDefaults.standard.set(item.rawValue, forKey: "arena.brawler")
                     self.inspected = nil
@@ -1148,16 +1255,16 @@ struct ArenaHomeView: View {
                                             edge: ArenaGameButton.blue.edge, height: 76))
                 .accessibilityIdentifier("arena.sample.threeHeroes")
 
-                Button {
+                Button { withClassicHero {
                     pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
                         mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
                         loadout: progress.loadout(for: chosen), mapID: ArenaMap.twinGates.id))
                     sheet = nil
-                } label: {
+                } } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("双闸交汇 · 抢占据点", systemImage: "map.fill")
                             .font(.system(size: 18, weight: .black, design: .rounded))
-                        Text("使用当前英雄 · 本地普通对战 · 正常结算奖励")
+                        Text(sourceHero == nil ? "使用当前英雄 · 本地普通对战 · 正常结算奖励" : "选择项目英雄后参加本地普通对战")
                             .font(.system(size: 13, weight: .bold))
                         Text("中路抢点，两侧包抄；也可在常规地图选择中选用。")
                             .font(.system(size: 12, weight: .medium))
@@ -1176,12 +1283,12 @@ struct ArenaHomeView: View {
                 }
                 .accessibilityIdentifier("arena.sample.review")
 
-                ForEach(ArenaGame.Mode.allCases, id: \.self) { item in
+                ForEach(ArenaGame.Mode.allCases.filter { sourceHero == nil || !ArenaImportedMapAssets.shared.maps(for: $0).isEmpty }, id: \.self) { item in
                     Button {
                         mode = item
                         UserDefaults.standard.set(item.rawValue, forKey: "arena.mode")
-                        selectedMapID = nil
-                        UserDefaults.standard.removeObject(forKey: "arena.map")
+                        selectedMapID = sourceHero == nil ? nil : ArenaImportedMapAssets.shared.maps(for: item).first?.id
+                        UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
                         sheet = nil
                     } label: {
                         modeRow(item)
@@ -1189,10 +1296,10 @@ struct ArenaHomeView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("arena.mode.\(item.rawValue)")
                 }
-                Text("一对一带：" + ([chosen] + duelPartners).map(\.name).joined(separator: "、"))
+                if sourceHero == nil { Text("一对一带：" + ([chosen] + duelPartners).map(\.name).joined(separator: "、"))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading) }
             }
         }
     }
@@ -1203,9 +1310,16 @@ struct ArenaHomeView: View {
                 .font(.system(size: 16, weight: .black, design: .rounded))
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 10) {
-                    mapChoice(nil)
-                    ForEach(ArenaMap.selectionPool(for: playMode), id: \.id) { map in
-                        mapChoice(map)
+                    if sourceHero == nil {
+                        mapChoice(nil)
+                        ForEach(ArenaMap.selectionPool(for: playMode), id: \.id) { map in
+                            mapChoice(map)
+                        }
+                    }
+                    if !ranked {
+                        ForEach(ArenaImportedMapAssets.shared.maps(for: playMode)) { entry in
+                            importedMapChoice(entry)
+                        }
                     }
                 }.padding(.vertical, 4)
             }
@@ -1214,6 +1328,25 @@ struct ArenaHomeView: View {
         }
         .foregroundStyle(.white).padding(12)
         .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func importedMapChoice(_ entry: ArenaImportedMapAssets.Entry) -> some View {
+        Button {
+            do {
+                _ = try ArenaImportedMapAssets.shared.choice(id: entry.id)
+                selectedMapID = entry.id
+                UserDefaults.standard.set(entry.id, forKey: "arena.map")
+                ArenaSound.shared.menu(.uiSelect)
+                sheet = nil
+            } catch { mapSelectionError = error.localizedDescription }
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: "map.fill").font(.title2).frame(width: 82, height: 54)
+                Text(entry.title).font(.system(size: 12, weight: .bold)).lineLimit(2).frame(height: 32)
+            }.frame(width: 112).padding(8)
+                .background(selectedMapID == entry.id ? Color.blue.opacity(0.55) : Color.black.opacity(0.25),
+                            in: RoundedRectangle(cornerRadius: 10))
+        }.buttonStyle(.plain)
     }
 
     private func mapChoice(_ map: ArenaMap?) -> some View {
@@ -1775,7 +1908,12 @@ extension ArenaGame.Mode {
 
 /// 大厅的底：蓝到紫的渐变，后面一圈光芒慢慢转，中间亮一点
 private struct ArenaLobbyBackground: View {
-    var body: some View { ArenaLobbyBackdrop().ignoresSafeArea() }
+    var body: some View {
+        ZStack {
+            ArenaLobbyBackdrop()
+            ArenaImportedLobbyBackground()
+        }.ignoresSafeArea()
+    }
 }
 
 /// 从中间往外的一圈光芒（16 道）

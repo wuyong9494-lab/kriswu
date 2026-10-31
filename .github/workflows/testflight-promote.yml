@@ -49,6 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_asc_promote.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_arena_private_pack.py' -v
           python3 .github/scripts/asc_promote.py preflight .github/releases/testflight.json
       - uses: actions/upload-artifact@v4
         if: always()
@@ -98,6 +99,13 @@ jobs:
           cd source
           python3 scripts/assets/validate_ranger.py
           xcodegen generate
+      - name: Install the exact private resource pack for this TestFlight release
+        env:
+          ARENA_PRIVATE_PACK_URL: ${{ secrets.ARENA_PRIVATE_PACK_URL }}
+        run: |
+          python3 .github/scripts/arena_private_pack.py install .github/releases/testflight.json --source source
+          cd source
+          xcodegen generate
       - name: Clear previous CI development certificates
         run: python3 .github/scripts/asc_dev_certs.py cleanup
       - name: Archive the requested build with automatic signing
@@ -122,6 +130,7 @@ jobs:
         run: |
           codesign --verify --deep --strict source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
           python3 .github/scripts/asc_promote.py archive .github/releases/testflight.json --path source/build/ShiftReminder.xcarchive
+          python3 .github/scripts/arena_private_pack.py archive .github/releases/testflight.json --source source --archive source/build/ShiftReminder.xcarchive
           python3 .github/scripts/asc_promote.py guard .github/releases/testflight.json
       - name: Upload exactly this build to TestFlight
         id: upload

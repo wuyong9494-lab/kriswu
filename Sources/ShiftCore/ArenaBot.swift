@@ -46,18 +46,18 @@ public struct ArenaBot: Sendable {
             if let aim = input.attack, me.superCharge >= 1, aim.length > 5 { input.special = aim }
         } else if let target, target.pos.distance(to: me.pos) < 10 {
             let distance = target.pos.distance(to: me.pos)
-            let range = me.brawler.attackRange
+            let range = me.attackRange
             let away = (me.pos - target.pos).normalized
             // 悬赏高了打得小心点
             let careful = game.mode == .bounty && me.stars >= 5
             let low = Double(me.health) < Double(me.maxHealth) * (careful ? 0.5 : 0.3)
-            let ideal = range * ([.barbarian, .knight, .guardian].contains(me.brawler) ? 0.55 : 0.75)
-            let clear = me.brawler == .mage || game.map.lineOfSight(me.pos, target.pos)
+            let ideal = range * (me.sourceHero != nil ? (range < 5 ? 0.55 : 0.75) : ([.barbarian, .knight, .guardian].contains(me.brawler) ? 0.55 : 0.75))
+            let clear = me.brawler == .mage || game.lineOfSight(me.pos, target.pos)
             let ratio = Double(me.health) / Double(max(me.maxHealth, 1))
             let closeEnemies = enemies.filter { $0.pos.distance(to: me.pos) < 5.5 }
             let alone = !game.fighters.contains { $0.alive && $0.id != me.id && $0.team == me.team && $0.pos.distance(to: me.pos) < 7 }
             let outnumbered = closeEnemies.count >= 2 && alone && ratio < 0.75
-            let meleeThreat = target.brawler.attackRange <= 3.6 && range >= 6 && distance < ideal * 0.9
+            let meleeThreat = target.attackRange <= 3.6 && range >= 6 && distance < ideal * 0.9
             let reloading = me.ammo < 0.35
             if outnumbered {
                 // 两个人围上来、身边没有队友：先撤，不站着换血
@@ -85,12 +85,14 @@ public struct ArenaBot: Sendable {
             }
             if clear, distance <= range * 0.97, me.ammo >= 1, me.cooldown <= 0, trigger <= 0 {
                 trigger = 0.25 + Double(random.below(30)) / 100
-                let travel = distance / me.brawler.bulletSpeed
+                let travel = distance / max(me.projectileSpeed, 0.1)
                 let lead = target.pos + target.moving * (travel * 0.7)
                 let noise = (Double(random.below(21)) - 10) / 100
                 input.attack = (lead - me.pos).rotated(by: noise)
             }
-            if me.superCharge >= 1 {
+            if me.superCharge >= 1, me.sourceHero != nil {
+                if distance <= me.specialRange * 0.95, clear { input.special = target.pos - me.pos }
+            } else if me.superCharge >= 1 {
                 switch me.brawler {
                 case .guardian:
                     // 挨打了、敌人在跟前才举盾
@@ -100,9 +102,9 @@ public struct ArenaBot: Sendable {
                     if distance < 8 { input.special = (target.pos - me.pos) * 0.5 }
                 case .shade:
                     // 血多的时候闪到敌人身边
-                    if !low, distance > 2.5, distance <= me.brawler.superRange { input.special = target.pos - me.pos }
+                    if !low, distance > 2.5, distance <= me.specialRange { input.special = target.pos - me.pos }
                 case .necromancer:
-                    if distance <= me.brawler.superRange * 0.9 { input.special = target.pos - me.pos }
+                    if distance <= me.specialRange * 0.9 { input.special = target.pos - me.pos }
                 case .brewer:
                     // 血少了就喝
                     if Double(me.health) < Double(me.maxHealth) * 0.6 { input.special = me.facing }
@@ -111,10 +113,10 @@ public struct ArenaBot: Sendable {
                     if distance < 3 || low { input.special = me.facing }
                 case .scholar:
                     // 身边有受伤的队友（或自己）就放护盾
-                    if game.fighters.contains(where: { $0.alive && $0.team == me.team && $0.pos.distance(to: me.pos) <= me.brawler.superRange
+                    if game.fighters.contains(where: { $0.alive && $0.team == me.team && $0.pos.distance(to: me.pos) <= me.specialRange
                         && Double($0.health) < Double($0.maxHealth) * 0.7 }) { input.special = me.facing }
                 default:
-                    if distance <= me.brawler.superRange * 0.85, clear || me.brawler == .barbarian || me.brawler == .mage {
+                    if distance <= me.specialRange * 0.85, clear || me.brawler == .barbarian || me.brawler == .mage {
                         input.special = target.pos - me.pos
                     }
                 }
@@ -123,17 +125,17 @@ public struct ArenaBot: Sendable {
         // 附近有对面的骨塔、又没有更近的敌人：先拆塔
         if !carrying, input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
            let turret = game.turrets.filter({ $0.team != me.team }).min(by: { $0.pos.distance(to: me.pos) < $1.pos.distance(to: me.pos) }),
-           turret.pos.distance(to: me.pos) <= me.brawler.attackRange * 0.95,
-           me.brawler == .mage || game.map.lineOfSight(me.pos, turret.pos),
+           turret.pos.distance(to: me.pos) <= me.attackRange * 0.95,
+           me.brawler == .mage || game.lineOfSight(me.pos, turret.pos),
            target.map({ $0.pos.distance(to: me.pos) > turret.pos.distance(to: me.pos) }) ?? true {
             trigger = 0.3
             input.attack = turret.pos - me.pos
         }
         // 大乱斗：够得着能量箱、附近又没有敌人就打箱子
-        if (game.mode == .showdown || game.mode == .duo), !game.map.inBush(me.pos), input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
+        if (game.mode == .showdown || game.mode == .duo), !game.inBush(me.pos), input.attack == nil, me.ammo >= 1, me.cooldown <= 0, trigger <= 0,
            target.map({ $0.pos.distance(to: me.pos) > 6 }) ?? true,
-           let box = game.nearestBox(to: me.pos), box.pos.distance(to: me.pos) <= me.brawler.attackRange * 0.95,
-           me.brawler == .mage || game.map.lineOfSight(me.pos, box.pos) {
+           let box = game.nearestBox(to: me.pos), box.pos.distance(to: me.pos) <= me.attackRange * 0.95,
+           me.brawler == .mage || game.lineOfSight(me.pos, box.pos) {
             trigger = 0.3
             input.attack = box.pos - me.pos
         }
@@ -142,7 +144,7 @@ public struct ArenaBot: Sendable {
            let chest = game.chests.first(where: { $0.team != me.team && $0.health > 0 }) {
             let face = chest.center + (me.pos - chest.center).normalized * 1.3
             let distance = face.distance(to: me.pos)
-            if distance <= me.brawler.attackRange * 0.95, me.brawler == .mage || game.map.lineOfSight(me.pos, face),
+            if distance <= me.attackRange * 0.95, me.brawler == .mage || game.lineOfSight(me.pos, face),
                target.map({ $0.pos.distance(to: me.pos) > distance }) ?? true {
                 trigger = 0.3
                 input.attack = chest.center - me.pos
@@ -179,9 +181,9 @@ public struct ArenaBot: Sendable {
     private func score(_ me: Fighter, _ enemy: Fighter, _ game: ArenaGame) -> Double {
         let distance = enemy.pos.distance(to: me.pos)
         let health = Double(enemy.health) / Double(max(enemy.maxHealth, 1))
-        let blocked = (me.brawler == .mage || game.map.lineOfSight(me.pos, enemy.pos)) ? 0.0 : 5.0
+        let blocked = (me.brawler == .mage || game.lineOfSight(me.pos, enemy.pos)) ? 0.0 : 5.0
         let focused = game.fighters.contains {
-            $0.alive && $0.id != me.id && $0.team == me.team && $0.pos.distance(to: enemy.pos) < $0.brawler.attackRange + 1
+            $0.alive && $0.id != me.id && $0.team == me.team && $0.pos.distance(to: enemy.pos) < $0.attackRange + 1
         } ? -1.8 : 0
         return distance * 0.55 + health * 3.2 + blocked + focused
     }
@@ -195,7 +197,7 @@ public struct ArenaBot: Sendable {
         case .potion: return health < 0.4
         case .ward: return health < 0.55 && distance < 5
         case .sprint, .roll, .vanish, .blink: return health < 0.35 && distance < 5
-        case .reload: return me.ammo < 0.5 && distance < me.brawler.attackRange
+        case .reload: return me.ammo < 0.5 && distance < me.attackRange
         case .shockwave: return distance < 2.2
         case .frost: return distance < 2.8
         }
@@ -208,7 +210,7 @@ public struct ArenaBot: Sendable {
         }
         let toGoal = goal - me.pos
         let pressed = enemies.contains { $0.pos.distance(to: me.pos) < 2.2 }
-        guard (toGoal.length < 7.5 && game.map.lineOfSight(me.pos, goal)) || pressed else { return nil }
+        guard (toGoal.length < 7.5 && game.lineOfSight(me.pos, goal)) || pressed else { return nil }
         trigger = 0.4
         let noise = (Double(random.below(21)) - 10) / 150
         return toGoal.rotated(by: noise)
@@ -217,10 +219,10 @@ public struct ArenaBot: Sendable {
     /// 血少了去旁边的草里躲。已经在草里、对面没走进来：人在射程里就蹲着打，不自己走出去
     private func cover(_ me: Fighter, target: Fighter?, fallback: V2, in game: ArenaGame) -> V2 {
         let ratio = Double(me.health) / Double(max(me.maxHealth, 1))
-        if game.map.inBush(me.pos) {
-            if let target, !game.map.sameBush(me.pos, target.pos) {
+        if game.inBush(me.pos) {
+            if let target, !game.sameBush(me.pos, target.pos) {
                 let distance = target.pos.distance(to: me.pos)
-                if distance <= me.brawler.attackRange || ratio < 0.45 { return me.pos }
+                if distance <= me.attackRange || ratio < 0.45 { return me.pos }
             }
             return fallback
         }
@@ -261,8 +263,9 @@ public struct ArenaBot: Sendable {
             return game.stars.min { $0.distance(to: me.pos) < $1.distance(to: me.pos) } ?? center
         case .showdown:
             return powerObjective(me, game) ?? center
-        case .zone, .duel:
-            return center
+        case .zone:
+            return game.importedZoneTarget(for: me.team, from: me.pos) ?? center
+        case .duel: return center
         case .teamFight, .bounty:
             let enemyHome = game.map.spawns.indices.contains(1 - me.team) ? (game.map.spawns[1 - me.team].first ?? center) : center
             return V2.lerp(center, enemyHome, 0.3)
@@ -284,10 +287,10 @@ public struct ArenaBot: Sendable {
                 return V2.lerp(own.center, center, 0.35)
             }
             let toward = (me.pos - chest.center).normalized
-            return chest.center + toward * (me.brawler.attackRange * 0.7 + 1)
+            return chest.center + toward * (me.attackRange * 0.7 + 1)
         case .boss:
             guard let boss = game.fighters.first(where: { $0.isBoss && $0.alive }) else { return center }
-            return boss.pos + (me.pos - boss.pos).normalized * (me.brawler.attackRange * 0.75)
+            return boss.pos + (me.pos - boss.pos).normalized * (me.attackRange * 0.75)
         }
     }
 
@@ -297,7 +300,7 @@ public struct ArenaBot: Sendable {
         if let cube = game.nearestCube(to: me.pos), safe(cube.pos), cube.pos.distance(to: me.pos) < 9 { return cube.pos }
         guard let box = game.nearestBox(to: me.pos), safe(box.pos) else { return nil }
         let toward = (me.pos - box.pos).normalized
-        return box.pos + (toward.length > 0 ? toward : V2(1, 0)) * min(me.brawler.attackRange * 0.7, 3)
+        return box.pos + (toward.length > 0 ? toward : V2(1, 0)) * min(me.attackRange * 0.7, 3)
     }
 
     /// 足球：自己带着球就去对面球门；队友带着跟在前面接应；对面带着去抢；球没人带离得最近的去捡，其余的守在球和自己球门中间
@@ -319,12 +322,11 @@ public struct ArenaBot: Sendable {
 
     /// 朝 goal 走：一路上没有墙就直走，不然按格子绕
     private mutating func steer(_ me: Fighter, to goal: V2, in game: ArenaGame) -> V2 {
-        let map = game.map
-        let target = map.nearestOpen(to: goal, radius: ArenaGame.fighterRadius)
+        let target = game.nearestOpen(to: goal, radius: ArenaGame.fighterRadius)
         if target.distance(to: me.pos) < 0.3 { return .zero }
-        if open(from: me.pos, to: target, map) { return (target - me.pos).normalized }
+        if open(from: me.pos, to: target, game) { return (target - me.pos).normalized }
         if repath <= 0 || (pathGoal.map { $0.distance(to: target) > 1 } ?? true) {
-            path = map.path(from: me.pos, to: target)
+            path = game.path(from: me.pos, to: target)
             pathGoal = target
             repath = 0.5
         }
@@ -334,10 +336,10 @@ public struct ArenaBot: Sendable {
     }
 
     /// 一个人能不能沿直线走过去（身子不蹭墙）
-    private func open(from a: V2, to b: V2, _ map: ArenaMap) -> Bool {
+    private func open(from a: V2, to b: V2, _ game: ArenaGame) -> Bool {
         let distance = a.distance(to: b)
         let steps = max(1, Int(distance / 0.3))
-        for k in 1...steps where map.collides(V2.lerp(a, b, Double(k) / Double(steps)), radius: ArenaGame.fighterRadius) {
+        for k in 1...steps where game.collides(V2.lerp(a, b, Double(k) / Double(steps)), radius: ArenaGame.fighterRadius) {
             return false
         }
         return true

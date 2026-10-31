@@ -21,6 +21,12 @@ targets:
       - path: App
         excludes:
           - Info.plist
+          - Resources/*.arenapack
+      # The private promotion job places this exact verified data file here.
+      # Public builds remain valid without it; its copy phase is explicit.
+      - path: App/Resources/arena-original-resources.arenapack
+        optional: true
+        buildPhase: resources
       - path: Sources/ShiftCore
       - path: Shared
     dependencies:

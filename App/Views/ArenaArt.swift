@@ -177,8 +177,15 @@ enum ArenaArt {
 
     static func grade(_ material: SCNMaterial, _ surface: String, fragment: String? = nil) {
         var modifiers = material.shaderModifiers ?? [:]
-        guard modifiers[.surface] == nil else { return }
-        modifiers[.surface] = surface
+        let gradeMarker = "// Arena surface grade"
+        if let existing = modifiers[.surface] {
+            // Imported base-color factors/coverage must run before the style
+            // grade; arbitrary existing surface shaders still own their look.
+            guard existing.contains(GLTFModel.materialSurfaceMarker), !existing.contains(gradeMarker) else { return }
+            modifiers[.surface] = GLTFModel.combiningShaderModifiers(existing, gradeMarker + "\n" + surface)
+        } else {
+            modifiers[.surface] = gradeMarker + "\n" + surface
+        }
         if let fragment, modifiers[.fragment] == nil {
             modifiers[.fragment] = fragment
         }

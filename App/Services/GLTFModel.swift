@@ -53,6 +53,7 @@ final class GLTFModel: @unchecked Sendable {
     private struct Skin {
         let joints: [Int]
         let inverseBinds: [NSValue]
+        let skeleton: Int
     }
 
     let names: [String]
@@ -116,29 +117,10 @@ final class GLTFModel: @unchecked Sendable {
             return nil
         }
         let textures = json["textures"] as? [[String: Any]] ?? []
-        let materials: [SCNMaterial] = (json["materials"] as? [[String: Any]] ?? []).map { info in
-            let material = SCNMaterial()
-            material.name = info["name"] as? String ?? ""
-            material.lightingModel = .lambert
-            material.isDoubleSided = info["doubleSided"] as? Bool ?? false
-            let pbr = info["pbrMetallicRoughness"] as? [String: Any] ?? [:]
-            if let texture = (pbr["baseColorTexture"] as? [String: Any])?["index"] as? Int,
-               textures.indices.contains(texture), let source = textures[texture]["source"] as? Int,
-               images.indices.contains(source), let image = images[source] {
-                material.diffuse.contents = image
-                material.diffuse.wrapS = .repeat
-                material.diffuse.wrapT = .repeat
-                material.diffuse.magnificationFilter = .linear
-                material.diffuse.minificationFilter = .linear
-                material.diffuse.mipFilter = .linear
-            } else if let factor = pbr["baseColorFactor"] as? [Double], factor.count == 4 {
-                material.diffuse.contents = UIColor(red: factor[0], green: factor[1], blue: factor[2], alpha: factor[3])
-            }
-            // 自己发光的部分（骷髅的眼睛）
-            if let glow = info["emissiveFactor"] as? [Double], glow.count == 3, glow.contains(where: { $0 > 0 }) {
-                material.emission.contents = UIColor(red: glow[0], green: glow[1], blue: glow[2], alpha: 1)
-            }
-            return material
+        let materialDefinitions = json["materials"] as? [[String: Any]] ?? []
+        let samplers = json["samplers"] as? [[String: Any]] ?? []
+        let materials: [SCNMaterial] = try materialDefinitions.map { info in
+            try Self.material(info, images: images, textures: textures, samplers: samplers)
         }
 
         // 网格
@@ -170,7 +152,11 @@ final class GLTFModel: @unchecked Sendable {
                 indices = Self.outwardTriangleIndices(indices, positions: positions, normals: normals)
                 let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
                 let geometry = SCNGeometry(sources: sources, elements: [element])
-                let hull = normals.count == count * 3
+                let materialIndex = primitive["material"] as? Int
+                let opaque = materialIndex.flatMap { materialDefinitions.indices.contains($0) ? materialDefinitions[$0]["alphaMode"] as? String : nil } ?? "OPAQUE"
+                // A solid hull would fill masked holes or surround translucent
+                // surfaces with opaque ink. Only opaque primitives get a hull.
+                let hull = normals.count == count * 3 && opaque == "OPAQUE"
                     ? SCNGeometry(sources: [vertices, GLTFModel.source(GLTFModel.smoothed(normals, at: positions), .normal, width: 3)], elements: [element])
                     : nil
                 if let material = primitive["material"] as? Int, materials.indices.contains(material) {
@@ -233,9 +219,13 @@ final class GLTFModel: @unchecked Sendable {
         parents = parentList
 
         // 骨骼
-        skins = (json["skins"] as? [[String: Any]] ?? []).map { skin in
+        skins = try (json["skins"] as? [[String: Any]] ?? []).map { skin in
             let joints = skin["joints"] as? [Int] ?? []
-            guard joints.allSatisfy({ infos.indices.contains($0) }) else { return Skin(joints: [], inverseBinds: []) }
+            guard !joints.isEmpty, joints.allSatisfy({ infos.indices.contains($0) }),
+                  let common = Self.commonAncestor(of: joints, parents: parentList) else { throw LoadError.badFormat }
+            let skeleton = skin["skeleton"] as? Int ?? common
+            guard infos.indices.contains(skeleton),
+                  Self.commonAncestor(of: joints + [skeleton], parents: parentList) == skeleton else { throw LoadError.badFormat }
             var inverse: [NSValue] = []
             if let accessor = skin["inverseBindMatrices"] as? Int {
                 let values = reader.floats(accessor)
@@ -244,7 +234,7 @@ final class GLTFModel: @unchecked Sendable {
                 }
             }
             while inverse.count < joints.count { inverse.append(NSValue(scnMatrix4: SCNMatrix4Identity)) }
-            return Skin(joints: joints, inverseBinds: Array(inverse.prefix(joints.count)))
+            return Skin(joints: joints, inverseBinds: Array(inverse.prefix(joints.count)), skeleton: skeleton)
         }
 
         // 动画
@@ -288,6 +278,152 @@ final class GLTFModel: @unchecked Sendable {
         }
         clips = clipList
         animated = moved.sorted()
+    }
+
+    // Keep this operation separate from SceneKit's `multiply` property, which
+    // the game uses for team tint, freezing and flashes. glTF factors are linear
+    // multipliers before lighting; alpha coverage is evaluated after sampling.
+    // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#alpha-coverage
+    static let materialSurfaceMarker = "// glTF base color and coverage"
+
+    private enum AlphaMode: String { case opaque = "OPAQUE", mask = "MASK", blend = "BLEND" }
+
+    private static func material(_ info: [String: Any], images: [UIImage?],
+                                 textures: [[String: Any]], samplers: [[String: Any]]) throws -> SCNMaterial {
+        let pbr = info["pbrMetallicRoughness"] as? [String: Any] ?? [:]
+        let factor: [Double]
+        if let value = pbr["baseColorFactor"] {
+            guard let components = value as? [Double], components.count == 4,
+                  components.allSatisfy({ $0.isFinite && (0...1).contains($0) }) else { throw LoadError.badFormat }
+            factor = components
+        } else { factor = [1, 1, 1, 1] }
+        guard let alpha = AlphaMode(rawValue: info["alphaMode"] as? String ?? "OPAQUE") else { throw LoadError.badFormat }
+        let material = SCNMaterial()
+        material.name = info["name"] as? String ?? ""
+        material.lightingModel = .lambert
+        material.isDoubleSided = info["doubleSided"] as? Bool ?? false
+        material.transparencyMode = .aOne
+        material.transparency = 1
+        material.transparent.contents = UIColor.white
+        // Keeping SceneKit's alpha blend equation also preserves an app-driven
+        // node opacity fade. OPAQUE/MASK force the *base color* alpha to one.
+        material.blendMode = .alpha
+        material.readsFromDepthBuffer = true
+        material.writesToDepthBuffer = alpha != .blend
+        var multiplier = factor
+        if let value = pbr["baseColorTexture"] {
+            guard let reference = value as? [String: Any], (reference["texCoord"] as? Int ?? 0) == 0,
+                  (reference["extensions"] as? [String: Any] ?? [:]).isEmpty,
+                  let index = reference["index"] as? Int, textures.indices.contains(index),
+                  let source = textures[index]["source"] as? Int, images.indices.contains(source),
+                  let image = images[source] else { throw LoadError.badFormat }
+            material.diffuse.contents = image
+            let sampler: [String: Any]
+            if let index = textures[index]["sampler"] as? Int {
+                guard samplers.indices.contains(index) else { throw LoadError.badFormat }
+                sampler = samplers[index]
+            } else { sampler = [:] }
+            try configureSampler(sampler, property: material.diffuse)
+        } else {
+            // A factor without a texture is already linear, not an sRGB color
+            // byte. Keep a UIColor so existing stage palette selection works.
+            guard let space = CGColorSpace(name: CGColorSpace.linearSRGB),
+                  let color = CGColor(colorSpace: space, components: [CGFloat(factor[0]), CGFloat(factor[1]), CGFloat(factor[2]), 1]) else { throw LoadError.badFormat }
+            material.diffuse.contents = UIColor(cgColor: color)
+            multiplier = [1, 1, 1, factor[3]]
+        }
+        let components = multiplier.map { String(Float($0)) }.joined(separator: ", ")
+        var body = "float4 gltfBaseColor = _surface.diffuse * float4(\(components));\n"
+        switch alpha {
+        case .opaque:
+            body += "gltfBaseColor.a = 1.0;\n"
+        case .mask:
+            let cutoff = info["alphaCutoff"] as? Double ?? 0.5
+            guard cutoff.isFinite, cutoff >= 0 else { throw LoadError.badFormat }
+            // All thresholds > 1 reject every fragment; cap only the literal to
+            // keep very large valid JSON values representable by the GPU float.
+            body += "if (gltfBaseColor.a < \(String(Float(min(cutoff, 2))))) { discard_fragment(); }\n"
+            body += "gltfBaseColor.a = 1.0;\n"
+        case .blend:
+            break
+        }
+        body += "_surface.diffuse = gltfBaseColor;"
+        material.shaderModifiers = [.surface: "\(materialSurfaceMarker)\n#pragma body\n{\n\(body)\n}"]
+        if alpha == .blend {
+            // SceneKit cannot infer transparency introduced by a surface
+            // modifier. Keep this pragma out of the surface color-grade chain.
+            material.shaderModifiers?[.fragment] = "#pragma transparent\n#pragma body\n// glTF BLEND keeps the sampled base-color coverage."
+        }
+        if let glow = info["emissiveFactor"] as? [Double], glow.count == 3, glow.contains(where: { $0 > 0 }) {
+            material.emission.contents = UIColor(red: glow[0], green: glow[1], blue: glow[2], alpha: 1)
+        }
+        return material
+    }
+
+    private static func configureSampler(_ sampler: [String: Any], property: SCNMaterialProperty) throws {
+        func wrap(_ value: Int) throws -> SCNWrapMode {
+            switch value {
+            case 10497: return .repeat
+            case 33071: return .clamp
+            case 33648: return .mirror
+            default: throw LoadError.badFormat
+            }
+        }
+        property.wrapS = try wrap(sampler["wrapS"] as? Int ?? 10497)
+        property.wrapT = try wrap(sampler["wrapT"] as? Int ?? 10497)
+        switch sampler["magFilter"] as? Int ?? 9729 {
+        case 9728: property.magnificationFilter = .nearest
+        case 9729: property.magnificationFilter = .linear
+        default: throw LoadError.badFormat
+        }
+        // glTF leaves omitted filters implementation-dependent. Preserve the
+        // loader's existing trilinear choice, but honor every explicit mode.
+        switch sampler["minFilter"] as? Int ?? 9987 {
+        case 9728: property.minificationFilter = .nearest; property.mipFilter = .none
+        case 9729: property.minificationFilter = .linear; property.mipFilter = .none
+        case 9984: property.minificationFilter = .nearest; property.mipFilter = .nearest
+        case 9985: property.minificationFilter = .linear; property.mipFilter = .nearest
+        case 9986: property.minificationFilter = .nearest; property.mipFilter = .linear
+        case 9987: property.minificationFilter = .linear; property.mipFilter = .linear
+        default: throw LoadError.badFormat
+        }
+    }
+
+    /// Preserve pragma/uniform declarations outside the shader body, and give
+    /// each effect its own local scope when tint, toon and concealment combine.
+    static func combiningShaderModifiers(_ first: String, _ second: String) -> String {
+        func parts(_ code: String) -> (header: String, body: String) {
+            guard let marker = code.range(of: "#pragma body") else { return ("", code) }
+            return (String(code[..<marker.lowerBound]), String(code[marker.upperBound...]))
+        }
+        let a = parts(first), b = parts(second)
+        // Custom argument declarations precede pipeline pragmas. In particular
+        // a BLEND marker must survive adding concealment's uniform declaration.
+        var pipeline: [String] = []
+        let declarations = (a.header + "\n" + b.header).components(separatedBy: "\n").filter { line in
+            let directive = line.trimmingCharacters(in: .whitespaces)
+            if directive == "#pragma transparent" || directive == "#pragma opaque" {
+                if !pipeline.contains(directive) { pipeline.append(directive) }
+                return false
+            }
+            return true
+        }.joined(separator: "\n")
+        return "\(declarations)\n\(pipeline.joined(separator: "\n"))\n#pragma body\n{\n\(a.body)\n}\n{\n\(b.body)\n}"
+    }
+
+    private static func commonAncestor(of indices: [Int], parents: [Int?]) -> Int? {
+        func ancestors(_ index: Int) -> [Int] {
+            var result: [Int] = [], seen = Set<Int>(), next: Int? = index
+            while let current = next {
+                guard parents.indices.contains(current), seen.insert(current).inserted else { return [] }
+                result.append(current)
+                next = parents[current]
+            }
+            return result
+        }
+        guard let first = indices.first else { return nil }
+        let others = indices.dropFirst().map { Set(ancestors($0)) }
+        return ancestors(first).first { candidate in others.allSatisfy { $0.contains(candidate) } }
     }
 
     /// 按名字找节点
@@ -365,8 +501,9 @@ final class GLTFModel: @unchecked Sendable {
                        let indices = primitive.boneIndices, let weights = primitive.boneWeights {
                         let skinner = SCNSkinner(baseGeometry: partGeometry, bones: skin.joints.map { made[$0] },
                                                  boneInverseBindTransforms: skin.inverseBinds, boneWeights: weights, boneIndices: indices)
-                        // glTF 里蒙皮按网格所在节点的坐标算
-                        skinner.skeleton = made[index]
+                        // SceneKit expects the root of the bone hierarchy, not
+                        // the mesh node (which may be a sibling of every bone).
+                        skinner.skeleton = made[skin.skeleton]
                         part.skinner = skinner
                     }
                     made[index].addChildNode(part)

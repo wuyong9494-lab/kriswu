@@ -22,7 +22,7 @@ extension ArenaGame {
 
     /// 打中这个人要多近（骷髅王个子大，好打中）
     public static func hitRadius(_ fighter: Fighter) -> Double {
-        fighter.isBoss ? 0.95 : fighterRadius
+        fighter.sourceHero?.collisionRadius ?? (fighter.isBoss ? 0.95 : fighterRadius)
     }
 
     // MARK: 开局
@@ -80,7 +80,7 @@ extension ArenaGame {
         guard var ball, ball.carrier == i else { return }
         let direction = aim.length > 0.01 ? aim.normalized : fighters[i].facing
         let start = fighters[i].pos + direction * 0.5
-        ball.pos = map.collides(start, radius: Ball.radius, ball: true) ? fighters[i].pos : start
+        ball.pos = collides(start, radius: Ball.radius, ball: true) ? fighters[i].pos : start
         ball.velocity = direction * (power ? 17 : 12)
         ball.carrier = nil
         ball.kicker = i
@@ -103,23 +103,24 @@ extension ArenaGame {
         if let carrier = ball.carrier {
             if fighters.indices.contains(carrier), fighters[carrier].alive {
                 let front = fighters[carrier].pos + fighters[carrier].facing * 0.45
-                ball.pos = map.collides(front, radius: Ball.radius, ball: true) ? fighters[carrier].pos : front
+                ball.pos = collides(front, radius: Ball.radius, ball: true) ? fighters[carrier].pos : front
                 ball.velocity = .zero
             } else {
                 ball.carrier = nil
             }
         }
-        if ball.carrier == nil {
-            Self.roll(&ball, dt, on: map)
-            if let defending = map.goalTeam(at: ball.pos), defending <= 1 {
+        if ball.carrier == nil { Self.roll(&ball, dt, on: map, terrain: terrainState) }
+        if let defending = map.goalTeam(at: ball.pos), defending <= 1 {
                 let scorer = 1 - defending
                 score[scorer] += 1
                 ball.velocity = .zero
                 self.ball = ball
                 events.append(.goal(team: scorer))
-                if score[scorer] < Self.ballGoals { startBreak() }
+                if usesImportedGoldenGoal { result = .team(scorer); return }
+                if score[scorer] < (importedMatchRules?.scoreGoal ?? Self.ballGoals) { startBreak() }
                 return
-            }
+        }
+        if ball.carrier == nil {
             let reach = Self.fighterRadius + Ball.radius + 0.05
             let position = ball.pos
             let kicker = ball.kickTimer > 0 ? ball.kicker : nil
@@ -134,17 +135,20 @@ extension ArenaGame {
     }
 
     /// 球往前滚：越滚越慢，碰到墙弹回来（房主算、别人的手机两包之间先滚都用这个）
-    static func roll(_ ball: inout Ball, _ dt: Double, on map: ArenaMap) {
+    static func roll(_ ball: inout Ball, _ dt: Double, on map: ArenaMap, terrain: ArenaTerrainState? = nil) {
+        func collides(_ point: V2, radius: Double, ball: Bool) -> Bool {
+            terrain?.intersectsMovement(at: point, radius: radius) ?? map.collides(point, radius: radius, ball: ball)
+        }
         guard ball.velocity.length > 0.05 else {
             ball.velocity = .zero
             return
         }
         let step = ball.velocity * dt
-        if map.collides(ball.pos + step, radius: Ball.radius, ball: true) {
-            if map.collides(ball.pos + V2(step.x, 0), radius: Ball.radius, ball: true) { ball.velocity.x = -ball.velocity.x * 0.6 }
-            if map.collides(ball.pos + V2(0, step.y), radius: Ball.radius, ball: true) { ball.velocity.y = -ball.velocity.y * 0.6 }
+        if collides(ball.pos + step, radius: Ball.radius, ball: true) {
+            if collides(ball.pos + V2(step.x, 0), radius: Ball.radius, ball: true) { ball.velocity.x = -ball.velocity.x * 0.6 }
+            if collides(ball.pos + V2(0, step.y), radius: Ball.radius, ball: true) { ball.velocity.y = -ball.velocity.y * 0.6 }
             let retry = ball.pos + ball.velocity * dt
-            if !map.collides(retry, radius: Ball.radius, ball: true) { ball.pos = retry }
+            if !collides(retry, radius: Ball.radius, ball: true) { ball.pos = retry }
         } else {
             ball.pos = ball.pos + step
         }
@@ -167,12 +171,14 @@ extension ArenaGame {
     mutating func startBreak() {
         pause = Self.breakTime
         projectiles.removeAll()
+        clearSourceTransientEffects()
         for i in fighters.indices { fighters[i].moving = .zero }
     }
 
     /// 停完了：大家回到出发的地方（满血、满弹，大招留着），子弹、骨塔、圈都清掉；球放回中间，三局两胜开下一局
     mutating func resetField() {
         projectiles.removeAll()
+        clearSourceTransientEffects()
         zones.removeAll()
         turrets.removeAll()
         warnings.removeAll()
@@ -182,6 +188,12 @@ extension ArenaGame {
             fighters[i].facing = (map.center - spot).normalized
             fighters[i].health = fighters[i].maxHealth
             fighters[i].ammo = 3
+            if fighters[i].sourceHero != nil {
+                fighters[i].sourceWeapon?.reset()
+                fighters[i].sourceUltimate?.reset()
+                fighters[i].sourceCharge = nil
+                fighters[i].ammo = fighters[i].sourceWeapon?.ammo ?? 0
+            }
             fighters[i].alive = true
             fighters[i].respawnIn = 0
             fighters[i].dash = nil
@@ -269,7 +281,7 @@ extension ArenaGame {
         if distance > 1.8 {
             // 中间有墙就按格子绕过去
             var heading = toward
-            if !map.lineOfSight(boss.pos, target.pos), let next = map.path(from: boss.pos, to: target.pos).first {
+            if !lineOfSight(boss.pos, target.pos), let next = map.path(from: boss.pos, to: target.pos).first {
                 heading = (next - boss.pos).normalized
             }
             let before = fighters[i].pos
@@ -296,7 +308,7 @@ extension ArenaGame {
             fighters[i].lastAttack = time
             events.append(.attack(fighter: i))
             spread(i, toward, count: 5, angle: 1.2, speed: 12, range: 3.6, damage: 950, radius: 0.35)
-        } else if bossBrain.volley <= 0, distance >= 3.2, distance < 10, map.lineOfSight(boss.pos, target.pos) {
+        } else if bossBrain.volley <= 0, distance >= 3.2, distance < 10, lineOfSight(boss.pos, target.pos) {
             bossBrain.volley = 2.3
             fighters[i].lastAttack = time
             events.append(.attack(fighter: i))
@@ -309,7 +321,7 @@ extension ArenaGame {
         let boss = fighters[i]
         let side = V2(-boss.facing.y, boss.facing.x)
         for k in [-1.0, 1.0] {
-            let spot = map.nearestOpen(to: boss.pos + side * (2.2 * k), radius: Turret.radius)
+            let spot = nearestOpen(to: boss.pos + side * (2.2 * k), radius: Turret.radius)
             let health = power(i, 2500)
             turrets.append(Turret(id: nextTurret, owner: i, team: boss.team, pos: spot, facing: boss.facing,
                                   health: health, maxHealth: health, left: Turret.duration))

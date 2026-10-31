@@ -1,0 +1,82 @@
+name: Arena resource runtime validation
+
+on:
+  push:
+    branches: [codex/arena-quality-sample]
+    paths:
+      - 'App/**'
+      - 'Sources/ShiftCore/ArenaResourcePack.swift'
+      - 'Tests/SiteTests/GLTFMaterialTests.swift'
+      - 'Tests/SiteTests/ArenaResourcePackTests.swift'
+      - 'Tests/SiteTests/ArenaImportedFaceTests.swift'
+      - '.github/workflows/arena-resource-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arena-resource-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+
+jobs:
+  resource-runtime:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Select Xcode and generate project
+        shell: bash -eo pipefail {0}
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -vi beta | sort -V | tail -1) || true
+          test -n "$XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Select available iPhone simulator
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j']))['devices']
+          candidates = [(runtime, d) for runtime, values in devices.items() for d in values
+                        if '.iOS-' in runtime and d.get('isAvailable') and d['name'].startswith('iPhone')]
+          if not candidates:
+              raise SystemExit('No available iPhone simulator')
+          runtime, device = max(candidates, key=lambda item: (tuple(map(int,re.findall(r'\d+',item[0]))), item[1]['name']))
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              out.write('RESOURCE_DEVICE=' + device['udid'] + '\n')
+          if device['state'] != 'Booted':
+              subprocess.run(['xcrun','simctl','boot',device['udid']],check=True)
+          subprocess.run(['xcrun','simctl','bootstatus',device['udid'],'-b'],check=True,timeout=180)
+          print(runtime, device['name'])
+          PY
+      - name: Check synthetic materials and transactional resource import
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Debug -destination "platform=iOS Simulator,id=$RESOURCE_DEVICE" \
+            -derivedDataPath resource-build -resultBundlePath resource-tests.xcresult \
+            -parallel-testing-enabled NO -only-testing:SiteTests/GLTFMaterialTests \
+            -only-testing:SiteTests/ArenaResourcePackTests \
+            -only-testing:SiteTests/ArenaImportedFaceTests \
+            CODE_SIGNING_ALLOWED=NO > resource-tests.log 2>&1 || { tail -120 resource-tests.log; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arena-resource-runtime-${{ github.sha }}
+          path: |
+            resource-tests.log
+            resource-tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Shut down simulator
+        if: always() && env.RESOURCE_DEVICE != ''
+        run: xcrun simctl shutdown "$RESOURCE_DEVICE"

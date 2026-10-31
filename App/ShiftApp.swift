@@ -229,7 +229,16 @@ struct RootView: View {
         // 「用值班提醒打开」的录音（比如备忘录里的通话录音）：存进工作留痕；
         // shiftreminder://capture/photo|record|note：小组件上的按钮
         .onOpenURL { url in
-            if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
+            if url.isFileURL, url.pathExtension.lowercased() == "arenapack" {
+                Task {
+                    await ArenaResourcePackStore.shared.install(from: url)
+                    if let error = ArenaResourcePackStore.shared.error {
+                        ToastCenter.shared.show(error, style: .error)
+                    } else {
+                        ToastCenter.shared.show("乱斗资源包已导入，可在大厅的英雄或设置页面查看", style: .success)
+                    }
+                }
+            } else if url.isFileURL, ["xlsx", "csv", "tsv"].contains(url.pathExtension.lowercased()),
                let plan = try? PlanReader.read(file: url) {
                 // 导出、分享过来的数传计划：直接打开「发数传计划」
                 passPlanReading = plan

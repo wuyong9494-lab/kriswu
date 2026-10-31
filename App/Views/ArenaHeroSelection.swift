@@ -6,10 +6,11 @@ struct ArenaHeroSelection: View {
     var startsMatch = false
     let onClose: () -> Void
     let onSelect: (Brawler) -> Void
+    var onSourceHeroes: (() -> Void)?
     @State private var inspected: Brawler?
 
     var body: some View {
-        ArenaMenuScreen(title: inspected?.name ?? "选择英雄 · 3", onClose: {
+        ArenaMenuScreen(title: inspected?.name ?? "选择英雄", onClose: {
             if inspected != nil { inspected = nil } else { onClose() }
         }, scrollContent: false) {
             GeometryReader { geometry in
@@ -17,6 +18,10 @@ struct ArenaHeroSelection: View {
                     detail(hero, height: geometry.size.height)
                 } else {
                     ScrollView {
+                        if let onSourceHeroes, ArenaResourcePackStore.shared.manifest != nil {
+                            Button("原版英雄 · \(ArenaResourcePackStore.shared.manifest?.heroes.count ?? 0)", action: onSourceHeroes)
+                                .buttonStyle(ArenaMenuButtonStyle()).padding(10)
+                        }
                         HStack(alignment: .top, spacing: 14) {
                             ForEach(ArenaQualitySample.heroes, id: \.self) { hero in
                                 Button { inspected = hero } label: {

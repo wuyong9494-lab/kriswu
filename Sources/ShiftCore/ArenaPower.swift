@@ -31,7 +31,7 @@ extension ArenaGame {
         for y in 1..<(map.height - 1) {
             for x in 1..<(map.width - 1) {
                 let p = V2(Double(x) + 0.5, Double(y) + 0.5)
-                guard map.tile(x, y) == .floor, !map.collides(p, radius: 0.6),
+                guard map.tile(x, y) == .floor, !collides(p, radius: 0.6),
                       spawns.allSatisfy({ $0.distance(to: p) > 2.6 }), p.distance(to: map.center) > 1.5 else { continue }
                 spots.append(p)
             }
@@ -75,16 +75,15 @@ extension ArenaGame {
 
     /// Shared by authoritative walking, client prediction and input replay.
     /// Static-only walk remains available for projectiles and special abilities.
-    public func walkingPosition(from start: V2, by delta: V2) -> V2 {
-        blockedByBoxes(start, Self.walk(from: start, by: delta, on: map))
+    public func walkingPosition(from start: V2, by delta: V2, radius: Double = fighterRadius) -> V2 {
+        blockedByBoxes(start, terrainWalkingPosition(from: start, by: delta, radius: radius), radius: radius)
     }
 
     /// 走的时候绕开没碎的能量箱（贴着箱子边停下；推出去会撞墙就不动）
-    func blockedByBoxes(_ start: V2, _ next: V2) -> V2 {
-        let gap = Self.fighterRadius + PowerBox.radius
+    func blockedByBoxes(_ start: V2, _ next: V2, radius: Double = fighterRadius) -> V2 {
         func clear(_ point: V2) -> Bool {
-            !map.collides(point, radius: Self.fighterRadius) &&
-                !boxes.contains { $0.health > 0 && point.distance(to: $0.pos) < gap - 1e-9 }
+            !collides(point, radius: radius) &&
+                !boxes.contains { $0.health > 0 && point.distance(to: $0.pos) < radius + powerBoxCollisionRadius($0) - 1e-9 }
         }
         func slide() -> V2 {
             let horizontal = V2(next.x, start.y), vertical = V2(start.x, next.y)
@@ -98,11 +97,12 @@ extension ArenaGame {
         }
         var position = next
         for box in boxes where box.health > 0 {
+            let gap = radius + powerBoxCollisionRadius(box)
             let away = position - box.pos
             guard away.length < gap else { continue }
             let push = away.length > 1e-6 ? away.normalized : (start - box.pos).normalized
             position = box.pos + (push.length > 0 ? push : V2(1, 0)) * gap
-            if map.collides(position, radius: Self.fighterRadius) { return slide() }
+            if collides(position, radius: radius) { return slide() }
         }
         // A later box can push the fighter back into an earlier one.
         return clear(position) ? position : slide()

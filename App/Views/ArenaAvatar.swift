@@ -32,6 +32,8 @@ final class ArenaAvatar {
 
     let node = SCNNode()
     let brawler: Brawler
+    let sourceHeroID: String?
+    private var importedAnimator: ArenaImportedHeroAnimator?
     /// 是不是自己（大招攒满时自己是金边，队友蓝、对面红）
     private let mine: Bool
     private let teamColor: UIColor
@@ -115,11 +117,11 @@ final class ArenaAvatar {
     private var concealmentMaterials: [SCNMaterial] = []
 
     // Screen-ray stipple discards the SAME samples in every mesh layer. Remaining
-    // samples stay opaque and write depth; no transparent skeleton sorting.
+    // samples keep their material's original alpha/depth behavior. Imported
+    // BLEND surfaces must not be forcibly changed into opaque geometry.
     static let concealmentFragment = """
         #pragma arguments
         float arenaConcealment;
-        #pragma opaque
         #pragma body
         if (arenaConcealment > 0.001) {
         float2 cell = floor((_surface.position.xy / max(abs(_surface.position.z), 0.001)) * 900.0);
@@ -142,7 +144,7 @@ final class ArenaAvatar {
                 let copy = owned.contains(key) ? original : original.copy() as! SCNMaterial
                 var modifiers = copy.shaderModifiers ?? [:]
                 let previous = modifiers[.fragment] ?? ""
-                modifiers[.fragment] = Self.concealmentFragment + "\n" + previous.replacingOccurrences(of: "#pragma body", with: "")
+                modifiers[.fragment] = GLTFModel.combiningShaderModifiers(previous, Self.concealmentFragment)
                 copy.shaderModifiers = modifiers
                 copy.setValue(Float(0), forKey: "arenaConcealment")
                 copies[key] = copy
@@ -161,15 +163,17 @@ final class ArenaAvatar {
     private var layer = GLTFModel.Pose(translation: [], rotation: [], scale: [])
 
     /// skin：穿第几套皮肤（0 原来的样子）
-    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false, qualitySample: Bool = false) {
+    init(brawler: Brawler, color: UIColor, isMe: Bool, decorated: Bool = true, size: Float = 1, skin: Int = 0, stageLit: Bool = false, qualitySample: Bool = false, sourceHeroID: String? = nil) {
         self.brawler = brawler
+        self.sourceHeroID = sourceHeroID
         self.mine = isMe
         self.teamColor = color
         self.size = size
         look = BrawlerLook.of(brawler, qualitySample: qualitySample)
-        model = ArenaModels.shared.character(brawler, qualitySample: qualitySample)
+        let imported = sourceHeroID.flatMap { ArenaImportedHeroAssets.shared.asset(id: $0) }
+        model = sourceHeroID == nil ? ArenaModels.shared.character(brawler, qualitySample: qualitySample) : imported?.model
         if let model {
-            instance = model.instantiate(outline: look.authored ? nil : ArenaArt.sampleOutline)
+            instance = model.instantiate(outline: sourceHeroID != nil || look.authored ? nil : ArenaArt.sampleOutline)
             upper = model.node(named: "spine").map { Array(model.subtree(of: $0).intersection(model.animated)) } ?? []
             swingBones = ["upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r"].compactMap { model.node(named: $0) }
             torsoBones = ["spine", "chest", "head"].compactMap { model.node(named: $0) }
@@ -181,7 +185,17 @@ final class ArenaAvatar {
             torsoBones = []
             chestBone = nil
         }
-        if let instance {
+        if let instance, let imported {
+            body.addChildNode(instance.root)
+            bodyScale = Float(1.8 / max(imported.hero.modelHeight ?? 12, 0.01)) * size
+            body.simdScale = SIMD3(repeating: bodyScale)
+            if let bounds = imported.hero.modelBounds, bounds.count == 6 {
+                body.simdPosition.y = -Float(bounds[1]) * bodyScale
+            }
+            glows = instance.materials.map { $0.emission.contents }
+            importedAnimator = ArenaImportedHeroAnimator(asset: imported, instance: instance)
+            importedAnimator?.update(base: "idle", delta: 0, visible: true)
+        } else if let instance {
             for name in look.hidden {
                 instance.root.childNode(withName: name, recursively: true)?.isHidden = true
             }
@@ -381,7 +395,7 @@ final class ArenaAvatar {
         }
         placed = true
         let leaning = fighter.alive && speed > 0.6
-        let leanTarget: Float = leaning && !look.authored ? -0.16 : 0
+        let leanTarget: Float = leaning && !look.authored && importedAnimator == nil ? -0.16 : 0
         lean += (leanTarget - lean) * min(1, dt * 6)
         if recoil > 0 { recoil = max(0, recoil - dt * 2.2) }
         body.simdEulerAngles = SIMD3(lean + recoil, angle, 0)
@@ -391,10 +405,13 @@ final class ArenaAvatar {
             if deadSince != nil {
                 deadSince = nil
                 action = nil
+                importedAnimator?.reset()
+                ammoPips = Int(fighter.ammo.rounded(.down))
             }
         } else if deadSince == nil {
             deadSince = clock
-            start(BrawlerLook.death, hold: true, fullBody: true)
+            importedAnimator?.reset()
+            if importedAnimator == nil { start(BrawlerLook.death, hold: true, fullBody: true) }
         }
 
         // 透明度：看不见的淡出；倒下的过一秒淡出
@@ -469,7 +486,7 @@ final class ArenaAvatar {
             sparks?.birthRate = 0
             streak?.birthRate = 0
         }
-        let frozen = fighter.alive && fighter.slowed > 0
+        let frozen = fighter.alive && (fighter.slowed > 0 || !(fighter.sourceSlows ?? []).isEmpty)
         if frozen != frosted, let instance {
             frosted = frozen
             instance.materials.forEach { $0.multiply.contents = frozen ? ArenaPalette.frost : baseTint }
@@ -486,6 +503,16 @@ final class ArenaAvatar {
         }
 
         let pips = Int(fighter.ammo.rounded(.down))
+        if let importedAnimator {
+            if fighter.alive, pips > ammoPips { importedAnimator.trigger("reload") }
+            ammoPips = pips
+            body.simdScale = SIMD3(repeating: bodyScale)
+            if fighter.alive {
+                importedAnimator.update(base: cheering ? "win" : (speed > 0.6 ? "walk" : "idle"),
+                    delta: dt, visible: !node.isHidden && sampleBones)
+            }
+            return
+        }
         // 弹回来的那一发才做换弹，而且只动手。开枪那一下不算换弹，免得把跑和出手盖住
         if fighter.alive, pips > ammoPips, action == nil, (brawler == .ranger || brawler == .shade) {
             let reload = look.authored ? BrawlerLook.Move(clip: "1H_Ranged_Reload", seconds: 0.65)
@@ -546,6 +573,7 @@ final class ArenaAvatar {
 
     /// 大厅展台的轻出手：整个人跟着挥，比场上那一下稍长，好让人看见。不改对局里的出手
     func showcaseSwing() {
+        if let importedAnimator { importedAnimator.trigger("attack"); return }
         let move = look.attack
         start(BrawlerLook.Move(clip: move.clip, from: move.from, to: move.to, seconds: max(move.seconds, 0.62)),
               hold: false, fullBody: true)
@@ -553,6 +581,11 @@ final class ArenaAvatar {
 
     /// 开了一枪
     func attack() {
+        if let importedAnimator {
+            angle = aimAngle; body.simdEulerAngles = SIMD3(0, angle, 0)
+            let skill = sourceHeroID.flatMap { ArenaImportedCombatAssets.shared.hero(id: $0)?.weapon }
+            importedAnimator.trigger("attack", holdFor: skill.map { $0.activeTime + $0.castingTime }); return
+        }
         alignAuthoredShot()
         // 剑圣转圈、书灵放环：整个身子跟着动，不要只动手
         let whole = brawler == .swordsman || brawler == .scholar
@@ -568,12 +601,18 @@ final class ArenaAvatar {
     }
 
     var muzzlePosition: SIMD3<Float>? {
+        if sourceHeroID != nil { return nil }
         guard look.authored, let muzzle = instance?.root.childNode(withName: "muzzle", recursively: true) else { return nil }
         return muzzle.simdWorldPosition
     }
 
     /// 放了大招（冲锋、跳、转圈、喝酒、抬手、闪现整个身子都动）
     func special() {
+        if let importedAnimator {
+            angle = aimAngle; body.simdEulerAngles = SIMD3(0, angle, 0)
+            let skill = sourceHeroID.flatMap { ArenaImportedCombatAssets.shared.hero(id: $0)?.ultimate }
+            importedAnimator.trigger("ultimate", holdFor: skill.map { $0.activeTime + $0.castingTime }); return
+        }
         alignAuthoredShot()
         switch brawler {
         case .knight, .barbarian, .swordsman, .brewer, .scholar, .shade, .darter:
@@ -587,8 +626,8 @@ final class ArenaAvatar {
     func flash(clock: Double, flinch: Bool = false) {
         flashUntil = clock + 0.055
         punch = 0.28
-        recoil = look.authored ? 0 : 0.2
-        if flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
+        recoil = look.authored || importedAnimator != nil ? 0 : 0.2
+        if importedAnimator == nil, flinch, deadSince == nil, action == nil || (action?.elapsed ?? 0) > (action?.move.seconds ?? 0) * 0.65 {
             let hit = look.authored ? BrawlerLook.Move(clip: "Hit_A", seconds: 0.24)
                 : BrawlerLook.Move(clip: "Hit_A", from: 0.05, to: 0.5, seconds: 0.2)
             start(hit, hold: false, fullBody: false)
@@ -808,8 +847,9 @@ final class ArenaTag {
         node.addChildNode(starText.node)
         if isMe {
             let gap: Float = 3 / 55
-            let segment = (Float(width) / 55 - gap * 2) / 3
-            for k in 0..<3 {
+            let capacity = max(fighter.ammoCapacity, 1)
+            let segment = (Float(width) / 55 - gap * Float(capacity - 1)) / Float(capacity)
+            for k in 0..<capacity {
                 let piece = ArenaBar(width: CGFloat(segment * 55), height: 5, color: ArenaPalette.ammo, border: 1.2)
                 piece.node.simdPosition = SIMD3(-Float(width) / 55 / 2 + segment / 2 + Float(k) * (segment + gap), -barH / 2 - 0.12, 0)
                 node.addChildNode(piece.node)

@@ -155,7 +155,7 @@ extension ArenaGame {
             if let carrier = current.carrier, fighters.indices.contains(carrier) {
                 current.pos = fighters[carrier].pos + fighters[carrier].facing * 0.45
             } else {
-                ArenaGame.roll(&current, dt, on: map)
+                ArenaGame.roll(&current, dt, on: map, terrain: terrainState)
             }
             ball = current
         }
@@ -165,7 +165,7 @@ extension ArenaGame {
                 fighters[i].leap = leap
                 fighters[i].pos = V2.lerp(leap.from, leap.to, leap.elapsed / Fighter.Leap.duration)
             } else if fighters[i].moving.length > 0.01 {
-                fighters[i].pos = ArenaGame.walk(from: fighters[i].pos, by: fighters[i].moving * dt, on: map)
+                fighters[i].pos = walkingPosition(from: fighters[i].pos, by: fighters[i].moving * dt)
             }
         }
         for k in zones.indices { zones[k].left -= dt }
@@ -183,7 +183,7 @@ extension ArenaGame {
                 let delta = p.velocity * dt
                 p.pos = p.pos + delta
                 p.rangeLeft -= delta.length
-                if p.rangeLeft <= 0 || map.blocks(p.pos) { continue }
+                if p.rangeLeft <= 0 || blocksProjectiles(p.pos) { continue }
             }
             kept.append(p)
         }

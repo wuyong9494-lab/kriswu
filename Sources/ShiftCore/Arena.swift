@@ -379,6 +379,12 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var team: Int
     public var brawler: Brawler
     public var isBot: Bool
+    /// Source identity and rules are independent of the legacy save identifier.
+    public var sourceHero: ArenaSourceHero?
+    public var sourceWeapon: ArenaSourceSkillState?
+    public var sourceUltimate: ArenaSourceSkillState?
+    public var sourceCharge: ArenaSourceChargeMotion?
+    public var sourceSlows: [ArenaSourceSlow]?
     /// 等级（1–9，血量、伤害按等级加成）
     public var level = 1
     public var pos: V2
@@ -432,12 +438,18 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var cubes = 0
 
     public var maxHealth: Int {
+        if let sourceHero { return sourceHero.health + cubes * ArenaGame.cubeHealth }
         if isBoss { return ArenaGame.bossHealth(level: level) }
         let base = brawler.health(level: level)
         let scaled = isBot ? base : Int((Double(base) * ArenaGame.playerEdge).rounded())
         return (starPower == .tough ? Int((Double(scaled) * 1.12).rounded()) : scaled) + cubes * ArenaGame.cubeHealth
     }
-    public var busy: Bool { dash != nil || leap != nil }
+    public var busy: Bool { dash != nil || leap != nil || sourceCharge != nil }
+    public var heroName: String { sourceHero?.name ?? brawler.name }
+    public var attackRange: Double { sourceHero?.weapon?.range ?? brawler.attackRange }
+    public var specialRange: Double { sourceHero?.ultimate?.range ?? brawler.superRange }
+    public var projectileSpeed: Double { sourceHero?.weapon?.projectiles.first?.speed ?? brawler.bulletSpeed }
+    public var ammoCapacity: Int { sourceHero?.weapon?.ammoCapacity ?? 3 }
 }
 
 /// 飞着的子弹、炸弹
@@ -468,6 +480,12 @@ public struct Projectile: Equatable, Codable, Sendable, Identifiable {
     /// 回旋镖：飞到头（或者撞墙）往回飞向扔的人；returning：在往回飞
     public var boomerang = false
     public var returning = false
+    /// Explicit environmental behavior; nil retains a normal weapon.
+    public var terrainDestruction: ArenaTerrainState.DestructionCause?
+    public var sourceLaunch: ArenaSourceLaunch?
+    public var sourceBouncesRemaining: Int?
+    public var sourceElapsed: Double?
+    public var sourceDamageMultiplier: Double?
 }
 
 /// 摇杆的输入：走的方向（长度 0–1）、这一帧开火、放大招（相对自己的偏移，单位格：方向 + 想打多远）、用小道具
@@ -683,9 +701,10 @@ public struct ArenaGame: Sendable {
         public var lineup: [Brawler]
         /// 带的小道具、星徽、超级充能
         public var loadout: ArenaLoadout
+        public var sourceHero: ArenaSourceHero?
 
         public init(name: String, brawler: Brawler, isBot: Bool, team: Int, level: Int = 1, lineup: [Brawler] = [],
-                    loadout: ArenaLoadout = ArenaLoadout()) {
+                    loadout: ArenaLoadout = ArenaLoadout(), sourceHero: ArenaSourceHero? = nil) {
             self.name = name
             self.brawler = brawler
             self.isBot = isBot
@@ -693,6 +712,7 @@ public struct ArenaGame: Sendable {
             self.level = level
             self.lineup = lineup
             self.loadout = loadout
+            self.sourceHero = sourceHero
         }
 
         /// 老版本存的、发来的没有等级（按 1 级）、没有一对一的阵容
@@ -705,6 +725,7 @@ public struct ArenaGame: Sendable {
             level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 1
             lineup = try container.decodeIfPresent([Brawler].self, forKey: .lineup) ?? []
             loadout = try container.decodeIfPresent(ArenaLoadout.self, forKey: .loadout) ?? ArenaLoadout()
+            sourceHero = try container.decodeIfPresent(ArenaSourceHero.self, forKey: .sourceHero)
         }
     }
 
@@ -731,9 +752,19 @@ public struct ArenaGame: Sendable {
 
     public let mode: Mode
     public let map: ArenaMap
+    /// Present only for a reviewed imported map. All collision queries use this mutable grid.
+    public internal(set) var terrainState: ArenaTerrainState?
+    public private(set) var importedMatchRules: ArenaImportedMatchRules?
+    public internal(set) var importedMapPlan: ArenaImportedMap.RuntimePlan?
+    public internal(set) var importedZone: ArenaZoneObjectiveState?
+    public internal(set) var importedOvertimeApplied = false
     public internal(set) var time: Double = 0
     public internal(set) var fighters: [Fighter]
     public internal(set) var projectiles: [Projectile] = []
+    public internal(set) var sourceAreas: [ArenaSourceLiveArea] = []
+    var sourceVolleyHits: [ArenaSourceVolleyKey: ArenaSourceHitWindow] = [:]
+    var sourceSharedAreaCooldowns: [ArenaSourceAreaTargetKey: Double] = [:]
+    var nextSourceArea = 1
     /// 地上的星星
     public internal(set) var stars: [V2] = []
     public internal(set) var teamKills = [0, 0]
@@ -747,6 +778,7 @@ public struct ArenaGame: Sendable {
     public internal(set) var turrets: [Turret] = []
     /// 两队的分：足球进了几球、悬赏攒了几颗星、三局两胜赢了几局、一对一打倒对方几个
     public internal(set) var score = [0, 0]
+    public internal(set) var importedBounty: ArenaBountyObjectiveState?
     public internal(set) var ball: Ball?
     public internal(set) var chests: [Chest] = []
     /// 大乱斗：能量箱、地上的能量块
@@ -769,9 +801,37 @@ public struct ArenaGame: Sendable {
     /// map：用哪张地图；nil 或者不是这个玩法的地图（拿团战的图打大乱斗）就用这个玩法的第一张。
     /// bossLevel：讨伐骷髅王时骷髅王几级（nil：按勇者们的平均等级；冒险里每关定好）
     public init(mode: Mode, entrants: [Entrant], seed: UInt64, map chosen: ArenaMap? = nil, bossLevel: Int? = nil) {
+        self.init(mode: mode, entrants: entrants, seed: seed, chosen: chosen, bossLevel: bossLevel, imported: nil)
+    }
+
+    public init(sourceMode: Mode, entrants: [Entrant], seed: UInt64, map: ArenaMap? = nil) throws {
+        try Self.validateSourceRoster(entrants, mode: sourceMode)
+        self.init(mode: sourceMode, entrants: entrants, seed: seed, chosen: map, bossLevel: nil, imported: nil)
+    }
+
+    /// Only the validated source-map adapter can create this entry; an arbitrary
+    /// map ID can never bypass the classic map registry.
+    public init(importedPlan: ArenaImportedMap.RuntimePlan, entrants: [Entrant], seed: UInt64) throws {
+        try Self.validateSourceRoster(entrants, mode: importedPlan.mode)
+        let binding = importedPlan.modeBinding
+        guard entrants.count == binding.teamCount * binding.teamSize,
+              Set(entrants.map(\.team)) == Set(0..<binding.teamCount),
+              (0..<binding.teamCount).allSatisfy({ team in entrants.filter { $0.team == team }.count == binding.teamSize }) else {
+            throw ArenaImportedMap.ValidationFailure(issues: [.init(.participantMismatch, "entrants", "Roster does not match the reviewed map mode.")])
+        }
+        self.init(mode: importedPlan.mode, entrants: entrants, seed: seed, chosen: nil, bossLevel: nil, imported: importedPlan)
+        try configureImportedObjectives(importedPlan, entrants: entrants, seed: seed)
+    }
+
+    private init(mode: Mode, entrants: [Entrant], seed: UInt64, chosen: ArenaMap?, bossLevel: Int?,
+                 imported: ArenaImportedMap.RuntimePlan?) {
         self.mode = mode
+        terrainState = imported?.terrainState
+        importedMatchRules = imported?.matchRules
         let pool = ArenaMap.selectionPool(for: mode)
-        if let chosen, pool.contains(where: { $0.id == chosen.id })
+        if let imported {
+            map = imported.map
+        } else if let chosen, pool.contains(where: { $0.id == chosen.id })
             || (chosen.id == "custom" && chosen.spawns.count == (mode.isTeams ? 2 : 1)) {
             map = chosen
         } else {
@@ -807,10 +867,24 @@ public struct ArenaGame: Sendable {
                                   pos: spawn, facing: (map.center - spawn).normalized, health: entrant.brawler.health(level: level))
             if mode == .duel { fighter.lineup = Self.lineup(entrant, seed: seed &+ UInt64(index + 1)) }
             if mode == .bounty { fighter.stars = Self.startingBounty }
-            Self.equip(&fighter, entrant.loadout)
+            if let source = entrant.sourceHero {
+                fighter.sourceHero = source
+                let actorSeed = seed &+ UInt64(index + 1) &* 0x9e3779b97f4a7c15
+                fighter.sourceWeapon = source.weapon.map { ArenaSourceSkillState(skill: $0, seed: actorSeed ^ 0x776561706f6e) }
+                fighter.sourceUltimate = source.ultimate.map { ArenaSourceSkillState(skill: $0, seed: actorSeed ^ 0x756c74696d617465) }
+                fighter.level = 1
+                fighter.health = source.health
+                fighter.ammo = fighter.sourceWeapon?.ammo ?? 0
+                fighter.superCharge = min(max(source.initialSuperCharge, 0), 1)
+            } else { Self.equip(&fighter, entrant.loadout) }
             list.append(fighter)
         }
         fighters = list
+        if importedMatchRules?.usesBlueStarTieBreak == true,
+           let goal = importedMatchRules?.scoreGoal, mode == .bounty {
+            importedBounty = try? ArenaBountyObjectiveState(teams: list.map(\.team), scoreGoal: goal,
+                startingBounty: Self.startingBounty, maximumBounty: Self.maxBounty)
+        }
         switch mode {
         case .ball:
             ball = Ball(pos: map.center)
@@ -827,7 +901,7 @@ public struct ArenaGame: Sendable {
 
     /// 还剩几秒（三局两胜是这一局还剩几秒）
     public var timeLeft: Double {
-        mode == .knockout ? max(0, Self.roundLimit - (time - roundStart)) : max(0, mode.duration - time)
+        mode == .knockout ? max(0, Self.roundLimit - (time - roundStart)) : max(0, matchDuration - time)
     }
 
     /// 毒圈在缩
@@ -854,9 +928,9 @@ public struct ArenaGame: Sendable {
         if fighter.invisible > 0 {
             return fighters.contains { $0.alive && $0.team == team && $0.pos.distance(to: fighter.pos) < 1.5 }
         }
-        if !map.inBush(fighter.pos) { return true }
+        if !inBush(fighter.pos) { return true }
         // 只有走进同一片连着的草才看得见，不是靠距离
-        return fighters.contains { $0.alive && $0.team == team && map.sameBush($0.pos, fighter.pos) }
+        return fighters.contains { $0.alive && $0.team == team && sameBush($0.pos, fighter.pos) }
     }
 
     // MARK: 一帧
@@ -865,6 +939,7 @@ public struct ArenaGame: Sendable {
         collisionCPUSeconds = 0
         guard result == nil else { return }
         time += dt
+        _ = updateImportedOvertime()
         // 进球、一局打完：停一会儿，停完大家回到出发的地方
         if pause > 0 {
             pause -= dt
@@ -875,6 +950,7 @@ public struct ArenaGame: Sendable {
             return
         }
         for i in fighters.indices {
+            tickSourceSlow(i, dt: dt)
             if fighters[i].isBoss {
                 updateBoss(i, dt)
             } else {
@@ -882,18 +958,20 @@ public struct ArenaGame: Sendable {
             }
         }
         moveProjectiles(dt)
+        updateSourceAreas(dt: dt)
         updateWarnings(dt)
         updateZones(dt)
         updateTurrets(dt)
         switch mode {
         case .stars: updateStars(dt)
+        case .bounty: updateImportedBounty()
         case .zone: updateZone(dt)
         case .ball: updateBall(dt)
         case .showdown, .duo:
             updatePoison(dt)
             collectCubes()
         case .knockout: updatePoison(dt)
-        case .teamFight, .heist, .bounty, .duel, .boss: break
+        case .teamFight, .heist, .duel, .boss: break
         }
         decide()
     }
@@ -908,6 +986,10 @@ public struct ArenaGame: Sendable {
             guard canRespawn(i) else { return }
             fighters[i].respawnIn -= dt
             if fighters[i].respawnIn <= 0 { respawn(i) }
+            return
+        }
+        if fighters[i].sourceHero != nil {
+            updateSourceFighter(i, input: input, dt: dt)
             return
         }
         fighters[i].cooldown -= dt
@@ -964,7 +1046,7 @@ public struct ArenaGame: Sendable {
     mutating func walk(_ i: Int, by delta: V2) {
         let start = measuresCPU ? ProcessInfo.processInfo.systemUptime : 0
         defer { if measuresCPU { collisionCPUSeconds += ProcessInfo.processInfo.systemUptime - start } }
-        fighters[i].pos = walkingPosition(from: fighters[i].pos, by: delta)
+        fighters[i].pos = walkingPosition(from: fighters[i].pos, by: delta, radius: Self.hitRadius(fighters[i]))
     }
 
     /// 被打倒的这个人还回不回来：大乱斗、三局两胜（这一局）不回来，双人大乱斗要队友还活着，一对一要还有角色没上过
@@ -979,6 +1061,7 @@ public struct ArenaGame: Sendable {
 
     /// 出发的地方（复活、重新开球时站回去）：自己队的出生点里按在队里的先后挑
     func homeSpot(_ i: Int) -> V2 {
+        if let imported = importedInitialSpawn(for: i) { return imported }
         let team = fighters[i].team
         if !mode.isTeams {
             let group = map.spawns.first ?? []
@@ -993,9 +1076,9 @@ public struct ArenaGame: Sendable {
         let spawn: V2
         if mode == .duo, let mate = fighters.first(where: { $0.team == fighters[i].team && $0.id != i && $0.alive }) {
             // 双人大乱斗：在队友身边回来
-            spawn = map.nearestOpen(to: mate.pos + V2(0.9, 0))
+            spawn = nearestOpen(to: mate.pos + V2(0.9, 0))
         } else {
-            spawn = homeSpot(i)
+            spawn = importedRespawn(for: i) ?? homeSpot(i)
         }
         if mode == .duel {
             // 一对一：换下一个角色上（小道具、星徽按这个角色的等级带）
@@ -1009,12 +1092,19 @@ public struct ArenaGame: Sendable {
         }
         fighters[i].speedBoost = 0
         fighters[i].slowed = 0
+        fighters[i].sourceSlows = nil
         fighters[i].invisible = 0
         fighters[i].hyperTime = 0
         fighters[i].pos = spawn
         fighters[i].facing = (map.center - spawn).normalized
         fighters[i].health = fighters[i].maxHealth
         fighters[i].ammo = 3
+        if fighters[i].sourceHero != nil {
+            fighters[i].sourceWeapon?.reset()
+            fighters[i].sourceUltimate?.reset()
+            fighters[i].sourceCharge = nil
+            fighters[i].ammo = fighters[i].sourceWeapon?.ammo ?? 0
+        }
         fighters[i].alive = true
         fighters[i].lastHurt = time
         fighters[i].moving = .zero
@@ -1092,7 +1182,7 @@ public struct ArenaGame: Sendable {
             shoot(i, direction, speed: 18, range: fighter.brawler.superRange + (hyper ? 2 : 0), damage: hyper ? 3100 : 2400,
                   radius: hyper ? 0.6 : 0.35, pierce: true, isSuper: true)
         case .barbarian:
-            let target = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
+            let target = nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
             fighters[i].leap = Fighter.Leap(from: fighter.pos, to: target, elapsed: 0)
         case .mage:
             lob(i, to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange),
@@ -1107,19 +1197,19 @@ public struct ArenaGame: Sendable {
                 events.append(.heal(target: i, amount: healed))
             }
         case .necromancer:
-            let center = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.superRange), radius: 0.2)
+            let center = nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.5), fighter.brawler.superRange), radius: 0.2)
             zones.append(Zone(center: center, radius: hyper ? 3 : 2.2, team: fighter.team, owner: i,
                               left: fighter.starPower == .feast ? 7 : Zone.duration, heal: power(i, 700), damage: power(i, 350)))
         case .shade:
             // 一下闪过去（能穿墙），落地炸一下
-            let target = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
+            let target = nearestOpen(to: fighter.pos + direction * min(max(aim.length, 2), fighter.brawler.superRange))
             fighters[i].pos = target
             fighters[i].moving = .zero
             blast(at: target, radius: hyper ? 2.4 : 1.6, damage: power(i, fighter.starPower == .ambush ? 1960 : 1400), by: i,
                   team: fighter.team, charges: false)
         case .summoner:
             // 同时只有一座（星徽「双塔」两座）：再召唤就换掉最早的
-            let spot = map.nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.2), fighter.brawler.superRange))
+            let spot = nearestOpen(to: fighter.pos + direction * min(max(aim.length, 1.2), fighter.brawler.superRange))
             let health = Int(Double(power(i, 2800)) * (fighter.starPower == .sturdy ? 1.5 : 1) * (hyper ? 2 : 1))
             let limit = fighter.starPower == .twin ? 2 : 1
             let mine = turrets.filter { $0.owner == i }.sorted { $0.id < $1.id }
@@ -1204,10 +1294,10 @@ public struct ArenaGame: Sendable {
         for t in turrets.indices where turrets[t].team != team && turrets[t].pos.distance(to: point) < radius + Turret.radius {
             turrets[t].health -= damage
         }
-        for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + 1.3 {
+        for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + chestCollisionRadius(k) {
             hitChest(k, damage, by: owner)
         }
-        for b in boxes.indices where boxes[b].health > 0 && boxes[b].pos.distance(to: point) < radius + PowerBox.radius {
+        for b in boxes.indices where boxes[b].health > 0 && boxes[b].pos.distance(to: point) < radius + powerBoxCollisionRadius(boxes[b]) {
             hitBox(b, damage)
         }
     }
@@ -1235,7 +1325,7 @@ public struct ArenaGame: Sendable {
         p.pos = p.pos + delta
         if !p.returning {
             p.rangeLeft -= delta.length
-            if p.rangeLeft <= 0 || map.blocks(p.pos) {
+            if p.rangeLeft <= 0 || blocksProjectiles(p.pos) {
                 p.returning = true
                 p.hit = []
             }
@@ -1254,6 +1344,9 @@ public struct ArenaGame: Sendable {
 
     /// 按这个人的等级加成后的伤害
     func power(_ i: Int, _ damage: Int) -> Int {
+        if fighters[i].sourceHero != nil {
+            return Int((Double(damage) * (1 + Self.cubeDamage * Double(fighters[i].cubes))).rounded())
+        }
         let hyper = fighters[i].hyperTime > 0 ? 1.1 : 1
         let cubes = 1 + Self.cubeDamage * Double(fighters[i].cubes)
         let edge = fighters[i].isBot || fighters[i].isBoss ? 1.0 : Self.playerEdge
@@ -1280,7 +1373,7 @@ public struct ArenaGame: Sendable {
         guard var dash = fighters[i].dash else { return }
         let step = min(dash.remaining, 12 * dt)
         let next = fighters[i].pos + dash.direction * step
-        if map.collides(next, radius: Self.fighterRadius) {
+        if collides(next, radius: Self.fighterRadius) {
             fighters[i].dash = nil
             return
         }
@@ -1330,7 +1423,16 @@ public struct ArenaGame: Sendable {
         let start = measuresCPU ? ProcessInfo.processInfo.systemUptime : 0
         defer { if measuresCPU { collisionCPUSeconds += ProcessInfo.processInfo.systemUptime - start } }
         var kept: [Projectile] = []
-        for var p in projectiles {
+        // Impacts can append source split projectiles. Drain the active list so
+        // the new children survive this frame and start moving next frame.
+        let activeProjectiles = projectiles
+        projectiles.removeAll(keepingCapacity: true)
+        for var p in activeProjectiles {
+            if p.sourceLaunch != nil {
+                if advanceSourceProjectile(&p, dt: dt) { kept.append(p) }
+                continue
+            }
+            let previousPoint = p.pos
             if var lob = p.lob {
                 lob.elapsed += dt
                 if lob.elapsed >= lob.duration {
@@ -1349,8 +1451,16 @@ public struct ArenaGame: Sendable {
                 p.pos = p.pos + delta
                 p.rangeLeft -= delta.length
             }
+            if terrainState != nil, !p.boomerang,
+               traceTerrain(from: previousPoint, to: p.pos, cause: p.terrainDestruction ?? .normalWeapon) { continue }
+            if let safe = importedSafeHit(from: previousPoint, to: p.pos, projectileRadius: p.radius, excludingTeam: p.team),
+               !p.hit.contains(-2000 - safe.index) {
+                hitChest(safe.index, p.damage, by: p.owner)
+                if !p.pierce { continue }
+                p.hit.append(-2000 - safe.index)
+            }
             if p.rangeLeft <= 0 && !p.boomerang { continue }
-            if map.blocks(p.pos) && !p.boomerang {
+            if blocksProjectiles(p.pos) && !p.boomerang {
                 // 打到墙上；是对面的宝箱就扣宝箱的血
                 if let k = map.chest(at: p.pos), chests.indices.contains(k), chests[k].team != p.team {
                     hitChest(k, p.damage, by: p.owner)
@@ -1359,7 +1469,7 @@ public struct ArenaGame: Sendable {
             }
             // 打到能量箱（穿透的记一下打过哪个：能量箱用 -1000 往下的编号）
             if let b = boxes.indices.first(where: { boxes[$0].health > 0 && !p.hit.contains(-1000 - $0)
-                && boxes[$0].pos.distance(to: p.pos) < PowerBox.radius + p.radius }) {
+                && boxes[$0].pos.distance(to: p.pos) < powerBoxCollisionRadius(boxes[$0]) + p.radius }) {
                 hitBox(b, p.damage)
                 if !p.pierce { continue }
                 p.hit.append(-1000 - b)
@@ -1390,7 +1500,7 @@ public struct ArenaGame: Sendable {
             }
             if !consumed { kept.append(p) }
         }
-        projectiles = kept
+        projectiles = kept + projectiles
     }
 
     mutating func blast(at point: V2, radius: Double, damage: Int, by owner: Int, team: Int, charges: Bool) {
@@ -1402,10 +1512,10 @@ public struct ArenaGame: Sendable {
         for t in turrets.indices where turrets[t].team != team && turrets[t].pos.distance(to: point) < radius + Turret.radius {
             turrets[t].health -= damage
         }
-        for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + 1.3 {
+        for k in chests.indices where chests[k].team != team && chests[k].center.distance(to: point) < radius + chestCollisionRadius(k) {
             hitChest(k, damage, by: owner)
         }
-        for b in boxes.indices where boxes[b].health > 0 && boxes[b].pos.distance(to: point) < radius + PowerBox.radius {
+        for b in boxes.indices where boxes[b].health > 0 && boxes[b].pos.distance(to: point) < radius + powerBoxCollisionRadius(boxes[b]) {
             hitBox(b, damage)
         }
     }
@@ -1444,7 +1554,7 @@ public struct ArenaGame: Sendable {
             guard turret.cooldown <= 0, turret.health > 0 else { continue }
             let targets = fighters.filter {
                 $0.alive && $0.team != turret.team && isVisible($0, to: turret.team)
-                    && $0.pos.distance(to: turret.pos) < Turret.range && map.lineOfSight(turret.pos, $0.pos)
+                    && $0.pos.distance(to: turret.pos) < Turret.range && lineOfSight(turret.pos, $0.pos)
             }
             guard let target = targets.min(by: { $0.pos.distance(to: turret.pos) < $1.pos.distance(to: turret.pos) }) else { continue }
             let direction = (target.pos - turret.pos).normalized
@@ -1506,10 +1616,14 @@ public struct ArenaGame: Sendable {
         fighters[j].dash = nil
         fighters[j].leap = nil
         fighters[j].burst = nil
+        fighters[j].sourceWeapon?.cancel()
+        fighters[j].sourceUltimate?.cancel()
+        fighters[j].sourceCharge = nil
         fighters[j].shield = 0
         fighters[j].moving = .zero
         fighters[j].speedBoost = 0
         fighters[j].slowed = 0
+        fighters[j].sourceSlows = nil
         fighters[j].invisible = 0
         fighters[j].hyperTime = 0
         if let attacker, attacker != j {
@@ -1525,8 +1639,13 @@ public struct ArenaGame: Sendable {
             }
             // 悬赏：按他头上的星星给队里加分，自己的悬赏涨一颗
             if mode == .bounty, fighters[attacker].team != victim.team {
-                score[fighters[attacker].team] += victim.stars
-                fighters[attacker].stars = min(Self.maxBounty, fighters[attacker].stars + 1)
+                if importedBounty != nil {
+                    _ = importedBounty!.recordElimination(victim: j, attacker: attacker)
+                    synchronizeImportedBounty()
+                } else {
+                    score[fighters[attacker].team] += victim.stars
+                    fighters[attacker].stars = min(Self.maxBounty, fighters[attacker].stars + 1)
+                }
             }
         }
         switch mode {
@@ -1537,7 +1656,7 @@ public struct ArenaGame: Sendable {
             for _ in 0..<fighters[j].stars {
                 let angle = Double(random.below(360)) * .pi / 180
                 let offset = V2(cos(angle), sin(angle)) * (0.4 + Double(random.below(80)) / 100)
-                stars.append(map.nearestOpen(to: fighters[j].pos + offset, radius: 0.2))
+                stars.append(nearestOpen(to: fighters[j].pos + offset, radius: 0.2))
             }
             fighters[j].stars = 0
         }
@@ -1548,7 +1667,7 @@ public struct ArenaGame: Sendable {
         }
         if mode == .duel, victim.team <= 1 { score[1 - victim.team] += 1 }
         if canRespawn(j) {
-            fighters[j].respawnIn = mode.respawnDelay
+            fighters[j].respawnIn = respawnDelay
         } else if mode == .showdown {
             fighters[j].place = aliveCount + 1
         } else if mode == .duo, !fighters.contains(where: { $0.team == victim.team && $0.alive }) {
@@ -1563,11 +1682,12 @@ public struct ArenaGame: Sendable {
 
     private mutating func updateStars(_ dt: Double) {
         starTimer += dt
-        if starTimer >= 7 {
-            starTimer -= 7
+        let interval = importedMatchRules?.gemSpawnIntervalSeconds ?? 7
+        if starTimer >= interval {
+            starTimer -= interval
             if stars.count < 20 {
                 let angle = Double(random.below(360)) * .pi / 180
-                stars.append(map.nearestOpen(to: map.center + V2(cos(angle), sin(angle)) * 0.6, radius: 0.2))
+                stars.append(nearestOpen(to: map.center + V2(cos(angle), sin(angle)) * 0.6, radius: 0.2))
             }
         }
         for i in fighters.indices where fighters[i].alive && !fighters[i].busy {
@@ -1588,7 +1708,7 @@ public struct ArenaGame: Sendable {
                 countdown = current
                 if current.left <= 0 { result = .team(leader) }
             } else {
-                countdown = Countdown(team: leader, left: Self.starHold)
+                countdown = Countdown(team: leader, left: importedMatchRules?.gemHoldSeconds ?? Self.starHold)
             }
         } else {
             countdown = nil
@@ -1596,6 +1716,7 @@ public struct ArenaGame: Sendable {
     }
 
     private mutating func updateZone(_ dt: Double) {
+        if updateImportedZones(dt) { return }
         let inside = Set(fighters.filter { $0.alive && $0.pos.distance(to: map.center) < Self.zoneRadius }.map(\.team))
         if inside.count == 1, let team = inside.first {
             zoneProgress[team] = min(100, zoneProgress[team] + dt * 100 / 50)
@@ -1621,7 +1742,7 @@ public struct ArenaGame: Sendable {
         guard result == nil else { return }
         switch mode {
         case .teamFight:
-            if let team = teamKills.firstIndex(where: { $0 >= Self.goal }) { result = .team(team) }
+            if let team = teamKills.firstIndex(where: { $0 >= (importedMatchRules?.scoreGoal ?? Self.goal) }) { result = .team(team) }
         case .showdown:
             let alive = fighters.filter(\.alive)
             if alive.count == 1, let winner = alive.first {
@@ -1639,7 +1760,7 @@ public struct ArenaGame: Sendable {
                 result = .draw
             }
         case .ball:
-            if let team = score.firstIndex(where: { $0 >= Self.ballGoals }) { result = .team(team) }
+            if let team = score.firstIndex(where: { $0 >= (importedMatchRules?.scoreGoal ?? Self.ballGoals) }) { result = .team(team) }
         case .heist:
             if let broken = chests.first(where: { $0.health <= 0 }) { result = .team(1 - broken.team) }
         case .knockout:
@@ -1654,7 +1775,7 @@ public struct ArenaGame: Sendable {
         case .stars, .zone, .bounty:
             break
         }
-        guard result == nil, time >= mode.duration else { return }
+        guard result == nil, time >= matchDuration else { return }
         // 时间到了
         switch mode {
         case .teamFight: result = compare(Double(teamKills[0]), Double(teamKills[1]))

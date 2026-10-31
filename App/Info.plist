@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>ArenaResourcePackRequiredForPromotion</key>
+	<true/>
 	<key>DefaultSiteURL</key>
 	<string>$(DEFAULT_SITE_URL)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -101,6 +103,16 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>乱斗资源包</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array><string>com.kriswu.arena-resource-pack</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>录音</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -124,6 +136,22 @@
 				<string>public.comma-separated-values-text</string>
 				<string>public.tab-separated-values-text</string>
 			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.kriswu.arena-resource-pack</string>
+			<key>UTTypeDescription</key>
+			<string>乱斗资源包</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string></array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array><string>arenapack</string></array>
+			</dict>
 		</dict>
 	</array>
 	<key>NSAppTransportSecurity</key>

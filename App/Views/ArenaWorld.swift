@@ -121,6 +121,10 @@ final class ArenaWorldView: SCNView {
     private var reach: (side: Float, above: Float, below: Float) = (5.6, 15, 8.6)
 
     private var avatars: [ArenaAvatar] = []
+    private var importedMapArt: ArenaImportedMapArt?
+    private var sourceAreaArt: [Int: ArenaSourceAreaArt] = [:]
+    private var sourceStartVoicePlayed = false
+    private var importedBlueStar: SCNNode?
     private var tags: [ArenaTag] = []
     private var bushes: [ArenaBushVisual] = []
     private var projectiles: [Int: ProjectileView] = [:]
@@ -129,6 +133,7 @@ final class ArenaWorldView: SCNView {
     private var floaterPool: [SCNNode] = []
     private var combatText = ArenaCombatText()
     private var zone: (disc: SCNNode, rim: SCNNode, state: Int)?
+    private var importedZonesArt: ArenaImportedZonesArt?
     /// 毒圈：一圈细边，外面几朵紫雾（牌子，不是整屏透明面）
     private var poison: PoisonField?
     private var geometries: [String: SCNGeometry] = [:]
@@ -199,6 +204,8 @@ final class ArenaWorldView: SCNView {
         var ball: SCNNode?
         var shadow: SCNNode?
         var height: Float = 0.6
+        var sourceArt: ArenaImportedSkillArt?
+        var createdAt: Double = 0
     }
 
     /// 开局就建好的刀光、圈、命中。打的时候只改位置，不再新建
@@ -297,6 +304,11 @@ final class ArenaWorldView: SCNView {
         metrics.reset()
         nextMetricsAt = 0
         ArenaSound.shared.begin(owner: ObjectIdentifier(self))
+        if !sourceStartVoicePlayed, controller.game.fighters.indices.contains(controller.me),
+           let hero = controller.game.fighters[controller.me].sourceHero {
+            sourceStartVoicePlayed = true
+            ArenaSound.shared.playSource(event: "voice.start", heroID: hero.id, volume: 0.8)
+        }
         let target = DisplayTarget(view: self)
         let link = CADisplayLink(target: target, selector: #selector(DisplayTarget.tick(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
@@ -483,6 +495,10 @@ final class ArenaWorldView: SCNView {
         let root = world.rootNode
         let width = Float(map.width), height = Float(map.height)
         let look = ThemeLook.of(map.theme)
+        if let theme = controller.sourceEnvironmentThemeID, let terrain = game.terrainState {
+            importedMapArt = ArenaImportedMapArt(themeID: theme, terrain: terrain)
+            if let importedMapArt { root.addChildNode(importedMapArt.node) }
+        }
         let harborSample = map.id == ArenaMap.twinGates.id
         woodPavingCells = ArenaMapAssets.woodPavingCells(in: map)
 
@@ -543,9 +559,10 @@ final class ArenaWorldView: SCNView {
         floorNode.simdEulerAngles = SIMD3(-Float.pi / 2, 0, 0)
         floorNode.simdPosition = SIMD3(width / 2, 0, height / 2)
         floorNode.castsShadow = false
-        root.addChildNode(floorNode)
+        if importedMapArt?.hasGround != true { root.addChildNode(floorNode) }
         if !purpleSample && !harborSample { root.addChildNode(ArenaArt.border(width: width, height: height)) }
 
+        if importedMapArt == nil {
         // 墙：木箱、木桶、石块（同一格每次都一样）；草丛
         let wallNode = harborSample ? ArenaHarborArt.walls(map) : purpleSample ? ArenaPurpleArt.walls(map) : walls(map, look: look)
         wallNode.castsShadow = false
@@ -567,10 +584,17 @@ final class ArenaWorldView: SCNView {
         if !purpleSample && !harborSample { root.addChildNode(scenery(game)) }
         root.addChildNode(ArenaMapAssets.scenery(map))
 
+        }
+
         // 各个玩法的东西
         let center = SIMD3(Float(map.center.x), 0, Float(map.center.y))
         switch game.mode {
         case .zone:
+            if let objective = game.importedZone {
+                let art = ArenaImportedZonesArt(objective: objective, myTeam: myTeam)
+                importedZonesArt = art; root.addChildNode(art.node)
+                break
+            }
             let disc = SCNCylinder(radius: CGFloat(ArenaGame.zoneRadius), height: 0.01)
             disc.radialSegmentCount = 64
             disc.firstMaterial = ArenaAvatar.decal(UIColor.white.withAlphaComponent(0.15))
@@ -654,7 +678,8 @@ final class ArenaWorldView: SCNView {
             let isMe = fighter.id == controller.me
             let ally = fighter.team == myTeam
             let avatar = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red, isMe: isMe,
-                                     size: fighter.isBoss ? 2.2 : 1, skin: fighter.isBoss ? 0 : fighter.skin, qualitySample: controller.qualitySample)
+                                     size: fighter.isBoss ? 2.2 : 1, skin: fighter.isBoss ? 0 : fighter.skin, qualitySample: controller.qualitySample,
+                                     sourceHeroID: fighter.sourceHero?.id)
             root.addChildNode(avatar.node)
             avatars.append(avatar)
             let tag = ArenaTag(fighter: fighter, isMe: isMe, ally: ally, boss: fighter.isBoss)
@@ -918,6 +943,8 @@ final class ArenaWorldView: SCNView {
     private func sync(dt: Float) {
         recycleExpiredEffects()
         let game = controller.game
+        if let terrain = game.terrainState { importedMapArt?.update(terrain: terrain, time: game.time) }
+        updateImportedBlueStar(game)
         moveCamera(dt: dt, game: game)
         let events = controller.takeEvents()
         // 进球、一局打完大家回到出发的地方：不算闪现
@@ -941,11 +968,12 @@ final class ArenaWorldView: SCNView {
             }
             lastPositions[fighter.id] = fighter.alive ? fighter.pos : nil
             // 一对一换了下一个角色上：换模型
-            if avatars[fighter.id].brawler != fighter.brawler, !fighter.isBoss {
+            if avatars[fighter.id].brawler != fighter.brawler || avatars[fighter.id].sourceHeroID != fighter.sourceHero?.id, !fighter.isBoss {
                 avatars[fighter.id].node.removeFromParentNode()
                 let ally = fighter.team == myTeam
                 let replacement = ArenaAvatar(brawler: fighter.brawler, color: ally ? ArenaPalette.blue : ArenaPalette.red,
-                                              isMe: fighter.id == controller.me, skin: fighter.skin, qualitySample: controller.qualitySample)
+                                              isMe: fighter.id == controller.me, skin: fighter.skin, qualitySample: controller.qualitySample,
+                                              sourceHeroID: fighter.sourceHero?.id)
                 world.rootNode.addChildNode(replacement.node)
                 let tag = tags[fighter.id]
                 tag.node.removeFromParentNode()
@@ -960,7 +988,7 @@ final class ArenaWorldView: SCNView {
             }
             let visible = game.isVisible(fighter, to: myTeam)
             // 草丛/隐身使用脚圈提示；可见性规则独立于不透明角色表现。
-            let hidden = fighter.team == myTeam && (game.map.inBush(fighter.pos) || fighter.invisible > 0) && game.time - fighter.lastAttack >= 1
+            let hidden = fighter.team == myTeam && (game.inBush(fighter.pos) || fighter.invisible > 0) && game.time - fighter.lastAttack >= 1
             avatar.update(fighter, visible: visible, translucent: hidden, cheering: winners(fighter), dt: dt, clock: clock,
                           sampleBones: ArenaDiagnostics.shared.variant != .noBones && (ArenaDiagnostics.shared.variant != .halfAnimation || diagnosticFrame % 2 == 0))
             tags[fighter.id].update(fighter, opacity: avatar.opacity)
@@ -982,14 +1010,14 @@ final class ArenaWorldView: SCNView {
             if !me.alive || distance > 3 {
                 lastFootstepPosition = me.pos
             } else if distance >= 0.55 && clock - lastFootstepTime >= 0.28 {
-                let grass = game.map.tile(Int(me.pos.x), Int(me.pos.y)) == .bush
+                let grass = game.inBush(me.pos)
                 let wood = woodPavingCells.contains(Int(me.pos.y) * game.map.width + Int(me.pos.x))
                 ArenaSound.shared.play(grass ? .stepGrass : (wood ? .stepWood : .stepStone), volume: 0.14)
                 lastFootstepPosition = me.pos
                 lastFootstepTime = clock
             }
         } else { lastFootstepPosition = me.pos }
-        let inside = me.alive && game.map.inBush(me.pos)
+        let inside = me.alive && game.inBush(me.pos)
         if inside, !wasInBush {
             ring(at: SIMD3(Float(me.pos.x), 0.05, Float(me.pos.y)),
                  color: UIColor(red: 0.45, green: 0.95, blue: 0.4, alpha: 1), to: 1.7)
@@ -1009,6 +1037,7 @@ final class ArenaWorldView: SCNView {
         }
 
         syncProjectiles(game)
+        syncSourceAreas(game)
         syncStars(game)
         syncZone(game)
         syncHealZones(game)
@@ -1266,12 +1295,12 @@ final class ArenaWorldView: SCNView {
                 item.wood.emission.contents = UIColor.black
             }
             guard box.health > 0 else { continue }
-            let left = CGFloat(box.health) / CGFloat(ArenaGame.PowerBox.fullHealth)
+            let left = CGFloat(box.health) / CGFloat(game.powerBoxMaximumHealth(box))
             item.wood.multiply.contents = UIColor(white: 0.4 + 0.6 * left, alpha: 1)
             item.node.childNode(withName: "gem", recursively: false)?.simdEulerAngles = SIMD3(0.6, Float(clock * 1.5), 0)
-            if box.health < ArenaGame.PowerBox.fullHealth {
+            if box.health < game.powerBoxMaximumHealth(box) {
                 item.bar.node.isHidden = false
-                item.bar.set(CGFloat(box.health) / CGFloat(ArenaGame.PowerBox.fullHealth))
+                item.bar.set(CGFloat(box.health) / CGFloat(game.powerBoxMaximumHealth(box)))
             } else {
                 item.bar.node.isHidden = true
             }
@@ -1356,6 +1385,7 @@ final class ArenaWorldView: SCNView {
             seen.insert(p.id)
             let view = projectiles[p.id] ?? makeProjectile(p, game)
             projectiles[p.id] = view
+            view.sourceArt?.update(elapsed: max(0, game.time - view.createdAt), direction: p.velocity.normalized)
             if let lob = p.lob {
                 let t = Float(min(max(lob.elapsed / lob.duration, 0), 1))
                 let arc: Float = p.isSuper ? 3 : 2
@@ -1363,6 +1393,9 @@ final class ArenaWorldView: SCNView {
                 view.shadow?.simdPosition = SIMD3(Float(p.pos.x), 0.035, Float(p.pos.y))
             } else {
                 view.root.simdPosition = SIMD3(Float(p.pos.x), view.height, Float(p.pos.y))
+                if p.sourceLaunch != nil && view.sourceArt == nil {
+                    view.root.eulerAngles.y = atan2(Float(p.velocity.x), Float(p.velocity.y))
+                }
             }
         }
         for (id, view) in projectiles where !seen.contains(id) {
@@ -1373,6 +1406,33 @@ final class ArenaWorldView: SCNView {
     }
 
     private func makeProjectile(_ p: Projectile, _ game: ArenaGame) -> ProjectileView {
+        if let launch = p.sourceLaunch {
+            let root = SCNNode()
+            let art = ArenaImportedSkillAssets.shared.projectile(logicID: launch.projectile.id,
+                enemy: p.team != myTeam, unitsPerSourcePoint: ArenaSourceAreaArt.unitsPerSourcePoint)
+            let body: SCNNode
+            if let art { body = art.node }
+            else {
+                // Missing decorative exports remain a neutral collision marker;
+                // never substitute another hero's weapon animation.
+                let sphere = SCNSphere(radius: max(0.06, CGFloat(p.radius)))
+                sphere.segmentCount = 10
+                sphere.firstMaterial = ArenaAvatar.material(p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot, lit: false)
+                body = SCNNode(geometry: sphere)
+            }
+            body.castsShadow = false
+            root.addChildNode(body)
+            world.rootNode.addChildNode(root)
+            if p.lob != nil {
+                let disc = SCNCylinder(radius: max(0.06, CGFloat(p.radius)), height: 0.004)
+                disc.firstMaterial = ArenaAvatar.decal(UIColor.black.withAlphaComponent(0.22))
+                let shadow = SCNNode(geometry: disc); shadow.castsShadow = false
+                root.addChildNode(shadow)
+                return ProjectileView(root: root, ball: body, shadow: shadow, sourceArt: art, createdAt: game.time)
+            }
+            root.simdPosition = SIMD3(Float(p.pos.x), 0.6, Float(p.pos.y))
+            return ProjectileView(root: root, sourceArt: art, createdAt: game.time)
+        }
         let owner = game.fighters.indices.contains(p.owner) ? game.fighters[p.owner].brawler : .ranger
         // 超级充能开着放的大招：紫的
         let hyper = p.isSuper && game.fighters.indices.contains(p.owner) && game.fighters[p.owner].hyperTime > 0
@@ -1475,6 +1535,22 @@ final class ArenaWorldView: SCNView {
         return ProjectileView(root: root, height: shotHeight)
     }
 
+    private func syncSourceAreas(_ game: ArenaGame) {
+        let active = Set(game.sourceAreas.map(\.id))
+        for (id, art) in sourceAreaArt where !active.contains(id) {
+            art.node.removeFromParentNode(); sourceAreaArt[id] = nil
+        }
+        for area in game.sourceAreas {
+            if let art = sourceAreaArt[area.id] { art.update(area); continue }
+            let art = ArenaSourceAreaArt(area: area, myTeam: myTeam)
+            sourceAreaArt[area.id] = art; world.rootNode.addChildNode(art.node)
+            if game.fighters.indices.contains(area.owner), let hero = game.fighters[area.owner].sourceHero {
+                ArenaSound.shared.playSource(event: area.spawn.role == .ultimate ? "ultimate.area.start" : "weapon.area.start",
+                    heroID: hero.id, areaEffectID: area.spawn.area.id, volume: loudness(area.position))
+            }
+        }
+    }
+
     /// 一团朝着镜头的光晕（颜色加上去，越叠越亮）
     private func halo(_ key: String, _ color: UIColor, size: CGFloat) -> SCNNode {
         let node = SCNNode(geometry: shared("halo-\(key)-\(size)") {
@@ -1546,6 +1622,10 @@ final class ArenaWorldView: SCNView {
 
     /// 占点：圈里只有一队就是这队的颜色，两队都在是橙色
     private func syncZone(_ game: ArenaGame) {
+        if let objective = game.importedZone {
+            importedZonesArt?.update(objective)
+            return
+        }
         guard var current = zone else { return }
         let inside = Set(game.fighters.filter { $0.alive && $0.pos.distance(to: game.map.center) < ArenaGame.zoneRadius }.map(\.team))
         let state = inside.count > 1 ? 3 : (inside.first.map { $0 == myTeam ? 1 : 2 } ?? 0)
@@ -1555,6 +1635,32 @@ final class ArenaWorldView: SCNView {
         let color: UIColor = [UIColor.white, ArenaPalette.blue, ArenaPalette.red, UIColor.orange][state]
         current.disc.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(state == 0 ? 0.15 : 0.3)
         current.rim.geometry?.firstMaterial?.diffuse.contents = color.withAlphaComponent(0.85)
+    }
+
+    private func updateImportedBlueStar(_ game: ArenaGame) {
+        guard let objective = game.importedBounty else { importedBlueStar?.isHidden = true; return }
+        let marker: SCNNode
+        if let existing = importedBlueStar { marker = existing }
+        else {
+            let text = SCNText(string: "★", extrusionDepth: 0.025)
+            text.font = UIFont.systemFont(ofSize: 1, weight: .black)
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = UIColor.cyan
+            text.firstMaterial = material
+            marker = SCNNode(geometry: text)
+            marker.simdScale = SIMD3(repeating: 0.65)
+            marker.constraints = [SCNBillboardConstraint()]
+            world.rootNode.addChildNode(marker); importedBlueStar = marker
+        }
+        if objective.blueStarAvailable {
+            marker.isHidden = false
+            marker.simdPosition = SIMD3(Float(game.map.center.x) - 0.25, 0.35, Float(game.map.center.y))
+        } else if let holder = objective.blueStarCarrier, game.fighters.indices.contains(holder) {
+            let fighter = game.fighters[holder]
+            marker.isHidden = !fighter.alive || !game.isVisible(fighter, to: myTeam)
+            marker.simdPosition = SIMD3(Float(fighter.pos.x) - 0.25, ArenaAvatar.headHeight + 0.5, Float(fighter.pos.y))
+        } else { marker.isHidden = true }
     }
 
     // MARK: - 特效
@@ -1567,7 +1673,10 @@ final class ArenaWorldView: SCNView {
             guard avatars.indices.contains(target), avatars[target].opacity > 0.1 else { return }
             // 毒圈这种一帧扣一点的不出声、不闪
             guard amount >= 60 else { return }
-            ArenaSound.shared.play(.hit, volume: loudness(game.fighters[target].pos) * 0.8)
+            if let hero = game.fighters[target].sourceHero {
+                ArenaSound.shared.playSource(event: "damage", heroID: hero.id, volume: loudness(game.fighters[target].pos) * 0.8)
+                ArenaSound.shared.playSource(event: "voice.takeDamage", heroID: hero.id, volume: loudness(game.fighters[target].pos) * 0.8)
+            } else { ArenaSound.shared.play(.hit, volume: loudness(game.fighters[target].pos) * 0.8) }
             avatars[target].flash(clock: clock, flinch: amount >= 400)
             if target == controller.me, amount >= 900 { addShake(0.22) }
             let at = avatars[target].node.simdPosition
@@ -1589,9 +1698,16 @@ final class ArenaWorldView: SCNView {
             node.simdScale = SIMD3(0.3, 1, 0.3)
             world.rootNode.addChildNode(node)
             node.runAction(.sequence([.group([.scale(to: 1, duration: 0.12), .fadeOut(duration: 0.4)]), .removeFromParentNode()]))
-        case .knockout(let target, _):
+        case .knockout(let target, let attacker):
             guard avatars.indices.contains(target) else { return }
-            ArenaSound.shared.play(.knockout, volume: target == controller.me ? 1 : loudness(game.fighters[target].pos))
+            if let hero = game.fighters[target].sourceHero {
+                let volume = target == controller.me ? Float(1) : loudness(game.fighters[target].pos)
+                ArenaSound.shared.playSource(event: "death", heroID: hero.id, volume: volume)
+                ArenaSound.shared.playSource(event: "voice.death", heroID: hero.id, volume: volume)
+            } else { ArenaSound.shared.play(.knockout, volume: target == controller.me ? 1 : loudness(game.fighters[target].pos)) }
+            if let attacker, game.fighters.indices.contains(attacker), let hero = game.fighters[attacker].sourceHero {
+                ArenaSound.shared.playSource(event: "voice.kill", heroID: hero.id, volume: loudness(game.fighters[attacker].pos))
+            }
             burst(at: avatars[target].node.simdPosition + SIMD3(0, 0.6, 0), color: UIColor(white: 0.9, alpha: 1),
                   count: 12, speed: 2, size: 0.16, life: 0.28, style: .smoke)
             if target == controller.me {
@@ -1601,7 +1717,11 @@ final class ArenaWorldView: SCNView {
         case .special(let fighter):
             guard avatars.indices.contains(fighter) else { return }
             let caster = game.fighters[fighter]
-            ArenaSound.shared.play(caster.brawler == .shade ? .blink : .power, volume: loudness(caster.pos))
+            if let hero = caster.sourceHero {
+                for event in ["ultimate.use", "ultimate.attack", "voice.ultimate"] {
+                    ArenaSound.shared.playSource(event: event, heroID: hero.id, volume: loudness(caster.pos))
+                }
+            } else { ArenaSound.shared.play(caster.brawler == .shade ? .blink : .power, volume: loudness(caster.pos)) }
             avatars[fighter].special()
             // 草丛里看不见的对面放大招不出光（免得暴露）
             if avatars[fighter].opacity > 0.1 || caster.team == myTeam {
@@ -1621,7 +1741,11 @@ final class ArenaWorldView: SCNView {
             default: sound = .shot
             }
             // 看不见的人开火也听得见一点（草丛里有人）
-            ArenaSound.shared.play(sound, volume: loudness(game.fighters[fighter].pos) * (fighter == controller.me ? 1 : 0.7))
+            if let hero = game.fighters[fighter].sourceHero {
+                for event in ["weapon.use", "weapon.attack", "voice.attack"] {
+                    ArenaSound.shared.playSource(event: event, heroID: hero.id, volume: loudness(game.fighters[fighter].pos))
+                }
+            } else { ArenaSound.shared.play(sound, volume: loudness(game.fighters[fighter].pos) * (fighter == controller.me ? 1 : 0.7)) }
             avatars[fighter].attack()
             guard avatars[fighter].opacity > 0.1 else { break }
             let shooter = game.fighters[fighter]
@@ -2236,17 +2360,23 @@ final class ArenaWorldView: SCNView {
             return
         }
         let isSuper = controller.superAiming != nil
+        let sourceSkill = isSuper ? fighter.sourceHero?.ultimate : fighter.sourceHero?.weapon
         let brawler = fighter.brawler
-        let range = isSuper ? brawler.superRange : brawler.attackRange
+        let range = isSuper ? fighter.specialRange : fighter.attackRange
         let direction = drag.length > 0.25 ? drag.normalized : fighter.facing
         // 路径画在 x、-z 平面上（节点转了 -90 度躺平）
         func flat(_ v: V2) -> CGPoint { CGPoint(x: v.x, y: -v.y) }
         let path = UIBezierPath()
         // 落在一个点上的（扔火球、跳、亡灵之地、闪现、骨塔）画落点的圈和一条线
-        let lobbing = brawler == .mage || brawler == .brewer && !isSuper
-            || (isSuper && [.barbarian, .necromancer, .shade, .summoner].contains(brawler))
+        let lobbing = sourceSkill.map { $0.projectiles.contains { $0.indirect == true } }
+            ?? (brawler == .mage || brawler == .brewer && !isSuper
+                || (isSuper && [.barbarian, .necromancer, .shade, .summoner].contains(brawler)))
         // 给自己（身边一圈）的：骨盾、豪饮、烟雾弹、护盾书；剑圣转圈砍、书灵的灵光也是身边一圈
         let selfRadius: Double? = {
+            if let sourceSkill {
+                return sourceSkill.projectiles.isEmpty && sourceSkill.charge == nil
+                    ? sourceSkill.areaEffects.map(\.radius).max() : nil
+            }
             if isSuper { return [.guardian, .brewer, .darter].contains(brawler) ? 0.9 : (brawler == .scholar ? range : nil) }
             return brawler == .swordsman || brawler == .scholar ? range : nil
         }()
@@ -2256,13 +2386,15 @@ final class ArenaWorldView: SCNView {
             let distance = max(drag.length, 0.35) * range
             let target = direction * distance
             let blast: Double
-            switch brawler {
+            if let sourceSkill {
+                blast = sourceSkill.projectiles.flatMap(\.areaEffects).map(\.radius).max() ?? 0.3
+            } else { switch brawler {
             case .mage: blast = isSuper ? 2.2 : 1.2
             case .brewer: blast = 1.3
             case .necromancer: blast = 2.2
             case .summoner: blast = 0.6
             default: blast = 1.6
-            }
+            } }
             path.append(UIBezierPath(ovalIn: CGRect(x: target.x - blast, y: -target.y - blast, width: blast * 2, height: blast * 2)))
             let side = V2(-direction.y, direction.x) * 0.06
             let line = UIBezierPath()
@@ -2275,13 +2407,14 @@ final class ArenaWorldView: SCNView {
         } else {
             // 散开打的画一个扇形，一条直线打的画一条
             let spread: Double
-            switch (brawler, isSuper) {
+            if let sourceSkill { spread = sourceSkill.spread / 2 }
+            else { switch (brawler, isSuper) {
             case (.knight, false): spread = 0.3
             case (.barbarian, false): spread = 0.5
             case (.assassin, true): spread = 0.56
             case (.summoner, false): spread = 0.17
             default: spread = 0
-            }
+            } }
             if spread > 0 {
                 path.move(to: .zero)
                 for k in 0...12 {
@@ -2291,12 +2424,14 @@ final class ArenaWorldView: SCNView {
                 path.close()
             } else {
                 let half: Double
-                switch brawler {
+                if let sourceSkill {
+                    half = sourceSkill.projectiles.map(\.radius).max() ?? fighter.sourceHero?.collisionRadius ?? 0.3
+                } else { switch brawler {
                 case .knight: half = ArenaGame.fighterRadius
                 case .guardian: half = 0.62
                 case .necromancer: half = 0.42
                 default: half = isSuper ? 0.48 : 0.36
-                }
+                } }
                 let side = V2(-direction.y, direction.x) * half
                 let end = direction * range
                 path.move(to: flat(side))
@@ -2307,7 +2442,7 @@ final class ArenaWorldView: SCNView {
             }
         }
         path.flatness = 0.08
-        let key = "\(isSuper)-\(brawler.rawValue)-\(Int((direction.x * 6).rounded()))-\(Int((direction.y * 6).rounded()))-\(Int((drag.length * 6).rounded()))"
+        let key = "\(sourceSkill?.id ?? brawler.rawValue)-\(isSuper)-\(Int((direction.x * 12).rounded()))-\(Int((direction.y * 12).rounded()))-\(Int((drag.length * 12).rounded()))"
         aimNode.simdPosition = SIMD3(Float(fighter.pos.x), 0.07, Float(fighter.pos.y))
         aimNode.isHidden = false
         guard key != aimKey else { return }

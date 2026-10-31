@@ -1,0 +1,44 @@
+# Private resource runtime integration — 2026-10-31
+
+This is a local implementation checkpoint, not a claim of a complete original-game port or a new TestFlight upload. The last independently verified uploaded version remains 1.2 (475), which contains the previous project assets. Builds 468, 469 and 470 remain excluded. The existing Ranger, Barbarian, Mage and Twin Gates remain formal gameplay. Full-match walkthroughs and recordings remain deferred.
+
+## What the code now uses
+
+- The private `.arenapack` is installed transactionally with bounded paths, sizes, embedded GLB checks and SHA-256 verification for every payload. A changed bundled pack replaces the prior bundled version even if a pack was already installed. Later explicit hero/resource selections are retained. The first successful source pack installation can select an available original hero; the hero entry exposes the imported catalog and a separate project-hero entry.
+- Source hero identity is a stable string independent of the existing save enum. Four complete combat profiles currently pass the implemented capability gate: Shelly, Colt, Rico and Spike. They use their own health, movement, collision radius, ammo/reload, burst/fan, bounce, area damage/slow, split projectiles and super-charge coefficients. Bots use the same base source stats. Outcomes are saved under source IDs without crediting a legacy hero's progression.
+- The catalog contains 118 source configurations including forms. Exact action bindings retain source clip names, ranges, timing and per-bone priorities; unsupported selections are not silently replaced with the first clip. Entrance and loop actions have separate transitions. Death/respawn resets canceled action layers. Body bounds come from source first-frame world geometry. Source heroes do not receive classic weapons or an unrelated portrait.
+- The expression display list retains independent child clocks, transforms, source colors and verified blend operations. Ninety hero configurations can bind dynamic expressions; ten configure no face and eighteen require further special-material adaptation. The frozen hero conversion records 1,513 source action records: 1,259 dynamic, 208 static and 46 unsupported. Both geometry and incomplete behavior remain distinguishable.
+- Eight source-derived static lobby backgrounds and five actual menu-art roles are applied to the App controls. Premultiplied source color crosses a single straight-alpha boundary. Unsupported blend instances were excluded only where their complete bounds lie outside the exact App framing rectangle; no unknown blend is treated as normal. These are source first-frame backgrounds, not the original client's animated UI runtime.
+- Seventy music tracks are selectable; original lobby/battle/result bindings retain their volume/loop metadata. The sound catalog supplies 4,011 converted unique audio files and original event bindings. Only roster/menu cues are prepared for playback. Missing source variants remain explicit; source loop-SFX lifetime playback is not implemented.
+- There are 119 playable location configurations across 111 source layouts, covering supported Gem, Bounty, Football, Heist, Hot Zone, Knockout, Solo and Deathmatch rules. Source spawns, sizes, walls, destructible terrain, objectives, goals, safes, boxes, zones, bounty star and overtime are interpreted explicitly. All 370 layout records remain browsable. The other 349 locations retain blocking reasons rather than being relabeled playable.
+- The environment catalog covers 35 themes. Of 312 referenced source models, 306 convert to GLB, one source scene is genuinely empty and five are unsupported. The renderer preserves the source map coordinate transform and additive ground/environment layers, exact submesh selection and source animations. Empty source scenes are not invented cubes. Known missing visible colliders remain identifiable host markers. Source shader variables are retained; SceneKit blend-intent mapping is not native shader equivalence. Dynamic SC map textures currently use their actual first frame.
+- Nine source projectile bindings have original blue/red exports, complete declarative display lists and bounded image caches. Scene parsing, graph validation and first-frame rendering occur during match preparation. Source canvas origin, percentage scale and heading policy are retained; 0.01 tile per source point is an explicit host presentation choice. Rico special states and Spike height-frame selection remain static until interpreted. Area FX binary programs and source shadows are retained as pending, not advertised as a complete effects port.
+
+## Frozen private pack
+
+The finished data container is `brawl69-c037c57e132b`: 5,469 registered files,
+852,915,256 bytes (813.40 MiB). Its SHA-256 is
+`a7d14fe4e028a89de7e90dce274cc7d0050b700ed55b7c533370ff16a717ca83`.
+All payload digests pass; the real Swift manifest validator and cross-file
+runtime reference checks pass. This container is private and is not in Git.
+
+## Validation actually performed
+
+- Swift 6.2.4 on Linux compiled an immutable source snapshot and ran 160 Arena tests with zero failures. The actual 119 private map descriptors and the 118-profile combat catalog were supplied. These are focused core checks, not an iOS gameplay walkthrough.
+- The final App snapshot passed the real Swift frontend syntax parser for 117 Swift files. UIKit/SceneKit type checking, iOS compilation and device rendering have not run in this environment.
+- The hero conversion's 298 GLB outputs passed the official Khronos validator with zero errors. Only the 118 corrected body outputs are selected for the runtime pack; the 180 superseded fixed-face variants are not shipped.
+- All 306 final map GLBs passed the official validator with zero errors; existing skin/animation warnings remain recorded. Per-mesh indexed-vertex compaction preserves every referenced vertex attribute and triangle while removing repeated unreferenced buffers.
+- Original menu and lobby PNG outputs were independently decoded and their dimensions, pixels/alpha and hashes checked. Source files in the frozen audit were not modified. SC6 projectile decoding was compared with the pinned reference decoder; this is not original-client execution.
+- Six focused private-pack release tests and six existing promotion tests pass. The private-pack tests cover a corrupted internal payload even with a rehashed outer file, wrong identity/digest, duplication, placement inside a Widget instead of the main App, secret URL exclusion and missing required release metadata.
+
+## Concrete release path and remaining gates
+
+`App/Info.plist` marks this source version as requiring a private resource pack for promotion. `.github/scripts/arena_private_pack.py` reads exact `id`, `bytes` and `sha256` from the release request. A download URL is supplied only through the `ARENA_PRIVATE_PACK_URL` Actions secret; it is not part of source, release JSON, application code or logs. The script checks the outer digest and every internal payload. XcodeGen explicitly copies the pack as a main-App resource. Archive verification requires the single exact file at `ShiftReminder.app/arena-original-resources.arenapack`, before Apple upload.
+
+Only the private TestFlight promotion job obtains the pack. Public build jobs and the narrow renderer-test workflow do not obtain original assets. Promotion artifact uploads contain identity/status JSON only, not the IPA, app archive, resource pack or private URL. The narrow iOS resource workflow additionally runs synthetic face-renderer tests. Its execution is pending.
+
+The release request is deliberately not changed to a guessed new build number or unverified source commit. Populate it only after the exact producing source CI is known, with the saved pack identity. The current historical request is not evidence that a resource release is ready.
+
+Automatic approval previously rejected public GitHub tree creation for the then-prepared 21-file source batch. The expanded source/workflow changes still need explicit approval for disclosure to public `wuyong9494-lab/kriswu`. No alternative upload route may be used to bypass that rejection. Local code and privately saved resources do not establish a remote commit, a CI run or a TestFlight upload. The current connector also cannot configure Actions secrets; obtain approval before any GitHub browser fallback for that operation.
+
+The original-game port remains incomplete: 114 of the 118 source configurations still fail at least one required native behavior/skill gate, 349 location configurations are unavailable, some materials/expressions/effects and dynamically downloaded source content remain unresolved. Do not call this catalog a complete playable roster, or claim that offline conversion is phone acceptance. Preserve this boundary when preparing any later release.

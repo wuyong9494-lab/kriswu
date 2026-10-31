@@ -1,5 +1,11 @@
 # Latest owner instruction — original Brawl Stars content, clarified 2026-10-31
 
+Latest continuation: the generic App resource importer, actual lobby background/
+music bindings, GLB model/Idle viewer and strict map-adapter entry are now being
+implemented. Read [runtime entry handoff](arena-resource-runtime-handoff.md) for
+the exact state. This is not complete original gameplay or a new TestFlight
+upload. The frozen private conversion checkpoint below remains intact.
+
 The owner clarified that the intended result is the original Brawl Stars lobby,
 maps, heroes, skills and audio in this app, including an older game version if
 appropriate, before researching later updates. The existing KayKit/Kenney and

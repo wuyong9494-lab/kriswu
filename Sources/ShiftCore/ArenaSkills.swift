@@ -171,19 +171,25 @@ extension ArenaGame {
 
     /// 现在每秒走几格
     public func moveSpeed(_ fighter: Fighter) -> Double {
-        var speed = fighter.brawler.speed
+        var speed = fighter.sourceHero?.speed ?? fighter.brawler.speed
         if fighter.isBoss { return speed }
         if fighter.starPower == .swift { speed *= 1.1 }
-        if fighter.starPower == .ghost, map.inBush(fighter.pos) { speed *= 1.2 }
+        if fighter.starPower == .ghost, inBush(fighter.pos) { speed *= 1.2 }
         if fighter.speedBoost > 0 { speed *= 1.5 }
         if fighter.hyperTime > 0 { speed *= 1.25 }
         if fighter.slowed > 0 { speed *= 0.6 }
+        // Source slows retain their absolute/percentage fields and can affect
+        // either roster. Different non-stacking slows use the strongest result.
+        let unslowed = speed
+        for slow in fighter.sourceSlows ?? [] where slow.remaining > 0 {
+            speed = min(speed, max(0, unslowed - slow.absoluteReduction) * (1 - slow.fractionReduction))
+        }
         return speed
     }
 
     /// 装一发弹要几秒
     func reloadTime(_ fighter: Fighter) -> Double {
-        fighter.brawler.reload * (fighter.starPower == .quickload ? 0.8 : 1)
+        fighter.sourceHero?.weapon?.reload ?? (fighter.brawler.reload * (fighter.starPower == .quickload ? 0.8 : 1))
     }
 
     /// 攒满一次大招要打出多少伤害（等级高、玩家伤害高，要的也多：打中几下攒满不变）
@@ -239,7 +245,7 @@ extension ArenaGame {
         case .vanish:
             fighters[i].invisible = 2.5
         case .blink:
-            fighters[i].pos = map.nearestOpen(to: fighter.pos + direction * 3.5)
+            fighters[i].pos = nearestOpen(to: fighter.pos + direction * 3.5)
             fighters[i].moving = .zero
         }
         events.append(.gadget(fighter: i))

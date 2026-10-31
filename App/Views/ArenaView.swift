@@ -59,14 +59,20 @@ struct ArenaPlayView: View {
     }
 
     var body: some View {
-        ArenaMatchView(controller: controller, onAgain: {
-            controller = ArenaController(setup: setup)
-            round += 1
-        }, onExit: {
-            dismiss()
-        })
-        .id(round)
-        .modifier(ArenaLandscape())
+        Group {
+            if let error = controller.configurationError {
+                VStack(spacing: 18) {
+                    Image(systemName: "exclamationmark.circle").font(.largeTitle)
+                    Text(error).multilineTextAlignment(.center)
+                    Button("返回大厅") { dismiss() }.buttonStyle(.borderedProminent)
+                }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ArenaMatchView(controller: controller, onAgain: {
+                    controller = ArenaController(setup: setup)
+                    round += 1
+                }, onExit: { dismiss() }).id(round)
+            }
+        }.modifier(ArenaLandscape())
     }
 }
 
@@ -742,7 +748,7 @@ struct ArenaMatchView: View {
             let color = id == controller.me ? ArenaPalette.myName
                 : (fighter.team == controller.mine.team ? ArenaPalette.allyName : ArenaPalette.enemyName)
             HStack(spacing: 3) {
-                BrawlerBadge(brawler: fighter.brawler, size: 22)
+                ArenaFighterBadge(fighter: fighter, size: 22)
                 Text(id == controller.me ? "我" : fighter.name)
                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                     .foregroundStyle(Color(uiColor: color))
@@ -962,7 +968,7 @@ struct ArenaMatchView: View {
     private func starPlayer(_ fighter: Fighter) -> some View {
         let isMe = fighter.id == controller.me
         return HStack(spacing: DS.Space.s) {
-            BrawlerBadge(brawler: fighter.brawler, size: 44)
+            ArenaFighterBadge(fighter: fighter, size: 44)
                 .overlay(Circle().strokeBorder(Color(uiColor: ArenaPalette.gold), lineWidth: 3))
                 .overlay(alignment: .top) { Text("👑").font(.system(size: 16)).offset(y: -12) }
             VStack(alignment: .leading, spacing: 1) {
@@ -1229,7 +1235,7 @@ private struct ArenaVersus: View {
 
     private func card(_ fighter: Fighter, size: CGFloat) -> some View {
         VStack(spacing: 1) {
-            BrawlerBadge(brawler: fighter.brawler, size: size)
+            ArenaFighterBadge(fighter: fighter, size: size)
                 .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 .shadow(color: .black.opacity(0.4), radius: 3, y: 2)
             Text(fighter.id == me ? "我" : fighter.name)

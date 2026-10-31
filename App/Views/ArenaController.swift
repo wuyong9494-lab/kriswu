@@ -98,6 +98,8 @@ final class ArenaController: ObservableObject {
         var botLevel: Int?
         /// A user-selected map; nil retains the normal random rotation.
         var mapID: String?
+        var importedMap: ArenaImportedMapChoice?
+        var sourceHero: ArenaSourceHero?
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
         var benchmark = false
@@ -122,6 +124,8 @@ final class ArenaController: ObservableObject {
     }
 
     let role: Role
+    private(set) var configurationError: String?
+    private(set) var sourceEnvironmentThemeID: String?
     let me: Int
     private(set) var qualitySample = false
     private(set) var threeHeroSample = false
@@ -261,8 +265,9 @@ final class ArenaController: ObservableObject {
     convenience init(setup: Setup, seed: UInt64 = UInt64.random(in: 0..<UInt64.max)) {
         let seed: UInt64 = setup.benchmark ? 170017 : seed
         let mine = ArenaGame.Entrant(name: setup.name.isEmpty ? "我" : setup.name, brawler: setup.brawler, isBot: false, team: 0,
-                                     level: setup.level, lineup: setup.lineup, loadout: setup.loadout.allowed(setup.brawler, level: setup.level))
+                                     level: setup.level, lineup: setup.lineup, loadout: setup.loadout.allowed(setup.brawler, level: setup.level), sourceHero: setup.sourceHero)
         let built: ArenaGame
+        var configurationError: String?
         if let story = setup.story {
             built = ArenaGame(mode: story.mode, entrants: story.entrants(me: mine), seed: seed, map: ArenaMap.named(story.map),
                              bossLevel: story.bossLevel)
@@ -282,7 +287,12 @@ final class ArenaController: ObservableObject {
                 map = ArenaMap.selectionPool(for: setup.mode).first { $0.id == setup.mapID }
                     ?? maps[random.below(maps.count)]
             }
-            let teams = setup.mode.seatTeams
+            let teams: [Int]
+            if let imported = setup.importedMap {
+                teams = (0..<imported.plan.modeBinding.teamCount).flatMap { team in
+                    Array(repeating: team, count: imported.plan.modeBinding.teamSize)
+                }
+            } else { teams = setup.mode.seatTeams }
             var entrants = [mine]
             entrants[0].team = teams[0]
             for k in 1..<teams.count {
@@ -293,6 +303,25 @@ final class ArenaController: ObservableObject {
                 let level = setup.botLevel ?? setup.level
                 entrants.append(ArenaGame.Entrant(name: boss ? "骷髅王" : "电脑\(brawler.name)", brawler: brawler, isBot: true, team: teams[k],
                                                   level: level, loadout: ArenaLoadout.basic(brawler, level: level)))
+            }
+            if setup.sourceHero != nil {
+                var sourceRoster = ArenaImportedCombatAssets.shared.playable
+                random.shuffle(&sourceRoster)
+                if sourceRoster.isEmpty { configurationError = "原版英雄的技能资源暂时不可用。" }
+                else {
+                    for index in entrants.indices.dropFirst() {
+                        let hero = sourceRoster[(index - 1) % sourceRoster.count]
+                        entrants[index].sourceHero = hero
+                        entrants[index].name = "电脑" + hero.name
+                        entrants[index].level = 1
+                        entrants[index].loadout = ArenaLoadout()
+                    }
+                }
+                for hero in entrants.compactMap(\.sourceHero) {
+                    if !hero.canPlay || ArenaImportedHeroAssets.shared.asset(id: hero.id) == nil {
+                        configurationError = "\(hero.name)的模型或技能资源暂时不可用。"
+                    }
+                }
             }
             if setup.benchmark {
                 let roster: [Brawler] = setup.threeHeroSample ? ArenaQualitySample.lineup(selected: setup.brawler) : [.ranger, .knight, .mage, .ranger, .knight, .mage]
@@ -306,9 +335,26 @@ final class ArenaController: ObservableObject {
                 (setup.benchmark && setup.qualitySample && setup.benchmarkTwinGates && UserDefaults.standard.bool(forKey: "arena.captureTraversal")) {
                 entrants = Array(entrants.prefix(1))
             }
-            built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
+            if let imported = setup.importedMap {
+                do { built = try ArenaGame(importedPlan: imported.plan, entrants: entrants, seed: seed) }
+                catch {
+                    configurationError = "这张地图的对战配置暂时不可用，请重新选择地图。"
+                    built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
+                }
+            } else if setup.sourceHero != nil {
+                do { built = try ArenaGame(sourceMode: setup.mode, entrants: entrants, seed: seed, map: map) }
+                catch {
+                    configurationError = error.localizedDescription
+                    built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map)
+                }
+            } else { built = ArenaGame(mode: setup.mode, entrants: entrants, seed: seed, map: map) }
         }
         self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
+        self.configurationError = configurationError
+        sourceEnvironmentThemeID = setup.importedMap?.environmentThemeID
+        ArenaSound.shared.prepareSourceAudio(heroIDs: Set(built.fighters.compactMap { $0.sourceHero?.id }))
+        ArenaImportedSkillAssets.shared.prepare(heroes: built.fighters.compactMap(\.sourceHero),
+                                               unitsPerSourcePoint: ArenaSourceAreaArt.unitsPerSourcePoint)
         qualitySample = setup.qualitySample
         threeHeroSample = setup.threeHeroSample
         benchmark = setup.benchmark
@@ -518,13 +564,13 @@ final class ArenaController: ObservableObject {
 
     /// 松开攻击摇杆：拖得很短算点了一下，自动瞄射程里最近的敌人
     func fire(_ drag: V2) {
-        let aim = target(for: drag, range: mine.brawler.attackRange)
+        let aim = target(for: drag, range: mine.attackRange)
         if role == .client { sendFire(attack: aim, special: nil) } else { queuedAttack = aim }
     }
 
     func fireSpecial(_ drag: V2) {
         guard mine.superCharge >= 1 else { return }
-        let aim = target(for: drag, range: mine.brawler.superRange)
+        let aim = target(for: drag, range: mine.specialRange)
         if role == .client { sendFire(attack: nil, special: aim) } else { queuedSpecial = aim }
     }
 
@@ -745,7 +791,10 @@ final class ArenaController: ObservableObject {
         if hud.result != nil, !recorded, recordsProgress {
             recorded = true
             let store = ArenaProgressStore.shared
-            if let story {
+            if let hero = mine.sourceHero {
+                ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
+                ArenaSourceProgressStore.shared.record(id: hero.id, won: won(hud.result), kills: mine.kills, damage: mine.damageDealt)
+            } else if let story {
                 // 冒险不加减奖杯：按星给金币
                 storyReward = store.finish(story, stars: story.stars(in: game, me: me))
             } else if ranked {
@@ -755,9 +804,11 @@ final class ArenaController: ObservableObject {
                 ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
                 reward = store.record(outcome(hud.result), brawler: mine.brawler)
             }
-            let stats = ArenaMatchStats(mode: game.mode, brawler: mine.brawler, won: won(hud.result), kills: mine.kills,
+            if mine.sourceHero == nil {
+                let stats = ArenaMatchStats(mode: game.mode, brawler: mine.brawler, won: won(hud.result), kills: mine.kills,
                                         damage: mine.damageDealt, gadgets: gadgetsUsed, supers: supersUsed, ranked: ranked)
-            seasonGain = store.recordSeason(stats, draw: hud.result == .draw)
+                seasonGain = store.recordSeason(stats, draw: hud.result == .draw)
+            }
         }
         if hud != self.hud { self.hud = hud }
     }
