@@ -84,7 +84,7 @@ def build():
                    'App/Services/ArenaColorGrade.swift',
                    'App/Views/ArenaMapAssets.swift', 'App/Views/ArenaEffectAssets.swift',
                    'App/Views/ArenaInterfaceAssets.swift', 'App/Services/ArenaSound.swift',
-                   'App/Services/ArenaEffectMixer.swift']
+                   'App/Services/ArenaEffectMixer.swift', 'App/Services/ArenaAudioDecoder.swift']
     return dict(schemaVersion=1,
                 scope='Complete assignments for the existing 13 heroes, 22 maps, 9 gadgets, interface and four music stages; alternate source formats remain archived',
                 sourcePackCount=source['packCount'], sourceFileCount=source['fileCount'],
