@@ -28,8 +28,8 @@
   "checkedAnimationBindings": 112,
   "configurationSources": {
     "App/Services/ArenaEffectMixer.swift": "8356e1a9e1ee7889f619bcf587001b8fa7cad49986ed94174b439082c00bd35f",
-    "App/Services/ArenaSound.swift": "6b67b05276eaa0671b8ad8d13d548bc023fbedfb28329dfabe0b760a1a5b27a5",
-    "App/Views/ArenaAvatar.swift": "41a538bc88932f82f820e22e977ef46ac6071404e9c48aef7e0f955e35e22a97",
+    "App/Services/ArenaSound.swift": "066fc1af8439dbb2e78a9f87f8788181008afe8c1280ed33b5d5570354d9865a",
+    "App/Views/ArenaAvatar.swift": "44e4479cf4b524185a71a595c7a2320e1ebe4b77a171660a4f15bda72295f8ca",
     "App/Views/ArenaEffectAssets.swift": "4a613b75d74f3ea36392fac8399212323f84c42704a7df1d4b9cc64295c78749",
     "App/Views/ArenaInterfaceAssets.swift": "341ed8eb67d4b99b29fff5f052498f591399ffb8046c3633dbbf7f0af6fe7541",
     "App/Views/ArenaMapAssets.swift": "d90042a82dbfc8ebe1732e598ced4b0fd0e1a136cf19309b04feaf356413771c",

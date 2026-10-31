@@ -41,22 +41,23 @@ jobs:
           python3 .github/scripts/build_identity.py
           xcodegen generate
       - name: Select available iPhone simulator
+        timeout-minutes: 12
         shell: bash -eo pipefail {0}
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
-          devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j']))['devices']
+          devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j'],timeout=60))['devices']
           candidates = [(runtime, d) for runtime, values in devices.items() for d in values
                         if '.iOS-' in runtime and d.get('isAvailable') and d['name'].startswith('iPhone')]
           if not candidates:
               raise SystemExit('No available iPhone simulator')
           runtime, device = max(candidates, key=lambda item: (tuple(map(int,re.findall(r'\d+',item[0]))), item[1]['name']))
+          print(runtime, device['name'], device['udid'], flush=True)
           with open(os.environ['GITHUB_ENV'],'a') as out:
               out.write('RESOURCE_DEVICE=' + device['udid'] + '\n')
           if device['state'] != 'Booted':
-              subprocess.run(['xcrun','simctl','boot',device['udid']],check=True)
-          subprocess.run(['xcrun','simctl','bootstatus',device['udid'],'-b'],check=True,timeout=180)
-          print(runtime, device['name'])
+              subprocess.run(['xcrun','simctl','boot',device['udid']],check=True,timeout=120)
+          subprocess.run(['xcrun','simctl','bootstatus',device['udid'],'-b'],check=True,timeout=600)
           PY
       - name: Check synthetic materials and transactional resource import
         shell: bash -eo pipefail {0}
