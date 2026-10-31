@@ -25,7 +25,7 @@ env:
 jobs:
   resource-runtime:
     runs-on: macos-15-intel
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
         with:
