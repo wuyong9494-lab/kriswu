@@ -2442,7 +2442,7 @@ final class ArenaWorldView: SCNView {
             }
         }
         path.flatness = 0.08
-        let key = "\(sourceSkill?.id ?? brawler.rawValue)-\(isSuper)-\(Int((direction.x * 12).rounded()))-\(Int((direction.y * 12).rounded()))-\(Int((drag.length * 12).rounded()))"
+        let key = "\(sourceSkill?.id ?? String(brawler.rawValue))-\(isSuper)-\(Int((direction.x * 12).rounded()))-\(Int((direction.y * 12).rounded()))-\(Int((drag.length * 12).rounded()))"
         aimNode.simdPosition = SIMD3(Float(fighter.pos.x), 0.07, Float(fighter.pos.y))
         aimNode.isHidden = false
         guard key != aimKey else { return }
