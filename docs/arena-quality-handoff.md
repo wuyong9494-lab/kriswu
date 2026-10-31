@@ -11,13 +11,19 @@ completed existing-material release, not an original-game content release.
 The three heroes and Twin Gates remain formal gameplay. Full gameplay and
 recordings remain deferred under the owner's prior instruction.
 
-Read [the corrected original-content scope and actual source audit](arena-original-content-scope.md)
-before further implementation. Current and accessible prior workspaces contain
-the eleven KayKit/Kenney packs, not an original client or extracted original
-asset collection. Previously evaluated private-server, protocol-client and
-format-tool repositories are not downloaded complete game clients. Source-code
-licenses and asset redistribution rights must be evaluated separately using the
-actual supplied package; a tool license is not a game-asset license.
+Read [the corrected original-content scope](arena-original-content-scope.md)
+and [the newly supplied client and conversion checkpoint](arena-original-source-audit-69.md)
+before further implementation. The owner has now supplied `荒野乱斗_69.414.ipa`
+through Dropbox. The complete 1,248,163,106-byte archive has been downloaded and
+verified. Its actual internal identity is modified Nulls Brawl with conflicting
+version labels; it contains real original-style game assets, not client source.
+Do not ask the owner to upload the same file again or report it as still absent.
+Real private offline conversions now exist for source hero textures, standard
+rigged/animated GLB samples, SC5 lobby data and music, with detailed source maps.
+These have not yet been integrated into the App or released to TestFlight.
+Source-code licenses and asset redistribution rights remain separate; a tool
+license is not a game-asset license. No proprietary payload has been pushed to
+this public repository. Preserve the private conversion checkpoint on resume.
 
 ## Previous completed task — existing material configuration and publication
 
