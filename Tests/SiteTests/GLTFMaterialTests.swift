@@ -3,7 +3,11 @@ import SceneKit
 import Metal
 import ImageIO
 import UniformTypeIdentifiers
+#if ARENA_RESOURCE_RUNTIME_TESTS
+@testable import ArenaResourceRuntime
+#else
 @testable import ShiftReminder
+#endif
 
 /// Synthetic glTF fixtures only. These checks render small in-memory surfaces;
 /// they do not import third-party assets or run gameplay/screenshot recording.
@@ -124,12 +128,12 @@ final class GLTFMaterialTests: XCTestCase {
         let instance = try fixture(alphaMode: "BLEND", factor: [1, 1, 1, 0.5], pixel: [255, 0, 0, 255]).instantiate()
         let material = try XCTUnwrap(instance.materials.first)
         let grade = "#pragma body\n_surface.diffuse.rgb *= float3(0.5, 1.0, 1.0);"
-        ArenaArt.grade(material, grade)
+        ArenaColorGrade.grade(material, grade)
         let graded = material.shaderModifiers
-        ArenaArt.grade(material, grade)
+        ArenaColorGrade.grade(material, grade)
         XCTAssertEqual(material.shaderModifiers, graded, "Repeated styling must not apply the base factor or grade twice")
         let previous = material.shaderModifiers?[.fragment] ?? ""
-        material.shaderModifiers?[.fragment] = GLTFModel.combiningShaderModifiers(previous, ArenaAvatar.concealmentFragment)
+        material.shaderModifiers?[.fragment] = GLTFModel.combiningShaderModifiers(previous, ArenaColorGrade.concealmentFragment)
         material.setValue(Float(0), forKey: "arenaConcealment")
         let result = try snapshot(instance).center
         assertPixel(result, equals: SIMD3(64, 0, 128), accuracy: 15)

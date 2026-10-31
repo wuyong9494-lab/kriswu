@@ -81,6 +81,7 @@ def build():
         themes.append(dict(stage=stage, file=path.name, sha256=sha(path), bytes=path.stat().st_size))
     canonical = ROOT / 'App/Arena3D/Ranger_FaceSample.glb'
     config_code = ['App/Views/ArenaModels.swift', 'App/Views/ArenaAvatar.swift',
+                   'App/Services/ArenaColorGrade.swift',
                    'App/Views/ArenaMapAssets.swift', 'App/Views/ArenaEffectAssets.swift',
                    'App/Views/ArenaInterfaceAssets.swift', 'App/Services/ArenaSound.swift',
                    'App/Services/ArenaEffectMixer.swift']

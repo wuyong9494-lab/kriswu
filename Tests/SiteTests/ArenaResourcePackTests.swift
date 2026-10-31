@@ -1,7 +1,11 @@
 import CryptoKit
 import Foundation
 import XCTest
+#if ARENA_RESOURCE_RUNTIME_TESTS
+@testable import ArenaResourceRuntime
+#else
 @testable import ShiftReminder
+#endif
 
 final class ArenaResourcePackTests: XCTestCase {
     private func manifest(path: String = "source/note.txt", payload: Data,

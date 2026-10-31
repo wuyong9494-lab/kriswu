@@ -75,6 +75,49 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.shiftreminder.sitetests
         TARGETED_DEVICE_FAMILY: "1,2"
 
+  # Production resource algorithms only; no App lifecycle, widgets or business UI.
+  ArenaResourceRuntime:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: App/Services/GLTFModel.swift
+      - path: Sources/ShiftCore/BoneSampler.swift
+      - path: Sources/ShiftCore/ArenaResourcePack.swift
+      - path: App/Services/ArenaResourcePackArchive.swift
+      - path: App/Services/ArenaFaceScene.swift
+      - path: App/Services/ArenaColorGrade.swift
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: ArenaResourceRuntime
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.arenaresourceruntime
+        GENERATE_INFOPLIST_FILE: YES
+        DEFINES_MODULE: YES
+        ENABLE_TESTABILITY: YES
+        SKIP_INSTALL: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_EMIT_LOC_STRINGS: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+  ArenaResourceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/SiteTests/GLTFMaterialTests.swift
+      - path: Tests/SiteTests/ArenaResourcePackTests.swift
+      - path: Tests/SiteTests/ArenaImportedFaceTests.swift
+    dependencies:
+      - target: ArenaResourceRuntime
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kriswu.arenaresourcetests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) ARENA_RESOURCE_RUNTIME_TESTS"
+        SWIFT_EMIT_LOC_STRINGS: NO
+
   # 主屏幕 / 锁屏小组件：显示今天、明天的分工
   ShiftWidget:
     type: app-extension
@@ -112,6 +155,15 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
 
 schemes:
+  ArenaResourceValidation:
+    build:
+      targets:
+        ArenaResourceRuntime: [test]
+        ArenaResourceTests: [test]
+    test:
+      config: Debug
+      targets:
+        - ArenaResourceTests
   ArenaFlow:
     build:
       targets:

@@ -5,6 +5,8 @@ on:
     branches: [codex/arena-quality-sample]
     paths:
       - 'App/**'
+      - 'project.yml'
+      - 'Sources/ShiftCore/BoneSampler.swift'
       - 'Sources/ShiftCore/ArenaResourcePack.swift'
       - 'Tests/SiteTests/GLTFMaterialTests.swift'
       - 'Tests/SiteTests/ArenaResourcePackTests.swift'
@@ -62,13 +64,13 @@ jobs:
       - name: Check synthetic materials and transactional resource import
         shell: bash -eo pipefail {0}
         run: |
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaResourceValidation \
             -configuration Debug -destination "platform=iOS Simulator,id=$RESOURCE_DEVICE" \
             -derivedDataPath resource-build -resultBundlePath resource-tests.xcresult \
-            -parallel-testing-enabled NO -only-testing:SiteTests/GLTFMaterialTests \
-            -only-testing:SiteTests/ArenaResourcePackTests \
-            -only-testing:SiteTests/ArenaImportedFaceTests \
-            CODE_SIGNING_ALLOWED=NO > resource-tests.log 2>&1 || { tail -120 resource-tests.log; exit 1; }
+            -parallel-testing-enabled NO -only-testing:ArenaResourceTests/GLTFMaterialTests \
+            -only-testing:ArenaResourceTests/ArenaResourcePackTests \
+            -only-testing:ArenaResourceTests/ArenaImportedFaceTests \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee resource-tests.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

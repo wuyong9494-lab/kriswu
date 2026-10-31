@@ -176,20 +176,7 @@ enum ArenaArt {
         """
 
     static func grade(_ material: SCNMaterial, _ surface: String, fragment: String? = nil) {
-        var modifiers = material.shaderModifiers ?? [:]
-        let gradeMarker = "// Arena surface grade"
-        if let existing = modifiers[.surface] {
-            // Imported base-color factors/coverage must run before the style
-            // grade; arbitrary existing surface shaders still own their look.
-            guard existing.contains(GLTFModel.materialSurfaceMarker), !existing.contains(gradeMarker) else { return }
-            modifiers[.surface] = GLTFModel.combiningShaderModifiers(existing, gradeMarker + "\n" + surface)
-        } else {
-            modifiers[.surface] = gradeMarker + "\n" + surface
-        }
-        if let fragment, modifiers[.fragment] == nil {
-            modifiers[.fragment] = fragment
-        }
-        material.shaderModifiers = modifiers
+        ArenaColorGrade.grade(material, surface, fragment: fragment)
     }
 
     /// 方块、圆柱、草丛的描边：形状已经放大好了，只画背面
