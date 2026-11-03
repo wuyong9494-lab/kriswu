@@ -274,6 +274,6 @@ final class PlanReaderIdentifierProbeTests: XCTestCase {
         var object = values
         object["fixture"] = fixture.rawValue
         let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        NSLog("OCRFIELD|%@", String(decoding: data, as: UTF8.self))
+        print("OCRFIELD|\(String(decoding: data, as: UTF8.self))")
     }
 }
