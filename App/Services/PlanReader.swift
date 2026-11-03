@@ -136,15 +136,17 @@ enum PlanReader {
             // 补救后的轮次可能读出更多行、成为合并底稿；原图表头仍取本页真实识别到的区域。
             if result.header == nil { result.header = geometric?.header }
             // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
-            // 拼出来了就拿它核对站名（同一行它认的站名对得上对照表、这边的对不上，用它的）
+            // 拼出来了就核对站名；唯一对应且原格也为空时补圈号，保留人工核对提示。
             if #available(iOS 26.0, *), settings.tables, let table = await tableReading(in: picture, words: words, settings: settings) {
                 sawText = sawText || !table.rows.isEmpty
                 if result.rows.isEmpty {
                     result = table
                 } else {
                     let adoptTrace = Trace(settings.diagnostics, "tableMerge\(page)", "rows=\(result.rows.count)|tableRows=\(table.rows.count)")
-                    result.rows = PassPlan.adoptStations(result.rows, from: table.rows, rules: rules)
-                    adoptTrace.end("rows=\(result.rows.count)")
+                    let emptyOrbits = result.rows.filter { $0.orbit.isEmpty }.count
+                    result.rows = PassPlan.adoptPhotoTable(result.rows, from: table.rows, layout: result.layout, rules: rules)
+                    let restoredOrbits = emptyOrbits - result.rows.filter { $0.orbit.isEmpty }.count
+                    adoptTrace.end("rows=\(result.rows.count)|orbitRestored=\(restoredOrbits)")
                 }
             }
             guard let found = result.layout else { continue }
@@ -796,7 +798,7 @@ enum PlanReader {
                 return cells
             }
         }
-        return grids.map(PassPlan.readTable).max { $0.rows.count < $1.rows.count }
+        return grids.map(PassPlan.readPhotoTable).max { $0.rows.count < $1.rows.count }
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算

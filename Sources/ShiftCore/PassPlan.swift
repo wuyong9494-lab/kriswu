@@ -176,7 +176,7 @@ public enum PassPlan {
         }
     }
 
-    // MARK: - 从表格读（Excel、复制的文字）
+    // MARK: - 从表格读（Excel、复制的文字、照片中的系统表格）
 
     /// 第一行认得出三列以上的是表头，下面每行是一条；空行、表头重复的行跳过
     public static func rows(fromTable table: [[String]]) -> [PassPlanRow] {
@@ -184,12 +184,22 @@ public enum PassPlan {
     }
 
     public static func readTable(_ table: [[String]]) -> Reading {
+        readTable(table, recoveringPhotoHeaders: false)
+    }
+
+    /// 系统从照片读出的表格：只恢复有明确计划上下文的 OCR 表头含义，保留原标签和单元格。
+    public static func readPhotoTable(_ table: [[String]]) -> Reading {
+        readTable(table, recoveringPhotoHeaders: true)
+    }
+
+    private static func readTable(_ table: [[String]], recoveringPhotoHeaders: Bool) -> Reading {
         guard let headerIndex = table.firstIndex(where: { row in Set(row.compactMap(column(forHeader:))).count >= 3 }) else {
             return Reading(rows: [], layout: nil)
         }
         // 表头空着的列不要
         let kept = table[headerIndex].indices.filter { !table[headerIndex][$0].trimmingCharacters(in: .whitespaces).isEmpty }
-        let layout = Layout(labels: kept.map { (table[headerIndex][$0], Double($0)) })
+        let detected = Layout(labels: kept.map { (table[headerIndex][$0], Double($0)) })
+        let layout = recoveringPhotoHeaders ? recoverPhotoOrbitHeader(detected) : detected
         let leading = 0..<(kept.first ?? 0)
         let hasBadges = table[(headerIndex + 1)...].contains { cells in
             leading.contains { $0 < cells.count && markerText(cells[$0]) == "应急" }
@@ -852,17 +862,11 @@ public enum PassPlan {
     /// 另一种认法核对站名：开始时间相同只是候选，还必须对上卫星身份、没有圈号/结束时间矛盾，且只对应一行。
     /// 同一秒可以有多条计划，不能把第一个站名分给其他卫星；本来可分家的站名不自动改。
     public static func adoptStations(_ rows: [PassPlanRow], from other: [PassPlanRow], rules: [OperatorRule]) -> [PassPlanRow] {
-        func samePlan(_ row: PassPlanRow, _ candidate: PassPlanRow) -> Bool {
-            row.start == candidate.start
-                && matchingSatellite(row, candidate)
-                && !differentWhenPresent(row.orbit, candidate.orbit)
-                && !differentWhenPresent(row.end, candidate.end)
-        }
         let sources = Dictionary(grouping: rows.filter { isValidTime($0.start) }, by: \.start)
         let candidates = Dictionary(grouping: other.filter { isValidTime($0.start) }, by: \.start)
         return rows.map { row in
             guard isValidTime(row.start) else { return row }
-            let matches = (candidates[row.start] ?? []).filter { samePlan(row, $0) }
+            let matches = (candidates[row.start] ?? []).filter { sameTablePlan(row, $0) }
             guard matches.count == 1, let candidate = matches.first else {
                 let stations = Set(matches.map { comparisonValue($0.station) })
                 return stations.count > 1
@@ -870,7 +874,7 @@ public enum PassPlan {
                     : row
             }
             // 同一卫星同一秒也可能同时向不同站数传。候选行反过来也只能对应原结果的一行。
-            guard (sources[row.start] ?? []).filter({ samePlan($0, candidate) }).count == 1 else {
+            guard (sources[row.start] ?? []).filter({ sameTablePlan($0, candidate) }).count == 1 else {
                 return retainingIssues(row, adding: ["同一时间的计划无法唯一对应地面站，请核对原图"])
             }
             let conflicts = recognitionConflicts(row, candidate, rules: rules, layout: nil)
@@ -882,6 +886,40 @@ public enum PassPlan {
             fixed.station = candidate.station
             return retainingIssues(fixed, from: [candidate], adding: conflicts)
         }
+    }
+
+    /// 照片的系统表格先沿用站名核对；圈号仅在原字段和对应原格都为空、双向唯一时补读。
+    /// 不改写已有字符，不补缺格，也不把格式为数字当成正确保证；补完仍须对照原图核对。
+    public static func adoptPhotoTable(_ rows: [PassPlanRow], from other: [PassPlanRow],
+                                       layout: Layout?, rules: [OperatorRule]) -> [PassPlanRow] {
+        let reviewed = adoptStations(rows, from: other, rules: rules)
+        guard let layout else { return reviewed }
+        let orbitColumns = layout.slots.indices.filter { layout.slots[$0].column == .orbit }
+        guard orbitColumns.count == 1, let index = orbitColumns.first else { return reviewed }
+        // 用原行快照核对双向唯一，不能让前一条补写改变后一条的匹配结果。
+        let sources = Dictionary(grouping: rows.filter { isValidTime($0.start) }, by: \.start)
+        let candidates = Dictionary(grouping: other.filter { isValidTime($0.start) }, by: \.start)
+        return reviewed.map { row in
+            guard row.orbit.isEmpty, row.cells.count == layout.slots.count,
+                  row.cells.indices.contains(index), row.cells[index].isEmpty,
+                  isValidTime(row.start) else { return row }
+            let matches = (candidates[row.start] ?? []).filter { sameTablePlan(row, $0) }
+            guard matches.count == 1, let candidate = matches.first,
+                  (sources[row.start] ?? []).filter({ sameTablePlan($0, candidate) }).count == 1,
+                  !candidate.orbit.isEmpty,
+                  candidate.orbit.unicodeScalars.allSatisfy({ (48...57).contains($0.value) }) else { return row }
+            var fixed = row
+            fixed.orbit = candidate.orbit
+            fixed.cells[index] = candidate.orbit
+            return retainingIssues(fixed, adding: ["圈号由系统表格补读，请对照原图核对"])
+        }
+    }
+
+    private static func sameTablePlan(_ row: PassPlanRow, _ candidate: PassPlanRow) -> Bool {
+        row.start == candidate.start
+            && matchingSatellite(row, candidate)
+            && !differentWhenPresent(row.orbit, candidate.orbit)
+            && !differentWhenPresent(row.end, candidate.end)
     }
 
     /// 单独重读地面站格子的结果。调用方提供不同设置的读数；只凭一次「像某家」不能覆盖原值。
