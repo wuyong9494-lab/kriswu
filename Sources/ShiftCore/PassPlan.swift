@@ -250,7 +250,7 @@ public enum PassPlan {
             let tolerance = max(lineHeight, top.map(\.box.height).reduce(0, +) / Double(top.count)) * 0.6
             let headerBoxes = boxes.filter { abs($0.midY - s * $0.midX - headerLevel) < tolerance }.sorted { $0.x < $1.x }
             body = boxes.filter { b in b.midY - s * b.midX > headerLevel + tolerance && !headerBoxes.contains(b) }
-            layout = Layout(labels: headerBoxes.map { ($0.text, $0.midX) })
+            layout = recoverPhotoOrbitHeader(Layout(labels: headerBoxes.map { ($0.text, $0.midX) }))
             headerY = headerBoxes.map(\.midY)
             let tallest = headerBoxes.map(\.height).max() ?? lineHeight
             header = Region(y0: headerLevel, slope: s, height: max(tallest * 1.7, lineHeight * 2), left: 0, right: 1)
@@ -296,6 +296,21 @@ public enum PassPlan {
             }
         }
         return Reading(rows: rows, layout: layout, header: header)
+    }
+
+    /// 照片 OCR 实测会把「圈号」认成「圖号」。只在同一表头里有完整计划上下文、且候选唯一时恢复含义。
+    /// 保留原标签和位置；文件/文本表格不经过这里，普通「图号」也不当作圈号。
+    private static func recoverPhotoOrbitHeader(_ layout: Layout) -> Layout {
+        let columns = layout.columns
+        guard !columns.contains(.orbit), columns.contains(.station), columns.contains(.start),
+              columns.contains(.satellite) || columns.contains(.satelliteID) else { return layout }
+        let candidates = layout.slots.indices.filter {
+            layout.slots[$0].column == nil && layout.slots[$0].label.filter { !$0.isWhitespace } == "圖号"
+        }
+        guard candidates.count == 1, let index = candidates.first else { return layout }
+        var recovered = layout
+        recovered.slots[index].column = .orbit
+        return recovered
     }
 
     /// 把表里的字拼成一行行。
@@ -773,6 +788,50 @@ public enum PassPlan {
         return fixed
     }
 
+    /// 独立复识只核对卫星编号/名称，不自动选真值：英文高置信度结果也可能把 05 读成 06、1 读成 L。
+    /// 只忽略既有的格式差异；C/0、O/0 等字符差异必须保留给人工核对，所有原字段和标记保持不变。
+    public static func reviewIdentifierReread(_ row: PassPlanRow, column: Column, candidates: [String]) -> PassPlanRow {
+        let original: String
+        let label: String
+        switch column {
+        case .satelliteID:
+            original = row.satelliteID
+            label = "卫星编号"
+        case .satellite:
+            original = row.satellite
+            label = "卫星名称"
+        default:
+            return row
+        }
+        let expected = comparisonValue(original)
+        var seen = Set<String>()
+        let usable = candidates.compactMap { raw -> (raw: String, value: String)? in
+            let value = comparisonValue(raw)
+            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+            return (raw, value)
+        }
+        let different = usable.filter { $0.value != expected }
+        let issue: String
+        if usable.isEmpty {
+            issue = "\(label)未能完成独立复核，请核对原图"
+        } else if !different.isEmpty {
+            // 仅在核对提示中展示有限原始读数，不把规范化后的内容伪装成 OCR 原文。
+            let excerpts = different.prefix(3).map { candidate in
+                let text = candidate.raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let excerpt = String(text.prefix(64)) + (text.count > 64 ? "…" : "")
+                return "「\(excerpt)」"
+            }.joined(separator: "、")
+            let remainder = different.count > 3 ? "等" : ""
+            issue = "\(label)独立复识与原读数不一致（复识：\(excerpts)\(remainder)），请核对原图"
+        } else {
+            return row
+        }
+        guard !(row.recognitionIssues ?? []).contains(issue) else { return row }
+        var result = row
+        result.recognitionIssues = (row.recognitionIssues ?? []) + [issue]
+        return result
+    }
+
     private static func comparisonValue(_ value: String) -> String {
         value.filter { !$0.isWhitespace }.uppercased()
             .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-")
@@ -921,14 +980,30 @@ public enum PassPlan {
             // 只有卫星 ID 是稳定的卫星身份；不同卫星的圈次数字也可能恰好相同。
             return matchingSatellite(a, b)
         }
+        // 同站、同起止时间还不足以合并不同编号。圈号和卫星名称也相同时，可能是重叠照片里的 OCR 错字，
+        // 但仍没有足够证据决定哪个编号正确：保留两条并要求核对，不能改写编号或跨身份复制 test。
+        func conflictingID(_ a: PassPlanRow, _ b: PassPlanRow) -> Bool {
+            let orbit = comparisonValue(a.orbit), satellite = comparisonValue(a.satellite)
+            return isValidTime(a.end) && isValidTime(b.end)
+                && differentWhenPresent(a.satelliteID, b.satelliteID)
+                && !orbit.isEmpty && orbit == comparisonValue(b.orbit)
+                && !satellite.isEmpty && satellite == comparisonValue(b.satellite)
+        }
         func filled(_ r: PassPlanRow) -> Int {
             [r.orbit, r.satelliteID, r.satellite, r.station, r.start, r.end, r.info, r.status].filter { !$0.isEmpty }.count
         }
         for page in pages {
             let previousCount = rows.count
             var matched = Set<Int>()
-            for row in page {
-                let k = key(row)
+            for observed in page {
+                let k = key(observed)
+                let conflicting = k.map { key in
+                    (indices[key] ?? []).filter { $0 < previousCount && conflictingID(rows[$0], observed) }
+                } ?? []
+                let identityWarnings = conflicting.isEmpty ? [] : ["跨页同站同时间、同圈号和同名卫星的编号不一致，请核对原图"]
+                // 已经匹配过的旧行仍是冲突证据；即使另有明确的相同 ID，也不能隐藏旁边的矛盾候选。
+                for i in conflicting { rows[i] = retainingIssues(rows[i], adding: identityWarnings) }
+                let row = retainingIssues(observed, adding: identityWarnings)
                 let matches = k.map { key in
                     (indices[key] ?? []).filter { $0 < previousCount && !matched.contains($0) && sameIdentity(rows[$0], row) }
                 } ?? []
@@ -972,7 +1047,16 @@ public enum PassPlan {
             list.append("结束比开始还早")
         }
         if operatorName(of: r.station, rules: rules) == nil { list.append("分不出是哪家（运营商对照表里没有这个站）") }
-        if !r.orbit.isEmpty, !r.orbit.allSatisfy(\.isNumber) { list.append("圈号不全是数字") }
+        // 只要求本表明确存在的列；没有布局的旧计划、原本没有这些列的表不新增必填项。
+        if layout?.columns.contains(.orbit) == true, r.orbit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            list.append("没认出圈号")
+        } else if !r.orbit.isEmpty, !r.orbit.allSatisfy(\.isNumber) {
+            list.append("圈号不全是数字")
+        }
+        if layout?.columns.contains(.satelliteID) == true,
+           r.satelliteID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            list.append("没认出卫星编号")
+        }
         if r.satellite.isEmpty, has(.satellite) { list.append("没认出卫星名称") }
         if layout?.emergencyIndex != nil, emergency(r, layout: layout) == nil {
             list.append("是否应急没认出来，请核对原图")
@@ -1016,8 +1100,12 @@ public enum PassPlan {
     }
 
     /// 状态为 test 的计划不发送给任何运营商。去掉空白、忽略大小写；其他字段含 test 不算。
+    public static func isTestStatus(_ status: String) -> Bool {
+        markerText(status) == "test"
+    }
+
     public static func isExcludedFromSending(_ row: PassPlanRow) -> Bool {
-        row.testStatusDetected == true || markerText(row.status) == "test"
+        row.testStatusDetected == true || isTestStatus(row.status)
     }
 
     /// 导出/分组的统一入口；识别结果本身保留所有行供核对和计数。

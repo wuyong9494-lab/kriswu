@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import CoreImage
 import ImageIO
 import UIKit
 @testable import ShiftReminder
@@ -86,16 +87,39 @@ final class PlanReaderTests: XCTestCase {
                 print("OCRSTART|\(name)|\(label)|size=\(width)x\(height)|truthRows=\(truth.rows.count)")
                 do {
                     let reading = try await PlanReader.read(pages: [image], rules: rules, settings: diagnosed)
+                    dumpSyntheticRows(name, reading, rules)
                     let measured = accuracy(reading, truth, rules)
                     print(report(name, label, reading, truth, rules, seconds: Date().timeIntervalSince(began)))
                     XCTAssertNotNil(reading.layout, "\(name)：缺少表头布局")
                     XCTAssertFalse(reading.rows.isEmpty, "\(name)：没有读出计划行")
                     XCTAssertGreaterThan(measured.matched, 0, "\(name)：没有一条能唯一对应标准答案")
+                    XCTAssertEqual(measured.unsafeEligibleRows, 0,
+                                   "\(name)：\(measured.eligibleWrongCriticalRows) 条可发送结果的关键字段错误，"
+                                   + "\(measured.eligibleUnmatched) 条可发送结果无法唯一对应真值；须保留核对或修正识别")
                     if label == "现在" { await dumpOriginal(name, reading, rules) }
                 } catch {
                     print("OCR|\(name)|\(label)|认不出：\(error.localizedDescription)")
                     XCTFail("\(name) / \(label) 识别失败：\(error.localizedDescription)")
                 }
+            }
+        }
+    }
+
+    /// 只由上面固定的公开虚构样例调用；保留全图最终字段，避免把单个首段当成整图结果。
+    private func dumpSyntheticRows(_ fixture: String, _ reading: PassPlan.Reading, _ rules: [PassPlan.OperatorRule]) {
+        guard ["excel_photo", "excel_scan", "web_photo", "long_table"].contains(fixture) else { return }
+        for (index, row) in reading.rows.enumerated() {
+            let emergency: Any = PassPlan.emergency(row, layout: reading.layout).map { $0 as Any } ?? NSNull()
+            let fields: [String: Any] = [
+                "index": index, "satellite": row.satellite, "satelliteID": row.satelliteID,
+                "station": row.station, "orbit": row.orbit, "start": row.start, "end": row.end,
+                "status": row.status, "emergency": emergency, "issues": row.recognitionIssues ?? [],
+                "problems": PassPlan.problems(row, rules: rules, layout: reading.layout),
+                "excluded": PassPlan.isExcludedFromSending(row),
+                "operator": PassPlan.operatorName(of: row.station, rules: rules).map { $0 as Any } ?? NSNull(),
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]) {
+                print("OCRROW|\(fixture)|\(String(decoding: data, as: UTF8.self))")
             }
         }
     }
@@ -131,6 +155,15 @@ final class PlanReaderTests: XCTestCase {
         var emergencyTotal = 0
         var emergencyUnknown = 0
         var ambiguous = 0
+        var eligible = 0
+        var reviewRequired = 0
+        var excluded = 0
+        var eligiblePaired = 0
+        var eligibleWrongCriticalRows = 0
+        var eligibleUnmatched = 0
+        var criticalErrors: [String: Int] = [:]
+
+        var unsafeEligibleRows: Int { eligibleWrongCriticalRows + eligibleUnmatched }
     }
 
     /// 一条实际结果最多对应一条真值。四个身份线索至少三个一致，且双方的最佳候选都唯一，
@@ -148,6 +181,13 @@ final class PlanReaderTests: XCTestCase {
         }
         let scores = truth.rows.map { expected in reading.rows.map { identityScore(expected, $0) } }
         var measured = Accuracy()
+        let excluded = reading.rows.map(PassPlan.isExcludedFromSending)
+        let problems = reading.rows.map { PassPlan.problems($0, rules: rules, layout: reading.layout) }
+        let eligible = Set(reading.rows.indices.filter { !excluded[$0] && problems[$0].isEmpty })
+        measured.excluded = excluded.filter { $0 }.count
+        measured.eligible = eligible.count
+        measured.reviewRequired = reading.rows.count - measured.excluded - measured.eligible
+        var pairedEligible = Set<Int>()
         // 分母来自全部真值；漏掉的行、没认出的“否”都不能从分母中消失。
         measured.endTotal = truth.rows.filter { !$0.end.isEmpty }.count
         measured.emergencyTotal = truth.rows.filter { $0.emergency != nil }.count
@@ -166,6 +206,13 @@ final class PlanReaderTests: XCTestCase {
             }
             let row = reading.rows[index]
             measured.matched += 1
+            if eligible.contains(index) {
+                pairedEligible.insert(index)
+                measured.eligiblePaired += 1
+                let wrong = criticalMismatches(row, expected: expected, layout: reading.layout, rules: rules)
+                if !wrong.isEmpty { measured.eligibleWrongCriticalRows += 1 }
+                for field in wrong { measured.criticalErrors[field, default: 0] += 1 }
+            }
             if row.station == expected.station { measured.station += 1 }
             if row.satellite == expected.satellite || row.satelliteID == expected.satellite { measured.satellite += 1 }
             if row.orbit == expected.orbit { measured.orbit += 1 }
@@ -181,13 +228,37 @@ final class PlanReaderTests: XCTestCase {
                 }
             }
         }
+        measured.eligibleUnmatched = eligible.subtracting(pairedEligible).count
         return measured
+    }
+
+    /// 发送保护按原始真值逐项比较；显式卫星 ID 优先，名称字段相似不能替它掩盖错误。
+    /// 只检查真值实际提供的结束时间/应急；缺失、不确定的结果仍由 problems 归入待核对。
+    private func criticalMismatches(_ row: PassPlanRow, expected: Truth.Row, layout: PassPlan.Layout?,
+                                    rules: [PassPlan.OperatorRule]) -> [String] {
+        var wrong: [String] = []
+        let identifier = row.satelliteID.isEmpty ? row.satellite : row.satelliteID
+        if identifier != expected.satellite { wrong.append("identifier") }
+        if row.station != expected.station { wrong.append("station") }
+        if PassPlan.operatorName(of: row.station, rules: rules) != PassPlan.operatorName(of: expected.station, rules: rules) {
+            wrong.append("operator")
+        }
+        if row.orbit != expected.orbit { wrong.append("orbit") }
+        if row.start != expected.start { wrong.append("start") }
+        if !expected.end.isEmpty, row.end != expected.end { wrong.append("end") }
+        if let expectedEmergency = expected.emergency, PassPlan.emergency(row, layout: layout) != expectedEmergency {
+            wrong.append("emergency")
+        }
+        return wrong
     }
 
     private func report(_ name: String, _ label: String, _ reading: PassPlan.Reading, _ truth: Truth,
                         _ rules: [PassPlan.OperatorRule], seconds: Double) -> String {
         let measured = accuracy(reading, truth, rules)
         let total = truth.rows.count
+        let included = reading.rows.count - measured.excluded
+        let criticalDetails = measured.criticalErrors.sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }.joined(separator: ",")
         func pct(_ n: Int, _ of: Int) -> String { of == 0 ? "-" : "\(n * 100 / of)%（\(n)/\(of)）" }
         return ["OCR", name, label,
                 "唯一对应行 \(measured.matched)/\(total)",
@@ -197,6 +268,11 @@ final class PlanReaderTests: XCTestCase {
                 "应急 \(pct(measured.emergency, measured.emergencyTotal))", "应急未知 \(measured.emergencyUnknown)",
                 "漏行或无法对应 \(total - measured.matched)", "身份歧义 \(measured.ambiguous)",
                 "多出或无法对应 \(reading.rows.count - measured.matched)",
+                "可发送 \(measured.eligible)/\(included)", "待核对 \(measured.reviewRequired)/\(included)",
+                "test排除 \(measured.excluded)", "可发送且唯一对应 \(measured.eligiblePaired)/\(measured.eligible)",
+                "可发送关键字段错误 \(measured.eligibleWrongCriticalRows)",
+                "可发送无法唯一对应 \(measured.eligibleUnmatched)",
+                "可发送错误字段 \(criticalDetails.isEmpty ? "无" : criticalDetails)",
                 String(format: "%.1f 秒", seconds)].joined(separator: "|")
     }
 
@@ -241,6 +317,153 @@ final class PlanReaderTests: XCTestCase {
         let result = accuracy(PassPlan.Reading(rows: [row], layout: nil), truth, [])
         XCTAssertEqual(result.matched, 0, "一条识别结果不能冒充两条同时开始的计划")
         XCTAssertEqual(result.ambiguous, 2)
+    }
+
+    private func dispatchMetricFixture() -> (truth: Truth, reading: PassPlan.Reading, rules: [PassPlan.OperatorRule]) {
+        let expected = Truth.Row(satellite: "SAT-A", station: "甲站01", orbit: "100",
+                                 start: "2032-04-12 08:00:00", end: "2032-04-12 08:05:00", emergency: true)
+        let rules = [PassPlan.OperatorRule(name: "甲", prefixes: ["甲站"]),
+                     PassPlan.OperatorRule(name: "乙", prefixes: ["乙站"])]
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星ID", column: .satelliteID, x: 0.1),
+            .init(label: "地面站", column: .station, x: 0.2),
+            .init(label: "圈号", column: .orbit, x: 0.3),
+            .init(label: "数传开始时间", column: .start, x: 0.4),
+            .init(label: "数传结束时间", column: .end, x: 0.5),
+            .init(label: "状态", column: .status, x: 0.6),
+            .init(label: "是否应急", column: nil, x: 0.7),
+        ])
+        let row = PassPlanRow(orbit: expected.orbit, satelliteID: expected.satellite, satellite: "合成示例A星",
+                              station: expected.station, start: expected.start, end: expected.end,
+                              status: "等待数传", cells: [expected.satellite, expected.station, expected.orbit,
+                                                      expected.start, expected.end, "等待数传", "是"])
+        let truth = Truth(kind: "test", rules: ["甲": ["甲站"], "乙": ["乙站"]], rows: [expected])
+        return (truth, PassPlan.Reading(rows: [row], layout: layout), rules)
+    }
+
+    func testDispatchMetricsAcceptFullyCorrectPlan() {
+        let fixture = dispatchMetricFixture()
+        let measured = accuracy(fixture.reading, fixture.truth, fixture.rules)
+        XCTAssertEqual(measured.matched, 1)
+        XCTAssertEqual(measured.eligible, 1)
+        XCTAssertEqual(measured.eligiblePaired, 1)
+        XCTAssertEqual(measured.reviewRequired, 0)
+        XCTAssertEqual(measured.excluded, 0)
+        XCTAssertEqual(measured.unsafeEligibleRows, 0)
+        XCTAssertTrue(measured.criticalErrors.isEmpty)
+    }
+
+    func testDispatchMetricsRejectValidButWrongCriticalFields() {
+        func check(_ field: String, change: (inout PassPlanRow) -> Void) {
+            var fixture = dispatchMetricFixture()
+            change(&fixture.reading.rows[0])
+            let measured = accuracy(fixture.reading, fixture.truth, fixture.rules)
+            XCTAssertEqual(measured.eligible, 1, field)
+            XCTAssertEqual(measured.reviewRequired, 0, field)
+            XCTAssertEqual(measured.eligiblePaired, 1, field)
+            XCTAssertEqual(measured.eligibleWrongCriticalRows, 1, field)
+            XCTAssertEqual(measured.eligibleUnmatched, 0, field)
+            XCTAssertEqual(measured.unsafeEligibleRows, 1, field)
+            XCTAssertEqual(measured.criticalErrors[field], 1, field)
+        }
+        check("identifier") { $0.satelliteID = "SAT-B"; $0.satellite = "SAT-A" }
+        check("station") { $0.station = "甲站02" }
+        check("operator") { $0.station = "乙站02" }
+        check("orbit") { $0.orbit = "101" }
+        check("start") { $0.start = "2032-04-12 08:00:01" }
+        check("end") { $0.end = "2032-04-12 08:05:01" }
+        check("emergency") { $0.cells[6] = "不是" }
+    }
+
+    func testDispatchMetricsReportInvalidAndConflictingRowsAsReview() {
+        let changes: [(inout PassPlanRow) -> Void] = [
+            { $0.start = "2032-04-12 08:00:XX" },
+            { $0.end = "2032-04-12 08:05:XX" },
+            { $0.orbit = "10O" },
+            { $0.station = "未知站" },
+            { $0.cells[6] = "" },
+            { $0.satelliteID = "SAT-B"; $0.recognitionIssues = ["卫星ID多次识别不一致，请核对原图"] },
+            { $0.start = "2032-04-12 08:00:01"; $0.recognitionIssues = ["开始时间多次识别不一致，请核对原图"] },
+        ]
+        for change in changes {
+            var fixture = dispatchMetricFixture()
+            change(&fixture.reading.rows[0])
+            let measured = accuracy(fixture.reading, fixture.truth, fixture.rules)
+            XCTAssertEqual(measured.eligible, 0)
+            XCTAssertEqual(measured.reviewRequired, 1)
+            XCTAssertEqual(measured.excluded, 0)
+            XCTAssertEqual(measured.unsafeEligibleRows, 0, "保护门槛通过仍须报告这一条待核对")
+            XCTAssertTrue(measured.criticalErrors.isEmpty)
+            let line = report("test", "test", fixture.reading, fixture.truth, fixture.rules, seconds: 0)
+            XCTAssertTrue(line.contains("可发送 0/1|待核对 1/1"))
+        }
+    }
+
+    func testDispatchMetricsRejectUnpairedAndDuplicateEligibleRows() {
+        var unknown = dispatchMetricFixture()
+        unknown.reading.rows[0].satelliteID = "SAT-B"
+        unknown.reading.rows[0].orbit = "101"
+        let unmatched = accuracy(unknown.reading, unknown.truth, unknown.rules)
+        XCTAssertEqual(unmatched.eligible, 1)
+        XCTAssertEqual(unmatched.eligiblePaired, 0)
+        XCTAssertEqual(unmatched.eligibleUnmatched, 1)
+        XCTAssertEqual(unmatched.unsafeEligibleRows, 1)
+
+        var duplicateRows = dispatchMetricFixture()
+        duplicateRows.reading.rows.append(duplicateRows.reading.rows[0])
+        let duplicateActual = accuracy(duplicateRows.reading, duplicateRows.truth, duplicateRows.rules)
+        XCTAssertEqual(duplicateActual.eligible, 2)
+        XCTAssertEqual(duplicateActual.eligibleUnmatched, 2, "两条结果不能共用一条真值")
+        XCTAssertEqual(duplicateActual.unsafeEligibleRows, 2)
+
+        let duplicateTruth = dispatchMetricFixture()
+        let truth = Truth(kind: "test", rules: duplicateTruth.truth.rules,
+                          rows: [duplicateTruth.truth.rows[0], duplicateTruth.truth.rows[0]])
+        let ambiguous = accuracy(duplicateTruth.reading, truth, duplicateTruth.rules)
+        XCTAssertEqual(ambiguous.eligible, 1)
+        XCTAssertEqual(ambiguous.eligibleUnmatched, 1, "一条结果不能对应两条相同真值")
+        XCTAssertEqual(ambiguous.unsafeEligibleRows, 1)
+    }
+
+    func testDispatchMetricsAcceptIdentifierFallbackAndAbsentOptionalColumns() {
+        let fixture = dispatchMetricFixture()
+        let base = fixture.truth.rows[0]
+        let expected = Truth.Row(satellite: base.satellite, station: base.station, orbit: base.orbit,
+                                 start: base.start, end: "", emergency: nil)
+        let truth = Truth(kind: "excel", rules: fixture.truth.rules, rows: [expected])
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星", column: .satellite, x: 0.1),
+            .init(label: "地面站", column: .station, x: 0.3),
+            .init(label: "圈次", column: .orbit, x: 0.5),
+            .init(label: "数传开始", column: .start, x: 0.7),
+        ])
+        let row = PassPlanRow(orbit: expected.orbit, satellite: expected.satellite,
+                              station: expected.station, start: expected.start)
+        let measured = accuracy(PassPlan.Reading(rows: [row], layout: layout), truth, fixture.rules)
+        XCTAssertEqual(measured.eligible, 1)
+        XCTAssertEqual(measured.eligiblePaired, 1)
+        XCTAssertEqual(measured.reviewRequired, 0)
+        XCTAssertEqual(measured.unsafeEligibleRows, 0, "原表未提供的结束时间/应急不能作为错误")
+    }
+
+    func testDispatchMetricsSeparateTestExclusionReviewAndEligibleRows() {
+        var fixture = dispatchMetricFixture()
+        var review = fixture.reading.rows[0]
+        review.orbit = "101"
+        review.recognitionIssues = ["圈号多次识别不一致，请核对原图"]
+        var excluded = fixture.reading.rows[0]
+        excluded.status = "test"
+        excluded.satelliteID = "SAT-B"
+        excluded.orbit = "102"
+        fixture.reading.rows += [review, excluded]
+        let measured = accuracy(fixture.reading, fixture.truth, fixture.rules)
+        XCTAssertEqual(measured.eligible, 1)
+        XCTAssertEqual(measured.eligiblePaired, 1)
+        XCTAssertEqual(measured.reviewRequired, 1)
+        XCTAssertEqual(measured.excluded, 1)
+        XCTAssertEqual(measured.unsafeEligibleRows, 0)
+        let line = report("test", "test", fixture.reading, fixture.truth, fixture.rules, seconds: 0)
+        XCTAssertTrue(line.contains("可发送 1/2|待核对 1/2|test排除 1"))
     }
 
     private struct BadgeTruth: Decodable {
@@ -319,6 +542,196 @@ final class PlanReaderTests: XCTestCase {
             XCTAssertEqual(try XCTUnwrap(mixed.pngData()), try XCTUnwrap(baseline.pngData()))
             XCTAssertNil(PassPlanOriginal.image(name: "演示甲", rows: [excluded], header: header,
                                                 strips: strips, caption: "合成测试"))
+        }
+    }
+
+    func testIdentifierColumnUsesExplicitIDAndKeepsNamesOutOfEnglishReview() {
+        let explicit = PassPlan.Layout(slots: [
+            .init(label: "卫星", column: .satellite, x: 0.1),
+            .init(label: "卫星ID", column: .satelliteID, x: 0.3),
+            .init(label: "地面站", column: .station, x: 0.5),
+        ])
+        XCTAssertEqual(PlanReader.identifierColumn(for: PassPlanRow(satelliteID: "XA101C", satellite: "高分GF05星"),
+                                                   layout: explicit), 1)
+        XCTAssertEqual(PlanReader.identifierColumn(for: PassPlanRow(satellite: "XA101C"), layout: explicit), 1,
+                       "显式编号列存在时，不改选名称列；缺编号由字段检查拦下")
+        let excel = PassPlan.Layout(slots: [
+            .init(label: " 卫 星 ", column: .satellite, x: 0.1),
+            .init(label: "地面站", column: .station, x: 0.3),
+        ])
+        for code in ["XA101C", "xa101c", " XA1GF 05B ", "XA1GF（5B"] {
+            XCTAssertEqual(PlanReader.identifierColumn(for: PassPlanRow(satellite: code), layout: excel), 0, code)
+        }
+        for name in ["", "12345", "ABCDE", "试验01星", "高分GF05星", "ＡＢC12"] {
+            XCTAssertNil(PlanReader.identifierColumn(for: PassPlanRow(satellite: name), layout: excel), name)
+        }
+        let names = PassPlan.Layout(slots: [.init(label: "卫星名称", column: .satellite, x: 0.1)])
+        XCTAssertNil(PlanReader.identifierColumn(for: PassPlanRow(satellite: "XA101C"), layout: names))
+        XCTAssertNil(PlanReader.identifierColumn(for: PassPlanRow(satellite: "XA101C"), layout: .init(slots: [])))
+    }
+
+    func testIdentifierCellRegionExcludesOuterRowNumberAndKeepsTiltedRow() throws {
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星", column: .satellite, x: 0.16),
+            .init(label: "地面站", column: .station, x: 0.40),
+            .init(label: "数传开始", column: .start, x: 0.72),
+        ])
+        for slope in [-0.2, 0, 0.2] {
+            let row = PassPlan.Region(page: 3, y0: 0.5 - slope * 0.5, slope: slope,
+                                      height: 0.1, left: 0, right: 1)
+            let ordinary = try XCTUnwrap(PlanReader.boundedCellRegion(column: 0, of: row, layout: layout))
+            let first = try XCTUnwrap(PlanReader.identifierCellRegion(column: 0, of: row, layout: layout))
+            let last = try XCTUnwrap(PlanReader.identifierCellRegion(column: 2, of: row, layout: layout))
+            XCTAssertEqual(first.left, 0.04, accuracy: 1e-12, "Excel 行号区不能带进编号格")
+            XCTAssertEqual(first.right, 0.28, accuracy: 1e-12)
+            XCTAssertGreaterThan(first.left, ordinary.left)
+            XCTAssertEqual(last.left, 0.56, accuracy: 1e-12)
+            XCTAssertEqual(last.right, 0.88, accuracy: 1e-12)
+            for cell in [first, last] {
+                XCTAssertEqual(cell.page, row.page)
+                XCTAssertEqual(cell.y0, row.y0)
+                XCTAssertEqual(cell.slope, row.slope)
+                XCTAssertGreaterThan(cell.height, 0)
+                XCTAssertLessThanOrEqual(cell.height, row.height)
+                for x in [cell.left, cell.right] {
+                    let center = row.y0 + row.slope * x
+                    XCTAssertGreaterThanOrEqual(cell.y0 + cell.slope * x - cell.height / 2,
+                                               center - row.height / 2 - 1e-12)
+                    XCTAssertLessThanOrEqual(cell.y0 + cell.slope * x + cell.height / 2,
+                                            center + row.height / 2 + 1e-12)
+                }
+            }
+            let middle = PlanReader.identifierCellRegion(column: 1, of: row, layout: layout)
+            XCTAssertEqual(middle, PlanReader.boundedCellRegion(column: 1, of: row, layout: layout),
+                           "已有两侧相邻表头的内列保持原几何")
+        }
+    }
+
+    func testIdentifierCellRegionHonorsClippedPageEdgesAndInvalidGeometry() throws {
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星ID", column: .satelliteID, x: 0.16),
+            .init(label: "地面站", column: .station, x: 0.40),
+            .init(label: "数传开始", column: .start, x: 0.72),
+        ])
+        let rows = [
+            PassPlan.Region(y0: 0.01, slope: 0.03, height: 0.2, left: 0.1, right: 0.8),
+            PassPlan.Region(y0: 0.99, slope: -0.03, height: 0.2, left: 0.1, right: 0.8),
+        ]
+        for row in rows {
+            for index in layout.slots.indices {
+                let cell = try XCTUnwrap(PlanReader.identifierCellRegion(column: index, of: row, layout: layout))
+                XCTAssertGreaterThanOrEqual(cell.left, row.left)
+                XCTAssertLessThanOrEqual(cell.right, row.right)
+                for x in [cell.left, cell.right] {
+                    let center = cell.y0 + cell.slope * x
+                    XCTAssertGreaterThanOrEqual(center - cell.height / 2, -1e-12)
+                    XCTAssertLessThanOrEqual(center + cell.height / 2, 1 + 1e-12)
+                }
+            }
+        }
+        XCTAssertNil(PlanReader.identifierCellRegion(column: -1, of: rows[0], layout: layout))
+        XCTAssertNil(PlanReader.identifierCellRegion(column: 3, of: rows[0], layout: layout))
+        XCTAssertNil(PlanReader.identifierCellRegion(column: 0, of: rows[0], layout: .init(slots: [])))
+        var invalid = rows[0]
+        invalid.height = 0
+        XCTAssertNil(PlanReader.identifierCellRegion(column: 0, of: invalid, layout: layout))
+        invalid = rows[0]
+        invalid.slope = .nan
+        XCTAssertNil(PlanReader.identifierCellRegion(column: 0, of: invalid, layout: layout))
+    }
+
+    func testCellRereadRegionStaysInsideItsRowAndImage() throws {
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星", column: .satellite, x: 0.1),
+            .init(label: "地面站", column: .station, x: 0.5),
+            .init(label: "是否应急", column: nil, x: 0.9),
+        ])
+        let regions = [
+            PassPlan.Region(y0: 0.5, slope: 0, height: 0.1, left: 0.05, right: 0.95),
+            PassPlan.Region(y0: 0.4, slope: 0.2, height: 0.15, left: 0.05, right: 0.95),
+            PassPlan.Region(y0: 0.6, slope: -0.2, height: 0.15, left: 0.05, right: 0.95),
+            PassPlan.Region(y0: 0.01, slope: 0.03, height: 0.2, left: 0, right: 1),
+            PassPlan.Region(y0: 0.99, slope: -0.03, height: 0.2, left: 0, right: 1),
+        ]
+        for region in regions {
+            for column in layout.slots.indices {
+                let cell = try XCTUnwrap(PlanReader.boundedCellRegion(column: column, of: region, layout: layout))
+                XCTAssertGreaterThan(cell.height, 0)
+                XCTAssertLessThanOrEqual(cell.height, region.height)
+                XCTAssertGreaterThanOrEqual(cell.left, region.left)
+                XCTAssertLessThanOrEqual(cell.right, region.right)
+                for x in [cell.left, cell.right] {
+                    let rowCenter = region.y0 + region.slope * x
+                    let cellCenter = cell.y0 + cell.slope * x
+                    let top = cellCenter - cell.height / 2
+                    let bottom = cellCenter + cell.height / 2
+                    XCTAssertGreaterThanOrEqual(top, rowCenter - region.height / 2 - 1e-12)
+                    XCTAssertLessThanOrEqual(bottom, rowCenter + region.height / 2 + 1e-12)
+                    XCTAssertGreaterThanOrEqual(top, -1e-12)
+                    XCTAssertLessThanOrEqual(bottom, 1 + 1e-12)
+                }
+            }
+        }
+        let empty = PassPlan.Region(y0: 0.5, slope: 0, height: 0, left: 0, right: 1)
+        XCTAssertNil(PlanReader.boundedCellRegion(column: 1, of: empty, layout: layout))
+        XCTAssertNil(PlanReader.boundedCellRegion(column: 3, of: regions[0], layout: layout))
+    }
+
+    /// 走整格复识实际使用的裁法：青色是本格，洋红是邻行，黄色是同一行的相邻列。
+    func testCellRereadCropExcludesNeighborPixelsWhenRowsAreTilted() async throws {
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星", column: .satellite, x: 0.1),
+            .init(label: "地面站", column: .station, x: 0.5),
+            .init(label: "是否应急", column: nil, x: 0.9),
+        ])
+        for slope in [-0.16, 0, 0.16] {
+            let y0 = 0.5 - slope * 0.5
+            let source = try await MainActor.run {
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 300), format: format).image { output in
+                    UIColor.magenta.setFill()
+                    output.cgContext.fill(CGRect(x: 0, y: 0, width: 600, height: 300))
+                    func band(left: Double, right: Double, color: UIColor) {
+                        func point(_ x: Double, _ dy: Double) -> CGPoint {
+                            CGPoint(x: x * 600, y: (y0 + slope * x + dy) * 300)
+                        }
+                        let path = CGMutablePath()
+                        path.move(to: point(left, -0.05))
+                        path.addLine(to: point(right, -0.05))
+                        path.addLine(to: point(right, 0.05))
+                        path.addLine(to: point(left, 0.05))
+                        path.closeSubpath()
+                        output.cgContext.addPath(path)
+                        color.setFill()
+                        output.cgContext.fillPath()
+                    }
+                    band(left: 0, right: 1, color: .yellow)
+                    band(left: 0.3, right: 0.7, color: .cyan)
+                }
+                return try XCTUnwrap(image.cgImage)
+            }
+            let rows = [-0.1, 0, 0.1].map { offset in
+                PassPlanRow(region: .init(y0: y0 + offset, slope: slope, height: 0.3, left: 0, right: 1))
+            }
+            let region = try XCTUnwrap(PassPlan.boundedRegions(rows)[1].region)
+            let crop = try XCTUnwrap(PlanReader.cropCell(column: 1, of: region, layout: layout,
+                                                       from: source, context: CIContext()))
+            let context = try XCTUnwrap(CGContext(data: nil, width: crop.width, height: crop.height, bitsPerComponent: 8,
+                                                 bytesPerRow: crop.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+            let bytes = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+            var cyan = 0, neighbor = 0
+            for pixel in 0..<(crop.width * crop.height) {
+                let i = pixel * 4
+                if bytes[i] < 80, bytes[i + 1] > 150, bytes[i + 2] > 150 { cyan += 1 }
+                let magenta = bytes[i] > 150 && bytes[i + 1] < 80 && bytes[i + 2] > 150
+                let yellow = bytes[i] > 150 && bytes[i + 1] > 150 && bytes[i + 2] < 80
+                if magenta || yellow { neighbor += 1 }
+            }
+            XCTAssertGreaterThan(cyan, crop.width * crop.height * 9 / 10, "目标格必须保留，slope=\(slope)")
+            XCTAssertEqual(neighbor, 0, "整格补读不得带入邻行或相邻列像素，slope=\(slope)")
         }
     }
 

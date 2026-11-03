@@ -153,6 +153,9 @@ enum PlanReader {
                     }
                 }
             }
+            // 编号即使格式合法也可能把 0/C、1/L、5/6 读错。用原格的英文无纠错读数核对，
+            // 只为当前可发送的记录补充疑项；不同读数不自动覆盖原值。
+            result.rows = await reviewIdentifiers(result.rows, layout: found, in: picture, rules: rules, settings: settings)
             // 所有行（包括稍后不发的 test）都参与裁切边界，避免正常条带带入相邻 test 行。
             result.rows = PassPlan.boundedRegions(result.rows)
             result.header?.page = page
@@ -182,21 +185,17 @@ enum PlanReader {
         let station = layout.slots.firstIndex { $0.column == .station }
         let urgent = layout.emergencyIndex
         guard station != nil || urgent != nil else { return rows }
-        let xs = layout.slots.map(\.x)
         return await Task.detached(priority: .userInitiated) {
             let trace = Trace(settings.diagnostics, "stationCells", "rows=\(rows.count)")
+            let context = CIContext()
             var attempts = 0
             defer { trace.end("cropAttempts=\(attempts)") }
             /// 这一行第 s 列那一格单独认出的字
             func reread(column s: Int, of region: PassPlan.Region, using options: Settings) -> String? {
-                let left = s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left
-                let right = s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right
-                let center = (left + right) / 2
-                let cell = PassPlan.TextBox(text: "", x: left, y: region.y0 + region.slope * center - region.height * 0.45,
-                                            width: right - left, height: region.height * 0.9)
                 attempts += 1
-                let text = Self.reread(cell, in: image, words: words, settings: options, smooth: false, diagnosticID: "column\(s)")?
-                    .text.filter { !$0.isWhitespace }
+                guard let crop = Self.cropCell(column: s, of: region, layout: layout, from: image, context: context) else { return nil }
+                let text = Self.recognizeCell(crop, words: words, settings: options, smooth: false, diagnosticID: "column\(s)")?
+                    .filter { !$0.isWhitespace }
                 return text?.isEmpty == false ? text : nil
             }
             return rows.map { row in
@@ -227,6 +226,102 @@ enum PlanReader {
                 return fixed
             }
         }.value
+    }
+
+    /// 整格补读只用已限定的行带：列界取相邻表头中点，四角随行倾斜，不能再向邻行补像素。
+    static func boundedCellRegion(column s: Int, of region: PassPlan.Region, layout: PassPlan.Layout) -> PassPlan.Region? {
+        let xs = layout.slots.map(\.x)
+        guard xs.indices.contains(s), xs.allSatisfy(\.isFinite),
+              region.y0.isFinite, region.slope.isFinite, region.height.isFinite, region.height > 0,
+              region.left.isFinite, region.right.isFinite else { return nil }
+        let left = max(max(0, region.left), s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left)
+        let right = min(min(1, region.right), s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right)
+        guard right > left else { return nil }
+        let leftY = region.y0 + region.slope * left
+        let rightY = region.y0 + region.slope * right
+        let imageMargin = min(min(leftY, rightY), min(1 - leftY, 1 - rightY))
+        let halfHeight = min(region.height * 0.45, imageMargin)
+        guard halfHeight > 0 else { return nil }
+        return PassPlan.Region(page: region.page, y0: region.y0, slope: region.slope, height: halfHeight * 2,
+                               left: left, right: right)
+    }
+
+    /// 与发原图同样沿四角扶正，直接给 OCR 原始像素，不经过 JPEG，也不调用词框的外扩裁法。
+    static func cropCell(column: Int, of region: PassPlan.Region, layout: PassPlan.Layout, from image: CGImage,
+                         context: CIContext) -> CGImage? {
+        guard let cell = boundedCellRegion(column: column, of: region, layout: layout),
+              let straight = straightened(cell, source: CIImage(cgImage: image),
+                                          width: Double(image.width), height: Double(image.height)),
+              straight.extent.width > 2, straight.extent.height > 2 else { return nil }
+        return context.createCGImage(straight, from: straight.extent)
+    }
+
+    /// 明确的卫星编号列；Excel 的「卫星」列只有出现字母数字代号时才参与编号核对。
+    static func identifierColumn(for row: PassPlanRow, layout: PassPlan.Layout) -> Int? {
+        if let index = layout.slots.firstIndex(where: { $0.column == .satelliteID }) { return index }
+        guard let index = layout.slots.firstIndex(where: { $0.column == .satellite }),
+              layout.slots[index].label.filter({ !$0.isWhitespace }) == "卫星" else { return nil }
+        let scalars = row.satellite.unicodeScalars
+        let hasLetter = scalars.contains { (65...90).contains($0.value) || (97...122).contains($0.value) }
+        let hasDigit = scalars.contains { (48...57).contains($0.value) }
+        let hasOtherLetter = scalars.contains { $0.value > 127 && CharacterSet.letters.contains($0) }
+        return hasLetter && hasDigit && !hasOtherLetter ? index : nil
+    }
+
+    /// 首列外侧不包含 Excel 行号栏，边界来自表头间距，不根据候选编号或真值猜裁框。
+    static func identifierCellRegion(column: Int, of region: PassPlan.Region, layout: PassPlan.Layout) -> PassPlan.Region? {
+        let xs = layout.slots.map(\.x)
+        guard xs.indices.contains(column), xs.allSatisfy(\.isFinite) else { return nil }
+        var bounded = region
+        if xs.count > 1 {
+            bounded.left = max(bounded.left, xs[0] - (xs[1] - xs[0]) / 2)
+            let last = xs.count - 1
+            bounded.right = min(bounded.right, xs[last] + (xs[last] - xs[last - 1]) / 2)
+        }
+        return boundedCellRegion(column: column, of: bounded, layout: layout)
+    }
+
+    /// 已有疑项或 test 的行无需再消耗识别请求；每页最多 100 格，未能核对的格子保留核对提示。
+    static func reviewIdentifiers(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
+                                  rules: [PassPlan.OperatorRule], settings: Settings) async -> [PassPlanRow] {
+        let work: Task<[PassPlanRow], Never> = Task.detached(priority: .userInitiated) {
+            let trace = Trace(settings.diagnostics, "identifierReview", "rows=\(rows.count)|limit=100")
+            let context = CIContext()
+            let source = CIImage(cgImage: image)
+            var attempts = 0
+            var result = rows
+            defer { trace.end("cropAttempts=\(attempts)") }
+            for i in result.indices {
+                let row = result[i]
+                guard !PassPlan.isExcludedFromSending(row),
+                      PassPlan.problems(row, rules: rules, layout: layout).isEmpty,
+                      let column = identifierColumn(for: row, layout: layout),
+                      let field = layout.slots[column].column else { continue }
+                var candidates: [String] = []
+                if attempts < 100, let region = row.region,
+                   let cell = identifierCellRegion(column: column, of: region, layout: layout),
+                   let straight = straightened(cell, source: source, width: Double(image.width), height: Double(image.height)),
+                   straight.extent.width > 2, straight.extent.height > 2 {
+                    let scale = min(4, max(1, (80 / straight.extent.height).rounded(.up)))
+                    let sized = straight.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                    if let crop = context.createCGImage(sized, from: sized.extent) {
+                        attempts += 1
+                        let request = VNRecognizeTextRequest()
+                        request.recognitionLevel = .accurate
+                        request.recognitionLanguages = ["en-US"]
+                        request.usesLanguageCorrection = false
+                        request.customWords = []
+                        if (try? VNImageRequestHandler(cgImage: crop, orientation: .up).perform([request])) != nil {
+                            let raw = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+                            candidates = [raw]
+                        }
+                    }
+                }
+                result[i] = PassPlan.reviewIdentifierReread(row, column: field, candidates: candidates)
+            }
+            return result
+        }
+        return await work.value
     }
 
     /// 网页的无表头「应急」在 No. 左边；test 在最右状态列。
@@ -329,7 +424,7 @@ enum PlanReader {
         for observation in request.results ?? [] {
             guard let text = observation.topCandidates(1).first?.string else { continue }
             let token = text.filter { !$0.isWhitespace }.lowercased()
-            guard token == "应急" || token == "test" else { continue }
+            guard token == "应急" || PassPlan.isTestStatus(text) else { continue }
             let box = observation.boundingBox
             let x: Double = (originX + Double(box.minX) * cropWidth) / w
             let y: Double = (originY + (1 - Double(box.maxY)) * cropHeight) / h
@@ -357,17 +452,8 @@ enum PlanReader {
             let w = Double(image.width), h = Double(image.height)
             var result: [PassPlan.Region: Data] = [:]
             for region in regions {
-                // CoreImage 的原点在左下
-                func corner(_ x: Double, _ dy: Double) -> CIVector {
-                    CIVector(x: x * w, y: h - (region.y0 + region.slope * x + dy) * h)
-                }
-                guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { continue }
-                filter.setValue(source, forKey: kCIInputImageKey)
-                filter.setValue(corner(region.left, -region.height / 2), forKey: "inputTopLeft")
-                filter.setValue(corner(region.right, -region.height / 2), forKey: "inputTopRight")
-                filter.setValue(corner(region.right, region.height / 2), forKey: "inputBottomRight")
-                filter.setValue(corner(region.left, region.height / 2), forKey: "inputBottomLeft")
-                guard let straight = filter.outputImage, straight.extent.width > 1 else { continue }
+                guard let straight = straightened(region, source: source, width: w, height: h),
+                      straight.extent.width > 1 else { continue }
                 let scale = min(1, 2400 / straight.extent.width)
                 let sized = straight.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
                 if let data = context.jpegRepresentation(of: sized, colorSpace: CGColorSpaceCreateDeviceRGB(),
@@ -377,6 +463,20 @@ enum PlanReader {
             }
             return result
         }.value
+    }
+
+    private static func straightened(_ region: PassPlan.Region, source: CIImage, width: Double, height: Double) -> CIImage? {
+        // CoreImage 的原点在左下；上下边沿同一条倾斜行，不能用包围矩形代替。
+        func corner(_ x: Double, _ dy: Double) -> CIVector {
+            CIVector(x: x * width, y: height - (region.y0 + region.slope * x + dy) * height)
+        }
+        guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
+        filter.setValue(source, forKey: kCIInputImageKey)
+        filter.setValue(corner(region.left, -region.height / 2), forKey: "inputTopLeft")
+        filter.setValue(corner(region.right, -region.height / 2), forKey: "inputTopRight")
+        filter.setValue(corner(region.right, region.height / 2), forKey: "inputBottomRight")
+        filter.setValue(corner(region.left, region.height / 2), forKey: "inputBottomLeft")
+        return filter.outputImage
     }
 
     /// 表格文件（Excel、CSV）
@@ -549,6 +649,14 @@ enum PlanReader {
         let rect = CGRect(x: spot.x * w - pad, y: spot.y * h - pad, width: spot.width * w + pad * 2, height: spot.height * h + pad * 2)
             .intersection(CGRect(x: 0, y: 0, width: w, height: h)).integral
         guard rect.width > 2, rect.height > 2, let cut = image.cropping(to: rect) else { return nil }
+        guard let text = recognizeCell(cut, words: words, settings: settings, smooth: smooth, diagnosticID: diagnosticID) else { return nil }
+        var box = spot
+        box.text = text
+        return box
+    }
+
+    private static func recognizeCell(_ cut: CGImage, words: [String], settings: Settings,
+                                      smooth: Bool, diagnosticID: String) -> String? {
         let trace = Trace(settings.diagnostics, "cellOCR.\(diagnosticID)", "size=\(cut.width)x\(cut.height)")
         defer { trace.end() }
         // 一小块字：放大到够高再认（小字放大了认得准）
@@ -561,9 +669,7 @@ enum PlanReader {
         guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { return nil }
         let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
         guard !text.isEmpty else { return nil }
-        var box = spot
-        box.text = text
-        return box
+        return text
     }
 
     /// 认之前处理一下：smooth 轻轻模糊压掉摩尔纹；enlarge 一小块字不到 80 像素高就放大到 80 以上（最多 4 倍）
