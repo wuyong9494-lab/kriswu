@@ -647,6 +647,137 @@ final class PlanReaderTests: XCTestCase {
         XCTAssertEqual(result, rows, "没有状态表头时不把最右侧信息当成状态补读")
     }
 
+    func testMarkerStripsCoverTheWholeBandWithinTheRequestBudget() {
+        XCTAssertTrue(PlanReader.markerStrips(height: 0).isEmpty)
+        XCTAssertTrue(PlanReader.markerStrips(height: -1).isEmpty)
+        for height in [1, 4, 599, 600, 720, 721, 1200, 3000, 7536, 30000, 1_000_000] {
+            let strips = PlanReader.markerStrips(height: height)
+            XCTAssertFalse(strips.isEmpty)
+            XCTAssertLessThanOrEqual(strips.count, 12, "超长窄栏仍须限制请求数，height=\(height)")
+            XCTAssertEqual(strips.first?.top, 0)
+            XCTAssertEqual(strips.last.map { $0.top + $0.height }, height, "预算不能截掉底部")
+            XCTAssertEqual(strips.first?.keep.lowerBound, -Double.infinity)
+            XCTAssertEqual(strips.last?.keep.upperBound, Double.infinity)
+            for (index, strip) in strips.enumerated() {
+                XCTAssertGreaterThan(strip.height, 0)
+                XCTAssertGreaterThanOrEqual(strip.top, 0)
+                XCTAssertLessThanOrEqual(strip.top + strip.height, height)
+                let ownedTop = max(0, strip.keep.lowerBound) * Double(height)
+                let ownedBottom = min(1, strip.keep.upperBound) * Double(height)
+                XCTAssertGreaterThanOrEqual(ownedTop, Double(strip.top) - 1e-8)
+                XCTAssertLessThanOrEqual(ownedBottom, Double(strip.top + strip.height) + 1e-8,
+                                         "保留区必须由本段实际像素覆盖")
+                if index > 0 {
+                    let previous = strips[index - 1]
+                    XCTAssertLessThan(strip.top, previous.top + previous.height, "相邻段应有重叠")
+                    XCTAssertEqual(previous.keep.upperBound, strip.keep.lowerBound, "交接处不能有缺口或重复归属")
+                    for delta in [-0.5, 0, 0.5] {
+                        let y = strip.keep.lowerBound + delta / Double(height)
+                        if y >= 0 && y < 1 {
+                            XCTAssertEqual(strips.filter { $0.keep.contains(y) }.count, 1)
+                        }
+                    }
+                }
+            }
+        }
+        XCTAssertGreaterThan(PlanReader.markerStrips(height: 3000).count, 1,
+                             "3000像素细长栏必须实际拆段，不能退回整栏缩小识别")
+    }
+
+    func testCriticalMarkersSurviveOppositeJitterAtOverlappingStripBoundary() throws {
+        let imageHeight = 4096
+        let band = CGRect(x: 600, y: 128, width: 220, height: 3000)
+        let strips = PlanReader.markerStrips(height: 3000)
+        XCTAssertGreaterThanOrEqual(strips.count, 2)
+        guard strips.count >= 2 else { return }
+        let first = strips[0], second = strips[1]
+        let boundary = Double(band.minY) + first.keep.upperBound * Double(band.height)
+        func marker(_ text: String, center: Double, height: Double = 20) -> PassPlan.TextBox {
+            .init(text: text, x: 0.72, y: (center - height / 2) / Double(imageHeight),
+                  width: 0.08, height: height / Double(imageHeight))
+        }
+        // 前段把中心读到交接线下0.5px，后段读到线上0.5px；若都按keep会两份都丢。
+        for text in ["test", " t e S T ", "应急", "应 急"] {
+            XCTAssertTrue(PlanReader.shouldKeepMarker(marker(text, center: boundary + 0.5),
+                                                       in: first, bandRect: band, imageHeight: imageHeight))
+            XCTAssertTrue(PlanReader.shouldKeepMarker(marker(text, center: boundary - 0.5),
+                                                       in: second, bandRect: band, imageHeight: imageHeight))
+            let clippedBottom = marker(text, center: Double(band.minY) + Double(first.top + first.height) - 2)
+            XCTAssertFalse(PlanReader.shouldKeepMarker(clippedBottom, in: first, bandRect: band,
+                                                        imageHeight: imageHeight), "切断下边缘的残框不能借关键证据例外")
+            let clippedTop = marker(text, center: Double(band.minY) + Double(second.top) + 2)
+            XCTAssertFalse(PlanReader.shouldKeepMarker(clippedTop, in: second, bandRect: band,
+                                                        imageHeight: imageHeight), "切断上边缘的残框不能借关键证据例外")
+        }
+        for text in ["等待数传", "已发送站", "发送失败", "数传成功"] {
+            XCTAssertFalse(PlanReader.shouldKeepMarker(marker(text, center: boundary + 0.5),
+                                                        in: first, bandRect: band, imageHeight: imageHeight))
+            XCTAssertFalse(PlanReader.shouldKeepMarker(marker(text, center: boundary - 0.5),
+                                                        in: second, bandRect: band, imageHeight: imageHeight))
+            let ordinary = marker(text, center: boundary)
+            XCTAssertEqual(strips.filter {
+                PlanReader.shouldKeepMarker(ordinary, in: $0, bandRect: band, imageHeight: imageHeight)
+            }.count, 1, "普通状态仍按唯一keep归属")
+        }
+    }
+
+    /// 3000px高的细长栏：18pt小字、四种普通状态、test和空白；固定标签跨过分段交接附近。
+    /// 所有数据均为程序绘制的通用词与虚构行，不使用用户照片。
+    func testTallNarrowStatusColumnRestoresSmallTextWithoutCrossingRows() async throws {
+        let centers = [40, 180, 320, 460, 544, 680, 820, 960, 1024, 1160, 1300, 1440,
+                       1504, 1640, 1780, 1920, 1984, 2120, 2260, 2400, 2464, 2600, 2740, 2880, 2960]
+        let cycle = ["等待数传", "发送失败", "数传成功", "已发送站", "test", ""]
+        let expected = centers.indices.map { cycle[$0 % cycle.count] }
+        let source = try await MainActor.run {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 1000, height: 3000), format: format).image { output in
+                UIColor.white.setFill()
+                output.cgContext.fill(CGRect(x: 0, y: 0, width: 1000, height: 3000))
+                let font = UIFont.systemFont(ofSize: 18, weight: .medium)
+                for index in centers.indices {
+                    func draw(_ value: String, at x: CGFloat, color: UIColor) {
+                        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+                        let size = (value as NSString).size(withAttributes: attributes)
+                        (value as NSString).draw(at: CGPoint(x: x - size.width / 2,
+                                                             y: CGFloat(centers[index]) - size.height / 2),
+                                                withAttributes: attributes)
+                    }
+                    draw("test", at: 540, color: .black)
+                    draw(expected[index], at: 830, color: UIColor(red: 0.12, green: 0.42, blue: 0.24, alpha: 1))
+                }
+            }
+            return try XCTUnwrap(image.cgImage)
+        }
+        let rows = centers.enumerated().map { index, center -> PassPlanRow in
+            var row = statusRereadRow(index)
+            row.start = String(format: "2032-04-12 08:%02d:00", index)
+            row.end = String(format: "2032-04-12 09:%02d:00", index)
+            row.region = .init(y0: Double(center) / 3000, slope: 0, height: 64.0 / 3000, left: 0, right: 1)
+            if index == 4 { row.emergencyBadge = true }
+            return row
+        }
+        var settings = PlanReader.Settings.standard
+        settings.diagnostics = true
+        let result = await PlanReader.rereadRowMarkers(rows, layout: statusRereadLayout, in: source, settings: settings)
+        XCTAssertEqual(result.count, rows.count)
+        guard result.count == rows.count else { return }
+        for index in rows.indices {
+            let row = result[index]
+            print("OCRSTATUSLONG|row=\(index)|y=\(centers[index])|expected=\(expected[index])|actual=\(row.status)|excluded=\(PassPlan.isExcludedFromSending(row))")
+            XCTAssertEqual(row.satelliteID, rows[index].satelliteID)
+            XCTAssertEqual(row.region, rows[index].region)
+            XCTAssertEqual(row.status, expected[index], "行\(index)的实际状态必须恢复，不能用待核对数量替代")
+            XCTAssertEqual(PassPlan.isExcludedFromSending(row), expected[index] == "test",
+                           "test只影响对应行，信息列test和空白不能误排")
+            if !expected[index].isEmpty && expected[index] != "test" {
+                XCTAssertEqual(row.cells.last, expected[index])
+            }
+        }
+        XCTAssertEqual(result[4].emergencyBadge, true)
+        XCTAssertTrue(PassPlan.isExcludedFromSending(result[4]), "应急计划仍以test不发送为优先")
+    }
+
     func testOriginalImageOmitsTestRowsEvenWithoutTheirStrips() async throws {
         try await MainActor.run {
             @MainActor func tile(_ color: UIColor) throws -> Data {

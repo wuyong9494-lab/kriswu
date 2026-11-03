@@ -343,7 +343,7 @@ enum PlanReader {
 
     /// 网页的无表头「应急」在 No. 左边；test 和普通状态在最右状态列。
     /// 只补读有明确列位置的窄边栏，再交给核心按唯一行几何挂接；不根据红色背景推断。
-    /// 每页最多两次窄栏识别，避免每个普通空白行都再跑一遍 OCR。
+    /// 长细栏分成有重叠的短段；每栏最多十二次请求，避免逐行复识或漏掉超长图尾部。
     static func rereadRowMarkers(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
                                  settings: Settings) async -> [PassPlanRow] {
         let trace = Trace(settings.diagnostics, "markers", "rows=\(rows.count)")
@@ -424,9 +424,64 @@ enum PlanReader {
         var markers: [PassPlan.TextBox] = []
         for band in bands {
             guard let rect = markerCrop(band, regions: regions, imageWidth: image.width, imageHeight: image.height) else { continue }
-            markers.append(contentsOf: markerTextBoxes(in: image, rect: rect, settings: settings))
+            let strips = markerStrips(height: Int(rect.height))
+            if settings.diagnostics {
+                print("OCRMARKERBAND|rect=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))|strips=\(strips.count)")
+            }
+            for strip in strips {
+                let piece = CGRect(x: rect.minX, y: rect.minY + CGFloat(strip.top),
+                                   width: rect.width, height: CGFloat(strip.height))
+                let found = markerTextBoxes(in: image, rect: piece, settings: settings)
+                markers.append(contentsOf: found.filter { box in
+                    shouldKeepMarker(box, in: strip, bandRect: rect, imageHeight: image.height)
+                })
+            }
         }
         return markers
+    }
+
+    /// 普通状态按交接中线去重；test / 应急在重叠内完整读到就保留。
+    /// 两段对同一字框的位置可能略有抖动，不能让中线两侧的取舍把两份关键证据都丢掉。
+    static func shouldKeepMarker(_ box: PassPlan.TextBox, in strip: PassPlan.Strip,
+                                 bandRect: CGRect, imageHeight: Int) -> Bool {
+        guard imageHeight > 0, bandRect.height > 0 else { return false }
+        let h = Double(imageHeight)
+        let relativeY = (box.midY * h - Double(bandRect.minY)) / Double(bandRect.height)
+        if strip.keep.contains(relativeY) { return true }
+        let emergency = box.text.filter { !$0.isWhitespace } == "应急"
+        guard emergency || PassPlan.isTestStatus(box.text) else { return false }
+        let top = Double(bandRect.minY) + Double(strip.top)
+        let bottom = top + Double(strip.height)
+        // 只额外保留完整落在片段内的证据，不让切边残词借用重叠例外。
+        return box.y * h >= top + 1 && (box.y + box.height) * h <= bottom - 1
+    }
+
+    /// 窄栏若一次识别两三千像素高，小字容易漏掉。优先用约 600 像素高的短段，
+    /// 重叠五分之一，并在重叠中线交接；超长图提高段高，仍完整覆盖且不超过十二段。
+    /// keep 使用整条窄栏的相对坐标，识别结果本身仍使用原照片坐标。
+    static func markerStrips(height: Int) -> [PassPlan.Strip] {
+        guard height > 0 else { return [] }
+        let limit = 12
+        let coveredSpans = 1 + Double(limit - 1) * 0.8
+        let size = max(600, Int(ceil(Double(height) / coveredSpans)))
+        let overlap = size / 5
+        guard height > size + overlap else {
+            return [.init(top: 0, height: height, keep: -Double.infinity..<Double.infinity)]
+        }
+        var spans: [(top: Int, bottom: Int)] = []
+        var top = 0
+        while true {
+            let bottom = min(top + size, height)
+            spans.append((top, bottom))
+            if bottom >= height { break }
+            top = bottom - overlap
+        }
+        let h = Double(height)
+        return spans.indices.map { i in
+            let from = i == 0 ? -Double.infinity : Double(spans[i].top + spans[i - 1].bottom) / 2 / h
+            let to = i == spans.count - 1 ? Double.infinity : Double(spans[i + 1].top + spans[i].bottom) / 2 / h
+            return .init(top: spans[i].top, height: spans[i].bottom - spans[i].top, keep: from..<to)
+        }
     }
 
     private static func markerTextBoxes(in image: CGImage, rect: CGRect, settings: Settings) -> [PassPlan.TextBox] {
@@ -456,6 +511,11 @@ enum PlanReader {
             let width: Double = Double(box.width) * cropWidth / w
             let height: Double = Double(box.height) * cropHeight / h
             boxes.append(PassPlan.TextBox(text: text, x: x, y: y, width: width, height: height))
+        }
+        if settings.diagnostics {
+            let normal = boxes.filter { PassPlan.isRecognizedPlanStatus($0.text) && !PassPlan.isTestStatus($0.text) }.count
+            let tests = boxes.filter { PassPlan.isTestStatus($0.text) }.count
+            print("OCRMARKERPASS|size=\(crop.width)x\(crop.height)|minHeight=\(request.minimumTextHeight)|observations=\(request.results?.count ?? 0)|accepted=\(boxes.count)|normal=\(normal)|test=\(tests)")
         }
         return boxes
     }

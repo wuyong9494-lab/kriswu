@@ -1251,7 +1251,7 @@ public enum PassPlan {
 
     /// 窄栏补读只接受已有计划格式中的完整状态；不把残缺词或相似英文猜成普通状态。
     public static func isRecognizedPlanStatus(_ status: String) -> Bool {
-        ["等待数传", "已发送站", "test"].contains(markerText(status))
+        ["等待数传", "已发送站", "发送失败", "数传成功", "test"].contains(markerText(status))
     }
 
     public static func isExcludedFromSending(_ row: PassPlanRow) -> Bool {

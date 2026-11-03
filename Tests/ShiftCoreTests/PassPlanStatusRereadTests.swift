@@ -27,10 +27,10 @@ final class PassPlanStatusRereadTests: XCTestCase {
     }
 
     func testCompleteStatusWordsAndWhitespaceAreAcceptedWithoutGuessing() {
-        for text in ["等待数传", "等 待\n数 传", "已发送站", "test", "Ｔ Ｅ Ｓ Ｔ"] {
+        for text in ["等待数传", "等 待\n数 传", "已发送站", "发送失败", "发 送\n失 败", "数传成功", "数 传 成 功", "test", "Ｔ Ｅ Ｓ Ｔ"] {
             XCTAssertTrue(PassPlan.isRecognizedPlanStatus(text), text)
         }
-        for text in ["等待", "等待数据", "已发送", "tost", "test 2", "contest", "应急", "状态", ""] {
+        for text in ["等待", "等待数据", "已发送", "发送失", "发送", "数传成", "数传成功1", "tost", "test 2", "contest", "应急", "状态", ""] {
             XCTAssertFalse(PassPlan.isRecognizedPlanStatus(text), text)
         }
     }
@@ -42,6 +42,34 @@ final class PassPlanStatusRereadTests: XCTestCase {
         XCTAssertEqual(result.map(\.status), ["等待数传", "已发送站"])
         XCTAssertEqual(result.map { $0.cells.last }, ["等待数传", "已发送站"])
         XCTAssertTrue(result.allSatisfy { $0.recognitionIssues == nil && !PassPlan.isExcludedFromSending($0) })
+    }
+
+    func testSendFailureAndSuccessFillEmptyWithoutOverridingTestOrExistingStatus() {
+        for status in ["发送失败", "数传成功"] {
+            let spaced = status.map(String.init).joined(separator: " ")
+            let filled = reread([row()], [box(spaced)])[0]
+            XCTAssertEqual(filled.status, status)
+            XCTAssertEqual(filled.cells.last, status)
+            XCTAssertNil(filled.recognitionIssues)
+            XCTAssertFalse(PassPlan.isExcludedFromSending(filled))
+            XCTAssertEqual(reread([row(status)], [box(status)]), [row(status)])
+
+            var retainedTest = row()
+            retainedTest.testStatusDetected = true
+            for original in [row("test"), retainedTest] {
+                let excluded = reread([original], [box(status)])[0]
+                XCTAssertEqual(excluded.status, original.status)
+                XCTAssertEqual(excluded.cells, original.cells)
+                XCTAssertTrue(PassPlan.isExcludedFromSending(excluded))
+            }
+            let conflict = reread([row("等待数传")], [box(status)])[0]
+            XCTAssertEqual(conflict.status, "等待数传")
+            XCTAssertEqual(conflict.cells.last, "等待数传")
+            XCTAssertTrue(conflict.recognitionIssues?.contains("状态补读与原识别不一致，请核对原图") == true)
+            let newTest = reread([row()], [box(status), box("test")])[0]
+            XCTAssertEqual(newTest.status, "test")
+            XCTAssertTrue(PassPlan.isExcludedFromSending(newTest))
+        }
     }
 
     func testInformationColumnAndBoxesSpillingAcrossColumnBoundaryAreIgnored() {
