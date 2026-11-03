@@ -18,6 +18,51 @@ final class PlanReaderTests: XCTestCase {
         let rows: [Row]
     }
 
+    func testSplitRereadBudgetIsSharedAcrossEveryPassAndStrip() {
+        let samples: [(width: Int, height: Int, strips: Int)] = [
+            (4032, 3024, 7), (3400, 1912, 4), (4032, 3024, 7), (1170, 7536, 6),
+        ]
+        for sample in samples {
+            let count = PassPlan.strips(width: sample.width, height: sample.height).count
+            XCTAssertEqual(count, sample.strips)
+            let budgets = PlanReader.splitRereadBudgets(total: 400, stripCounts: [count, count, 1])
+            XCTAssertEqual(budgets.map(\.count), [count, count, 1])
+            XCTAssertEqual(budgets.flatMap { $0 }.reduce(0, +), 400, "不是每段各自获得400次")
+            let passTotals = budgets.map { $0.reduce(0, +) }
+            XCTAssertLessThanOrEqual((passTotals.max() ?? 0) - (passTotals.min() ?? 0), 1)
+            for pass in budgets {
+                XCTAssertLessThanOrEqual((pass.max() ?? 0) - (pass.min() ?? 0), 1, "各段都有固定公平份额")
+            }
+        }
+        XCTAssertEqual(PlanReader.splitRereadBudgets(total: 400, stripCounts: [7, 7, 1]), [
+            [20, 19, 19, 19, 19, 19, 19], [19, 19, 19, 19, 19, 19, 19], [133],
+        ], "分配顺序固定，不取决于并发任务谁先完成")
+    }
+
+    func testSplitRereadBudgetCannotSpendAnIncompleteGroup() {
+        var budget = PlanReader.SplitRereadBudget(limit: 5)
+        XCTAssertTrue(budget.reserve(groupSize: 3))
+        XCTAssertEqual(budget.used, 3)
+        XCTAssertFalse(budget.reserve(groupSize: 3), "余量不够整组则不拆，调用方保留原框")
+        XCTAssertEqual(budget.used, 3, "不允许只花剩下的两次、丢掉第三块")
+        XCTAssertTrue(budget.reserve(groupSize: 2))
+        XCTAssertEqual(budget.used, 5)
+        XCTAssertFalse(budget.reserve(groupSize: 1))
+        XCTAssertEqual(budget.used, 5)
+    }
+
+    func testZeroAndSmallSplitRereadBudgetsStayWithinThePhotoLimit() {
+        let zero = PlanReader.splitRereadBudgets(total: 0, stripCounts: [7, 7, 1])
+        XCTAssertTrue(zero.flatMap { $0 }.allSatisfy { $0 == 0 })
+        let small = PlanReader.splitRereadBudgets(total: 2, stripCounts: [7, 7, 1])
+        XCTAssertEqual(small.flatMap { $0 }.reduce(0, +), 2)
+        var budget = PlanReader.SplitRereadBudget(limit: 0)
+        XCTAssertFalse(budget.reserve(groupSize: 2))
+        XCTAssertEqual(budget.used, 0)
+        XCTAssertEqual(PlanReader.splitRereadBudgets(total: 400, stripCounts: []), [])
+        XCTAssertFalse(PlanReader.Settings.standard.diagnostics, "正式使用默认不输出诊断日志")
+    }
+
     func testRecognitionAccuracy() async throws {
         let bundle = Bundle(for: Self.self)
         // 模拟器里认字很慢（没有神经网络芯片），只跑现在的认法；要比较几种认法时在这里加
@@ -35,8 +80,12 @@ final class PlanReaderTests: XCTestCase {
             let rules = truth.rules.sorted { $0.key < $1.key }.map { PassPlan.OperatorRule(name: $0.key, prefixes: $0.value) }
             for (label, settings) in variants {
                 let began = Date()
+                var diagnosed = settings
+                diagnosed.diagnostics = true
+                let width = image.cgImage?.width ?? 0, height = image.cgImage?.height ?? 0
+                print("OCRSTART|\(name)|\(label)|size=\(width)x\(height)|truthRows=\(truth.rows.count)")
                 do {
-                    let reading = try await PlanReader.read(pages: [image], rules: rules, settings: settings)
+                    let reading = try await PlanReader.read(pages: [image], rules: rules, settings: diagnosed)
                     let measured = accuracy(reading, truth, rules)
                     print(report(name, label, reading, truth, rules, seconds: Date().timeIntervalSince(began)))
                     XCTAssertNotNil(reading.layout, "\(name)：缺少表头布局")
