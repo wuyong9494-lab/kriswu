@@ -96,6 +96,13 @@ final class PlanReaderTests: XCTestCase {
                     XCTAssertEqual(measured.unsafeEligibleRows, 0,
                                    "\(name)：\(measured.eligibleWrongCriticalRows) 条可发送结果的关键字段错误，"
                                    + "\(measured.eligibleUnmatched) 条可发送结果无法唯一对应真值；须保留核对或修正识别")
+                    if let layout = reading.layout {
+                        for row in reading.rows where !PassPlan.isExcludedFromSending(row)
+                            && PlanReader.identifierColumn(for: row, layout: layout) != nil {
+                            XCTAssertFalse(PassPlan.problems(row, rules: rules, layout: layout).isEmpty,
+                                           "\(name)：照片编号在人工确认前不能仅凭多次 OCR 一致而放行")
+                        }
+                    }
                     if label == "现在" { await dumpOriginal(name, reading, rules) }
                 } catch {
                     print("OCR|\(name)|\(label)|认不出：\(error.localizedDescription)")

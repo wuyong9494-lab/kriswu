@@ -156,6 +156,15 @@ enum PlanReader {
             // 编号即使格式合法也可能把 0/C、1/L、5/6 读错。用原格的英文无纠错读数核对，
             // 只为当前可发送的记录补充疑项；不同读数不自动覆盖原值。
             result.rows = await reviewIdentifiers(result.rows, layout: found, in: picture, rules: rules, settings: settings)
+            // 多遍 Vision 也会把同一个编号读成相同的错误值。照片代号必须由人对照原图确认；
+            // 复识只补充候选分歧，不能代替确认。已有 test 记录继续直接排除。
+            for i in result.rows.indices {
+                let row = result.rows[i]
+                guard !PassPlan.isExcludedFromSending(row),
+                      let column = identifierColumn(for: row, layout: found),
+                      let field = found.slots[column].column else { continue }
+                result.rows[i] = PassPlan.requiringPhotoIdentifierReview(row, column: field)
+            }
             // 所有行（包括稍后不发的 test）都参与裁切边界，避免正常条带带入相邻 test 行。
             result.rows = PassPlan.boundedRegions(result.rows)
             result.header?.page = page

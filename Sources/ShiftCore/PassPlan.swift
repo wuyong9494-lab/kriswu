@@ -832,6 +832,29 @@ public enum PassPlan {
         return result
     }
 
+    /// 照片复识一致仍可能同错；照片读取入口显式调用，文字/表格导入不增加这项人工确认要求。
+    /// 不根据易混字母猜测，不要求已有裁条，也不改写任何识别值或发送标记。
+    public static func requiringPhotoIdentifierReview(_ row: PassPlanRow, column: Column) -> PassPlanRow {
+        let label: String
+        switch column {
+        case .satelliteID: label = "卫星编号"
+        case .satellite: label = "卫星代号"
+        default: return row
+        }
+        let issue = "照片中的\(label)需对照原图确认"
+        guard !(row.recognitionIssues ?? []).contains(issue) else { return row }
+        var result = row
+        result.recognitionIssues = (row.recognitionIssues ?? []) + [issue]
+        return result
+    }
+
+    /// 用户对照原图确认当前行后，只解除识别疑项；格式/缺字段检查和 test 排除仍按原值生效。
+    public static func confirmedRecognitionReview(_ row: PassPlanRow) -> PassPlanRow {
+        var result = row
+        result.recognitionIssues = nil
+        return result
+    }
+
     private static func comparisonValue(_ value: String) -> String {
         value.filter { !$0.isWhitespace }.uppercased()
             .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-")

@@ -1002,7 +1002,7 @@ struct PassPlanRowEditor: View {
                         Label(issue, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote).foregroundStyle(DS.Palette.warning)
                     }
-                    Text("对照原文改好后，点「保存并确认」。")
+                    Text("对照原文逐项核对，确认无误后点「保存并确认」。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -1044,8 +1044,8 @@ struct PassPlanRowEditor: View {
                 Button("保存并确认") {
                     row.start = PassPlan.normalizedTime(row.start)
                     row.end = PassPlan.normalizedTime(row.end)
-                    // 人工核对只清除多次识别的分歧；无效时间、缺少字段等检查仍然保留。
-                    row.recognitionIssues = nil
+                    // 人工确认只清除识别提示；无效时间、缺少字段和 test 排除继续生效。
+                    row = PassPlan.confirmedRecognitionReview(row)
                     onDone(row)
                     dismiss()
                 }
