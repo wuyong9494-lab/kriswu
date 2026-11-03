@@ -4,7 +4,7 @@
 
 - 用户反馈：值班提醒 App「拍照识图发计划」仍大量认错。
 - 范围是运营商数传计划的拍照识别、按地面站分家、核对与分享；现有实现为本机 Apple Vision 加表格几何解析。
-- 从最新开发提交 `bbdbc34a953452b0e394fba423126139f53db994` 创建 `codex/plan-ocr-accuracy`，没有从旧 main 开始。
+- 从最新开发提交 `bbdbc34a953452b0e394fba423126139f53db994` 创建 `codex/plan-ocr-accuracy`，没有从旧 main 开始。实际照片规则在同一修复链的 `codex/plan-photo-rules` 验证，保留上一轮正在运行的 OCR 对照。
 - 首次修复提交：`75087f9c00a34c5b86641256abfa0cda2c9db0b9`。
 - 首轮验证：[iOS Build 486](https://github.com/wuyong9494-lab/kriswu/actions/runs/41571843067)。
 - 页面拆分修复提交：`c3d7caf623ac9b314d0b44eea8c22a2c8a6979ba`。当前验收运行：[iOS Build 487](https://github.com/wuyong9494-lab/kriswu/actions/runs/41572618165)。
@@ -47,7 +47,7 @@
 
 ## 发布与剩余验收
 
-- 此修复分支排除自动更新 Releases 最新侧载包，不自动上传 TestFlight。
+- `codex/plan-` 修复分支均排除自动更新 Releases 最新侧载包，不自动上传 TestFlight。
 - 已取得并逐张查看四张实际照片，找到了无表头应急标签被分配进序号列后丢失的原因。目前执行环境不能运行 Apple Vision；真实照片尚未实际跑过本机 iOS OCR。匿名合成版式不能替代实际拍照验收，不能声称真实照片准确率或真机问题已经全部解决。
 - 真实 OCR 的最低执行契约不等于精度验收，必须阅读逐字段结果，并针对剩余误识补充样例。
 

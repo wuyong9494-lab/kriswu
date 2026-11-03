@@ -135,7 +135,7 @@ jobs:
 
       # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
       - name: 发布到 Releases（最新版）
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && github.ref != 'refs/heads/codex/plan-ocr-accuracy'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && !startsWith(github.ref, 'refs/heads/codex/plan-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
