@@ -7,7 +7,7 @@ import ImageIO
 import Vision
 @testable import ShiftReminder
 
-/// Test-only language comparison on six fixed, public synthetic cells recorded by Probe2.
+/// Test-only recognition/preprocessing comparison on six fixed, public synthetic cells recorded by Probe2.
 /// Recorded OCR boxes determine geometry; truth files and satellite dictionaries are never loaded.
 final class PlanReaderIdentifierProbeTests: XCTestCase {
     override func setUpWithError() throws {
@@ -33,10 +33,18 @@ final class PlanReaderIdentifierProbeTests: XCTestCase {
     }
 
     private enum Setting: String, CaseIterable, Sendable {
-        case bilingualCorrected, englishUncorrected, bilingualUncorrected
+        // Keep the original English setting name so offline comparison can join the Probe3 baseline.
+        case englishUncorrected, fastEnglishUncorrected, grayscaleContrastEnglishUncorrected
 
-        var languages: [String] { self == .englishUncorrected ? ["en-US"] : ["zh-Hans", "en-US"] }
-        var correction: Bool { self == .bilingualCorrected }
+        var languages: [String] { ["en-US"] }
+        var correction: Bool { false }
+        var fast: Bool { self == .fastEnglishUncorrected }
+        var grayscaleContrast: Bool { self == .grayscaleContrastEnglishUncorrected }
+        var recognitionLevelName: String { fast ? "fast" : "accurate" }
+        var preprocessing: String { grayscaleContrast ? "CIColorControls-grayscale-contrast" : "none" }
+
+        // One fixed transform for every cell, selected before inspecting any new OCR outputs.
+        static let contrast = 1.6
     }
 
     private struct Recordings: Decodable {
@@ -72,6 +80,7 @@ final class PlanReaderIdentifierProbeTests: XCTestCase {
         var rawHeight: Int
         var scale: Double
         var image: CGImage
+        var grayscaleContrastImage: CGImage
     }
 
     private static func run(_ fixture: Fixture) async throws {
@@ -139,27 +148,35 @@ final class PlanReaderIdentifierProbeTests: XCTestCase {
             }
             let sourceRead = fixture.column == .satelliteID ? row.satelliteID : row.satellite
             cells.append(Cell(row: index, sourceRead: sourceRead, region: region,
-                              rawWidth: crop.width, rawHeight: crop.height, scale: scale, image: prepared))
+                              rawWidth: crop.width, rawHeight: crop.height, scale: scale, image: prepared,
+                              grayscaleContrastImage: try grayscaleContrast(prepared, context: context)))
         }
         try log(fixture, [
             "kind": "identifierStart", "recording": records.recording,
             "sha256": hash, "placedBoxes": placed.count, "parsedRows": reading.rows.count,
             "completeRows": complete.count, "selectedRows": cells.count, "column": column,
             "columnLabel": layout.slots[column].label, "customWords": 0, "allowance": 180,
+            "settings": Setting.allCases.map(\.rawValue),
+            "baseline": Setting.englishUncorrected.rawValue,
+            "geometryPolicy": "unchanged-Probe3-six-cells; shared-crop-and-enlargement",
             "normalizationPolicy": "format-check-only; no trimming or character substitution",
             "sourceReadScope": "Probe2 first strip after keep; not a complete multi-strip production result",
         ])
         var requests = 0
         for cell in cells {
             for setting in Setting.allCases {
+                let input = setting.grayscaleContrast ? cell.grayscaleContrastImage : cell.image
+                let pixels = try XCTUnwrap(input.dataProvider?.data)
+                let pixelHash = SHA256.hash(data: pixels as Data).map { String(format: "%02x", Int($0)) }.joined()
                 let began = ProcessInfo.processInfo.systemUptime
-                try log(fixture, ["kind": "identifierRequestStart", "row": cell.row, "setting": setting.rawValue])
+                try log(fixture, ["kind": "identifierRequestStart", "row": cell.row, "setting": setting.rawValue,
+                                  "recognitionLevel": setting.recognitionLevelName, "preprocessing": setting.preprocessing])
                 let request = VNRecognizeTextRequest()
-                request.recognitionLevel = .accurate
+                request.recognitionLevel = setting.fast ? .fast : .accurate
                 request.recognitionLanguages = setting.languages
                 request.usesLanguageCorrection = setting.correction
                 request.customWords = []
-                try VNImageRequestHandler(cgImage: cell.image, orientation: .up).perform([request])
+                try VNImageRequestHandler(cgImage: input, orientation: .up).perform([request])
                 let observations = request.results ?? []
                 let rawStrings = observations.compactMap { $0.topCandidates(1).first?.string }
                 let raw = rawStrings.joined(separator: " ")
@@ -168,13 +185,27 @@ final class PlanReaderIdentifierProbeTests: XCTestCase {
                 let alternatives: [[[String: Any]]] = observations.map { observation in
                     observation.topCandidates(3).map { ["text": $0.string, "confidence": Double($0.confidence)] }
                 }
+                let observationBoxes: [[String: Double]] = observations.map {
+                    let box = $0.boundingBox
+                    return ["x": Double(box.minX), "y": Double(box.minY),
+                            "width": Double(box.width), "height": Double(box.height)]
+                }
                 try log(fixture, [
                     "kind": "identifierCandidate", "row": cell.row, "setting": setting.rawValue,
                     "languages": setting.languages, "languageCorrection": setting.correction,
                     "customWords": 0, "requestRevision": request.revision,
+                    "recognitionLevel": setting.recognitionLevelName,
+                    "minimumTextHeight": Double(request.minimumTextHeight),
+                    "preprocessing": setting.preprocessing,
+                    "saturation": setting.grayscaleContrast ? 0.0 : 1.0,
+                    "contrast": setting.grayscaleContrast ? Setting.contrast : 1.0,
+                    "brightness": 0.0,
                     "cropWidth": cell.rawWidth, "cropHeight": cell.rawHeight, "scale": cell.scale,
-                    "ocrWidth": cell.image.width, "ocrHeight": cell.image.height,
+                    "ocrWidth": input.width, "ocrHeight": input.height,
+                    "pixelSHA256": pixelHash, "bitsPerPixel": input.bitsPerPixel, "bytesPerRow": input.bytesPerRow,
                     "raw": raw, "rawStrings": rawStrings, "candidates": alternatives,
+                    "observationBoxes": observationBoxes,
+                    "observationCoordinateSpace": "prepared-crop-normalized-bottom-left",
                     "normalized": normalized, "normalizedMeaning": "raw-is-one-ASCII-alphanumeric-token",
                     "normalizationApplied": false, "sourceFirstStripRead": cell.sourceRead,
                     "region": regionFields(cell.region),
@@ -185,6 +216,19 @@ final class PlanReaderIdentifierProbeTests: XCTestCase {
         }
         try log(fixture, ["kind": "identifierSummary", "rows": cells.count, "requests": requests])
         XCTAssertEqual(requests, fixture.rowLimit * Setting.allCases.count)
+    }
+
+    /// A fixed grayscale/contrast transform only; no threshold search, morphology, or truth-derived parameters.
+    /// The accurate and fast baselines both receive the unchanged prepared image above.
+    private static func grayscaleContrast(_ image: CGImage, context: CIContext) throws -> CGImage {
+        let input = CIImage(cgImage: image)
+        let filter = try XCTUnwrap(CIFilter(name: "CIColorControls"))
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(0.0, forKey: kCIInputSaturationKey)
+        filter.setValue(Setting.contrast, forKey: kCIInputContrastKey)
+        filter.setValue(0.0, forKey: kCIInputBrightnessKey)
+        let output = try XCTUnwrap(filter.outputImage)
+        return try XCTUnwrap(context.createCGImage(output, from: input.extent))
     }
 
     /// Column geometry only. For the first Excel header, half-gap extrapolation excludes the row-number gutter.
