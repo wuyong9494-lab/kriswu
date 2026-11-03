@@ -42,7 +42,7 @@ enum PlanReader {
     }
 
     /// 拆格复识的整张照片预算。先公平分给各 pass，再在该 pass 的各段间按顺序分配。
-    /// 每个并发任务拿自己的固定份额，完成快慢不会改变哪些段可复识。
+    /// 各段拿自己的固定份额，前段不会耗尽后段的复识额度。
     static func splitRereadBudgets(total: Int, stripCounts: [Int]) -> [[Int]] {
         let counts = stripCounts.map { max(0, $0) }
         let active = counts.indices.filter { counts[$0] > 0 }
@@ -113,7 +113,7 @@ enum PlanReader {
             guard let picture = upright(image) else { continue }
             let pageTrace = Trace(settings.diagnostics, "page\(page)", "size=\(picture.width)x\(picture.height)")
             defer { pageTrace.end() }
-            // 几种认法同时认，拼出来的一行行对着挑
+            // 几种认法依次认，控制同时运行的 Vision 请求数量，再把各遍结果逐行核对
             let readings = try await boxes(of: picture, words: words, settings: settings)
             sawText = sawText || readings.contains { !$0.isEmpty }
             let parseTrace = Trace(settings.diagnostics, "parse\(page)", "readings=\(readings.count)")
@@ -421,7 +421,8 @@ enum PlanReader {
         return list.isEmpty ? [Settings.Pass()] : list
     }
 
-    /// 几种认法同时认，各认出一份（顺序和 passes 一样）
+    /// 按 passes 顺序逐遍识别：同一张照片同一时刻只执行一个 pass，限制 Vision 资源占用。
+    /// 各遍保留所有分段和既定拆格额度，返回顺序与 passes 一致。
     private static func boxes(of image: CGImage, words: [String], settings: Settings) async throws -> [[PassPlan.TextBox]] {
         let list = passes(of: image, settings: settings)
         let stripCounts: [Int] = list.map { pass in
@@ -430,19 +431,13 @@ enum PlanReader {
         let budgets = splitRereadBudgets(total: 400, stripCounts: stripCounts)
         let trace = Trace(settings.diagnostics, "allPasses", "size=\(image.width)x\(image.height)|strips=\(stripCounts)|splitBudgets=\(budgets)")
         defer { trace.end() }
-        return try await withThrowingTaskGroup(of: (Int, [PassPlan.TextBox]).self) { group in
-            for (i, pass) in list.enumerated() {
-                let quota: [Int] = budgets[i]
-                group.addTask {
-                    let boxes = try await textBoxes(in: image, words: words, settings: settings, pass: pass,
-                                                    splitBudgets: quota, diagnosticID: "pass\(i)")
-                    return (i, boxes)
-                }
-            }
-            var found = [[PassPlan.TextBox]](repeating: [], count: list.count)
-            for try await (i, boxes) in group { found[i] = boxes }
-            return found
+        var found: [[PassPlan.TextBox]] = []
+        for (i, pass) in list.enumerated() {
+            let boxes = try await textBoxes(in: image, words: words, settings: settings, pass: pass,
+                                            splitBudgets: budgets[i], diagnosticID: "pass\(i)")
+            found.append(boxes)
         }
+        return found
     }
 
     /// 认出图里的字：每一块按空格再拆开（相邻两格偶尔被认成一块），各自带位置（整张图的 0–1，y 从上往下）。
