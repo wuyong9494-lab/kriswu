@@ -1,0 +1,1030 @@
+{
+  "schemaVersion": 1,
+  "recording": "Existing generator grid and homography + production row/cell bounding formulas; not Build 495 OCR row boxes",
+  "photo": {
+    "name": "status_probe_web_photo",
+    "sourceCommit": "f2fd46fee3295cc4cb06b930ea2e74b047d7c753",
+    "sourcePath": "Tests/SiteTests/OCRSamples/web_photo.jpg",
+    "sha256": "d6c7d3c30672244ae5b8713061d3cb7d4fff4996f27e193c58eabb128434ffba",
+    "width": 4032,
+    "height": 3024
+  },
+  "geometrySource": {
+    "generator": "scripts/make_ocr_samples.py",
+    "generatorSHA256": "4ba4337f6a0904d2b7f853b629f8c5a5b5839a433abea260f4e62be66ab8783f",
+    "screenSize": [
+      1920,
+      1174
+    ],
+    "sourceColumnBoundaries": [
+      30,
+      116,
+      252,
+      413,
+      599,
+      809,
+      1119,
+      1429,
+      1751,
+      1887
+    ],
+    "headerCenterSourceY": 96.0,
+    "firstRowTop": 122,
+    "sourceRowHeight": 46,
+    "totalRows": 22,
+    "photoScreenCorners": [
+      [
+        260,
+        180
+      ],
+      [
+        3800,
+        120
+      ],
+      [
+        3960,
+        2900
+      ],
+      [
+        90,
+        2840
+      ]
+    ],
+    "screenToPhotoMatrix": [
+      [
+        1.761887733742674,
+        -0.15120997745838408,
+        260.0
+      ],
+      [
+        -0.03383512419759978,
+        2.0636167097989224,
+        180.0
+      ],
+      [
+        -2.1542701646664806e-05,
+        -7.117654302614895e-05,
+        1.0
+      ]
+    ],
+    "rowHeightSeed": "median projected station-column center pitch across all 22 rows",
+    "rowHeightSeedNormalized": 0.0351688302178131,
+    "limitingPolicy": "all 22 centerlines -> exact boundedRegions -> exact boundedCellRegion; then select fixed 8 rows",
+    "notMeasuredOCRGeometry": true
+  },
+  "layout": {
+    "slots": [
+      {
+        "label": "No.",
+        "column": "number",
+        "x": 0.09356965233728971
+      },
+      {
+        "label": "圈号",
+        "column": "orbit",
+        "x": 0.1428295996920343
+      },
+      {
+        "label": "卫星ID",
+        "column": "satelliteID",
+        "x": 0.2091050636148726
+      },
+      {
+        "label": "卫星名称",
+        "column": "satellite",
+        "x": 0.2870848432975952
+      },
+      {
+        "label": "地面站",
+        "column": "station",
+        "x": 0.3768044049375457
+      },
+      {
+        "label": "数传开始时间",
+        "column": "start",
+        "x": 0.49581337841811374
+      },
+      {
+        "label": "数传结束时间",
+        "column": "end",
+        "x": 0.6395129196704651
+      },
+      {
+        "label": "数传信息",
+        "column": "info",
+        "x": 0.7880537818313282
+      },
+      {
+        "label": "状态",
+        "column": "status",
+        "x": 0.8970237034082027
+      }
+    ]
+  },
+  "statusColumnIndex": 8,
+  "variants": [
+    "production",
+    "headerCapped"
+  ],
+  "scales": [
+    1,
+    3
+  ],
+  "selectedRows": [
+    1,
+    4,
+    7,
+    10,
+    13,
+    16,
+    19,
+    22
+  ],
+  "rows": [
+    {
+      "row": 1,
+      "sourceCenterY": 145.0,
+      "stationAnchorPixels": [
+        1517.1095747980069,
+        467.31478895090305
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.16117986269302034,
+        "slope": -0.01765912070916454,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.03047694877118077
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.16117986269302034,
+        "slope": -0.01765912070916454,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.16117986269302034,
+            "slope": -0.01765912070916454,
+            "height": 0.027429253894062693,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              400.94230898106656
+            ],
+            [
+              4032,
+              392.5336918713572
+            ],
+            [
+              4032,
+              475.4797556470028
+            ],
+            [
+              3397.1162102428943,
+              483.88837275671216
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            392.5336918713572,
+            4032,
+            483.88837275671216
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 82.94606377564558
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.16117986269302034,
+            "slope": -0.01765912070916454,
+            "height": 0.027429253894062693,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              400.94230898106656
+            ],
+            [
+              3836.4829340408523,
+              395.12318647271286
+            ],
+            [
+              3836.4829340408523,
+              478.06925024835846
+            ],
+            [
+              3397.1162102428943,
+              483.88837275671216
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            395.12318647271286,
+            3836.4829340408523,
+            483.88837275671216
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 82.94606377564558
+        }
+      }
+    },
+    {
+      "row": 4,
+      "sourceCenterY": 283.0,
+      "stationAnchorPixels": [
+        1510.9258577573935,
+        767.2753447197475
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.25854730182958985,
+        "slope": -0.01285895526738832,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.030918545346018934
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.25854730182958985,
+        "slope": -0.01285895526738832,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.25854730182958985,
+            "slope": -0.01285895526738832,
+            "height": 0.027826690811417042,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              707.0105601865923
+            ],
+            [
+              4032,
+              700.8876034972349
+            ],
+            [
+              4032,
+              785.03551651096
+            ],
+            [
+              3397.1162102428943,
+              791.1584732003174
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            700.8876034972349,
+            4032,
+            791.1584732003174
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 84.14791301372513
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.25854730182958985,
+            "slope": -0.01285895526738832,
+            "height": 0.027826690811417042,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              707.0105601865923
+            ],
+            [
+              3836.4829340408523,
+              702.7732124011196
+            ],
+            [
+              3836.4829340408523,
+              786.9211254148448
+            ],
+            [
+              3397.1162102428943,
+              791.1584732003174
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            702.7732124011196,
+            3836.4829340408523,
+            791.1584732003174
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 84.14791301372513
+        }
+      }
+    },
+    {
+      "row": 7,
+      "sourceCenterY": 421.0,
+      "stationAnchorPixels": [
+        1504.6149217209472,
+        1073.4070561937835
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.35793280998815225,
+        "slope": -0.007959300044794252,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.031598150651925956
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.35793280998815225,
+        "slope": -0.007959300044794252,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.35793280998815225,
+            "slope": -0.007959300044794252,
+            "height": 0.028438335586733362,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1019.1110535937635
+            ],
+            [
+              4032,
+              1015.3211306615738
+            ],
+            [
+              4032,
+              1101.3186574758554
+            ],
+            [
+              3397.1162102428943,
+              1105.108580408045
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1015.3211306615738,
+            4032,
+            1105.108580408045
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 85.99752681428168
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.35793280998815225,
+            "slope": -0.007959300044794252,
+            "height": 0.028438335586733362,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1019.1110535937635
+            ],
+            [
+              3836.4829340408523,
+              1016.4882649054588
+            ],
+            [
+              3836.4829340408523,
+              1102.4857917197405
+            ],
+            [
+              3397.1162102428943,
+              1105.108580408045
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1016.4882649054588,
+            3836.4829340408523,
+            1105.108580408045
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 85.99752681428168
+        }
+      }
+    },
+    {
+      "row": 10,
+      "sourceCenterY": 559.0,
+      "stationAnchorPixels": [
+        1498.1727999267798,
+        1385.9023435779995
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.45939978489607786,
+        "slope": -0.0029570295655280744,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.03229917988230747
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.45939978489607786,
+        "slope": -0.0029570295655280744,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.45939978489607786,
+            "slope": -0.0029570295655280744,
+            "height": 0.02906926189407672,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1337.7381957384782
+            ],
+            [
+              4032,
+              1336.3301681357384
+            ],
+            [
+              4032,
+              1424.2356161034265
+            ],
+            [
+              3397.1162102428943,
+              1425.6436437061664
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1336.3301681357384,
+            4032,
+            1425.6436437061664
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 87.905447967688
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.45939978489607786,
+            "slope": -0.0029570295655280744,
+            "height": 0.02906926189407672,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1337.7381957384782
+            ],
+            [
+              3836.4829340408523,
+              1336.7637804441933
+            ],
+            [
+              3836.4829340408523,
+              1424.6692284118815
+            ],
+            [
+              3397.1162102428943,
+              1425.6436437061664
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1336.7637804441933,
+            3836.4829340408523,
+            1425.6436437061664
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 87.905447967688
+        }
+      }
+    },
+    {
+      "row": 13,
+      "sourceCenterY": 697.0,
+      "stationAnchorPixels": [
+        1491.5953589663827,
+        1704.961710793444
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.5630143079060096,
+        "slope": 0.002151113947631241,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.033022543084805574
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.5630143079060096,
+        "slope": 0.002151113947631241,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.5630143079060096,
+            "slope": 0.002151113947631241,
+            "height": 0.029720288776325016,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1663.0988785241527
+            ],
+            [
+              4032,
+              1664.1231590556065
+            ],
+            [
+              4032,
+              1753.9973123152133
+            ],
+            [
+              3397.1162102428943,
+              1752.9730317837596
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1663.0988785241527,
+            4032,
+            1753.9973123152133
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 89.87415325960684
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.5630143079060096,
+            "slope": 0.002151113947631241,
+            "height": 0.029720288776325016,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1663.0988785241527
+            ],
+            [
+              3836.4829340408523,
+              1663.8077244399178
+            ],
+            [
+              3836.4829340408523,
+              1753.6818776995249
+            ],
+            [
+              3397.1162102428943,
+              1752.9730317837596
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1663.0988785241527,
+            3836.4829340408523,
+            1753.6818776995249
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 89.87415325960684
+        }
+      }
+    },
+    {
+      "row": 16,
+      "sourceCenterY": 835.0,
+      "stationAnchorPixels": [
+        1484.8782899405564,
+        2030.7941744866391
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.6688452875119147,
+        "slope": 0.007368527648540609,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0337691991466731
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.6688452875119147,
+        "slope": 0.007368527648540609,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.6688452875119147,
+            "slope": 0.007368527648540609,
+            "height": 0.030392279232005787,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1995.4088317775977
+            ],
+            [
+              4032,
+              1998.9174508464241
+            ],
+            [
+              4032,
+              2090.8237032440097
+            ],
+            [
+              3397.1162102428943,
+              2087.315084175183
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1995.4088317775977,
+            4032,
+            2090.8237032440097
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 91.9062523975855
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.6688452875119147,
+            "slope": 0.007368527648540609,
+            "height": 0.030392279232005787,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              1995.4088317775977
+            ],
+            [
+              3836.4829340408523,
+              1997.836946166713
+            ],
+            [
+              3836.4829340408523,
+              2089.7431985642984
+            ],
+            [
+              3397.1162102428943,
+              2087.315084175183
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            1995.4088317775977,
+            3836.4829340408523,
+            2089.7431985642984
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 91.9062523975855
+        }
+      }
+    },
+    {
+      "row": 19,
+      "sourceCenterY": 973.0,
+      "stationAnchorPixels": [
+        1478.0170990460585,
+        2363.617720653556
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.7769646121747267,
+        "slope": 0.0126987556019188,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.03454015897417007
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.7769646121747267,
+        "slope": 0.0126987556019188,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.7769646121747267,
+            "slope": 0.0126987556019188,
+            "height": 0.031086143076753066,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              2334.893100263216
+            ],
+            [
+              4032,
+              2340.9397758245254
+            ],
+            [
+              4032,
+              2434.9442724886267
+            ],
+            [
+              3397.1162102428943,
+              2428.8975969273174
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            2334.893100263216,
+            4032,
+            2434.9442724886267
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 94.00449666410127
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.7769646121747267,
+            "slope": 0.0126987556019188,
+            "height": 0.031086143076753066,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              2334.893100263216
+            ],
+            [
+              3836.4829340408523,
+              2339.0776582470608
+            ],
+            [
+              3836.4829340408523,
+              2433.082154911162
+            ],
+            [
+              3397.1162102428943,
+              2428.8975969273174
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            2334.893100263216,
+            3836.4829340408523,
+            2433.082154911162
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 94.00449666410127
+        }
+      }
+    },
+    {
+      "row": 22,
+      "sourceCenterY": 1111.0,
+      "stationAnchorPixels": [
+        1471.0070975497663,
+        2703.659790974385
+      ],
+      "region": {
+        "page": 0,
+        "y0": 0.8874473131698123,
+        "slope": 0.018145496811645564,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "initialRegion": {
+        "page": 0,
+        "y0": 0.8874473131698123,
+        "slope": 0.018145496811645564,
+        "left": 0.0,
+        "right": 1.0,
+        "height": 0.0351688302178131
+      },
+      "crops": {
+        "production": {
+          "region": {
+            "page": 0,
+            "y0": 0.8874473131698123,
+            "slope": 0.018145496811645564,
+            "height": 0.03165194719603179,
+            "left": 0.8425387426197655,
+            "right": 1
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              2682.0147018864263
+            ],
+            [
+              4032,
+              2690.6549132235286
+            ],
+            [
+              4032,
+              2786.3704015443286
+            ],
+            [
+              3397.1162102428943,
+              2777.7301902072263
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            2682.0147018864263,
+            4032,
+            2786.3704015443286
+          ],
+          "horizontalWidthPixels": 634.8837897571057,
+          "verticalHeightPixels": 95.71548832080012
+        },
+        "headerCapped": {
+          "region": {
+            "page": 0,
+            "y0": 0.8874473131698123,
+            "slope": 0.018145496811645564,
+            "height": 0.03165194719603179,
+            "left": 0.8425387426197655,
+            "right": 0.9515086641966399
+          },
+          "cornersTopLeft": [
+            [
+              3397.1162102428943,
+              2682.0147018864263
+            ],
+            [
+              3836.4829340408523,
+              2687.9940975007908
+            ],
+            [
+              3836.4829340408523,
+              2783.7095858215907
+            ],
+            [
+              3397.1162102428943,
+              2777.7301902072263
+            ]
+          ],
+          "cornerOrder": [
+            "topLeft",
+            "topRight",
+            "bottomRight",
+            "bottomLeft"
+          ],
+          "axisAlignedBBox": [
+            3397.1162102428943,
+            2682.0147018864263,
+            3836.4829340408523,
+            2783.7095858215907
+          ],
+          "horizontalWidthPixels": 439.36672379795783,
+          "verticalHeightPixels": 95.71548832080012
+        }
+      }
+    }
+  ],
+  "exclusions": [
+    "No status values or truth rows supplied to OCR",
+    "No image processing or Vision execution performed by this derivation",
+    "CIPerspectiveCorrection output extent must be measured on Apple runtime, not inferred as exact integer size"
+  ]
+}
