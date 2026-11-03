@@ -3022,7 +3022,7 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(rows[2].info, "通道1:900M")
         XCTAssertNil(PassPlan.emergency(rows[3], layout: reading.layout), "空着的认不出")
         XCTAssertEqual(PassPlan.problems(rows[3], rules: [PassPlan.OperatorRule(name: "乙", prefixes: ["乙站"])], layout: reading.layout),
-                       ["是否应急没认出来（发的时候按不是应急算）"])
+                       ["是否应急没认出来，请核对原图"])
         XCTAssertNil(PassPlan.emergency(rows[0], layout: nil), "网页上的表没有这一列")
         // 照片最右边下一列只拍进半截，混进这一格：只看开头
         var mixed = rows[1]
@@ -3138,7 +3138,7 @@ final class PassPlanTests: XCTestCase {
 
     /// 上百条、连着扫几张：重叠的那几条第二次卫星名认错了一个字，也只留一条
     func testMergeIgnoresSatelliteTypos() {
-        let a = PassPlanRow(orbit: "101", satellite: "试验一号", station: "甲站-北区01",
+        let a = PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
                             start: "2026-10-27 08:00:00", end: "2026-10-27 08:07:00")
         var typo = a
         typo.satellite = "试验-号"

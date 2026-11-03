@@ -3,7 +3,7 @@ import XCTest
 
 /// 数传计划的文字识别准确率：合成的「拍屏幕」照片（scripts/make_ocr_samples.py 生成，虚构数据）在模拟器里真的认一遍，
 /// 和标准答案比。结果打印成 OCR| 开头的行（CI 里变成注解，方便对比几种认法）。
-/// 只报告、不卡：模拟器和真机的识别会有出入
+/// 识别失败、空结果、完全无法对应真值会失败；字段准确率按全部标准行报告，不用格式正确替代精度验收。
 final class PlanReaderTests: XCTestCase {
     private struct Truth: Decodable {
         struct Row: Decodable {
@@ -34,10 +34,15 @@ final class PlanReaderTests: XCTestCase {
                 let began = Date()
                 do {
                     let reading = try await PlanReader.read(pages: [image], rules: rules, settings: settings)
+                    let measured = accuracy(reading, truth, rules)
                     print(report(name, label, reading, truth, rules, seconds: Date().timeIntervalSince(began)))
+                    XCTAssertNotNil(reading.layout, "\(name)：缺少表头布局")
+                    XCTAssertFalse(reading.rows.isEmpty, "\(name)：没有读出计划行")
+                    XCTAssertGreaterThan(measured.matched, 0, "\(name)：没有一条能唯一对应标准答案")
                     if label == "现在" { await dumpOriginal(name, reading, rules) }
                 } catch {
                     print("OCR|\(name)|\(label)|认不出：\(error.localizedDescription)")
+                    XCTFail("\(name) / \(label) 识别失败：\(error.localizedDescription)")
                 }
             }
         }
@@ -62,35 +67,128 @@ final class PlanReaderTests: XCTestCase {
         if let data { print("OCRIMG|\(name)|\(data.base64EncodedString())") }
     }
 
-    private func report(_ name: String, _ label: String, _ reading: PassPlan.Reading, _ truth: Truth,
-                        _ rules: [PassPlan.OperatorRule], seconds: Double) -> String {
-        var byStart: [String: PassPlanRow] = [:]
-        for row in reading.rows where byStart[row.start] == nil { byStart[row.start] = row }
-        var found = 0, station = 0, satellite = 0, orbit = 0, family = 0, emergency = 0, emergencyTotal = 0
-        for expected in truth.rows {
-            guard let row = byStart[expected.start] else { continue }
-            found += 1
-            if row.station == expected.station { station += 1 }
-            if row.satellite == expected.satellite || row.satelliteID == expected.satellite { satellite += 1 }
-            if row.orbit == expected.orbit { orbit += 1 }
-            if PassPlan.operatorName(of: row.station, rules: rules) == PassPlan.operatorName(of: expected.station, rules: rules) {
-                family += 1
+    private struct Accuracy {
+        var matched = 0
+        var station = 0
+        var satellite = 0
+        var orbit = 0
+        var start = 0
+        var end = 0
+        var endTotal = 0
+        var family = 0
+        var emergency = 0
+        var emergencyTotal = 0
+        var emergencyUnknown = 0
+        var ambiguous = 0
+    }
+
+    /// 一条实际结果最多对应一条真值。四个身份线索至少三个一致，且双方的最佳候选都唯一，
+    /// 才算找到这条；结束时间不参与配对，避免把结束时间识错隐藏在漏行里。
+    /// 不能只用开始时间：不同卫星/地面站可以同时开始。
+    private func accuracy(_ reading: PassPlan.Reading, _ truth: Truth,
+                          _ rules: [PassPlan.OperatorRule]) -> Accuracy {
+        func identityScore(_ expected: Truth.Row, _ row: PassPlanRow) -> Int {
+            let sameSatellite = !expected.satellite.isEmpty
+                && (row.satellite == expected.satellite || row.satelliteID == expected.satellite)
+            return [sameSatellite,
+                    !expected.orbit.isEmpty && row.orbit == expected.orbit,
+                    !expected.station.isEmpty && row.station == expected.station,
+                    !expected.start.isEmpty && row.start == expected.start].filter { $0 }.count
+        }
+        let scores = truth.rows.map { expected in reading.rows.map { identityScore(expected, $0) } }
+        var measured = Accuracy()
+        // 分母来自全部真值；漏掉的行、没认出的“否”都不能从分母中消失。
+        measured.endTotal = truth.rows.filter { !$0.end.isEmpty }.count
+        measured.emergencyTotal = truth.rows.filter { $0.emergency != nil }.count
+        for (t, expected) in truth.rows.enumerated() {
+            guard let best = scores[t].max(), best >= 3 else { continue }
+            let candidates = reading.rows.indices.filter { scores[t][$0] == best }
+            guard candidates.count == 1, let index = candidates.first else {
+                measured.ambiguous += 1
+                continue
             }
+            let reverseBest = truth.rows.indices.map { scores[$0][index] }.max() ?? 0
+            let reverse = truth.rows.indices.filter { scores[$0][index] == reverseBest }
+            guard reverse.count == 1, reverse.first == t else {
+                measured.ambiguous += 1
+                continue
+            }
+            let row = reading.rows[index]
+            measured.matched += 1
+            if row.station == expected.station { measured.station += 1 }
+            if row.satellite == expected.satellite || row.satelliteID == expected.satellite { measured.satellite += 1 }
+            if row.orbit == expected.orbit { measured.orbit += 1 }
+            if row.start == expected.start { measured.start += 1 }
+            if !expected.end.isEmpty, row.end == expected.end { measured.end += 1 }
+            if let want = PassPlan.operatorName(of: expected.station, rules: rules),
+               PassPlan.operatorName(of: row.station, rules: rules) == want { measured.family += 1 }
             if let want = expected.emergency {
-                emergencyTotal += 1
-                if (PassPlan.emergency(row, layout: reading.layout) ?? false) == want { emergency += 1 }
+                if let actual = PassPlan.emergency(row, layout: reading.layout) {
+                    if actual == want { measured.emergency += 1 }
+                } else {
+                    measured.emergencyUnknown += 1
+                }
             }
         }
-        // 分到各家的条数对不对（发原图时只看这个）：每家认出的条数和应有的条数，取小的加起来
-        var want: [String: Int] = [:], got: [String: Int] = [:]
-        for row in truth.rows { want[PassPlan.operatorName(of: row.station, rules: rules) ?? "?", default: 0] += 1 }
-        for row in reading.rows { got[PassPlan.operatorName(of: row.station, rules: rules) ?? "?", default: 0] += 1 }
-        let grouped = want.reduce(0) { $0 + min($1.value, got[$1.key] ?? 0) }
-        func pct(_ n: Int, _ of: Int) -> String { of == 0 ? "-" : "\(n * 100 / of)%" }
+        return measured
+    }
+
+    private func report(_ name: String, _ label: String, _ reading: PassPlan.Reading, _ truth: Truth,
+                        _ rules: [PassPlan.OperatorRule], seconds: Double) -> String {
+        let measured = accuracy(reading, truth, rules)
+        let total = truth.rows.count
+        func pct(_ n: Int, _ of: Int) -> String { of == 0 ? "-" : "\(n * 100 / of)%（\(n)/\(of)）" }
         return ["OCR", name, label,
-                "行 \(found)/\(truth.rows.count)", "各家条数 \(pct(grouped, truth.rows.count))",
-                "站名 \(pct(station, found))", "分家 \(pct(family, found))", "卫星 \(pct(satellite, found))",
-                "圈号 \(pct(orbit, found))", "应急 \(pct(emergency, emergencyTotal))",
-                "多出 \(reading.rows.count - found)", String(format: "%.1f 秒", seconds)].joined(separator: "|")
+                "唯一对应行 \(measured.matched)/\(total)",
+                "站名 \(pct(measured.station, total))", "分家 \(pct(measured.family, total))",
+                "卫星 \(pct(measured.satellite, total))", "圈号 \(pct(measured.orbit, total))",
+                "开始时间 \(pct(measured.start, total))", "结束时间 \(pct(measured.end, measured.endTotal))",
+                "应急 \(pct(measured.emergency, measured.emergencyTotal))", "应急未知 \(measured.emergencyUnknown)",
+                "漏行或无法对应 \(total - measured.matched)", "身份歧义 \(measured.ambiguous)",
+                "多出或无法对应 \(reading.rows.count - measured.matched)",
+                String(format: "%.1f 秒", seconds)].joined(separator: "|")
+    }
+
+    func testAccuracyDoesNotReuseRowsWithTheSameStartTime() {
+        let time = "2026-10-27 10:00:00"
+        let truth = Truth(kind: "test", rules: [:], rows: [
+            Truth.Row(satellite: "SAT-A", station: "甲站-01", orbit: "100", start: time, end: "", emergency: false),
+            Truth.Row(satellite: "SAT-B", station: "乙站-02", orbit: "200", start: time, end: "", emergency: false),
+        ])
+        let row = PassPlanRow(orbit: "100", satellite: "SAT-A", station: "甲站-01", start: time)
+        let reading = PassPlan.Reading(rows: [row], layout: nil)
+        let result = accuracy(reading, truth, [])
+        XCTAssertEqual(result.matched, 1)
+        XCTAssertEqual(result.satellite, 1)
+        XCTAssertEqual(result.emergencyTotal, 2)
+        XCTAssertEqual(result.emergency, 0, "未知应急不能算作识对了非应急")
+        XCTAssertEqual(result.emergencyUnknown, 1)
+        XCTAssertTrue(report("test", "test", reading, truth, [], seconds: 0).contains("卫星 50%（1/2）"))
+    }
+
+    func testAccuracyMeasuresWrongTimesAndUnknownEmergency() {
+        let expected = Truth.Row(satellite: "SAT-A", station: "甲站-01", orbit: "100",
+                                 start: "2026-10-27 10:00:00", end: "2026-10-27 10:05:00", emergency: false)
+        let truth = Truth(kind: "test", rules: [:], rows: [expected])
+        let row = PassPlanRow(orbit: "100", satellite: "SAT-A", station: "甲站-01",
+                              start: "2026-10-27 10:00:08", end: "2026-10-27 10:05:08", cells: ["看不清"])
+        let layout = PassPlan.Layout(slots: [.init(label: "是否应急", column: nil, x: 0)])
+        let result = accuracy(PassPlan.Reading(rows: [row], layout: layout), truth, [])
+        XCTAssertEqual(result.matched, 1)
+        XCTAssertEqual(result.start, 0)
+        XCTAssertEqual(result.end, 0)
+        XCTAssertEqual(result.endTotal, 1)
+        XCTAssertEqual(result.emergency, 0)
+        XCTAssertEqual(result.emergencyUnknown, 1)
+    }
+
+    func testAccuracyRejectsAmbiguousDuplicateIdentity() {
+        let expected = Truth.Row(satellite: "SAT-A", station: "甲站-01", orbit: "100",
+                                 start: "2026-10-27 10:00:00", end: "", emergency: nil)
+        let truth = Truth(kind: "test", rules: [:], rows: [expected, expected])
+        let row = PassPlanRow(orbit: "100", satellite: "SAT-A", station: "甲站-01", start: expected.start)
+        let result = accuracy(PassPlan.Reading(rows: [row], layout: nil), truth, [])
+        XCTAssertEqual(result.matched, 0, "一条识别结果不能冒充两条同时开始的计划")
+        XCTAssertEqual(result.ambiguous, 2)
     }
 }

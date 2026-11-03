@@ -59,8 +59,13 @@ enum PlanReader {
             // 几种认法同时认，拼出来的一行行对着挑
             let readings = try await boxes(of: picture, words: words, settings: settings)
             sawText = sawText || readings.contains { !$0.isEmpty }
-            var result = PassPlan.combine(readings.map { PassPlan.read($0, fallback: positions) }, rules: rules)
-            positions = positions ?? result.layout
+            let pageReadings = readings.map { PassPlan.read($0, fallback: positions) }
+            var result = PassPlan.combine(pageReadings, rules: rules)
+            // 连拍时取景可能变了：本页重新拍到表头，就用本页的列位置继续向下读。
+            // 只接受带几何表头的布局；系统表格识别的 x 是列号（0、1、2…），不能拿来分照片里的列。
+            let geometric: PassPlan.Reading? = result.header != nil ? result : pageReadings.filter { $0.header != nil }
+                .max { PassPlan.score($0, rules: rules) < PassPlan.score($1, rules: rules) }
+            if let latest = geometric?.layout { positions = latest }
             // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
             // 拼出来了就拿它核对站名（同一行它认的站名对得上对照表、这边的对不上，用它的）
             if #available(iOS 26.0, *), settings.tables, let table = await tableReading(in: picture, words: words, settings: settings) {
@@ -85,14 +90,15 @@ enum PlanReader {
             pages.append(PassPlan.remap(result.rows, from: found, to: target))
         }
         guard sawText else { throw Failure.noText }
-        let rows = PassPlan.merge(pages)
+        let rows = PassPlan.merge(pages, layout: layout)
         guard !rows.isEmpty else { throw Failure.noTable }
         return PassPlan.Reading(rows: rows, layout: layout, header: header, strips: strips)
     }
 
     /// 最要紧的两格再认一遍：每一行把「地面站」那一格（分家只看它）、没认出来的「是否应急」那一格（决定图下面那句话）
     /// 单独裁下来、放大了再认（一小格单独认，比一整张里一起认准得多）。
-    /// 地面站：再认的对得上对照表、或者原来那个对不上，就用再认的；是否应急：再认出「是 / 不是」就填上
+    /// 地面站：已知站名不被一次复识覆盖；未知站只有两次局部复识一致、且对得上明确对照表才修正。
+    /// 是否应急：再认出「是 / 不是」就填上。冲突保留在行里，供核对页显示。
     static func rereadStations(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
                                rules: [PassPlan.OperatorRule], words: [String], settings: Settings) async -> [PassPlanRow] {
         let station = layout.slots.firstIndex { $0.column == .station }
@@ -101,27 +107,36 @@ enum PlanReader {
         let xs = layout.slots.map(\.x)
         return await Task.detached(priority: .userInitiated) {
             /// 这一行第 s 列那一格单独认出的字
-            func reread(column s: Int, of region: PassPlan.Region) -> String? {
+            func reread(column s: Int, of region: PassPlan.Region, using options: Settings) -> String? {
                 let left = s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left
                 let right = s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right
                 let center = (left + right) / 2
                 let cell = PassPlan.TextBox(text: "", x: left, y: region.y0 + region.slope * center - region.height * 0.45,
                                             width: right - left, height: region.height * 0.9)
-                let text = Self.reread(cell, in: image, words: words, settings: settings, smooth: false)?
+                let text = Self.reread(cell, in: image, words: words, settings: options, smooth: false)?
                     .text.filter { !$0.isWhitespace }
                 return text?.isEmpty == false ? text : nil
             }
             return rows.map { row in
                 guard let region = row.region else { return row }
                 var fixed = row
-                if let s = station,
-                   let again = reread(column: s, of: region)?
-                       .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-"),
-                   again != row.station,
-                   PassPlan.operatorName(of: again, rules: rules) != nil || PassPlan.operatorName(of: row.station, rules: rules) == nil {
-                    fixed.station = again
+                if let s = station, !rules.isEmpty,
+                   let again = reread(column: s, of: region, using: settings) {
+                    var candidates = [again]
+                    if PassPlan.operatorName(of: row.station, rules: rules) == nil,
+                       PassPlan.operatorName(of: again, rules: rules) != nil {
+                        // 仅在可能修好未知站时，多认这一小格；不增加整张照片的识别遍数。
+                        // 关闭词语纠错再核对一次，防止词库把模糊文字硬套成另一家已知站。
+                        var independent = settings
+                        independent.languageCorrection.toggle()
+                        if let confirmation = reread(column: s, of: region, using: independent) {
+                            candidates.append(confirmation)
+                        }
+                    }
+                    fixed = PassPlan.reviewStationReread(row, candidates: candidates, rules: rules)
                 }
-                if let e = urgent, PassPlan.emergency(fixed, layout: layout) == nil, let again = reread(column: e, of: region) {
+                if let e = urgent, PassPlan.emergency(fixed, layout: layout) == nil,
+                   let again = reread(column: e, of: region, using: settings) {
                     var trial = fixed
                     while trial.cells.count <= e { trial.cells.append("") }
                     trial.cells[e] = again
@@ -297,7 +312,9 @@ enum PlanReader {
                 continue
             }
             rereads += inside.count
-            result += inside.compactMap { reread($0.box, in: image, words: words, settings: settings, smooth: smooth) }
+            let separated = inside.compactMap { reread($0.box, in: image, words: words, settings: settings, smooth: smooth) }
+            // 分格复识有一块失败，不能静默丢掉它：保留本轮原始识别，交给其他轮次核对。
+            if separated.count == inside.count { result += separated } else { result.append(box) }
         }
         return result
     }
