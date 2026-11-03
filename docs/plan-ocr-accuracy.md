@@ -384,3 +384,38 @@
 - 补读后增加「圈号由系统表格补读，请对照原图核对」，保留原有疑项、test 排除、应急和原图区域；既有人工逐项核对后的“保存并确认”可解除普通识别疑项。此次不采用系统普通状态或另一个编号读数，也没有新增 OCR 请求。
 - Probe 6 与 495 最终字段离线对照显示，网页有 4 条原空圈号具备正确候选；其中一条的结束时间仍是两路共同误读，不能因圈号补齐而视为整行正确。495 的最终行日志没有保存原 cells，这 4 条仅是待验证上限；最终恢复数量、其他三图变化及原生回归结果须以后续完整 App 运行确认。
 - 本地以实际核心和 XCTest 文件直接编译执行 70 个相关方法，0 失败；核心与测试均以 Swift 5、完整并发检查编译，0 警告。新增回归覆盖双空、缺格/多格、重复候选及反向歧义、编号/时间冲突、数字原串与前导零、原有疑项及应急 test 排除。独立重放确认通用表格逐字段不变，照片解析仅恢复圈号字段，旧新匹配集合均为相同 8 对。该结果不替代 Apple 原生验证。
+
+### Build 496：核心测试、App 构建与安装包身份已核验
+
+- 产品源码 `45585691de08b158d48b8b316eb814645280d481`；[主运行](https://github.com/wuyong9494-lab/kriswu/actions/runs/41617227196) 整体完成 success。下列结果来自该次运行的完整作业日志，耗时为核心测试报告的执行时间。
+
+| 任务 | 方法数 | 跳过 | 失败 | 核心测试耗时 | 并发警告 |
+|---|---:|---:|---:|---:|---:|
+| macOS Core / App 作业 `125853600453` | 506 | 6 | 0 | 259.843 秒 | 0 |
+| Linux Core 作业 `125853600930` | 506 | 7 | 0 | 47.736 秒 | 0 |
+
+- App 日志于 2026-11-03 北京时间 18:37:38（UTC 10:37:38）明确记录 `BUILD SUCCEEDED`；未签名 IPA 打包及 artifact 上传均成功。Releases 发布步骤、TestFlight 任务及 TestFlight 更新说明任务均跳过。
+- [安装包 artifact `13223019091`](https://github.com/wuyong9494-lab/kriswu/actions/runs/41617227196/artifacts/13223019091) 名为 `ShiftReminder-ipa`。下载的原 ZIP 为 27,007,844 字节，SHA256 精确匹配 `151bbd8a82164c7e2093116b13b1147fb285d2e632313a4f9caeaeff29e92c3a`，全部 ZIP 成员 CRC 通过。
+- 只读检查包内 `ShiftReminder.ipa` 的 `Payload/ShiftReminder.app/Info.plist`，确认 `CFBundleVersion=496`、`ArenaCommitSHA=45585691de08b158d48b8b316eb814645280d481`，与本次构建和产品源码一致；版本号为 `1.2`，Bundle ID 为 `com.kriswu.shiftreminder`。该成员 CRC 也通过；检查没有修改、签名或重新发布安装包。
+- 主提交未带 `[plan-ocr-tests]` 标记，因此主运行的 `site-tests` 为 skipped。原生验证另由[隔离运行 `41618080436`](https://github.com/wuyong9494-lab/kriswu/actions/runs/41618080436) 完成，其 workflow 修订 `cbfa12a` 固定检出上述产品源码；正式原生结果及实际圈号恢复数量见下一节。没有为了补测而重复打包 App。
+- 完整审计证据为 `build496/app-job.log`、`linux-job.log`、`app-summary.json`、`linux-summary.json`、`final-jobs.json`、`final-run.json`、`artifacts.json` 和 `ipa-verification.json`。本节确认构建、核心测试与安装包版本身份，不新增完整四图识别结果或实际补空数量结论。
+
+### Build 496：同源完整原生验证完成，网页实际补回 4 个正确圈号
+
+- [原生运行 `41618080436`](https://github.com/wuyong9494-lab/kriswu/actions/runs/41618080436)，attempt 2、作业 `125864438121` 完成 success。在 iPhone 17 Pro Max / iOS 26.2 模拟器执行完整 `SiteTests/PlanReaderTests`，27 个唯一方法全部开始且通过，0 失败；suite 375.512 秒，其中完整四图方法 344.096 秒。沿用产品原生命令及完整样例，没有采用 Probe 的 180 秒限制。
+- workflow / trigger 源码为 `cbfa12a2bad062fbe209b410605bee0d97156974`，实际检出的产品源码和 App 内嵌身份均为 `45585691de08b158d48b8b316eb814645280d481`，tree 为 `35450b1570156672e93ce5961d13947018df0cfc`。以上身份由 artifact 的 `source-manifest.json` 逐项核验，不能把 workflow SHA 写成受测产品源码。
+- attempt 1 排队后结束为 run failure / job cancelled，runner ID 为 0、0 steps、无日志或 artifact，没有启动测试；具体取消原因未确定。只对该原生作业重试一次，attempt 2 才是本节完整执行结果，主 App 构建没有重跑。
+- [原生 artifact `13224386529`](https://github.com/wuyong9494-lab/kriswu/actions/runs/41618080436/artifacts/13224386529) 为 `plan-product-native-7-2`，3,400,809 字节，ZIP SHA256 为 `760756f0d92e8de7603696c17f7910418c860f85a536a51d5375413acdec1f1f`，86 个成员 CRC 全部通过。评分使用 artifact 内 canonical `test.log`，SHA256 为 `8520e0561a79b9b503c71a33b316fcff059c78a0a12c56fa02cdf048709edf91`；没有把 workflow 后续回显的 OCR 日志重复计数。
+
+| 完整样例 | 输出行 / 真值行 | 唯一对应行：495 → 496 | 圈号得分：495 → 496 | 496 非空状态 | 待核对 / 可发送 |
+|---|---:|---:|---:|---:|---:|
+| excel_photo | 50 / 50 | 45/50 → 45/50 | 44/50 → 44/50 | 无此列 | 50 / 0 |
+| excel_scan | 48 / 48 | 34/48 → 34/48 | 32/48 → 32/48 | 无此列 | 48 / 0 |
+| web_photo | 21 / 22 | 6/22 → 7/22 | 2/22 → 6/22 | 0 / 21 | 21 / 0 |
+| long_table | 69 / 70 | 65/70 → 65/70 | 65/70 → 65/70 | 69 / 69 | 69 / 0 |
+
+- 四图仍输出 188 行，最终下标逐一相同；网页圈号非空从 16/21 到 20/21，实际补回 `42930`、`10885`、`42938`、`10859`。另用不包含圈号或输出顺序的“精确卫星编号 + 开始时间”独立匹配，每条均唯一对应真值，4 个新圈号全部正确，4 条均保留「圈号由系统表格补读，请对照原图核对」。生产 trace 的网页 `orbitRestored=4` 与最终补空数一致；excel_photo / excel_scan 均为 0，长表没有该合并 trace，不能把缺日志写成记录了 0。
+- 逐字段比较只有 4 个圈号及这 4 行的 issues / problems 变化；已记录的卫星名称、卫星编号、站名、开始时间、结束时间、状态、应急、test 排除和分家字段变化均为 0。OCRROW 没有记录 info 和 raw cells，不能扩展成所有未记录字段逐字相同。其余三图各项评分不变；长表仍为 65 个精确「等待数传」，另 4 个原误词保留。
+- 网页唯一匹配增加 1 行，使 harness 的站名、分家、卫星、起止时间得分随匹配集合变化；这些字段原值并未改善，不能将评分上升解释为新识对了编号或时间。圈号 `10885` 对应行的结束时间仍为误读 `04:00:11`，真值为 `04:06:11`；4 个圈号正确也不等于这 4 行全部正确。
+- 本轮新增解析与补空规则没有新增 OCR 请求；网页普通状态仍为 0/21，编号及部分时间误识仍待处理。全四图 188 行均待核对、0 行可直接发送；“可发送关键字段错误为 0”仍来自空可发送集合，不能作为准确率验收。左侧应急、右侧 test 全收件人排除及逐项确认流程保留，相关原生与核心回归通过。
+- 证据包括 `build496/native-artifact/test.log`、`source-manifest.json`、`native-execution-verification.json`、`native-evidence-verification.json`、`root-field-audit.json` 及 `analysis/native-summary.json`、`analysis/comparison495.json`。全部四图为既有公开合成样例，真值未修改；用户的四张真实照片未上传公开仓库或 CI，尚未实际运行 Apple Vision。本轮不能声称真实照片已验收，也不依据不同 CI 耗时宣称性能提升。
