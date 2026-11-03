@@ -1,0 +1,79 @@
+name: Plan OCR primary probe
+
+on:
+  push:
+    branches: ['codex/plan-ocr-probe']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  primary-probe:
+    runs-on: macos-15
+    timeout-minutes: 25
+    concurrency:
+      group: plan-primary-probe-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || { echo "No Xcode 26 installation"; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Generate app and test project
+        run: |
+          python3 scripts/assets/validate_ranger.py
+          python3 scripts/assets/validate_ranger.py --face-sample
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Compare text, character rectangles, and batched requests
+        timeout-minutes: 20
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          candidates = [(runtime, item) for runtime, items in sorted(devices.items(), reverse=True) if 'iOS' in runtime for item in items if item['name'].startswith('iPhone')]
+          if not candidates:
+              sys.exit('No available iPhone simulator')
+          runtime, device = next((item for item in candidates if item[1]['name'] == 'iPhone 17 Pro Max'), candidates[0])
+          with open('probe-device.json', 'w') as stream:
+              json.dump({'runtime': runtime, 'name': device['name'], 'udid': device['udid']}, stream, indent=2)
+          print(device['udid'])")
+          cat probe-device.json
+          set +e
+          xcodebuild test \
+            -project ShiftReminder.xcodeproj \
+            -scheme ShiftReminder \
+            -destination "id=$DEVICE" \
+            -only-testing:SiteTests/PlanReaderPrimaryProbeTests \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 180 \
+            -derivedDataPath build \
+            -resultBundlePath primary-probe.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee probe.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'OCRPRIMARY|Test Case .* (passed|failed)|error:|Executed' probe.log || true
+          exit $status
+      - name: Save diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-primary-probe-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            probe.log
+            probe-device.json
+            primary-probe.xcresult
+          if-no-files-found: warn
