@@ -35,7 +35,7 @@ jobs:
           brew install xcodegen
           python3 .github/scripts/build_identity.py
           xcodegen generate
-      - name: Compare identifier crop recognition settings
+      - name: Compare fixed status-band preprocessing
         timeout-minutes: 20
         shell: bash -eo pipefail {0}
         run: |
@@ -55,7 +55,7 @@ jobs:
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -destination "id=$DEVICE" \
-            -only-testing:SiteTests/PlanReaderIdentifierProbeTests \
+            -only-testing:SiteTests/PlanReaderStatusProbeTests \
             -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 180 \
@@ -65,7 +65,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee probe.log
           status=${PIPESTATUS[0]}
           set -e
-          grep -E 'OCRPRIMARY|OCRFIELD|Test Case .* (passed|failed)|error:|Executed' probe.log || true
+          grep -E 'OCRSTATUSPROBE|Test Case .* (passed|failed)|error:|Executed' probe.log || true
           exit $status
       - name: Save diagnostic evidence
         if: always()
