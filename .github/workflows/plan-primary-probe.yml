@@ -65,7 +65,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee probe.log
           status=${PIPESTATUS[0]}
           set -e
-          grep -E 'OCRPRIMARY|Test Case .* (passed|failed)|error:|Executed' probe.log || true
+          grep -E 'OCRPRIMARY|OCRFIELD|Test Case .* (passed|failed)|error:|Executed' probe.log || true
           exit $status
       - name: Save diagnostic evidence
         if: always()
