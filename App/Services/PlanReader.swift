@@ -117,8 +117,14 @@ enum PlanReader {
             let readings = try await boxes(of: picture, words: words, settings: settings)
             sawText = sawText || readings.contains { !$0.isEmpty }
             let parseTrace = Trace(settings.diagnostics, "parse\(page)", "readings=\(readings.count)")
-            let pageReadings = readings.map { PassPlan.read($0, fallback: positions) }
-            parseTrace.end("rows=\(pageReadings.map { $0.rows.count })")
+            if settings.diagnostics {
+                let unshared = readings.map { PassPlan.read($0, fallback: positions) }
+                print("OCRPARSES|page=\(page)|unsharedRows=\(unshared.map { $0.rows.count })|headers=\(unshared.map { $0.header != nil })")
+            }
+            // 同一张照片的各轮共用像素坐标；某轮漏掉表头时，先借用本页其他轮读到的布局。
+            // 只有整页都没有表头才沿用上一页，避免有文字的整轮结果因缺表头被丢弃。
+            let pageReadings = PassPlan.readPasses(readings, fallback: positions, rules: rules)
+            parseTrace.end("rows=\(pageReadings.map { $0.rows.count })|headers=\(pageReadings.map { $0.header != nil })")
             let combineTrace = Trace(settings.diagnostics, "combine\(page)", "readings=\(pageReadings.count)")
             var result = PassPlan.combine(pageReadings, rules: rules)
             combineTrace.end("rows=\(result.rows.count)")
@@ -127,6 +133,8 @@ enum PlanReader {
             let geometric: PassPlan.Reading? = result.header != nil ? result : pageReadings.filter { $0.header != nil }
                 .max { PassPlan.score($0, rules: rules) < PassPlan.score($1, rules: rules) }
             if let latest = geometric?.layout { positions = latest }
+            // 补救后的轮次可能读出更多行、成为合并底稿；原图表头仍取本页真实识别到的区域。
+            if result.header == nil { result.header = geometric?.header }
             // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
             // 拼出来了就拿它核对站名（同一行它认的站名对得上对照表、这边的对不上，用它的）
             if #available(iOS 26.0, *), settings.tables, let table = await tableReading(in: picture, words: words, settings: settings) {
@@ -333,7 +341,7 @@ enum PlanReader {
         return await work.value
     }
 
-    /// 网页的无表头「应急」在 No. 左边；test 在最右状态列。
+    /// 网页的无表头「应急」在 No. 左边；test 和普通状态在最右状态列。
     /// 只补读有明确列位置的窄边栏，再交给核心按唯一行几何挂接；不根据红色背景推断。
     /// 每页最多两次窄栏识别，避免每个普通空白行都再跑一遍 OCR。
     static func rereadRowMarkers(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
@@ -346,7 +354,15 @@ enum PlanReader {
         guard !bands.isEmpty else { return rows }
         let work: Task<[PassPlanRow], Never> = Task.detached(priority: .userInitiated) { () -> [PassPlanRow] in
             let markers = scanRowMarkers(in: image, bands: bands, regions: regions, settings: settings)
-            return PassPlan.applyingRowMarkers(rows, markers: markers, layout: layout)
+            let marked = PassPlan.applyingRowMarkers(rows, markers: markers, layout: layout)
+            let reviewed = PassPlan.applyingStatusReread(marked, readings: markers, layout: layout)
+            if settings.diagnostics {
+                let normal = markers.filter { PassPlan.isRecognizedPlanStatus($0.text) && !PassPlan.isTestStatus($0.text) }.count
+                let tests = markers.filter { PassPlan.isTestStatus($0.text) }.count
+                let restored = zip(rows, reviewed).filter { $0.status.isEmpty && !$1.status.isEmpty }.count
+                print("OCRMARKERS|normal=\(normal)|test=\(tests)|restored=\(restored)")
+            }
+            return reviewed
         }
         return await work.value
     }
@@ -433,7 +449,7 @@ enum PlanReader {
         for observation in request.results ?? [] {
             guard let text = observation.topCandidates(1).first?.string else { continue }
             let token = text.filter { !$0.isWhitespace }.lowercased()
-            guard token == "应急" || PassPlan.isTestStatus(text) else { continue }
+            guard token == "应急" || PassPlan.isRecognizedPlanStatus(text) else { continue }
             let box = observation.boundingBox
             let x: Double = (originX + Double(box.minX) * cropWidth) / w
             let y: Double = (originY + (1 - Double(box.maxY)) * cropHeight) / h

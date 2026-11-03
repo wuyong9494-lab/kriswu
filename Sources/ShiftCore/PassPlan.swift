@@ -232,9 +232,44 @@ public enum PassPlan {
         read(boxes).rows
     }
 
+    /// 同一张照片的多轮 OCR 共用像素坐标。某轮没读到表头时，优先借用本页其他轮读到的布局。
+    /// 每轮先独立找表头；有表头的保留自身布局，无表头的才重解析。整页都没有表头才沿用上一页。
+    /// 借用布局不会生成虚构表头区域，也不增加文字或更改各轮顺序。
+    public static func readPasses(_ passes: [[TextBox]], fallback: Layout? = nil,
+                                  rules: [OperatorRule] = []) -> [Reading] {
+        let originals = passes.map { read($0) }
+        func isGeometric(_ layout: Layout) -> Bool {
+            let positions = layout.slots.map(\.x)
+            return layout.columns.contains(.station) && layout.columns.contains(.start)
+                && (layout.columns.contains(.satellite) || layout.columns.contains(.satelliteID))
+                && positions.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 1 }
+                && Set(positions).count == positions.count
+        }
+        var current: Reading?
+        var bestScore = -Double.infinity
+        for reading in originals {
+            guard reading.header != nil, let layout = reading.layout, isGeometric(layout) else { continue }
+            let candidateScore = score(reading, rules: rules)
+            if candidateScore > bestScore {
+                current = reading
+                bestScore = candidateScore
+            }
+        }
+        let shared = current?.layout ?? fallback.flatMap { isGeometric($0) ? $0 : nil }
+        guard let shared else { return originals }
+        return zip(passes, originals).map { boxes, original in
+            original.header != nil ? original : read(boxes, fallback: shared, fallbackSlope: current?.header?.slope)
+        }
+    }
+
     /// 同上，另外返回读到的那张表的列；这张没拍到表头时用 fallback（前一张的列，当作没有倾斜）。
     /// 表头那一排上认不出含义的格子（创建时间、是否应急……）也算一列：它们下面的字归它们，不会串进旁边的列
     public static func read(_ boxes: [TextBox], fallback: Layout? = nil) -> Reading {
+        read(boxes, fallback: fallback, fallbackSlope: nil)
+    }
+
+    /// 只有同页另一次读数提供了真实表头时才传斜率；跨页 fallback 保留原有无斜率行为。
+    private static func read(_ boxes: [TextBox], fallback: Layout?, fallbackSlope: Double?) -> Reading {
         let recognized = boxes.compactMap { b in column(forHeader: b.text).map { (box: b, column: $0) } }
         let heights = boxes.map(\.height).sorted()
         let lineHeight = heights.isEmpty ? 0.02 : heights[heights.count / 2]
@@ -257,7 +292,8 @@ public enum PassPlan {
         } else if let fallback {
             body = boxes
             layout = fallback
-            headerY = nil
+            // assemble 使用表头各列的相对高度初始化匹配偏移；丢掉斜率会把密集相邻行错配。
+            headerY = fallbackSlope.map { slope in layout.slots.map { $0.x * slope } }
         } else {
             return Reading(rows: [], layout: nil)
         }
@@ -457,6 +493,92 @@ public enum PassPlan {
                 for i in matched.isEmpty ? nearby(marker) : matched {
                     result[i] = retainingIssues(result[i], adding: ["test 状态与行位置对应不清，请核对原图"])
                 }
+            }
+        }
+        return result
+    }
+
+    /// 状态窄栏的普通状态补读。先由 applyingRowMarkers 保留 test 证据，再用本方法补空值。
+    /// 只接受完整、已知的状态文字；必须完整落在状态栏内并唯一对应同一张照片的一条倾斜行。
+    /// 非空原值、test 证据和其他核对提示不会被补读覆盖；歧义或冲突继续留给用户核对。
+    public static func applyingStatusReread(_ rows: [PassPlanRow], readings: [TextBox], layout: Layout) -> [PassPlanRow] {
+        let ordered = layout.slots.sorted { $0.x < $1.x }
+        guard ordered.allSatisfy({ $0.x.isFinite && $0.x >= 0 && $0.x <= 1 }),
+              ordered.filter({ $0.column == .status }).count == 1,
+              let statusIndex = ordered.firstIndex(where: { $0.column == .status }),
+              let cellIndex = layout.slots.firstIndex(where: { $0.column == .status }),
+              Set(rows.compactMap { $0.region?.page }).count <= 1 else { return rows }
+        let left = statusIndex > 0 ? (ordered[statusIndex - 1].x + ordered[statusIndex].x) / 2 : 0
+        let right = statusIndex + 1 < ordered.count ? (ordered[statusIndex].x + ordered[statusIndex + 1].x) / 2 : 1
+        guard right > left else { return rows }
+        let markers = readings.filter {
+            isRecognizedPlanStatus($0.text) && !isTestStatus($0.text)
+                && $0.x.isFinite && $0.y.isFinite && $0.width.isFinite && $0.height.isFinite
+                && $0.width > 0 && $0.height > 0 && $0.x >= left && $0.x + $0.width <= right
+        }
+        var result = rows
+        var values: [Int: Set<String>] = [:]
+        var uncertain = Set<Int>()
+        for marker in markers {
+            let levels = rows.indices.compactMap { i -> (index: Int, center: Double, half: Double)? in
+                guard let region = rows[i].region, region.y0.isFinite, region.slope.isFinite,
+                      region.height.isFinite, region.height > 0,
+                      marker.x >= region.left, marker.x + marker.width <= region.right else { return nil }
+                return (i, region.y0 + region.slope * marker.midX, region.height / 2)
+            }
+            let matches = levels.filter { abs($0.center - marker.midY) < $0.half * 0.9 }
+            if matches.count == 1, let match = matches.first, let region = rows[match.index].region {
+                let atLeft = region.y0 + region.slope * marker.x
+                let atRight = region.y0 + region.slope * (marker.x + marker.width)
+                if marker.y >= min(atLeft, atRight) - match.half,
+                   marker.y + marker.height <= max(atLeft, atRight) + match.half {
+                    values[match.index, default: []].insert(markerText(marker.text))
+                    continue
+                }
+            }
+            // 文字在两行之间、跨行、或同时落进两行时，不挑最近的一行填值。
+            let affected: [Int]
+            if matches.count > 1 {
+                affected = matches.map(\.index)
+            } else if let top = levels.map({ $0.center - $0.half }).min(),
+                      let bottom = levels.map({ $0.center + $0.half }).max(),
+                      marker.midY >= top, marker.midY <= bottom {
+                affected = Array(levels.sorted { abs($0.center - marker.midY) < abs($1.center - marker.midY) }
+                    .prefix(2).map(\.index))
+            } else {
+                affected = []
+            }
+            uncertain.formUnion(affected)
+        }
+        for i in uncertain {
+            result[i] = retainingIssues(result[i], adding: ["状态补读与行位置对应不清，请核对原图"])
+        }
+        for (i, found) in values where !uncertain.contains(i) {
+            if isExcludedFromSending(result[i]) {
+                result[i] = retainingIssues(result[i], adding: ["状态识别不一致（含 test），已排除发送"])
+                continue
+            }
+            guard found.count == 1, let value = found.first else {
+                result[i] = retainingIssues(result[i], adding: ["状态补读结果不一致，请核对原图"])
+                continue
+            }
+            let original = markerText(result[i].status)
+            if !original.isEmpty {
+                if original != value {
+                    result[i] = retainingIssues(result[i], adding: ["状态补读与原识别不一致，请核对原图"])
+                }
+                continue
+            }
+            // cells 是整理表格的原文出口，也需同步；已有的非空单元格不能被静默改写。
+            if result[i].cells.indices.contains(cellIndex), !markerText(result[i].cells[cellIndex]).isEmpty,
+               markerText(result[i].cells[cellIndex]) != value {
+                result[i] = retainingIssues(result[i], adding: ["状态补读与原识别不一致，请核对原图"])
+                continue
+            }
+            result[i].status = value
+            if !result[i].cells.isEmpty {
+                while result[i].cells.count <= cellIndex { result[i].cells.append("") }
+                result[i].cells[cellIndex] = value
             }
         }
         return result
@@ -1125,6 +1247,11 @@ public enum PassPlan {
     /// 状态为 test 的计划不发送给任何运营商。去掉空白、忽略大小写；其他字段含 test 不算。
     public static func isTestStatus(_ status: String) -> Bool {
         markerText(status) == "test"
+    }
+
+    /// 窄栏补读只接受已有计划格式中的完整状态；不把残缺词或相似英文猜成普通状态。
+    public static func isRecognizedPlanStatus(_ status: String) -> Bool {
+        ["等待数传", "已发送站", "test"].contains(markerText(status))
     }
 
     public static func isExcludedFromSending(_ row: PassPlanRow) -> Bool {

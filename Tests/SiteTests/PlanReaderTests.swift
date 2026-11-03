@@ -266,6 +266,14 @@ final class PlanReaderTests: XCTestCase {
         let included = reading.rows.count - measured.excluded
         let criticalDetails = measured.criticalErrors.sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        // 真值未提供状态列，这里只报告非空覆盖，不能称为状态正确率或发送通过率。
+        let statusCoverage: String
+        if reading.layout?.columns.contains(.status) == true {
+            let present = reading.rows.filter { !$0.status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+            statusCoverage = "\(present)/\(reading.rows.count)"
+        } else {
+            statusCoverage = "-"
+        }
         func pct(_ n: Int, _ of: Int) -> String { of == 0 ? "-" : "\(n * 100 / of)%（\(n)/\(of)）" }
         return ["OCR", name, label,
                 "唯一对应行 \(measured.matched)/\(total)",
@@ -273,6 +281,7 @@ final class PlanReaderTests: XCTestCase {
                 "卫星 \(pct(measured.satellite, total))", "圈号 \(pct(measured.orbit, total))",
                 "开始时间 \(pct(measured.start, total))", "结束时间 \(pct(measured.end, measured.endTotal))",
                 "应急 \(pct(measured.emergency, measured.emergencyTotal))", "应急未知 \(measured.emergencyUnknown)",
+                "非空状态 \(statusCoverage)",
                 "漏行或无法对应 \(total - measured.matched)", "身份歧义 \(measured.ambiguous)",
                 "多出或无法对应 \(reading.rows.count - measured.matched)",
                 "可发送 \(measured.eligible)/\(included)", "待核对 \(measured.reviewRequired)/\(included)",
@@ -520,6 +529,122 @@ final class PlanReaderTests: XCTestCase {
             XCTAssertFalse(message.contains(excluded.start), "文字出口不能带出 test 计划")
         }
         await dumpOriginal("badge_overlap", reading, rules)
+    }
+
+    private var statusRereadLayout: PassPlan.Layout {
+        .init(slots: [
+            .init(label: "卫星名称", column: .satellite, x: 0.13),
+            .init(label: "地面站", column: .station, x: 0.35),
+            .init(label: "数传信息", column: .info, x: 0.54),
+            .init(label: "状态", column: .status, x: 0.83),
+        ])
+    }
+
+    private func statusRereadRow(_ index: Int, status: String = "", retainedTest: Bool = false) -> PassPlanRow {
+        let name = "演示卫星\(index + 1)"
+        let station = "演示甲站-01"
+        return PassPlanRow(orbit: "\(100 + index)", satelliteID: "SAMPLE-C\(index + 1)",
+                           satellite: name, station: station,
+                           start: String(format: "2032-04-12 %02d:00:00", 8 + index),
+                           end: String(format: "2032-04-12 %02d:05:00", 8 + index),
+                           info: "test", status: status, cells: [name, station, "test", status],
+                           region: .init(y0: Double(70 + index * 100) / 840, slope: 0,
+                                         height: 80.0 / 840, left: 0, right: 1),
+                           testStatusDetected: retainedTest ? true : nil)
+    }
+
+    /// 状态实际绘制为像素，补读必须经过 Vision；信息列放 test 干扰词，不能跨列取值。
+    private func statusRereadSource(_ statuses: [String]) async throws -> CGImage {
+        try await MainActor.run {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 1400, height: 840), format: format).image { output in
+                UIColor.white.setFill()
+                output.cgContext.fill(CGRect(x: 0, y: 0, width: 1400, height: 840))
+                let font = UIFont.systemFont(ofSize: 36, weight: .medium)
+                for (index, status) in statuses.enumerated() {
+                    let centerY = CGFloat(70 + index * 100)
+                    func text(_ value: String, centerX: CGFloat, color: UIColor) {
+                        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+                        let size = (value as NSString).size(withAttributes: attributes)
+                        (value as NSString).draw(at: CGPoint(x: centerX - size.width / 2,
+                                                             y: centerY - size.height / 2),
+                                                withAttributes: attributes)
+                    }
+                    text("test", centerX: 1400 * 0.54, color: .black)
+                    text(status, centerX: 1400 * 0.83,
+                         color: UIColor(red: 0.12, green: 0.42, blue: 0.24, alpha: 1))
+                }
+            }
+            return try XCTUnwrap(image.cgImage)
+        }
+    }
+
+    func testStatusRereadRecognizesNormalTextAndPreservesTestEvidence() async throws {
+        let source = try await statusRereadSource([
+            "等待数传", "已发送站", "test", "等待数传", "已发送站", "等待数传", "",
+        ])
+        let rows = [
+            statusRereadRow(0),
+            statusRereadRow(1),
+            statusRereadRow(2, status: "等待数传"),
+            statusRereadRow(3, status: "test"),
+            statusRereadRow(4, status: "等待数传"),
+            statusRereadRow(5, status: "等待数传", retainedTest: true),
+            statusRereadRow(6),
+        ]
+        let result = await PlanReader.rereadRowMarkers(rows, layout: statusRereadLayout, in: source, settings: .standard)
+        XCTAssertEqual(result.count, rows.count)
+        guard result.count == rows.count else { return }
+        for index in rows.indices {
+            XCTAssertEqual(result[index].satelliteID, rows[index].satelliteID, "状态补读不能改编号")
+            XCTAssertEqual(result[index].station, rows[index].station)
+            XCTAssertEqual(result[index].start, rows[index].start)
+            XCTAssertEqual(result[index].region, rows[index].region)
+        }
+        XCTAssertEqual(result[0].status, "等待数传", "不能因为全都待核对而绕过实际状态恢复")
+        XCTAssertEqual(result[1].status, "已发送站")
+        XCTAssertEqual(result[0].cells.last, "等待数传", "整理表格的原始状态格同步更新")
+        XCTAssertEqual(result[1].cells.last, "已发送站")
+        XCTAssertFalse(PassPlan.isExcludedFromSending(result[0]), "信息列里的 test 不是状态")
+        XCTAssertFalse(PassPlan.isExcludedFromSending(result[1]))
+        XCTAssertEqual(result[2].testStatusDetected, true, "右栏独立读到 test 必须保留")
+        XCTAssertTrue(PassPlan.isExcludedFromSending(result[2]))
+        XCTAssertEqual(result[3].status, "test", "普通补读不能覆盖原有 test")
+        XCTAssertTrue(PassPlan.isExcludedFromSending(result[3]))
+        XCTAssertEqual(result[4].status, "等待数传", "不同普通状态不能静默替换原值")
+        XCTAssertTrue(result[4].recognitionIssues?.contains(where: { $0.contains("状态") && $0.contains("不一致") }) == true)
+        XCTAssertEqual(result[5].testStatusDetected, true, "历史 test 证据不被普通补读清除")
+        XCTAssertTrue(PassPlan.isExcludedFromSending(result[5]))
+        XCTAssertTrue(result[6].status.isEmpty, "空状态不能从相邻行或信息列借来")
+        XCTAssertFalse(PassPlan.isExcludedFromSending(result[6]))
+    }
+
+    func testStatusRereadKeepsAmbiguousRowsUnresolved() async throws {
+        let source = try await statusRereadSource(["等待数传", "已发送站"])
+        let first = statusRereadRow(0)
+        var overlap = statusRereadRow(2)
+        overlap.region = first.region
+        let rows = [first, overlap, statusRereadRow(1)]
+        let result = await PlanReader.rereadRowMarkers(rows, layout: statusRereadLayout, in: source, settings: .standard)
+        XCTAssertEqual(result.count, rows.count)
+        guard result.count == rows.count else { return }
+        for row in result.prefix(2) {
+            XCTAssertTrue(row.status.isEmpty, "同一段文字不能同时填给两个身份不同的计划")
+            XCTAssertTrue(row.recognitionIssues?.contains(where: { $0.contains("状态") && $0.contains("行位置对应不清") }) == true)
+            XCTAssertFalse(PassPlan.problems(row, rules: [], layout: statusRereadLayout).isEmpty)
+        }
+        XCTAssertEqual(result[2].status, "已发送站", "无歧义的行应实际识别成功，不能整批跳过")
+    }
+
+    func testStatusRereadWithoutStatusHeaderDoesNotReadInfoColumn() async throws {
+        let source = try await statusRereadSource(["等待数传", "test"])
+        var layout = statusRereadLayout
+        layout.slots[2].column = nil
+        layout.slots[3] = .init(label: "数传信息", column: .info, x: 0.83)
+        let rows = [statusRereadRow(0), statusRereadRow(1)]
+        let result = await PlanReader.rereadRowMarkers(rows, layout: layout, in: source, settings: .standard)
+        XCTAssertEqual(result, rows, "没有状态表头时不把最右侧信息当成状态补读")
     }
 
     func testOriginalImageOmitsTestRowsEvenWithoutTheirStrips() async throws {
