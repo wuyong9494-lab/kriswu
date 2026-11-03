@@ -1,0 +1,101 @@
+{
+  "kind": "fictional_headerless_badges",
+  "pages": [
+    "badge_overlap_1",
+    "badge_overlap_2"
+  ],
+  "rules": {
+    "演示甲": [
+      "样例甲"
+    ],
+    "演示乙": [
+      "样例乙"
+    ]
+  },
+  "rows": [
+    {
+      "number": 1,
+      "satellite": "DEMOA1",
+      "name": "模拟1号",
+      "station": "样例甲-园区01",
+      "orbit": "5101",
+      "start": "2032-04-12 08:00:00",
+      "end": "2032-04-12 08:08:00",
+      "info": "通道1:800M",
+      "emergency": false,
+      "status": "等待数传",
+      "excluded": false,
+      "red_background": false
+    },
+    {
+      "number": 2,
+      "satellite": "DEMOB1",
+      "name": "模拟2号",
+      "station": "样例乙-园区02",
+      "orbit": "5102",
+      "start": "2032-04-12 09:00:00",
+      "end": "2032-04-12 09:08:00",
+      "info": "通道1:800M",
+      "emergency": false,
+      "status": "等待数传",
+      "excluded": false,
+      "red_background": true
+    },
+    {
+      "number": 3,
+      "satellite": "DEMOC1",
+      "name": "模拟3号",
+      "station": "样例甲-园区03",
+      "orbit": "5103",
+      "start": "2032-04-12 10:00:00",
+      "end": "2032-04-12 10:08:00",
+      "info": "通道1:800M",
+      "emergency": true,
+      "status": "等待数传",
+      "excluded": false,
+      "red_background": true
+    },
+    {
+      "number": 4,
+      "satellite": "DEMOD1",
+      "name": "模拟4号",
+      "station": "样例乙-园区04",
+      "orbit": "5104",
+      "start": "2032-04-12 11:00:00",
+      "end": "2032-04-12 11:08:00",
+      "info": "通道1:800M",
+      "emergency": true,
+      "status": "TeSt",
+      "excluded": true,
+      "red_background": true
+    },
+    {
+      "number": 5,
+      "satellite": "DEMOE1",
+      "name": "模拟5号",
+      "station": "样例甲-园区05",
+      "orbit": "5105",
+      "start": "2032-04-12 12:00:00",
+      "end": "2032-04-12 12:08:00",
+      "info": "通道1:800M",
+      "emergency": true,
+      "status": "数传成功",
+      "excluded": false,
+      "red_background": true
+    },
+    {
+      "number": 6,
+      "satellite": "DEMOF1",
+      "name": "模拟6号",
+      "station": "样例乙-园区06",
+      "orbit": "5106",
+      "start": "2032-04-12 13:00:00",
+      "end": "2032-04-12 13:08:00",
+      "info": "通道test说明：应急演练",
+      "emergency": false,
+      "status": "等待数传",
+      "excluded": false,
+      "red_background": false
+    }
+  ]
+}

@@ -17,10 +17,15 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public var region: PassPlan.Region?
     /// 多次识别互相矛盾、需要对原图核实的内容。nil 兼容旧版本保存的计划；重排、合并时保留。
     public var recognitionIssues: [String]?
+    /// 无表头左侧栏的独立「应急」标签。true 是文字证据；false 只用于已确认版式的无标签行或手动确认。
+    public var emergencyBadge: Bool?
+    /// 任一读数在状态列明确识别到 test。即使另一遍选择了别的状态文字，也不能把这条发出去。
+    public var testStatusDetected: Bool?
 
     public init(orbit: String = "", satelliteID: String = "", satellite: String = "", station: String = "",
                 start: String = "", end: String = "", info: String = "", status: String = "", cells: [String] = [],
-                region: PassPlan.Region? = nil, recognitionIssues: [String]? = nil) {
+                region: PassPlan.Region? = nil, recognitionIssues: [String]? = nil,
+                emergencyBadge: Bool? = nil, testStatusDetected: Bool? = nil) {
         self.orbit = orbit
         self.satelliteID = satelliteID
         self.satellite = satellite
@@ -32,6 +37,8 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
         self.cells = cells
         self.region = region
         self.recognitionIssues = recognitionIssues
+        self.emergencyBadge = emergencyBadge
+        self.testStatusDetected = testStatusDetected
     }
 }
 
@@ -183,9 +190,17 @@ public enum PassPlan {
         // 表头空着的列不要
         let kept = table[headerIndex].indices.filter { !table[headerIndex][$0].trimmingCharacters(in: .whitespaces).isEmpty }
         let layout = Layout(labels: kept.map { (table[headerIndex][$0], Double($0)) })
+        let leading = 0..<(kept.first ?? 0)
+        let hasBadges = table[(headerIndex + 1)...].contains { cells in
+            leading.contains { $0 < cells.count && markerText(cells[$0]) == "应急" }
+        }
         let rows = table[(headerIndex + 1)...].compactMap { cells -> PassPlanRow? in
             let values = kept.map { $0 < cells.count ? cells[$0].trimmingCharacters(in: .whitespacesAndNewlines) : "" }
-            return row(cells: values, layout: layout)
+            var found = row(cells: values, layout: layout)
+            if hasBadges {
+                found?.emergencyBadge = leading.contains { $0 < cells.count && markerText(cells[$0]) == "应急" }
+            }
+            return found
         }
         return Reading(rows: rows, layout: layout)
     }
@@ -261,7 +276,13 @@ public enum PassPlan {
         right = min(1, right)
         header?.left = left
         header?.right = right
-        let rows = assemble(body, layout: layout, headerY: headerY, lineHeight: lineHeight, span: (left, right))
+        // 左侧无表头的「应急」标签单独关联到行，不能挤进 No./圈号/卫星列后被丢掉。
+        let badges = leadingBadgeBoxes(body, layout: layout)
+        if let badgeLeft = badges.map(\.x).min() { left = max(0, min(left, badgeLeft - lineHeight)) }
+        header?.left = left
+        let content = body.filter { !badges.contains($0) }
+        let assembled = assemble(content, layout: layout, headerY: headerY, lineHeight: lineHeight, span: (left, right))
+        let rows = boundedRegions(applyingRowMarkers(assembled, markers: body, layout: layout))
         // 表头那一条往下不超过第一行的上边（不带进半截第一行）
         let middle = (left + right) / 2
         if var h = header, let first = rows.compactMap(\.region).min(by: { $0.y0 + $0.slope * middle < $1.y0 + $1.slope * middle }) {
@@ -356,6 +377,129 @@ public enum PassPlan {
         }
     }
 
+    /// 同一张图里无表头左侧「应急」、状态列 test 的明确文字证据。
+    /// 必须落在对应栏、且只对应一条倾斜行；其他列的同名文字和背景颜色都不参与判断。
+    public static func applyingRowMarkers(_ rows: [PassPlanRow], markers: [TextBox], layout: Layout) -> [PassPlanRow] {
+        var result = rows
+        let badges = leadingBadgeBoxes(markers, layout: layout)
+        let ordered = layout.slots.sorted { $0.x < $1.x }
+        let statusIndex = ordered.firstIndex { $0.column == .status }
+        let testMarkers: [TextBox]
+        if let index = statusIndex {
+            let left = index > 0 ? (ordered[index - 1].x + ordered[index].x) / 2 : 0
+            let right = index + 1 < ordered.count ? (ordered[index].x + ordered[index + 1].x) / 2 : 1
+            testMarkers = markers.filter { markerText($0.text) == "test" && $0.midX >= left && $0.midX <= right }
+        } else {
+            testMarkers = []
+        }
+        func matches(_ marker: TextBox) -> [Int] {
+            result.indices.filter { i in
+                guard let region = result[i].region, region.height > 0,
+                      marker.midX >= region.left, marker.midX <= region.right else { return false }
+                return abs(marker.midY - (region.y0 + region.slope * marker.midX)) < region.height * 0.45
+            }
+        }
+        func nearby(_ marker: TextBox) -> [Int] {
+            let eligible = result.indices.filter { i in
+                result[i].region.map { marker.midX >= $0.left && marker.midX <= $0.right } ?? false
+            }
+            let levels = eligible.compactMap { i -> (index: Int, y: Double, half: Double)? in
+                guard let region = result[i].region else { return nil }
+                return (i, region.y0 + region.slope * marker.midX, region.height / 2)
+            }
+            guard let top = levels.map({ $0.y - $0.half }).min(), let bottom = levels.map({ $0.y + $0.half }).max(),
+                  marker.midY >= top, marker.midY <= bottom else { return [] }
+            return Array(levels.sorted { abs($0.y - marker.midY) < abs($1.y - marker.midY) }.prefix(2).map(\.index))
+        }
+        var uncertainBadges = Set<Int>()
+        for badge in badges {
+            let matched = matches(badge)
+            if matched.count == 1, let i = matched.first {
+                result[i].emergencyBadge = true
+            } else {
+                for i in matched.isEmpty ? nearby(badge) : matched {
+                    uncertainBadges.insert(i)
+                    result[i] = retainingIssues(result[i], adding: ["左侧应急标签与行位置对应不清，请核对原图"])
+                }
+            }
+        }
+        // 看到了这张图的左侧标签版式，且这一行的左栏也完整可见，才把无标签记为普通计划。
+        if result.contains(where: { $0.emergencyBadge == true }), let boundary = leadingBadgeBoundary(layout) {
+            for i in result.indices where result[i].emergencyBadge == nil && !uncertainBadges.contains(i) {
+                if let region = result[i].region, region.left < boundary { result[i].emergencyBadge = false }
+            }
+        }
+        for marker in testMarkers {
+            let matched = matches(marker)
+            if matched.count == 1, let i = matched.first {
+                result[i].testStatusDetected = true
+                if result[i].status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    result[i].status = "test"
+                } else if markerText(result[i].status) != "test" {
+                    result[i] = retainingIssues(result[i], adding: ["状态识别不一致（含 test），已排除发送"])
+                }
+            } else {
+                for i in matched.isEmpty ? nearby(marker) : matched {
+                    result[i] = retainingIssues(result[i], adding: ["test 状态与行位置对应不清，请核对原图"])
+                }
+            }
+        }
+        return result
+    }
+
+    /// 裁原图前，所有行（包括不发送的 test 行）一起限定边界，避免邻行文字被裁进可发送条目。
+    /// 倾斜行按左右两端分别检查；几何交叉时保留条目但放弃不可靠的原图裁条。
+    public static func boundedRegions(_ rows: [PassPlanRow]) -> [PassPlanRow] {
+        var result = rows
+        let pages = Set(rows.compactMap { $0.region?.page })
+        for page in pages {
+            let ordered = rows.indices.filter { rows[$0].region?.page == page }.sorted { a, b in
+                let lhs = rows[a].region!, rhs = rows[b].region!
+                let ay = lhs.y0 + lhs.slope * 0.5, by = rhs.y0 + rhs.slope * 0.5
+                return ay == by ? a < b : ay < by
+            }
+            for (position, i) in ordered.enumerated() {
+                guard var region = rows[i].region else { continue }
+                let margin = min(0.002, max(0.0003, region.height * 0.025))
+                var allowed = region.height
+                for neighborPosition in [position - 1, position + 1] where ordered.indices.contains(neighborPosition) {
+                    let neighbor = rows[ordered[neighborPosition]].region!
+                    let direction = neighborPosition < position ? 1.0 : -1.0
+                    for x in [region.left, region.right] {
+                        let distance = direction * ((region.y0 + region.slope * x) - (neighbor.y0 + neighbor.slope * x))
+                        allowed = min(allowed, distance - margin * 2)
+                    }
+                }
+                if allowed > 0 {
+                    region.height = allowed
+                    result[i].region = region
+                } else {
+                    result[i].region = nil
+                    result[i] = retainingIssues(result[i], adding: ["原图行边界重叠，请核对后使用整理表格"])
+                }
+            }
+        }
+        return result
+    }
+
+    private static func markerText(_ value: String) -> String {
+        value.folding(options: .widthInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+            .filter { !$0.isWhitespace }.lowercased()
+    }
+
+    private static func leadingBadgeBoundary(_ layout: Layout) -> Double? {
+        let slots = layout.slots.sorted { $0.x < $1.x }
+        guard let first = slots.first, first.column != nil,
+              !layout.slots.contains(where: { $0.column == .number && $0.x > first.x }) else { return nil }
+        let gap = slots.count > 1 ? slots[1].x - first.x : 0.08
+        return first.x - max(gap * 0.45, 0.01)
+    }
+
+    private static func leadingBadgeBoxes(_ boxes: [TextBox], layout: Layout) -> [TextBox] {
+        guard let boundary = leadingBadgeBoundary(layout) else { return [] }
+        return boxes.filter { markerText($0.text) == "应急" && $0.midX < boundary }
+    }
+
     /// 一格里只该有一个值（圈号、卫星、地面站）：挨得近的几块（一个名字被认成了两段）拼起来；
     /// 隔得远的（挤进来的序号、Excel 的行号）只留离表头最近的那一段
     static func singleValue(_ boxes: [TextBox], center: Double, gap: Double) -> String {
@@ -439,6 +583,7 @@ public enum PassPlan {
         guard !(r.satellite.isEmpty && r.satelliteID.isEmpty), !r.station.isEmpty, !r.start.isEmpty else { return nil }
         // 又出现一遍表头（翻页、拼接的表）
         if column(forHeader: r.station) == .station { return nil }
+        if markerText(r.status) == "test" { r.testStatusDetected = true }
         return r
     }
 
@@ -570,7 +715,6 @@ public enum PassPlan {
     /// 另一种认法核对站名：开始时间相同只是候选，还必须对上卫星身份、没有圈号/结束时间矛盾，且只对应一行。
     /// 同一秒可以有多条计划，不能把第一个站名分给其他卫星；本来可分家的站名不自动改。
     public static func adoptStations(_ rows: [PassPlanRow], from other: [PassPlanRow], rules: [OperatorRule]) -> [PassPlanRow] {
-        guard !rules.isEmpty else { return rows }
         func samePlan(_ row: PassPlanRow, _ candidate: PassPlanRow) -> Bool {
             row.start == candidate.start
                 && matchingSatellite(row, candidate)
@@ -578,9 +722,7 @@ public enum PassPlan {
                 && !differentWhenPresent(row.end, candidate.end)
         }
         let sources = Dictionary(grouping: rows.filter { isValidTime($0.start) }, by: \.start)
-        let candidates = Dictionary(grouping: other.filter {
-            isValidTime($0.start) && operatorName(of: $0.station, rules: rules) != nil
-        }, by: \.start)
+        let candidates = Dictionary(grouping: other.filter { isValidTime($0.start) }, by: \.start)
         return rows.map { row in
             guard isValidTime(row.start) else { return row }
             let matches = (candidates[row.start] ?? []).filter { samePlan(row, $0) }
@@ -595,7 +737,8 @@ public enum PassPlan {
                 return retainingIssues(row, adding: ["同一时间的计划无法唯一对应地面站，请核对原图"])
             }
             let conflicts = recognitionConflicts(row, candidate, rules: rules, layout: nil)
-            if operatorName(of: row.station, rules: rules) != nil {
+            if rules.isEmpty || operatorName(of: row.station, rules: rules) != nil
+                || operatorName(of: candidate.station, rules: rules) == nil {
                 return retainingIssues(row, from: [candidate], adding: conflicts)
             }
             var fixed = row
@@ -651,6 +794,13 @@ public enum PassPlan {
 
     private static func retainingIssues(_ row: PassPlanRow, from others: [PassPlanRow] = [], adding: [String] = []) -> PassPlanRow {
         var result = row
+        let observations = [row] + others
+        if observations.contains(where: { $0.emergencyBadge == true }) {
+            result.emergencyBadge = true
+        } else if observations.contains(where: { $0.emergencyBadge == false }) {
+            result.emergencyBadge = false
+        }
+        if observations.contains(where: isExcludedFromSending) { result.testStatusDetected = true }
         var seen = Set<String>()
         let issues = ((row.recognitionIssues ?? []) + others.flatMap { $0.recognitionIssues ?? [] } + adding)
             .filter { !$0.isEmpty && seen.insert($0).inserted }
@@ -674,7 +824,14 @@ public enum PassPlan {
             labels.append("圈号")
         }
         if differentWhenPresent(lhs.info, rhs.info) { labels.append("数传信息") }
-        if let a = emergency(lhs, layout: layout), let b = emergency(rhs, layout: layout), a != b { labels.append("是否应急") }
+        let a = emergencyColumn(lhs, layout: layout), b = emergencyColumn(rhs, layout: layout)
+        // 没读到左标签不构成「否」的文字证据；另一页/另一遍读到的 true 必须保留。
+        if (a != nil && b != nil && a != b) || (a == false && rhs.emergencyBadge == true) || (b == false && lhs.emergencyBadge == true) {
+            labels.append("是否应急")
+        }
+        if isExcludedFromSending(lhs) != isExcludedFromSending(rhs), !lhs.status.isEmpty, !rhs.status.isEmpty {
+            labels.append("状态（含 test，已排除发送）")
+        }
         return labels.map { "\($0)多次识别不一致，请核对原图" }
     }
 
@@ -733,7 +890,7 @@ public enum PassPlan {
         if rows.allSatisfy({ $0.region != nil }) {
             rows.sort { level($0.region!) < level($1.region!) }
         }
-        base.rows = rows
+        base.rows = boundedRegions(rows)
         return base
     }
 
@@ -820,16 +977,31 @@ public enum PassPlan {
         if layout?.emergencyIndex != nil, emergency(r, layout: layout) == nil {
             list.append("是否应急没认出来，请核对原图")
         }
+        if r.emergencyBadge == true, emergencyColumn(r, layout: layout) == false {
+            list.append("左侧应急标签与是否应急列不一致，请核对原图")
+        }
         var seen = Set<String>()
         return (list + (r.recognitionIssues ?? [])).filter { seen.insert($0).inserted }
     }
 
     // MARK: - 应急
 
-    /// 这一条是不是应急计划：看「是否应急」那一列；没有这一列返回 nil，认不出「是 / 不是」也返回 nil
+    /// 明确的左侧「应急」标签优先，兼容 Excel 的「是否应急」列。
+    /// 无标签只有在该页版式已确认时才记为 false；没有应急信息则保持 nil。
     public static func emergency(_ r: PassPlanRow, layout: Layout?) -> Bool? {
+        if r.emergencyBadge == true { return true }
+        if layout?.emergencyIndex != nil { return emergencyColumn(r, layout: layout) }
+        return r.emergencyBadge
+    }
+
+    private static func emergencyColumn(_ r: PassPlanRow, layout: Layout?) -> Bool? {
         guard let i = layout?.emergencyIndex else { return nil }
         let value = i < r.cells.count ? r.cells[i].filter { !$0.isWhitespace } : ""
+        // 重新导入本 App 整理出的标签列：空白代表没有标签；显式「是否应急」空白仍然是未知。
+        if layout?.slots[i].label.filter({ !$0.isWhitespace }) == "应急" {
+            if value == "应急" { return true }
+            if value.isEmpty { return false }
+        }
         if ["是", "是的", "Y", "y", "YES", "Yes", "yes", "√", "✓"].contains(value) { return true }
         if ["不是", "否", "N", "n", "NO", "No", "no", "×"].contains(value) { return false }
         // 已知的下一列半截粘连，只接受这两种完整读数；「是否」「是X」不能靠前缀冒充确认。
@@ -840,7 +1012,17 @@ public enum PassPlan {
 
     /// 发图时下面那句话：这一家里有应急计划用 urgent，没有用 normal
     public static func caption(_ rows: [PassPlanRow], layout: Layout?, normal: String, urgent: String) -> String {
-        rows.contains { emergency($0, layout: layout) == true } ? urgent : normal
+        sendableRows(rows).contains { emergency($0, layout: layout) == true } ? urgent : normal
+    }
+
+    /// 状态为 test 的计划不发送给任何运营商。去掉空白、忽略大小写；其他字段含 test 不算。
+    public static func isExcludedFromSending(_ row: PassPlanRow) -> Bool {
+        row.testStatusDetected == true || markerText(row.status) == "test"
+    }
+
+    /// 导出/分组的统一入口；识别结果本身保留所有行供核对和计数。
+    public static func sendableRows(_ rows: [PassPlanRow]) -> [PassPlanRow] {
+        rows.filter { !isExcludedFromSending($0) }
     }
 
     // MARK: - 按运营商分开
@@ -917,7 +1099,7 @@ public enum PassPlan {
     public static func grouped(_ rows: [PassPlanRow], rules: [OperatorRule] = []) -> [(name: String, rows: [PassPlanRow])] {
         var order: [String] = []
         var map: [String: [PassPlanRow]] = [:]
-        for r in rows {
+        for r in sendableRows(rows) {
             let name = operatorName(of: r.station, rules: rules) ?? unassigned
             if map[name] == nil { order.append(name) }
             map[name, default: []].append(r)
@@ -968,11 +1150,15 @@ public enum PassPlan {
     /// 发到群里的表：表头、列的先后照网页上的（No.、圈号、卫星ID、卫星名称、地面站、数传开始时间、数传结束时间、
     /// 数传信息、状态），时间写全；这几条里整列都是空的（没拍到、网页上没有）就不要这一列。No. 是这一家里的第几条
     public static func table(_ rows: [PassPlanRow], layout: Layout? = nil) -> (headers: [String], cells: [[String]]) {
+        let rows = sendableRows(rows)
         if let layout { return table(rows, layout: layout) }
-        let columns: [(String, (PassPlanRow) -> String)] = [
+        var columns: [(String, (PassPlanRow) -> String)] = [
             ("圈号", \.orbit), ("卫星ID", \.satelliteID), ("卫星名称", \.satellite), ("地面站", \.station),
             ("数传开始时间", \.start), ("数传结束时间", \.end), ("数传信息", \.info), ("状态", \.status),
         ]
+        if rows.contains(where: { $0.emergencyBadge != nil }) {
+            columns.insert(("应急", { $0.emergencyBadge == true ? "应急" : "" }), at: 0)
+        }
         let used = columns.filter { column in rows.contains { !column.1($0).isEmpty } }
         let cells = rows.enumerated().map { i, row in ["\(i + 1)"] + used.map { $0.1(row) } }
         return (["No."] + used.map(\.0), cells)
@@ -982,15 +1168,20 @@ public enum PassPlan {
     /// 认得出含义的列用整理过的值（改过的、补的一条也对得上），其他列用原来的字
     private static func table(_ rows: [PassPlanRow], layout: Layout) -> (headers: [String], cells: [[String]]) {
         let kept = layout.slots.indices.filter { layout.slots[$0].column != .number }
+        let showsBadges = layout.emergencyIndex == nil && rows.contains { $0.emergencyBadge != nil }
         func value(_ row: PassPlanRow, _ i: Int) -> String {
-            layout.slots[i].column.flatMap(row.value) ?? (i < row.cells.count ? row.cells[i] : "")
+            if i == layout.emergencyIndex, let urgent = emergency(row, layout: layout) { return urgent ? "是" : "不是" }
+            return layout.slots[i].column.flatMap(row.value) ?? (i < row.cells.count ? row.cells[i] : "")
         }
-        let cells = rows.enumerated().map { n, row in ["\(n + 1)"] + kept.map { value(row, $0) } }
-        return (["No."] + kept.map { layout.slots[$0].label }, cells)
+        let cells = rows.enumerated().map { n, row in
+            ["\(n + 1)"] + (showsBadges ? [row.emergencyBadge == true ? "应急" : ""] : []) + kept.map { value(row, $0) }
+        }
+        return (["No."] + (showsBadges ? ["应急"] : []) + kept.map { layout.slots[$0].label }, cells)
     }
 
     /// 标题：「10月27日数传计划（甲站）共 3 条」（跨了几天的不写日期）
     public static func title(name: String, rows: [PassPlanRow]) -> String {
+        let rows = sendableRows(rows)
         let days = Set(rows.map { String($0.start.prefix(10)) }).sorted()
         if days.count == 1, let d = DayKey(string: days[0]) {
             return "\(d.month)月\(d.day)日数传计划（\(name)）共 \(rows.count) 条"
@@ -1001,6 +1192,8 @@ public enum PassPlan {
     /// 发到群里的一段话：标题、表头、每条一行，和图上的表一样
     /// caption：最后一行的那句话（「麻烦确认一下数传计划」），空的不加
     public static func message(name: String, rows: [PassPlanRow], layout: Layout? = nil, caption: String = "") -> String {
+        let rows = sendableRows(rows)
+        guard !rows.isEmpty else { return "" }
         let t = table(rows, layout: layout)
         let lines = [title(name: name, rows: rows), t.headers.joined(separator: "  ")]
             + t.cells.map { $0.filter { !$0.isEmpty }.joined(separator: "  ") }

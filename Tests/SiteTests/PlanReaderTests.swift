@@ -1,4 +1,7 @@
 import XCTest
+import CoreGraphics
+import ImageIO
+import UIKit
 @testable import ShiftReminder
 
 /// 数传计划的文字识别准确率：合成的「拍屏幕」照片（scripts/make_ocr_samples.py 生成，虚构数据）在模拟器里真的认一遍，
@@ -52,11 +55,10 @@ final class PlanReaderTests: XCTestCase {
     private func dumpOriginal(_ name: String, _ reading: PassPlan.Reading, _ rules: [PassPlan.OperatorRule]) async {
         let withStrip = reading.rows.filter { $0.region.flatMap { reading.strips[$0] } != nil }.count
         print("OCRSTRIPS|\(name)|有原图 \(withStrip)/\(reading.rows.count)|表头 \(reading.header.flatMap { reading.strips[$0] } != nil)")
-        guard let group = PassPlan.grouped(reading.rows, rules: rules).first(where: { $0.name != PassPlan.unassigned }),
-              let header = reading.header.flatMap({ reading.strips[$0] }).flatMap(UIImage.init(data:)) else { return }
-        let strips = [header] + group.rows.compactMap { $0.region.flatMap { reading.strips[$0] }.flatMap(UIImage.init(data:)) }
+        guard let group = PassPlan.grouped(reading.rows, rules: rules).first(where: { $0.name != PassPlan.unassigned }) else { return }
         let data: Data? = await MainActor.run {
-            guard let image = PassPlanOriginal.compose(title: group.name, caption: "麻烦确认一下数传计划", strips: strips) else { return nil }
+            guard let image = PassPlanOriginal.image(name: group.name, rows: group.rows, header: reading.header,
+                                                     strips: reading.strips, caption: "麻烦确认一下数传计划") else { return nil }
             let width = min(1100, image.size.width)
             let size = CGSize(width: width, height: image.size.height * width / image.size.width)
             let format = UIGraphicsImageRendererFormat()
@@ -190,5 +192,121 @@ final class PlanReaderTests: XCTestCase {
         let result = accuracy(PassPlan.Reading(rows: [row], layout: nil), truth, [])
         XCTAssertEqual(result.matched, 0, "一条识别结果不能冒充两条同时开始的计划")
         XCTAssertEqual(result.ambiguous, 2)
+    }
+
+    private struct BadgeTruth: Decodable {
+        struct Row: Decodable {
+            var start: String
+            var emergency: Bool
+            var excluded: Bool
+        }
+        var pages: [String]
+        var rules: [String: [String]]
+        var rows: [Row]
+    }
+
+    /// 完全虚构的两页网页：左侧无表头应急、右侧 test、红背景但无标签、信息列里的 test，
+    /// 以及重叠页第二次漏掉应急标签。真的走生产 OCR 和跨页合并，不用模拟读数代替。
+    func testHeaderlessEmergencyAndTestStatusAcrossPages() async throws {
+        let bundle = Bundle(for: Self.self)
+        let truthURL = try XCTUnwrap(bundle.url(forResource: "badge_overlap", withExtension: "json"))
+        let truth = try JSONDecoder().decode(BadgeTruth.self, from: Data(contentsOf: truthURL))
+        let images = try truth.pages.map { name -> UIImage in
+            let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "jpg"))
+            return try XCTUnwrap(UIImage(contentsOfFile: url.path))
+        }
+        let rules = truth.rules.sorted { $0.key < $1.key }.map { PassPlan.OperatorRule(name: $0.key, prefixes: $0.value) }
+        let reading = try await PlanReader.read(pages: images, rules: rules)
+        XCTAssertNil(reading.layout?.emergencyIndex, "样图的应急是无表头侧边标签")
+        XCTAssertEqual(reading.rows.count, truth.rows.count, "跨页重叠应合并，test 原行保留供核对")
+        for expected in truth.rows {
+            let matches = reading.rows.filter { $0.start == expected.start }
+            XCTAssertEqual(matches.count, 1, "合成计划应唯一对应：\(expected.start)")
+            let row = try XCTUnwrap(matches.first)
+            if expected.emergency {
+                XCTAssertEqual(PassPlan.emergency(row, layout: reading.layout), true, "漏了左侧应急标签")
+            } else {
+                XCTAssertNotEqual(PassPlan.emergency(row, layout: reading.layout), true,
+                                  "红背景或信息列的应急文字不能变成左侧应急标签")
+            }
+            XCTAssertEqual(PassPlan.isExcludedFromSending(row), expected.excluded,
+                           "只有状态列 test 排除，信息列里的 test 不能误排")
+        }
+        let sendable = PassPlan.sendableRows(reading.rows)
+        XCTAssertEqual(sendable.count, truth.rows.filter { !$0.excluded }.count)
+        XCTAssertEqual(PassPlan.table(reading.rows, layout: reading.layout).cells.count, sendable.count)
+        XCTAssertFalse(PassPlan.grouped(reading.rows, rules: rules).flatMap(\.rows).contains(where: PassPlan.isExcludedFromSending))
+        let message = PassPlan.message(name: "合成演示", rows: reading.rows, layout: reading.layout)
+        for excluded in truth.rows where excluded.excluded {
+            XCTAssertFalse(message.contains(excluded.start), "文字出口不能带出 test 计划")
+        }
+        await dumpOriginal("badge_overlap", reading, rules)
+    }
+
+    func testOriginalImageOmitsTestRowsEvenWithoutTheirStrips() async throws {
+        try await MainActor.run {
+            @MainActor func tile(_ color: UIColor) throws -> Data {
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 320, height: 44), format: format).image { context in
+                    color.setFill()
+                    context.cgContext.fill(CGRect(x: 0, y: 0, width: 320, height: 44))
+                }
+                return try XCTUnwrap(image.pngData())
+            }
+            let header = PassPlan.Region(y0: 0.1, slope: 0, height: 0.1, left: 0, right: 1)
+            let normalRegion = PassPlan.Region(y0: 0.3, slope: 0, height: 0.1, left: 0, right: 1)
+            let testRegion = PassPlan.Region(y0: 0.5, slope: 0, height: 0.1, left: 0, right: 1)
+            let normal = PassPlanRow(satellite: "演示A", station: "演示甲-01", start: "2032-04-12 08:00:00",
+                                     status: "等待数传", region: normalRegion)
+            let excluded = PassPlanRow(satellite: "演示B", station: "演示甲-02", start: "2032-04-12 09:00:00",
+                                       status: " test ", region: testRegion)
+            // test 故意没有切片；过滤必须发生在读取每条切片之前。
+            let strips = [header: try tile(.lightGray), normalRegion: try tile(.cyan)]
+            let baseline = try XCTUnwrap(PassPlanOriginal.image(name: "演示甲", rows: [normal], header: header,
+                                                               strips: strips, caption: "合成测试"))
+            let mixed = try XCTUnwrap(PassPlanOriginal.image(name: "演示甲", rows: [normal, excluded], header: header,
+                                                            strips: strips, caption: "合成测试"))
+            XCTAssertEqual(try XCTUnwrap(mixed.pngData()), try XCTUnwrap(baseline.pngData()))
+            XCTAssertNil(PassPlanOriginal.image(name: "演示甲", rows: [excluded], header: header,
+                                                strips: strips, caption: "合成测试"))
+        }
+    }
+
+    /// 中间洋红色条带代表不发送的 test 行；它仍参与正常行的裁切边界计算。
+    func testBoundedOriginalCropDoesNotIncludeNeighboringTestBand() async throws {
+        let source = try await MainActor.run {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 240), format: format).image { context in
+                UIColor.white.setFill()
+                context.cgContext.fill(CGRect(x: 0, y: 0, width: 400, height: 240))
+                UIColor.magenta.setFill()
+                context.cgContext.fill(CGRect(x: 0, y: 100, width: 400, height: 40))
+            }
+            return try XCTUnwrap(image.cgImage)
+        }
+        let rows = [
+            PassPlanRow(status: "等待数传", region: .init(y0: 80.0 / 240, slope: 0, height: 0.5, left: 0, right: 1)),
+            PassPlanRow(status: "test", region: .init(y0: 120.0 / 240, slope: 0, height: 0.3, left: 0, right: 1)),
+            PassPlanRow(status: "等待数传", region: .init(y0: 180.0 / 240, slope: 0, height: 0.4, left: 0, right: 1)),
+        ]
+        let bounded = PassPlan.boundedRegions(rows)
+        let region = try XCTUnwrap(bounded[0].region)
+        XCTAssertLessThan(region.height, rows[0].region!.height)
+        let strips = await PlanReader.cut(bounded.compactMap(\.region), from: source)
+        let data = try XCTUnwrap(strips[region])
+        let decoder = try XCTUnwrap(CGImageSourceCreateWithData(data as CFData, nil))
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(decoder, 0, nil))
+        let context = try XCTUnwrap(CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                                             bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let bytes = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+        let magenta = (0..<(image.width * image.height)).filter { pixel in
+            let i = pixel * 4
+            return bytes[i] > 130 && bytes[i + 1] < 100 && bytes[i + 2] > 130
+        }.count
+        XCTAssertEqual(magenta, 0, "正常行原图不得带入相邻 test 行的色带或文字")
     }
 }

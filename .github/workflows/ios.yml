@@ -211,6 +211,7 @@ jobs:
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
     runs-on: macos-15
+    timeout-minutes: 90
     # [site-tests] and manual extras keep the full suite; [plan-ocr-tests] runs the real photo reader only.
     if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[site-tests]') || contains(github.event.head_commit.message, '[plan-ocr-tests]')))
     env:
@@ -245,6 +246,8 @@ jobs:
           xcodegen generate
 
       - name: 模拟器里测试同步流程或计划识图
+        timeout-minutes: 75
+        shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
           import json, sys
@@ -269,16 +272,17 @@ jobs:
             -only-testing:"$TEST_TARGET" \
             -derivedDataPath build \
             -resultBundlePath site-tests.xcresult \
-            CODE_SIGNING_ALLOWED=NO > test.log 2>&1
-          status=$?
-          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log || true
           # 文字识别准确率（PlanReaderTests）：每种认法一行，做成注解
           grep -o "OCR|.*" test.log | sed 's/^/::notice::/' || true
-          # 认出的每块字、拼出的每行（虚构数据），查准确率时看
-          grep -oE "OCR(BOX|ROW|LAYOUT|STRIPS|IMG)\|.*" test.log || true
+          # 每块字、拼出的行和原图预览已通过 tee 实时记录（全部是虚构样例）。
+          grep -oE "OCR(BOX|ROW|LAYOUT|STRIPS)\|.*" test.log || true
           if [ $status -ne 0 ]; then
             tail -80 test.log
-            grep -E "error:" test.log | head -20 | sed 's/^/::error::/'
+            grep -E "error:" test.log | head -20 | sed 's/^/::error::/' || true
           fi
           exit $status
 

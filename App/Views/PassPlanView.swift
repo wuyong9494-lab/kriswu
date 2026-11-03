@@ -97,6 +97,7 @@ struct PassPlanView: View {
         var all: [OperatorGroup]
         var sendable: [OperatorGroup]
         var resting: [OperatorGroup]
+        var excluded: Int
         var doubtful: Int
         var idle: [String]
     }
@@ -109,7 +110,8 @@ struct PassPlanView: View {
         let resting = all.filter { skipped.contains($0.name) }
         let doubtful = all.filter { !skipped.contains($0.name) }.flatMap(\.rows)
             .filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }.count
-        return GroupedPlans(all: all, sendable: groups, resting: resting, doubtful: doubtful,
+        return GroupedPlans(all: all, sendable: groups, resting: resting,
+                            excluded: rows.filter(PassPlan.isExcludedFromSending).count, doubtful: doubtful,
                             idle: PassPlan.idle(rows, rules: rules))
     }
 
@@ -169,6 +171,10 @@ struct PassPlanView: View {
         return Section {
             LabeledContent("一共", value: "\(rows.count) 条，\(groups.count) 家")
             LabeledContent("已经发了", value: "\(groups.filter { store.passPlan.sent.contains($0.name) }.count) / \(groups.count) 家")
+            if grouped.excluded > 0 {
+                Label("已排除 \(grouped.excluded) 条 test，不发送给任何一家", systemImage: "nosign")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             if grouped.doubtful > 0 {
                 Label("有 \(grouped.doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote).foregroundStyle(DS.Palette.warning)
@@ -183,7 +189,7 @@ struct PassPlanView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if !grouped.idle.isEmpty {
-                Text("今天没有计划：\(grouped.idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
+                Text("没有可发送计划：\(grouped.idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
             }
             chainShareButton(groups)
         } footer: {
@@ -216,6 +222,9 @@ struct PassPlanView: View {
         }
         if !grouped.resting.isEmpty {
             restingSection(grouped.resting)
+        }
+        if grouped.excluded > 0 {
+            excludedSection
         }
     }
 
@@ -250,6 +259,21 @@ struct PassPlanView: View {
         }
     }
 
+    private var excludedSection: some View {
+        let excluded = rows.enumerated().filter { PassPlan.isExcludedFromSending($0.element) }
+        return Section {
+            DisclosureGroup("查看已排除的 \(excluded.count) 条") {
+                ForEach(excluded, id: \.offset) { item in
+                    rowButton(item.element, at: item.offset)
+                }
+            }
+        } header: {
+            Text("test · 不发送")
+        } footer: {
+            Text("状态为 test 的计划不进入任何一家的图片、文字或依次发送；即使标了应急也会排除。点开可对照原图核对状态。")
+        }
+    }
+
     private var addPlanSection: some View {
         Section {
             Button { editing = EditingRow(sourceID: store.passPlan.sourceID, index: nil, row: PassPlanRow()) } label: {
@@ -278,7 +302,7 @@ struct PassPlanView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("图片下面那句话").font(.caption).foregroundStyle(.secondary)
                 TextField("没有应急计划时", text: $store.settings.passPlanCaption)
-                TextField("有应急计划时（「是否应急」认出「是」）", text: $store.settings.passPlanUrgentCaption)
+                TextField("有应急计划时（左侧「应急」或「是否应急」为「是」）", text: $store.settings.passPlanUrgentCaption)
             }
             Toggle("每天提醒发计划", isOn: $store.settings.passPlanReminder)
             if store.settings.passPlanReminder {
@@ -450,7 +474,8 @@ struct PassPlanView: View {
     /// 两条值完全相同的计划仍是两条记录；分组后保留它们在本批计划中的独立下标。
     private func indexedRows(for name: String) -> [(offset: Int, element: PassPlanRow)] {
         rows.enumerated().filter {
-            (PassPlan.operatorName(of: $0.element.station, rules: rules) ?? PassPlan.unassigned) == name
+            !PassPlan.isExcludedFromSending($0.element)
+                && (PassPlan.operatorName(of: $0.element.station, rules: rules) ?? PassPlan.unassigned) == name
         }
     }
 
@@ -460,7 +485,8 @@ struct PassPlanView: View {
             .buttonStyle(.plain)
             .disabled(reading)
             // 可能认错的标黄
-            .listRowBackground(PassPlan.problems(row, rules: rules, layout: layout).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
+            .listRowBackground(PassPlan.isExcludedFromSending(row) || PassPlan.problems(row, rules: rules, layout: layout).isEmpty
+                               ? nil : DS.Palette.warning.opacity(0.12))
             .swipeActions {
                 Button("删掉", role: .destructive) { delete(row, at: index, sourceID: sourceID) }
                     .disabled(reading)
@@ -476,7 +502,7 @@ struct PassPlanView: View {
                 // 站名多半是认错了一个字（「驭星」认成「取星」）：最像的那家放第一个，点一下就分过去
                 // 或者表按地面站排过序：上下挨着的都是同一家
                 let similar = PassPlan.likelyOperator(of: station, rules: rules)
-                let neighbor = PassPlan.neighborOperator(of: station, in: self.rows, rules: rules)
+                let neighbor = PassPlan.neighborOperator(of: station, in: PassPlan.sendableRows(self.rows), rules: rules)
                 let likely = similar ?? neighbor
                 let reason = similar.map { " · 像是认错了字，最像「\($0)」" } ?? neighbor.map { " · 上下挨着的都是「\($0)」" } ?? ""
                 HStack {
@@ -557,13 +583,16 @@ struct PassPlanView: View {
                 if PassPlan.emergency(row, layout: layout) == true {
                     Text("应急").font(.caption2.weight(.bold)).foregroundStyle(DS.Palette.danger)
                 }
+                if PassPlan.isExcludedFromSending(row) {
+                    Text("test · 已排除").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Text(row.satellite.isEmpty ? row.satelliteID : row.satellite).font(.subheadline)
             }
             Text([row.station, row.orbit.isEmpty ? "" : "圈号 \(row.orbit)", row.satelliteID, row.info]
                 .filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.caption).foregroundStyle(.secondary)
-            if !problems.isEmpty {
+            if !PassPlan.isExcludedFromSending(row), !problems.isEmpty {
                 Label(problems.joined(separator: "；"), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(DS.Palette.warning)
             }
@@ -638,11 +667,13 @@ struct PassPlanView: View {
                     store.passPlan = PassPlanSession(fromPhotos: fromPhotos, rows: found, layout: result.layout,
                                                     header: result.header, strips: result.strips)
                 }
-                let doubtful = found.filter { !PassPlan.problems($0, rules: rules, layout: result.layout).isEmpty }.count
+                let doubtful = PassPlan.sendableRows(found).filter { !PassPlan.problems($0, rules: rules, layout: result.layout).isEmpty }.count
+                let excluded = found.filter(PassPlan.isExcludedFromSending).count
                 let grouped = PassPlan.grouped(found, rules: rules)
                 let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
                 let families = grouped.filter { $0.name != PassPlan.unassigned }.count
                 var message = "认出 \(found.count) 条，分成 \(families) 家"
+                if excluded > 0 { message += "；已排除 \(excluded) 条 test" }
                 if lost > 0 { message += "；\(lost) 条分不出是哪家，在最上面" } else if doubtful > 0 { message += "，\(doubtful) 条要核对" }
                 ToastCenter.shared.show(message, style: doubtful > 0 || lost > 0 ? .warning : .success)
             } catch {
@@ -697,7 +728,10 @@ struct PassPlanView: View {
     /// 只拦下实际存在的疑项；对照照片后保存，才清除多次识别的分歧。
     private func readyToSend(_ names: [String]) -> Bool {
         let selected = Set(names)
-        let doubtful = PassPlan.grouped(rows, rules: rules).filter { selected.contains($0.name) }.flatMap(\.rows)
+        let allowed = sendable.filter { selected.contains($0.name) }
+        // 只剩 test、被标为不用发，或旧队列中的运营商，都没有发送入口。
+        guard !selected.isEmpty, Set(allowed.map(\.name)) == selected else { return false }
+        let doubtful = allowed.flatMap(\.rows)
             .filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }
         guard let first = doubtful.first else { return true }
         reviewRow = first
@@ -788,13 +822,8 @@ struct PassPlanView: View {
     /// 任意一行没有原图就返回 nil，让页面说明缺图；不自动换成识别文字绘制的表。
     private func originalImage(name: String, rows: [PassPlanRow]) -> UIImage? {
         let session = store.passPlan
-        guard let header = session.header, let top = session.strips[header].flatMap(UIImage.init(data:)) else { return nil }
-        var pieces = [top]
-        for row in rows {
-            guard let region = row.region, let strip = session.strips[region].flatMap(UIImage.init(data:)) else { return nil }
-            pieces.append(strip)
-        }
-        return PassPlanOriginal.compose(title: PassPlan.title(name: name, rows: rows), caption: caption(rows), strips: pieces)
+        return PassPlanOriginal.image(name: name, rows: rows, header: session.header, strips: session.strips,
+                                      caption: caption(PassPlan.sendableRows(rows)))
     }
 }
 
@@ -806,16 +835,10 @@ struct PassPlanSheet: View {
     /// 表下面那一行字（「麻烦确认一下数传计划」）
     var caption = ""
 
-    /// 「是否应急」在表里是第几列（前面多了一列 No.）
-    private var urgentColumn: Int? {
-        layout?.emergencyIndex.map { index in
-            1 + (layout?.slots.prefix(index).filter { $0.column != .number }.count ?? 0)
-        }
-    }
-
     /// 和网页上的表一样：同样的表头、列的先后、行的先后，时间写全；居中、每行一条细线
     var body: some View {
         let table = PassPlan.table(rows, layout: layout)
+        let urgentColumn = table.headers.firstIndex { $0.contains("应急") }
         VStack(alignment: .leading, spacing: 12) {
             Text(PassPlan.title(name: name, rows: rows)).font(.system(size: 20, weight: .bold))
             Grid(alignment: .center, horizontalSpacing: 18, verticalSpacing: 0) {
@@ -829,8 +852,8 @@ struct PassPlanSheet: View {
                     Divider().gridCellUnsizedAxes(.horizontal)
                     GridRow {
                         ForEach(Array(cells.enumerated()), id: \.offset) { c, cell in
-                            // 「是否应急」是「是」的那一格标红
-                            let urgent = c == urgentColumn && cell.filter { !$0.isWhitespace } == "是"
+                            let value = cell.filter { !$0.isWhitespace }
+                            let urgent = c == urgentColumn && (value == "是" || value == "应急")
                             Text(cell).font(.system(size: 14, weight: urgent ? .bold : .regular)).monospacedDigit()
                                 .foregroundStyle(urgent ? Color.red : Color.black)
                                 .padding(.vertical, 10)
@@ -853,12 +876,15 @@ struct PassPlanSheet: View {
 /// 改一条（认错的字、漏的一条）
 struct PassPlanRowEditor: View {
     @State private var row: PassPlanRow
+    @State private var emergencyConfirmed = false
     /// 读到的那张表的列：认不出含义的列（是否应急、创建时间……）也能改
     private let layout: PassPlan.Layout?
     private let rules: [PassPlan.OperatorRule]
     private let sourceImage: UIImage?
     private let sourceHeader: UIImage?
     private let sendsOriginal: Bool
+    private let originalStatus: String
+    private let originalTestStatusDetected: Bool?
     let isNew: Bool
     var onDone: (PassPlanRow?) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -876,6 +902,8 @@ struct PassPlanRowEditor: View {
         self.sourceImage = sourceImage
         self.sourceHeader = sourceHeader
         self.sendsOriginal = sendsOriginal
+        self.originalStatus = row.status
+        self.originalTestStatusDetected = row.testStatusDetected
         self.isNew = isNew
         self.onDone = onDone
     }
@@ -883,7 +911,63 @@ struct PassPlanRowEditor: View {
     /// 只有原表里才有、App 认不出含义的那几列
     private var otherColumns: [Int] {
         guard let layout else { return [] }
-        return layout.slots.indices.filter { layout.slots[$0].column == nil }
+        return layout.slots.indices.filter { layout.slots[$0].column == nil && $0 != layout.emergencyIndex }
+    }
+
+    private var statusBinding: Binding<String> {
+        Binding(get: { row.status }, set: { value in
+            row.status = value
+            // 明确改过状态后，以核对的新值为准；仅改空格/大小写不能抹掉先前读到 test 的证据。
+            let same = value.filter { !$0.isWhitespace }.lowercased() == originalStatus.filter { !$0.isWhitespace }.lowercased()
+            row.testStatusDetected = same ? originalTestStatusDetected : nil
+        })
+    }
+
+    private var emergencySelection: Binding<Int> {
+        Binding(get: {
+            if emergencyNeedsChoice { return -1 }
+            if let value = PassPlan.emergency(row, layout: layout) { return value ? 1 : 0 }
+            return layout?.emergencyIndex == nil ? 0 : -1
+        }, set: { choice in
+            emergencyConfirmed = choice >= 0
+            row.emergencyBadge = choice < 0 ? nil : choice == 1
+            if let index = layout?.emergencyIndex, row.cells.indices.contains(index) {
+                row.cells[index] = choice < 0 ? "" : (choice == 1 ? "是" : "不是")
+            }
+        })
+    }
+
+    private var emergencyNeedsChoice: Bool {
+        if emergencyConfirmed { return false }
+        return (layout?.emergencyIndex != nil && PassPlan.emergency(row, layout: layout) == nil)
+            || row.recognitionIssues?.contains(where: { $0.contains("应急") }) == true
+    }
+
+    private var sendingRulesSection: some View {
+        Section {
+            Picker("计划类型", selection: emergencySelection) {
+                if emergencyNeedsChoice { Text("待核对").tag(-1) }
+                Text("普通计划").tag(0)
+                Text("应急计划").tag(1)
+            }
+            if emergencyNeedsChoice {
+                Text("请对照原图，选择这条是否为应急计划。")
+                    .font(.footnote).foregroundStyle(DS.Palette.warning)
+            }
+            if PassPlan.isExcludedFromSending(row) {
+                Label("已排除：不发送给任何一家", systemImage: "nosign")
+                    .foregroundStyle(.secondary)
+                if row.testStatusDetected == true, row.status.filter({ !$0.isWhitespace }).lowercased() != "test" {
+                    Text("有一次识别结果读到 test，请对照原图最右侧的状态列。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button("已核对原图，状态不是 test") { row.testStatusDetected = nil }
+                }
+            }
+        } header: {
+            Text("应急与发送")
+        } footer: {
+            Text("最左侧标「应急」的按应急计划处理；最右侧状态为 test 的始终不发送，包括应急计划。")
+        }
     }
 
     var body: some View {
@@ -932,17 +1016,18 @@ struct PassPlanRowEditor: View {
                 TextField("开始时间", text: $row.start)
                 TextField("结束时间", text: $row.end)
                 TextField("数传信息", text: $row.info)
-                TextField("状态", text: $row.status)
+                TextField("状态", text: statusBinding)
             } footer: {
                 Text("时间写成 2026-10-27 22:57:51 这样")
             }
+            sendingRulesSection
             if let layout, !otherColumns.isEmpty {
                 Section {
                     ForEach(otherColumns, id: \.self) { i in
                         TextField(layout.slots[i].label, text: $row.cells[i])
                     }
                 } footer: {
-                    Text("「是否应急」写「是」或「不是」：哪家有「是」，图下面就写「应急计划优先推送」。")
+                    Text("这里保留原表中的其他列，按原图核对。")
                 }
             }
             if !isNew {
@@ -964,7 +1049,7 @@ struct PassPlanRowEditor: View {
                     onDone(row)
                     dismiss()
                 }
-                .disabled(row.station.isEmpty || (row.satellite.isEmpty && row.satelliteID.isEmpty))
+                .disabled(row.station.isEmpty || (row.satellite.isEmpty && row.satelliteID.isEmpty) || emergencyNeedsChoice)
             }
         }
     }
@@ -991,6 +1076,20 @@ extension PassPlanView {
 
 /// 发原图：把从照片上裁下来的几条（表头、这一家的每一行）上下拼成一张，上面标题、下面那句话
 enum PassPlanOriginal {
+    /// 所有原图出口共用过滤：test 行连原照片切片也不能带入任何一家的图片。
+    @MainActor
+    static func image(name: String, rows: [PassPlanRow], header: PassPlan.Region?,
+                      strips: [PassPlan.Region: Data], caption: String) -> UIImage? {
+        let included = PassPlan.sendableRows(rows)
+        guard !included.isEmpty, let header, let top = strips[header].flatMap(UIImage.init(data:)) else { return nil }
+        var pieces = [top]
+        for row in included {
+            guard let region = row.region, let strip = strips[region].flatMap(UIImage.init(data:)) else { return nil }
+            pieces.append(strip)
+        }
+        return compose(title: PassPlan.title(name: name, rows: included), caption: caption, strips: pieces)
+    }
+
     @MainActor
     static func compose(title: String, caption: String, strips: [UIImage]) -> UIImage? {
         let width = strips.map(\.size.width).max() ?? 0

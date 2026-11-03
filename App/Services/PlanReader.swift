@@ -79,6 +79,19 @@ enum PlanReader {
             guard let found = result.layout else { continue }
             for i in result.rows.indices { result.rows[i].region?.page = page }
             result.rows = await rereadStations(result.rows, layout: found, in: picture, rules: rules, words: words, settings: settings)
+            result.rows = await rereadRowMarkers(result.rows, layout: found, in: picture, settings: settings)
+            if found.columns.contains(.status) {
+                for i in result.rows.indices where !PassPlan.isExcludedFromSending(result.rows[i])
+                    && result.rows[i].status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // 空白读数无法证明它不是 test；人工对照原图保存后可解除这项识别疑问。
+                    let issue = "状态没认出来，请核对原图是否为 test"
+                    if !(result.rows[i].recognitionIssues ?? []).contains(issue) {
+                        result.rows[i].recognitionIssues = (result.rows[i].recognitionIssues ?? []) + [issue]
+                    }
+                }
+            }
+            // 所有行（包括稍后不发的 test）都参与裁切边界，避免正常条带带入相邻 test 行。
+            result.rows = PassPlan.boundedRegions(result.rows)
             result.header?.page = page
             let pageHeader = header == nil ? result.header : nil
             header = header ?? result.header
@@ -144,6 +157,68 @@ enum PlanReader {
                 }
                 return fixed
             }
+        }.value
+    }
+
+    /// 网页的无表头「应急」在 No. 左边；test 在最右状态列。
+    /// 只补读有明确列位置的窄边栏，再交给核心按唯一行几何挂接；不根据红色背景推断。
+    /// 每页最多两次窄栏识别，避免每个普通空白行都再跑一遍 OCR。
+    static func rereadRowMarkers(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
+                                 settings: Settings) async -> [PassPlanRow] {
+        let positioned = rows.compactMap(\.region)
+        guard !positioned.isEmpty else { return rows }
+        let slots = layout.slots.sorted { $0.x < $1.x }
+        guard slots.count > 1, slots.allSatisfy({ $0.x >= 0 && $0.x <= 1 }) else { return rows }
+        return await Task.detached(priority: .userInitiated) {
+            var bands: [(left: Double, right: Double)] = []
+            if let first = slots.first, first.column == .number, layout.emergencyIndex == nil,
+               rows.contains(where: { PassPlan.emergency($0, layout: layout) != true }) {
+                let gap = slots[1].x - first.x
+                let left = max(positioned.map(\.left).min() ?? 0, first.x - gap * 1.5)
+                let right = first.x - gap * 0.45
+                if right > left { bands.append((left, right)) }
+            }
+            // 即使本轮填了普通状态，也独立核对右栏，防止错行的普通标签掩盖真正的 test。
+            let needsStatus = rows.contains { !PassPlan.isExcludedFromSending($0) }
+            if needsStatus, let index = slots.firstIndex(where: { $0.column == .status }) {
+                let left = index > 0 ? (slots[index - 1].x + slots[index].x) / 2
+                    : positioned.map(\.left).min() ?? 0
+                let right = index + 1 < slots.count ? (slots[index].x + slots[index + 1].x) / 2
+                    : positioned.map(\.right).max() ?? 1
+                if right > left { bands.append((left, right)) }
+            }
+            let w = Double(image.width), h = Double(image.height)
+            var markers: [PassPlan.TextBox] = []
+            for band in bands {
+                let top = positioned.map {
+                    min($0.y0 + $0.slope * band.left, $0.y0 + $0.slope * band.right) - $0.height / 2
+                }.min() ?? 0
+                let bottom = positioned.map {
+                    max($0.y0 + $0.slope * band.left, $0.y0 + $0.slope * band.right) + $0.height / 2
+                }.max() ?? 1
+                let rect = CGRect(x: band.left * w, y: top * h, width: (band.right - band.left) * w,
+                                  height: (bottom - top) * h)
+                    .intersection(CGRect(x: 0, y: 0, width: w, height: h)).integral
+                guard rect.width > 4, rect.height > 4, let crop = image.cropping(to: rect) else { continue }
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.recognitionLanguages = ["zh-Hans", "en-US"]
+                // 状态中的英文代码按原文读，不能让词语纠错把别的词替成 test。
+                request.usesLanguageCorrection = false
+                if settings.smallText { request.minimumTextHeight = minimumTextHeight(crop.height) }
+                guard (try? VNImageRequestHandler(cgImage: crop, orientation: .up).perform([request])) != nil else { continue }
+                for observation in request.results ?? [] {
+                    guard let text = observation.topCandidates(1).first?.string else { continue }
+                    let token = text.filter { !$0.isWhitespace }.lowercased()
+                    guard token == "应急" || token == "test" else { continue }
+                    let box = observation.boundingBox
+                    markers.append(PassPlan.TextBox(text: text,
+                        x: (rect.minX + box.minX * rect.width) / w,
+                        y: (rect.minY + (1 - box.maxY) * rect.height) / h,
+                        width: box.width * rect.width / w, height: box.height * rect.height / h))
+                }
+            }
+            return PassPlan.applyingRowMarkers(rows, markers: markers, layout: layout)
         }.value
     }
 
