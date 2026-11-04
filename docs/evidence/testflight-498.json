@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "version": "1.2",
+  "build_number": 498,
+  "bundle_id": "com.kriswu.shiftreminder",
+  "source_sha": "4f86dbaedbfe3f39169f2422f9a47ab841c3d8aa",
+  "source_tree": "73f6d8aa8a0c4ff127e3ec216edc3b589a54232d",
+  "source_ci": {
+    "run_id": 41800470743,
+    "conclusion": "success",
+    "macos": {
+      "tests": 573,
+      "skipped": 6,
+      "failures": 0
+    },
+    "linux": {
+      "tests": 573,
+      "skipped": 7,
+      "failures": 0
+    },
+    "new_regression_methods_passed_per_platform": 67,
+    "ios_release_build": "success",
+    "concurrency_warnings": 0
+  },
+  "resource_ci": {
+    "run_id": 41800470738,
+    "attempt": 2,
+    "conclusion": "success",
+    "tests": 36,
+    "skipped": 0,
+    "failures": 0,
+    "device": "iPhone SE (3rd generation), iOS 26.2 simulator"
+  },
+  "promotion": {
+    "run_id": 41803590122,
+    "attempt": 2,
+    "sha": "1e4f997c5333d4685451777c935d745d8edef4f0",
+    "testflight_job_id": 126498429760,
+    "apple_status_job_id": 126504110484,
+    "upload_completed_at": "2026-11-04T09:40:38.883194Z",
+    "upload": "success",
+    "conclusion": "success",
+    "completed_at": "2026-11-04T09:47:12Z"
+  },
+  "private_resource_pack": {
+    "id": "brawl69-c037c57e132b",
+    "bytes": 852915256,
+    "sha256": "a7d14fe4e028a89de7e90dce274cc7d0050b700ed55b7c533370ff16a717ca83",
+    "files": 5469,
+    "all_payload_hashes_verified": true,
+    "transport_bytes": 513291258,
+    "transport_sha256": "014f308baae24d1ea44d54c649facbb18b85b09a32d6a0424b02a34a17640281"
+  },
+  "archive": {
+    "signed_archive": "success",
+    "source_and_build_identity": "success",
+    "current_source_head_verified": true,
+    "vendor_runtime_verified": true,
+    "canonical_ranger_verified": true,
+    "opaque_textures_verified": true
+  },
+  "validation_mode": "resource-runtime-gameplay-deferred",
+  "gameplay_validation": "deferred",
+  "apple": {
+    "build_number": "498",
+    "version": "1.2",
+    "source_sha": "4f86dbaedbfe3f39169f2422f9a47ab841c3d8aa",
+    "source_run_id": 41800470743,
+    "build_id": "d735b1a5-4f74-49be-89f4-88ffd4028b06",
+    "processing_state": "VALID",
+    "uploaded_this_run": true,
+    "notes_written": true,
+    "source_identity_verified_this_run": true,
+    "internal_build_state": "READY_FOR_BETA_TESTING",
+    "external_build_state": "READY_FOR_BETA_SUBMISSION",
+    "last_observed_at": "2026-11-04T09:47:09.6175408Z"
+  },
+  "known_limitations": [
+    "Background app icon change is not reliably implemented; the current path updates in the foreground.",
+    "Dense photo OCR has not passed accuracy acceptance and still requires human identifier review.",
+    "Full gameplay and recording validation remains deferred.",
+    "Real-device overnight, Face ID, sharing and EventKit acceptance remains outstanding."
+  ],
+  "evidence_urls": [
+    "https://github.com/wuyong9494-lab/kriswu/actions/runs/41800470743",
+    "https://github.com/wuyong9494-lab/kriswu/actions/runs/41800470738",
+    "https://github.com/wuyong9494-lab/kriswu/actions/runs/41803590122"
+  ]
+}
