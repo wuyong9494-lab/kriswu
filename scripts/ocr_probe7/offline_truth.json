@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Offline scoring only; never supplied to native recognition or crop selection",
+  "fixture": "status_probe_web_photo",
+  "photoSHA256": "d6c7d3c30672244ae5b8713061d3cb7d4fff4996f27e193c58eabb128434ffba",
+  "geometrySHA256": "d2107acbde65dc3a0446debea2097efd836c53c13608929d1f79b8d783254a37",
+  "sourceCommit": "f2fd46fee3295cc4cb06b930ea2e74b047d7c753",
+  "basis": "Existing scripts/make_ocr_samples.py web_screen() draws the same status label for all 22 public fixture rows; web_photo.json itself has no status field",
+  "generatorSHA256": "4ba4337f6a0904d2b7f853b629f8c5a5b5839a433abea260f4e62be66ab8783f",
+  "selectedRows": [1, 4, 7, 10, 13, 16, 19, 22],
+  "expectedStatusByRow": {
+    "1": "等待数传",
+    "4": "等待数传",
+    "7": "等待数传",
+    "10": "等待数传",
+    "13": "等待数传",
+    "16": "等待数传",
+    "19": "等待数传",
+    "22": "等待数传"
+  }
+}

@@ -1,0 +1,1607 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Frozen, independently SHA/CRC-checked Probe6 B-image and OCR baseline for Probe7. No status truth.",
+  "sourceProbeRuntimeCommit": "02f088526a38ca5602c90fa0dec9db73b4cc7b8c",
+  "sourceRunID": 41613614494,
+  "sourceJobID": 125841425702,
+  "sourceRecords": "/workspace/scratch/2a5b37fe15e4/status-probe6/analysis/cell_requests.json",
+  "sourceRecordsSHA256": "e40e982e9c9808c957e91702a09e96676f54fa5a8a45b1e15064c2cd75ce7c79",
+  "photoSHA256": "d6c7d3c30672244ae5b8713061d3cb7d4fff4996f27e193c58eabb128434ffba",
+  "geometrySHA256": "d2107acbde65dc3a0446debea2097efd836c53c13608929d1f79b8d783254a37",
+  "images": [
+    {
+      "row": 1,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-1-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-1-headerCapped-1x.png",
+      "pngName": "probe6-row-1-headerCapped-1x.png",
+      "pngSHA256": "15ff4b0c8534dcb44b3c9c34f7fc4e6f9d8b870d4662a84a3075efde6acf2436",
+      "pngBytes": 64227,
+      "size": [
+        440,
+        83
+      ],
+      "pixelSHA256": "1b4e744e39dcb7c4512381bd7317d0c8ad1657e344b0b8b47322c8c86bf2ef5b",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          83
+        ],
+        "cellRegion": {
+          "height": 0.027429253894062693,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01765912070916454,
+          "y0": 0.16117986269302034
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.1204819306731224,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          83
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.03047694877118077,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01765912070916454,
+          "y0": 0.16117986269302034
+        },
+        "row": 1,
+        "seconds": 0.09571091666668963,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            400.94230898106656
+          ],
+          [
+            3836.4829340408523,
+            395.12318647271286
+          ],
+          [
+            3836.4829340408523,
+            478.06925024835846
+          ],
+          [
+            3397.1162102428943,
+            483.88837275671216
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 10.00000024586916,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.1204819306731224,
+        "orientation": "up",
+        "requestID": "row-1-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 1,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-1-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-1-headerCapped-3x.png",
+      "pngName": "probe6-row-1-headerCapped-3x.png",
+      "pngSHA256": "46d7d6cddcf915dfd5eac58af476dcec4cd0cede2057eb47e0564f949debed38",
+      "pngBytes": 357961,
+      "size": [
+        1320,
+        249
+      ],
+      "pixelSHA256": "57da57ef285cdc5225050d2f061977423a6f6ede3a8759f578791e8a9a8c0f21",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          83
+        ],
+        "cellRegion": {
+          "height": 0.027429253894062693,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01765912070916454,
+          "y0": 0.16117986269302034
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.1204819306731224,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          83
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.03047694877118077,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01765912070916454,
+          "y0": 0.16117986269302034
+        },
+        "row": 1,
+        "seconds": 0.09571091666668963,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            400.94230898106656
+          ],
+          [
+            3836.4829340408523,
+            395.12318647271286
+          ],
+          [
+            3836.4829340408523,
+            478.06925024835846
+          ],
+          [
+            3397.1162102428943,
+            483.88837275671216
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 30.00000073760748,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.1204819306731224,
+        "orientation": "up",
+        "requestID": "row-1-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 4,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-4-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-4-headerCapped-1x.png",
+      "pngName": "probe6-row-4-headerCapped-1x.png",
+      "pngSHA256": "e80a39d7537ca1d1bc016a07f1de81806e50fdaf940f1e6318a7f62819cd33f1",
+      "pngBytes": 64070,
+      "size": [
+        440,
+        85
+      ],
+      "pixelSHA256": "d026598e2301f0004b7c8c2d1efb0d27868a34adebbcb627f774405341f21bed",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          85
+        ],
+        "cellRegion": {
+          "height": 0.027826690811417042,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01285895526738832,
+          "y0": 0.25854730182958985
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.11764705926179886,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          85
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.030918545346018934,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01285895526738832,
+          "y0": 0.25854730182958985
+        },
+        "row": 4,
+        "seconds": 0.0765522500000202,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            707.0105601865923
+          ],
+          [
+            3836.4829340408523,
+            702.7732124011196
+          ],
+          [
+            3836.4829340408523,
+            786.9211254148448
+          ],
+          [
+            3397.1162102428943,
+            791.1584732003174
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 10.000000037252903,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.11764705926179886,
+        "orientation": "up",
+        "requestID": "row-4-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 4,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-4-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-4-headerCapped-3x.png",
+      "pngName": "probe6-row-4-headerCapped-3x.png",
+      "pngSHA256": "51d5e05fb8b7333c678b4751f5f90fd3e6c0e1939d1f49899de63a224d4e30d3",
+      "pngBytes": 359072,
+      "size": [
+        1320,
+        255
+      ],
+      "pixelSHA256": "b755dad4b05ac155eb87a87def1b782ec17e85cff77edb9a295bc27e7a8a7dfe",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          85
+        ],
+        "cellRegion": {
+          "height": 0.027826690811417042,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01285895526738832,
+          "y0": 0.25854730182958985
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.11764705926179886,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          85
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.030918545346018934,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.01285895526738832,
+          "y0": 0.25854730182958985
+        },
+        "row": 4,
+        "seconds": 0.0765522500000202,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            707.0105601865923
+          ],
+          [
+            3836.4829340408523,
+            702.7732124011196
+          ],
+          [
+            3836.4829340408523,
+            786.9211254148448
+          ],
+          [
+            3397.1162102428943,
+            791.1584732003174
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 30.00000011175871,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.11764705926179886,
+        "orientation": "up",
+        "requestID": "row-4-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 7,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-7-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-7-headerCapped-1x.png",
+      "pngName": "probe6-row-7-headerCapped-1x.png",
+      "pngSHA256": "122f38ed5bde4fa0c2b80915278f9eb7fdc7c10fe5763f31e4fecae6ba0f0c4c",
+      "pngBytes": 62782,
+      "size": [
+        440,
+        86
+      ],
+      "pixelSHA256": "c263560de904ec87f4bf519106f64b7b85aea8fab498ae6811007c67010f4073",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          86
+        ],
+        "cellRegion": {
+          "height": 0.028438335586733362,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.007959300044794252,
+          "y0": 0.35793280998815225
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.11627907305955887,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          86
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.031598150651925956,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.007959300044794252,
+          "y0": 0.35793280998815225
+        },
+        "row": 7,
+        "seconds": 0.12948387500000536,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1019.1110535937635
+          ],
+          [
+            3836.4829340408523,
+            1016.4882649054588
+          ],
+          [
+            3836.4829340408523,
+            1102.4857917197405
+          ],
+          [
+            3397.1162102428943,
+            1105.108580408045
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 10.000000283122063,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.11627907305955887,
+        "orientation": "up",
+        "requestID": "row-7-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 7,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-7-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-7-headerCapped-3x.png",
+      "pngName": "probe6-row-7-headerCapped-3x.png",
+      "pngSHA256": "d7ebcfb6d916962bb10db5d3fd187e9633d4219d56b3f3be105dfef183ab340e",
+      "pngBytes": 350526,
+      "size": [
+        1320,
+        258
+      ],
+      "pixelSHA256": "e326042fe5be97ca6cf98c2ac23200f3aa1792c23517e6525f10a1f83a3f8061",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          86
+        ],
+        "cellRegion": {
+          "height": 0.028438335586733362,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.007959300044794252,
+          "y0": 0.35793280998815225
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.11627907305955887,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          86
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.031598150651925956,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.007959300044794252,
+          "y0": 0.35793280998815225
+        },
+        "row": 7,
+        "seconds": 0.12948387500000536,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1019.1110535937635
+          ],
+          [
+            3836.4829340408523,
+            1016.4882649054588
+          ],
+          [
+            3836.4829340408523,
+            1102.4857917197405
+          ],
+          [
+            3397.1162102428943,
+            1105.108580408045
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 30.000000849366188,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.11627907305955887,
+        "orientation": "up",
+        "requestID": "row-7-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 10,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-10-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-10-headerCapped-1x.png",
+      "pngName": "probe6-row-10-headerCapped-1x.png",
+      "pngSHA256": "1bdecf58cbbb3202e0dc8b9a111412d633f93ae345b90e07e270c2233d17559f",
+      "pngBytes": 62074,
+      "size": [
+        440,
+        88
+      ],
+      "pixelSHA256": "3446d5527d630ad025eb828f4da4a3728ee6096afc526b5863eea9a67f89cbc2",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          88
+        ],
+        "cellRegion": {
+          "height": 0.02906926189407672,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.0029570295655280744,
+          "y0": 0.45939978489607786
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.11363636702299118,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          88
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.03229917988230747,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.0029570295655280744,
+          "y0": 0.45939978489607786
+        },
+        "row": 10,
+        "seconds": 0.12268312499998046,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1337.7381957384782
+          ],
+          [
+            3836.4829340408523,
+            1336.7637804441933
+          ],
+          [
+            3836.4829340408523,
+            1424.6692284118815
+          ],
+          [
+            3397.1162102428943,
+            1425.6436437061664
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 10.000000298023224,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.11363636702299118,
+        "orientation": "up",
+        "requestID": "row-10-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 10,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-10-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-10-headerCapped-3x.png",
+      "pngName": "probe6-row-10-headerCapped-3x.png",
+      "pngSHA256": "9ddb24fc816613297e47d28353d2938af37c4d3a9b77378b1f797046a1bce3ee",
+      "pngBytes": 346276,
+      "size": [
+        1320,
+        264
+      ],
+      "pixelSHA256": "c99db66d873734e85790e7f34aa7a6cae71415ab35747ae2a86e4e9404cbcecd",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          88
+        ],
+        "cellRegion": {
+          "height": 0.02906926189407672,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.0029570295655280744,
+          "y0": 0.45939978489607786
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.11363636702299118,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          88
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.03229917988230747,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": -0.0029570295655280744,
+          "y0": 0.45939978489607786
+        },
+        "row": 10,
+        "seconds": 0.12268312499998046,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1337.7381957384782
+          ],
+          [
+            3836.4829340408523,
+            1336.7637804441933
+          ],
+          [
+            3836.4829340408523,
+            1424.6692284118815
+          ],
+          [
+            3397.1162102428943,
+            1425.6436437061664
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 30.00000089406967,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.11363636702299118,
+        "orientation": "up",
+        "requestID": "row-10-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 13,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-13-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-13-headerCapped-1x.png",
+      "pngName": "probe6-row-13-headerCapped-1x.png",
+      "pngSHA256": "ec7cf6a4287d429f921f91a27be4c8fe942a66cc066fe72b09177c7594089912",
+      "pngBytes": 64378,
+      "size": [
+        440,
+        90
+      ],
+      "pixelSHA256": "b913da93396c4816f65bc9d92061562ad2d57903c200587d81941a591ab77267",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          90
+        ],
+        "cellRegion": {
+          "height": 0.029720288776325016,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.002151113947631241,
+          "y0": 0.5630143079060096
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.1111111119389534,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          90
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.033022543084805574,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.002151113947631241,
+          "y0": 0.5630143079060096
+        },
+        "row": 13,
+        "seconds": 0.07075037500004555,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1663.0988785241527
+          ],
+          [
+            3836.4829340408523,
+            1663.8077244399178
+          ],
+          [
+            3836.4829340408523,
+            1753.6818776995249
+          ],
+          [
+            3397.1162102428943,
+            1752.9730317837596
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 10.000000074505806,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.1111111119389534,
+        "orientation": "up",
+        "requestID": "row-13-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 13,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-13-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-13-headerCapped-3x.png",
+      "pngName": "probe6-row-13-headerCapped-3x.png",
+      "pngSHA256": "b77f4a65da9a5a63e3997c4fac1d3e56fd48bbfbe592a00d9b1cfaf1c4cb433a",
+      "pngBytes": 357584,
+      "size": [
+        1320,
+        270
+      ],
+      "pixelSHA256": "f081071a75597a0be6f4900fdf8ddc974bcdfb814adb519fba3e503974fe957b",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          90
+        ],
+        "cellRegion": {
+          "height": 0.029720288776325016,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.002151113947631241,
+          "y0": 0.5630143079060096
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.1111111119389534,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          90
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.033022543084805574,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.002151113947631241,
+          "y0": 0.5630143079060096
+        },
+        "row": 13,
+        "seconds": 0.07075037500004555,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1663.0988785241527
+          ],
+          [
+            3836.4829340408523,
+            1663.8077244399178
+          ],
+          [
+            3836.4829340408523,
+            1753.6818776995249
+          ],
+          [
+            3397.1162102428943,
+            1752.9730317837596
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 30.000000223517418,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.1111111119389534,
+        "orientation": "up",
+        "requestID": "row-13-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 16,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-16-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-16-headerCapped-1x.png",
+      "pngName": "probe6-row-16-headerCapped-1x.png",
+      "pngSHA256": "b4c3766887959b83fa0376d1e67c47e590f4be9492fb9a7f5de41a9b18f4f534",
+      "pngBytes": 68249,
+      "size": [
+        440,
+        92
+      ],
+      "pixelSHA256": "44e09bc3032863d3b9c5c4565b1cf2a6b6fe6be662bbe6120f826728ed53bab5",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          92
+        ],
+        "cellRegion": {
+          "height": 0.030392279232005787,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.007368527648540609,
+          "y0": 0.6688452875119147
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.10869564861059189,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          92
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.0337691991466731,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.007368527648540609,
+          "y0": 0.6688452875119147
+        },
+        "row": 16,
+        "seconds": 0.04933049999999639,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1995.4088317775977
+          ],
+          [
+            3836.4829340408523,
+            1997.836946166713
+          ],
+          [
+            3836.4829340408523,
+            2089.7431985642984
+          ],
+          [
+            3397.1162102428943,
+            2087.315084175183
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 9.999999672174454,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.10869564861059189,
+        "orientation": "up",
+        "requestID": "row-16-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 16,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-16-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-16-headerCapped-3x.png",
+      "pngName": "probe6-row-16-headerCapped-3x.png",
+      "pngSHA256": "e6474a5822c5d7bb214facbcf4835082ccb18329bc995fe8dab9d6ec38dfd67d",
+      "pngBytes": 380515,
+      "size": [
+        1320,
+        276
+      ],
+      "pixelSHA256": "a22f9e847c499eeeeab4fe4dc075fa7e7b6afb058190a54f4cea775137787f70",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          92
+        ],
+        "cellRegion": {
+          "height": 0.030392279232005787,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.007368527648540609,
+          "y0": 0.6688452875119147
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.10869564861059189,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          92
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.0337691991466731,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.007368527648540609,
+          "y0": 0.6688452875119147
+        },
+        "row": 16,
+        "seconds": 0.04933049999999639,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            1995.4088317775977
+          ],
+          [
+            3836.4829340408523,
+            1997.836946166713
+          ],
+          [
+            3836.4829340408523,
+            2089.7431985642984
+          ],
+          [
+            3397.1162102428943,
+            2087.315084175183
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 29.99999901652336,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.10869564861059189,
+        "orientation": "up",
+        "requestID": "row-16-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 19,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-19-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-19-headerCapped-1x.png",
+      "pngName": "probe6-row-19-headerCapped-1x.png",
+      "pngSHA256": "83fb3a653b8a505295bbdb2694006933d7baf6d26b0eb00b79b32160aac930ba",
+      "pngBytes": 73126,
+      "size": [
+        440,
+        95
+      ],
+      "pixelSHA256": "19ccf778f6b7dd1b7c538ba2dc83a62c0a392c68ea8a83f7cc4ecac31acfdad1",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          95
+        ],
+        "cellRegion": {
+          "height": 0.031086143076753066,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.0126987556019188,
+          "y0": 0.7769646121747267
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.10526315867900848,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          95
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.03454015897417007,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.0126987556019188,
+          "y0": 0.7769646121747267
+        },
+        "row": 19,
+        "seconds": 0.142737208333358,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            2334.893100263216
+          ],
+          [
+            3836.4829340408523,
+            2339.0776582470608
+          ],
+          [
+            3836.4829340408523,
+            2433.082154911162
+          ],
+          [
+            3397.1162102428943,
+            2428.8975969273174
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 10.000000074505806,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.10526315867900848,
+        "orientation": "up",
+        "requestID": "row-19-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 19,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-19-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-19-headerCapped-3x.png",
+      "pngName": "probe6-row-19-headerCapped-3x.png",
+      "pngSHA256": "20e217a3a9bbfc5ba2fc19351ec4c051286689ffb62df1ee0788afcb289985c4",
+      "pngBytes": 407915,
+      "size": [
+        1320,
+        285
+      ],
+      "pixelSHA256": "687a7a7d8f9709f2e07c1e9af81692af2575dcc29e46a5d5912572b6b41f9f89",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          95
+        ],
+        "cellRegion": {
+          "height": 0.031086143076753066,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.0126987556019188,
+          "y0": 0.7769646121747267
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.10526315867900848,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          95
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.03454015897417007,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.0126987556019188,
+          "y0": 0.7769646121747267
+        },
+        "row": 19,
+        "seconds": 0.142737208333358,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            2334.893100263216
+          ],
+          [
+            3836.4829340408523,
+            2339.0776582470608
+          ],
+          [
+            3836.4829340408523,
+            2433.082154911162
+          ],
+          [
+            3397.1162102428943,
+            2428.8975969273174
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 30.000000223517418,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.10526315867900848,
+        "orientation": "up",
+        "requestID": "row-19-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 22,
+      "geometry": "headerCapped",
+      "scale": 1,
+      "requestID": "row-22-headerCapped-1x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-22-headerCapped-1x.png",
+      "pngName": "probe6-row-22-headerCapped-1x.png",
+      "pngSHA256": "abe486d8223cf398908c606bc10e4e367a918a401d17b8efc5716d6683f53035",
+      "pngBytes": 77589,
+      "size": [
+        440,
+        96
+      ],
+      "pixelSHA256": "72bee77aa79bace2e2c4007c587818d8fac4a05ba876ce522197bbcaee4e12ad",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 1792,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          96
+        ],
+        "cellRegion": {
+          "height": 0.03165194719603179,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.018145496811645564,
+          "y0": 0.8874473131698123
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.1041666641831398,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          96
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.0351688302178131,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.018145496811645564,
+          "y0": 0.8874473131698123
+        },
+        "row": 22,
+        "seconds": 0.08829829166671743,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            2682.0147018864263
+          ],
+          [
+            3836.4829340408523,
+            2687.9940975007908
+          ],
+          [
+            3836.4829340408523,
+            2783.7095858215907
+          ],
+          [
+            3397.1162102428943,
+            2777.7301902072263
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 9.999999761581421,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.1041666641831398,
+        "orientation": "up",
+        "requestID": "row-22-headerCapped-1x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [
+        {
+          "confidence": 0.30000001192092896,
+          "family": "cell",
+          "kind": "candidate",
+          "observation": 0,
+          "rank": 1,
+          "raw": "COM",
+          "requestID": "row-22-headerCapped-1x"
+        }
+      ],
+      "allPNGCRCVerified": true
+    },
+    {
+      "row": 22,
+      "geometry": "headerCapped",
+      "scale": 3,
+      "requestID": "row-22-headerCapped-3x",
+      "file": "/workspace/scratch/2a5b37fe15e4/status-probe6/prepared-png/probe6-row-22-headerCapped-3x.png",
+      "pngName": "probe6-row-22-headerCapped-3x.png",
+      "pngSHA256": "97d64b8fc150f1b60f19aa7ee28d537fbf9fab3aa811e70f842deb7dc68ecb56",
+      "pngBytes": 432132,
+      "size": [
+        1320,
+        288
+      ],
+      "pixelSHA256": "949d72adbfaa158c40ee7d4dd296797138f92bdb22652e349e8290e38751ff59",
+      "pixelHashScope": "CGImage-dataProvider-bytes",
+      "bitsPerPixel": 32,
+      "bytesPerRow": 5312,
+      "baseCrop": {
+        "baseCropSize": [
+          440,
+          96
+        ],
+        "cellRegion": {
+          "height": 0.03165194719603179,
+          "left": 0.8425387426197655,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.018145496811645564,
+          "y0": 0.8874473131698123
+        },
+        "colorManagement": "CoreImage-default",
+        "family": "cell",
+        "geometry": "headerCapped",
+        "kind": "baseCrop",
+        "minimumHeightPolicy": "10/baseCrop.height; identical normalized value for both scales",
+        "normalizedMinHeight": 0.1041666641831398,
+        "rectifiedExtent": [
+          0,
+          0,
+          440,
+          96
+        ],
+        "rectifiedExtentCoordinates": "CoreImage-pixels-bottom-left",
+        "regionBeforeCellBounding": {
+          "height": 0.0351688302178131,
+          "left": 0,
+          "page": 0,
+          "right": 0.9515086641966399,
+          "slope": 0.018145496811645564,
+          "y0": 0.8874473131698123
+        },
+        "row": 22,
+        "seconds": 0.08829829166671743,
+        "sourceCoordinates": "source-pixels-top-left",
+        "sourceCornerOrder": [
+          "topLeft",
+          "topRight",
+          "bottomRight",
+          "bottomLeft"
+        ],
+        "sourceCorners": [
+          [
+            3397.1162102428943,
+            2682.0147018864263
+          ],
+          [
+            3836.4829340408523,
+            2687.9940975007908
+          ],
+          [
+            3836.4829340408523,
+            2783.7095858215907
+          ],
+          [
+            3397.1162102428943,
+            2777.7301902072263
+          ]
+        ]
+      },
+      "requestSettings": {
+        "customWords": [],
+        "effectiveMinPixels": 29.999999284744263,
+        "family": "cell",
+        "kind": "requestStart",
+        "languageCorrection": false,
+        "languages": [
+          "zh-Hans",
+          "en-US"
+        ],
+        "level": "accurate",
+        "normalizedMinHeight": 0.1041666641831398,
+        "orientation": "up",
+        "requestID": "row-22-headerCapped-3x",
+        "requestRevision": 3,
+        "topCandidates": 3
+      },
+      "baselineCandidates": [],
+      "allPNGCRCVerified": true
+    }
+  ]
+}
