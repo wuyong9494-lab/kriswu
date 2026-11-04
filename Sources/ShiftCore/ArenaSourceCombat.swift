@@ -12,7 +12,8 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "impact_damage", "wall_break", "projectile_bounce", "indirect_flight",
         "projectile_fuse", "pass_environment", "life_steal", "damage_once_per_volley",
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
-        "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded"
+        "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
+        "self_shield"
     ]
     public var id: String
     public var name: String
@@ -77,9 +78,32 @@ public enum ArenaSourceCompatibility {
         }
         adaptPatternNine(&result.weapon)
         adaptPatternNine(&result.ultimate)
+        // Only the explicitly reviewed self-shield source record is adapted.
+        // A host damage multiplier is declared in the policy; the unverified
+        // damage-taken super-charge rule must remain blocked independently.
+        if result.id == "Rosa", var skill = result.ultimate,
+           skill.id == "RosaUlti", skill.role == .ultimate, skill.behavior == "Shield",
+           skill.rawSource["BehaviorType"] == "Shield", skill.rawSource["ActiveTime"] == "4000",
+           skill.activeTime == 4, skill.projectiles.isEmpty, skill.projectileCount == 0,
+           skill.charge == nil, skill.areaEffects.isEmpty, skill.damage == 0 {
+            let reason = "skill.RosaUlti.BehaviorType=Shield: requires a dedicated behavior adapter"
+            if skill.unsupportedReasons == [reason] {
+                skill.shieldDamageMultiplier = 0.4
+                skill.unsupportedReasons.removeAll { $0 == reason }
+                if skill.isSupported {
+                    result.ultimate = skill
+                    resolved.insert(reason)
+                }
+            }
+        }
         if !resolved.isEmpty {
             result.unsupportedReasons.removeAll { resolved.contains($0) }
-            result.compatibilityPolicy += "+host-pattern9-seeded-cone"
+            if resolved.contains(where: { $0.contains("AttackPattern=9") }) {
+                result.compatibilityPolicy += "+host-pattern9-seeded-cone"
+            }
+            if resolved.contains("skill.RosaUlti.BehaviorType=Shield: requires a dedicated behavior adapter") {
+                result.compatibilityPolicy += "+host-self-shield60"
+            }
         }
         return result
     }
@@ -257,11 +281,15 @@ public struct ArenaSourceSkill: Codable, Equatable, Sendable, Identifiable {
     /// Optional host adapter for source AttackPattern 1. Its seeded sequence is
     /// reproducible, while the native v69 random generator remains unspecified.
     public var dispersion: String? = nil
+    /// Explicit host reduction policy for a self-shield skill. A nil value
+    /// means the native shield semantics have not been reviewed or implemented.
+    public var shieldDamageMultiplier: Double? = nil
 
     public var runtimeCapabilities: Set<String> {
         var result: Set<String> = behavior == "Attack" ? ["timed_burst"] : []
         if projectileCount > 1 { result.insert("pellet_fan") }
         if dispersion != nil { result.insert("dispersion_seeded") }
+        if behavior == "Shield" { result.insert("self_shield") }
         for projectile in projectiles { result.formUnion(projectile.runtimeCapabilities) }
         for area in areaEffects { result.formUnion(area.runtimeCapabilities) }
         if let charge {
@@ -279,17 +307,24 @@ public struct ArenaSourceSkill: Codable, Equatable, Sendable, Identifiable {
               reload >= 0, cooldown >= 0, cooldown <= 600, castingTime >= 0, castingTime <= 600,
               activeTime >= 0, activeTime <= 600, spread >= 0, spread <= Double.pi * 2,
               dispersion == nil || dispersion == "seeded_cone",
+              (shieldDamageMultiplier.map { $0.isFinite && $0 > 0 && $0 < 1 } ?? true),
               (ammoCapacity == 0 || reload > 0),
               areaEffects.allSatisfy(\.isSupported) else { return false }
         if behavior == "Attack" {
-            return projectiles.count == 1 && projectiles[0].isSupported
+            return shieldDamageMultiplier == nil && projectiles.count == 1 && projectiles[0].isSupported
                 && projectileCount > 0 && projectileCount <= 128
                 && attackInterval >= ArenaSourceSkillState.tickDuration && attackInterval <= 600
         }
         if behavior == "Charge", let charge {
-            return [1, 4].contains(charge.sourceType) && charge.speed.isFinite && charge.speed > 0.01
+            return shieldDamageMultiplier == nil && [1, 4].contains(charge.sourceType)
+                && charge.speed.isFinite && charge.speed > 0.01
                 && charge.speed <= 1000 && charge.pushback.isFinite && charge.pushback >= 0
                 && charge.endAreas.allSatisfy(\.isSupported)
+        }
+        if behavior == "Shield" {
+            return role == .ultimate && activeTime > 0 && shieldDamageMultiplier != nil
+                && projectiles.isEmpty && projectileCount == 0 && charge == nil
+                && areaEffects.isEmpty && ammoCapacity == 0 && damage == 0 && chargeDamage == 0
         }
         return false
     }
@@ -337,10 +372,16 @@ public struct ArenaSourceAreaSpawn: Codable, Equatable, Sendable {
     public var chargeDamage: Int
 }
 
+public struct ArenaSourceShield: Codable, Equatable, Sendable {
+    public var duration: Double
+    public var damageMultiplier: Double
+}
+
 public enum ArenaSourceEmission: Codable, Equatable, Sendable {
     case projectile(ArenaSourceLaunch)
     case charge(ArenaSourceCharge)
     case area(ArenaSourceAreaSpawn)
+    case shield(ArenaSourceShield)
     case finished(skillID: String)
 }
 
@@ -498,6 +539,9 @@ public struct ArenaSourceSkillState: Codable, Equatable, Sendable {
             state.emittedVolleyCount += 1
         }
         if state.elapsedTicks == state.castingTicks {
+            if skill.behavior == "Shield", let multiplier = skill.shieldDamageMultiplier {
+                output.append(.shield(ArenaSourceShield(duration: skill.activeTime, damageMultiplier: multiplier)))
+            }
             for area in skill.areaEffects {
                 output.append(.area(ArenaSourceAreaSpawn(skillID: skill.id, role: skill.role, area: area,
                     position: origin, damage: area.resolvedDamage(skillDamage: skill.damage), chargeDamage: skill.chargeDamage)))

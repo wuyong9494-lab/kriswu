@@ -32,6 +32,98 @@ final class ArenaSourceCombatTests: XCTestCase {
         emitted.compactMap { if case .projectile(let launch) = $0 { return launch }; return nil }
     }
 
+    private func sourceShield(casting: Double = 0) -> ArenaSourceSkill {
+        var skill = colt(role: .ultimate)
+        skill.id = "HostShield"
+        skill.behavior = "Shield"
+        skill.range = 0
+        skill.damage = 0
+        skill.chargeDamage = 0
+        skill.castingTime = casting
+        skill.activeTime = 4
+        skill.projectiles = []
+        skill.projectileCount = 0
+        skill.shieldDamageMultiplier = 0.4
+        return skill
+    }
+
+    func testSourceShieldWaitsForCastingAndEmitsOnce() throws {
+        let skill = sourceShield(casting: 0.2)
+        XCTAssertTrue(skill.isSupported)
+        XCTAssertTrue(skill.runtimeCapabilities.contains("self_shield"))
+        var state = ArenaSourceSkillState(skill: skill)
+        XCTAssertTrue(try state.activate(origin: .zero, aim: V2(1, 0)).isEmpty)
+        let before = state.advance(dt: 0.15, origin: .zero)
+        XCTAssertTrue(before.isEmpty)
+        let cast = state.advance(dt: 0.05, origin: .zero)
+        XCTAssertEqual(cast, [.shield(ArenaSourceShield(duration: 4, damageMultiplier: 0.4))])
+        let rest = state.advance(dt: 4.1, origin: .zero)
+        XCTAssertEqual(rest.filter { if case .shield = $0 { return true }; return false }.count, 0)
+        XCTAssertEqual(rest.filter { if case .finished = $0 { return true }; return false }.count, 1)
+        XCTAssertFalse(state.active)
+    }
+
+    func testSourceShieldUsesExplicitReductionAndExpiresWithoutAffectingClassicDamage() throws {
+        var source = hero()
+        source.id = "HostShieldTester"
+        source.ultimate = sourceShield()
+        XCTAssertTrue(source.canPlay)
+        let entrants = [
+            ArenaGame.Entrant(name: "Shield", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Attacker", brawler: .knight, isBot: true, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 701, map: .canyon)
+        game.applySourceEmissions([.shield(ArenaSourceShield(duration: .infinity, damageMultiplier: -1))], owner: 0)
+        XCTAssertEqual(game.fighters[0].shield, 0)
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(1, 0))
+        XCTAssertEqual(game.fighters[0].shield, 4, accuracy: 1e-12)
+        XCTAssertEqual(game.fighters[0].sourceShieldDamageMultiplier, 0.4)
+        let previous = game.fighters[0].health
+        game.hurt(0, 1000, by: 1, charges: false)
+        XCTAssertEqual(game.fighters[0].health, previous - 400)
+        XCTAssertEqual(game.damageTaken(game.fighters[1]), 1)
+        // Drive the source fighter only: AI attacks or match timeout must not
+        // make shield expiry tests depend on unrelated arena events.
+        for _ in 0..<4 { game.updateSourceFighter(0, input: ArenaInput(), dt: 1) }
+        XCTAssertEqual(game.fighters[0].shield, 0, accuracy: 1e-12)
+        XCTAssertNil(game.fighters[0].sourceShieldDamageMultiplier)
+        let unshielded = game.fighters[0].health
+        game.hurt(0, 1000, by: 1, charges: false)
+        XCTAssertEqual(game.fighters[0].health, unshielded - 1000)
+    }
+
+    func testReviewedRosaShieldDoesNotBypassUnimplementedDamageTakenSuperCharge() throws {
+        var original = hero()
+        original.id = "Rosa"
+        original.rawSource = ["ChargeUltiFromDamage": "240"]
+        let remaining = "hero.Rosa.ChargeUltiFromDamage=240: requires a dedicated hero rule"
+        let shieldReason = "skill.RosaUlti.BehaviorType=Shield: requires a dedicated behavior adapter"
+        original.unsupportedReasons = [remaining, shieldReason]
+        var special = sourceShield()
+        special.id = "RosaUlti"
+        special.shieldDamageMultiplier = nil
+        special.rawSource = ["BehaviorType": "Shield", "ActiveTime": "4000"]
+        special.unsupportedReasons = [shieldReason]
+        original.ultimate = special
+
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertEqual(adapted.ultimate?.shieldDamageMultiplier, 0.4)
+        XCTAssertEqual(adapted.ultimate?.unsupportedReasons, [])
+        XCTAssertTrue(adapted.ultimate?.isSupported == true)
+        XCTAssertEqual(adapted.unsupportedReasons, [remaining])
+        XCTAssertFalse(adapted.canPlay)
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original.ultimate?.unsupportedReasons, [shieldReason], "Private source profile remains frozen")
+
+        var unknown = original
+        unknown.ultimate?.rawSource["ActiveTime"] = "5000"
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(unknown), unknown)
+        unknown = original
+        unknown.ultimate?.unsupportedReasons.append("unverified area behavior")
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(unknown), unknown)
+    }
+
     func testActualColt650msProducesSixShotsAnd1250msProducesTwelve() throws {
         for (role, expected) in [(ArenaSourceSkillRole.weapon, 6), (.ultimate, 12)] {
             var state = ArenaSourceSkillState(skill: colt(role: role))

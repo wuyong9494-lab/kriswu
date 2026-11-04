@@ -81,7 +81,10 @@ extension ArenaGame {
     mutating func updateSourceFighter(_ i: Int, input: ArenaInput, dt: Double) {
         guard dt.isFinite, dt > 0, dt <= 1, fighters[i].sourceHero?.canPlay == true else { return }
         tickStatus(i, dt)
-        if fighters[i].shield > 0 { fighters[i].shield = max(0, fighters[i].shield - dt) }
+        if fighters[i].shield > 0 {
+            fighters[i].shield = max(0, fighters[i].shield - dt)
+            if fighters[i].shield == 0 { fighters[i].sourceShieldDamageMultiplier = nil }
+        }
         if fighters[i].sourceCharge != nil {
             updateSourceCharge(i, dt: dt)
         } else {
@@ -148,6 +151,12 @@ extension ArenaGame {
             case .charge(let charge):
                 fighters[owner].sourceCharge = ArenaSourceChargeMotion(definition: charge, remaining: charge.distance)
             case .area(let area): applySourceArea(area, owner: owner)
+            case .shield(let shield):
+                guard shield.duration.isFinite, shield.duration > 0, shield.duration <= 600,
+                      shield.damageMultiplier.isFinite, shield.damageMultiplier > 0,
+                      shield.damageMultiplier < 1 else { continue }
+                fighters[owner].shield = max(fighters[owner].shield, shield.duration)
+                fighters[owner].sourceShieldDamageMultiplier = shield.damageMultiplier
             case .finished: break
             }
         }

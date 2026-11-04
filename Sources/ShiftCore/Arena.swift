@@ -405,6 +405,9 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var burst: Burst?
     /// 骨盾还剩几秒（这段时间受到的伤害少六成）
     public var shield: Double = 0
+    /// Source shield policies use an explicit multiplier rather than borrowing
+    /// the classic shield's percentage. Nil retains the classic 0.4 behavior.
+    public var sourceShieldDamageMultiplier: Double? = nil
     /// 这一帧走的速度（电脑瞄准算提前量、画面上用）
     public var moving: V2 = .zero
     public var kills = 0
@@ -1109,6 +1112,7 @@ public struct ArenaGame: Sendable {
         fighters[i].lastHurt = time
         fighters[i].moving = .zero
         fighters[i].shield = 0
+        fighters[i].sourceShieldDamageMultiplier = nil
         events.append(.respawn(fighter: i))
     }
 
@@ -1620,6 +1624,7 @@ public struct ArenaGame: Sendable {
         fighters[j].sourceUltimate?.cancel()
         fighters[j].sourceCharge = nil
         fighters[j].shield = 0
+        fighters[j].sourceShieldDamageMultiplier = nil
         fighters[j].moving = .zero
         fighters[j].speedBoost = 0
         fighters[j].slowed = 0

@@ -161,6 +161,22 @@ struct ArenaResourcePackView: View {
                     } else {
                         Text("模型与动作可查看；特殊技能规则仍在适配，暂未开放对战。")
                             .font(.caption).foregroundStyle(.orange)
+                        if let profile = ArenaImportedCombatAssets.shared.hero(id: hero.id) {
+                            if profile.compatibilityPolicy.contains("host-self-shield60") {
+                                Text("持续护盾已有本地减伤兼容实现；受击充能等剩余规则未适配，仍不可对战。")
+                                    .font(.caption2).foregroundStyle(.cyan)
+                            }
+                            let remaining = profile.unsupportedReasons + profile.unavailableCapabilities.map { "缺少能力：\($0)" }
+                            if !remaining.isEmpty {
+                                Text("待适配规则 \(remaining.count) 项")
+                                    .font(.caption2.bold()).foregroundStyle(.orange)
+                                ForEach(Array(remaining.prefix(3)), id: \.self) { reason in
+                                    Text("• \(reason)").font(.caption2)
+                                        .foregroundStyle(.white.opacity(0.7))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
                     }
                     ForEach(hero.notes, id: \.self) { note in
                         Text(note).font(.caption2).foregroundStyle(.white.opacity(0.75))

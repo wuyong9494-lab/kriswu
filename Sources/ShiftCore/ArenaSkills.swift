@@ -200,7 +200,8 @@ extension ArenaGame {
 
     /// 受到的伤害打几折（骨盾、铁壁少六成，超级充能少一成半）
     func damageTaken(_ fighter: Fighter) -> Double {
-        (fighter.shield > 0 ? 0.4 : 1) * (fighter.hyperTime > 0 ? 0.85 : 1) * (fighter.starPower == .ironSkin ? 0.9 : 1)
+        (fighter.shield > 0 ? (fighter.sourceShieldDamageMultiplier ?? 0.4) : 1)
+            * (fighter.hyperTime > 0 ? 0.85 : 1) * (fighter.starPower == .ironSkin ? 0.9 : 1)
     }
 
     // MARK: 小道具
