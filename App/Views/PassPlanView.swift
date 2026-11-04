@@ -25,6 +25,7 @@ struct PassPlanView: View {
     private let initial: PassPlan.Reading?
     /// 从快捷指令「拍数传计划」打开：直接进扫描
     private let autoScan: Bool
+    @State private var entryState = PassPlanEntryState()
     @State private var reading = false
     @State private var problem: String?
     @State private var scanning = false
@@ -118,6 +119,8 @@ struct PassPlanView: View {
     var body: some View {
         namingContent
             .onAppear(perform: prepareOnAppear)
+            .onChange(of: initial) { _ in prepareOnAppear() }
+            .onChange(of: autoScan) { _ in prepareOnAppear() }
             .task(id: renderInput) { renderImages() }
     }
 
@@ -458,11 +461,12 @@ struct PassPlanView: View {
     }
 
     private func prepareOnAppear() {
-        if let initial, !initial.rows.isEmpty {
+        let actions = entryState.consume(initial: initial, autoScan: autoScan)
+        if let initial = actions.reading {
             store.passPlan = PassPlanSession(fromPhotos: initial.header != nil || initial.rows.contains { $0.region != nil },
                                             rows: initial.rows, layout: initial.layout, header: initial.header, strips: initial.strips)
         }
-        if autoScan {
+        if actions.autoScan {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 if DocumentScanner.isSupported { scanning = true } else { showingCamera = true }
             }
@@ -709,8 +713,8 @@ struct PassPlanView: View {
         if let name = PassPlan.operatorName(of: row.station, rules: rules) { store.passPlan.sent.remove(name) }
     }
 
-    /// 发出去（在微信里选群）；真的发了就标「已发」。progress：依次发时面板标题前面的「2/5」；
-    /// then：发完（或没发出去）以后接着做，参数是发出去没有
+    /// 在微信等分享操作完成后标「已发」（系统不提供收件人送达回执）。
+    /// progress：面板标题前面的「2/5」；then：是否完成了可记为已发的分享操作。
     private func share(_ item: Any, name: String, progress: String? = nil, then next: (@MainActor (Bool) -> Void)? = nil) {
         guard imagesAreCurrent, readyToSend([name]) else { return }
         let sharedInput = renderInput
@@ -760,7 +764,7 @@ struct PassPlanView: View {
             if sent {
                 if !rest.isEmpty { sendInTurn(rest, step: step + 1, total: total) }
             } else if total > 1 {
-                ToastCenter.shared.show("停在\(name)，这家没发出去。要接着发，点「\(chainTitle(sendable.map(\.name)))」", style: .warning)
+                ToastCenter.shared.show("停在\(name)，这家尚未标为已发。要接着发，点「\(chainTitle(sendable.map(\.name)))」", style: .warning)
             }
         }
     }

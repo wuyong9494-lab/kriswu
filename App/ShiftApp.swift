@@ -263,8 +263,9 @@ struct RootView: View {
             } else if url.scheme == "shiftreminder", url.host == "capture",
                       let action = CaptureAction(rawValue: url.lastPathComponent) {
                 startCapture(action)
-            } else if url.scheme == "shiftreminder", url.host == "day", let day = DayKey(string: url.lastPathComponent) {
-                // 小组件：打开那一天（我的班、全员分工、留痕）
+            } else if url.scheme == "shiftreminder", url.host == "day" || url.host == "managed-calendar",
+                      let day = DayKey(string: url.lastPathComponent) {
+                // 小组件或本版生成的日历日程：打开那一天（我的班、全员分工、留痕）
                 tab = .today
                 rootSheet = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { openDay = day }

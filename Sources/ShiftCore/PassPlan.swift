@@ -723,10 +723,7 @@ public enum PassPlan {
                             start: normalizedTime(values[.start] ?? ""), end: normalizedTime(values[.end] ?? ""),
                             info: values[.info] ?? "", status: values[.status] ?? "")
         r.station = r.station.replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-")
-        // 拍 Excel 时左边的行号常和卫星编号拼成一块（「3XA102C」）：编号以字母开头，前面的数字去掉
-        for key in [\PassPlanRow.satellite, \PassPlanRow.satelliteID] {
-            r[keyPath: key] = r[keyPath: key].replacingOccurrences(of: #"^\d{1,4}(?=[A-Z]{2})"#, with: "", options: .regularExpression)
-        }
+        // 编号和名称保留读到的原串；不能猜开头的数字是 Excel 行号。照片编号由人工对照原图确认。
         guard !(r.satellite.isEmpty && r.satelliteID.isEmpty), !r.station.isEmpty, !r.start.isEmpty else { return nil }
         // 又出现一遍表头（翻页、拼接的表）
         if column(forHeader: r.station) == .station { return nil }

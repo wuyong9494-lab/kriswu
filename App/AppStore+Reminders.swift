@@ -14,7 +14,7 @@ extension AppStore {
             matcher: matcher,
             calendar: .app)
         p.weekly = settings.weeklyPreview
-        p.memos = Dictionary(uniqueKeysWithValues: settings.dayMemos.compactMap { k, v in DayKey(string: k).map { ($0, v) } })
+        p.memos = NotificationPlanner.normalizedMemos(settings.dayMemos)
         p.dutyStart = settings.dutyStart
         p.dutyLeadMinutes = settings.dutyLeadMinutes
         return p

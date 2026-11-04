@@ -28,9 +28,12 @@ public struct DayKey: Hashable, Comparable, Codable, CustomStringConvertible, Se
 
     /// 解析 "yyyy-MM-dd"。
     public init?(string: String) {
-        let parts = string.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3, DayKey.isValid(year: parts[0], month: parts[1], day: parts[2]) else { return nil }
-        self.init(year: parts[0], month: parts[1], day: parts[2])
+        let parts = string.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy({ $0 >= "0" && $0 <= "9" }) }),
+              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]),
+              DayKey.isValid(year: year, month: month, day: day) else { return nil }
+        self.init(year: year, month: month, day: day)
     }
 
     /// 「2026-10-09」。到处都在用（字典键、节假日查表），不用 String(format:)（慢得多）
