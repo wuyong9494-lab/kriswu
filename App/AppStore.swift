@@ -767,38 +767,43 @@ final class AppStore: ObservableObject {
     /// userInitiated：用户手动刷新。登录失败过一次后，只有手动刷新才再尝试登录，防止密码错误时反复登录把账号锁住；
     /// 同步结果和之前差别过大时，也只有手动刷新才采用。
     func sync(full: Bool = true, userInitiated: Bool = false, source: String? = nil) async -> Bool {
+        guard canSync, !Task.isCancelled else { return false }
         let source = source ?? (userInitiated ? "手动刷新" : (full ? "打开 App" : "后台"))
         // 正在同步：等它做完，用它的结果（快捷指令不会因为撞上自动同步而说「没有数据」）
-        if let running = syncTask {
+        while let running = syncTask {
             let runningWasUser = syncTaskUserInitiated
-            let runningAliases = syncTaskAliases
+            let runningInput = syncTaskInputIdentity
             let ok = await running.value
-            // 等的时候换了人、改了名字：那次是按旧名字读的，要重新来一次
-            let renamed = settings.aliases != runningAliases
+            // 调用方已离开或已关掉同步时，不再发起新请求；正在运行的独立任务照常自行收尾。
+            guard canSync, !Task.isCancelled else { return false }
+            // 换人、改来源或恢复备份取消了旧任务：那次结果不能充当新请求的结果。
             // 手动下拉时正在跑的是自动同步：那次可能在网站刚改之前就读过了，等它做完再读一次最新的
             //（自动同步不会重试登录、不采用异常结果，这一次也会补上）
-            guard renamed || (userInitiated && !runningWasUser) else { return ok }
-            // 等待期间别人已经开始了新的一次：用那一次
-            if let next = syncTask { return await next.value }
+            guard syncInputIdentity.requiresNewRun(after: runningInput, previousCancelled: running.isCancelled,
+                                                   userInitiated: userInitiated, previousUserInitiated: runningWasUser) else { return ok }
+            // 等待期间别人已开始新的一次就继续等它；旧 handle 在任务 defer 中清理，不递归重试同一任务。
         }
+        let input = syncInputIdentity
         // 放在独立的任务里跑：下拉刷新的界面消失、切换页面时 SwiftUI 会取消调用方，
         // 不能让读到一半的全员排班跟着作废（以前会显示「CancellationError」）
         let task = Task { () -> Bool in
-            let start = Date()
-            let ok = await self.performSync(full: full, userInitiated: userInitiated)
-            // 被系统中途收回的不记（不是失败）
-            if self.canSync, !Task.isCancelled {
-                let entry = SyncLogEntry(date: start, source: source, ok: ok,
-                                         message: self.settings.lastSyncMessage ?? "", seconds: Int(Date().timeIntervalSince(start)))
-                self.records.syncLog = Array(([entry] + self.records.syncLog).prefix(30))
+            // 所有等待者醒来前清掉 handle，取消或输入变化也走同一个清理出口。
+            defer {
+                self.syncTask = nil
+                self.syncTaskInputIdentity = nil
             }
-            // 在任务里面清掉：所有在等它的人醒来时，都能看到「已经没有正在进行的同步」
-            self.syncTask = nil
+            let start = Date()
+            let ok = await self.performSync(full: full, userInitiated: userInitiated, input: input)
+            // 被系统中途收回或已换了输入的不记，不把旧任务的消息记到新的账号或恢复的数据里。
+            guard self.canContinueSync(input) else { return false }
+            let entry = SyncLogEntry(date: start, source: source, ok: ok,
+                                     message: self.settings.lastSyncMessage ?? "", seconds: Int(Date().timeIntervalSince(start)))
+            self.records.syncLog = Array(([entry] + self.records.syncLog).prefix(30))
             return ok
         }
         syncTask = task
         syncTaskUserInitiated = userInitiated
-        syncTaskAliases = settings.aliases
+        syncTaskInputIdentity = input
         return await task.value
     }
 
@@ -910,35 +915,48 @@ final class AppStore: ObservableObject {
 
     private var syncTask: Task<Bool, Never>?
     private var syncTaskUserInitiated = false
-    private var syncTaskAliases: [String] = []
+    private var syncTaskInputIdentity: SyncInputIdentity?
 
-    private func performSync(full: Bool, userInitiated: Bool) async -> Bool {
-        guard canSync, !isSyncing else { return false }
+    private var syncInputIdentity: SyncInputIdentity {
+        SyncInputIdentity(aliases: settings.aliases, sourceURL: settings.sourceURL,
+                          sourceUsername: settings.sourceUsername, syncViaWeb: settings.syncViaWeb)
+    }
+
+    private func canContinueSync(_ input: SyncInputIdentity) -> Bool {
+        canSync && input.canCommit(current: syncInputIdentity, isCancelled: Task.isCancelled)
+    }
+
+    private func performSync(full: Bool, userInitiated: Bool, input: SyncInputIdentity) async -> Bool {
+        guard canContinueSync(input), !isSyncing else { return false }
         isSyncing = true
         defer { isSyncing = false }
         settings.lastSyncAttempt = Date()
         // 正在读电脑版页面：让它停下，等它的浏览器关掉再开始（最多等 15 秒）
         if let cancel = desktopFetch {
             cancel()
-            for _ in 0..<50 where desktopFetch != nil { try? await Task.sleep(nanoseconds: 300_000_000) }
+            for _ in 0..<50 where desktopFetch != nil {
+                do { try await Task.sleep(nanoseconds: 300_000_000) }
+                catch { return false }
+                guard canContinueSync(input) else { return false }
+            }
         }
-        let aliasesAtStart = settings.aliases
+        guard canContinueSync(input) else { return false }
         do {
             let mayLogin = userInitiated || !settings.loginExpiredNotified
-            let outcome = try await SyncService.fetchSchedule(urlString: settings.sourceURL,
-                                                              username: settings.sourceUsername,
+            let outcome = try await SyncService.fetchSchedule(urlString: input.sourceURL,
+                                                              username: input.sourceUsername,
                                                               password: mayLogin ? (Keychain.get(.sourcePassword) ?? "") : "",
-                                                              viaWeb: settings.syncViaWeb,
+                                                              viaWeb: input.syncViaWeb,
                                                               // 后台和快捷指令也读全员排班，只是不一页页翻（时间有限）
                                                               includeRoster: true,
                                                               pageThroughRoster: full,
                                                               parser: parser,
-                                                              aliases: settings.aliases,
+                                                              aliases: input.aliases,
                                                               matcher: matcher,
                                                               preferredAPI: settings.apiSignature)
+            // 同步途中换人、改来源或取消了任务：旧结果不能写回当前数据。
+            guard canContinueSync(input) else { return false }
             let result = outcome.result
-            // 同步途中换了人、改了名字：这次是按旧名字读的，不能当成现在这个人的班。交给下一次同步
-            guard settings.aliases == aliasesAtStart else { return false }
             // 读到的「我的班」里一半以上是同事的名字（读错了网页上的表，比如全员排班表）：这次不改我的班、不提醒变动，
             // 全员排班、公告这些照常更新
             let colleagues = colleagueNames(extra: Set(outcome.site.people.keys))
@@ -958,6 +976,7 @@ final class AppStore: ObservableObject {
                         await NotificationService.notifyNow(id: "sync-anomaly",
                                                             title: "排班变化很大，没有自动采用",
                                                             body: "\(known.count) 天里有 \(changed) 天和之前不同。打开值班提醒下拉刷新确认。")
+                        guard canContinueSync(input) else { return false }
                     }
                     return false
                 }
@@ -974,17 +993,26 @@ final class AppStore: ObservableObject {
             let healthy = outcome.roster.isEmpty ? false
                 : await checkSyncHealth(outcome.roster, source: full ? "sync-full" : "sync-quick", title: "同步",
                                         accept: userInitiated, quiet: !full && !userInitiated)
+            guard canContinueSync(input) else { return false }
             if healthy || userInitiated {
                 let edits = mergeRoster(outcome.roster, source: "sync")
-                if !baselineRun { await notifyRosterEdits(edits, published: publishedBefore) }
-                if !baselineRun { await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore)) }
+                if !baselineRun {
+                    await notifyRosterEdits(edits, published: publishedBefore)
+                    guard canContinueSync(input) else { return false }
+                    await recordTeamChanges(before: rosterBefore, days: freshDays.intersection(publishedBefore))
+                    guard canContinueSync(input) else { return false }
+                }
             }
             await notifyRestWarnings()
+            guard canContinueSync(input) else { return false }
             await notifyDutyHeadsUp()
+            guard canContinueSync(input) else { return false }
             updateRestBalance(outcome.restBalance)
             let freshNotices = applySiteInfo(outcome.site)
             await notifyNoticeChange(freshNotices)
+            guard canContinueSync(input) else { return false }
             await notifySiteNoRest(outcome.site.noRest)
+            guard canContinueSync(input) else { return false }
             if !outcome.groupNotes.isEmpty { settings.autoGroupNotes.merge(outcome.groupNotes) { _, n in n } }
 
             if let wrongName {
@@ -996,16 +1024,20 @@ final class AppStore: ObservableObject {
                 failed.apiSignature = nil
                 settings = failed
                 await notifyIfSyncStale()
+                guard canContinueSync(input) else { return false }
                 return false
             }
+            guard canContinueSync(input) else { return false }
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
-            // 同步途中又改了名字：这次用的是旧名字，下次还要当作重新开始
-            if settings.aliases == aliasesAtStart { settings.nextSyncIsBaseline = false }
+            settings.nextSyncIsBaseline = false
             let changes = apply(result, publishedBefore: publishedBefore,
                                 rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
             identifyMeIfNeeded()
+            // 自动认出使用者也会通过 setMe 排队新同步，由新一轮按明确的名字继续。
+            guard canContinueSync(input) else { return false }
             // 预演打分、「快轮到你」都要用遥测推算：先在后台算好
             await warmRotation()
+            guard canContinueSync(input) else { return false }
             scorePreview()
             // 同步状态一次改完：只触发一次比较、存盘和界面刷新
             var status = settings
@@ -1039,6 +1071,7 @@ final class AppStore: ObservableObject {
                 if settings.notifyChanges {
                     // 每次变动一条，后一次不会把前一次顶掉
                     await NotificationService.notifyNow(id: "schedule-changed-\(UUID().uuidString)", title: title, body: body)
+                    guard canContinueSync(input) else { return false }
                 }
                 do {
                     // 微信有自己的开关，和 iPhone 通知分开；同样的变动不重复发；没发出去的留着下次补发
@@ -1046,6 +1079,7 @@ final class AppStore: ObservableObject {
                         settings.lastWeChatChangeDigest = body
                         // 上次没发出去的先补发；还是发不出去就合在一起，不丢掉前一次的变动
                         await sendPendingWeChatChange()
+                        guard canContinueSync(input) else { return false }
                         if let older = settings.pendingWeChatChange {
                             let olderBody = older.text.split(separator: "\n", maxSplits: 1).dropFirst().joined()
                             settings.pendingWeChatChange = ChangeLogEntry(date: Date(), text: title + "\n" + body + "\n" + olderBody)
@@ -1053,6 +1087,7 @@ final class AppStore: ObservableObject {
                             settings.pendingWeChatChange = ChangeLogEntry(date: Date(), text: title + "\n" + body)
                         }
                         await sendPendingWeChatChange()
+                        guard canContinueSync(input) else { return false }
                     }
                 }
             }
@@ -1067,6 +1102,8 @@ final class AppStore: ObservableObject {
             }
             return true
         } catch {
+            // 旧来源的失败、已取消的任务不能改当前账号的状态或发登录过期通知。
+            guard canContinueSync(input) else { return false }
             // 系统收回后台时间、用户离开页面：不是同步失败，不改状态、不报警
             if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled { return false }
             var failed = settings
@@ -1080,9 +1117,12 @@ final class AppStore: ObservableObject {
                 let title = "⚠️ 值班网站登录已过期"
                 let body = "打开「值班提醒 › 设置 › 网页登录」重新登录一次，之后会继续自动更新。"
                 await NotificationService.notifyNow(id: "login-expired", title: title, body: body)
+                guard canContinueSync(input) else { return false }
                 await pushToWeChat(title: title, content: body)
+                guard canContinueSync(input) else { return false }
             }
             await notifyIfSyncStale()
+            guard canContinueSync(input) else { return false }
             return false
         }
     }
@@ -1480,6 +1520,8 @@ final class AppStore: ObservableObject {
     // 微信推送、日报周报月报在 AppStore+WeChat.swift
     /// 正在补发排班变动的微信（不重复发）
     var isSendingWeChatChange = false
+    /// 早、晚、下周预告的发送占位只放内存，成功后才保存已发日期。
+    var weChatReminderGate = WeChatReminderGate()
 
     // MARK: - 收藏的同事
 
@@ -1562,34 +1604,25 @@ final class AppStore: ObservableObject {
     /// 从备份恢复：设置、排班、全员排班整体替换。返回恢复了多少天。
     func restore(from data: Data) throws -> Int {
         guard canEdit else { throw NSError(domain: "role", code: 1, userInfo: [NSLocalizedDescriptionKey: "只有管理员能从备份恢复"]) }
+        // 在改动任何内存状态或文件前校验全部核心数据；缺失、损坏的排班不能被当作空排班覆盖现有数据。
+        let archive = try BackupArchive(data: data)
         // 一段一段容错地读：哪一项坏了只有那一项用默认值（备份里的日期是 ISO 8601）
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let file = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], file["settings"] is [String: Any] else {
-            throw NSError(domain: "backup", code: 1, userInfo: [NSLocalizedDescriptionKey: "这不是值班提醒的备份文件"])
-        }
-        var restored: [DayKey: String] = [:]
-        for (k, v) in file["schedule"] as? [String: String] ?? [:] { if let d = DayKey(string: k) { restored[d] = v } }
-        schedule = restored
-        covered = Set((file["covered"] as? [String] ?? []).compactMap(DayKey.init(string:)))
-        roster = (file["roster"] as? [String: [String: String]] ?? [:]).mapValues { days in
-            Dictionary(days.compactMap { k, v in DayKey(string: k).map { ($0, v) } }, uniquingKeysWith: { a, _ in a })
-        }
-        saveRoster()
         // 周会、记录：新备份单独一段；旧备份在设置那一段里
-        let meetingSource: Any? = file["meeting"] ?? LegacySettings.extract(LegacySettings.meeting, from: file["settings"])
-        let recordsSource: Any? = file["records"] ?? LegacySettings.extract(LegacySettings.records, from: file["settings"])
-        if let meetingSource {
-            meeting = TolerantCoding.decode(MeetingState.self, from: meetingSource, defaults: MeetingState(), encoder: encoder, decoder: decoder)
+        let meetingSource = archive.meeting ?? LegacySettings.extract(LegacySettings.meeting, from: archive.settings)
+        let recordsSource = archive.records ?? LegacySettings.extract(LegacySettings.records, from: archive.settings)
+        let restoredMeeting = meetingSource.map {
+            TolerantCoding.decode(MeetingState.self, from: $0, defaults: MeetingState(), encoder: encoder, decoder: decoder)
         }
-        if let recordsSource {
-            records = TolerantCoding.decode(RecordsState.self, from: recordsSource, defaults: RecordsState(), encoder: encoder, decoder: decoder)
+        let restoredRecords = recordsSource.map {
+            TolerantCoding.decode(RecordsState.self, from: $0, defaults: RecordsState(), encoder: encoder, decoder: decoder)
         }
-        var newSettings = AppSettings.load(from: file["settings"], encoder: encoder, decoder: decoder)
+        var newSettings = AppSettings.load(from: archive.settings, encoder: encoder, decoder: decoder)
         // 旧格式的全员排班可能读错过，清掉，同步时重新读
-        if newSettings.rosterVersion < Self.rosterVersion { roster = [:]; saveRoster() }
+        let restoredRoster = newSettings.rosterVersion < Self.rosterVersion ? [:] : archive.roster
         newSettings.rosterVersion = Self.rosterVersion
         // 备份时的同步状态已经过时：清掉，马上重新同步（也会重新尝试登录）
         newSettings.lastSync = nil
@@ -1600,9 +1633,6 @@ final class AppStore: ObservableObject {
         newSettings.syncStaleNotified = false
         newSettings.nextSyncIsBaseline = true
         newSettings.leaveSources = []
-        rosterSources = [:]
-        rosterLog = []
-        saveSourcesAndLog()
         // 重装后日历权限要重新给，没给就先关掉
         if newSettings.calendarSync && !CalendarSync.authorized { newSettings.calendarSync = false }
         // 自动备份的文件夹是这台手机上选的，不用备份里的
@@ -1622,10 +1652,22 @@ final class AppStore: ObservableObject {
         newSettings.dutyHeadsUpSent = settings.dutyHeadsUpSent
         // 备份里没发出去的变动早就过时了，不再发
         newSettings.pendingWeChatChange = nil
+        // 全部校验、转换完成后才提交；上面任何校验失败都保留当前数据和磁盘文件。
+        // 同名、同来源的恢复也必须使旧请求失效；坏备份在上方抛错，不会打断当前正常同步。
+        cancelRunningSync()
+        schedule = archive.schedule
+        covered = archive.covered
+        roster = restoredRoster
+        saveRoster()
+        if let restoredMeeting { meeting = restoredMeeting }
+        if let restoredRecords { records = restoredRecords }
+        rosterSources = [:]
+        rosterLog = []
+        saveSourcesAndLog()
         settings = newSettings
         scheduleChanged()
         Task { [weak self] in await self?.sync(userInitiated: true) }
-        return restored.count
+        return archive.schedule.count
     }
 
     // MARK: - 工作量统计

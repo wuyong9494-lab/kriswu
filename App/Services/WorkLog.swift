@@ -64,6 +64,8 @@ final class WorkLogStore: ObservableObject {
     @Published private(set) var transcribing: Set<UUID> = []
     /// 加了面容 ID 锁后，这次打开 App 是否已经解锁（退到后台就重新锁上）
     @Published var unlocked = false
+    /// 两个存储目录同时有内容时保留原件，阻止空索引覆盖，等用户重试恢复。
+    @Published private(set) var storageError: String?
 
     /// 没加锁：放在「文稿」里，「文件」App 能看到；加了锁：放到「资料库」里，「文件」App 看不到
     private static var hidden: Bool { AppStore.shared.settings.workLogLock }
@@ -81,28 +83,49 @@ final class WorkLogStore: ObservableObject {
     }
 
     /// 开关面容 ID 锁时把整个文件夹搬过去
-    func relocate(hidden: Bool) {
+    private func relocate(hidden: Bool) throws {
         let from = Self.baseFolder(hidden: !hidden), to = Self.baseFolder(hidden: hidden)
         let fm = FileManager.default
         guard fm.fileExists(atPath: from.path) else { return }
-        try? fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if !fm.fileExists(atPath: to.path) {
-            try? fm.moveItem(at: from, to: to)
-        } else {
-            for name in (try? fm.contentsOfDirectory(atPath: from.path)) ?? [] {
-                try? fm.moveItem(at: from.appendingPathComponent(name), to: to.appendingPathComponent(name))
-            }
-            try? fm.removeItem(at: from)
+        try DirectoryMigration.move(from: from, to: to)
+        protectAll(in: to)
+    }
+
+    /// 文件成功搬完才改变设置；失败时继续使用原目录，不能显示成「已上锁」。
+    func setLocked(_ locked: Bool) {
+        guard !AppStore.isDemo, locked != Self.hidden else { return }
+        guard canWrite else {
+            ToastCenter.shared.show(storageError ?? "记录暂时无法读取，请解锁手机后重试。", style: .error)
+            return
         }
-        protectAll()
+        if locked {
+            var error: NSError?
+            guard LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+                ToastCenter.shared.show("暂时不能启用工作留痕锁，请先检查手机的锁屏密码与身份验证设置。", style: .error)
+                return
+            }
+        }
+        save()
+        guard !pendingSave else {
+            ToastCenter.shared.show("记录尚未保存成功，存储位置没有改变，请稍后重试。", style: .error)
+            return
+        }
+        do {
+            try relocate(hidden: locked)
+            AppStore.shared.settings.workLogLock = locked
+            unlocked = true
+        } catch {
+            ToastCenter.shared.show("存储位置没有改变：\(error.localizedDescription)", style: .error)
+        }
     }
 
     /// 文件都设成「锁屏后加密、解锁后才能读」
-    private func protectAll() {
+    private func protectAll(in directory: URL? = nil) {
         let fm = FileManager.default
-        for name in (try? fm.contentsOfDirectory(atPath: Self.folder.path)) ?? [] {
+        let directory = directory ?? Self.folder
+        for name in (try? fm.contentsOfDirectory(atPath: directory.path)) ?? [] {
             try? fm.setAttributes([.protectionKey: FileProtectionType.complete],
-                                  ofItemAtPath: Self.folder.appendingPathComponent(name).path)
+                                  ofItemAtPath: directory.appendingPathComponent(name).path)
         }
     }
 
@@ -112,8 +135,9 @@ final class WorkLogStore: ObservableObject {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            unlocked = true   // 手机没设密码：没法锁
-            return true
+            unlocked = false
+            ToastCenter.shared.show("暂时无法验证身份，工作留痕仍保持锁定。请检查手机的锁屏密码与身份验证设置。", style: .error)
+            return false
         }
         let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "查看工作留痕")) ?? false
         unlocked = ok
@@ -133,7 +157,12 @@ final class WorkLogStore: ObservableObject {
             return
         }
         // 上次开关锁时没搬完（比如中途退出）：以设置为准再搬一次
-        relocate(hidden: Self.hidden)
+        do { try relocate(hidden: Self.hidden) }
+        catch {
+            storageError = "工作留痕的存储位置需要恢复。\(error.localizedDescription)"
+            loadFailed = true
+            return
+        }
         load()
         protectAll()
     }
@@ -156,7 +185,13 @@ final class WorkLogStore: ObservableObject {
             entries = list.sorted { $0.date > $1.date }
         } else {
             // 文件坏了：留一份备份，从头开始
-            try? FileManager.default.moveItem(at: url, to: url.deletingPathExtension().appendingPathExtension("bad-\(Int(Date().timeIntervalSince1970)).json"))
+            let backup = url.deletingPathExtension().appendingPathExtension("bad-\(UUID().uuidString).json")
+            do { try FileManager.default.moveItem(at: url, to: backup) }
+            catch {
+                loadFailed = true
+                storageError = "记录文件损坏，暂时无法保留恢复副本。原文件未覆盖，请检查存储空间后重试。"
+                return
+            }
             entries = []
         }
         loadFailed = false
@@ -164,6 +199,12 @@ final class WorkLogStore: ObservableObject {
 
     /// 打开 App 时调用：之前没读出来的再读一次
     func reloadIfNeeded() {
+        if storageError != nil {
+            do {
+                try relocate(hidden: Self.hidden)
+                storageError = nil
+            } catch { return }
+        }
         if loadFailed { load() }
     }
 

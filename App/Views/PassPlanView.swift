@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 
 /// 发数传计划这一次的状态：读到的计划、哪几家已经发了。只在内存里（离开这一页再回来还在，关掉 App 就没了）
 struct PassPlanSession: Equatable {
+    /// 每次读取都是一批新原图；发出状态不参与图片是否过期的判断。
+    var sourceID = UUID()
+    var fromPhotos = false
     var rows: [PassPlanRow] = []
     /// 读到的那张表的列（发出去的表照它）；补的、演示的是 nil，用默认的列
     var layout: PassPlan.Layout?
@@ -22,6 +25,7 @@ struct PassPlanView: View {
     private let initial: PassPlan.Reading?
     /// 从快捷指令「拍数传计划」打开：直接进扫描
     private let autoScan: Bool
+    @State private var entryState = PassPlanEntryState()
     @State private var reading = false
     @State private var problem: String?
     @State private var scanning = false
@@ -36,12 +40,30 @@ struct PassPlanView: View {
     @State private var newOperatorName = ""
     /// 每家的图（读完、改完重新画）
     @State private var images: [String: UIImage] = [:]
+    @State private var renderedInput: RenderInput?
     @State private var clearing = false
+    @State private var reviewRow: PassPlanRow?
+    @State private var reviewMessage = ""
+    @State private var showingReview = false
+
+    private struct RenderInput: Equatable {
+        var sourceID: UUID
+        var rows: [PassPlanRow]
+        var layout: PassPlan.Layout?
+        var rules: [PassPlan.OperatorRule]
+        var normalCaption: String
+        var urgentCaption: String
+        var original: Bool
+        var skipped: [String]
+    }
 
     private struct EditingRow: Identifiable {
         let id = UUID()
+        var sourceID: UUID
         var index: Int?
         var row: PassPlanRow
+        var sourceImage: UIImage?
+        var sourceHeader: UIImage?
     }
 
     init(reading: PassPlan.Reading? = nil, autoScan: Bool = false) {
@@ -53,6 +75,12 @@ struct PassPlanView: View {
     private var layout: PassPlan.Layout? { store.passPlan.layout }
     /// 运营商对照表（没填名字的那行不算）
     private var rules: [PassPlan.OperatorRule] { store.settings.passPlanOperators.filter { !$0.name.isEmpty } }
+    private var renderInput: RenderInput {
+        RenderInput(sourceID: store.passPlan.sourceID, rows: rows, layout: layout, rules: rules,
+                    normalCaption: store.settings.passPlanCaption, urgentCaption: store.settings.passPlanUrgentCaption,
+                    original: store.settings.passPlanOriginal, skipped: store.settings.passPlanSkipped)
+    }
+    private var imagesAreCurrent: Bool { !reading && renderedInput == renderInput }
     /// 图下面那句话（这一家有应急计划就是「……应急计划优先推送」）
     private func caption(_ rows: [PassPlanRow]) -> String {
         PassPlan.caption(rows, layout: layout, normal: store.settings.passPlanCaption, urgent: store.settings.passPlanUrgentCaption)
@@ -64,237 +92,408 @@ struct PassPlanView: View {
         return PassPlan.grouped(rows, rules: rules).filter { $0.name != PassPlan.unassigned && !skipped.contains($0.name) }
     }
 
-    var body: some View {
+    private typealias OperatorGroup = (name: String, rows: [PassPlanRow])
+
+    private struct GroupedPlans {
+        var all: [OperatorGroup]
+        var sendable: [OperatorGroup]
+        var resting: [OperatorGroup]
+        var excluded: Int
+        var doubtful: Int
+        var idle: [String]
+    }
+
+    private var groupedPlans: GroupedPlans {
         let all = PassPlan.grouped(rows, rules: rules)
         let skipped = Set(store.settings.passPlanSkipped)
         let groups = all.filter { $0.name != PassPlan.unassigned && !skipped.contains($0.name) }
-        // 标了「不用发」的几家（长春站这种）：收在最下面，不算在依次发、已发里
+        // 标了「不用发」的几家（长春站这种）：收在最下面，不算在依次发、已发里。
         let resting = all.filter { skipped.contains($0.name) }
         let doubtful = all.filter { !skipped.contains($0.name) }.flatMap(\.rows)
             .filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }.count
-        let idle = PassPlan.idle(rows, rules: rules)
-        List {
-            Section {
-                Button { if DocumentScanner.isSupported { scanning = true } else { showingCamera = true } } label: {
-                    Label("拍计划", systemImage: "doc.viewfinder").font(.headline)
-                }
-                PhotosPicker(selection: $photoItems, maxSelectionCount: 20, matching: .images) {
-                    Label("从相册选（可以选几张）", systemImage: "photo.on.rectangle")
-                }
-                DisclosureGroup("其他方式") {
-                    Button { showingCamera = true } label: { Label("普通拍照", systemImage: "camera") }
-                    Button { importing = true } label: { Label("导入 Excel", systemImage: "tablecells") }
-                    Button { read { try PlanReader.readClipboard() } } label: {
-                        Label("粘贴复制的表格", systemImage: "doc.on.clipboard")
-                    }
-                }
-                if reading {
-                    HStack(spacing: DS.Space.xs) { DSSpinner(size: 14); Text("正在认…").foregroundStyle(.secondary) }
-                }
-                if let problem {
-                    Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
-                }
-            } footer: {
-                Text("对着电脑屏幕拍，会自动框出屏幕、扶正；表头那一行要拍进去，计划长就往下翻着连拍几张，会合成一份。照片和计划不存、不上传。")
-            }
+        return GroupedPlans(all: all, sendable: groups, resting: resting,
+                            excluded: rows.filter(PassPlan.isExcludedFromSending).count, doubtful: doubtful,
+                            idle: PassPlan.idle(rows, rules: rules))
+    }
+
+    var body: some View {
+        namingContent
+            .onAppear(perform: prepareOnAppear)
+            .onChange(of: initial) { _ in prepareOnAppear() }
+            .onChange(of: autoScan) { _ in prepareOnAppear() }
+            .task(id: renderInput) { renderImages() }
+    }
+
+    // MARK: - 页面分区
+
+    private var planList: some View {
+        let grouped = groupedPlans
+        return List {
+            scannerSection
             if !rows.isEmpty {
-                Section {
-                    LabeledContent("一共", value: "\(rows.count) 条，\(groups.count) 家")
-                    LabeledContent("已经发了", value: "\(groups.filter { store.passPlan.sent.contains($0.name) }.count) / \(groups.count) 家")
-                    if doubtful > 0 {
-                        Label("有 \(doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(DS.Palette.warning)
-                    }
-                    let lostCount = all.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
-                    if lostCount > 0 {
-                        Label("有 \(lostCount) 条分不出是哪家（在下面最上面），点「分给哪家」记下来，记一次以后自动分",
-                              systemImage: "questionmark.circle.fill")
-                            .font(.footnote.weight(.semibold)).foregroundStyle(DS.Palette.warning)
-                    }
-                    if rules.isEmpty {
-                        Text("还没填运营商对照表，现在先按站名「-」前面的名字分。到下面「运营商对照表」里粘贴导入一次就准了。")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                    if !idle.isEmpty {
-                        Text("今天没有计划：\(idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
-                    }
-                    // 一直在：都发了就是「再依次发一遍」
-                    let names = groups.map(\.name)
-                    let unsent = names.filter { !store.passPlan.sent.contains($0) }
-                    if !names.isEmpty {
-                        Button { sendInTurn(unsent.isEmpty ? names : unsent) } label: {
-                            Label(chainTitle(names), systemImage: unsent.isEmpty ? "arrow.clockwise" : "paperplane.fill")
-                                .font(.headline)
-                        }
-                        .disabled(images.count < groups.count)
-                    }
-                } footer: {
-                    Text("依次发：点一下从第一家开始，发完一家自动弹出下一家，面板最上面写着第几家、发给谁、该选哪个群；都发完了按钮还在，能再发一遍。每家在面板里点：微信 → 发送给朋友 → 选群 → 发送。微信不让别的 App 替你选群、替你发，这几下省不掉；面板里用不上的隔空投送、信息、邮件已经拿掉，微信在前面，每次点同一个位置。")
+                summarySection(grouped)
+                planSections(grouped)
+                addPlanSection
+            }
+            settingsSection
+        }
+    }
+
+    private var scannerSection: some View {
+        Section {
+            Button { if DocumentScanner.isSupported { scanning = true } else { showingCamera = true } } label: {
+                Label("拍计划", systemImage: "doc.viewfinder").font(.headline)
+            }
+            .disabled(reading)
+            PhotosPicker(selection: $photoItems, maxSelectionCount: 20, matching: .images) {
+                Label("从相册选（可以选几张）", systemImage: "photo.on.rectangle")
+            }
+            .disabled(reading)
+            DisclosureGroup("其他方式") {
+                Button { showingCamera = true } label: { Label("普通拍照", systemImage: "camera") }
+                Button { importing = true } label: { Label("导入 Excel", systemImage: "tablecells") }
+                Button { read { try PlanReader.readClipboard() } } label: {
+                    Label("粘贴复制的表格", systemImage: "doc.on.clipboard")
                 }
-                // 分不出是哪家的放最上面：先分好再发
-                if let lost = all.first(where: { $0.name == PassPlan.unassigned }) {
-                    unassignedSection(lost.rows, known: groups.map(\.name))
+            }
+            .disabled(reading)
+            if reading {
+                HStack(spacing: DS.Space.xs) { DSSpinner(size: 14); Text("正在认…").foregroundStyle(.secondary) }
+            }
+            if let problem {
+                Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
+            }
+        } footer: {
+            Text("对着电脑屏幕拍，会自动框出屏幕、扶正；表头那一行要拍进去，计划长就往下翻着连拍几张，会合成一份。照片和计划不存、不上传。")
+        }
+    }
+
+    private func summarySection(_ grouped: GroupedPlans) -> some View {
+        let groups = grouped.sendable
+        let lostCount = grouped.all.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
+        return Section {
+            LabeledContent("一共", value: "\(rows.count) 条，\(groups.count) 家")
+            LabeledContent("已经发了", value: "\(groups.filter { store.passPlan.sent.contains($0.name) }.count) / \(groups.count) 家")
+            if grouped.excluded > 0 {
+                Label("已排除 \(grouped.excluded) 条 test，不发送给任何一家", systemImage: "nosign")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            if grouped.doubtful > 0 {
+                Label("有 \(grouped.doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote).foregroundStyle(DS.Palette.warning)
+            }
+            if lostCount > 0 {
+                Label("有 \(lostCount) 条分不出是哪家（在下面最上面），点「分给哪家」记下来，记一次以后自动分",
+                      systemImage: "questionmark.circle.fill")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(DS.Palette.warning)
+            }
+            if rules.isEmpty {
+                Text("还没填运营商对照表，现在先按站名「-」前面的名字分。到下面「运营商对照表」里粘贴导入一次就准了。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            if !grouped.idle.isEmpty {
+                Text("没有可发送计划：\(grouped.idle.joined(separator: "、"))").font(.footnote).foregroundStyle(.secondary)
+            }
+            chainShareButton(groups)
+        } footer: {
+            Text("依次发：点一下从第一家开始，发完一家自动弹出下一家，面板最上面写着第几家、发给谁、该选哪个群；都发完了按钮还在，能再发一遍。每家在面板里点：微信 → 发送给朋友 → 选群 → 发送。微信不让别的 App 替你选群、替你发，这几下省不掉；面板里用不上的隔空投送、信息、邮件已经拿掉，微信在前面，每次点同一个位置。")
+        }
+    }
+
+    @ViewBuilder
+    private func chainShareButton(_ groups: [OperatorGroup]) -> some View {
+        // 一直在：都发了就是「再依次发一遍」。
+        let names = groups.map(\.name)
+        let unsent = names.filter { !store.passPlan.sent.contains($0) }
+        if !names.isEmpty {
+            Button { sendInTurn(unsent.isEmpty ? names : unsent) } label: {
+                Label(chainTitle(names), systemImage: unsent.isEmpty ? "arrow.clockwise" : "paperplane.fill")
+                    .font(.headline)
+            }
+            .disabled(!imagesAreCurrent || groups.contains { images[$0.name] == nil })
+        }
+    }
+
+    @ViewBuilder
+    private func planSections(_ grouped: GroupedPlans) -> some View {
+        // 分不出是哪家的放最上面：先分好再发。
+        if let lost = grouped.all.first(where: { $0.name == PassPlan.unassigned }) {
+            unassignedSection(lost.rows, known: grouped.sendable.map(\.name))
+        }
+        ForEach(grouped.sendable, id: \.name) { group in
+            operatorSection(group)
+        }
+        if !grouped.resting.isEmpty {
+            restingSection(grouped.resting)
+        }
+        if grouped.excluded > 0 {
+            excludedSection
+        }
+    }
+
+    private func operatorSection(_ group: OperatorGroup) -> some View {
+        Section {
+            ForEach(indexedRows(for: group.name), id: \.offset) { item in
+                rowButton(item.element, at: item.offset)
+            }
+            outputDescription(for: group.rows)
+            sendButtons(group.name, rows: group.rows)
+        } header: {
+            header(group.name, count: group.rows.count,
+                   urgent: group.rows.contains { PassPlan.emergency($0, layout: layout) == true })
+        }
+    }
+
+    private func restingSection(_ groups: [OperatorGroup]) -> some View {
+        Section {
+            ForEach(groups, id: \.name) { group in
+                HStack {
+                    Text("\(group.name) · \(group.rows.count) 条").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("要发") { store.settings.passPlanSkipped.removeAll { $0 == group.name } }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.borderless)
                 }
-                ForEach(groups, id: \.name) { group in
-                    Section {
-                        ForEach(group.rows, id: \.self) { row in
-                            rowButton(row)
-                        }
-                        sendButtons(group.name, rows: group.rows)
-                    } header: {
-                        header(group.name, count: group.rows.count,
-                               urgent: group.rows.contains { PassPlan.emergency($0, layout: layout) == true })
-                    }
+            }
+        } header: {
+            Text("不用发的")
+        } footer: {
+            Text("这几家标了「不用发」：不算在依次发、已发里。点「要发」改回来。")
+        }
+    }
+
+    private var excludedSection: some View {
+        let excluded = rows.enumerated().filter { PassPlan.isExcludedFromSending($0.element) }
+        return Section {
+            DisclosureGroup("查看已排除的 \(excluded.count) 条") {
+                ForEach(excluded, id: \.offset) { item in
+                    rowButton(item.element, at: item.offset)
                 }
-                if !resting.isEmpty {
-                    Section {
-                        ForEach(resting, id: \.name) { group in
-                            HStack {
-                                Text("\(group.name) · \(group.rows.count) 条").foregroundStyle(.secondary)
-                                Spacer()
-                                Button("要发") { store.settings.passPlanSkipped.removeAll { $0 == group.name } }
-                                    .font(.caption.weight(.semibold))
-                                    .buttonStyle(.borderless)
-                            }
-                        }
-                    } header: {
-                        Text("不用发的")
-                    } footer: {
-                        Text("这几家标了「不用发」：不算在依次发、已发里。点「要发」改回来。")
-                    }
+            }
+        } header: {
+            Text("test · 不发送")
+        } footer: {
+            Text("状态为 test 的计划不进入任何一家的图片、文字或依次发送；即使标了应急也会排除。点开可对照原图核对状态。")
+        }
+    }
+
+    private var addPlanSection: some View {
+        Section {
+            Button { editing = EditingRow(sourceID: store.passPlan.sourceID, index: nil, row: PassPlanRow()) } label: {
+                Label("补一条", systemImage: "plus")
+            }
+            .disabled(reading)
+        }
+    }
+
+    private var settingsSection: some View {
+        Section {
+            NavigationLink {
+                PassPlanOperatorsView()
+            } label: {
+                LabeledContent("运营商对照表", value: rules.isEmpty ? "还没填" : "\(rules.count) 家")
+            }
+            Toggle(isOn: $store.settings.passPlanOriginal) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("发原图")
+                    Text(store.settings.passPlanOriginal
+                         ? "从照片上裁下表头和这一家的几行拼成一张，字和照片一模一样；认字只用来分家"
+                         : "发重新画的表：字是认出来的，可能有认错的，发之前核对标黄的")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                Section {
-                    Button { editing = EditingRow(index: nil, row: PassPlanRow()) } label: {
-                        Label("补一条", systemImage: "plus")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("图片下面那句话").font(.caption).foregroundStyle(.secondary)
+                TextField("没有应急计划时", text: $store.settings.passPlanCaption)
+                TextField("有应急计划时（左侧「应急」或「是否应急」为「是」）", text: $store.settings.passPlanUrgentCaption)
+            }
+            Toggle("每天提醒发计划", isOn: $store.settings.passPlanReminder)
+            if store.settings.passPlanReminder {
+                DatePicker("提醒时间", selection: reminderTime, displayedComponents: .hourAndMinute)
+            }
+        } footer: {
+            Text("到点提醒一次，点提醒直接打开这一页；那天各家都发完了就不再提醒。也可以在「快捷指令」里把「拍数传计划」设成轻点两下手机背面（设置 › 辅助功能 › 触控 › 轻点背面），一下就进扫描。")
+        }
+    }
+
+    // MARK: - 导航、弹窗与输入
+
+    private var navigationContent: some View {
+        planList
+            .appList()
+            .navigationTitle("发数传计划")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if !rows.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("全部清掉", role: .destructive) { clearing = true }
                     }
                 }
             }
-            Section {
-                NavigationLink {
-                    PassPlanOperatorsView()
-                } label: {
-                    LabeledContent("运营商对照表", value: rules.isEmpty ? "还没填" : "\(rules.count) 家")
-                }
-                Toggle(isOn: $store.settings.passPlanOriginal) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("发原图")
-                        Text(store.settings.passPlanOriginal
-                             ? "从照片上裁下表头和这一家的几行拼成一张，字和照片一模一样；认字只用来分家"
-                             : "发重新画的表：字是认出来的，可能有认错的，发之前核对标黄的")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("图片下面那句话").font(.caption).foregroundStyle(.secondary)
-                    TextField("没有应急计划时", text: $store.settings.passPlanCaption)
-                    TextField("有应急计划时（「是否应急」认出「是」）", text: $store.settings.passPlanUrgentCaption)
-                }
-                Toggle("每天提醒发计划", isOn: $store.settings.passPlanReminder)
-                if store.settings.passPlanReminder {
-                    DatePicker("提醒时间", selection: reminderTime, displayedComponents: .hourAndMinute)
-                }
-            } footer: {
-                Text("到点提醒一次，点提醒直接打开这一页；那天各家都发完了就不再提醒。也可以在「快捷指令」里把「拍数传计划」设成轻点两下手机背面（设置 › 辅助功能 › 触控 › 轻点背面），一下就进扫描。")
+    }
+
+    private var reviewContent: some View {
+        navigationContent
+            .confirmationDialog("把读到的计划全部清掉？", isPresented: $clearing, titleVisibility: .visible) {
+                Button("全部清掉", role: .destructive) { store.passPlan = PassPlanSession(); problem = nil }
+            }
+            .alert("先核对可能认错的计划", isPresented: $showingReview) {
+                Button("核对这一条") { if let reviewRow { edit(reviewRow) } }
+                Button("暂不发送", role: .cancel) {}
+            } message: {
+                Text(reviewMessage)
+            }
+    }
+
+    private var captureContent: some View {
+        reviewContent
+            .fullScreenCover(isPresented: $scanning) {
+                DocumentScanner { pages in readCapturedPages(pages) }
+                    .ignoresSafeArea()
+            }
+            .fullScreenCover(isPresented: $showingCamera) {
+                CameraPicker { image in readCapturedPages([image]) }
+                    .ignoresSafeArea()
+            }
+            .onChange(of: photoItems) { items in readSelectedPhotos(items) }
+    }
+
+    private var editingContent: some View {
+        captureContent
+            .fileImporter(isPresented: $importing,
+                          allowedContentTypes: [UTType(filenameExtension: "xlsx") ?? .data,
+                                                .commaSeparatedText, .tabSeparatedText, .plainText]) { result in
+                readImportedFile(result)
+            }
+            .sheet(item: $editing) { target in editorView(target) }
+    }
+
+    private var namingContent: some View {
+        editingContent
+            .alert("新的一家运营商", isPresented: newOperatorPresented) {
+                TextField("运营商名字", text: $newOperatorName)
+                Button("好", action: saveOperatorName)
+                Button("取消", role: .cancel) { newOperatorFor = nil }
+            } message: {
+                Text("「\(newOperatorFor.map(PassPlan.suggestedPrefix(of:)) ?? "")」开头的站以后都算这一家")
+            }
+            .alert("\(naming ?? "")的计划发到哪个群", isPresented: groupNamePresented) {
+                TextField("群名（只是给自己看的提示）", text: $groupName)
+                Button("好", action: saveGroupName)
+                Button("取消", role: .cancel) { naming = nil }
+            } message: {
+                Text("微信不让别的 App 直接发到群里：点「发图片」以后在微信里选这个群。记下来按钮上就写着该发哪个群。")
+            }
+    }
+
+    private var newOperatorPresented: Binding<Bool> {
+        Binding(get: { newOperatorFor != nil }, set: { if !$0 { newOperatorFor = nil } })
+    }
+
+    private var groupNamePresented: Binding<Bool> {
+        Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })
+    }
+
+    private func editorView(_ target: EditingRow) -> some View {
+        NavigationStack {
+            PassPlanRowEditor(row: target.row, layout: layout, rules: rules, isNew: target.index == nil,
+                              sourceImage: target.sourceImage, sourceHeader: target.sourceHeader,
+                              sendsOriginal: store.settings.passPlanOriginal && store.passPlan.fromPhotos) { saved in
+                saveEditedRow(saved, for: target)
             }
         }
-        .appList()
-        .navigationTitle("发数传计划")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !rows.isEmpty {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("全部清掉", role: .destructive) { clearing = true }
+    }
+
+    private func saveEditedRow(_ saved: PassPlanRow?, for target: EditingRow) {
+        guard target.sourceID == store.passPlan.sourceID else {
+            ToastCenter.shared.show("计划已经更新，请重新打开要核对的那一条", style: .warning)
+            return
+        }
+        if let i = target.index {
+            guard store.passPlan.rows.indices.contains(i), store.passPlan.rows[i] == target.row else {
+                ToastCenter.shared.show("这一条已经变化，请重新打开核对", style: .warning)
+                return
+            }
+            let old = store.passPlan.rows[i]
+            if let saved { store.passPlan.rows[i] = saved } else { store.passPlan.rows.remove(at: i) }
+            if let name = PassPlan.operatorName(of: old.station, rules: rules) { store.passPlan.sent.remove(name) }
+        } else if let saved {
+            store.passPlan.rows.append(saved)
+        }
+        if let saved, let name = PassPlan.operatorName(of: saved.station, rules: rules) { store.passPlan.sent.remove(name) }
+    }
+
+    private func readCapturedPages(_ pages: [UIImage]) {
+        read(fromPhotos: true) { try await PlanReader.read(pages: pages, rules: rules) }
+    }
+
+    private func readSelectedPhotos(_ items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+        photoItems = []
+        read(fromPhotos: true) {
+            var pages: [UIImage] = []
+            for item in items {
+                if let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                    pages.append(image)
                 }
             }
+            return try await PlanReader.read(pages: pages, rules: rules)
         }
-        .confirmationDialog("把读到的计划全部清掉？", isPresented: $clearing, titleVisibility: .visible) {
-            Button("全部清掉", role: .destructive) { store.passPlan = PassPlanSession(); problem = nil }
+    }
+
+    private func readImportedFile(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        read { try PlanReader.read(file: url) }
+    }
+
+    private func saveOperatorName() {
+        let name = newOperatorName.trimmingCharacters(in: .whitespaces)
+        if let station = newOperatorFor, !name.isEmpty { assign(station, to: name) }
+        newOperatorFor = nil
+    }
+
+    private func saveGroupName() {
+        if let name = naming {
+            let trimmed = groupName.trimmingCharacters(in: .whitespaces)
+            store.settings.passPlanGroups[name] = trimmed.isEmpty ? nil : trimmed
         }
-        .fullScreenCover(isPresented: $scanning) {
-            DocumentScanner { pages in read { try await PlanReader.read(pages: pages, rules: rules) } }
-                .ignoresSafeArea()
+        naming = nil
+    }
+
+    private func prepareOnAppear() {
+        let actions = entryState.consume(initial: initial, autoScan: autoScan)
+        if let initial = actions.reading {
+            store.passPlan = PassPlanSession(fromPhotos: initial.header != nil || initial.rows.contains { $0.region != nil },
+                                            rows: initial.rows, layout: initial.layout, header: initial.header, strips: initial.strips)
         }
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraPicker { image in read { try await PlanReader.read(pages: [image], rules: rules) } }
-                .ignoresSafeArea()
-        }
-        .onChange(of: photoItems) { items in
-            guard !items.isEmpty else { return }
-            photoItems = []
-            read {
-                var pages: [UIImage] = []
-                for item in items {
-                    if let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                        pages.append(image)
-                    }
-                }
-                return try await PlanReader.read(pages: pages, rules: rules)
+        if actions.autoScan {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                if DocumentScanner.isSupported { scanning = true } else { showingCamera = true }
             }
-        }
-        .fileImporter(isPresented: $importing,
-                      allowedContentTypes: [UTType(filenameExtension: "xlsx") ?? .data, .commaSeparatedText, .tabSeparatedText, .plainText]) { result in
-            guard case .success(let url) = result else { return }
-            read { try PlanReader.read(file: url) }
-        }
-        .sheet(item: $editing) { target in
-            NavigationStack {
-                PassPlanRowEditor(row: target.row, layout: layout, isNew: target.index == nil) { saved in
-                    if let i = target.index, store.passPlan.rows.indices.contains(i) {
-                        if let saved { store.passPlan.rows[i] = saved } else { store.passPlan.rows.remove(at: i) }
-                    } else if let saved {
-                        store.passPlan.rows.append(saved)
-                    }
-                }
-            }
-        }
-        .alert("新的一家运营商", isPresented: Binding(get: { newOperatorFor != nil }, set: { if !$0 { newOperatorFor = nil } })) {
-            TextField("运营商名字", text: $newOperatorName)
-            Button("好") {
-                let name = newOperatorName.trimmingCharacters(in: .whitespaces)
-                if let station = newOperatorFor, !name.isEmpty { assign(station, to: name) }
-                newOperatorFor = nil
-            }
-            Button("取消", role: .cancel) { newOperatorFor = nil }
-        } message: {
-            Text("「\(newOperatorFor.map(PassPlan.suggestedPrefix(of:)) ?? "")」开头的站以后都算这一家")
-        }
-        .alert("\(naming ?? "")的计划发到哪个群", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
-            TextField("群名（只是给自己看的提示）", text: $groupName)
-            Button("好") {
-                if let name = naming {
-                    let trimmed = groupName.trimmingCharacters(in: .whitespaces)
-                    store.settings.passPlanGroups[name] = trimmed.isEmpty ? nil : trimmed
-                }
-                naming = nil
-            }
-            Button("取消", role: .cancel) { naming = nil }
-        } message: {
-            Text("微信不让别的 App 直接发到群里：点「发图片」以后在微信里选这个群。记下来按钮上就写着该发哪个群。")
-        }
-        .onAppear {
-            if let initial, !initial.rows.isEmpty {
-                store.passPlan = PassPlanSession(rows: initial.rows, layout: initial.layout, header: initial.header, strips: initial.strips)
-            }
-            if autoScan {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    if DocumentScanner.isSupported { scanning = true } else { showingCamera = true }
-                }
-            }
-        }
-        .task(id: "\(rows.hashValue)-\(rules.hashValue)-\(layout?.slots.map(\.label).joined() ?? "")-\(store.settings.passPlanCaption)-\(store.settings.passPlanUrgentCaption)-\(store.settings.passPlanOriginal)-\(store.settings.passPlanSkipped)") {
-            renderImages()
         }
     }
 
     // MARK: - 一家的标题、一行
 
-    private func rowButton(_ row: PassPlanRow) -> some View {
-        Button { edit(row) } label: { rowView(row) }
+    /// 两条值完全相同的计划仍是两条记录；分组后保留它们在本批计划中的独立下标。
+    private func indexedRows(for name: String) -> [(offset: Int, element: PassPlanRow)] {
+        rows.enumerated().filter {
+            !PassPlan.isExcludedFromSending($0.element)
+                && (PassPlan.operatorName(of: $0.element.station, rules: rules) ?? PassPlan.unassigned) == name
+        }
+    }
+
+    private func rowButton(_ row: PassPlanRow, at index: Int) -> some View {
+        let sourceID = store.passPlan.sourceID
+        return Button { edit(row, at: index, sourceID: sourceID) } label: { rowView(row) }
             .buttonStyle(.plain)
+            .disabled(reading)
             // 可能认错的标黄
-            .listRowBackground(PassPlan.problems(row, rules: rules, layout: layout).isEmpty ? nil : DS.Palette.warning.opacity(0.12))
+            .listRowBackground(PassPlan.isExcludedFromSending(row) || PassPlan.problems(row, rules: rules, layout: layout).isEmpty
+                               ? nil : DS.Palette.warning.opacity(0.12))
             .swipeActions {
-                Button("删掉", role: .destructive) { store.passPlan.rows.removeAll { $0 == row } }
+                Button("删掉", role: .destructive) { delete(row, at: index, sourceID: sourceID) }
+                    .disabled(reading)
             }
     }
 
@@ -307,7 +506,7 @@ struct PassPlanView: View {
                 // 站名多半是认错了一个字（「驭星」认成「取星」）：最像的那家放第一个，点一下就分过去
                 // 或者表按地面站排过序：上下挨着的都是同一家
                 let similar = PassPlan.likelyOperator(of: station, rules: rules)
-                let neighbor = PassPlan.neighborOperator(of: station, in: self.rows, rules: rules)
+                let neighbor = PassPlan.neighborOperator(of: station, in: PassPlan.sendableRows(self.rows), rules: rules)
                 let likely = similar ?? neighbor
                 let reason = similar.map { " · 像是认错了字，最像「\($0)」" } ?? neighbor.map { " · 上下挨着的都是「\($0)」" } ?? ""
                 HStack {
@@ -339,7 +538,9 @@ struct PassPlanView: View {
                     .buttonStyle(.borderless)
                 }
             }
-            ForEach(rows, id: \.self) { row in rowButton(row) }
+            ForEach(indexedRows(for: PassPlan.unassigned), id: \.offset) { item in
+                rowButton(item.element, at: item.offset)
+            }
         } header: {
             Label("\(PassPlan.unassigned) · \(rows.count) 条", systemImage: "questionmark.circle.fill")
                 .foregroundStyle(DS.Palette.warning)
@@ -386,13 +587,16 @@ struct PassPlanView: View {
                 if PassPlan.emergency(row, layout: layout) == true {
                     Text("应急").font(.caption2.weight(.bold)).foregroundStyle(DS.Palette.danger)
                 }
+                if PassPlan.isExcludedFromSending(row) {
+                    Text("test · 已排除").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Text(row.satellite.isEmpty ? row.satelliteID : row.satellite).font(.subheadline)
             }
             Text([row.station, row.orbit.isEmpty ? "" : "圈号 \(row.orbit)", row.satelliteID, row.info]
                 .filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.caption).foregroundStyle(.secondary)
-            if !problems.isEmpty {
+            if !PassPlan.isExcludedFromSending(row), !problems.isEmpty {
                 Label(problems.joined(separator: "；"), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(DS.Palette.warning)
             }
@@ -414,56 +618,132 @@ struct PassPlanView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(sent ? DS.Palette.success : DS.Palette.accent)
-            .disabled(images[name] == nil)
+            .disabled(!imagesAreCurrent || images[name] == nil)
             Button { share(PassPlan.message(name: name, rows: rows, layout: layout, caption: caption(rows)), name: name) } label: {
                 Label("发文字", systemImage: "text.alignleft").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .disabled(!imagesAreCurrent)
         }
         .font(.subheadline.weight(.medium))
         .padding(.vertical, DS.Space.xxs)
     }
 
+    @ViewBuilder
+    private func outputDescription(for rows: [PassPlanRow]) -> some View {
+        if store.settings.passPlanOriginal && store.passPlan.fromPhotos {
+            let missing = rows.filter { $0.region.flatMap { store.passPlan.strips[$0] } == nil }.count
+            let hasHeader = store.passPlan.header.flatMap { store.passPlan.strips[$0] } != nil
+            if missing > 0 || !hasHeader {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(missing > 0 ? "这家有 \(missing) 条缺少原图，暂时不能拼成完整图片" : "没有裁出完整表头，暂时不能拼原图",
+                          systemImage: "photo.badge.exclamationmark")
+                    Text("可以重新拍摄；核对文字后，也可以改用重新绘制的表格。")
+                    Button("改用文字绘制图片") { store.settings.passPlanOriginal = false }
+                        .buttonStyle(.bordered)
+                }
+                .font(.caption).foregroundStyle(DS.Palette.warning)
+            } else {
+                Text("图片使用原照片；点开计划可对照原文。文字计划使用下面核对后的识别结果。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } else {
+            Text(store.passPlan.fromPhotos ? "图片由识别文字重新绘制，请先核对标黄的计划。" : "图片根据导入或填写的表格生成。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
     // MARK: - 读、改、发
 
-    private func read(_ work: @escaping @MainActor () async throws -> PassPlan.Reading) {
+    private func read(fromPhotos: Bool = false, _ work: @escaping @MainActor () async throws -> PassPlan.Reading) {
+        guard !reading else { return }
+        let sourceID = store.passPlan.sourceID
         reading = true
         problem = nil
         Task {
+            defer { reading = false }
             do {
                 let result = try await work()
+                // 清空或换了一批计划后，旧识别任务不能把结果重新写回来。
+                guard store.passPlan.sourceID == sourceID else { return }
                 let found = result.rows
                 withAnimation {
-                    store.passPlan = PassPlanSession(rows: found, layout: result.layout, header: result.header, strips: result.strips)
+                    store.passPlan = PassPlanSession(fromPhotos: fromPhotos, rows: found, layout: result.layout,
+                                                    header: result.header, strips: result.strips)
                 }
-                let doubtful = found.filter { !PassPlan.problems($0, rules: rules, layout: result.layout).isEmpty }.count
+                let doubtful = PassPlan.sendableRows(found).filter { !PassPlan.problems($0, rules: rules, layout: result.layout).isEmpty }.count
+                let excluded = found.filter(PassPlan.isExcludedFromSending).count
                 let grouped = PassPlan.grouped(found, rules: rules)
                 let lost = grouped.first { $0.name == PassPlan.unassigned }?.rows.count ?? 0
                 let families = grouped.filter { $0.name != PassPlan.unassigned }.count
                 var message = "认出 \(found.count) 条，分成 \(families) 家"
+                if excluded > 0 { message += "；已排除 \(excluded) 条 test" }
                 if lost > 0 { message += "；\(lost) 条分不出是哪家，在最上面" } else if doubtful > 0 { message += "，\(doubtful) 条要核对" }
                 ToastCenter.shared.show(message, style: doubtful > 0 || lost > 0 ? .warning : .success)
             } catch {
+                guard store.passPlan.sourceID == sourceID else { return }
                 problem = error.localizedDescription
             }
-            reading = false
         }
     }
 
     private func edit(_ row: PassPlanRow) {
-        editing = EditingRow(index: rows.firstIndex(of: row), row: row)
+        guard let index = rows.firstIndex(of: row) else { return }
+        edit(row, at: index, sourceID: store.passPlan.sourceID)
     }
 
-    /// 发出去（在微信里选群）；真的发了就标「已发」。progress：依次发时面板标题前面的「2/5」；
-    /// then：发完（或没发出去）以后接着做，参数是发出去没有
+    private func edit(_ row: PassPlanRow, at index: Int, sourceID: UUID) {
+        guard !reading else { return }
+        guard sourceID == store.passPlan.sourceID, rows.indices.contains(index), rows[index] == row else {
+            ToastCenter.shared.show("这一条已经变化，请重新打开核对", style: .warning)
+            return
+        }
+        editing = EditingRow(sourceID: sourceID, index: index, row: row,
+                             sourceImage: row.region.flatMap { store.passPlan.strips[$0] }.flatMap(UIImage.init(data:)),
+                             sourceHeader: store.passPlan.header.flatMap { store.passPlan.strips[$0] }.flatMap(UIImage.init(data:)))
+    }
+
+    private func delete(_ row: PassPlanRow, at index: Int, sourceID: UUID) {
+        guard !reading else { return }
+        guard sourceID == store.passPlan.sourceID, rows.indices.contains(index), rows[index] == row else {
+            ToastCenter.shared.show("这一条已经变化，请重新打开核对", style: .warning)
+            return
+        }
+        store.passPlan.rows.remove(at: index)
+        if let name = PassPlan.operatorName(of: row.station, rules: rules) { store.passPlan.sent.remove(name) }
+    }
+
+    /// 在微信等分享操作完成后标「已发」（系统不提供收件人送达回执）。
+    /// progress：面板标题前面的「2/5」；then：是否完成了可记为已发的分享操作。
     private func share(_ item: Any, name: String, progress: String? = nil, then next: (@MainActor (Bool) -> Void)? = nil) {
+        guard imagesAreCurrent, readyToSend([name]) else { return }
+        let sharedInput = renderInput
         let step = progress.map { "\($0) · " } ?? ""
         let target = store.settings.passPlanGroups[name].map { " → 发到「\($0)」" } ?? ""
         let payload = SharePayload(item, title: "\(step)\(name)数传计划\(target)", preview: images[name])
         ActivityShare.present([payload], excluding: ActivityShare.chatOnly) { completed in
+            // 从外部文件换了一批计划时，旧分享不能给新计划标「已发」或继续发下一家。
+            guard sharedInput == renderInput else { return }
             if completed { markSent(name) }
             next?(completed)
         }
+    }
+
+    /// 只拦下实际存在的疑项；对照照片后保存，才清除多次识别的分歧。
+    private func readyToSend(_ names: [String]) -> Bool {
+        let selected = Set(names)
+        let allowed = sendable.filter { selected.contains($0.name) }
+        // 只剩 test、被标为不用发，或旧队列中的运营商，都没有发送入口。
+        guard !selected.isEmpty, Set(allowed.map(\.name)) == selected else { return false }
+        let doubtful = allowed.flatMap(\.rows)
+            .filter { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }
+        guard let first = doubtful.first else { return true }
+        reviewRow = first
+        reviewMessage = "有 \(doubtful.count) 条需要核对。\n\n\(first.satellite.isEmpty ? first.satelliteID : first.satellite) · \(first.station)\n"
+            + PassPlan.problems(first, rules: rules, layout: layout).joined(separator: "；")
+            + "\n\n请对照原图修改，确认后再发送。"
+        showingReview = true
+        return false
     }
 
     /// 「依次发」按钮上的字
@@ -475,6 +755,8 @@ struct PassPlanView: View {
 
     /// 从第一家开始，发完一家弹下一家（上一个面板收完马上弹）；中途取消就停下，提示停在哪家
     private func sendInTurn(_ names: [String], step: Int = 1, total: Int? = nil) {
+        guard imagesAreCurrent else { return }
+        if step == 1, !readyToSend(names) { return }
         let total = total ?? names.count
         guard let name = names.first, let image = images[name] else { return }
         share(image, name: name, progress: total > 1 ? "\(step)/\(total)" : nil) { sent in
@@ -482,7 +764,7 @@ struct PassPlanView: View {
             if sent {
                 if !rest.isEmpty { sendInTurn(rest, step: step + 1, total: total) }
             } else if total > 1 {
-                ToastCenter.shared.show("停在\(name)，这家没发出去。要接着发，点「\(chainTitle(sendable.map(\.name)))」", style: .warning)
+                ToastCenter.shared.show("停在\(name)，这家尚未标为已发。要接着发，点「\(chainTitle(sendable.map(\.name)))」", style: .warning)
             }
         }
     }
@@ -523,10 +805,12 @@ struct PassPlanView: View {
     }
 
     private func renderImages() {
+        let input = renderInput
         var made: [String: UIImage] = [:]
         for group in sendable {
-            if store.settings.passPlanOriginal, let original = originalImage(name: group.name, rows: group.rows) {
-                made[group.name] = original
+            if store.settings.passPlanOriginal && store.passPlan.fromPhotos {
+                // 原图缺行时不能悄悄换成 OCR 重绘图，把认错的字带出去。
+                if let original = originalImage(name: group.name, rows: group.rows) { made[group.name] = original }
                 continue
             }
             let renderer = ImageRenderer(content: PassPlanSheet(name: group.name, rows: group.rows, layout: layout,
@@ -535,19 +819,15 @@ struct PassPlanView: View {
             if let image = renderer.uiImage { made[group.name] = image }
         }
         images = made
+        renderedInput = input
     }
 
     /// 发原图：表头那一条加上这一家每一行那一条（都是从照片上裁下来扶正的），上面标题、下面那句话。
-    /// 有一行没有原图（补的一条、从表格文件读的）就不用原图，发重新画的表
+    /// 任意一行没有原图就返回 nil，让页面说明缺图；不自动换成识别文字绘制的表。
     private func originalImage(name: String, rows: [PassPlanRow]) -> UIImage? {
         let session = store.passPlan
-        guard let header = session.header, let top = session.strips[header].flatMap(UIImage.init(data:)) else { return nil }
-        var pieces = [top]
-        for row in rows {
-            guard let region = row.region, let strip = session.strips[region].flatMap(UIImage.init(data:)) else { return nil }
-            pieces.append(strip)
-        }
-        return PassPlanOriginal.compose(title: PassPlan.title(name: name, rows: rows), caption: caption(rows), strips: pieces)
+        return PassPlanOriginal.image(name: name, rows: rows, header: session.header, strips: session.strips,
+                                      caption: caption(PassPlan.sendableRows(rows)))
     }
 }
 
@@ -559,16 +839,10 @@ struct PassPlanSheet: View {
     /// 表下面那一行字（「麻烦确认一下数传计划」）
     var caption = ""
 
-    /// 「是否应急」在表里是第几列（前面多了一列 No.）
-    private var urgentColumn: Int? {
-        layout?.emergencyIndex.map { index in
-            1 + (layout?.slots.prefix(index).filter { $0.column != .number }.count ?? 0)
-        }
-    }
-
     /// 和网页上的表一样：同样的表头、列的先后、行的先后，时间写全；居中、每行一条细线
     var body: some View {
         let table = PassPlan.table(rows, layout: layout)
+        let urgentColumn = table.headers.firstIndex { $0.contains("应急") }
         VStack(alignment: .leading, spacing: 12) {
             Text(PassPlan.title(name: name, rows: rows)).font(.system(size: 20, weight: .bold))
             Grid(alignment: .center, horizontalSpacing: 18, verticalSpacing: 0) {
@@ -582,8 +856,8 @@ struct PassPlanSheet: View {
                     Divider().gridCellUnsizedAxes(.horizontal)
                     GridRow {
                         ForEach(Array(cells.enumerated()), id: \.offset) { c, cell in
-                            // 「是否应急」是「是」的那一格标红
-                            let urgent = c == urgentColumn && cell.filter { !$0.isWhitespace } == "是"
+                            let value = cell.filter { !$0.isWhitespace }
+                            let urgent = c == urgentColumn && (value == "是" || value == "应急")
                             Text(cell).font(.system(size: 14, weight: urgent ? .bold : .regular)).monospacedDigit()
                                 .foregroundStyle(urgent ? Color.red : Color.black)
                                 .padding(.vertical, 10)
@@ -606,19 +880,34 @@ struct PassPlanSheet: View {
 /// 改一条（认错的字、漏的一条）
 struct PassPlanRowEditor: View {
     @State private var row: PassPlanRow
+    @State private var emergencyConfirmed = false
     /// 读到的那张表的列：认不出含义的列（是否应急、创建时间……）也能改
     private let layout: PassPlan.Layout?
+    private let rules: [PassPlan.OperatorRule]
+    private let sourceImage: UIImage?
+    private let sourceHeader: UIImage?
+    private let sendsOriginal: Bool
+    private let originalStatus: String
+    private let originalTestStatusDetected: Bool?
     let isNew: Bool
     var onDone: (PassPlanRow?) -> Void
     @Environment(\.dismiss) private var dismiss
 
-    init(row: PassPlanRow, layout: PassPlan.Layout?, isNew: Bool, onDone: @escaping (PassPlanRow?) -> Void) {
+    init(row: PassPlanRow, layout: PassPlan.Layout?, rules: [PassPlan.OperatorRule] = [], isNew: Bool,
+         sourceImage: UIImage? = nil, sourceHeader: UIImage? = nil, sendsOriginal: Bool = false,
+         onDone: @escaping (PassPlanRow?) -> Void) {
         var r = row
         if let layout, r.cells.count < layout.slots.count {
             r.cells += Array(repeating: "", count: layout.slots.count - r.cells.count)
         }
         _row = State(initialValue: r)
         self.layout = layout
+        self.rules = rules
+        self.sourceImage = sourceImage
+        self.sourceHeader = sourceHeader
+        self.sendsOriginal = sendsOriginal
+        self.originalStatus = row.status
+        self.originalTestStatusDetected = row.testStatusDetected
         self.isNew = isNew
         self.onDone = onDone
     }
@@ -626,11 +915,101 @@ struct PassPlanRowEditor: View {
     /// 只有原表里才有、App 认不出含义的那几列
     private var otherColumns: [Int] {
         guard let layout else { return [] }
-        return layout.slots.indices.filter { layout.slots[$0].column == nil }
+        return layout.slots.indices.filter { layout.slots[$0].column == nil && $0 != layout.emergencyIndex }
+    }
+
+    private var statusBinding: Binding<String> {
+        Binding(get: { row.status }, set: { value in
+            row.status = value
+            // 明确改过状态后，以核对的新值为准；仅改空格/大小写不能抹掉先前读到 test 的证据。
+            let same = value.filter { !$0.isWhitespace }.lowercased() == originalStatus.filter { !$0.isWhitespace }.lowercased()
+            row.testStatusDetected = same ? originalTestStatusDetected : nil
+        })
+    }
+
+    private var emergencySelection: Binding<Int> {
+        Binding(get: {
+            if emergencyNeedsChoice { return -1 }
+            if let value = PassPlan.emergency(row, layout: layout) { return value ? 1 : 0 }
+            return layout?.emergencyIndex == nil ? 0 : -1
+        }, set: { choice in
+            emergencyConfirmed = choice >= 0
+            row.emergencyBadge = choice < 0 ? nil : choice == 1
+            if let index = layout?.emergencyIndex, row.cells.indices.contains(index) {
+                row.cells[index] = choice < 0 ? "" : (choice == 1 ? "是" : "不是")
+            }
+        })
+    }
+
+    private var emergencyNeedsChoice: Bool {
+        if emergencyConfirmed { return false }
+        return (layout?.emergencyIndex != nil && PassPlan.emergency(row, layout: layout) == nil)
+            || row.recognitionIssues?.contains(where: { $0.contains("应急") }) == true
+    }
+
+    private var sendingRulesSection: some View {
+        Section {
+            Picker("计划类型", selection: emergencySelection) {
+                if emergencyNeedsChoice { Text("待核对").tag(-1) }
+                Text("普通计划").tag(0)
+                Text("应急计划").tag(1)
+            }
+            if emergencyNeedsChoice {
+                Text("请对照原图，选择这条是否为应急计划。")
+                    .font(.footnote).foregroundStyle(DS.Palette.warning)
+            }
+            if PassPlan.isExcludedFromSending(row) {
+                Label("已排除：不发送给任何一家", systemImage: "nosign")
+                    .foregroundStyle(.secondary)
+                if row.testStatusDetected == true, row.status.filter({ !$0.isWhitespace }).lowercased() != "test" {
+                    Text("有一次识别结果读到 test，请对照原图最右侧的状态列。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button("已核对原图，状态不是 test") { row.testStatusDetected = nil }
+                }
+            }
+        } header: {
+            Text("应急与发送")
+        } footer: {
+            Text("最左侧标「应急」的按应急计划处理；最右侧状态为 test 的始终不发送，包括应急计划。")
+        }
     }
 
     var body: some View {
         Form {
+            if let sourceImage {
+                Section {
+                    let width = max(900, sourceImage.size.width)
+                    let headerHeight = sourceHeader.map { width * $0.size.height / max($0.size.width, 1) } ?? 0
+                    let rowHeight = width * sourceImage.size.height / max(sourceImage.size.width, 1)
+                    ScrollView([.horizontal, .vertical]) {
+                        VStack(spacing: 2) {
+                            if let sourceHeader {
+                                Image(uiImage: sourceHeader).resizable().scaledToFit().frame(width: width)
+                            }
+                            Image(uiImage: sourceImage).resizable().scaledToFit().frame(width: width)
+                        }
+                    }
+                    .frame(height: min(280, max(70, headerHeight + rowHeight + 4)))
+                    .accessibilityLabel("这一条计划的原照片，左右滑动查看各列")
+                } header: {
+                    Text("对照原照片")
+                } footer: {
+                    Text(sendsOriginal
+                         ? "左右滑动查看各列。当前发图片使用原照片；修改下面的识别结果会修正分家和文字计划，不会改写照片中的字。"
+                         : "左右滑动查看各列，再核对下面的识别结果；发送的文字和重绘图片使用你确认后的内容。")
+                }
+            }
+            let issues = PassPlan.problems(row, rules: rules, layout: layout)
+            if !issues.isEmpty {
+                Section("需要核对") {
+                    ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                        Label(issue, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(DS.Palette.warning)
+                    }
+                    Text("对照原文逐项核对，确认无误后点「保存并确认」。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section {
                 TextField("卫星名称", text: $row.satellite)
                 TextField("卫星 ID", text: $row.satelliteID)
@@ -641,17 +1020,18 @@ struct PassPlanRowEditor: View {
                 TextField("开始时间", text: $row.start)
                 TextField("结束时间", text: $row.end)
                 TextField("数传信息", text: $row.info)
-                TextField("状态", text: $row.status)
+                TextField("状态", text: statusBinding)
             } footer: {
                 Text("时间写成 2026-10-27 22:57:51 这样")
             }
+            sendingRulesSection
             if let layout, !otherColumns.isEmpty {
                 Section {
                     ForEach(otherColumns, id: \.self) { i in
                         TextField(layout.slots[i].label, text: $row.cells[i])
                     }
                 } footer: {
-                    Text("「是否应急」写「是」或「不是」：哪家有「是」，图下面就写「应急计划优先推送」。")
+                    Text("这里保留原表中的其他列，按原图核对。")
                 }
             }
             if !isNew {
@@ -665,13 +1045,15 @@ struct PassPlanRowEditor: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("好") {
+                Button("保存并确认") {
                     row.start = PassPlan.normalizedTime(row.start)
                     row.end = PassPlan.normalizedTime(row.end)
+                    // 人工确认只清除识别提示；无效时间、缺少字段和 test 排除继续生效。
+                    row = PassPlan.confirmedRecognitionReview(row)
                     onDone(row)
                     dismiss()
                 }
-                .disabled(row.station.isEmpty || (row.satellite.isEmpty && row.satelliteID.isEmpty))
+                .disabled(row.station.isEmpty || (row.satellite.isEmpty && row.satelliteID.isEmpty) || emergencyNeedsChoice)
             }
         }
     }
@@ -698,6 +1080,20 @@ extension PassPlanView {
 
 /// 发原图：把从照片上裁下来的几条（表头、这一家的每一行）上下拼成一张，上面标题、下面那句话
 enum PassPlanOriginal {
+    /// 所有原图出口共用过滤：test 行连原照片切片也不能带入任何一家的图片。
+    @MainActor
+    static func image(name: String, rows: [PassPlanRow], header: PassPlan.Region?,
+                      strips: [PassPlan.Region: Data], caption: String) -> UIImage? {
+        let included = PassPlan.sendableRows(rows)
+        guard !included.isEmpty, let header, let top = strips[header].flatMap(UIImage.init(data:)) else { return nil }
+        var pieces = [top]
+        for row in included {
+            guard let region = row.region, let strip = strips[region].flatMap(UIImage.init(data:)) else { return nil }
+            pieces.append(strip)
+        }
+        return compose(title: PassPlan.title(name: name, rows: included), caption: caption, strips: pieces)
+    }
+
     @MainActor
     static func compose(title: String, caption: String, strips: [UIImage]) -> UIImage? {
         let width = strips.map(\.size.width).max() ?? 0

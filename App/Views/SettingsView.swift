@@ -286,20 +286,22 @@ struct SettingsView: View {
                             calendarMessage = nil
                             store.settings.calendarSync = true
                             CalendarSync.sync(store.mySchedule, matcher: store.matcher)
+                            calendarMessage = CalendarSync.lastError
                         } else {
                             store.settings.calendarSync = false
-                            CalendarSync.removeCalendar()
+                            CalendarSync.removeRecentManagedEvents()
+                            calendarMessage = CalendarSync.lastError
                         }
                     }
                 }))
-            if store.settings.calendarSync, let error = CalendarSync.lastError {
+            if let error = CalendarSync.lastError, error != calendarMessage {
                 Text(error).font(.footnote).foregroundStyle(.orange)
             }
             if let calendarMessage {
                 Text(calendarMessage).font(.footnote).foregroundStyle(.orange)
             }
         } footer: {
-            Text("在系统「日历」App 里新建一个「值班提醒」日历，每天一个全天事件（如「组D」），Apple Watch 上也能看到。只改动这个日历，关掉开关会删除它。")
+            Text("在系统「日历」App 里新建「值班提醒」日历，每天一个全天排班，Apple Watch 上也能看到。已有日程和旧版生成的排班会保留，首次升级后可能和新排班并存。关闭同步只清理过去两周到未来两个月内由本版生成的排班，日历本身和其它日程都保留。")
         }
     }
 

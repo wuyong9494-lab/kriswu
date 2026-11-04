@@ -170,10 +170,30 @@ def web_screen(rows, width=1920, height=1080, scale=1.0, tall=False):
         xs.append(xs[-1] + int(w * s * (width / s - 60) / total))
     row_h = int(46 * s)
     head_h = int(52 * s)
+    table_top = int(70 * s)
+    bottom_margin = int(40 * s)
+    required_height = table_top + head_h + row_h * len(rows) + bottom_margin
     if tall:
         height = int(120 * s) + head_h + row_h * len(rows) + int(40 * s)
+    height = max(height, required_height)
     img = Image.new("RGB", (width, height), (255, 255, 255))
     d = ImageDraw.Draw(img)
+
+    def require_inside(label, box, bounds):
+        """可读样例不能先把字叠到邻列，或把标准答案中的行画到画布外。"""
+        left, top, right, bottom = box
+        if left < bounds[0] or top < bounds[1] or right > bounds[2] or bottom > bounds[3]:
+            raise ValueError(f"{label}: 文字/边框 {box} 超出单元格 {bounds}，请调整列宽、字号或画布")
+
+    def cell_text(xy, value, cell_font, fill, bounds, label, bold=False):
+        require_inside(label, d.textbbox(xy, value, font=cell_font), bounds)
+        if bold:
+            shifted = (xy[0] + 1, xy[1])
+            require_inside(label, d.textbbox(shifted, value, font=cell_font), bounds)
+        d.text(xy, value, font=cell_font, fill=fill)
+        if bold:
+            d.text(shifted, value, font=cell_font, fill=fill)
+
     # 工具栏
     d.rectangle((0, 0, width, int(56 * s)), fill=(248, 249, 251))
     for i, (label, x) in enumerate([("导出Excel", 30), ("100%", 160), ("125%", 240), ("150%", 320)]):
@@ -181,11 +201,12 @@ def web_screen(rows, width=1920, height=1080, scale=1.0, tall=False):
         d.rectangle((bx, int(14 * s), bx + int(66 * s), int(42 * s)), fill=(64, 158, 255) if i == 3 else (236, 245, 255))
         d.text((bx + int(8 * s), int(20 * s)), label, font=tag_f, fill=(255, 255, 255) if i == 3 else (64, 158, 255))
     d.line((0, int(60 * s), width, int(60 * s)), fill=(255, 150, 40), width=max(1, int(2 * s)))
-    y = int(70 * s)
+    y = table_top
     for i, (label, _) in enumerate(columns):
         cx = (xs[i] + xs[i + 1]) / 2
-        d.text((cx - d.textlength(label, font=head_f) / 2, y + (head_h - head_f.size) / 2), label, font=head_f, fill=(48, 49, 51))
-        d.text((cx - d.textlength(label, font=head_f) / 2 + 1, y + (head_h - head_f.size) / 2), label, font=head_f, fill=(48, 49, 51))
+        cell_text((cx - d.textlength(label, font=head_f) / 2, y + (head_h - head_f.size) / 2),
+                  label, head_f, (48, 49, 51), (xs[i], y, xs[i + 1], y + head_h),
+                  f"表头 {label}", bold=True)
     y += head_h
     d.line((xs[0], y, xs[-1], y), fill=(235, 238, 245))
     grey = (96, 98, 102)
@@ -194,15 +215,21 @@ def web_screen(rows, width=1920, height=1080, scale=1.0, tall=False):
                   row["info"].replace("，", " , ")]
         for c, value in enumerate(values):
             cx = (xs[c] + xs[c + 1]) / 2
-            d.text((cx - d.textlength(value, font=cell_f) / 2, y + (row_h - cell_f.size) / 2), value, font=cell_f, fill=grey)
+            cell_text((cx - d.textlength(value, font=cell_f) / 2, y + (row_h - cell_f.size) / 2),
+                      value, cell_f, grey, (xs[c], y, xs[c + 1], y + row_h),
+                      f"第 {r + 1} 行 {columns[c][0]}")
         # 状态：绿框的小标签
         cx = (xs[8] + xs[9]) / 2
         tw = d.textlength("等待数传", font=tag_f)
-        d.rectangle((cx - tw / 2 - 8 * s, y + 10 * s, cx + tw / 2 + 8 * s, y + row_h - 10 * s), outline=(103, 194, 58),
-                    fill=(240, 249, 235))
-        d.text((cx - tw / 2, y + (row_h - tag_f.size) / 2), "等待数传", font=tag_f, fill=(103, 194, 58))
+        tag_bounds = (cx - tw / 2 - 8 * s, y + 10 * s, cx + tw / 2 + 8 * s, y + row_h - 10 * s)
+        require_inside(f"第 {r + 1} 行 状态框", tag_bounds, (xs[8], y, xs[9], y + row_h))
+        d.rectangle(tag_bounds, outline=(103, 194, 58), fill=(240, 249, 235))
+        cell_text((cx - tw / 2, y + (row_h - tag_f.size) / 2), "等待数传", tag_f,
+                  (103, 194, 58), tag_bounds, f"第 {r + 1} 行 状态")
         y += row_h
         d.line((xs[0], y, xs[-1], y), fill=(235, 238, 245))
+    require_inside("完整表格与底边距", (xs[0], table_top, xs[-1], y + bottom_margin),
+                   (0, 0, width, height))
     return img
 
 
@@ -282,7 +309,7 @@ def main():
 
     # 4. 很长的图（长截图、拼起来的长图）：70 行，干净
     rows = plan(70)
-    long = web_screen(rows, width=1170, scale=2.2, tall=True)
+    long = web_screen(rows, width=1170, scale=1.0, tall=True)
     save("long_table", long, rows, "web", quality=80)
 
 

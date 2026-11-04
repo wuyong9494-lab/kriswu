@@ -98,6 +98,18 @@ struct WorkLogView: View {
             .navigationTitle("工作留痕")
             .navigationBarTitleDisplayMode(.inline)
             .task { await log.unlock() }
+        } else if let error = log.storageError {
+            VStack(spacing: DS.Space.m) {
+                Image(systemName: "exclamationmark.triangle").font(.system(size: 44))
+                Text("工作留痕暂时无法读取").font(DS.Font.headline)
+                Text(error).font(.footnote).foregroundStyle(.secondary)
+                Button("重试读取") { log.reloadIfNeeded() }
+                    .buttonStyle(DSButtonStyle(kind: .primary))
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .appBackground()
+            .navigationTitle("工作留痕")
         } else {
             content
         }
@@ -204,12 +216,10 @@ struct WorkLogView: View {
             Section {
                 Toggle("录音自动转成文字", isOn: $store.settings.workLogAutoTranscribe)
                 Toggle("只在手机上识别（不联网）", isOn: $store.settings.speechOnDeviceOnly)
-                Toggle("打开工作留痕要面容 ID", isOn: $store.settings.workLogLock)
-                    .onChange(of: store.settings.workLogLock) { locked in
-                        guard !AppStore.isDemo else { return }
-                        log.relocate(hidden: locked)
-                        log.unlocked = true
-                    }
+                Toggle("打开工作留痕要面容 ID", isOn: Binding(
+                    get: { store.settings.workLogLock },
+                    set: { log.setLocked($0) }
+                ))
                     // 演示时设置不保存，开关锁会把真实文件挪走：演示里不能改
                     .disabled(AppStore.isDemo)
             } header: {

@@ -1,12 +1,34 @@
 import LinkPresentation
 import UIKit
 
-/// 系统分享面板（发到微信等）：和 ShareLink 不同，能知道是不是真的发出去了
+/// 系统分享面板（发到微信等）：回报所选分享操作是否完成，不提供收件人送达回执。
 enum ActivityShare {
     /// 只往微信这类聊天 App 发：面板里去掉用不上的（隔空投送、信息、邮件、打印……），微信就挪到 App 那一排前面
     @MainActor
     static var chatOnly: [UIActivity.ActivityType] {
         [.airDrop, .message, .mail, .print, .assignToContact, .addToReadingList, .openInIBooks, .markupAsPDF]
+    }
+
+    /// 这些操作只在本机保存或处理内容，完成后不能给运营商记「已发」。
+    /// 不对白名单外的第三方分享 App 作限制，保留微信等扩展的兼容性。
+    @MainActor
+    private static var localActivities: [UIActivity.ActivityType] {
+        [.copyToPasteboard, .saveToCameraRoll, .print, .assignToContact,
+         .addToReadingList, .openInIBooks, .markupAsPDF]
+    }
+
+    @MainActor
+    private final class Completion {
+        private var gate = ShareCompletionGate()
+        private let callback: @MainActor (Bool) -> Void
+
+        init(_ callback: @escaping @MainActor (Bool) -> Void) { self.callback = callback }
+
+        func finish(activity: ShareCompletionGate.Activity = .none,
+                    completed: Bool = false, hasError: Bool = false) {
+            guard let result = gate.finish(activity: activity, completed: completed, hasError: hasError) else { return }
+            callback(result)
+        }
     }
 
     /// 连着发的时候，上一个面板（和微信的发送窗口）可能还没收完：等它收完再弹，不然弹不出来。
@@ -16,8 +38,14 @@ enum ActivityShare {
                         completion: @escaping @MainActor (Bool) -> Void) {
         let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
         controller.excludedActivityTypes = excluded
-        controller.completionWithItemsHandler = { _, completed, _, _ in
-            Task { @MainActor in completion(completed) }
+        let result = Completion(completion)
+        let localIdentifiers = Set(localActivities.map(\.rawValue))
+        controller.completionWithItemsHandler = { type, completed, _, error in
+            let activity: ShareCompletionGate.Activity = type.map {
+                localIdentifiers.contains($0.rawValue) ? .local : .externalOrUnknown
+            } ?? .none
+            let hasError = error != nil
+            Task { @MainActor in result.finish(activity: activity, completed: completed, hasError: hasError) }
         }
         Task { @MainActor in
             var waited = 0
@@ -25,7 +53,7 @@ enum ActivityShare {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 waited += 1
             }
-            guard !isBusy, let top = topController() else { completion(false); return }
+            guard !isBusy, let top = topController() else { result.finish(); return }
             // iPad 上从屏幕中间弹出
             if let popover = controller.popoverPresentationController {
                 popover.sourceView = top.view
@@ -33,7 +61,7 @@ enum ActivityShare {
                 popover.permittedArrowDirections = []
             }
             top.present(controller, animated: true)
-            if controller.presentingViewController == nil { completion(false) }
+            if controller.presentingViewController == nil { result.finish() }
         }
     }
 

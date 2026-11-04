@@ -188,45 +188,26 @@ extension AppStore {
         await sendPersonalWeeklyIfDue()
         await sendMonthlyReportIfDue()
         await sendWeeklyDigestIfDue()
-        guard settings.weChatEnabled, settings.weChatDaily else { return }
+        guard !Task.isCancelled, settings.weChatEnabled, settings.weChatDaily else { return }
         let now = Date()
         let today = DayKey.today
-        let p = planner
         let due = WeChatSchedule.dailyDue(now: now, today: today,
                                           morning: settings.morningEnabled ? settings.morning : nil,
                                           evening: settings.eveningEnabled ? settings.evening : nil,
                                           morningSent: settings.weChatMorningSent, eveningSent: settings.weChatEveningSent,
                                           calendar: .app)
-        // 还没有这天的数据就先不记「已发」，同步拿到数据后再发；
-        // 有内容时先记下「已发」防止重复，发送失败再改回去，下次 App 运行时重发
+        // 自动补发和快捷指令共用内存占位；网络成功、有数据之后才记「已发」。
         if due == .evening {
-            if let m = p.message(morning: false, on: today, schedule: reminderSchedule) {
-                let before = (settings.weChatEveningSent, settings.weChatMorningSent)
-                settings.weChatEveningSent = today
-                settings.weChatMorningSent = today
-                if !(await pushToWeChat(title: m.title, content: m.body)) {
-                    (settings.weChatEveningSent, settings.weChatMorningSent) = before
-                }
-            }
+            _ = await deliverWeChatReminder(.evening, on: today, force: false, synchronize: false)
         } else if due == .morning {
-            if let m = p.message(morning: true, on: today, schedule: reminderSchedule) {
-                let before = settings.weChatMorningSent
-                settings.weChatMorningSent = today
-                if !(await pushToWeChat(title: m.title, content: m.body)) {
-                    settings.weChatMorningSent = before
-                }
-            }
+            _ = await deliverWeChatReminder(.morning, on: today, force: false, synchronize: false)
         }
         // 周日晚上：下周安排
-        if settings.weeklyPreview,
-           WeChatSchedule.weekPreviewDue(now: now, today: today, evening: settings.eveningEnabled ? settings.evening : nil,
-                                         sent: settings.weChatWeekSent, calendar: .app),
-           let w = p.weekMessage(on: today, schedule: reminderSchedule) {
-            let before = settings.weChatWeekSent
-            settings.weChatWeekSent = today
-            if !(await pushToWeChat(title: w.title, content: w.body)) {
-                settings.weChatWeekSent = before
-            }
+        let weekDay = DayKey.today
+        if !Task.isCancelled, settings.weChatEnabled, settings.weChatDaily, settings.weeklyPreview,
+           WeChatSchedule.weekPreviewDue(now: Date(), today: weekDay, evening: settings.eveningEnabled ? settings.evening : nil,
+                                         sent: settings.weChatWeekSent, calendar: .app) {
+            _ = await deliverWeChatReminder(.week, on: weekDay, force: false, synchronize: false)
         }
     }
 
@@ -235,22 +216,14 @@ extension AppStore {
         guard !(Keychain.get(.pushPlusToken) ?? "").isEmpty else {
             return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
         }
-        let today = DayKey.today
-        // App 今天已经自己发过下周安排：不重复发
-        guard settings.weChatWeekSent != today else { return "今天已经发过下周安排了" }
-        let before = settings.weChatWeekSent
-        settings.weChatWeekSent = today
-        if canSync { await syncWithin(seconds: 15, source: "快捷指令（下周）") }
-        guard let w = planner.weekMessage(on: today, schedule: reminderSchedule) else {
-            let ok = await pushToWeChat(title: "🗓 接下来一周：暂无排班数据",
-                                        content: "没有取到接下来一周的排班（\(settings.lastSyncMessage ?? "还没同步过")）。", force: true)
-            // 没数据时让 App 之后有了数据再补发
-            settings.weChatWeekSent = before
-            return ok ? "已发送到微信：暂无排班数据" : (settings.weChatMessage ?? "微信推送失败")
+        switch await deliverWeChatReminder(.week, on: .today, force: true, synchronize: true) {
+        case .sent(let title, let hasData): return "已发送到微信：\(hasData ? title : "暂无排班数据")"
+        case .alreadySent: return "今天已经发过下周安排了"
+        case .inProgress: return "下周安排正在发送，请稍候"
+        case .stopped: return "发送已取消或配置已变化，未记录为已发"
+        case .failed: return settings.weChatMessage ?? "微信推送失败"
+        case .noData: return "接下来一周暂无排班数据"
         }
-        let ok = await pushToWeChat(title: w.title, content: w.body, force: true)
-        if !ok { settings.weChatWeekSent = before }
-        return ok ? "已发送到微信：\(w.title)" : (settings.weChatMessage ?? "微信推送失败")
     }
 
     /// 立即把今天（morning）或明天的分工发到微信，供快捷指令自动化准点调用。返回给用户看的结果。
@@ -258,26 +231,87 @@ extension AppStore {
         guard !(Keychain.get(.pushPlusToken) ?? "").isEmpty else {
             return "还没有设置 PushPlus token：打开值班提醒 › 设置 › 微信推送"
         }
-        let today = DayKey.today
         let label = morning ? "今天" : "明天"
-        // App 到点已经自己补发过同一条：不重复发
-        if morning ? settings.weChatMorningSent == today : settings.weChatEveningSent == today {
-            return "\(label)的分工今天已经发过微信了"
+        switch await deliverWeChatReminder(morning ? .morning : .evening, on: .today, force: true, synchronize: true) {
+        case .sent(let title, _): return "已发送到微信：\(title)"
+        case .alreadySent: return "\(label)的分工今天已经发过微信了"
+        case .inProgress: return "\(label)的分工正在发送，请稍候"
+        case .stopped: return "发送已取消或配置已变化，未记录为已发"
+        case .failed: return settings.weChatMessage ?? "微信推送失败"
+        case .noData: return "\(label)暂无排班数据"
         }
-        // 先记上「已发」：下面同步的十几秒里 App 到点自己补发时不会再发一遍；没发成再改回去
-        let before = (settings.weChatMorningSent, settings.weChatEveningSent)
-        settings.weChatMorningSent = today
-        if !morning { settings.weChatEveningSent = today }
-        // 先同步再发，但最多等 15 秒：快捷指令有时间限制，同步太慢就用手上的数据先发，别让提醒丢了
-        if canSync { await syncWithin(seconds: 15, source: "快捷指令（微信）") }
-        let m = planner.message(morning: morning, on: today, schedule: reminderSchedule)
-        // 仍然没有也照样发一条，免得以为推送坏了
-        let title = m?.title ?? "\(label)：暂无排班数据"
-        let body = m?.body ?? "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"
-        let ok = await pushToWeChat(title: title, content: body, force: true)
-        // 发出去了、而且有排班才算「已发」；没发出去或暂无数据就改回去，App 之后拿到数据再补发
-        if !ok || m == nil { (settings.weChatMorningSent, settings.weChatEveningSent) = before }
-        return ok ? "已发送到微信：\(title)" : (settings.weChatMessage ?? "微信推送失败")
+    }
+
+    private enum ReminderDelivery {
+        case sent(title: String, hasData: Bool)
+        case alreadySent, inProgress, stopped, failed, noData
+    }
+
+    private var weChatReminderIdentity: WeChatReminderGate.Identity {
+        .init(aliases: settings.aliases, sourceURL: settings.sourceURL, sourceUsername: settings.sourceUsername,
+              recipientToken: Keychain.get(.pushPlusToken) ?? "")
+    }
+
+    private var weChatReminderSentDates: WeChatReminderGate.SentDates {
+        .init(morning: settings.weChatMorningSent, evening: settings.weChatEveningSent, week: settings.weChatWeekSent)
+    }
+
+    /// 领取占位后再同步，避免 App 自动补发与快捷指令重入；任何早退都会释放自己的占位。
+    private func deliverWeChatReminder(_ kind: WeChatReminderGate.Kind, on day: DayKey,
+                                      force: Bool, synchronize: Bool) async -> ReminderDelivery {
+        guard !Self.isDemo, !Task.isCancelled, force || (settings.weChatEnabled && settings.weChatDaily) else { return .stopped }
+        let identity = weChatReminderIdentity
+        let sent = weChatReminderSentDates
+        if sent.contains(kind, on: day) { return .alreadySent }
+        guard let request = weChatReminderGate.begin(kind, on: day, identity: identity, sent: sent) else { return .inProgress }
+        defer { weChatReminderGate.abandon(request) }
+        if synchronize, canSync {
+            await syncWithin(seconds: 15, source: kind == .week ? "快捷指令（下周）" : "快捷指令（微信）")
+        }
+        guard !Self.isDemo, !Task.isCancelled, identity == weChatReminderIdentity, day == .today else { return .stopped }
+        // 等待期间另一种提醒可能已经完成（例如晚提醒成功后不再补早提醒）。
+        if weChatReminderSentDates.contains(kind, on: day) { return .alreadySent }
+        let message: PlannedNotification?
+        switch kind {
+        case .morning: message = planner.message(morning: true, on: day, schedule: reminderSchedule)
+        case .evening: message = planner.message(morning: false, on: day, schedule: reminderSchedule)
+        case .week: message = planner.weekMessage(on: day, schedule: reminderSchedule)
+        }
+        guard message != nil || force else { return .noData }
+        let label = kind == .morning ? "今天" : "明天"
+        let fallbackTitle = kind == .week ? "🗓 接下来一周：暂无排班数据" : "\(label)：暂无排班数据"
+        let fallbackBody = kind == .week
+            ? "没有取到接下来一周的排班（\(settings.lastSyncMessage ?? "还没同步过")）。"
+            : "没有取到\(label)的排班（\(settings.lastSyncMessage ?? "还没同步过")）。打开值班提醒下拉刷新一下。"
+        let title = message?.title ?? fallbackTitle
+        let body = message?.body ?? fallbackBody
+        let succeeded: Bool
+        let failure: String?
+        do {
+            // 使用领取时的 token，不能在 await 后把旧身份的内容送到新配置的目标。
+            try await WeChatPush.send(title: title, content: body, token: identity.recipientToken)
+            succeeded = true
+            failure = nil
+        } catch {
+            succeeded = false
+            failure = error.localizedDescription
+        }
+        let currentIdentity = weChatReminderIdentity
+        let currentDay = DayKey.today
+        let cancelled = Task.isCancelled || Self.isDemo
+        let committed = weChatReminderGate.finish(request, succeeded: succeeded, hasData: message != nil,
+                                                  cancelled: cancelled, currentIdentity: currentIdentity,
+                                                  currentDay: currentDay, sent: weChatReminderSentDates)
+        guard !cancelled, identity == currentIdentity, day == currentDay else { return .stopped }
+        if let committed {
+            settings.weChatMorningSent = committed.morning
+            settings.weChatEveningSent = committed.evening
+            settings.weChatWeekSent = committed.week
+        }
+        settings.weChatMessage = succeeded
+            ? "上次微信推送成功：\(Date().formatted(date: .omitted, time: .shortened))"
+            : "微信推送失败：\(failure ?? "未知错误")"
+        return succeeded ? .sent(title: title, hasData: message != nil) : .failed
     }
 
     /// 同步，但最多等 seconds 秒；超时就先返回（同步自己继续在后台做完）。

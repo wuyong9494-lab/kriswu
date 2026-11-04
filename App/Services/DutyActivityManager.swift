@@ -69,10 +69,12 @@ enum DutyActivityManager {
         if UserDefaults.standard.string(forKey: dayKey) == target.day.description,
            let shown = UserDefaults.standard.object(forKey: timeKey) as? Date,
            Date().timeIntervalSince(shown) < 8 * 3600 { return }
-        UserDefaults.standard.set(target.day.description, forKey: dayKey)
-        UserDefaults.standard.set(Date(), forKey: timeKey)
-        _ = try? Activity.request(attributes: DutyAttributes(day: target.day.description, post: target.post),
+        if (try? Activity.request(attributes: DutyAttributes(day: target.day.description, post: target.post),
                                   content: ActivityContent(state: target.state, staleDate: target.state.end),
-                                  pushType: nil)
+                                  pushType: nil)) != nil {
+            // 只有系统确实创建了活动才记展示时间；失败不能阻止之后 8 小时内重试。
+            UserDefaults.standard.set(target.day.description, forKey: dayKey)
+            UserDefaults.standard.set(Date(), forKey: timeKey)
+        }
     }
 }

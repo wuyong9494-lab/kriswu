@@ -57,6 +57,31 @@ public struct NotificationPlanner: Sendable {
         self.calendar = calendar
     }
 
+    /// 旧存档的日期可能没补零；多个字符串归一到同一天时，优先保留界面使用的正规日期键。
+    /// 没有正规键时按原键排序取第一条，让恢复结果稳定；无效日期跳过，原备忘内容不改写。
+    public static func normalizedMemos(_ stored: [String: String]) -> [DayKey: String] {
+        var result: [DayKey: String] = [:]
+        for (key, value) in stored.sorted(by: { $0.key < $1.key }) {
+            guard let day = DayKey(string: key) else { continue }
+            if result[day] == nil || key == day.description { result[day] = value }
+        }
+        return result
+    }
+
+    /// 数传计划只登记下一次提醒；已发日期统一是公历，不能被系统所选的佛历、日本历重新解释。
+    /// 保留传入日历的时区，并把公历写进触发组件；now 可注入以核对跨日和已发抑制。
+    public static func nextPlanReminderComponents(at time: ClockTime, sentDay: DayKey?, now: Date,
+                                                  calendar: Calendar) -> DateComponents {
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        var day = DayKey(date: now, calendar: gregorian)
+        let todayFire = day.date(calendar: gregorian, hour: time.hour, minute: time.minute)
+        if sentDay == day || todayFire <= now { day = day.adding(days: 1, calendar: gregorian) }
+        return DateComponents(calendar: gregorian, timeZone: gregorian.timeZone,
+                              year: day.year, month: day.month, day: day.day,
+                              hour: time.hour, minute: time.minute)
+    }
+
     public func plan(schedule: [DayKey: String], now: Date, days: Int = 40) -> [PlannedNotification] {
         let today = DayKey(date: now, calendar: calendar)
         var result: [PlannedNotification] = []

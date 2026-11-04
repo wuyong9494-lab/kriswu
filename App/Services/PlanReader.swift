@@ -26,6 +26,8 @@ enum PlanReader {
         /// 每张照片认几遍、每遍怎么认，几遍拼出来的一行行对着挑（哪种认法好看照片：密密麻麻的 Excel 分段认好，
         /// 有的网页照片分段认反而漏行、整张认好，摩尔纹重的去一下纹好）
         var passes = Pass.all
+        /// 仅测试显式开启：输出阶段、尺寸、计数和耗时，不记录识别文字。
+        var diagnostics = false
 
         struct Pass: Sendable, Hashable {
             /// 很长的图切成上下几段分别认
@@ -37,6 +39,59 @@ enum PlanReader {
         }
 
         static let standard = Settings()
+    }
+
+    /// 拆格复识的整张照片预算。先公平分给各 pass，再在该 pass 的各段间按顺序分配。
+    /// 各段拿自己的固定份额，前段不会耗尽后段的复识额度。
+    static func splitRereadBudgets(total: Int, stripCounts: [Int]) -> [[Int]] {
+        let counts = stripCounts.map { max(0, $0) }
+        let active = counts.indices.filter { counts[$0] > 0 }
+        var result = counts.map { [Int](repeating: 0, count: $0) }
+        let passShares = equalShares(total: max(0, total), count: active.count)
+        for (offset, pass) in active.enumerated() {
+            result[pass] = equalShares(total: passShares[offset], count: counts[pass])
+        }
+        return result
+    }
+
+    private static func equalShares(total: Int, count: Int) -> [Int] {
+        guard count > 0 else { return [] }
+        let share = total / count, extra = total % count
+        return (0..<count).map { share + ($0 < extra ? 1 : 0) }
+    }
+
+    struct SplitRereadBudget: Sendable {
+        let limit: Int
+        private(set) var used = 0
+        var remaining: Int { limit - used }
+
+        init(limit: Int) { self.limit = max(0, limit) }
+
+        /// 拆一组必须够这一整组的额度；额度不足时一个也不花，保留原始 OCR 框。
+        mutating func reserve(groupSize: Int) -> Bool {
+            guard groupSize > 0, groupSize <= remaining else { return false }
+            used += groupSize
+            return true
+        }
+    }
+
+    private struct Trace: Sendable {
+        let enabled: Bool
+        let stage: String
+        let began: Date
+
+        init(_ enabled: Bool, _ stage: String, _ details: String = "") {
+            self.enabled = enabled
+            self.stage = stage
+            began = Date()
+            if enabled { print("OCRSTAGE|\(stage)|start|\(details)") }
+        }
+
+        func end(_ details: String = "") {
+            guard enabled else { return }
+            let seconds = String(format: "%.3f", Date().timeIntervalSince(began))
+            print("OCRSTAGE|\(stage)|end|seconds=\(seconds)|\(details)")
+        }
     }
 
     /// 几张照片（计划长、往下翻着拍的）→ 合成一份。第一张要拍到表头；后面几张没拍到表头的，按前一张的列分。
@@ -56,72 +111,132 @@ enum PlanReader {
         var strips: [PassPlan.Region: Data] = [:]
         for (page, image) in images.enumerated() {
             guard let picture = upright(image) else { continue }
-            // 几种认法同时认，拼出来的一行行对着挑
+            let pageTrace = Trace(settings.diagnostics, "page\(page)", "size=\(picture.width)x\(picture.height)")
+            defer { pageTrace.end() }
+            // 几种认法依次认，控制同时运行的 Vision 请求数量，再把各遍结果逐行核对
             let readings = try await boxes(of: picture, words: words, settings: settings)
             sawText = sawText || readings.contains { !$0.isEmpty }
-            var result = PassPlan.combine(readings.map { PassPlan.read($0, fallback: positions) }, rules: rules)
-            positions = positions ?? result.layout
+            let parseTrace = Trace(settings.diagnostics, "parse\(page)", "readings=\(readings.count)")
+            if settings.diagnostics {
+                let unshared = readings.map { PassPlan.read($0, fallback: positions) }
+                print("OCRPARSES|page=\(page)|unsharedRows=\(unshared.map { $0.rows.count })|headers=\(unshared.map { $0.header != nil })")
+            }
+            // 同一张照片的各轮共用像素坐标；某轮漏掉表头时，先借用本页其他轮读到的布局。
+            // 只有整页都没有表头才沿用上一页，避免有文字的整轮结果因缺表头被丢弃。
+            let pageReadings = PassPlan.readPasses(readings, fallback: positions, rules: rules)
+            parseTrace.end("rows=\(pageReadings.map { $0.rows.count })|headers=\(pageReadings.map { $0.header != nil })")
+            let combineTrace = Trace(settings.diagnostics, "combine\(page)", "readings=\(pageReadings.count)")
+            var result = PassPlan.combine(pageReadings, rules: rules)
+            combineTrace.end("rows=\(result.rows.count)")
+            // 连拍时取景可能变了：本页重新拍到表头，就用本页的列位置继续向下读。
+            // 只接受带几何表头的布局；系统表格识别的 x 是列号（0、1、2…），不能拿来分照片里的列。
+            let geometric: PassPlan.Reading? = result.header != nil ? result : pageReadings.filter { $0.header != nil }
+                .max { PassPlan.score($0, rules: rules) < PassPlan.score($1, rules: rules) }
+            if let latest = geometric?.layout { positions = latest }
+            // 补救后的轮次可能读出更多行、成为合并底稿；原图表头仍取本页真实识别到的区域。
+            if result.header == nil { result.header = geometric?.header }
             // iOS 26 起系统还能直接按格子认表格：按位置拼的什么都没拼出来就用它（没有原图）；
-            // 拼出来了就拿它核对站名（同一行它认的站名对得上对照表、这边的对不上，用它的）
+            // 拼出来了就核对站名；唯一对应且原格也为空时补圈号，保留人工核对提示。
             if #available(iOS 26.0, *), settings.tables, let table = await tableReading(in: picture, words: words, settings: settings) {
                 sawText = sawText || !table.rows.isEmpty
                 if result.rows.isEmpty {
                     result = table
                 } else {
-                    result.rows = PassPlan.adoptStations(result.rows, from: table.rows, rules: rules)
+                    let adoptTrace = Trace(settings.diagnostics, "tableMerge\(page)", "rows=\(result.rows.count)|tableRows=\(table.rows.count)")
+                    let emptyOrbits = result.rows.filter { $0.orbit.isEmpty }.count
+                    result.rows = PassPlan.adoptPhotoTable(result.rows, from: table.rows, layout: result.layout, rules: rules)
+                    let restoredOrbits = emptyOrbits - result.rows.filter { $0.orbit.isEmpty }.count
+                    adoptTrace.end("rows=\(result.rows.count)|orbitRestored=\(restoredOrbits)")
                 }
             }
             guard let found = result.layout else { continue }
             for i in result.rows.indices { result.rows[i].region?.page = page }
             result.rows = await rereadStations(result.rows, layout: found, in: picture, rules: rules, words: words, settings: settings)
+            result.rows = await rereadRowMarkers(result.rows, layout: found, in: picture, settings: settings)
+            if found.columns.contains(.status) {
+                for i in result.rows.indices where !PassPlan.isExcludedFromSending(result.rows[i])
+                    && result.rows[i].status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // 空白读数无法证明它不是 test；人工对照原图保存后可解除这项识别疑问。
+                    let issue = "状态没认出来，请核对原图是否为 test"
+                    if !(result.rows[i].recognitionIssues ?? []).contains(issue) {
+                        result.rows[i].recognitionIssues = (result.rows[i].recognitionIssues ?? []) + [issue]
+                    }
+                }
+            }
+            // 编号即使格式合法也可能把 0/C、1/L、5/6 读错。用原格的英文无纠错读数核对，
+            // 只为当前可发送的记录补充疑项；不同读数不自动覆盖原值。
+            result.rows = await reviewIdentifiers(result.rows, layout: found, in: picture, rules: rules, settings: settings)
+            // 多遍 Vision 也会把同一个编号读成相同的错误值。照片代号必须由人对照原图确认；
+            // 复识只补充候选分歧，不能代替确认。已有 test 记录继续直接排除。
+            for i in result.rows.indices {
+                let row = result.rows[i]
+                guard !PassPlan.isExcludedFromSending(row),
+                      let column = identifierColumn(for: row, layout: found),
+                      let field = found.slots[column].column else { continue }
+                result.rows[i] = PassPlan.requiringPhotoIdentifierReview(row, column: field)
+            }
+            // 所有行（包括稍后不发的 test）都参与裁切边界，避免正常条带带入相邻 test 行。
+            result.rows = PassPlan.boundedRegions(result.rows)
             result.header?.page = page
             let pageHeader = header == nil ? result.header : nil
             header = header ?? result.header
             let regions = result.rows.compactMap(\.region) + (pageHeader.map { [$0] } ?? [])
-            let cuts = await cut(regions, from: picture)
+            let cuts = await cut(regions, from: picture, diagnostics: settings.diagnostics)
             strips.merge(cuts) { old, _ in old }
             let target = layout ?? found
             layout = target
             pages.append(PassPlan.remap(result.rows, from: found, to: target))
         }
         guard sawText else { throw Failure.noText }
-        let rows = PassPlan.merge(pages)
+        let mergeTrace = Trace(settings.diagnostics, "pageMerge", "pages=\(pages.count)")
+        let rows = PassPlan.merge(pages, layout: layout)
+        mergeTrace.end("rows=\(rows.count)")
         guard !rows.isEmpty else { throw Failure.noTable }
         return PassPlan.Reading(rows: rows, layout: layout, header: header, strips: strips)
     }
 
     /// 最要紧的两格再认一遍：每一行把「地面站」那一格（分家只看它）、没认出来的「是否应急」那一格（决定图下面那句话）
     /// 单独裁下来、放大了再认（一小格单独认，比一整张里一起认准得多）。
-    /// 地面站：再认的对得上对照表、或者原来那个对不上，就用再认的；是否应急：再认出「是 / 不是」就填上
+    /// 地面站：已知站名不被一次复识覆盖；未知站只有两次局部复识一致、且对得上明确对照表才修正。
+    /// 是否应急：再认出「是 / 不是」就填上。冲突保留在行里，供核对页显示。
     static func rereadStations(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
                                rules: [PassPlan.OperatorRule], words: [String], settings: Settings) async -> [PassPlanRow] {
         let station = layout.slots.firstIndex { $0.column == .station }
         let urgent = layout.emergencyIndex
         guard station != nil || urgent != nil else { return rows }
-        let xs = layout.slots.map(\.x)
         return await Task.detached(priority: .userInitiated) {
+            let trace = Trace(settings.diagnostics, "stationCells", "rows=\(rows.count)")
+            let context = CIContext()
+            var attempts = 0
+            defer { trace.end("cropAttempts=\(attempts)") }
             /// 这一行第 s 列那一格单独认出的字
-            func reread(column s: Int, of region: PassPlan.Region) -> String? {
-                let left = s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left
-                let right = s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right
-                let center = (left + right) / 2
-                let cell = PassPlan.TextBox(text: "", x: left, y: region.y0 + region.slope * center - region.height * 0.45,
-                                            width: right - left, height: region.height * 0.9)
-                let text = Self.reread(cell, in: image, words: words, settings: settings, smooth: false)?
-                    .text.filter { !$0.isWhitespace }
+            func reread(column s: Int, of region: PassPlan.Region, using options: Settings) -> String? {
+                attempts += 1
+                guard let crop = Self.cropCell(column: s, of: region, layout: layout, from: image, context: context) else { return nil }
+                let text = Self.recognizeCell(crop, words: words, settings: options, smooth: false, diagnosticID: "column\(s)")?
+                    .filter { !$0.isWhitespace }
                 return text?.isEmpty == false ? text : nil
             }
             return rows.map { row in
                 guard let region = row.region else { return row }
                 var fixed = row
-                if let s = station,
-                   let again = reread(column: s, of: region)?
-                       .replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "－", with: "-"),
-                   again != row.station,
-                   PassPlan.operatorName(of: again, rules: rules) != nil || PassPlan.operatorName(of: row.station, rules: rules) == nil {
-                    fixed.station = again
+                if let s = station, !rules.isEmpty,
+                   let again = reread(column: s, of: region, using: settings) {
+                    var candidates = [again]
+                    if PassPlan.operatorName(of: row.station, rules: rules) == nil,
+                       PassPlan.operatorName(of: again, rules: rules) != nil {
+                        // 仅在可能修好未知站时，多认这一小格；不增加整张照片的识别遍数。
+                        // 关闭词语纠错再核对一次，防止词库把模糊文字硬套成另一家已知站。
+                        var independent = settings
+                        independent.languageCorrection.toggle()
+                        if let confirmation = reread(column: s, of: region, using: independent) {
+                            candidates.append(confirmation)
+                        }
+                    }
+                    fixed = PassPlan.reviewStationReread(row, candidates: candidates, rules: rules)
                 }
-                if let e = urgent, PassPlan.emergency(fixed, layout: layout) == nil, let again = reread(column: e, of: region) {
+                if let e = urgent, PassPlan.emergency(fixed, layout: layout) == nil,
+                   let again = reread(column: e, of: region, using: settings) {
                     var trial = fixed
                     while trial.cells.count <= e { trial.cells.append("") }
                     trial.cells[e] = again
@@ -132,11 +247,288 @@ enum PlanReader {
         }.value
     }
 
+    /// 整格补读只用已限定的行带：列界取相邻表头中点，四角随行倾斜，不能再向邻行补像素。
+    static func boundedCellRegion(column s: Int, of region: PassPlan.Region, layout: PassPlan.Layout) -> PassPlan.Region? {
+        let xs = layout.slots.map(\.x)
+        guard xs.indices.contains(s), xs.allSatisfy(\.isFinite),
+              region.y0.isFinite, region.slope.isFinite, region.height.isFinite, region.height > 0,
+              region.left.isFinite, region.right.isFinite else { return nil }
+        let left = max(max(0, region.left), s > 0 ? (xs[s - 1] + xs[s]) / 2 : region.left)
+        let right = min(min(1, region.right), s < xs.count - 1 ? (xs[s] + xs[s + 1]) / 2 : region.right)
+        guard right > left else { return nil }
+        let leftY = region.y0 + region.slope * left
+        let rightY = region.y0 + region.slope * right
+        let imageMargin = min(min(leftY, rightY), min(1 - leftY, 1 - rightY))
+        let halfHeight = min(region.height * 0.45, imageMargin)
+        guard halfHeight > 0 else { return nil }
+        return PassPlan.Region(page: region.page, y0: region.y0, slope: region.slope, height: halfHeight * 2,
+                               left: left, right: right)
+    }
+
+    /// 与发原图同样沿四角扶正，直接给 OCR 原始像素，不经过 JPEG，也不调用词框的外扩裁法。
+    static func cropCell(column: Int, of region: PassPlan.Region, layout: PassPlan.Layout, from image: CGImage,
+                         context: CIContext) -> CGImage? {
+        guard let cell = boundedCellRegion(column: column, of: region, layout: layout),
+              let straight = straightened(cell, source: CIImage(cgImage: image),
+                                          width: Double(image.width), height: Double(image.height)),
+              straight.extent.width > 2, straight.extent.height > 2 else { return nil }
+        return context.createCGImage(straight, from: straight.extent)
+    }
+
+    /// 明确的卫星编号列；Excel 的「卫星」列只有出现字母数字代号时才参与编号核对。
+    static func identifierColumn(for row: PassPlanRow, layout: PassPlan.Layout) -> Int? {
+        if let index = layout.slots.firstIndex(where: { $0.column == .satelliteID }) { return index }
+        guard let index = layout.slots.firstIndex(where: { $0.column == .satellite }),
+              layout.slots[index].label.filter({ !$0.isWhitespace }) == "卫星" else { return nil }
+        let scalars = row.satellite.unicodeScalars
+        let hasLetter = scalars.contains { (65...90).contains($0.value) || (97...122).contains($0.value) }
+        let hasDigit = scalars.contains { (48...57).contains($0.value) }
+        let hasOtherLetter = scalars.contains { $0.value > 127 && CharacterSet.letters.contains($0) }
+        return hasLetter && hasDigit && !hasOtherLetter ? index : nil
+    }
+
+    /// 首列外侧不包含 Excel 行号栏，边界来自表头间距，不根据候选编号或真值猜裁框。
+    static func identifierCellRegion(column: Int, of region: PassPlan.Region, layout: PassPlan.Layout) -> PassPlan.Region? {
+        let xs = layout.slots.map(\.x)
+        guard xs.indices.contains(column), xs.allSatisfy(\.isFinite) else { return nil }
+        var bounded = region
+        if xs.count > 1 {
+            bounded.left = max(bounded.left, xs[0] - (xs[1] - xs[0]) / 2)
+            let last = xs.count - 1
+            bounded.right = min(bounded.right, xs[last] + (xs[last] - xs[last - 1]) / 2)
+        }
+        return boundedCellRegion(column: column, of: bounded, layout: layout)
+    }
+
+    /// 已有疑项或 test 的行无需再消耗识别请求；每页最多 100 格，未能核对的格子保留核对提示。
+    static func reviewIdentifiers(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
+                                  rules: [PassPlan.OperatorRule], settings: Settings) async -> [PassPlanRow] {
+        let work: Task<[PassPlanRow], Never> = Task.detached(priority: .userInitiated) {
+            let trace = Trace(settings.diagnostics, "identifierReview", "rows=\(rows.count)|limit=100")
+            let context = CIContext()
+            let source = CIImage(cgImage: image)
+            var attempts = 0
+            var result = rows
+            defer { trace.end("cropAttempts=\(attempts)") }
+            for i in result.indices {
+                let row = result[i]
+                guard !PassPlan.isExcludedFromSending(row),
+                      PassPlan.problems(row, rules: rules, layout: layout).isEmpty,
+                      let column = identifierColumn(for: row, layout: layout),
+                      let field = layout.slots[column].column else { continue }
+                var candidates: [String] = []
+                if attempts < 100, let region = row.region,
+                   let cell = identifierCellRegion(column: column, of: region, layout: layout),
+                   let straight = straightened(cell, source: source, width: Double(image.width), height: Double(image.height)),
+                   straight.extent.width > 2, straight.extent.height > 2 {
+                    let scale = min(4, max(1, (80 / straight.extent.height).rounded(.up)))
+                    let sized = straight.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                    if let crop = context.createCGImage(sized, from: sized.extent) {
+                        attempts += 1
+                        let request = VNRecognizeTextRequest()
+                        request.recognitionLevel = .accurate
+                        request.recognitionLanguages = ["en-US"]
+                        request.usesLanguageCorrection = false
+                        request.customWords = []
+                        if (try? VNImageRequestHandler(cgImage: crop, orientation: .up).perform([request])) != nil {
+                            let raw = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+                            candidates = [raw]
+                        }
+                    }
+                }
+                result[i] = PassPlan.reviewIdentifierReread(row, column: field, candidates: candidates)
+            }
+            return result
+        }
+        return await work.value
+    }
+
+    /// 网页的无表头「应急」在 No. 左边；test 和普通状态在最右状态列。
+    /// 只补读有明确列位置的窄边栏，再交给核心按唯一行几何挂接；不根据红色背景推断。
+    /// 长细栏分成有重叠的短段；每栏最多十二次请求，避免逐行复识或漏掉超长图尾部。
+    static func rereadRowMarkers(_ rows: [PassPlanRow], layout: PassPlan.Layout, in image: CGImage,
+                                 settings: Settings) async -> [PassPlanRow] {
+        let trace = Trace(settings.diagnostics, "markers", "rows=\(rows.count)")
+        defer { trace.end() }
+        let regions: [PassPlan.Region] = rows.compactMap(\.region)
+        guard !regions.isEmpty else { return rows }
+        let bands: [MarkerBand] = rowMarkerBands(rows, layout: layout, regions: regions)
+        guard !bands.isEmpty else { return rows }
+        let work: Task<[PassPlanRow], Never> = Task.detached(priority: .userInitiated) { () -> [PassPlanRow] in
+            let markers = scanRowMarkers(in: image, bands: bands, regions: regions, settings: settings)
+            let marked = PassPlan.applyingRowMarkers(rows, markers: markers, layout: layout)
+            let reviewed = PassPlan.applyingStatusReread(marked, readings: markers, layout: layout)
+            if settings.diagnostics {
+                let normal = markers.filter { PassPlan.isRecognizedPlanStatus($0.text) && !PassPlan.isTestStatus($0.text) }.count
+                let tests = markers.filter { PassPlan.isTestStatus($0.text) }.count
+                let restored = zip(rows, reviewed).filter { $0.status.isEmpty && !$1.status.isEmpty }.count
+                print("OCRMARKERS|normal=\(normal)|test=\(tests)|restored=\(restored)")
+            }
+            return reviewed
+        }
+        return await work.value
+    }
+
+    private struct MarkerBand: Sendable {
+        var left: Double
+        var right: Double
+    }
+
+    private static func rowMarkerBands(_ rows: [PassPlanRow], layout: PassPlan.Layout,
+                                       regions: [PassPlan.Region]) -> [MarkerBand] {
+        let slots: [PassPlan.Layout.Slot] = layout.slots.sorted { $0.x < $1.x }
+        guard slots.count > 1, slots.allSatisfy({ $0.x >= 0 && $0.x <= 1 }) else { return [] }
+        let tableLeft: Double = regions.map(\.left).min() ?? 0
+        let tableRight: Double = regions.map(\.right).max() ?? 1
+        var bands: [MarkerBand] = []
+        let first = slots[0]
+        let needsBadge = rows.contains { PassPlan.emergency($0, layout: layout) != true }
+        if first.column == .number, layout.emergencyIndex == nil, needsBadge {
+            let gap: Double = slots[1].x - first.x
+            let left: Double = max(tableLeft, first.x - gap * 1.5)
+            let right: Double = first.x - gap * 0.45
+            if right > left { bands.append(MarkerBand(left: left, right: right)) }
+        }
+        // 即使本轮填了普通状态，也独立核对右栏，防止错行的普通标签掩盖真正的 test。
+        let needsStatus = rows.contains { !PassPlan.isExcludedFromSending($0) }
+        if needsStatus, let index = slots.firstIndex(where: { $0.column == .status }) {
+            var left = tableLeft
+            var right = tableRight
+            if index > 0 { left = (slots[index - 1].x + slots[index].x) / 2 }
+            if index + 1 < slots.count { right = (slots[index].x + slots[index + 1].x) / 2 }
+            if right > left { bands.append(MarkerBand(left: left, right: right)) }
+        }
+        return bands
+    }
+
+    private static func markerCrop(_ band: MarkerBand, regions: [PassPlan.Region],
+                                   imageWidth: Int, imageHeight: Int) -> CGRect? {
+        var top = Double.infinity
+        var bottom = -Double.infinity
+        for region in regions {
+            let atLeft: Double = region.y0 + region.slope * band.left
+            let atRight: Double = region.y0 + region.slope * band.right
+            top = min(top, min(atLeft, atRight) - region.height / 2)
+            bottom = max(bottom, max(atLeft, atRight) + region.height / 2)
+        }
+        guard top.isFinite, bottom.isFinite else { return nil }
+        let w = Double(imageWidth)
+        let h = Double(imageHeight)
+        let proposed = CGRect(x: CGFloat(band.left * w), y: CGFloat(top * h),
+                              width: CGFloat((band.right - band.left) * w), height: CGFloat((bottom - top) * h))
+        let bounds = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
+        let rect = proposed.intersection(bounds).integral
+        return !rect.isNull && rect.width > 4 && rect.height > 4 ? rect : nil
+    }
+
+    private static func scanRowMarkers(in image: CGImage, bands: [MarkerBand], regions: [PassPlan.Region],
+                                       settings: Settings) -> [PassPlan.TextBox] {
+        var markers: [PassPlan.TextBox] = []
+        for band in bands {
+            guard let rect = markerCrop(band, regions: regions, imageWidth: image.width, imageHeight: image.height) else { continue }
+            let strips = markerStrips(height: Int(rect.height))
+            if settings.diagnostics {
+                print("OCRMARKERBAND|rect=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))|strips=\(strips.count)")
+            }
+            for strip in strips {
+                let piece = CGRect(x: rect.minX, y: rect.minY + CGFloat(strip.top),
+                                   width: rect.width, height: CGFloat(strip.height))
+                let found = markerTextBoxes(in: image, rect: piece, settings: settings)
+                markers.append(contentsOf: found.filter { box in
+                    shouldKeepMarker(box, in: strip, bandRect: rect, imageHeight: image.height)
+                })
+            }
+        }
+        return markers
+    }
+
+    /// 普通状态按交接中线去重；test / 应急在重叠内完整读到就保留。
+    /// 两段对同一字框的位置可能略有抖动，不能让中线两侧的取舍把两份关键证据都丢掉。
+    static func shouldKeepMarker(_ box: PassPlan.TextBox, in strip: PassPlan.Strip,
+                                 bandRect: CGRect, imageHeight: Int) -> Bool {
+        guard imageHeight > 0, bandRect.height > 0 else { return false }
+        let h = Double(imageHeight)
+        let relativeY = (box.midY * h - Double(bandRect.minY)) / Double(bandRect.height)
+        if strip.keep.contains(relativeY) { return true }
+        let emergency = box.text.filter { !$0.isWhitespace } == "应急"
+        guard emergency || PassPlan.isTestStatus(box.text) else { return false }
+        let top = Double(bandRect.minY) + Double(strip.top)
+        let bottom = top + Double(strip.height)
+        // 只额外保留完整落在片段内的证据，不让切边残词借用重叠例外。
+        return box.y * h >= top + 1 && (box.y + box.height) * h <= bottom - 1
+    }
+
+    /// 窄栏若一次识别两三千像素高，小字容易漏掉。优先用约 600 像素高的短段，
+    /// 重叠五分之一，并在重叠中线交接；超长图提高段高，仍完整覆盖且不超过十二段。
+    /// keep 使用整条窄栏的相对坐标，识别结果本身仍使用原照片坐标。
+    static func markerStrips(height: Int) -> [PassPlan.Strip] {
+        guard height > 0 else { return [] }
+        let limit = 12
+        let coveredSpans = 1 + Double(limit - 1) * 0.8
+        let size = max(600, Int(ceil(Double(height) / coveredSpans)))
+        let overlap = size / 5
+        guard height > size + overlap else {
+            return [.init(top: 0, height: height, keep: -Double.infinity..<Double.infinity)]
+        }
+        var spans: [(top: Int, bottom: Int)] = []
+        var top = 0
+        while true {
+            let bottom = min(top + size, height)
+            spans.append((top, bottom))
+            if bottom >= height { break }
+            top = bottom - overlap
+        }
+        let h = Double(height)
+        return spans.indices.map { i in
+            let from = i == 0 ? -Double.infinity : Double(spans[i].top + spans[i - 1].bottom) / 2 / h
+            let to = i == spans.count - 1 ? Double.infinity : Double(spans[i + 1].top + spans[i].bottom) / 2 / h
+            return .init(top: spans[i].top, height: spans[i].bottom - spans[i].top, keep: from..<to)
+        }
+    }
+
+    private static func markerTextBoxes(in image: CGImage, rect: CGRect, settings: Settings) -> [PassPlan.TextBox] {
+        guard let crop = image.cropping(to: rect) else { return [] }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        // 状态中的英文代码按原文读，不能让词语纠错把别的词替成 test。
+        request.usesLanguageCorrection = false
+        if settings.smallText { request.minimumTextHeight = minimumTextHeight(crop.height) }
+        let handler = VNImageRequestHandler(cgImage: crop, orientation: .up)
+        guard (try? handler.perform([request])) != nil else { return [] }
+        let w = Double(image.width)
+        let h = Double(image.height)
+        let originX = Double(rect.minX)
+        let originY = Double(rect.minY)
+        let cropWidth = Double(rect.width)
+        let cropHeight = Double(rect.height)
+        var boxes: [PassPlan.TextBox] = []
+        for observation in request.results ?? [] {
+            guard let text = observation.topCandidates(1).first?.string else { continue }
+            let token = text.filter { !$0.isWhitespace }.lowercased()
+            guard token == "应急" || PassPlan.isRecognizedPlanStatus(text) else { continue }
+            let box = observation.boundingBox
+            let x: Double = (originX + Double(box.minX) * cropWidth) / w
+            let y: Double = (originY + (1 - Double(box.maxY)) * cropHeight) / h
+            let width: Double = Double(box.width) * cropWidth / w
+            let height: Double = Double(box.height) * cropHeight / h
+            boxes.append(PassPlan.TextBox(text: text, x: x, y: y, width: width, height: height))
+        }
+        if settings.diagnostics {
+            let normal = boxes.filter { PassPlan.isRecognizedPlanStatus($0.text) && !PassPlan.isTestStatus($0.text) }.count
+            let tests = boxes.filter { PassPlan.isTestStatus($0.text) }.count
+            print("OCRMARKERPASS|size=\(crop.width)x\(crop.height)|minHeight=\(request.minimumTextHeight)|observations=\(request.results?.count ?? 0)|accepted=\(boxes.count)|normal=\(normal)|test=\(tests)")
+        }
+        return boxes
+    }
+
     // MARK: - 发原图：从照片上裁
 
     /// 从照片上裁下这几条（每一行、表头），各自扶正成长方形，存成 JPEG（宽最多 2400）
-    static func cut(_ regions: [PassPlan.Region], from image: CGImage) async -> [PassPlan.Region: Data] {
+    static func cut(_ regions: [PassPlan.Region], from image: CGImage, diagnostics: Bool = false) async -> [PassPlan.Region: Data] {
         await Task.detached(priority: .userInitiated) {
+            let trace = Trace(diagnostics, "cut", "size=\(image.width)x\(image.height)|regions=\(regions.count)")
+            defer { trace.end() }
             let context = CIContext()
             // 照片自动调一下明暗、对比（屏幕拍出来常常发灰）
             var source = CIImage(cgImage: image)
@@ -147,17 +539,8 @@ enum PlanReader {
             let w = Double(image.width), h = Double(image.height)
             var result: [PassPlan.Region: Data] = [:]
             for region in regions {
-                // CoreImage 的原点在左下
-                func corner(_ x: Double, _ dy: Double) -> CIVector {
-                    CIVector(x: x * w, y: h - (region.y0 + region.slope * x + dy) * h)
-                }
-                guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { continue }
-                filter.setValue(source, forKey: kCIInputImageKey)
-                filter.setValue(corner(region.left, -region.height / 2), forKey: "inputTopLeft")
-                filter.setValue(corner(region.right, -region.height / 2), forKey: "inputTopRight")
-                filter.setValue(corner(region.right, region.height / 2), forKey: "inputBottomRight")
-                filter.setValue(corner(region.left, region.height / 2), forKey: "inputBottomLeft")
-                guard let straight = filter.outputImage, straight.extent.width > 1 else { continue }
+                guard let straight = straightened(region, source: source, width: w, height: h),
+                      straight.extent.width > 1 else { continue }
                 let scale = min(1, 2400 / straight.extent.width)
                 let sized = straight.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
                 if let data = context.jpegRepresentation(of: sized, colorSpace: CGColorSpaceCreateDeviceRGB(),
@@ -167,6 +550,20 @@ enum PlanReader {
             }
             return result
         }.value
+    }
+
+    private static func straightened(_ region: PassPlan.Region, source: CIImage, width: Double, height: Double) -> CIImage? {
+        // CoreImage 的原点在左下；上下边沿同一条倾斜行，不能用包围矩形代替。
+        func corner(_ x: Double, _ dy: Double) -> CIVector {
+            CIVector(x: x * width, y: height - (region.y0 + region.slope * x + dy) * height)
+        }
+        guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
+        filter.setValue(source, forKey: kCIInputImageKey)
+        filter.setValue(corner(region.left, -region.height / 2), forKey: "inputTopLeft")
+        filter.setValue(corner(region.right, -region.height / 2), forKey: "inputTopRight")
+        filter.setValue(corner(region.right, region.height / 2), forKey: "inputBottomRight")
+        filter.setValue(corner(region.left, region.height / 2), forKey: "inputBottomLeft")
+        return filter.outputImage
     }
 
     /// 表格文件（Excel、CSV）
@@ -211,32 +608,42 @@ enum PlanReader {
         return list.isEmpty ? [Settings.Pass()] : list
     }
 
-    /// 几种认法同时认，各认出一份（顺序和 passes 一样）
+    /// 按 passes 顺序逐遍识别：同一张照片同一时刻只执行一个 pass，限制 Vision 资源占用。
+    /// 各遍保留所有分段和既定拆格额度，返回顺序与 passes 一致。
     private static func boxes(of image: CGImage, words: [String], settings: Settings) async throws -> [[PassPlan.TextBox]] {
         let list = passes(of: image, settings: settings)
-        return try await withThrowingTaskGroup(of: (Int, [PassPlan.TextBox]).self) { group in
-            for (i, pass) in list.enumerated() {
-                group.addTask { (i, try await textBoxes(in: image, words: words, settings: settings, pass: pass)) }
-            }
-            var found = [[PassPlan.TextBox]](repeating: [], count: list.count)
-            for try await (i, boxes) in group { found[i] = boxes }
-            return found
+        let stripCounts: [Int] = list.map { pass in
+            pass.split ? PassPlan.strips(width: image.width, height: image.height).count : 1
         }
+        let budgets = splitRereadBudgets(total: 400, stripCounts: stripCounts)
+        let trace = Trace(settings.diagnostics, "allPasses", "size=\(image.width)x\(image.height)|strips=\(stripCounts)|splitBudgets=\(budgets)")
+        defer { trace.end() }
+        var found: [[PassPlan.TextBox]] = []
+        for (i, pass) in list.enumerated() {
+            let boxes = try await textBoxes(in: image, words: words, settings: settings, pass: pass,
+                                            splitBudgets: budgets[i], diagnosticID: "pass\(i)")
+            found.append(boxes)
+        }
+        return found
     }
 
     /// 认出图里的字：每一块按空格再拆开（相邻两格偶尔被认成一块），各自带位置（整张图的 0–1，y 从上往下）。
     /// 很长的图切成上下重叠的几段分别认：整张一起认，字相对整张图太小，会被跳过或认错
     static func textBoxes(in image: CGImage, words: [String] = [], settings: Settings = .standard,
-                          pass: Settings.Pass = Settings.Pass()) async throws -> [PassPlan.TextBox] {
+                          pass: Settings.Pass = Settings.Pass(), splitBudgets: [Int]? = nil,
+                          diagnosticID: String = "singlePass") async throws -> [PassPlan.TextBox] {
         try await Task.detached(priority: .userInitiated) {
             let strips = pass.split ? PassPlan.strips(width: image.width, height: image.height)
                 : [PassPlan.Strip(top: 0, height: image.height, keep: -Double.infinity..<Double.infinity)]
             var boxes: [PassPlan.TextBox] = []
-            for strip in strips {
+            let quotas = splitBudgets ?? splitRereadBudgets(total: 400, stripCounts: [strips.count])[0]
+            for (index, strip) in strips.enumerated() {
                 let piece = strips.count == 1 ? image
                     : image.cropping(to: CGRect(x: 0, y: strip.top, width: image.width, height: strip.height))
                 guard let piece else { continue }
-                let found = try recognize(piece, words: words, settings: settings, smooth: pass.smooth)
+                let quota = index < quotas.count ? quotas[index] : 0
+                let found = try recognize(piece, words: words, settings: settings, smooth: pass.smooth,
+                                          splitBudget: quota, diagnosticID: "\(diagnosticID).strip\(index)")
                 boxes += PassPlan.place(found, in: strip, imageHeight: image.height)
             }
             return boxes
@@ -249,7 +656,8 @@ enum PlanReader {
     }
 
     private static func recognize(_ source: CGImage, words: [String], settings: Settings,
-                                  smooth: Bool) throws -> [PassPlan.TextBox] {
+                                  smooth: Bool, splitBudget: Int, diagnosticID: String) throws -> [PassPlan.TextBox] {
+        let mainTrace = Trace(settings.diagnostics, "mainOCR.\(diagnosticID)", "size=\(source.width)x\(source.height)")
         let image = prepared(source, smooth: smooth, enlarge: false)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
@@ -261,6 +669,7 @@ enum PlanReader {
         let blocks = VNDetectTextRectanglesRequest()
         blocks.reportCharacterBoxes = true
         try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request, blocks])
+        mainTrace.end("observations=\(request.results?.count ?? 0)|blocks=\(blocks.results?.count ?? 0)")
         let aspect = Double(image.width) / Double(max(image.height, 1))
         let spots = (blocks.results ?? []).map { block in
             (box: PassPlan.TextBox(text: "", x: block.boundingBox.minX, y: 1 - block.boundingBox.maxY,
@@ -268,8 +677,15 @@ enum PlanReader {
              count: block.characterBoxes?.count ?? 0)
         }
         var result: [PassPlan.TextBox] = []
-        var rereads = 0
-        for box in (request.results ?? []).flatMap({ tokens($0, aspect: aspect) }) {
+        let tokenTrace = Trace(settings.diagnostics, "tokens.\(diagnosticID)")
+        let tokenBoxes: [PassPlan.TextBox] = (request.results ?? []).flatMap { tokens($0, aspect: aspect) }
+        tokenTrace.end("boxes=\(tokenBoxes.count)")
+        var budget = SplitRereadBudget(limit: splitBudget)
+        var budgetLimitedGroups = 0
+        var failedGroups = 0
+        let splitTrace = Trace(settings.diagnostics, "splitOCR.\(diagnosticID)", "limit=\(budget.limit)")
+        defer { splitTrace.end("cropAttempts=\(budget.used)|budgetLimitedGroups=\(budgetLimitedGroups)|failedGroups=\(failedGroups)|boxes=\(result.count)") }
+        for box in tokenBoxes {
             // 认出的一块字（中文常把隔得很远的一整行认成一串，还会漏字）横跨好几块隔开的字
             let inside = spots.filter { spot in
                 let midX = spot.box.x + spot.box.width / 2, midY = spot.box.y + spot.box.height / 2
@@ -291,25 +707,45 @@ enum PlanReader {
                 }
                 continue
             }
-            // 对不上：每一块单独裁下来再认一遍（一张图最多认几百块，太多就不拆）
-            guard rereads + inside.count <= 400 else {
+            // 对不上才拆格复识；整张照片最多 400 次，已提前公平分给各 pass/strip。
+            // 额度不够整组就保留原框，不拆一半，不消耗额度，也不丢掉原始字。
+            guard budget.reserve(groupSize: inside.count) else {
+                budgetLimitedGroups += 1
                 result.append(box)
                 continue
             }
-            rereads += inside.count
-            result += inside.compactMap { reread($0.box, in: image, words: words, settings: settings, smooth: smooth) }
+            let separated = inside.compactMap {
+                reread($0.box, in: image, words: words, settings: settings, smooth: smooth, diagnosticID: diagnosticID)
+            }
+            // 分格复识有一块失败，不能静默丢掉它：保留本轮原始识别，交给其他轮次核对。
+            if separated.count == inside.count {
+                result += separated
+            } else {
+                failedGroups += 1
+                result.append(box)
+            }
         }
         return result
     }
 
     /// 把一小块字（位置是这张图的 0–1）裁下来单独认
     private static func reread(_ spot: PassPlan.TextBox, in image: CGImage, words: [String], settings: Settings,
-                               smooth: Bool) -> PassPlan.TextBox? {
+                               smooth: Bool, diagnosticID: String = "local") -> PassPlan.TextBox? {
         let w = Double(image.width), h = Double(image.height)
         let pad = spot.height * h * 0.3
         let rect = CGRect(x: spot.x * w - pad, y: spot.y * h - pad, width: spot.width * w + pad * 2, height: spot.height * h + pad * 2)
             .intersection(CGRect(x: 0, y: 0, width: w, height: h)).integral
         guard rect.width > 2, rect.height > 2, let cut = image.cropping(to: rect) else { return nil }
+        guard let text = recognizeCell(cut, words: words, settings: settings, smooth: smooth, diagnosticID: diagnosticID) else { return nil }
+        var box = spot
+        box.text = text
+        return box
+    }
+
+    private static func recognizeCell(_ cut: CGImage, words: [String], settings: Settings,
+                                      smooth: Bool, diagnosticID: String) -> String? {
+        let trace = Trace(settings.diagnostics, "cellOCR.\(diagnosticID)", "size=\(cut.width)x\(cut.height)")
+        defer { trace.end() }
         // 一小块字：放大到够高再认（小字放大了认得准）
         let piece = prepared(cut, smooth: smooth, enlarge: true)
         let request = VNRecognizeTextRequest()
@@ -320,9 +756,7 @@ enum PlanReader {
         guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { return nil }
         let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
         guard !text.isEmpty else { return nil }
-        var box = spot
-        box.text = text
-        return box
+        return text
     }
 
     /// 认之前处理一下：smooth 轻轻模糊压掉摩尔纹；enlarge 一小块字不到 80 像素高就放大到 80 以上（最多 4 倍）
@@ -343,6 +777,8 @@ enum PlanReader {
     /// iOS 26 起：系统直接认表格（按格子读）。照片里认出几张表的话，用读出行最多的那张
     @available(iOS 26.0, *)
     private static func tableReading(in image: CGImage, words: [String], settings: Settings) async -> PassPlan.Reading? {
+        let trace = Trace(settings.diagnostics, "systemTable", "size=\(image.width)x\(image.height)")
+        defer { trace.end() }
         var request = RecognizeDocumentsRequest()
         request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: "zh-Hans"),
                                                                Locale.Language(identifier: "en-US")]
@@ -362,7 +798,7 @@ enum PlanReader {
                 return cells
             }
         }
-        return grids.map(PassPlan.readTable).max { $0.rows.count < $1.rows.count }
+        return grids.map(PassPlan.readPhotoTable).max { $0.rows.count < $1.rows.count }
     }
 
     /// 照片转成正着的（相机拍的照片常常横着存、再标上「要转 90°」）：之后切段、换算位置都按正着的算

@@ -127,17 +127,13 @@ enum NotificationService {
         let id = "pass-plan"
         center.removePendingNotificationRequests(withIdentifiers: [id])
         guard let time else { return }
-        let cal = Calendar.current
-        var day = DayKey.today
-        let todayFire = day.date(calendar: cal, hour: time.hour, minute: time.minute)
-        if sentDay == day || todayFire <= Date() { day = day.adding(days: 1) }
+        let c = NotificationPlanner.nextPlanReminderComponents(at: time, sentDay: sentDay,
+                                                               now: Date(), calendar: .app)
         let content = UNMutableNotificationContent()
         content.title = "📡 该发数传计划了"
         content.body = "拍一张计划，按运营商分好发到各家群里。"
         content.sound = .default
         content.userInfo = ["route": "passPlan"]
-        let fire = day.date(calendar: cal, hour: time.hour, minute: time.minute)
-        let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
         try? await center.add(UNNotificationRequest(identifier: id, content: content,
                                                     trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
     }

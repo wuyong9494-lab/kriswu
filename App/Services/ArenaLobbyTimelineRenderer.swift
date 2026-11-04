@@ -213,9 +213,11 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
         let semaphore = inFlight
         command.addCompletedHandler { [weak self] buffer in
             semaphore.signal()
+            // Metal owns this callback's buffer; only its Sendable message crosses to the main actor.
+            let errorMessage = buffer.error?.localizedDescription
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let error = buffer.error { self.reportFailure(error.localizedDescription) }
+                if let errorMessage { self.reportFailure(errorMessage) }
                 else if !self.failed, !self.firstFrameDelivered {
                     self.firstFrameDelivered = true
                     self.epoch = CACurrentMediaTime()

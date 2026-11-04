@@ -135,7 +135,7 @@ jobs:
 
       # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
       - name: 发布到 Releases（最新版）
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && !startsWith(github.ref, 'refs/heads/codex/plan-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -211,8 +211,11 @@ jobs:
   # 在 iPhone 模拟器里，用真正的网页浏览器对着仿值班网站跑同步流程（自动登录、电脑版页面、翻页、读各组说明）
   site-tests:
     runs-on: macos-15
-    # Shared sync-service fixes can opt into the existing mock-site regression with [site-tests].
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[site-tests]'))
+    timeout-minutes: 90
+    # [site-tests] and manual extras keep the full suite; [plan-ocr-tests] runs the real photo reader only.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[site-tests]') || contains(github.event.head_commit.message, '[plan-ocr-tests]')))
+    env:
+      PLAN_OCR_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[plan-ocr-tests]') && !contains(github.event.head_commit.message, '[site-tests]') }}
     concurrency:
       group: site-tests-${{ github.ref }}
       cancel-in-progress: true
@@ -228,6 +231,7 @@ jobs:
           xcodebuild -version
 
       - name: 启动仿值班网站
+        if: env.PLAN_OCR_ONLY != 'true'
         run: |
           nohup python3 Tests/MockSite/server.py 8765 > mock.log 2>&1 &
           sleep 2
@@ -241,36 +245,62 @@ jobs:
           python3 .github/scripts/build_identity.py
           xcodegen generate
 
-      - name: 模拟器里测试同步流程
+      - name: 模拟器里测试同步流程或计划识图
+        timeout-minutes: 75
+        shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
           import json, sys
           d = json.load(sys.stdin)['devices']
-          print(next(x['udid'] for k, v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          candidates = [(runtime, device) for runtime, devices in sorted(d.items(), reverse=True) if 'iOS' in runtime for device in devices if device['name'].startswith('iPhone')]
+          if not candidates:
+              sys.exit('没有可用的 iPhone 模拟器')
+          runtime, device = next((item for item in candidates if item[1]['name'] == 'iPhone 17 Pro Max'), candidates[0])
+          with open('test-device.json', 'w') as f:
+              json.dump({'runtime': runtime, 'name': device['name'], 'udid': device['udid']}, f, ensure_ascii=False, indent=2)
+          print(device['udid'])")
           echo "模拟器：$DEVICE"
+          cat test-device.json
+          TEST_TARGET=SiteTests
+          if [ "$PLAN_OCR_ONLY" = true ]; then TEST_TARGET=SiteTests/PlanReaderTests; fi
+          echo "测试范围：$TEST_TARGET"
           set +e
           xcodebuild test \
             -project ShiftReminder.xcodeproj \
             -scheme ShiftReminder \
             -destination "id=$DEVICE" \
-            -only-testing:SiteTests \
+            -only-testing:"$TEST_TARGET" \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO > test.log 2>&1
-          status=$?
-          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log
+            -resultBundlePath site-tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log || true
           # 文字识别准确率（PlanReaderTests）：每种认法一行，做成注解
           grep -o "OCR|.*" test.log | sed 's/^/::notice::/' || true
-          # 认出的每块字、拼出的每行（虚构数据），查准确率时看
-          grep -oE "OCR(BOX|ROW|LAYOUT|STRIPS|IMG)\|.*" test.log || true
+          # 每块字、拼出的行和原图预览已通过 tee 实时记录（全部是虚构样例）。
+          grep -oE "OCR(BOX|ROW|LAYOUT|STRIPS)\|.*" test.log || true
           if [ $status -ne 0 ]; then
             tail -80 test.log
-            grep -E "error:" test.log | head -20 | sed 's/^/::error::/'
+            grep -E "error:" test.log | head -20 | sed 's/^/::error::/' || true
           fi
           exit $status
 
       - name: 网站访问记录
-        if: always()
+        if: always() && env.PLAN_OCR_ONLY != 'true'
         run: tail -150 mock.log
+
+      - name: 保存测试日志和识图结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-tests-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            test.log
+            test-device.json
+            site-tests.xcresult
+            mock.log
+          if-no-files-found: warn
 
   # 用虚构的演示数据（启动参数 -demo）在模拟器里打开各个页面截图，浅色、深色各一套，推到 screenshots 分支方便查看界面
   screenshots:

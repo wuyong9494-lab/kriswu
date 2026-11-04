@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-11-04",
+  "branch": "codex/plan-photo-rules",
+  "baseline": "20f9d111ccb8612bf61d26274c37d437b82d71fe",
+  "source_commit": "0b9254567f021a14fe70018b5c080681e439b3c5",
+  "source_tree": "604081eae330bcf66376d3dee696802761f17b20",
+  "run": {
+    "id": 41788589038,
+    "number": 497,
+    "attempt": 1,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/41788589038",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-04T06:54:09Z",
+    "updated_at": "2026-11-04T07:06:33Z"
+  },
+  "verification": {
+    "macos": {
+      "tests": 573,
+      "skipped": 6,
+      "failures": 0,
+      "seconds": 171.164
+    },
+    "linux": {
+      "tests": 573,
+      "skipped": 7,
+      "failures": 0,
+      "seconds": 75.116
+    },
+    "new_regression_methods": 67,
+    "new_methods_passed_on_each_platform": 67,
+    "new_method_counts": {
+      "BackupArchiveTests": 14,
+      "CalendarEventOwnershipTests": 6,
+      "DayKeyParsingTests": 3,
+      "DirectoryMigrationTests": 5,
+      "NotificationMemoTests": 3,
+      "PassPlanEntryStateTests": 7,
+      "PassPlanIdentifierPreservationTests": 4,
+      "PlanReminderDateTests": 3,
+      "ShareCompletionGateTests": 6,
+      "SyncInputIdentityTests": 6,
+      "WeChatReminderGateTests": 10
+    },
+    "xcode": "26.3",
+    "xcode_build": "17C529",
+    "app_compile": "success",
+    "ipa_package": "success",
+    "concurrency_warnings": 0,
+    "non_blocking_swift_warnings": [
+      {
+        "path": "App/Services/WorkLog.swift",
+        "message": "allowBluetooth is deprecated; renamed to AVAudioSession.CategoryOptions.allowBluetoothHFP."
+      },
+      {
+        "path": "App/Views/WorkLogView.swift",
+        "message": "Result of unlock() is unused."
+      }
+    ]
+  },
+  "jobs": [
+    {
+      "id": 126436376248,
+      "name": "build",
+      "conclusion": "success"
+    },
+    {
+      "id": 126436376532,
+      "name": "core-tests-linux",
+      "conclusion": "success"
+    },
+    {
+      "id": 126436377441,
+      "name": "screenshots",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 126436379070,
+      "name": "site-tests",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 126436422176,
+      "name": "arena-look",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 126440796026,
+      "name": "testflight",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 126440796704,
+      "name": "whats-new",
+      "conclusion": "skipped"
+    }
+  ],
+  "release": {
+    "github_release": "skipped",
+    "testflight": "skipped",
+    "installed_on_user_device": false
+  },
+  "artifact": {
+    "id": 13302428989,
+    "name": "ShiftReminder-ipa",
+    "size_in_bytes": 27065889,
+    "digest": "sha256:8e96d688d2ef653af86faf9887786a49dce97cb09645164e32f92e011d4d80ea",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/41788589038/artifacts/13302428989",
+    "source_commit": "0b9254567f021a14fe70018b5c080681e439b3c5",
+    "created_at": "2026-11-04T07:06:28Z"
+  },
+  "boundaries": [
+    "Test counts are taken from the completed job logs.",
+    "IPA identity is linked by workflow and artifact metadata; its binary contents were not independently unpacked.",
+    "No new native Vision, UI screenshot, private-photo or real-device acceptance was run.",
+    "Background icon, dense-image OCR accuracy, one-shot periodic reminders, other WeChat helpers and AlarmKit re-registration remain documented limitations."
+  ]
+}

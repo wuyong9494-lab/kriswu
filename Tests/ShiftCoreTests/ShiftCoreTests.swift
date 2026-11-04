@@ -3022,7 +3022,7 @@ final class PassPlanTests: XCTestCase {
         XCTAssertEqual(rows[2].info, "通道1:900M")
         XCTAssertNil(PassPlan.emergency(rows[3], layout: reading.layout), "空着的认不出")
         XCTAssertEqual(PassPlan.problems(rows[3], rules: [PassPlan.OperatorRule(name: "乙", prefixes: ["乙站"])], layout: reading.layout),
-                       ["是否应急没认出来（发的时候按不是应急算）"])
+                       ["是否应急没认出来，请核对原图"])
         XCTAssertNil(PassPlan.emergency(rows[0], layout: nil), "网页上的表没有这一列")
         // 照片最右边下一列只拍进半截，混进这一格：只看开头
         var mixed = rows[1]
@@ -3138,7 +3138,7 @@ final class PassPlanTests: XCTestCase {
 
     /// 上百条、连着扫几张：重叠的那几条第二次卫星名认错了一个字，也只留一条
     func testMergeIgnoresSatelliteTypos() {
-        let a = PassPlanRow(orbit: "101", satellite: "试验一号", station: "甲站-北区01",
+        let a = PassPlanRow(orbit: "101", satelliteID: "SAT-A", satellite: "试验一号", station: "甲站-北区01",
                             start: "2026-10-27 08:00:00", end: "2026-10-27 08:07:00")
         var typo = a
         typo.satellite = "试验-号"
@@ -3279,8 +3279,8 @@ final class PassPlanTests: XCTestCase {
         XCTAssertTrue(PassPlan.combine([]).rows.isEmpty)
     }
 
-    /// 拍屏幕认丢了「-」「:」也认得出时间；认出来不是有效时间的原样留着（标黄）；行号拼到卫星编号前面的去掉
-    func testTimesWithLostSeparatorsAndGluedRowNumbers() {
+    /// 时间只恢复可确定的分隔符；编号开头的数字不能猜作行号删除，照片仍需人工核对。
+    func testTimesWithLostSeparatorsAndPreservedIdentifierPrefixes() {
         XCTAssertEqual(PassPlan.normalizedTime("2026 10-27 22:05:25"), "2026-10-27 22:05:25")
         XCTAssertEqual(PassPlan.normalizedTime("2026-10 28 075658"), "2026-10-28 07:56:58")
         XCTAssertEqual(PassPlan.normalizedTime("2026-10-27 22:57"), "2026-10-27 22:57:00")
@@ -3292,7 +3292,12 @@ final class PassPlanTests: XCTestCase {
             ["3XA102C", "甲站-北区01", "2026-10-27 01:00:00"],
             ["4243XB7", "甲站-北区02", "2026-10-27 02:00:00"],
         ])
-        XCTAssertEqual(reading.rows.map(\.satellite), ["XA102C", "XB7"])
+        XCTAssertEqual(reading.rows.map(\.satellite), ["3XA102C", "4243XB7"])
+        let photographed = reading.rows.map { PassPlan.requiringPhotoIdentifierReview($0, column: .satellite) }
+        XCTAssertEqual(photographed.map(\.satellite), ["3XA102C", "4243XB7"])
+        XCTAssertTrue(photographed.allSatisfy {
+            PassPlan.problems($0, layout: reading.layout).contains("照片中的卫星代号需对照原图确认")
+        })
     }
 
     /// 发原图：每一行记下它在照片里的那一条（斜着拍的每行斜得不一样），表头也记一条
