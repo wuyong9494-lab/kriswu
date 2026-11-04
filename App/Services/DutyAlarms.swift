@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 #if canImport(AlarmKit)
@@ -37,27 +38,67 @@ enum DutyAlarms {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             let manager = AlarmManager.shared
-            let old = (UserDefaults.standard.stringArray(forKey: idsKey) ?? []).compactMap(UUID.init(uuidString:))
-            for id in old { try? manager.cancel(id: id) }
-            guard !alarms.isEmpty, manager.authorizationState == .authorized else {
-                UserDefaults.standard.set([String](), forKey: idsKey)
-                return
-            }
-            var ids: [String] = []
-            for alarm in alarms where alarm.date > Date() {
+            let defaults = UserDefaults.standard
+            let old = Set((defaults.stringArray(forKey: idsKey) ?? []).compactMap(UUID.init(uuidString:)))
+            let existing = try? Set(manager.alarms.map(\.id))
+            let upcoming = alarms.filter { $0.date > Date() }
+            // Loss of permission must not silently discard the IDs needed for
+            // cleanup if the person enables AlarmKit again later.
+            guard upcoming.isEmpty || manager.authorizationState == .authorized else { return }
+            var registered = old
+            var desired = Set<UUID>()
+            var failed = false
+            for alarm in upcoming {
+                let id = stableID(for: alarm.date, title: alarm.title)
+                guard desired.insert(id).inserted else { continue }
+                // A previous scheduling call may have been suspended after the
+                // daemon accepted its alarm. Reuse it rather than duplicating it.
+                if existing?.contains(id) == true || (existing == nil && old.contains(id)) {
+                    registered.insert(id)
+                    continue
+                }
                 let stop = AlarmButton(text: "起来了", textColor: .white, systemImageName: "sun.max.fill")
                 let alert = AlarmPresentation.Alert(title: LocalizedStringResource(stringLiteral: alarm.title), stopButton: stop)
                 let attributes = AlarmAttributes<DutyAlarmMetadata>(presentation: AlarmPresentation(alert: alert),
                                                                     metadata: DutyAlarmMetadata(), tintColor: .indigo)
                 let configuration = AlarmManager.AlarmConfiguration<DutyAlarmMetadata>(
                     countdownDuration: nil, schedule: .fixed(alarm.date), attributes: attributes)
-                let id = UUID()
-                if (try? await manager.schedule(id: id, configuration: configuration)) != nil { ids.append(id.uuidString) }
+                do {
+                    _ = try await manager.schedule(id: id, configuration: configuration)
+                    registered.insert(id)
+                    // Save each successful alarm: suspension at any point can
+                    // still be reconciled on the next foreground run.
+                    defaults.set(registered.map(\.uuidString).sorted(), forKey: idsKey)
+                } catch { failed = true }
             }
-            UserDefaults.standard.set(ids, forKey: idsKey)
+            // Register all replacement alarms first. When even one fails, keep
+            // the previous generation instead of leaving duty mornings silent.
+            if !failed {
+                for id in old.subtracting(desired) {
+                    if existing?.contains(id) == false {
+                        registered.remove(id)
+                        continue
+                    }
+                    do {
+                        try manager.cancel(id: id)
+                        registered.remove(id)
+                    } catch { /* Keep the ID so another refresh can retry. */ }
+                }
+            }
+            defaults.set(registered.map(\.uuidString).sorted(), forKey: idsKey)
         }
         #endif
     }
+
+    #if canImport(AlarmKit)
+    /// The same duty slot gets the same identifier across retries and launches.
+    private static func stableID(for date: Date, title: String) -> UUID {
+        let payload = Data("duty-alarm-v1|\(Int(date.timeIntervalSince1970))|\(title)".utf8)
+        let bytes = Array(SHA256.hash(data: payload))
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+    #endif
 }
 
 #if canImport(AlarmKit)

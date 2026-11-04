@@ -66,7 +66,15 @@ enum NotificationService {
         if Task.isCancelled { return }
         // 先登记新的（同一个 id 直接替换旧内容），再删掉不再需要的：
         // 中途被系统挂起时，最多是多一两条旧提醒，不会出现一条提醒都没有
-        for request in requests { try? await center.add(request) }
+        var registeredAll = true
+        for request in requests {
+            if Task.isCancelled { return }
+            do { try await center.add(request) }
+            catch { registeredAll = false }
+        }
+        // Do not remove the previous generation (or its speech files) when
+        // notification registration fails halfway through this replacement.
+        guard registeredAll, !Task.isCancelled else { return }
         let keep = Set(requests.map(\.identifier))
         let stale = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) && !keep.contains($0) }
         center.removePendingNotificationRequests(withIdentifiers: stale)
@@ -76,11 +84,16 @@ enum NotificationService {
     /// 签名到期前 1 天提醒去 SideStore 续签（来不及就提前 2 小时）。
     static func scheduleSigningReminder(expiry: Date?) async {
         let id = "signing-expiry"
-        center.removePendingNotificationRequests(withIdentifiers: [id])
-        guard let expiry else { return }
+        guard let expiry else {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            return
+        }
         let fire = [expiry.addingTimeInterval(-86_400), expiry.addingTimeInterval(-7_200)]
             .first { $0 > Date().addingTimeInterval(60) }
-        guard let fire else { return }
+        guard let fire else {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            return
+        }
         let content = UNMutableNotificationContent()
         content.title = "⚠️ 值班提醒的签名快到期了"
         content.body = "打开 LocalDevVPN 连接，再打开 SideStore 点「Refresh All」续签。过期后 App 打不开（已登记的提醒照常）。"
@@ -93,9 +106,11 @@ enum NotificationService {
     /// 上次同步成功 2 天后还没有新的同步，就由系统弹出提醒（每次同步成功都会往后推）。
     static func scheduleStaleReminder(after lastSync: Date?) async {
         let id = "sync-stale-scheduled"
-        center.removePendingNotificationRequests(withIdentifiers: [id])
         // 已经超过两天了：首页红色提示和那一次通知已经提醒过，这里不再每小时重复
-        guard let lastSync, lastSync.addingTimeInterval(2 * 86_400) > Date().addingTimeInterval(60) else { return }
+        guard let lastSync, lastSync.addingTimeInterval(2 * 86_400) > Date().addingTimeInterval(60) else {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            return
+        }
         let fire = lastSync.addingTimeInterval(2 * 86_400)
         let content = UNMutableNotificationContent()
         content.title = "⚠️ 已经两天没同步排班了"
@@ -107,26 +122,31 @@ enum NotificationService {
     }
 
     /// 周一早上 9 点提醒我负责的、还没解决的周会问题（周会前看一眼进展）。
-    /// 周会问题一变、重排提醒时重新登记；没有就取消
+    /// 周会问题一变、重排提醒时重新登记；没有就取消。
+    /// 必须是每周重复触发，否则 App 一周没打开就只提醒一次。
     static func scheduleMeetingReminder(_ issues: [MeetingIssue]) async {
         let id = "meeting-mine"
-        center.removePendingNotificationRequests(withIdentifiers: [id])
-        guard !issues.isEmpty else { return }
+        guard !issues.isEmpty else {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            return
+        }
         let content = UNMutableNotificationContent()
         content.title = "📝 你负责的周会问题还有 \(issues.count) 个没解决"
         content.body = issues.prefix(3).map { "· " + $0.text }.joined(separator: "\n")
             + (issues.count > 3 ? "\n· 还有 \(issues.count - 3) 个" : "")
         content.sound = .default
         content.userInfo = ["route": "meetingMine"]
-        let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: 9, minute: 0, weekday: 2), repeats: false)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: 9, minute: 0, weekday: 2), repeats: true)
         try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
     }
 
     /// 每天到点提醒发数传计划：登记下一次（今天已经发完就从明天起）
     static func schedulePlanReminder(at time: ClockTime?, sentDay: DayKey?) async {
         let id = "pass-plan"
-        center.removePendingNotificationRequests(withIdentifiers: [id])
-        guard let time else { return }
+        guard let time else {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            return
+        }
         let c = NotificationPlanner.nextPlanReminderComponents(at: time, sentDay: sentDay,
                                                                now: Date(), calendar: .app)
         let content = UNMutableNotificationContent()
@@ -145,6 +165,16 @@ enum NotificationService {
             .compactMap { r in (r.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate().map { ($0, r.content.title) } }
             .min { $0.0 < $1.0 }
             .map { (date: $0.0, title: $0.1) }
+    }
+
+    /// 诊断页明确区分排班、数传计划、周会提醒，避免只数 shift- 而漏报。
+    static func otherReminderDates() async -> (plan: Date?, meeting: Date?) {
+        let requests = await center.pendingNotificationRequests()
+        func next(_ id: String) -> Date? {
+            requests.first(where: { $0.identifier == id })
+                .flatMap { ($0.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate() }
+        }
+        return (plan: next("pass-plan"), meeting: next("meeting-mine"))
     }
 
     static let tasksCategory = "shift-tasks"

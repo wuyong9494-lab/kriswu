@@ -1,5 +1,15 @@
 import Foundation
 
+/// A local source match can share one roster with the project's established
+/// heroes. This only chooses the kind of bot; each fighter retains its own
+/// movement, weapon, effects and progression rules in ArenaGame.
+public enum ArenaSourceBotRoster {
+    public static func usesImportedHero(seat: Int, mixProjectHeroes: Bool) -> Bool {
+        guard seat > 0 else { return false }
+        return !mixProjectHeroes || !seat.isMultiple(of: 2)
+    }
+}
+
 public struct ArenaSourceChargeMotion: Codable, Equatable, Sendable {
     public var definition: ArenaSourceCharge
     public var remaining: Double

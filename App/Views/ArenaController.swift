@@ -100,6 +100,8 @@ final class ArenaController: ObservableObject {
         var mapID: String?
         var importedMap: ArenaImportedMapChoice?
         var sourceHero: ArenaSourceHero?
+        /// In local source matches, retain the existing project heroes as bots.
+        var mixProjectHeroes = true
         /// 截图用：停在开场对阵画面、直接到结算
         var demo: Demo?
         var benchmark = false
@@ -310,6 +312,18 @@ final class ArenaController: ObservableObject {
                 if sourceRoster.isEmpty { configurationError = "原版英雄的技能资源暂时不可用。" }
                 else {
                     for index in entrants.indices.dropFirst() {
+                        // The engine supports mixed source/classic fighters.
+                        // Only source seats use the imported skill and model;
+                        // other seats keep their established project hero.
+                        guard ArenaSourceBotRoster.usesImportedHero(seat: index,
+                                  mixProjectHeroes: setup.mixProjectHeroes) else {
+                            // Imported heroes use their source baseline stats.
+                            // Do not pit them against a level-11 project bot
+                            // solely because another project hero was upgraded.
+                            entrants[index].level = 1
+                            entrants[index].loadout = ArenaLoadout.basic(entrants[index].brawler, level: 1)
+                            continue
+                        }
                         let hero = sourceRoster[(index - 1) % sourceRoster.count]
                         entrants[index].sourceHero = hero
                         entrants[index].name = "电脑" + hero.name

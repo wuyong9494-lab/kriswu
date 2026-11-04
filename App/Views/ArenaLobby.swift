@@ -833,7 +833,10 @@ struct ArenaHomeView: View {
     }
     private var selectedMapTitle: String {
         let maps = ArenaImportedMapAssets.shared.maps(for: playMode)
-        if sourceHero != nil { return maps.first(where: { $0.id == selectedMapID })?.title ?? maps.first?.title ?? "请选择地图" }
+        if sourceHero != nil {
+            return selectedMap?.title ?? maps.first(where: { $0.id == selectedMapID })?.title
+                ?? maps.first?.title ?? "请选择地图"
+        }
         return selectedMap?.title ?? maps.first(where: { $0.id == selectedMapID })?.title ?? "地图随机轮换"
     }
 
@@ -915,9 +918,9 @@ struct ArenaHomeView: View {
             guard sourceHero.canPlay, !ranked, playMode != .duel, playMode != .boss else {
                 mapSelectionError = "请选择原版英雄支持的普通对战玩法。"; return
             }
-            if imported == nil {
+            if imported == nil && selectedMap == nil {
                 guard let entry = ArenaImportedMapAssets.shared.maps(for: playMode).first else {
-                    mapSelectionError = "此玩法暂没有完成适配的原版地图，请选择其他玩法。"; return
+                    mapSelectionError = "此玩法暂没有可用的原资源地图，请选择项目地图或其他玩法。"; return
                 }
                 do { imported = try ArenaImportedMapAssets.shared.choice(id: entry.id) }
                 catch { mapSelectionError = error.localizedDescription; return }
@@ -928,7 +931,8 @@ struct ArenaHomeView: View {
         playing = ArenaEntry(setup: ArenaController.Setup(mode: playMode, brawler: chosen, name: name, level: level,
                                                           lineup: duelPartners, loadout: progress.loadout(for: chosen),
                                                           ranked: ranked, botLevel: botLevel, mapID: selectedMap?.id, importedMap: imported,
-                                                          sourceHero: sourceHero))
+                                                          sourceHero: sourceHero,
+                                                          mixProjectHeroes: UserDefaults.standard.object(forKey: "arena.mixProjectHeroes") as? Bool ?? true))
     }
 
     // MARK: 面板
@@ -1328,11 +1332,9 @@ struct ArenaHomeView: View {
                 .font(.system(size: 16, weight: .black, design: .rounded))
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 10) {
-                    if sourceHero == nil {
-                        mapChoice(nil)
-                        ForEach(ArenaMap.selectionPool(for: playMode), id: \.id) { map in
-                            mapChoice(map)
-                        }
+                    if sourceHero == nil { mapChoice(nil) }
+                    ForEach(ArenaMap.selectionPool(for: playMode), id: \.id) { map in
+                        mapChoice(map)
                     }
                     if !ranked {
                         ForEach(ArenaImportedMapAssets.shared.maps(for: playMode)) { entry in
@@ -1341,7 +1343,7 @@ struct ArenaHomeView: View {
                     }
                 }.padding(.vertical, 4)
             }
-            Text("左右滑动查看原地图和扩展地图；切换玩法后可选择对应地图。")
+            Text("左右滑动选择项目地图和已适配原资源地图；两类英雄都可使用对应玩法的地图。")
                 .font(.caption).foregroundStyle(.white.opacity(0.75))
         }
         .foregroundStyle(.white).padding(12)

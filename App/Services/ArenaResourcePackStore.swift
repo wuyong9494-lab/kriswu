@@ -173,6 +173,16 @@ final class ArenaResourcePackStore: ObservableObject {
         let destination = directory
         let owner = self
         do {
+            // A second import of an identical pack should not copy another
+            // ~850 MB into Application Support. Compare the fully validated
+            // manifest first; keep the existing verified installation intact.
+            let incoming = try await Task.detached(priority: .utility) {
+                try ArenaResourcePackArchive.readManifest(from: source)
+            }.value
+            if let manifest, try Self.identity(manifest) == Self.identity(incoming) {
+                progress = 1
+                return
+            }
             let installed = try await Task.detached(priority: .userInitiated) {
                 try ArenaResourcePackArchive.install(from: source, directory: destination) { value in
                     Task { @MainActor in owner.progress = max(owner.progress, value) }

@@ -67,6 +67,46 @@ final class ArenaSourceCombatTests: XCTestCase {
         }
     }
 
+    func testPatternNineHostAdapterEnablesOnlyVerifiedSingleProjectileCones() throws {
+        var source = hero()
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "BarkeepUlti"
+        ultimate.projectileCount = 1
+        ultimate.activeTime = 1.05
+        ultimate.attackInterval = 0.2
+        ultimate.spread = 75 * .pi / 360
+        ultimate.rawSource = ["AttackPattern": "9", "NumBulletsInOneAttack": "1", "Spread": "75"]
+        let pattern = "skill.BarkeepUlti.AttackPattern=9: not yet interpreted"
+        let spread = "skill.BarkeepUlti.Spread: single-projectile dispersion needs a source pattern adapter"
+        ultimate.unsupportedReasons = [pattern, spread]
+        source.ultimate = ultimate
+        source.unsupportedReasons = [pattern, spread]
+        XCTAssertFalse(source.canPlay)
+
+        let adapted = ArenaSourceCompatibility.adapt(source)
+        XCTAssertTrue(adapted.canPlay)
+        XCTAssertEqual(adapted.ultimate?.dispersion, "seeded_cone")
+        XCTAssertEqual(adapted.ultimate?.rawSource, ultimate.rawSource)
+        XCTAssertEqual(source.unsupportedReasons, [pattern, spread], "The frozen source profile must not be rewritten")
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        var first = ArenaSourceSkillState(skill: try XCTUnwrap(adapted.ultimate), seed: 901)
+        var second = first
+        let a = try first.activate(origin: .zero, aim: V2(1, 0)) + first.advance(dt: 2, origin: .zero)
+        let b = try second.activate(origin: .zero, aim: V2(1, 0)) + second.advance(dt: 2, origin: .zero)
+        XCTAssertEqual(a, b)
+        let shots = launches(a)
+        XCTAssertEqual(shots.count, 5)
+        XCTAssertGreaterThan(Set(shots.map(\.direction.x)).count, 1)
+        XCTAssertTrue(shots.allSatisfy { abs(atan2($0.direction.y, $0.direction.x)) <= ultimate.spread / 2 })
+
+        var unknown = source
+        unknown.ultimate?.rawSource["AttackPattern"] = "8"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        var stillBlocked = source
+        stillBlocked.unsupportedReasons.append("unimplemented ally-healing behavior")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(stillBlocked).canPlay)
+    }
+
     func testReservedTerminalTickDoesNotEmitSeventhColtShot() throws {
         var state = ArenaSourceSkillState(skill: colt())
         let immediate = try state.activate(origin: .zero, aim: V2(1, 0))
@@ -312,6 +352,11 @@ final class ArenaSourceCombatTests: XCTestCase {
         var state = ArenaSourceSkillState(skill: try XCTUnwrap(coltHero.weapon))
         let all = try state.activate(origin: .zero, aim: V2(1, 0)) + state.advance(dt: 1, origin: .zero)
         XCTAssertEqual(launches(all).count, 6)
+        let barley = try XCTUnwrap(catalog.heroes.first { $0.id == "Barkeep" })
+        XCTAssertFalse(barley.canPlay)
+        let adaptedBarley = ArenaSourceCompatibility.adapt(barley)
+        XCTAssertTrue(adaptedBarley.canPlay, "Pattern 9 can be dispatched with the named seeded host policy")
+        XCTAssertEqual(adaptedBarley.ultimate?.dispersion, "seeded_cone")
         let surge = try XCTUnwrap(catalog.heroes.first { $0.id == "PowerLeveler" })
         XCTAssertFalse(surge.canPlay)
         XCTAssertTrue(surge.unsupportedReasons.contains { $0.contains("PowerLevelsType") })
@@ -329,6 +374,29 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(game.power(1, 360), 360)
         XCTAssertEqual(game.fighters[0].ammoCapacity, 3)
         XCTAssertEqual(game.fighters[0].heroName, "colt")
+    }
+
+    func testLocalMixedRosterRetainsBothProjectAndSourceFighterRules() throws {
+        XCTAssertEqual((1..<6).filter { ArenaSourceBotRoster.usesImportedHero(seat: $0, mixProjectHeroes: true) }, [1, 3, 5])
+        XCTAssertEqual((1..<6).filter { !ArenaSourceBotRoster.usesImportedHero(seat: $0, mixProjectHeroes: true) }, [2, 4])
+        XCTAssertEqual((1..<6).filter { ArenaSourceBotRoster.usesImportedHero(seat: $0, mixProjectHeroes: false) }, [1, 2, 3, 4, 5])
+        let source = hero()
+        let entrants = [
+            ArenaGame.Entrant(name: "Player", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Source bot", brawler: .knight, isBot: true, team: 1, sourceHero: source),
+            ArenaGame.Entrant(name: "Project bot", brawler: .mage, isBot: true, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 7, map: .canyon)
+        XCTAssertEqual(game.map.id, ArenaMap.canyon.id, "Source/project mixed matches can use an established project map")
+        XCTAssertNotNil(game.fighters[0].sourceWeapon)
+        XCTAssertNotNil(game.fighters[1].sourceWeapon)
+        XCTAssertNil(game.fighters[2].sourceWeapon)
+        XCTAssertEqual(game.fighters[1].heroName, "colt")
+        XCTAssertEqual(game.fighters[2].heroName, Brawler.mage.name)
+        XCTAssertEqual(game.fighters[1].maxHealth, 3100)
+        XCTAssertEqual(game.fighters[2].maxHealth, Brawler.mage.maxHealth)
+        game.step(1.0 / 60.0, inputs: [:])
+        XCTAssertTrue(game.fighters.allSatisfy { $0.health > 0 })
     }
 
     func testSuperChargeUsesSourceDamageCoefficientInsteadOfClassicCost() throws {

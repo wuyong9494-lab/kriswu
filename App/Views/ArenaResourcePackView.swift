@@ -14,6 +14,7 @@ struct ArenaResourcePackView: View {
     @State private var picking = false
     @State private var selectedMap: ArenaResourcePackManifest.Map?
     @State private var importError: String?
+    @AppStorage("arena.mixProjectHeroes") private var mixProjectHeroes = true
     private enum Page: String, CaseIterable { case heroes = "英雄资源", maps = "地图布局", themes = "大厅主题", music = "音乐" }
 
     var body: some View {
@@ -21,8 +22,12 @@ struct ArenaResourcePackView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     if let manifest = store.manifest {
-                        Text("\(manifest.heroes.count) 条英雄配置 · \(manifest.maps.count) 个布局 · \(manifest.music.count) 首音乐")
-                            .font(.caption).foregroundStyle(.white.opacity(0.8))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("原资源 \(manifest.heroes.count) 条英雄配置 · \(manifest.maps.count) 个布局 · \(manifest.music.count) 首音乐")
+                                .font(.caption).foregroundStyle(.white.opacity(0.8))
+                            Text("当前可本地对战：原资源 \(ArenaImportedCombatAssets.shared.playable.count) 位 + 项目 \(Brawler.allCases.count) 位")
+                                .font(.caption2).foregroundStyle(.green)
+                        }
                     } else if store.hasBundledPack {
                         Text(store.error == nil ? "正在自动准备内置资源…" : "内置资源暂未加载完成")
                             .font(.subheadline)
@@ -59,6 +64,10 @@ struct ArenaResourcePackView: View {
                     }
                 }
                 if let manifest = store.manifest {
+                    if page == .heroes {
+                        Toggle("本地对战加入项目英雄（混合队友和对手）", isOn: $mixProjectHeroes)
+                            .font(.caption).tint(.cyan)
+                    }
                     Picker("资源类别", selection: $page) {
                         ForEach(Page.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }.pickerStyle(.segmented)
@@ -141,6 +150,10 @@ struct ArenaResourcePackView: View {
                     if let profile = ArenaImportedCombatAssets.shared.hero(id: hero.id), profile.canPlay {
                         Text("生命 \(profile.health) · 移速 \(profile.speed, specifier: "%.2f") · 弹药 \(profile.weapon?.ammoCapacity ?? 0)")
                             .font(.caption)
+                        if profile.compatibilityPolicy.contains("host-pattern9-seeded-cone") {
+                            Text("技能散射采用本地兼容算法，尚未验证与原客户端逐帧一致。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }

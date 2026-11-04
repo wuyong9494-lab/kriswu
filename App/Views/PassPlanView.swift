@@ -27,6 +27,9 @@ struct PassPlanView: View {
     private let autoScan: Bool
     @State private var entryState = PassPlanEntryState()
     @State private var reading = false
+    @State private var readingStage = ""
+    @State private var readingGeneration = UUID()
+    @State private var readingTask: Task<Void, Never>?
     @State private var problem: String?
     @State private var scanning = false
     @State private var showingCamera = false
@@ -45,6 +48,7 @@ struct PassPlanView: View {
     @State private var reviewRow: PassPlanRow?
     @State private var reviewMessage = ""
     @State private var showingReview = false
+    @State private var onlyReview = false
 
     private struct RenderInput: Equatable {
         var sourceID: UUID
@@ -121,6 +125,9 @@ struct PassPlanView: View {
             .onAppear(perform: prepareOnAppear)
             .onChange(of: initial) { _ in prepareOnAppear() }
             .onChange(of: autoScan) { _ in prepareOnAppear() }
+            .onChange(of: groupedPlans.doubtful) { count in
+                if count == 0 { onlyReview = false }
+            }
             .task(id: renderInput) { renderImages() }
     }
 
@@ -158,7 +165,12 @@ struct PassPlanView: View {
             }
             .disabled(reading)
             if reading {
-                HStack(spacing: DS.Space.xs) { DSSpinner(size: 14); Text("正在认…").foregroundStyle(.secondary) }
+                HStack(spacing: DS.Space.xs) {
+                    DSSpinner(size: 14)
+                    Text(readingStage).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("取消") { cancelReading() }.buttonStyle(.borderless)
+                }
             }
             if let problem {
                 Text(problem).font(.footnote).foregroundStyle(DS.Palette.danger)
@@ -181,6 +193,12 @@ struct PassPlanView: View {
             if grouped.doubtful > 0 {
                 Label("有 \(grouped.doubtful) 条可能认错了（标黄的），点开核对一下", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote).foregroundStyle(DS.Palette.warning)
+                Toggle("只显示待核对的 \(grouped.doubtful) 条", isOn: $onlyReview)
+                    .font(.subheadline)
+                if onlyReview {
+                    Text("仅筛选当前查看的行；发送时仍包含这家全部非 test 计划。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             if lostCount > 0 {
                 Label("有 \(lostCount) 条分不出是哪家（在下面最上面），点「分给哪家」记下来，记一次以后自动分",
@@ -220,13 +238,15 @@ struct PassPlanView: View {
         if let lost = grouped.all.first(where: { $0.name == PassPlan.unassigned }) {
             unassignedSection(lost.rows, known: grouped.sendable.map(\.name))
         }
-        ForEach(grouped.sendable, id: \.name) { group in
+        ForEach(grouped.sendable.filter { group in
+            !onlyReview || group.rows.contains { !PassPlan.problems($0, rules: rules, layout: layout).isEmpty }
+        }, id: \.name) { group in
             operatorSection(group)
         }
-        if !grouped.resting.isEmpty {
+        if !onlyReview, !grouped.resting.isEmpty {
             restingSection(grouped.resting)
         }
-        if grouped.excluded > 0 {
+        if !onlyReview, grouped.excluded > 0 {
             excludedSection
         }
     }
@@ -432,11 +452,15 @@ struct PassPlanView: View {
         photoItems = []
         read(fromPhotos: true) {
             var pages: [UIImage] = []
-            for item in items {
+            for (index, item) in items.enumerated() {
+                try Task.checkCancellation()
+                readingStage = "正在载入照片 \(index + 1)/\(items.count)…"
                 if let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
                     pages.append(image)
                 }
             }
+            try Task.checkCancellation()
+            readingStage = "正在识别 \(pages.count) 张照片…"
             return try await PlanReader.read(pages: pages, rules: rules)
         }
     }
@@ -480,6 +504,7 @@ struct PassPlanView: View {
         rows.enumerated().filter {
             !PassPlan.isExcludedFromSending($0.element)
                 && (PassPlan.operatorName(of: $0.element.station, rules: rules) ?? PassPlan.unassigned) == name
+                && (!onlyReview || !PassPlan.problems($0.element, rules: rules, layout: layout).isEmpty)
         }
     }
 
@@ -658,14 +683,23 @@ struct PassPlanView: View {
     private func read(fromPhotos: Bool = false, _ work: @escaping @MainActor () async throws -> PassPlan.Reading) {
         guard !reading else { return }
         let sourceID = store.passPlan.sourceID
+        let generation = UUID()
+        readingGeneration = generation
         reading = true
+        readingStage = fromPhotos ? "正在识别照片…" : "正在读取表格…"
         problem = nil
-        Task {
-            defer { reading = false }
+        readingTask = Task {
+            defer {
+                if readingGeneration == generation {
+                    reading = false
+                    readingStage = ""
+                    readingTask = nil
+                }
+            }
             do {
                 let result = try await work()
                 // 清空或换了一批计划后，旧识别任务不能把结果重新写回来。
-                guard store.passPlan.sourceID == sourceID else { return }
+                guard readingGeneration == generation, store.passPlan.sourceID == sourceID else { return }
                 let found = result.rows
                 withAnimation {
                     store.passPlan = PassPlanSession(fromPhotos: fromPhotos, rows: found, layout: result.layout,
@@ -681,10 +715,21 @@ struct PassPlanView: View {
                 if lost > 0 { message += "；\(lost) 条分不出是哪家，在最上面" } else if doubtful > 0 { message += "，\(doubtful) 条要核对" }
                 ToastCenter.shared.show(message, style: doubtful > 0 || lost > 0 ? .warning : .success)
             } catch {
-                guard store.passPlan.sourceID == sourceID else { return }
+                guard readingGeneration == generation, store.passPlan.sourceID == sourceID else { return }
                 problem = error.localizedDescription
             }
         }
+    }
+
+    private func cancelReading() {
+        readingTask?.cancel()
+        readingGeneration = UUID()
+        readingTask = nil
+        reading = false
+        readingStage = ""
+        // Some image-recognition APIs finish synchronously despite cancellation.
+        // The generation check above still prevents their stale results replacing
+        // the current plan when the user starts again.
     }
 
     private func edit(_ row: PassPlanRow) {
@@ -806,8 +851,28 @@ struct PassPlanView: View {
 
     private func renderImages() {
         let input = renderInput
+        // One corrected OCR row should only redraw that operator's image.
+        // Keep the cache scoped to this photo batch and the same presentation
+        // rules, so an old crop or caption can never leak into a new share.
+        let mayReuse = renderedInput.map { old in
+            old.sourceID == input.sourceID && old.layout == input.layout
+                && old.rules == input.rules && old.normalCaption == input.normalCaption
+                && old.urgentCaption == input.urgentCaption && old.original == input.original
+        } ?? false
+        let previousGroups: [String: [PassPlanRow]]
+        if mayReuse, let previous = renderedInput {
+            previousGroups = Dictionary(PassPlan.grouped(previous.rows, rules: previous.rules)
+                .map { ($0.name, $0.rows) }, uniquingKeysWith: { first, _ in first })
+        } else {
+            previousGroups = [:]
+        }
         var made: [String: UIImage] = [:]
         for group in sendable {
+            if let previous = previousGroups[group.name], previous == group.rows,
+               let existingImage = images[group.name] {
+                made[group.name] = existingImage
+                continue
+            }
             if store.settings.passPlanOriginal && store.passPlan.fromPhotos {
                 // 原图缺行时不能悄悄换成 OCR 重绘图，把认错的字带出去。
                 if let original = originalImage(name: group.name, rows: group.rows) { made[group.name] = original }

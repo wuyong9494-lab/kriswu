@@ -47,6 +47,44 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// Small, evidence-gated compatibility adapters for an already verified source
+/// profile. The original CSV fields and rejection reasons are retained in the
+/// private archive; this runtime view only clears reasons whose host mechanics
+/// are implemented and checked. It never switches to a project hero's skill.
+public enum ArenaSourceCompatibility {
+    public static func adapt(_ source: ArenaSourceHero) -> ArenaSourceHero {
+        var result = source
+        var resolved = Set<String>()
+        func adaptPatternNine(_ skill: inout ArenaSourceSkill?) {
+            guard var candidate = skill, candidate.behavior == "Attack",
+                  candidate.rawSource["AttackPattern"] == "9",
+                  candidate.rawSource["NumBulletsInOneAttack"] == "1",
+                  candidate.projectileCount == 1, candidate.projectiles.count == 1,
+                  candidate.spread.isFinite, candidate.spread > 0 else { return }
+            let pattern = "skill.\(candidate.id).AttackPattern=9: not yet interpreted"
+            let spread = "skill.\(candidate.id).Spread: single-projectile dispersion needs a source pattern adapter"
+            guard candidate.unsupportedReasons.contains(pattern), candidate.unsupportedReasons.contains(spread) else { return }
+            // Approximate source pattern 9 with the same 20 Hz, seeded-cone
+            // dispatcher already used for validated source dispersions. This
+            // is a deterministic host compatibility pattern, not a claim to
+            // reproduce the original client's RNG sequence bit-for-bit.
+            candidate.dispersion = "seeded_cone"
+            candidate.unsupportedReasons.removeAll { $0 == pattern || $0 == spread }
+            guard candidate.isSupported else { return }
+            skill = candidate
+            resolved.insert(pattern)
+            resolved.insert(spread)
+        }
+        adaptPatternNine(&result.weapon)
+        adaptPatternNine(&result.ultimate)
+        if !resolved.isEmpty {
+            result.unsupportedReasons.removeAll { resolved.contains($0) }
+            result.compatibilityPolicy += "+host-pattern9-seeded-cone"
+        }
+        return result
+    }
+}
+
 public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable {
     public var id: String
     public var speed: Double

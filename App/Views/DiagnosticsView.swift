@@ -272,6 +272,7 @@ struct DiagnosticsView: View {
         let pending = await NotificationService.pendingCount()
         notifications = ([.authorized, .provisional, .ephemeral].contains(auth), pending)
         let next = await NotificationService.nextReminder()
+        let otherReminders = await NotificationService.otherReminderDates()
         let widget = WidgetStore.load()
         let hasPassword = !(Keychain.get(.sourcePassword) ?? "").isEmpty
         let hasToken = !(Keychain.get(.pushPlusToken) ?? "").isEmpty
@@ -322,8 +323,15 @@ struct DiagnosticsView: View {
         }()
         let reminderRows = [
             Row(label: "通知权限", value: authText.0, ok: authText.1),
-            Row(label: "已登记提醒", value: "\(pending) 条", ok: pending > 0),
-            Row(label: "下一条", value: next.map { "\(fmt($0.date)) \($0.title)" } ?? "无", ok: next != nil),
+            Row(label: "已登记排班提醒", value: "\(pending) 条", ok: pending > 0),
+            Row(label: "下一条排班提醒", value: next.map { "\(fmt($0.date)) \($0.title)" } ?? "无", ok: next != nil),
+            Row(label: "数传计划提醒", value: s.passPlanReminder
+                ? (otherReminders.plan.map(fmt) ?? "已开启，但系统未登记") : "关",
+                ok: s.passPlanReminder ? otherReminders.plan != nil : nil),
+            Row(label: "周会问题提醒", value: s.meetingMineReminder && !store.myMeetingIssues.filter({ $0.status == .open }).isEmpty
+                ? (otherReminders.meeting.map(fmt) ?? "已开启，但系统未登记") : "关或暂无待办",
+                ok: s.meetingMineReminder && !store.myMeetingIssues.filter({ $0.status == .open }).isEmpty
+                    ? otherReminders.meeting != nil : nil),
             Row(label: "语音播报", value: s.voiceEnabled ? "开" : "关", ok: nil),
             Row(label: "网站一般排班时间", value: PublishPattern.describe(s.publishTimes, calendar: .app) ?? "还在学（发现新排班 \(s.publishTimes.count) 次）",
                 ok: nil),

@@ -139,4 +139,34 @@ final class ArenaResourcePackTests: XCTestCase {
         XCTAssertThrowsError(try ArenaResourcePackArchive.install(from: url, directory: destination) { _ in })
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.appendingPathComponent("active.json").path))
     }
+
+    #if !ARENA_RESOURCE_RUNTIME_TESTS
+    @MainActor
+    func testReimportingIdenticalPackKeepsSingleInstalledCopy() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "arena-pack-test-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "arena.resources.hasChosenCombatHero")
+        let input = root.appendingPathComponent("same.arenapack")
+        let destination = root.appendingPathComponent("installed")
+        let payload = Data("keep this copy".utf8)
+        try pack(manifest(payload: payload), payload: payload, at: input)
+
+        let store = ArenaResourcePackStore(defaults: defaults, directory: destination)
+        await store.install(from: input)
+        XCTAssertNil(store.error)
+        let active = destination.appendingPathComponent("active.json")
+        let firstPointer = try Data(contentsOf: active)
+
+        await store.install(from: input)
+        XCTAssertNil(store.error)
+        XCTAssertEqual(try Data(contentsOf: active), firstPointer)
+        let folders = try FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: [.isDirectoryKey])
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+        XCTAssertEqual(folders.count, 1, "Importing the same pack must not consume another full copy")
+    }
+    #endif
 }
