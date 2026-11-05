@@ -215,9 +215,13 @@ final class ArenaSourceCombatTests: XCTestCase {
         var weapon = colt()
         weapon.id = "BlackHoleWeapon"
         weapon.damage = 480
+        weapon.range = 8
+        weapon.activeTime = 0.15
         weapon.projectileCount = 3
         weapon.spread = 0.4363323129985824
         weapon.projectiles[0].id = "BlackHoleProjectile"
+        weapon.projectiles[0].speed = 3152 / 300.0
+        weapon.projectiles[0].radius = 100 / 300.0
         weapon.projectiles[0].piercesCharacters = true
         source.weapon = weapon
 
@@ -233,8 +237,12 @@ final class ArenaSourceCombatTests: XCTestCase {
         ultimate.id = "BlackHoleUlti"
         ultimate.damage = 800
         ultimate.chargeDamage = 800
+        ultimate.range = 20 / 3.0
+        ultimate.activeTime = 0.15
         ultimate.projectileCount = 1
         ultimate.projectiles[0].id = "BlackHoleUltiProjectile"
+        ultimate.projectiles[0].speed = 1522 / 300.0
+        ultimate.projectiles[0].radius = 0
         ultimate.projectiles[0].indirect = true
         ultimate.projectiles[0].directDamage = false
         ultimate.projectiles[0].wallBreak = false
@@ -257,6 +265,7 @@ final class ArenaSourceCombatTests: XCTestCase {
         var weapon = colt()
         weapon.id = "BlowerWeapon"
         weapon.damage = 300
+        weapon.activeTime = 0.15
         weapon.projectileCount = 6
         weapon.spread = 0
         weapon.rawSource = ["AttackPattern": "7", "NumBulletsInOneAttack": "6"]
@@ -270,6 +279,7 @@ final class ArenaSourceCombatTests: XCTestCase {
         ultimate.id = "BlowerUlti"
         ultimate.damage = 800
         ultimate.chargeDamage = 800
+        ultimate.activeTime = 0.15
         ultimate.projectileCount = 4
         ultimate.spread = 0
         ultimate.rawSource = ["AttackPattern": "7", "NumBulletsInOneAttack": "4"]
@@ -511,7 +521,7 @@ final class ArenaSourceCombatTests: XCTestCase {
         game.activateSourceSkill(0, role: .ultimate, aim: V2(7, 0))
         XCTAssertEqual(game.projectiles.count, 1)
         XCTAssertEqual(game.projectiles[0].sourceLaunch?.projectile.id, "BlackHoleUltiProjectile")
-        runWorld(&game, frames: 32)
+        runWorld(&game, frames: 85)
         XCTAssertTrue(game.projectiles.isEmpty)
         XCTAssertEqual(Set(game.sourceAreas.map(\.kind)), Set(["Pushback", "DelayedDamage"]))
         XCTAssertEqual(game.fighters[1].health, game.fighters[1].maxHealth)
