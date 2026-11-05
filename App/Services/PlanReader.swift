@@ -170,6 +170,8 @@ enum PlanReader {
                     }
                 }
             }
+            // 名称中明确显示的片段仅用于核对完整的原格读数；片段外字符不能被覆盖。
+            result.rows = await rereadNamedIdentifiers(result.rows, layout: found, in: picture, settings: settings)
             // 编号即使格式合法也可能把 0/C、1/L、5/6 读错。用原格的英文无纠错读数核对，
             // 只为当前可发送的记录补充疑项；不同读数不自动覆盖原值。
             result.rows = await reviewIdentifiers(result.rows, layout: found, in: picture, rules: rules, settings: settings)
@@ -335,6 +337,70 @@ enum PlanReader {
             bounded.right = min(bounded.right, xs[last] + (xs[last] - xs[last - 1]) / 2)
         }
         return boundedCellRegion(column: column, of: bounded, layout: layout)
+    }
+
+    /// 编号与名称的实际片段冲突时补读编号格，每页最多 64 次；不把复识相符当作人工确认。
+    static func rereadNamedIdentifiers(_ rows: [PassPlanRow], layout: PassPlan.Layout,
+                                        in image: CGImage, settings: Settings) async -> [PassPlanRow] {
+        guard let column = layout.slots.firstIndex(where: { $0.column == .satelliteID }) else { return rows }
+        let targets = rows.indices.filter { PassPlan.identifierRereadFragment(rows[$0], layout: layout) != nil }
+        guard !targets.isEmpty else { return rows }
+        return await Task.detached(priority: .userInitiated) {
+            let trace = Trace(settings.diagnostics, "namedIdentifierCells", "targets=\(targets.count)|limit=64")
+            let context = CIContext(), source = CIImage(cgImage: image)
+            var result = rows, attempts = 0, changed = 0, fallbackAttempts = 0
+            var unresolved: [Int] = []
+            defer { trace.end("cropAttempts=\(attempts)|fallbackAttempts=\(fallbackAttempts)|changed=\(changed)") }
+            for index in targets {
+                guard attempts < 64, let region = result[index].region,
+                      let cell = identifierCellRegion(column: column, of: region, layout: layout),
+                      let readings = namedIdentifierReadings(cell, source: source, context: context,
+                                                             width: Double(image.width), height: Double(image.height)) else { continue }
+                attempts += 1
+                let reviewed = PassPlan.reviewNamedIdentifierRereads(result[index], rereads: readings, layout: layout)
+                if reviewed.satelliteID != result[index].satelliteID { changed += 1 }
+                else if readings.allSatisfy({
+                    PassPlan.reviewNamedIdentifierReread(result[index], reread: $0, layout: layout).satelliteID == result[index].satelliteID
+                }) { unresolved.append(index) }
+                result[index] = reviewed
+            }
+            // 先完成全部首轮请求，再用剩余的同一份 64 次预算测试字符识别路径。
+            // 已有两个可支持编号的歧义不交给另一种设置覆盖；已采用的完整读数也不再改写。
+            for index in unresolved {
+                guard attempts < 64, let region = result[index].region,
+                      let cell = identifierCellRegion(column: column, of: region, layout: layout),
+                      let readings = namedIdentifierReadings(cell, source: source, context: context,
+                                                             width: Double(image.width), height: Double(image.height),
+                                                             level: .fast) else { continue }
+                attempts += 1; fallbackAttempts += 1
+                let reviewed = PassPlan.reviewNamedIdentifierRereads(result[index], rereads: readings, layout: layout)
+                if reviewed.satelliteID != result[index].satelliteID { changed += 1 }
+                result[index] = reviewed
+            }
+            return result
+        }.value
+    }
+
+    /// 同一次原格请求的前三个完整候选；多 observation 仍只拼接各自第一读数，不组合字符猜词。
+    /// 不输出业务文字，测试可用虚构像素检查实际候选。
+    static func namedIdentifierReadings(_ cell: PassPlan.Region, source: CIImage, context: CIContext,
+                                        width: Double, height: Double, languageCorrection: Bool = false,
+                                        languages: [String] = ["en-US"],
+                                        level: VNRequestTextRecognitionLevel = .accurate) -> [String]? {
+        guard let straight = straightened(cell, source: source, width: width, height: height),
+              straight.extent.width > 2, straight.extent.height > 2,
+              let crop = context.createCGImage(straight, from: straight.extent) else { return nil }
+        let piece = prepared(crop, smooth: false, enlarge: true)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = level
+        request.recognitionLanguages = languages
+        request.usesLanguageCorrection = languageCorrection
+        request.customWords = []
+        guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { return [] }
+        let observations = request.results ?? []
+        if observations.count == 1 { return observations[0].topCandidates(3).map(\.string) }
+        let raw = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+        return raw.isEmpty ? [] : [raw]
     }
 
     /// 已有疑项或 test 的行无需再消耗识别请求；每页最多 100 格，未能核对的格子保留核对提示。

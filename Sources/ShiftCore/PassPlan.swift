@@ -1054,6 +1054,67 @@ public enum PassPlan {
         return retainingIssues(fixed, adding: [issue])
     }
 
+    /// 只使用名称末尾实际读出的混合数字/字母片段（如「示例07D星」中的 07D）。
+    /// 必须是分开的编号与名称列；不从单一编号列猜名称，不修数字前缀，也不转换 O/0。
+    public static func identifierRereadFragment(_ row: PassPlanRow, layout: Layout) -> String? {
+        let identifiers = layout.slots.indices.filter { layout.slots[$0].column == .satelliteID }
+        let names = layout.slots.indices.filter { layout.slots[$0].column == .satellite }
+        guard !isExcludedFromSending(row), row.region != nil,
+              identifiers.count == 1, names.count == 1, let identifier = identifiers.first, let name = names.first,
+              row.cells.count == layout.slots.count, isValidTime(row.start), !row.station.isEmpty,
+              !row.orbit.isEmpty, row.orbit.unicodeScalars.allSatisfy({ (48...57).contains($0.value) }) else { return nil }
+        let original = comparisonValue(row.satelliteID), label = comparisonValue(row.satellite)
+        guard isASCIIIdentifier(original), label.filter({ $0 == "星" }).count == 1,
+              comparisonValue(row.cells[identifier]) == original,
+              comparisonValue(row.cells[name]) == label,
+              let expression = try? NSRegularExpression(pattern: #"(?<![A-Z0-9])([0-9][A-Z0-9]{2,})星$"#),
+              let match = expression.firstMatch(in: label, range: NSRange(label.startIndex..., in: label)),
+              let range = Range(match.range(at: 1), in: label) else { return nil }
+        let fragment = String(label[range])
+        guard fragment.unicodeScalars.contains(where: { (65...90).contains($0.value) }),
+              !original.contains(fragment) else { return nil }
+        return fragment
+    }
+
+    /// 必须实际复识出完整编号；仅当差异全部位于名称明确显示的唯一片段内时采用。
+    /// 片段之外的每个字符和总长度都必须保持一致，不能补前缀/后缀或按规则合成编号。
+    public static func reviewNamedIdentifierReread(_ row: PassPlanRow, reread: String, layout: Layout) -> PassPlanRow {
+        guard let fragment = identifierRereadFragment(row, layout: layout),
+              let column = layout.slots.firstIndex(where: { $0.column == .satelliteID }) else { return row }
+        let original = comparisonValue(row.satelliteID), value = comparisonValue(reread)
+        guard isASCIIIdentifier(value), value.count == original.count else { return row }
+        let before = Array(original.utf8), after = Array(value.utf8), label = Array(fragment.utf8)
+        guard after.count >= label.count else { return row }
+        let matches = (0...(after.count - label.count)).filter { start in
+            after[start..<(start + label.count)].elementsEqual(label)
+        }
+        guard matches.count == 1, let start = matches.first else { return row }
+        let end = start + label.count
+        guard before[..<start].elementsEqual(after[..<start]), before[end...].elementsEqual(after[end...]) else { return row }
+        var fixed = row
+        fixed.satelliteID = value
+        fixed.cells[column] = reread.trimmingCharacters(in: .whitespacesAndNewlines)
+        let old = String(row.satelliteID.prefix(64))
+        return retainingIssues(fixed, adding: ["卫星编号原格复识与名称片段相符，原读数「\(old)」，请核对原图"])
+    }
+
+    /// 引擎的完整候选也须逐一满足原格约束；仅有一个不同编号得到支持才采用。
+    /// 多个格式不同但编号相同的候选不重复计数，两个不同的可支持编号则保留原值。
+    public static func reviewNamedIdentifierRereads(_ row: PassPlanRow, rereads: [String], layout: Layout) -> PassPlanRow {
+        var supported: [String: PassPlanRow] = [:]
+        for raw in rereads {
+            let candidate = reviewNamedIdentifierReread(row, reread: raw, layout: layout)
+            guard candidate.satelliteID != row.satelliteID else { continue }
+            if supported[candidate.satelliteID] == nil { supported[candidate.satelliteID] = candidate }
+            guard supported.count <= 1 else { return row }
+        }
+        return supported.count == 1 ? (supported.values.first ?? row) : row
+    }
+
+    private static func isASCIIIdentifier(_ value: String) -> Bool {
+        !value.isEmpty && value.unicodeScalars.allSatisfy { (48...57).contains($0.value) || (65...90).contains($0.value) }
+    }
+
     /// 照片复识一致仍可能同错；照片读取入口显式调用，文字/表格导入不增加这项人工确认要求。
     /// 不根据易混字母猜测，不要求已有裁条，也不改写任何识别值或发送标记。
     public static func requiringPhotoIdentifierReview(_ row: PassPlanRow, column: Column) -> PassPlanRow {
