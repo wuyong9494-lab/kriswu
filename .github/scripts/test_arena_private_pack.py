@@ -300,6 +300,92 @@ class PrivatePackReleaseTests(unittest.TestCase):
         self.assertFalse((source / "App/Resources" / release.PACK_NAME).with_suffix(".partial").exists())
 
 
+class TileSourceTests(unittest.TestCase):
+    def setUp(self):
+        self.request = {**release.TILE_RELEASE, "source_validation": {"mode": release.TILE_MODE},
+                        "bundle_id": "com.kriswu.shiftreminder", "version": "1.2",
+                        "ranger_sha256": "0" * 64, "notes": release.DEFERRED_NOTE,
+                        "private_resource_pack": {"id": "synthetic", "bytes": 100, "sha256": "0" * 64}}
+        self.run = {"id": self.request["source_run_id"], "head_sha": self.request["source_sha"],
+                    "run_number": 529, "path": ".github/workflows/ios.yml", "event": "push",
+                    "head_branch": release.TILE_BRANCH, "status": "completed", "conclusion": "success",
+                    "head_commit": {"message": "Verified source [tile-tests]"}}
+        self.jobs = [{"name": name, "status": "completed", "conclusion": "success"}
+                     for name in ("build", "core-tests-linux", "site-tests")]
+        self.jobs[-1]["steps"] = [{"name": name, "status": "completed", "conclusion": "success"}
+                                  for name in release.TILE_STEPS]
+
+    def testPinnedTileReleaseRequiresExactSourceAndCompletedCI(self):
+        release.validate_tile_source(self.request, self.run, self.jobs)
+        for key, value in (("id", 1), ("head_sha", "b" * 40), ("run_number", 530),
+                           ("path", "other.yml"), ("event", "workflow_dispatch"),
+                           ("head_branch", "main"), ("status", "in_progress"),
+                           ("conclusion", "failure"), ("head_commit", {"message": "No marker"})):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                release.validate_tile_source(self.request, {**self.run, key: value}, self.jobs)
+        for key, value in (("build_number", "530"), ("source_sha", "b" * 40), ("source_run_id", 1),
+                           ("notes", "Everything passed"), ("private_resource_pack", None),
+                           ("source_validation", {"mode": release.TILE_MODE, "resource_run_id": 1})):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                release.validate_tile_source({**self.request, key: value}, self.run, self.jobs)
+
+    def testTileNativeAndInteractionChecksCannotBeSkippedOrSubstituted(self):
+        for index in range(len(self.jobs)):
+            variants = [self.jobs[:index] + self.jobs[index + 1:], self.jobs + [self.jobs[index]]]
+            variants += [[dict(job, conclusion=value) if i == index else job for i, job in enumerate(self.jobs)]
+                         for value in ("skipped", "failure", "cancelled", None)]
+            for jobs in variants:
+                with self.subTest(index=index, jobs=jobs), self.assertRaises(ValueError):
+                    release.validate_tile_source(self.request, self.run, jobs)
+        for index in range(len(release.TILE_STEPS)):
+            for change in ("missing", "duplicate", "skipped", "in_progress"):
+                jobs = copy.deepcopy(self.jobs)
+                steps = jobs[-1]["steps"]
+                if change == "missing":
+                    steps.pop(index)
+                elif change == "duplicate":
+                    steps.append(dict(steps[index]))
+                else:
+                    steps[index]["status" if change == "in_progress" else "conclusion"] = change
+                with self.subTest(index=index, change=change), self.assertRaises(ValueError):
+                    release.validate_tile_source(self.request, self.run, jobs)
+        with self.assertRaises(ValueError):
+            release.validate_tile_source(self.request, self.run,
+                                         self.jobs + [{"name": "other", "status": "completed", "conclusion": "failure"}])
+
+    def testTilePreflightPreservesDuplicateUploadGuardAndReportsItsScope(self):
+        for build in (None, {"id": "existing", "attributes": {"processingState": "VALID"}}):
+            with self.subTest(existing=bool(build)), \
+                    patch.object(release.promotion, "github", side_effect=[{"object": {"sha": self.request["source_sha"]}},
+                                                                          self.run, {"jobs": self.jobs}]), \
+                    patch.object(release.promotion, "find_build", return_value=build), \
+                    patch.object(release.promotion, "output") as output, \
+                    patch.object(release.promotion, "save_report") as report:
+                release.preflight(self.request)
+                output.assert_any_call("upload_required", "false" if build else "true")
+                self.assertEqual(report.call_args.kwargs["tile_native_and_ui_validation"], "success")
+                self.assertEqual(report.call_args.kwargs["physical_device_validation"], "pending")
+                self.assertEqual(report.call_args.kwargs["gameplay_validation"], "deferred")
+
+    def testStaleTileSourceStopsBeforeAppleOrPrivateResourceAccess(self):
+        with patch.object(release.promotion, "github", return_value={"object": {"sha": "b" * 40}}), \
+                patch.object(release.promotion, "find_build") as find, self.assertRaisesRegex(ValueError, "superseded"):
+            release.preflight(self.request)
+        find.assert_not_called()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            request_path = root / "request.json"
+            request_path.write_text(json.dumps(self.request))
+            (root / "App").mkdir()
+            (root / "App/Info.plist").write_bytes(plistlib.dumps({"ArenaResourcePackRequiredForPromotion": True}))
+            args = ["arena_private_pack", "archive", str(request_path), "--source", str(root), "--archive", str(root / "archive")]
+            with patch.object(sys, "argv", args), \
+                    patch.object(release.promotion, "github", return_value={"object": {"sha": "b" * 40}}), \
+                    patch.object(release, "archive") as archive, self.assertRaisesRegex(ValueError, "superseded"):
+                release.main()
+            archive.assert_not_called()
+
+
 class DeferredSourceTests(unittest.TestCase):
     def setUp(self):
         self.request = {

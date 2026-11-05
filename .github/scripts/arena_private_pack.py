@@ -26,6 +26,16 @@ TRANSFER_CHUNK = 1024 * 1024
 DEFERRED_MODE = "resource-runtime-gameplay-deferred"
 DEFERRED_NOTE = "完整对局与录像验收已延期，本版未完成该项验证。"
 SOURCE_BRANCH = "codex/arena-quality-sample"
+TILE_MODE = "tiles-verified-gameplay-deferred"
+# Owner-requested Build 529 release. Only the tested product commit is
+# accepted; this is not a generic bypass for later builds.
+TILE_RELEASE = {
+    "build_number": "529",
+    "source_sha": "f707bd822d0a949f7bc5b5857819b5a0a8ec11fb",
+    "source_run_id": 42019932652,
+}
+TILE_BRANCH = "codex/tiles-upgrade-20261105"
+TILE_STEPS = ("模拟器里测试同步流程或计划识图", "叠叠消实际交互回归", "保存测试日志和识图结果")
 ARCHIVE_REPORT = "promotion-private-resources.json"
 OPAQUE_TEXTURE_SOURCES = (
     "App/Arena3D/hexagons_medieval.png",
@@ -73,6 +83,14 @@ def validation_specification(request):
     value = request.get("source_validation")
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("mode") == TILE_MODE:
+        if set(value) != {"mode"} or any(request.get(key) != expected for key, expected in TILE_RELEASE.items()):
+            raise ValueError("Tile release must match the pinned Build 529 identity")
+        if type(request.get("source_run_id")) is not int:
+            raise ValueError("Source CI run ID must be an integer")
+        if specification(request) is None or DEFERRED_NOTE not in request.get("notes", ""):
+            raise ValueError("Tile release requires the existing private pack and explicit gameplay limitation")
+        return value
     if not isinstance(value, dict) or set(value) != {"mode", "resource_run_id"}:
         raise ValueError("Source validation requires mode and resource_run_id only")
     if value["mode"] != DEFERRED_MODE:
@@ -134,6 +152,55 @@ def check_deferred_source(request):
             "current_source_head_verified": True}
 
 
+def validate_tile_source(request, run, jobs):
+    validation = validation_specification(request)
+    if validation is None or validation["mode"] != TILE_MODE:
+        raise ValueError("Pinned tile validation must be explicitly requested")
+    required = {"id": request["source_run_id"], "head_sha": request["source_sha"],
+                "run_number": 529, "path": ".github/workflows/ios.yml", "event": "push",
+                "head_branch": TILE_BRANCH, "status": "completed", "conclusion": "success"}
+    if any(run.get(key) != expected for key, expected in required.items()):
+        raise ValueError("Tile source CI must match the completed pinned release")
+    if "[tile-tests]" not in run.get("head_commit", {}).get("message", ""):
+        raise ValueError("Source did not request tile visual and interaction tests")
+    for name in ("build", "core-tests-linux", "site-tests"):
+        matched = [job for job in jobs if job.get("name") == name]
+        if (len(matched) != 1 or matched[0].get("status") != "completed"
+                or matched[0].get("conclusion") != "success"):
+            raise ValueError("Required tile release check failed: " + name)
+        if name == "site-tests":
+            for step_name in TILE_STEPS:
+                steps = [step for step in matched[0].get("steps", []) if step.get("name") == step_name]
+                if (len(steps) != 1 or steps[0].get("status") != "completed"
+                        or steps[0].get("conclusion") != "success"):
+                    raise ValueError("Required tile evidence step failed: " + step_name)
+    if any(job.get("status") != "completed" or job.get("conclusion") not in ("success", "skipped")
+           for job in jobs):
+        raise ValueError("Source contains an unfinished or failed job")
+
+
+def check_tile_source(request):
+    validation_specification(request)
+    head = promotion.github("/git/ref/heads/" + TILE_BRANCH).get("object", {}).get("sha")
+    if head != TILE_RELEASE["source_sha"]:
+        raise ValueError("Tile source was superseded; refusing a stale release")
+    run_id = request["source_run_id"]
+    run = promotion.github(f"/actions/runs/{run_id}")
+    jobs = promotion.github(f"/actions/runs/{run_id}/jobs?filter=latest&per_page=100")["jobs"]
+    validate_tile_source(request, run, jobs)
+    return {"validation_mode": TILE_MODE, "source_ci_conclusion": "success",
+            "tile_native_and_ui_validation": "success", "gameplay_validation": "deferred",
+            "physical_device_validation": "pending", "current_source_head_verified": True,
+            "source_branch_head": head}
+
+
+def check_requested_source(request):
+    validation = validation_specification(request)
+    if validation is None:
+        return {}
+    return check_tile_source(request) if validation["mode"] == TILE_MODE else check_deferred_source(request)
+
+
 def preflight(request):
     validation = validation_specification(request)
     transport = transport_specification(request)
@@ -141,7 +208,7 @@ def preflight(request):
         # Preserve the existing strict acceptance path. Never fall back after it fails.
         promotion.preflight(request)
         return
-    acceptance = check_deferred_source(request)
+    acceptance = check_requested_source(request)
     build = promotion.find_build(request)
     promotion.output("upload_required", "false" if build else "true")
     promotion.output("source_sha", request["source_sha"])
@@ -466,7 +533,7 @@ def main():
     else:
         if args.archive is None:
             parser.error("--archive is required")
-        acceptance = check_deferred_source(request) if validation_specification(request) is not None else {}
+        acceptance = check_requested_source(request)
         report = archive(expected, args.source, args.archive)
         # This metadata contains no signed URL or payload and is safe to retain as an artifact.
         promotion.save_report(ARCHIVE_REPORT, request, private_resource_pack=expected["id"],
