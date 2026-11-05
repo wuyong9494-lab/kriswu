@@ -18,7 +18,8 @@ struct ArenaImportedMapChoice: Equatable, Sendable {
 
 @MainActor
 final class ArenaImportedMapAssets {
-    static let shared = ArenaImportedMapAssets()
+    static let shared = ArenaImportedMapAssets(store: .shared)
+    private let store: ArenaResourcePackStore
     struct Entry: Decodable, Identifiable {
         let id: String
         let title: String
@@ -33,6 +34,8 @@ final class ArenaImportedMapAssets {
     private var retryAfter: Date = .distantPast
     private(set) var lastError: String?
 
+    init(store: ArenaResourcePackStore) { self.store = store }
+
     func maps(for mode: ArenaGame.Mode) -> [Entry] {
         refresh()
         return entries.filter { $0.runtimeMode == mode.rawValue }
@@ -41,7 +44,6 @@ final class ArenaImportedMapAssets {
     func choice(id: String) throws -> ArenaImportedMapChoice {
         refresh()
         if let cached = choices[id] { return cached }
-        let store = ArenaResourcePackStore.shared
         guard let entry = entries.first(where: { $0.id == id }),
               let asset = store.manifest?.files.first(where: { $0.path == entry.file && $0.kind == .data }),
               asset.bytes <= 4 * 1024 * 1024, let url = store.url(for: entry.file) else {
@@ -62,9 +64,9 @@ final class ArenaImportedMapAssets {
     /// source terrain plans on the main actor. Match startup keeps the normal
     /// checked synchronous accessor and shares this result cache.
     func previewChoice(id: String) async throws -> ArenaImportedMapChoice {
+        try Task.checkCancellation()
         refresh()
         if let cached = choices[id] { return cached }
-        let store = ArenaResourcePackStore.shared
         guard let entry = entries.first(where: { $0.id == id }),
               let asset = store.manifest?.files.first(where: { $0.path == entry.file && $0.kind == .data }),
               asset.bytes <= 4 * 1024 * 1024, let url = store.url(for: entry.file) else {
@@ -72,7 +74,7 @@ final class ArenaImportedMapAssets {
         }
         let bytes = asset.bytes
         let digest = asset.sha256
-        let manifestID = store.manifest?.id
+        let revision = store.contentRevision
         let environment = entry.environmentThemeID
         let expectedMode = entry.runtimeMode
         let decodeTask = Task.detached(priority: .utility) {
@@ -93,10 +95,12 @@ final class ArenaImportedMapAssets {
             decodeTask.cancel()
         }
         try Task.checkCancellation()
+        refresh()
         // The user may replace the private pack while previews are decoding.
         // Never publish a stale terrain plan into the new pack's cache.
         guard store.enabled,
-              store.manifest?.id == manifestID,
+              store.contentRevision == revision,
+              store.url(for: entry.file) == url,
               store.manifest?.files.first(where: { $0.path == entry.file && $0.kind == .data })?.sha256 == digest,
               entries.contains(where: { $0.id == id && $0.file == entry.file
                   && $0.runtimeMode == expectedMode && $0.environmentThemeID == environment }) else {
@@ -107,7 +111,6 @@ final class ArenaImportedMapAssets {
     }
 
     private func refresh() {
-        let store = ArenaResourcePackStore.shared
         guard store.enabled, let pack = store.manifest, let path = pack.playableMapsFile,
               let asset = pack.files.first(where: { $0.path == path && $0.kind == .data }),
               asset.bytes <= 8 * 1024 * 1024, let url = store.url(for: path) else {
@@ -115,7 +118,7 @@ final class ArenaImportedMapAssets {
             lastError = nil; retryAfter = .distantPast
             return
         }
-        let key = url.path + "@" + asset.sha256
+        let key = store.contentRevision.uuidString + "@" + url.path + "@" + asset.sha256
         // File-protection transitions or interrupted pack installs can make a
         // validated local catalog temporarily unreadable. Retry periodically
         // without decoding on every SwiftUI body update if the failure persists.

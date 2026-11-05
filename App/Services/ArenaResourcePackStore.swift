@@ -19,6 +19,8 @@ final class ArenaResourcePackStore: ObservableObject {
     @Published private(set) var selectedHeroID: String?
     @Published private(set) var combatHeroID: String?
     @Published private(set) var enabled = true
+    /// Changes even when a replacement keeps the same catalogue and pack ID.
+    @Published private(set) var contentRevision = UUID()
     private var root: URL?
     private var approvedPaths = Set<String>()
     private let defaults: UserDefaults
@@ -95,7 +97,9 @@ final class ArenaResourcePackStore: ObservableObject {
     }
 
     func setEnabled(_ value: Bool) {
+        guard value != enabled else { return }
         enabled = value
+        contentRevision = UUID()
         defaults.set(value, forKey: "arena.resources.enabled")
         Task { await ArenaImportedSourceRules.shared.loadIfNeeded(store: self) }
         ArenaSound.shared.themeChanged()
@@ -214,6 +218,7 @@ final class ArenaResourcePackStore: ObservableObject {
             defaults.removeObject(forKey: "arena.resources.combatHero")
         }
         if !value.music.contains(where: { $0.id == lobbyMusicID }) { lobbyMusicID = nil }
+        contentRevision = UUID()
     }
 
     private func restore() {

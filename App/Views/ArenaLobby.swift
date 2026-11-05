@@ -198,6 +198,7 @@ struct ArenaHomeView: View {
             if reduceLobbyMotion { lobbyPresented = true }
             else { withAnimation(.easeOut(duration: 0.24)) { lobbyPresented = true } }
             growth.refreshSeason()
+            if resourcePack.manifest != nil || !resourcePack.enabled { reconcileMapSelection() }
             if UserDefaults.standard.bool(forKey: "arena.openSettings") { sheet = .settings }
             ArenaSound.shared.enterLobby()
         }
@@ -205,26 +206,8 @@ struct ArenaHomeView: View {
             Button("知道了", role: .cancel) { mapSelectionError = nil }
         } message: { Text(mapSelectionError ?? "") }
         .onChange(of: volume) { _ in ArenaSound.shared.volumeChanged() }
-        .onChange(of: resourcePack.combatHeroID) { id in
-            guard id != nil else { return }
-            ranked = false
-            let maps = ArenaImportedMapAssets.shared.maps(for: mode)
-            if maps.isEmpty { mode = .stars }
-            let available = ArenaImportedMapAssets.shared.maps(for: mode)
-            let selectedImported = available.contains(where: { $0.id == selectedMapID })
-            let selectedProject = ArenaMap.selectionPool(for: mode).contains(where: { $0.id == selectedMapID })
-            if !selectedImported && !selectedProject {
-                selectedMapID = available.first?.id
-                UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
-            }
-        }
-        .onChange(of: resourcePack.enabled) { enabled in
-            // If the user temporarily disables the imported pack, an old
-            // imported selection must not block classic matches.
-            guard !enabled, selectedMapID?.hasPrefix("imported:") == true else { return }
-            selectedMapID = nil
-            UserDefaults.standard.removeObject(forKey: "arena.map")
-        }
+        .onChange(of: resourcePack.combatHeroID) { _ in reconcileMapSelection() }
+        .onChange(of: resourcePack.contentRevision) { _ in reconcileMapSelection() }
         .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
         .fullScreenCover(item: $sheet, onDismiss: {
             if let entry = pendingBenchmark {
@@ -830,6 +813,19 @@ struct ArenaHomeView: View {
         guard resourcePack.enabled, let id = resourcePack.combatHeroID else { return nil }
         return ArenaImportedCombatAssets.shared.hero(id: id)
     }
+    private func reconcileMapSelection() {
+        let importedHero = sourceHero != nil
+        if importedHero { ranked = false }
+        let maps = Dictionary(uniqueKeysWithValues: ArenaGame.Mode.allCases.map {
+            ($0, ArenaImportedMapAssets.shared.maps(for: $0).map(\.id))
+        })
+        let selection = ArenaMapSelection.resolve(mode: mode, mapID: selectedMapID,
+                                                  importedHero: importedHero, importedMaps: maps)
+        mode = selection.mode
+        selectedMapID = selection.mapID
+        UserDefaults.standard.set(mode.rawValue, forKey: "arena.mode")
+        UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
+    }
     private func withClassicHero(_ action: () -> Void) {
         guard sourceHero == nil else {
             mapSelectionError = "原版英雄目前可参加本地普通对战；此入口请先选择项目英雄。"
@@ -930,7 +926,7 @@ struct ArenaHomeView: View {
             }
         }
         if let sourceHero {
-            guard sourceHero.canPlay, !ranked, playMode != .duel, playMode != .boss else {
+            guard sourceHero.canPlay, !ranked, ArenaMapSelection.supportsImportedHero(playMode) else {
                 mapSelectionError = "请选择原版英雄支持的普通对战玩法。"; return
             }
             if imported == nil && selectedMap == nil {
@@ -1321,12 +1317,10 @@ struct ArenaHomeView: View {
                 }
                 .accessibilityIdentifier("arena.sample.review")
 
-                ForEach(ArenaGame.Mode.allCases.filter { sourceHero == nil || !ArenaImportedMapAssets.shared.maps(for: $0).isEmpty }, id: \.self) { item in
+                ForEach(ArenaGame.Mode.allCases.filter { sourceHero == nil || ArenaMapSelection.supportsImportedHero($0) }, id: \.self) { item in
                     Button {
                         mode = item
-                        UserDefaults.standard.set(item.rawValue, forKey: "arena.mode")
-                        selectedMapID = sourceHero == nil ? nil : ArenaImportedMapAssets.shared.maps(for: item).first?.id
-                        UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
+                        reconcileMapSelection()
                         sheet = nil
                     } label: {
                         modeRow(item)
@@ -2392,9 +2386,7 @@ private struct ArenaImportedMapThumb: View {
     @State private var choice: ArenaImportedMapChoice?
 
     private var requestKey: String {
-        guard let path = resources.manifest?.playableMapsFile else { return "\(id):\(resources.enabled):missing" }
-        let digest = resources.manifest?.files.first { $0.path == path }?.sha256 ?? ""
-        return "\(id):\(resources.enabled):\(digest)"
+        "\(id):\(resources.contentRevision)"
     }
 
     var body: some View {
@@ -2436,7 +2428,9 @@ private struct ArenaImportedMapThumb: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.black, lineWidth: 2))
         .task(id: requestKey) {
             choice = nil
-            choice = try? await ArenaImportedMapAssets.shared.previewChoice(id: id)
+            let result = try? await ArenaImportedMapAssets.shared.previewChoice(id: id)
+            guard !Task.isCancelled else { return }
+            choice = result
         }
     }
 }

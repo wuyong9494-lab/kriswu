@@ -217,10 +217,11 @@ jobs:
   site-tests:
     runs-on: macos-15
     timeout-minutes: 90
-    # [site-tests] and manual extras keep the full suite; [plan-ocr-tests] runs the real photo reader only.
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[site-tests]') || contains(github.event.head_commit.message, '[plan-ocr-tests]')))
+    # Full suite by default; named markers select the relevant native regression suite.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[site-tests]') || contains(github.event.head_commit.message, '[plan-ocr-tests]') || contains(github.event.head_commit.message, '[arena-map-tests]')))
     env:
       PLAN_OCR_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[plan-ocr-tests]') && !contains(github.event.head_commit.message, '[site-tests]') }}
+      ARENA_MAP_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[arena-map-tests]') && !contains(github.event.head_commit.message, '[site-tests]') && !contains(github.event.head_commit.message, '[plan-ocr-tests]') }}
     concurrency:
       group: site-tests-${{ github.ref }}
       cancel-in-progress: true
@@ -236,7 +237,7 @@ jobs:
           xcodebuild -version
 
       - name: 启动仿值班网站
-        if: env.PLAN_OCR_ONLY != 'true'
+        if: env.PLAN_OCR_ONLY != 'true' && env.ARENA_MAP_ONLY != 'true'
         run: |
           nohup python3 Tests/MockSite/server.py 8765 > mock.log 2>&1 &
           sleep 2
@@ -268,6 +269,7 @@ jobs:
           cat test-device.json
           TEST_TARGET=SiteTests
           if [ "$PLAN_OCR_ONLY" = true ]; then TEST_TARGET=SiteTests/PlanReaderTests; fi
+          if [ "$ARENA_MAP_ONLY" = true ]; then TEST_TARGET=SiteTests/ArenaImportedMapAssetsTests; fi
           echo "测试范围：$TEST_TARGET"
           set +e
           xcodebuild test \
@@ -292,7 +294,7 @@ jobs:
           exit $status
 
       - name: 网站访问记录
-        if: always() && env.PLAN_OCR_ONLY != 'true'
+        if: always() && env.PLAN_OCR_ONLY != 'true' && env.ARENA_MAP_ONLY != 'true'
         run: tail -150 mock.log
 
       - name: 保存测试日志和识图结果

@@ -74,7 +74,7 @@ extension ArenaGame {
         for hero in entrants.compactMap(\.sourceHero) where !hero.canPlay {
             throw SourceConfigurationError.unsupportedHero(hero.name)
         }
-        if entrants.contains(where: { $0.sourceHero != nil }), mode == .duel || mode == .boss {
+        if entrants.contains(where: { $0.sourceHero != nil }), !ArenaMapSelection.supportsImportedHero(mode) {
             throw SourceConfigurationError.unsupportedMode
         }
     }
