@@ -166,6 +166,10 @@ struct ArenaResourcePackView: View {
                             Text("辅助治疗采用本地兼容规则：普攻击中队友回复基础生命比例，大招回复队友和自己；精确数值仍需原客户端比对。")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
+                        if profile.compatibilityPolicy.contains("host-mortis-dash90pct-after6s") {
+                            Text("蓄力长冲刺采用本地兼容规则：6 秒不使用普攻后冲刺距离增加 90%；并非已验证的原客户端计时公式。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }

@@ -97,7 +97,7 @@ struct WorkLogView: View {
             .appBackground()
             .navigationTitle("工作留痕")
             .navigationBarTitleDisplayMode(.inline)
-            .task { await log.unlock() }
+            .task { _ = await log.unlock() }
         } else if let error = log.storageError {
             VStack(spacing: DS.Space.m) {
                 Image(systemName: "exclamationmark.triangle").font(.system(size: 44))

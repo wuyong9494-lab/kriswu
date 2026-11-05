@@ -385,6 +385,9 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     public var sourceUltimate: ArenaSourceSkillState?
     public var sourceCharge: ArenaSourceChargeMotion?
     public var sourceSlows: [ArenaSourceSlow]?
+    /// Source long-dash recharge starts at match entry or respawn and resets
+    /// on a weapon dash; it does not depend on ammo or ultimate usage.
+    public var sourceLongDashChargeStart: Double? = nil
     /// 等级（1–9，血量、伤害按等级加成）
     public var level = 1
     public var pos: V2
@@ -1106,6 +1109,7 @@ public struct ArenaGame: Sendable {
             fighters[i].sourceWeapon?.reset()
             fighters[i].sourceUltimate?.reset()
             fighters[i].sourceCharge = nil
+            fighters[i].sourceLongDashChargeStart = time
             fighters[i].ammo = fighters[i].sourceWeapon?.ammo ?? 0
         }
         fighters[i].alive = true

@@ -89,6 +89,112 @@ final class ArenaSourceCombatTests: XCTestCase {
         return source
     }
 
+    private func longDashMortis() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "Undertaker"
+        source.name = "Mortis"
+        source.health = 4000
+        source.rawSource = ["UniqueProperty": "HAS_LONGER_DASH", "UniquePropertyValue1": "90",
+                            "UniquePropertyValue2": "6"]
+        source.unsupportedReasons = [
+            "hero.Undertaker.UniquePropertyValue1=90: requires a dedicated hero rule",
+            "hero.Undertaker.UniquePropertyValue2=6: requires a dedicated hero rule",
+            "hero.Undertaker.UniqueProperty=HAS_LONGER_DASH: native identity behavior not implemented"
+        ]
+        var weapon = colt()
+        weapon.id = "UndertakerWeapon"
+        weapon.behavior = "Charge"
+        weapon.range = 8.0 / 3
+        weapon.damage = 1000
+        weapon.chargeDamage = 1000
+        weapon.reload = 2.4
+        weapon.cooldown = 0
+        weapon.activeTime = 0
+        weapon.attackInterval = 0
+        weapon.canMove = false
+        weapon.projectileCount = 0
+        weapon.projectiles = []
+        weapon.charge = ArenaSourceChargeDefinition(sourceType: 4, speed: 9, wallBreak: false,
+            pushback: 0, alwaysAtMaxRange: true, endAreas: [])
+        source.weapon = weapon
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "UndertakerUlti"
+        ultimate.damage = 900
+        ultimate.projectiles[0].id = "UndertakerUltiProjectile"
+        ultimate.projectiles[0].wallBreak = false
+        ultimate.projectiles[0].lifeStealFraction = 1
+        ultimate.projectiles[0].passesEnvironment = true
+        source.ultimate = ultimate
+        return source
+    }
+
+    func testMortisLongDashOnlyAdaptsReviewedIdentityAndKeepsNativeData() throws {
+        let original = longDashMortis()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.longDash, ArenaSourceLongDash(bonusDistanceFraction: 0.9, rechargeAfterSeconds: 6))
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-mortis-dash90pct-after6s"))
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, longDashMortis(), "Adaptation must not edit the source record")
+
+        var unknown = original
+        unknown.rawSource["UniquePropertyValue1"] = "91"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        unknown = original
+        unknown.weapon?.charge?.alwaysAtMaxRange = false
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        unknown = original
+        unknown.unsupportedReasons.append("unreviewed identity component")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+
+        var invalid = try XCTUnwrap(adapted.longDash)
+        invalid.rechargeAfterSeconds = .infinity
+        XCTAssertFalse(invalid.isSupported)
+        invalid = try XCTUnwrap(adapted.longDash)
+        invalid.bonusDistanceFraction = 4
+        XCTAssertFalse(invalid.isSupported)
+    }
+
+    func testMortisHostLongDashChargesWithoutAmmoDependenceAndResetsOnAttack() throws {
+        let source = ArenaSourceCompatibility.adapt(longDashMortis())
+        XCTAssertTrue(source.canPlay)
+        let rows = (0..<9).map { y in String((0..<33).map { x -> Character in
+            if x == 0 || x == 32 || y == 0 || y == 8 { return "#" }
+            if x == 3 && y == 4 { return "a" }
+            if x == 29 && y == 4 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Mortis", brawler: .assassin, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Opponent", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 805, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(3.5, 4.5)
+        game.fighters[1].pos = V2(29.5, 4.5)
+        let ordinary = try XCTUnwrap(source.weapon?.range)
+        game.activateSourceSkill(0, role: .weapon, aim: V2(1, 0))
+        XCTAssertEqual(try XCTUnwrap(game.fighters[0].sourceCharge).remaining, ordinary, accuracy: 1e-9)
+        runWorld(&game, frames: 60)
+        let afterOrdinary = game.fighters[0].pos.x
+        XCTAssertEqual(afterOrdinary, 3.5 + ordinary, accuracy: 1e-5)
+
+        // The charge timer is independent of Super use and current ammo state.
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(0, 1))
+        runWorld(&game, frames: 360)
+        game.activateSourceSkill(0, role: .weapon, aim: V2(1, 0))
+        XCTAssertEqual(try XCTUnwrap(game.fighters[0].sourceCharge).remaining, ordinary * 1.9, accuracy: 1e-9)
+        runWorld(&game, frames: 60)
+        XCTAssertEqual(game.fighters[0].pos.x, afterOrdinary + ordinary * 1.9, accuracy: 1e-5)
+
+        // The enhanced dash is consumed; attacking again before another six
+        // seconds of charging must use the normal source charge distance.
+        game.activateSourceSkill(0, role: .weapon, aim: V2(1, 0))
+        XCTAssertEqual(try XCTUnwrap(game.fighters[0].sourceCharge).remaining, ordinary, accuracy: 1e-9)
+    }
+
     func testSourceShieldWaitsForCastingAndEmitsOnce() throws {
         let skill = sourceShield(casting: 0.2)
         XCTAssertTrue(skill.isSupported)
@@ -308,6 +414,7 @@ final class ArenaSourceCombatTests: XCTestCase {
         game.fighters[1].pos = V2(4.0, 4.5)
         game.fighters[2].pos = V2(6.0, 4.5)
         game.fighters[1].health = game.fighters[1].maxHealth - 1000
+        game.fighters[1].lastHurt = game.time // isolate healing from ordinary out-of-combat regeneration
         let expectedHeal = Int((Double(game.fighters[1].maxHealth) * 0.05).rounded())
         let enemyFull = game.fighters[2].health
         game.activateSourceSkill(0, role: .weapon, aim: V2(1, 0))
@@ -748,6 +855,18 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.casterHealFraction, 1)
         XCTAssertEqual(adapted.rawSource, original.rawSource)
         XCTAssertEqual(adapted.compatibilityPolicy.contains("host-poco-ally-heal5pct-and-super"), true)
+    }
+
+    func testPrivateMortisProfileUsesOwnChargeAndLifestealSuper() throws {
+        let original = try privateHero("Undertaker")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.id, "UndertakerWeapon")
+        XCTAssertEqual(adapted.ultimate?.id, "UndertakerUlti")
+        XCTAssertEqual(adapted.longDash, ArenaSourceLongDash(bonusDistanceFraction: 0.9, rechargeAfterSeconds: 6))
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.lifeStealFraction, 1)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
     }
 
     func testWorldOncePerVolleyKeysIncludeActivationAndExpire() throws {

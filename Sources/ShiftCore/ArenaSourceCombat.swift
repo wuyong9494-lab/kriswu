@@ -4,6 +4,22 @@ import Foundation
 /// classic Brawler as a substitute for an unsupported source mechanic.
 public enum ArenaSourceSkillRole: String, Codable, Equatable, Hashable, Sendable { case weapon, ultimate }
 
+/// Deliberately bounded host policy for the reviewed long-dash source hero.
+/// The archived 90 / 6 parameters have not been proven to encode the native
+/// distance/timing formula; do not present this as native behavior.
+public struct ArenaSourceLongDash: Codable, Equatable, Sendable {
+    public var bonusDistanceFraction: Double
+    public var rechargeAfterSeconds: Double
+    public init(bonusDistanceFraction: Double, rechargeAfterSeconds: Double) {
+        self.bonusDistanceFraction = bonusDistanceFraction
+        self.rechargeAfterSeconds = rechargeAfterSeconds
+    }
+    public var isSupported: Bool {
+        bonusDistanceFraction.isFinite && (0...3).contains(bonusDistanceFraction)
+            && rechargeAfterSeconds.isFinite && rechargeAfterSeconds > 0 && rechargeAfterSeconds <= 120
+    }
+}
+
 public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
     /// Add a capability only after both the dispatcher and World adapter have
     /// meaningful verification. Decoding a source field alone does not enable it.
@@ -13,7 +29,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "projectile_fuse", "pass_environment", "life_steal", "damage_once_per_volley",
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
-        "self_shield", "damage_taken_super_charge", "ally_projectile_heal"
+        "self_shield", "damage_taken_super_charge", "ally_projectile_heal", "charged_ground_dash"
     ]
     public var id: String
     public var name: String
@@ -30,11 +46,13 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
     public var rawSource: [String: String]
     public var requiredCapabilities: [String]? = nil
     public var damageTakenChargePerDamage: Double? = nil
+    public var longDash: ArenaSourceLongDash? = nil
     public var unavailableCapabilities: [String] {
         var requested = Set(requiredCapabilities ?? [])
         requested.formUnion(weapon?.runtimeCapabilities ?? [])
         requested.formUnion(ultimate?.runtimeCapabilities ?? [])
         if damageTakenChargePerDamage != nil { requested.insert("damage_taken_super_charge") }
+        if longDash != nil { requested.insert("charged_ground_dash") }
         return requested.subtracting(Self.implementedCapabilities).sorted()
     }
 
@@ -46,6 +64,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
             && ultimateChargePerDamage.isFinite && ultimateChargePerDamage >= 0
             && initialSuperCharge.isFinite && (0...1).contains(initialSuperCharge)
             && (damageTakenChargePerDamage.map { $0.isFinite && $0 >= 0 && $0 <= 1 } ?? true)
+            && (longDash.map { $0.isSupported && weapon?.behavior == "Charge" } ?? true)
             && weapon?.isSupported == true && ultimate?.isSupported == true
     }
 }
@@ -146,6 +165,32 @@ public enum ArenaSourceCompatibility {
                 }
             }
         }
+        // The imported Mortis record already has a supported charge weapon and
+        // lifesteal Super. Its three identity fields are the only remaining
+        // blockers. Map those exact fields to an explicit, non-native charged
+        // dash rule; other identity variants remain blocked for review.
+        if result.id == "Undertaker", result.rawSource["UniqueProperty"] == "HAS_LONGER_DASH",
+           result.rawSource["UniquePropertyValue1"] == "90",
+           result.rawSource["UniquePropertyValue2"] == "6",
+           let weapon = result.weapon, weapon.id == "UndertakerWeapon",
+           weapon.role == .weapon, weapon.behavior == "Charge", weapon.isSupported,
+           weapon.castingTime == 0, weapon.damage == 1000, weapon.range == 8.0 / 3,
+           let charge = weapon.charge, charge.sourceType == 4,
+           charge.speed == 9, charge.alwaysAtMaxRange, !charge.wallBreak,
+           let ultimate = result.ultimate, ultimate.id == "UndertakerUlti",
+           ultimate.role == .ultimate, ultimate.isSupported,
+           ultimate.projectiles.count == 1, ultimate.projectiles[0].lifeStealFraction == 1,
+           ultimate.projectiles[0].passesEnvironment == true, result.longDash == nil {
+            let reasons = [
+                "hero.Undertaker.UniquePropertyValue1=90: requires a dedicated hero rule",
+                "hero.Undertaker.UniquePropertyValue2=6: requires a dedicated hero rule",
+                "hero.Undertaker.UniqueProperty=HAS_LONGER_DASH: native identity behavior not implemented"
+            ]
+            if reasons.allSatisfy({ result.unsupportedReasons.contains($0) }) {
+                result.longDash = ArenaSourceLongDash(bonusDistanceFraction: 0.9, rechargeAfterSeconds: 6)
+                resolved.formUnion(reasons)
+            }
+        }
         if !resolved.isEmpty {
             result.unsupportedReasons.removeAll { resolved.contains($0) }
             if resolved.contains(where: { $0.contains("AttackPattern=9") }) {
@@ -159,6 +204,9 @@ public enum ArenaSourceCompatibility {
             }
             if resolved.contains("hero.DeadMariachi.Traits=DeadMariachiProjectileHealPassive: requires a dedicated hero rule") {
                 result.compatibilityPolicy += "+host-poco-ally-heal5pct-and-super"
+            }
+            if resolved.contains("hero.Undertaker.UniqueProperty=HAS_LONGER_DASH: native identity behavior not implemented") {
+                result.compatibilityPolicy += "+host-mortis-dash90pct-after6s"
             }
         }
         return result

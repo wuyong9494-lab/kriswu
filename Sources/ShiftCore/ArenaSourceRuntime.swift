@@ -125,6 +125,12 @@ extension ArenaGame {
 
     mutating func activateSourceSkill(_ i: Int, role: ArenaSourceSkillRole, aim: V2) {
         let resolved = aim.length > 0.001 ? aim : fighters[i].facing
+        var longDashBonus = 0.0
+        if role == .weapon, let policy = fighters[i].sourceHero?.longDash,
+           policy.isSupported,
+           time - (fighters[i].sourceLongDashChargeStart ?? 0) >= policy.rechargeAfterSeconds {
+            longDashBonus = policy.bonusDistanceFraction
+        }
         let emitted: [ArenaSourceEmission]
         do {
             if role == .weapon {
@@ -138,23 +144,31 @@ extension ArenaGame {
         } catch { return }
         fighters[i].facing = resolved.normalized
         fighters[i].lastAttack = time
+        if role == .weapon, fighters[i].sourceHero?.longDash != nil {
+            fighters[i].sourceLongDashChargeStart = time
+        }
         events.append(role == .weapon ? .attack(fighter: i) : .special(fighter: i))
         if role == .ultimate, let skill = fighters[i].sourceHero?.ultimate,
            let fraction = skill.projectiles.first?.casterHealFraction,
            fraction.isFinite, fraction > 0 {
             healSourceTarget(i, amount: Int((Double(power(i, skill.damage)) * fraction).rounded()))
         }
-        applySourceEmissions(emitted, owner: i)
+        applySourceEmissions(emitted, owner: i, longDashBonus: longDashBonus)
     }
 
-    mutating func applySourceEmissions(_ emitted: [ArenaSourceEmission], owner: Int) {
+    mutating func applySourceEmissions(_ emitted: [ArenaSourceEmission], owner: Int,
+                                     longDashBonus: Double = 0) {
         guard fighters.indices.contains(owner), fighters[owner].alive else { return }
         for emission in emitted {
             switch emission {
             case .projectile(let launch):
                 spawnSourceProjectile(launch, owner: owner, team: fighters[owner].team)
             case .charge(let charge):
-                fighters[owner].sourceCharge = ArenaSourceChargeMotion(definition: charge, remaining: charge.distance)
+                var motion = charge
+                if motion.role == .weapon, longDashBonus.isFinite, longDashBonus > 0, longDashBonus <= 3 {
+                    motion.distance *= 1 + longDashBonus
+                }
+                fighters[owner].sourceCharge = ArenaSourceChargeMotion(definition: motion, remaining: motion.distance)
             case .area(let area): applySourceArea(area, owner: owner)
             case .shield(let shield):
                 guard shield.duration.isFinite, shield.duration > 0, shield.duration <= 600,
