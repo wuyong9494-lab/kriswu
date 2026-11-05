@@ -13,7 +13,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "projectile_fuse", "pass_environment", "life_steal", "damage_once_per_volley",
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
-        "self_shield", "damage_taken_super_charge"
+        "self_shield", "damage_taken_super_charge", "ally_projectile_heal"
     ]
     public var id: String
     public var name: String
@@ -112,6 +112,40 @@ public enum ArenaSourceCompatibility {
                 }
             }
         }
+        // The reviewed healing hero uses a main-attack ally-heal trait and a
+        // non-damaging healing Super. These are host gameplay approximations:
+        // main attack heals an ally for 5% of their max HP; Super projectiles
+        // heal allies for the source skill amount and heal the caster once.
+        if result.id == "DeadMariachi", result.rawSource["Traits"] == "DeadMariachiProjectileHealPassive",
+           var weapon = result.weapon, var ultimate = result.ultimate,
+           weapon.id == "DeadMariachiWeapon", weapon.role == .weapon, weapon.behavior == "Attack",
+           weapon.projectiles.count == 1, weapon.projectiles[0].id == "DeadMariachiProjectile",
+           weapon.projectiles[0].piercesCharacters, weapon.projectiles[0].damageOncePerVolley == true,
+           weapon.damage == 760, weapon.unsupportedReasons.isEmpty,
+           ultimate.id == "DeadMariachiUlti", ultimate.role == .ultimate, ultimate.behavior == "Attack",
+           ultimate.projectiles.count == 1, ultimate.projectiles[0].id == "DeadMariachiUltiProjectile",
+           ultimate.projectiles[0].rawSource["HealOwnPercent"] == "100",
+           ultimate.projectiles[0].piercesCharacters, ultimate.projectiles[0].passesEnvironment == true,
+           ultimate.projectiles[0].damageOncePerVolley == true,
+           ultimate.projectiles[0].areaEffects.isEmpty, ultimate.damage == 2100 {
+            let traitReason = "hero.DeadMariachi.Traits=DeadMariachiProjectileHealPassive: requires a dedicated hero rule"
+            let healReason = "projectile.DeadMariachiUltiProjectile.HealOwnPercent=100: not yet interpreted"
+            if result.unsupportedReasons.contains(traitReason), result.unsupportedReasons.contains(healReason),
+               ultimate.unsupportedReasons == [healReason],
+               ultimate.projectiles[0].unsupportedReasons == [healReason] {
+                weapon.projectiles[0].allyHealMaxHealthFraction = 0.05
+                ultimate.projectiles[0].healAlliesInsteadOfDamage = true
+                ultimate.projectiles[0].casterHealFraction = 1
+                ultimate.projectiles[0].unsupportedReasons.removeAll { $0 == healReason }
+                ultimate.unsupportedReasons.removeAll { $0 == healReason }
+                if weapon.isSupported && ultimate.isSupported {
+                    result.weapon = weapon
+                    result.ultimate = ultimate
+                    resolved.insert(traitReason)
+                    resolved.insert(healReason)
+                }
+            }
+        }
         if !resolved.isEmpty {
             result.unsupportedReasons.removeAll { resolved.contains($0) }
             if resolved.contains(where: { $0.contains("AttackPattern=9") }) {
@@ -122,6 +156,9 @@ public enum ArenaSourceCompatibility {
             }
             if resolved.contains(where: { $0.contains(".ChargeUltiFromDamage=") }) {
                 result.compatibilityPolicy += "+host-damage-taken-permille-health"
+            }
+            if resolved.contains("hero.DeadMariachi.Traits=DeadMariachiProjectileHealPassive: requires a dedicated hero rule") {
+                result.compatibilityPolicy += "+host-poco-ally-heal5pct-and-super"
             }
         }
         return result
@@ -153,6 +190,13 @@ public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable 
     public var canHitAgainAfterBounce: Bool? = nil
     public var gravity: Double? = nil
     public var minimumSpreadDistance: Double? = nil
+    /// A non-native host approximation for main-attack projectiles that can
+    /// heal teammates on contact, as a fraction of the recipient's max HP.
+    public var allyHealMaxHealthFraction: Double? = nil
+    /// Healing waves restore allied HP instead of damaging opposing fighters.
+    public var healAlliesInsteadOfDamage: Bool? = nil
+    /// Heal the caster once when this healing ultimate is activated.
+    public var casterHealFraction: Double? = nil
     public var isSupported: Bool {
         unsupportedReasons.isEmpty && speed.isFinite && speed > 0 && speed <= 1000
             && radius.isFinite && radius >= 0 && radius <= 100
@@ -160,6 +204,10 @@ public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable 
             && bounceRangeAdd.isFinite && bounceRangeAdd >= 0
             && [constantFlightTime, impactDelay, lifeStealFraction, gravity, minimumSpreadDistance]
                 .compactMap { $0 }.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 600 }
+            && [allyHealMaxHealthFraction, casterHealFraction]
+                .compactMap { $0 }.allSatisfy { $0.isFinite && (0...1).contains($0) }
+            && !(healAlliesInsteadOfDamage == true && (allyHealMaxHealthFraction ?? 0) > 0)
+            && (healAlliesInsteadOfDamage != true || (piercesCharacters && areaEffects.isEmpty))
             && areaEffects.allSatisfy(\.isSupported)
     }
 
@@ -172,6 +220,9 @@ public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable 
         if directDamage == false { result.insert("projectile_area_impact") }
         if bounces > 0 { result.insert("projectile_bounce") }
         if wallBreak { result.insert("wall_break") }
+        if (allyHealMaxHealthFraction ?? 0) > 0 || healAlliesInsteadOfDamage == true || (casterHealFraction ?? 0) > 0 {
+            result.insert("ally_projectile_heal")
+        }
         for area in areaEffects { result.formUnion(area.runtimeCapabilities) }
         return result
     }
@@ -332,6 +383,7 @@ public struct ArenaSourceSkill: Codable, Equatable, Sendable, Identifiable {
         if behavior == "Attack" {
             return shieldDamageMultiplier == nil && projectiles.count == 1 && projectiles[0].isSupported
                 && projectileCount > 0 && projectileCount <= 128
+                && (role == .ultimate || (projectiles[0].casterHealFraction ?? 0) == 0)
                 && attackInterval >= ArenaSourceSkillState.tickDuration && attackInterval <= 600
         }
         if behavior == "Charge", let charge {

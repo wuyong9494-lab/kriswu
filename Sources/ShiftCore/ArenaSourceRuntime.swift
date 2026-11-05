@@ -139,6 +139,11 @@ extension ArenaGame {
         fighters[i].facing = resolved.normalized
         fighters[i].lastAttack = time
         events.append(role == .weapon ? .attack(fighter: i) : .special(fighter: i))
+        if role == .ultimate, let skill = fighters[i].sourceHero?.ultimate,
+           let fraction = skill.projectiles.first?.casterHealFraction,
+           fraction.isFinite, fraction > 0 {
+            healSourceTarget(i, amount: Int((Double(power(i, skill.damage)) * fraction).rounded()))
+        }
         applySourceEmissions(emitted, owner: i)
     }
 
@@ -350,6 +355,14 @@ extension ArenaGame {
         }
     }
 
+    mutating func healSourceTarget(_ target: Int, amount: Int) {
+        guard fighters.indices.contains(target), fighters[target].alive, amount > 0 else { return }
+        let healed = min(amount, max(0, fighters[target].maxHealth - fighters[target].health))
+        guard healed > 0 else { return }
+        fighters[target].health += healed
+        events.append(.heal(target: target, amount: healed))
+    }
+
     mutating func sourceImpact(_ projectile: Projectile) {
         guard let launch = projectile.sourceLaunch else { return }
         for area in launch.projectile.areaEffects {
@@ -385,7 +398,8 @@ extension ArenaGame {
             let previous = projectile.pos
             let proposed = previous + projectile.velocity.normalized * distance
             let cause = projectile.terrainDestruction ?? .normalWeapon
-            if let safe = importedSafeHit(from: previous, to: proposed, projectileRadius: projectile.radius,
+            if launch.projectile.healAlliesInsteadOfDamage != true,
+               let safe = importedSafeHit(from: previous, to: proposed, projectileRadius: projectile.radius,
                 excludingTeam: projectile.team), !projectile.hit.contains(-2000 - safe.index) {
                 projectile.pos = proposed
                 if launch.projectile.directDamage != false && claimSourceHit(-2000 - safe.index, projectile: projectile) {
@@ -410,7 +424,8 @@ extension ArenaGame {
                 } else { sourceImpact(projectile); return false }
             } else { projectile.pos = proposed }
             projectile.rangeLeft -= distance
-            for index in chests.indices where chests[index].health > 0 && chests[index].team != projectile.team
+            for index in chests.indices where launch.projectile.healAlliesInsteadOfDamage != true
+                && chests[index].health > 0 && chests[index].team != projectile.team
                 && !projectile.hit.contains(-2000 - index) && chests[index].center.distance(to: projectile.pos) < (importedMatchRules?.safeCollisionRadius ?? 0.6) + projectile.radius {
                 if launch.projectile.directDamage != false && claimSourceHit(-2000 - index, projectile: projectile) {
                     hitChest(index, projectile.damage, by: projectile.owner)
@@ -418,13 +433,31 @@ extension ArenaGame {
                 projectile.hit.append(-2000 - index)
                 if !projectile.pierce { sourceImpact(projectile); return false }
             }
-            for index in boxes.indices where boxes[index].health > 0 && !projectile.hit.contains(-1000 - index)
+            for index in boxes.indices where launch.projectile.healAlliesInsteadOfDamage != true
+                && boxes[index].health > 0 && !projectile.hit.contains(-1000 - index)
                 && boxes[index].pos.distance(to: projectile.pos) < powerBoxCollisionRadius(boxes[index]) + projectile.radius {
                 if launch.projectile.directDamage != false && claimSourceHit(-1000 - index, projectile: projectile) { hitBox(index, projectile.damage) }
                 projectile.hit.append(-1000 - index)
                 if !projectile.pierce { sourceImpact(projectile); return false }
             }
-            for target in fighters.indices where fighters[target].alive && fighters[target].team != projectile.team
+            if launch.projectile.healAlliesInsteadOfDamage == true || (launch.projectile.allyHealMaxHealthFraction ?? 0) > 0 {
+                for target in fighters.indices where fighters[target].alive && fighters[target].team == projectile.team
+                    && target != projectile.owner && fighters[target].leap == nil
+                    && !projectile.hit.contains(target)
+                    && fighters[target].pos.distance(to: projectile.pos) < Self.hitRadius(fighters[target]) + projectile.radius {
+                    if claimSourceHit(target, projectile: projectile) {
+                        if launch.projectile.healAlliesInsteadOfDamage == true {
+                            healSourceTarget(target, amount: projectile.damage)
+                        } else if let fraction = launch.projectile.allyHealMaxHealthFraction {
+                            healSourceTarget(target, amount: Int((Double(fighters[target].maxHealth) * fraction).rounded()))
+                        }
+                    }
+                    projectile.hit.append(target)
+                    if !projectile.pierce { sourceImpact(projectile); return false }
+                }
+            }
+            for target in fighters.indices where launch.projectile.healAlliesInsteadOfDamage != true
+                && fighters[target].alive && fighters[target].team != projectile.team
                 && fighters[target].leap == nil
                 && !projectile.hit.contains(target) && fighters[target].pos.distance(to: projectile.pos) < Self.hitRadius(fighters[target]) + projectile.radius {
                 if launch.projectile.directDamage != false && claimSourceHit(target, projectile: projectile) {
@@ -435,7 +468,8 @@ extension ArenaGame {
                 projectile.hit.append(target)
                 if !projectile.pierce { sourceImpact(projectile); return false }
             }
-            for index in turrets.indices where turrets[index].health > 0 && turrets[index].team != projectile.team
+            for index in turrets.indices where launch.projectile.healAlliesInsteadOfDamage != true
+                && turrets[index].health > 0 && turrets[index].team != projectile.team
                 && !projectile.hit.contains(-1_000_000 - turrets[index].id)
                 && turrets[index].pos.distance(to: projectile.pos) < Turret.radius + projectile.radius {
                 let target = -1_000_000 - turrets[index].id

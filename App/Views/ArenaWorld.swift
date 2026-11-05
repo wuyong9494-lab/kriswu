@@ -1417,7 +1417,10 @@ final class ArenaWorldView: SCNView {
                 // never substitute another hero's weapon animation.
                 let sphere = SCNSphere(radius: max(0.06, CGFloat(p.radius)))
                 sphere.segmentCount = 10
-                sphere.firstMaterial = ArenaAvatar.material(p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot, lit: false)
+                let color = launch.projectile.healAlliesInsteadOfDamage == true
+                    ? UIColor(red: 0.3, green: 1, blue: 0.55, alpha: 1)
+                    : (p.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot)
+                sphere.firstMaterial = ArenaAvatar.material(color, lit: false)
                 body = SCNNode(geometry: sphere)
             }
             body.castsShadow = false

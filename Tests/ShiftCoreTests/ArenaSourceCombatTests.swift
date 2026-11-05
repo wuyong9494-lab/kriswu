@@ -47,6 +47,48 @@ final class ArenaSourceCombatTests: XCTestCase {
         return skill
     }
 
+    private func healingPoco() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "DeadMariachi"
+        source.name = "Poco"
+        source.health = 4000
+        source.rawSource = ["Traits": "DeadMariachiProjectileHealPassive"]
+        let passive = "hero.DeadMariachi.Traits=DeadMariachiProjectileHealPassive: requires a dedicated hero rule"
+        let heal = "projectile.DeadMariachiUltiProjectile.HealOwnPercent=100: not yet interpreted"
+        source.unsupportedReasons = [passive, heal]
+        var weapon = colt()
+        weapon.id = "DeadMariachiWeapon"
+        weapon.damage = 760
+        weapon.range = 7
+        weapon.activeTime = 0.15
+        weapon.projectileCount = 4
+        weapon.spread = 1.1344640137963142
+        weapon.projectiles[0].id = "DeadMariachiProjectile"
+        weapon.projectiles[0].speed = 2500 / 300.0
+        weapon.projectiles[0].radius = 0.5
+        weapon.projectiles[0].piercesCharacters = true
+        weapon.projectiles[0].damageOncePerVolley = true
+        source.weapon = weapon
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "DeadMariachiUlti"
+        ultimate.damage = 2100
+        ultimate.range = 28 / 3.0
+        ultimate.activeTime = 0.15
+        ultimate.projectileCount = 3
+        ultimate.spread = 1.1344640137963142
+        ultimate.projectiles[0].id = "DeadMariachiUltiProjectile"
+        ultimate.projectiles[0].speed = 5000 / 300.0
+        ultimate.projectiles[0].radius = 400 / 300.0
+        ultimate.projectiles[0].piercesCharacters = true
+        ultimate.projectiles[0].passesEnvironment = true
+        ultimate.projectiles[0].damageOncePerVolley = true
+        ultimate.projectiles[0].rawSource["HealOwnPercent"] = "100"
+        ultimate.projectiles[0].unsupportedReasons = [heal]
+        ultimate.unsupportedReasons = [heal]
+        source.ultimate = ultimate
+        return source
+    }
+
     func testSourceShieldWaitsForCastingAndEmitsOnce() throws {
         let skill = sourceShield(casting: 0.2)
         XCTAssertTrue(skill.isSupported)
@@ -184,6 +226,94 @@ final class ArenaSourceCombatTests: XCTestCase {
         game.fighters[0].superCharge = 0.99
         game.hurt(0, 1000, by: 1, charges: false)
         XCTAssertEqual(game.fighters[0].superCharge, 1, accuracy: 1e-12)
+    }
+
+    func testPocoHostHealingOnlyAdaptsReviewedSourceAndPreservesOriginalData() throws {
+        let original = healingPoco()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.projectiles.first?.allyHealMaxHealthFraction, 0.05)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.healAlliesInsteadOfDamage, true)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.casterHealFraction, 1)
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-poco-ally-heal5pct-and-super"))
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, healingPoco(), "Source records cannot be mutated by adaptation")
+
+        var mismatched = original
+        mismatched.ultimate?.projectiles[0].rawSource["HealOwnPercent"] = "99"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(mismatched).canPlay)
+        mismatched = original
+        mismatched.rawSource["Traits"] = "unknown"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(mismatched).canPlay)
+        mismatched = original
+        mismatched.unsupportedReasons.append("requires a different effect")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(mismatched).canPlay)
+
+        var invalid = try XCTUnwrap(adapted.ultimate?.projectiles.first)
+        invalid.casterHealFraction = 1.01
+        XCTAssertFalse(invalid.isSupported, "Host heal fractions must be bounded")
+        invalid = try XCTUnwrap(adapted.ultimate?.projectiles.first)
+        invalid.piercesCharacters = false
+        XCTAssertFalse(invalid.isSupported, "A healing wave cannot silently stop on its first ally")
+    }
+
+    func testHealingProjectilesHealAlliesOnceButDoNotHarmEnemies() throws {
+        let source = ArenaSourceCompatibility.adapt(healingPoco())
+        XCTAssertTrue(source.canPlay)
+        let rows = (0..<9).map { y in String((0..<15).map { x -> Character in
+            if x == 0 || x == 14 || y == 0 || y == 8 { return "#" }
+            if x == 2 && y == 4 { return "a" }
+            if x == 11 && y == 4 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Poco", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Ally", brawler: .ranger, isBot: false, team: 0),
+            ArenaGame.Entrant(name: "Opponent", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 801, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(2.5, 4.5)
+        game.fighters[1].pos = V2(4.0, 4.5)
+        game.fighters[2].pos = V2(6.0, 4.5)
+        game.fighters[0].health = 900
+        game.fighters[1].health = game.fighters[1].maxHealth - 1000
+        let enemyFull = game.fighters[2].health
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(1, 0))
+        XCTAssertEqual(game.fighters[0].health, 3000, "Caster is healed once at Super activation")
+        runWorld(&game, frames: 50)
+        XCTAssertEqual(game.fighters[1].health, game.fighters[1].maxHealth, "The ally is healed once, capped at full HP")
+        XCTAssertEqual(game.fighters[2].health, enemyFull, "Poco's healing Super must not damage enemies")
+        XCTAssertEqual(game.events.filter { if case .heal(let target, _) = $0 { return target == 1 }; return false }.count, 1,
+            "Multiple projectiles in the same volley must not multiply healing")
+    }
+
+    func testPocoMainAttackCanHealAllyAndStillDamageEnemy() throws {
+        let source = ArenaSourceCompatibility.adapt(healingPoco())
+        let rows = (0..<9).map { y in String((0..<15).map { x -> Character in
+            if x == 0 || x == 14 || y == 0 || y == 8 { return "#" }
+            if x == 2 && y == 4 { return "a" }
+            if x == 11 && y == 4 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Poco", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Ally", brawler: .ranger, isBot: false, team: 0),
+            ArenaGame.Entrant(name: "Enemy", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 802, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(2.5, 4.5)
+        game.fighters[1].pos = V2(4.0, 4.5)
+        game.fighters[2].pos = V2(6.0, 4.5)
+        game.fighters[1].health = game.fighters[1].maxHealth - 1000
+        let expectedHeal = Int((Double(game.fighters[1].maxHealth) * 0.05).rounded())
+        let enemyFull = game.fighters[2].health
+        game.activateSourceSkill(0, role: .weapon, aim: V2(1, 0))
+        runWorld(&game, frames: 50)
+        XCTAssertEqual(game.fighters[1].health, game.fighters[1].maxHealth - 1000 + expectedHeal)
+        XCTAssertLessThan(game.fighters[2].health, enemyFull, "The main attack still damages opponents")
     }
 
     func testActualColt650msProducesSixShotsAnd1250msProducesTwelve() throws {
@@ -604,6 +734,20 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.ultimate?.projectiles.count, 0)
         XCTAssertEqual(adapted.weapon?.id, original.weapon?.id)
         XCTAssertEqual(adapted.rawSource, original.rawSource)
+    }
+
+    func testPrivatePocoHealingProfileAdaptsWithoutReplacingSourceSkills() throws {
+        let original = try privateHero("DeadMariachi")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.id, "DeadMariachiWeapon")
+        XCTAssertEqual(adapted.ultimate?.id, "DeadMariachiUlti")
+        XCTAssertEqual(adapted.weapon?.projectiles.first?.allyHealMaxHealthFraction, 0.05)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.healAlliesInsteadOfDamage, true)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.casterHealFraction, 1)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
+        XCTAssertEqual(adapted.compatibilityPolicy.contains("host-poco-ally-heal5pct-and-super"), true)
     }
 
     func testWorldOncePerVolleyKeysIncludeActivationAndExpire() throws {

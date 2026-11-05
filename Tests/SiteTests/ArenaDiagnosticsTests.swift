@@ -59,13 +59,14 @@ final class ArenaDiagnosticsTests: XCTestCase {
         defer { ArenaDiagnostics.shared.configureCapture(old, enabled: enabled) }
         ArenaDiagnostics.shared.configureCapture(.baseline)
         let view = ArenaWorldView(controller: make(.empty))
-        // No display link or render queue is running. Pool ownership must still
+        // The diagnostic emits four pooled effects: one streak, slash, burst and
+        // ring. No display link or render queue is running; ownership must
         // expire deterministically, including repeated reuse of the same nodes.
         for _ in 0..<30 {
             view.emitDiagnosticPooledEffects()
-            XCTAssertEqual(view.diagnosticBusyFXCount, 5)
+            XCTAssertEqual(view.diagnosticBusyFXCount, 4)
             view.advanceDiagnosticEffects(by: 0.1)
-            XCTAssertEqual(view.diagnosticBusyFXCount, 5)
+            XCTAssertEqual(view.diagnosticBusyFXCount, 4)
             view.advanceDiagnosticEffects(by: 0.16)
             XCTAssertEqual(view.diagnosticBusyFXCount, 2)
             view.advanceDiagnosticEffects(by: 1)
