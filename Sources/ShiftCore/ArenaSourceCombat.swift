@@ -30,7 +30,8 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
         "self_shield", "damage_taken_super_charge", "ally_projectile_heal", "charged_ground_dash",
-        "caster_tracked_indirect_flight", "smoke_ally_hide", "area_pull", "delayed_area_damage"
+        "caster_tracked_indirect_flight", "smoke_ally_hide", "area_pull", "delayed_area_damage",
+        "lateral_projectile_line"
     ]
     public var id: String
     public var name: String
@@ -193,6 +194,47 @@ public enum ArenaSourceCompatibility {
                 }
             }
         }
+        // Gale's archived pattern seven emits a broad line of six/four
+        // parallel shots (both skills have zero angular spread). Use evenly
+        // separated local lanes; the native muzzle offsets are not archived.
+        // The reviewed Super uses the host's bounded forward knockback while
+        // explicitly retaining its once-per-volley damage guard.
+        if result.id == "Blower", var weapon = result.weapon, var ultimate = result.ultimate,
+           weapon.id == "BlowerWeapon", weapon.role == .weapon, weapon.behavior == "Attack",
+           weapon.rawSource["AttackPattern"] == "7", weapon.rawSource["NumBulletsInOneAttack"] == "6",
+           weapon.projectileCount == 6, weapon.spread == 0, weapon.damage == 300,
+           weapon.projectiles.count == 1, weapon.projectiles[0].id == "BlowerProjectile",
+           ultimate.id == "BlowerUlti", ultimate.role == .ultimate, ultimate.behavior == "Attack",
+           ultimate.rawSource["AttackPattern"] == "7", ultimate.rawSource["NumBulletsInOneAttack"] == "4",
+           ultimate.projectileCount == 4, ultimate.spread == 0, ultimate.damage == 800,
+           ultimate.projectiles.count == 1, ultimate.projectiles[0].id == "BlowerUltiProjectile",
+           ultimate.projectiles[0].rawSource["PushbackType"] == "1",
+           ultimate.projectiles[0].rawSource["PushbackStrength"] == "450",
+           ultimate.projectiles[0].pushback == 1.5,
+           ultimate.projectiles[0].piercesCharacters,
+           ultimate.projectiles[0].passesEnvironment == true,
+           ultimate.projectiles[0].damageOncePerVolley == true,
+           ultimate.projectiles[0].rawSource["DamageOnlyWithOneProj"] == "true" {
+            let weaponPattern = "skill.BlowerWeapon.AttackPattern=7: not yet interpreted"
+            let superPattern = "skill.BlowerUlti.AttackPattern=7: not yet interpreted"
+            let pushType = "projectile.BlowerUltiProjectile.PushbackType=1: not yet interpreted"
+            let reasons = [weaponPattern, superPattern, pushType]
+            if reasons.allSatisfy({ result.unsupportedReasons.contains($0) }),
+               weapon.unsupportedReasons == [weaponPattern],
+               Set(ultimate.unsupportedReasons) == Set([superPattern, pushType]),
+               ultimate.projectiles[0].unsupportedReasons == [pushType] {
+                weapon.dispersion = "lateral_line"
+                weapon.unsupportedReasons.removeAll { $0 == weaponPattern }
+                ultimate.dispersion = "lateral_line"
+                ultimate.projectiles[0].unsupportedReasons.removeAll { $0 == pushType }
+                ultimate.unsupportedReasons.removeAll { $0 == superPattern || $0 == pushType }
+                if weapon.isSupported && ultimate.isSupported {
+                    result.weapon = weapon
+                    result.ultimate = ultimate
+                    resolved.formUnion(reasons)
+                }
+            }
+        }
         // This archived Brock Super keeps an indirect impact target relative
         // to the moving caster during flight. The native prediction formula is
         // unknown; the host follows caster displacement from launch instead.
@@ -340,6 +382,9 @@ public enum ArenaSourceCompatibility {
             }
             if resolved.contains("area.BlackHoleUltiExplosion.CustomValue=700: not yet interpreted") {
                 result.compatibilityPolicy += "+host-tara-pull-and-delayed-blast700ms"
+            }
+            if resolved.contains("projectile.BlowerUltiProjectile.PushbackType=1: not yet interpreted") {
+                result.compatibilityPolicy += "+host-gale-lateral-line-and-forward-knockback"
             }
         }
         return result
@@ -543,8 +588,8 @@ public struct ArenaSourceSkill: Codable, Equatable, Sendable, Identifiable {
     public var charge: ArenaSourceChargeDefinition?
     public var unsupportedReasons: [String]
     public var rawSource: [String: String]
-    /// Optional host adapter for source AttackPattern 1. Its seeded sequence is
-    /// reproducible, while the native v69 random generator remains unspecified.
+    /// Named source pattern adapter: seeded cone or parallel lateral line.
+    /// Their exact native random sequence / muzzle offsets are unspecified.
     public var dispersion: String? = nil
     /// Explicit host reduction policy for a self-shield skill. A nil value
     /// means the native shield semantics have not been reviewed or implemented.
@@ -553,7 +598,8 @@ public struct ArenaSourceSkill: Codable, Equatable, Sendable, Identifiable {
     public var runtimeCapabilities: Set<String> {
         var result: Set<String> = behavior == "Attack" ? ["timed_burst"] : []
         if projectileCount > 1 { result.insert("pellet_fan") }
-        if dispersion != nil { result.insert("dispersion_seeded") }
+        if dispersion == "seeded_cone" { result.insert("dispersion_seeded") }
+        if dispersion == "lateral_line" { result.insert("lateral_projectile_line") }
         if behavior == "Shield" { result.insert("self_shield") }
         for projectile in projectiles { result.formUnion(projectile.runtimeCapabilities) }
         for area in areaEffects { result.formUnion(area.runtimeCapabilities) }
@@ -571,7 +617,9 @@ public struct ArenaSourceSkill: Codable, Equatable, Sendable, Identifiable {
               [reload, cooldown, castingTime, activeTime, attackInterval, spread].allSatisfy(\.isFinite),
               reload >= 0, cooldown >= 0, cooldown <= 600, castingTime >= 0, castingTime <= 600,
               activeTime >= 0, activeTime <= 600, spread >= 0, spread <= Double.pi * 2,
-              dispersion == nil || dispersion == "seeded_cone",
+              dispersion == nil || dispersion == "seeded_cone" || dispersion == "lateral_line",
+              (dispersion != "lateral_line" || (spread == 0 && projectileCount >= 2
+                  && projectiles.count == 1 && projectiles[0].indirect != true)),
               (shieldDamageMultiplier.map { $0.isFinite && $0 > 0 && $0 < 1 } ?? true),
               (ammoCapacity == 0 || reload > 0),
               areaEffects.allSatisfy(\.isSupported) else { return false }
@@ -789,8 +837,15 @@ public struct ArenaSourceSkillState: Codable, Equatable, Sendable {
                     angle = count == 1 ? 0 : -span / 2 + span * Double(pellet) / Double(count - 1)
                 }
                 let direction = state.direction.rotated(by: angle)
+                // Pattern seven is a flat line of projectiles fired in the
+                // same direction, not an angular cone or one stacked bullet.
+                let sideways = V2(-state.direction.y, state.direction.x)
+                let laneSpacing = max(0.5, projectile.radius * 2)
+                let lane = Double(pellet) - Double(count - 1) / 2
+                let launchOrigin = skill.dispersion == "lateral_line"
+                    ? origin + sideways * (lane * laneSpacing) : origin
                 var launch = ArenaSourceLaunch(skillID: skill.id, role: skill.role,
-                    projectile: projectile, origin: origin, direction: state.direction.rotated(by: angle),
+                    projectile: projectile, origin: launchOrigin, direction: direction,
                     range: skill.range, damage: skill.damage, chargeDamage: skill.chargeDamage,
                     volleyIndex: state.emittedVolleyCount, pelletIndex: pellet)
                 launch.activationID = state.id

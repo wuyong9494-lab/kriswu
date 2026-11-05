@@ -182,6 +182,10 @@ struct ArenaResourcePackView: View {
                             Text("塔拉大招会吸引敌人，0.7 秒后在中心爆炸并破坏障碍；吸引速度为本地兼容参数，尚未验证原客户端数值。")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
+                        if profile.compatibilityPolicy.contains("host-gale-lateral-line-and-forward-knockback") {
+                            Text("盖尔普攻与大招按并排弹道发射，大招能击退敌人；弹道间距及击退方式为本地兼容规则。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }

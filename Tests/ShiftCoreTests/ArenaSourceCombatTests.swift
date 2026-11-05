@@ -245,6 +245,119 @@ final class ArenaSourceCombatTests: XCTestCase {
         return source
     }
 
+    private func blowerGale() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "Blower"
+        source.name = "Gale"
+        source.health = 4000
+        let weaponPattern = "skill.BlowerWeapon.AttackPattern=7: not yet interpreted"
+        let superPattern = "skill.BlowerUlti.AttackPattern=7: not yet interpreted"
+        let pushType = "projectile.BlowerUltiProjectile.PushbackType=1: not yet interpreted"
+        source.unsupportedReasons = [weaponPattern, superPattern, pushType]
+        var weapon = colt()
+        weapon.id = "BlowerWeapon"
+        weapon.damage = 300
+        weapon.projectileCount = 6
+        weapon.spread = 0
+        weapon.rawSource = ["AttackPattern": "7", "NumBulletsInOneAttack": "6"]
+        weapon.unsupportedReasons = [weaponPattern]
+        weapon.projectiles[0].id = "BlowerProjectile"
+        weapon.projectiles[0].speed = 3000 / 300.0
+        weapon.projectiles[0].radius = 50 / 300.0
+        source.weapon = weapon
+
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "BlowerUlti"
+        ultimate.damage = 800
+        ultimate.chargeDamage = 800
+        ultimate.projectileCount = 4
+        ultimate.spread = 0
+        ultimate.rawSource = ["AttackPattern": "7", "NumBulletsInOneAttack": "4"]
+        ultimate.unsupportedReasons = [superPattern, pushType]
+        ultimate.projectiles[0].id = "BlowerUltiProjectile"
+        ultimate.projectiles[0].speed = 5000 / 300.0
+        ultimate.projectiles[0].radius = 150 / 300.0
+        ultimate.projectiles[0].pushback = 450 / 300.0
+        ultimate.projectiles[0].wallBreak = false
+        ultimate.projectiles[0].passesEnvironment = true
+        ultimate.projectiles[0].piercesCharacters = true
+        ultimate.projectiles[0].damageOncePerVolley = true
+        ultimate.projectiles[0].rawSource = [
+            "PushbackType": "1", "PushbackStrength": "450", "DamageOnlyWithOneProj": "true"
+        ]
+        ultimate.projectiles[0].unsupportedReasons = [pushType]
+        source.ultimate = ultimate
+        return source
+    }
+
+    func testGaleParallelShotPatternAndForwardKnockbackNeedReviewedProfile() throws {
+        let original = blowerGale()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertEqual(adapted.weapon?.dispersion, "lateral_line")
+        XCTAssertEqual(adapted.ultimate?.dispersion, "lateral_line")
+        XCTAssertEqual(adapted.ultimate?.projectiles[0].pushback, 1.5)
+        XCTAssertEqual(adapted.ultimate?.projectiles[0].damageOncePerVolley, true)
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-gale-lateral-line-and-forward-knockback"))
+        XCTAssertEqual(try JSONDecoder().decode(ArenaSourceHero.self, from: JSONEncoder().encode(adapted)), adapted)
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, blowerGale(), "Source hero data remains immutable")
+
+        var unreviewed = original
+        unreviewed.weapon?.rawSource["AttackPattern"] = "6"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.ultimate?.projectiles[0].rawSource["PushbackStrength"] = "700"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.unsupportedReasons.append("unknown skill")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        var bad = try XCTUnwrap(adapted.weapon)
+        bad.spread = 0.1
+        XCTAssertFalse(bad.isSupported, "A lateral line cannot silently become a cone")
+    }
+
+    func testGaleSixAndFourProjectilesLaunchInParallelSeparatedLanes() throws {
+        let gale = ArenaSourceCompatibility.adapt(blowerGale())
+        let origin = V2(5, 5)
+        var weapon = ArenaSourceSkillState(skill: try XCTUnwrap(gale.weapon))
+        let regular = launches(try weapon.activate(origin: origin, aim: V2(1, 0)))
+        XCTAssertEqual(regular.count, 6)
+        XCTAssertEqual(regular.map { $0.origin.y }, [3.75, 4.25, 4.75, 5.25, 5.75, 6.25])
+        XCTAssertTrue(regular.allSatisfy { $0.origin.x == 5 && $0.direction == V2(1, 0) })
+        var ultimate = ArenaSourceSkillState(skill: try XCTUnwrap(gale.ultimate))
+        let superShots = launches(try ultimate.activate(origin: origin, aim: V2(1, 0)))
+        XCTAssertEqual(superShots.count, 4)
+        XCTAssertEqual(superShots.map { $0.origin.y }, [3.5, 4.5, 5.5, 6.5])
+        XCTAssertTrue(superShots.allSatisfy { $0.direction == V2(1, 0) })
+    }
+
+    func testGaleSuperKnocksProjectEnemyBackButDealsOnlyOneVolleyOfDamage() throws {
+        let gale = ArenaSourceCompatibility.adapt(blowerGale())
+        let rows = (0..<13).map { y in String((0..<23).map { x -> Character in
+            if x == 0 || x == 22 || y == 0 || y == 12 { return "#" }
+            if x == 4 && y == 6 { return "a" }
+            if x == 19 && y == 6 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Gale", brawler: .ranger, isBot: false, team: 0, sourceHero: gale),
+            ArenaGame.Entrant(name: "Project opponent", brawler: .ranger, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 811, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(4.5, 6.5)
+        game.fighters[1].pos = V2(9.5, 6.5)
+        let full = game.fighters[1].health
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(1, 0))
+        XCTAssertEqual(game.projectiles.count, 4)
+        runWorld(&game, frames: 55)
+        XCTAssertEqual(game.fighters[1].health, full - 800)
+        XCTAssertGreaterThan(game.fighters[1].pos.x, 10.5, "The reviewed Super pushes forward")
+    }
+
     func testTaraBlackHoleRequiresTheReviewedPullAnd700msFuse() throws {
         let original = blackHoleTara()
         XCTAssertFalse(original.canPlay)
@@ -1338,6 +1451,22 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.rawSource, original.rawSource)
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects[1].rawSource,
                        original.ultimate?.projectiles.first?.areaEffects[1].rawSource)
+    }
+
+    func testPrivateGaleProfileRetainsSixAndFourSourceProjectileCounts() throws {
+        let original = try privateHero("Blower")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.id, "BlowerWeapon")
+        XCTAssertEqual(adapted.weapon?.projectileCount, 6)
+        XCTAssertEqual(adapted.weapon?.dispersion, "lateral_line")
+        XCTAssertEqual(adapted.ultimate?.id, "BlowerUlti")
+        XCTAssertEqual(adapted.ultimate?.projectileCount, 4)
+        XCTAssertEqual(adapted.ultimate?.dispersion, "lateral_line")
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.pushback, 1.5)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.damageOncePerVolley, true)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
     }
 
     func testWorldOncePerVolleyKeysIncludeActivationAndExpire() throws {
