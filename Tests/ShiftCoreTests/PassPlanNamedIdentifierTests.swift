@@ -121,4 +121,38 @@ final class PassPlanNamedIdentifierTests: XCTestCase {
         XCTAssertTrue(required.recognitionIssues?.contains("照片中的卫星编号需对照原图确认") == true)
         XCTAssertFalse(PassPlan.problems(required, rules: [.init(name: "演示", prefixes: ["演示"])], layout: layout).isEmpty)
     }
+
+    func testOnlyOneSupportedCompleteEngineAlternativeCanBeSelected() {
+        let original = row()
+        let expected = PassPlan.reviewNamedIdentifierReread(original, reread: "SAMPLE07D02", layout: layout)
+        for candidates in [["SAMPLF07D02", "SAMPLE07D02", "SAMPLE07D03"],
+                           ["SAMPLE07D02", "SAMPLEO7D02", "07D"]] {
+            XCTAssertEqual(PassPlan.reviewNamedIdentifierRereads(original, rereads: candidates, layout: layout), expected)
+        }
+    }
+
+    func testDistinctSupportedEngineAlternativesRemainUnresolvedInEitherOrder() {
+        let original = row(identifier: "SAMPLEO7DO7D")
+        let alternatives = ["SAMPLE07DO7D", "SAMPLEO7D07D"]
+        for candidate in alternatives {
+            XCTAssertNotEqual(PassPlan.reviewNamedIdentifierReread(original, reread: candidate, layout: layout), original)
+        }
+        XCTAssertEqual(PassPlan.reviewNamedIdentifierRereads(original, rereads: alternatives, layout: layout), original)
+        XCTAssertEqual(PassPlan.reviewNamedIdentifierRereads(original, rereads: Array(alternatives.reversed()), layout: layout), original)
+    }
+
+    func testDuplicateFormattedEngineAlternativesPreserveFirstActualRawCell() {
+        var original = row(); original.emergencyBadge = true; original.recognitionIssues = ["保留原疑项"]
+        let expected = PassPlan.reviewNamedIdentifierReread(original, reread: "sample 07d02", layout: layout)
+        let actual = PassPlan.reviewNamedIdentifierRereads(original, rereads: ["sample 07d02", "SAMPLE07D02"], layout: layout)
+        XCTAssertEqual(actual, expected)
+        XCTAssertEqual(actual.cells[0], "sample 07d02")
+    }
+
+    func testAbsentOrUnsupportedEngineAlternativesDoNotChangeTheRow() {
+        let original = row()
+        for candidates in [[], [""], ["SAMPLEO7D02", "SAMPLE07D03", "SAMPLF07D02"], ["07D", "SAMPLE07D002"]] {
+            XCTAssertEqual(PassPlan.reviewNamedIdentifierRereads(original, rereads: candidates, layout: layout), original)
+        }
+    }
 }

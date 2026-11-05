@@ -642,7 +642,11 @@ final class PlanReaderTests: XCTestCase {
         let result = await PlanReader.rereadNamedIdentifiers(rows, layout: layout, in: source, settings: .standard)
         XCTAssertEqual(result.count, rows.count)
         guard result.count == rows.count else { return }
-        XCTAssertEqual(result[0].satelliteID, actual[0], "必须实际读取编号格，不得从名称合成完整编号")
+        let firstCell = try XCTUnwrap(PlanReader.identifierCellRegion(column: 0, of: rows[0].region!, layout: layout))
+        let firstReadings = PlanReader.namedIdentifierReadings(firstCell, source: CIImage(cgImage: source), context: CIContext(),
+                                                               width: Double(source.width), height: Double(source.height)) ?? []
+        print("OCRNAMEDTEST|syntheticCell|\(firstReadings)")
+        XCTAssertEqual(result[0].satelliteID, actual[0], "必须实际读取编号格，不得从名称合成完整编号；实际候选 \(firstReadings)")
         XCTAssertEqual(result[0].cells[0].filter { !$0.isWhitespace }.uppercased(), actual[0])
         XCTAssertEqual(result[0].emergencyBadge, true)
         XCTAssertTrue(result[0].recognitionIssues?.contains("保留已有疑项") == true)

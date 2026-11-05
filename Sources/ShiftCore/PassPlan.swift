@@ -1098,6 +1098,19 @@ public enum PassPlan {
         return retainingIssues(fixed, adding: ["卫星编号原格复识与名称片段相符，原读数「\(old)」，请核对原图"])
     }
 
+    /// 引擎的完整候选也须逐一满足原格约束；仅有一个不同编号得到支持才采用。
+    /// 多个格式不同但编号相同的候选不重复计数，两个不同的可支持编号则保留原值。
+    public static func reviewNamedIdentifierRereads(_ row: PassPlanRow, rereads: [String], layout: Layout) -> PassPlanRow {
+        var supported: [String: PassPlanRow] = [:]
+        for raw in rereads {
+            let candidate = reviewNamedIdentifierReread(row, reread: raw, layout: layout)
+            guard candidate.satelliteID != row.satelliteID else { continue }
+            if supported[candidate.satelliteID] == nil { supported[candidate.satelliteID] = candidate }
+            guard supported.count <= 1 else { return row }
+        }
+        return supported.count == 1 ? (supported.values.first ?? row) : row
+    }
+
     private static func isASCIIIdentifier(_ value: String) -> Bool {
         !value.isEmpty && value.unicodeScalars.allSatisfy { (48...57).contains($0.value) || (65...90).contains($0.value) }
     }

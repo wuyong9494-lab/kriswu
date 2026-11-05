@@ -353,24 +353,35 @@ enum PlanReader {
             for index in targets {
                 guard attempts < 64, let region = result[index].region,
                       let cell = identifierCellRegion(column: column, of: region, layout: layout),
-                      let straight = straightened(cell, source: source, width: Double(image.width), height: Double(image.height)),
-                      straight.extent.width > 2, straight.extent.height > 2,
-                      let crop = context.createCGImage(straight, from: straight.extent) else { continue }
+                      let readings = namedIdentifierReadings(cell, source: source, context: context,
+                                                             width: Double(image.width), height: Double(image.height)) else { continue }
                 attempts += 1
-                let piece = prepared(crop, smooth: false, enlarge: true)
-                let request = VNRecognizeTextRequest()
-                request.recognitionLevel = .accurate
-                request.recognitionLanguages = ["en-US"]
-                request.usesLanguageCorrection = false
-                request.customWords = []
-                guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { continue }
-                let raw = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
-                let reviewed = PassPlan.reviewNamedIdentifierReread(result[index], reread: raw, layout: layout)
+                let reviewed = PassPlan.reviewNamedIdentifierRereads(result[index], rereads: readings, layout: layout)
                 if reviewed.satelliteID != result[index].satelliteID { changed += 1 }
                 result[index] = reviewed
             }
             return result
         }.value
+    }
+
+    /// 同一次原格请求的前三个完整候选；多 observation 仍只拼接各自第一读数，不组合字符猜词。
+    /// 不输出业务文字，测试可用虚构像素检查实际候选。
+    static func namedIdentifierReadings(_ cell: PassPlan.Region, source: CIImage, context: CIContext,
+                                        width: Double, height: Double) -> [String]? {
+        guard let straight = straightened(cell, source: source, width: width, height: height),
+              straight.extent.width > 2, straight.extent.height > 2,
+              let crop = context.createCGImage(straight, from: straight.extent) else { return nil }
+        let piece = prepared(crop, smooth: false, enlarge: true)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        request.usesLanguageCorrection = false
+        request.customWords = []
+        guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { return [] }
+        let observations = request.results ?? []
+        if observations.count == 1 { return observations[0].topCandidates(3).map(\.string) }
+        let raw = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+        return raw.isEmpty ? [] : [raw]
     }
 
     /// 已有疑项或 test 的行无需再消耗识别请求；每页最多 100 格，未能核对的格子保留核对提示。
