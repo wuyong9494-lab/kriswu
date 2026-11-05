@@ -376,7 +376,7 @@ final class ArenaLobbyTimelineScene {
                             default: throw ArenaLobbyTimelineError.invalid("Unknown lobby mask modifier")
                             }
                         } else if capturing { capturing = false; hasMask = true }
-                        if ![0, 4, 8].contains(child.blendMode) {
+                        if ![0, 3, 4, 8].contains(child.blendMode) {
                             guard let proofID = child.excludedByProof, let proof = proofs[proofID],
                                   child.blendMode == 64, proof.kind == "complete_timeline_outside_viewport",
                                   proof.parentObjectID == id, proof.childIndex == e[0], proof.objectID == child.objectID,

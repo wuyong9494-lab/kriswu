@@ -62,6 +62,23 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         assertPixel(try makeRenderer(scene).snapshot(time: 0, width: 4, height: 4), [128,0,255,255])
     }
 
+    func testMultiplyPreservesPartialDestinationAndSourceCoverage() throws {
+        let root = clip(10, children: [(1,0),(1,3)], frames: [[[0,-1,0],[1,-1,1]]])
+        let scene = try fixture(objects: [shape(1),root],
+            colors: [[0,0,255,128,0,0,0],[255,0,0,128,0,0,0]])
+        // Half-red over half-blue: multiply term is zero, uncovered source
+        // and destination each contribute 1/4, combined coverage is 3/4.
+        assertPixel(try makeRenderer(scene).snapshot(time: 0,width:4,height:4),[64,0,64,192])
+    }
+
+    func testMultiplyCompositesGroupAndWorksOnTransparentTarget() throws {
+        let child = clip(2, children: [(1,0),(1,0)], frames: [[[0,-1,0],[1,-1,1]]])
+        let root = clip(10,children:[(2,3)],frames:[[[0,-1,-1]]])
+        let scene = try fixture(objects:[shape(1),child,root],
+            colors:[[0,0,255,128,0,0,0],[255,0,0,128,0,0,0]])
+        assertPixel(try makeRenderer(scene).snapshot(time:0,width:4,height:4),[128,0,64,192])
+    }
+
     func testTriangleStripSharedEdgeAndConstantUVDoNotDoubleAlpha() throws {
         let root = clip(10, children: [(1,0)], frames: [[[0,-1,4]]])
         let scene = try fixture(objects: [shape(1),root])

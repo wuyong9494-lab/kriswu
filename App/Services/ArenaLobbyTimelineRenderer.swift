@@ -138,7 +138,7 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
             throw ArenaLobbyTimelineError.invalid("Lobby Metal functions are unavailable")
         }
         var states: [Int: MTLRenderPipelineState] = [:]
-        for blend in [0, 4, 8] {
+        for blend in [0, 3, 4, 8, 103] {
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.label = "Lobby source blend \(blend)"
             descriptor.vertexFunction = vertex
@@ -151,6 +151,18 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
             color.sourceRGBBlendFactor = .one
             color.sourceAlphaBlendFactor = .one
             switch blend {
+            case 3:
+                // First half of premultiplied MULTIPLY. Preserve destination
+                // alpha so the second half still sees the original coverage.
+                color.sourceRGBBlendFactor = .destinationColor
+                color.destinationRGBBlendFactor = .oneMinusSourceAlpha
+                color.sourceAlphaBlendFactor = .zero
+                color.destinationAlphaBlendFactor = .one
+            case 103:
+                // Cs*Cd + Cd*(1-As) + Cs*(1-Ad), with source-over alpha.
+                color.sourceRGBBlendFactor = .oneMinusDestinationAlpha
+                color.destinationRGBBlendFactor = .one
+                color.destinationAlphaBlendFactor = .oneMinusSourceAlpha
             case 0:
                 color.destinationRGBBlendFactor = .oneMinusSourceAlpha
                 color.destinationAlphaBlendFactor = .oneMinusSourceAlpha
@@ -315,7 +327,15 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
                     blend: 0, framebuffer: true, mask: mask))
             case .layer(let children, let blend, let bounds):
                 guard pipelines[blend] != nil else { throw ArenaLobbyTimelineError.invalid("Unsupported lobby group blend") }
-                if children.count == 1, case .draw(let draw) = children[0], draw.blendMode == 0 {
+                if blend == 3 {
+                    // Composite the entire child once before multiplying it.
+                    // Applying these two passes per overlapping source shape
+                    // would incorrectly multiply the destination repeatedly.
+                    if let layer = try renderTexture(children, bounds: bounds, command: command, pool: pool, density: density) {
+                        result.append(quad(texture: layer.texture, rect: layer.rect, blend: 3, mask: mask))
+                        result.append(quad(texture: layer.texture, rect: layer.rect, blend: 103, mask: mask))
+                    }
+                } else if children.count == 1, case .draw(let draw) = children[0], draw.blendMode == 0 {
                     result.append(PreparedDraw(texture: textures[draw.textureIndex], vertices: draw.vertices,
                         blend: blend, framebuffer: false, mask: mask))
                 } else if let layer = try renderTexture(children, bounds: bounds, command: command, pool: pool, density: density) {
