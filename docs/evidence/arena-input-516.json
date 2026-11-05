@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "source_sha": "072d58816b68887759cf3f9d648c72ff49de6b01",
+  "source_tree": "111ed24c95397a0a274adc3791fc41fdc9478280",
+  "branch": "codex/plan-photo-rules",
+  "run_id": 41970681764,
+  "build_number": 516,
+  "linux": {
+    "job_id": 127057947395,
+    "tests": 616,
+    "skipped": 15,
+    "failures": 0,
+    "seconds": 64.334,
+    "concurrency_warnings": 0,
+    "conclusion": "success"
+  },
+  "native_input": {
+    "job_id": 127057947458,
+    "device": "iPhone 17 Pro Max",
+    "runtime": "iOS 26.2 simulator",
+    "tests": 10,
+    "new_tests": 7,
+    "skipped": 0,
+    "failures": 0,
+    "seconds": 15.77,
+    "conclusion": "success",
+    "artifact_id": 13390250282,
+    "artifact_name": "site-tests-516-1",
+    "artifact_bytes": 137573,
+    "artifact_digest": "sha256:fe8a5e679b96230b5939e75fadb1b74d63c279132f93ec3e5e127c2ba92dc406",
+    "cases": [
+      "ArenaAnimationTests.testStoppingWorldClearsHeldAndQueuedInput",
+      "ArenaDiagnosticsTests.testManualCaptureExportsInputAndCompletesOneCase",
+      "ArenaDiagnosticsTests.testManualTraversalKeepsUserInputAndHasNoBots",
+      "ArenaInputLifecycleTests.testDialogAndRendererPausesMustBothClearInEitherOrder",
+      "ArenaInputLifecycleTests.testDialogDropsAlreadyQueuedAttackGadgetAndEmote",
+      "ArenaInputLifecycleTests.testInputDialogDoesNotStopOtherFightersOrTheMatchClock",
+      "ArenaInputLifecycleTests.testIntroRejectsCommandsAndClearsHeldMovementBeforeCombat",
+      "ArenaInputLifecycleTests.testLateGestureCallbacksCannotReplayAfterDialogCloses",
+      "ArenaInputLifecycleTests.testQueuedUltimateIsDiscardedWithoutSpendingEarnedCharge",
+      "ArenaInputLifecycleTests.testResultFromActualRulesClearsInputAndCannotBePlayedThrough"
+    ],
+    "xcode": "26.3"
+  },
+  "macos_and_ios": {
+    "job_id": 127057947055,
+    "tests": 616,
+    "skipped": 14,
+    "failures": 0,
+    "seconds": 208.309,
+    "core_status": "success",
+    "ios_release_compile": "success",
+    "unsigned_ipa_package": "success",
+    "concurrency_warnings": 0,
+    "conclusion": "success",
+    "ipa_artifact_publication": "skipped",
+    "github_release_publication": "skipped"
+  },
+  "local_checks": [
+    "generated asset configuration matches source",
+    "workflow YAML and 40 shell steps parsed",
+    "git diff --check"
+  ],
+  "first_attempt": {
+    "run_id": 41969504016,
+    "build_number": 515,
+    "source_sha": "e2972cd4dd41a77675f0990eb059ae758ee0eb58",
+    "native_job_id": 127054197103,
+    "native_tests": 10,
+    "failed_cases": 2,
+    "failed_assertions": 4,
+    "native_seconds": 21.298,
+    "reason": "Benchmark crowd fixture deliberately applies AI input to the player. Switched crowd tests to a seeded normal roster and routed navigation/attacks through real controller callbacks.",
+    "artifact_id": 13389068993,
+    "artifact_digest": "sha256:6d152de4a967ce776070b3beb767bb67a85c5e37ea6e7c845cde5c78990ca38e",
+    "failed_case_names": [
+      "ArenaInputLifecycleTests.testInputDialogDoesNotStopOtherFightersOrTheMatchClock",
+      "ArenaInputLifecycleTests.testQueuedUltimateIsDiscardedWithoutSpendingEarnedCharge"
+    ],
+    "linux": {
+      "tests": 616,
+      "skipped": 15,
+      "failures": 0,
+      "seconds": 53.654,
+      "conclusion": "success"
+    },
+    "macos_core": {
+      "tests": 616,
+      "skipped": 14,
+      "failures": 0,
+      "seconds": 341.84,
+      "conclusion": "success"
+    },
+    "device_build": "Automatically cancelled by the newer commit after native fixture failures were collected"
+  },
+  "new_testflight_upload": false,
+  "limitations": [
+    "No physical-device touch or FPS acceptance",
+    "No actual multi-device network session",
+    "No new heroes or private assets added"
+  ],
+  "conclusion": "success",
+  "completed_at": "2026-11-05T05:13:33Z"
+}
