@@ -91,15 +91,45 @@ final class PassPlanFieldMergeTests: XCTestCase {
         XCTAssertEqual(result.region, first.region)
     }
 
-    func testConflictingLiteralIdentifiersCannotBorrowFieldsFromAnotherSatellite() {
+    func testConflictingIdentifiersSelectOneCompleteCandidateWithoutMixingFields() {
         let first = row([.satelliteID: "0OO10", .station: "虚构申站-01", .orbit: ""])
-        let other = row([.satelliteID: "OOO10"])
+        var other = row([.satelliteID: "OOO10", .start: "2032-06-18 08:01:00", .info: "通道1:900M"],
+                        note: "另一轮备注")
+        other.recognitionIssues = ["候选卫星编号需核对", "候选数传信息需核对", "候选开始时间需核对"]
+        let result = combine(first, other)
+        XCTAssertEqual(result.satelliteID, "OOO10")
+        XCTAssertEqual(result.station, other.station)
+        XCTAssertEqual(result.orbit, other.orbit)
+        XCTAssertEqual(result.start, other.start)
+        XCTAssertEqual(result.info, other.info)
+        XCTAssertEqual(result.cells, other.cells)
+        XCTAssertTrue(result.recognitionIssues?.contains("卫星编号多次识别不一致，请核对原图") == true)
+        XCTAssertTrue(result.recognitionIssues?.contains("候选卫星编号需核对") == true)
+    }
+
+    func testEquallyCompleteConflictingIdentifiersKeepLiteralZeroAndLetters() {
+        let first = row([.satelliteID: "0OO10"])
+        let other = row([.satelliteID: "OOO10", .start: "2032-06-18 08:01:00", .info: "通道1:900M"])
         let result = combine(first, other)
         XCTAssertEqual(result.satelliteID, "0OO10")
         XCTAssertEqual(result.station, first.station)
         XCTAssertEqual(result.orbit, first.orbit)
+        XCTAssertEqual(result.start, first.start)
+        XCTAssertEqual(result.info, first.info)
         XCTAssertEqual(result.cells, first.cells)
         XCTAssertTrue(result.recognitionIssues?.contains("卫星编号多次识别不一致，请核对原图") == true)
+    }
+
+    func testNameOnlyConflictDoesNotBlockCompleteTimeCandidate() {
+        let first = row([.satelliteID: "", .satellite: "DEMO0A01", .start: "2032-06-18 08:OO:00"])
+        let other = row([.satelliteID: "", .satellite: "DEMOOA01", .info: "通道1:900M"], emergency: "是")
+        let result = combine(first, other)
+        XCTAssertEqual(result.satellite, other.satellite)
+        XCTAssertEqual(result.start, other.start)
+        XCTAssertEqual(result.info, other.info)
+        XCTAssertEqual(result.cells, other.cells)
+        XCTAssertEqual(PassPlan.emergency(result, layout: layout), true)
+        XCTAssertTrue(result.recognitionIssues?.contains("卫星名称多次识别不一致，请核对原图") == true)
     }
 
     func testTimeRepairsCannotCreateANewImpossibleInterval() {

@@ -1079,16 +1079,16 @@ public enum PassPlan {
         reading.rows.reduce(0) { $0 + (problems($1, rules: rules, layout: reading.layout).isEmpty ? 1 : 0.3) }
     }
 
-    /// 同位置的另一轮只能补坏格/空格，不能因它少一个错误就整行换掉。
+    /// 身份相容时，另一轮只能补坏格/空格，不能因它少一个错误就整行换掉。
     /// 两个完整但不同的值仍保留首选读数及冲突提示；不猜 0/O 或编号前缀。
     private static func supplementingFields(_ row: PassPlanRow, from other: PassPlanRow,
-                                            layout: Layout, rules: [OperatorRule]) -> PassPlanRow {
+                                            layout: Layout, rules: [OperatorRule]) -> PassPlanRow? {
         let hasBothIDs = !comparisonValue(row.satelliteID).isEmpty && !comparisonValue(other.satelliteID).isEmpty
         if hasBothIDs {
-            guard !differentWhenPresent(row.satelliteID, other.satelliteID) else { return row }
+            guard !differentWhenPresent(row.satelliteID, other.satelliteID) else { return nil }
         } else if differentWhenPresent(row.satellite, other.satellite) {
             // 相近的行位置不能把两个身份不同的卫星拼成一条。
-            return row
+            return nil
         }
         var result = row
         func empty(_ value: String) -> Bool { value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -1126,6 +1126,7 @@ public enum PassPlan {
 
     /// 同一张照片几种认法各拼出一份：认得最好的那份打底，按位置唯一对应、一一匹配。
     /// 逐字段补全格式错误和空值；完整值之间的矛盾保留首选值和核对提示。
+    /// 身份冲突时沿用完整候选择优，不拼字段，也不阻断整条较完整的读数。
     public static func combine(_ readings: [Reading], rules: [OperatorRule] = []) -> Reading {
         let ranked = readings.enumerated().sorted { a, b in
             let (sa, sb) = (score(a.element, rules: rules), score(b.element, rules: rules))
@@ -1135,6 +1136,11 @@ public enum PassPlan {
         guard let layout = base.layout else { return base }
         /// 这一行在照片正中间那里的高低
         func level(_ r: Region) -> Double { r.y0 + r.slope * 0.5 }
+        func issues(_ row: PassPlanRow) -> Int {
+            var value = row
+            value.recognitionIssues = nil
+            return problems(value, rules: rules, layout: layout).count
+        }
         func samePosition(_ a: Region, _ b: Region) -> Bool {
             guard a.page == b.page else { return false }
             let left = max(a.left, b.left), right = min(a.right, b.right)
@@ -1156,8 +1162,9 @@ public enum PassPlan {
                     matched.insert(i)
                     let previous = rows[i]
                     let conflicts = recognitionConflicts(previous, row, rules: rules, layout: layout)
-                    let supplemented = supplementingFields(previous, from: row, layout: layout, rules: rules)
-                    rows[i] = retainingIssues(supplemented, from: [previous, row], adding: conflicts)
+                    let preferred = supplementingFields(previous, from: row, layout: layout, rules: rules)
+                        ?? (issues(row) < issues(previous) ? row : previous)
+                    rows[i] = retainingIssues(preferred, from: [previous, row], adding: conflicts)
                 } else {
                     // 同一行被对应两次、或附近两行都可能对应时，不擅自吞掉一条。
                     let warnings = candidates.isEmpty ? [] : ["多次识别的行位置对应不清，请核对原图"]
