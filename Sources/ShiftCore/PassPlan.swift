@@ -1079,8 +1079,53 @@ public enum PassPlan {
         reading.rows.reduce(0) { $0 + (problems($1, rules: rules, layout: reading.layout).isEmpty ? 1 : 0.3) }
     }
 
+    /// 同位置的另一轮只能补坏格/空格，不能因它少一个错误就整行换掉。
+    /// 两个完整但不同的值仍保留首选读数及冲突提示；不猜 0/O 或编号前缀。
+    private static func supplementingFields(_ row: PassPlanRow, from other: PassPlanRow,
+                                            layout: Layout, rules: [OperatorRule]) -> PassPlanRow {
+        let hasBothIDs = !comparisonValue(row.satelliteID).isEmpty && !comparisonValue(other.satelliteID).isEmpty
+        if hasBothIDs {
+            guard !differentWhenPresent(row.satelliteID, other.satelliteID) else { return row }
+        } else if differentWhenPresent(row.satellite, other.satellite) {
+            // 相近的行位置不能把两个身份不同的卫星拼成一条。
+            return row
+        }
+        var result = row
+        func empty(_ value: String) -> Bool { value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        func replace(_ column: Column, _ key: WritableKeyPath<PassPlanRow, String>, when allowed: Bool) {
+            guard allowed, !empty(other[keyPath: key]), let index = layout.slots.firstIndex(where: { $0.column == column }) else { return }
+            result[keyPath: key] = other[keyPath: key]
+            while result.cells.count < layout.slots.count { result.cells.append("") }
+            result.cells[index] = index < other.cells.count ? other.cells[index] : other[keyPath: key]
+        }
+        replace(.satelliteID, \.satelliteID, when: empty(row.satelliteID))
+        replace(.satellite, \.satellite, when: empty(row.satellite))
+        replace(.station, \.station, when: operatorName(of: row.station, rules: rules) == nil
+            && operatorName(of: other.station, rules: rules) != nil)
+        replace(.orbit, \.orbit, when: (empty(row.orbit) || !row.orbit.allSatisfy(\.isNumber))
+            && !empty(other.orbit) && other.orbit.allSatisfy(\.isNumber))
+        replace(.info, \.info, when: empty(row.info))
+        replace(.status, \.status, when: empty(row.status) && isRecognizedPlanStatus(other.status))
+
+        let fixesStart = !isValidTime(row.start) && isValidTime(other.start)
+        let fixesEnd = !isValidTime(row.end) && isValidTime(other.end)
+        let start = fixesStart ? other.start : row.start
+        let end = fixesEnd ? other.end : row.end
+        // 各自看起来合法的时间不能组合成结束早于开始的新区间。
+        if !isValidTime(start) || !isValidTime(end) || end > start {
+            replace(.start, \.start, when: fixesStart)
+            replace(.end, \.end, when: fixesEnd)
+        }
+        if let index = layout.emergencyIndex, emergencyColumn(row, layout: layout) == nil,
+           emergencyColumn(other, layout: layout) != nil, index < other.cells.count {
+            while result.cells.count < layout.slots.count { result.cells.append("") }
+            result.cells[index] = other.cells[index]
+        }
+        return result
+    }
+
     /// 同一张照片几种认法各拼出一份：认得最好的那份打底，按位置唯一对应、一一匹配。
-    /// 更完整的读数可以补上格式错误，但合法值之间的矛盾必须留下核对提示，不能静默挑一个。
+    /// 逐字段补全格式错误和空值；完整值之间的矛盾保留首选值和核对提示。
     public static func combine(_ readings: [Reading], rules: [OperatorRule] = []) -> Reading {
         let ranked = readings.enumerated().sorted { a, b in
             let (sa, sb) = (score(a.element, rules: rules), score(b.element, rules: rules))
@@ -1090,11 +1135,6 @@ public enum PassPlan {
         guard let layout = base.layout else { return base }
         /// 这一行在照片正中间那里的高低
         func level(_ r: Region) -> Double { r.y0 + r.slope * 0.5 }
-        func issues(_ row: PassPlanRow) -> Int {
-            var value = row
-            value.recognitionIssues = nil
-            return problems(value, rules: rules, layout: layout).count
-        }
         func samePosition(_ a: Region, _ b: Region) -> Bool {
             guard a.page == b.page else { return false }
             let left = max(a.left, b.left), right = min(a.right, b.right)
@@ -1116,8 +1156,8 @@ public enum PassPlan {
                     matched.insert(i)
                     let previous = rows[i]
                     let conflicts = recognitionConflicts(previous, row, rules: rules, layout: layout)
-                    let preferred = issues(row) < issues(previous) ? row : previous
-                    rows[i] = retainingIssues(preferred, from: [previous, row], adding: conflicts)
+                    let supplemented = supplementingFields(previous, from: row, layout: layout, rules: rules)
+                    rows[i] = retainingIssues(supplemented, from: [previous, row], adding: conflicts)
                 } else {
                     // 同一行被对应两次、或附近两行都可能对应时，不擅自吞掉一条。
                     let warnings = candidates.isEmpty ? [] : ["多次识别的行位置对应不清，请核对原图"]
