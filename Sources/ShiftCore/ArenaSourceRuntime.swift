@@ -253,11 +253,14 @@ extension ArenaGame {
     mutating func applySourceArea(_ spawn: ArenaSourceAreaSpawn, owner: Int, damageMultiplier: Double? = nil) {
         guard spawn.area.isSupported, fighters.indices.contains(owner) else { return }
         let team = fighters[owner].team
-        if spawn.area.wallBreak || spawn.area.rawSource["DestroysDecorations"]?.lowercased() == "true" {
+        if spawn.area.kind != "DelayedDamage",
+           spawn.area.wallBreak || spawn.area.rawSource["DestroysDecorations"]?.lowercased() == "true" {
             _ = destroyTerrain(at: spawn.position, radius: spawn.area.radius,
                 cause: spawn.area.wallBreak ? .wallBreaker : .normalWeapon)
         }
-        events.append(.explosion(at: spawn.position, radius: spawn.area.radius))
+        if spawn.area.kind != "DelayedDamage" {
+            events.append(.explosion(at: spawn.position, radius: spawn.area.radius))
+        }
         if let strength = spawn.area.ownPushback, strength > 0, fighters[owner].alive,
            fighters[owner].pos.distance(to: spawn.position) < spawn.area.radius + Self.hitRadius(fighters[owner]) {
             let direction = (fighters[owner].pos - spawn.position).normalized
@@ -280,15 +283,19 @@ extension ArenaGame {
         let activeAreas = sourceAreas
         sourceAreas.removeAll(keepingCapacity: true)
         for var live in activeAreas {
-            live.state.advance(dt: max(0, time - live.lastUpdateTime))
+            let elapsed = max(0, time - live.lastUpdateTime)
+            live.state.advance(dt: elapsed)
             live.lastUpdateTime = time
-            guard !live.state.expired else { continue }
-            resolveSourceArea(&live)
-            sourceAreas.append(live)
+            // A large simulation step may cross both the fuse and lifetime.
+            // The delayed blast must still fire exactly once at the crossing.
+            if !live.state.expired || live.kind == "DelayedDamage" {
+                resolveSourceArea(&live, deltaTime: elapsed)
+            }
+            if !live.state.expired { sourceAreas.append(live) }
         }
     }
 
-    mutating func resolveSourceArea(_ live: inout ArenaSourceLiveArea) {
+    mutating func resolveSourceArea(_ live: inout ArenaSourceLiveArea, deltaTime: Double = 0) {
         let spawn = live.spawn
         if spawn.area.kind == "SmokeScreen" {
             // Refresh a very short concealment window each simulation step.
@@ -299,6 +306,30 @@ extension ArenaGame {
                 fighters[target].invisible = max(fighters[target].invisible, 0.15)
             }
             return
+        }
+        if spawn.area.kind == "Pushback" {
+            // A host approximation for Tara's inward attraction. The archived
+            // -150 source strength is not a verified velocity curve; use a
+            // fixed, bounded local movement and normal terrain collision.
+            let step = min(8, max(0, -spawn.area.pushback) * 7) * min(deltaTime, 1)
+            guard step > 0 else { return }
+            for target in fighters.indices where fighters[target].alive && fighters[target].team != live.team
+                && fighters[target].leap == nil {
+                let toCenter = spawn.position - fighters[target].pos
+                let distance = toCenter.length
+                guard distance > 0.001, distance < spawn.area.radius + Self.hitRadius(fighters[target]) else { continue }
+                fighters[target].pos = walkingPosition(from: fighters[target].pos,
+                    by: toCenter.normalized * min(distance, step), radius: Self.hitRadius(fighters[target]))
+            }
+            return
+        }
+        if spawn.area.kind == "DelayedDamage" {
+            guard live.state.takeDelayedExplosion() else { return }
+            if spawn.area.wallBreak || spawn.area.rawSource["DestroysDecorations"]?.lowercased() == "true" {
+                _ = destroyTerrain(at: spawn.position, radius: spawn.area.radius,
+                    cause: spawn.area.wallBreak ? .wallBreaker : .normalWeapon)
+            }
+            events.append(.explosion(at: spawn.position, radius: spawn.area.radius))
         }
         var targets = fighters.indices.filter { fighters[$0].alive && fighters[$0].team != live.team
             && fighters[$0].pos.distance(to: spawn.position) < spawn.area.radius + Self.hitRadius(fighters[$0]) }
@@ -314,7 +345,8 @@ extension ArenaGame {
                 areaID: spawn.area.id, target: target)] ?? 0) <= time
         }
         let amount = Int((Double(spawn.damage) * live.damageMultiplier).rounded())
-        for target in live.state.damageTargets(eligible) {
+        let damageTargets = spawn.area.kind == "DelayedDamage" ? eligible : live.state.damageTargets(eligible)
+        for target in damageTargets {
             if target >= 0 {
                 sourceDamage(target, amount: amount, owner: live.owner, role: spawn.role,
                     chargeDamage: spawn.chargeDamage, pushback: spawn.area.pushback,

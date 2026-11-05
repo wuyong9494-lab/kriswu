@@ -12,9 +12,14 @@ final class ArenaSourceAreaArt {
     private let source: ArenaImportedSkillArt?
 
     init(area: ArenaSourceLiveArea, myTeam: Int) {
-        let color = area.kind == "SmokeScreen"
-            ? UIColor(red: 0.63, green: 0.56, blue: 0.9, alpha: 1)
-            : (area.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot)
+        let color: UIColor
+        if area.kind == "SmokeScreen" {
+            color = UIColor(red: 0.63, green: 0.56, blue: 0.9, alpha: 1)
+        } else if area.kind == "Pushback" || area.kind == "DelayedDamage" {
+            color = UIColor(red: 0.59, green: 0.21, blue: 0.76, alpha: 1)
+        } else {
+            color = area.team == myTeam ? ArenaPalette.allyShot : ArenaPalette.enemyShot
+        }
         let radius = CGFloat(max(area.radius, 0.05))
         let tube = SCNTube(innerRadius: max(0, radius - 0.04), outerRadius: radius, height: 0.008)
         tube.radialSegmentCount = 40

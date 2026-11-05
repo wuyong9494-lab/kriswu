@@ -30,7 +30,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
         "self_shield", "damage_taken_super_charge", "ally_projectile_heal", "charged_ground_dash",
-        "caster_tracked_indirect_flight", "smoke_ally_hide"
+        "caster_tracked_indirect_flight", "smoke_ally_hide", "area_pull", "delayed_area_damage"
     ]
     public var id: String
     public var name: String
@@ -145,6 +145,51 @@ public enum ArenaSourceCompatibility {
                 if ultimate.isSupported {
                     result.ultimate = ultimate
                     resolved.insert(reason)
+                }
+            }
+        }
+        // Tara's archived black hole emits a short inward pull plus a single
+        // later blast. This is a bounded host area lifecycle, not an exact
+        // recreation of the native suction acceleration or impact tick.
+        if result.id == "BlackHole", var ultimate = result.ultimate,
+           result.weapon?.isSupported == true,
+           ultimate.id == "BlackHoleUlti", ultimate.role == .ultimate,
+           ultimate.behavior == "Attack", ultimate.damage == 800,
+           ultimate.projectileCount == 1, ultimate.projectiles.count == 1,
+           ultimate.projectiles[0].id == "BlackHoleUltiProjectile",
+           ultimate.projectiles[0].indirect == true,
+           ultimate.projectiles[0].directDamage == false,
+           ultimate.projectiles[0].areaEffects.count == 2 {
+            let pull = "area.BlackHoleUltiSuck.Type=Pushback: requires a dedicated area lifecycle"
+            let explosion = "area.BlackHoleUltiExplosion.Type=DelayedDamage: requires a dedicated area lifecycle"
+            let delay = "area.BlackHoleUltiExplosion.CustomValue=700: not yet interpreted"
+            var projectile = ultimate.projectiles[0]
+            let pullArea = projectile.areaEffects[0]
+            let blastArea = projectile.areaEffects[1]
+            let reasons = [pull, explosion, delay]
+            if reasons.allSatisfy({ result.unsupportedReasons.contains($0) }),
+               Set(ultimate.unsupportedReasons) == Set(reasons),
+               Set(projectile.unsupportedReasons) == Set(reasons),
+               pullArea.id == "BlackHoleUltiSuck", pullArea.kind == "Pushback",
+               pullArea.rawSource["Type"] == "Pushback", pullArea.duration == 0.7,
+               pullArea.rawSource["PushbackStrength"] == "-150",
+               pullArea.radius == 4,
+               pullArea.pushback == -0.5, pullArea.unsupportedReasons == [pull],
+               blastArea.id == "BlackHoleUltiExplosion", blastArea.kind == "DelayedDamage",
+               blastArea.rawSource["Type"] == "DelayedDamage",
+               blastArea.rawSource["CustomValue"] == "700",
+               blastArea.rawSource["PushbackStrength"] == "50",
+               blastArea.radius == 1.5, blastArea.duration == 1.4, blastArea.wallBreak,
+               Set(blastArea.unsupportedReasons) == Set([explosion, delay]) {
+                projectile.areaEffects[0].unsupportedReasons.removeAll { $0 == pull }
+                projectile.areaEffects[1].delayedDamageSeconds = 0.7
+                projectile.areaEffects[1].unsupportedReasons.removeAll { $0 == explosion || $0 == delay }
+                projectile.unsupportedReasons.removeAll { reasons.contains($0) }
+                ultimate.projectiles[0] = projectile
+                ultimate.unsupportedReasons.removeAll { reasons.contains($0) }
+                if ultimate.isSupported {
+                    result.ultimate = ultimate
+                    resolved.formUnion(reasons)
                 }
             }
         }
@@ -293,6 +338,9 @@ public enum ArenaSourceCompatibility {
             if resolved.contains("area.Sandy_def_ulti.Type=SmokeScreen: requires a dedicated area lifecycle") {
                 result.compatibilityPolicy += "+host-sandy-ally-smoke-nine-seconds"
             }
+            if resolved.contains("area.BlackHoleUltiExplosion.CustomValue=700: not yet interpreted") {
+                result.compatibilityPolicy += "+host-tara-pull-and-delayed-blast700ms"
+            }
         }
         return result
     }
@@ -386,6 +434,8 @@ public struct ArenaSourceAreaEffect: Codable, Equatable, Sendable, Identifiable 
     public var damageMultiplier: Double? = nil
     public var inheritsSkillDamage: Bool? = nil
     public var bulletExplosion: ArenaSourceBulletExplosion? = nil
+    /// One-shot blast time within a longer-lived source area, in seconds.
+    public var delayedDamageSeconds: Double? = nil
 
     public func resolvedDamage(skillDamage: Int) -> Int {
         let base = inheritsSkillDamage != false && skillDamage > 0 ? skillDamage : (damage ?? skillDamage)
@@ -393,10 +443,11 @@ public struct ArenaSourceAreaEffect: Codable, Equatable, Sendable, Identifiable 
     }
 
     public var isSupported: Bool {
-        unsupportedReasons.isEmpty && ["Damage", "Dot", "StatusEffect", "BulletExplosion", "SmokeScreen"].contains(kind)
+        unsupportedReasons.isEmpty && ["Damage", "Dot", "StatusEffect", "BulletExplosion", "SmokeScreen", "Pushback", "DelayedDamage"].contains(kind)
             && radius.isFinite && radius > 0 && radius <= 100
             && duration.isFinite && duration >= 0 && duration <= 600
-            && pushback.isFinite && pushback >= 0 && (damage ?? 0) >= 0 && (damage ?? 0) <= 10_000_000
+            && pushback.isFinite && (kind == "Pushback" ? (-10...0).contains(pushback) : pushback >= 0)
+            && (damage ?? 0) >= 0 && (damage ?? 0) <= 10_000_000
             && [ownPushback, sharedTargetCooldown].compactMap { $0 }.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 600 }
             && (tickInterval ?? 1).isFinite && (tickInterval ?? 1) >= ArenaSourceSkillState.tickDuration
             && (statusTickInterval ?? 0.1).isFinite && (statusTickInterval ?? 0.1) >= ArenaSourceSkillState.tickDuration
@@ -405,6 +456,9 @@ public struct ArenaSourceAreaEffect: Codable, Equatable, Sendable, Identifiable 
             && (statusEnemy?.isSupported ?? true) && (bulletExplosion?.isSupported ?? true)
             && (kind != "StatusEffect" || statusEnemy != nil)
             && (kind != "BulletExplosion" || bulletExplosion != nil)
+            && (kind != "DelayedDamage" || (delayedDamageSeconds.map {
+                $0.isFinite && $0 >= 0 && $0 < duration
+            } ?? false))
     }
 
     public var runtimeCapabilities: Set<String> {
@@ -412,6 +466,8 @@ public struct ArenaSourceAreaEffect: Codable, Equatable, Sendable, Identifiable 
         if kind == "Damage" { result.insert("impact_damage") }
         if kind == "Dot" { result.insert("dot_area") }
         if kind == "SmokeScreen" { result.insert("smoke_ally_hide") }
+        if kind == "Pushback" { result.insert("area_pull") }
+        if kind == "DelayedDamage" { result.insert("delayed_area_damage") }
         if statusEnemy != nil { result.insert("slow_status") }
         if (ownPushback ?? 0) > 0 { result.insert("self_pushback") }
         if (sharedTargetCooldown ?? 0) > 0 { result.insert("area_shared_cooldown") }

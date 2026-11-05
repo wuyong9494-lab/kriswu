@@ -178,6 +178,10 @@ struct ArenaResourcePackView: View {
                             Text("沙迪的普攻按三发扇形散射，大招生成持续 9 秒的队友隐蔽区域；属于本地兼容玩法，尚待原客户端对照。")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
+                        if profile.compatibilityPolicy.contains("host-tara-pull-and-delayed-blast700ms") {
+                            Text("塔拉大招会吸引敌人，0.7 秒后在中心爆炸并破坏障碍；吸引速度为本地兼容参数，尚未验证原客户端数值。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }

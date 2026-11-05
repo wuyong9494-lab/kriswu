@@ -9,6 +9,8 @@ public struct ArenaSourceAreaState: Codable, Equatable, Sendable {
     private var damageWindows: [Int: Int] = [:]
     private var statusWindows: [Int: Int] = [:]
     private var explosionConsumed = false
+    /// Optional preserves decoding of older snapshots that lack this field.
+    private var delayedExplosionConsumed: Bool? = nil
 
     public init(definition: ArenaSourceAreaEffect) { self.definition = definition }
     public var expired: Bool { elapsed + 1e-9 >= max(0.05, definition.duration) }
@@ -49,5 +51,16 @@ public struct ArenaSourceAreaState: Codable, Equatable, Sendable {
               definition.kind == "BulletExplosion", let explosion = definition.bulletExplosion else { return nil }
         explosionConsumed = true
         return explosion
+    }
+
+    /// Fire once when the delayed area's authored fuse is reached. Do not
+    /// depend on a target being present at impact or on the graphics frame
+    /// count; a late simulation step must still resolve the pending blast.
+    public mutating func takeDelayedExplosion() -> Bool {
+        guard definition.isSupported, definition.kind == "DelayedDamage",
+              let delay = definition.delayedDamageSeconds,
+              elapsed + 1e-9 >= delay, delayedExplosionConsumed != true else { return false }
+        delayedExplosionConsumed = true
+        return true
     }
 }

@@ -202,6 +202,210 @@ final class ArenaSourceCombatTests: XCTestCase {
         return source
     }
 
+    private func blackHoleTara() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "BlackHole"
+        source.name = "Tara"
+        source.health = 3300
+        let pull = "area.BlackHoleUltiSuck.Type=Pushback: requires a dedicated area lifecycle"
+        let explosion = "area.BlackHoleUltiExplosion.Type=DelayedDamage: requires a dedicated area lifecycle"
+        let delay = "area.BlackHoleUltiExplosion.CustomValue=700: not yet interpreted"
+        let reasons = [pull, explosion, delay]
+        source.unsupportedReasons = reasons
+        var weapon = colt()
+        weapon.id = "BlackHoleWeapon"
+        weapon.damage = 480
+        weapon.projectileCount = 3
+        weapon.spread = 0.4363323129985824
+        weapon.projectiles[0].id = "BlackHoleProjectile"
+        weapon.projectiles[0].piercesCharacters = true
+        source.weapon = weapon
+
+        let pullArea = ArenaSourceAreaEffect(id: "BlackHoleUltiSuck", kind: "Pushback", radius: 4,
+            damage: nil, duration: 0.7, wallBreak: false, pushback: -0.5,
+            unsupportedReasons: [pull], rawSource: ["Type": "Pushback", "PushbackStrength": "-150"])
+        let blastArea = ArenaSourceAreaEffect(id: "BlackHoleUltiExplosion", kind: "DelayedDamage", radius: 1.5,
+            damage: nil, duration: 1.4, wallBreak: true, pushback: 50 / 300.0,
+            unsupportedReasons: [explosion, delay], rawSource: [
+                "Type": "DelayedDamage", "CustomValue": "700", "PushbackStrength": "50"
+            ])
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "BlackHoleUlti"
+        ultimate.damage = 800
+        ultimate.chargeDamage = 800
+        ultimate.projectileCount = 1
+        ultimate.projectiles[0].id = "BlackHoleUltiProjectile"
+        ultimate.projectiles[0].indirect = true
+        ultimate.projectiles[0].directDamage = false
+        ultimate.projectiles[0].wallBreak = false
+        ultimate.projectiles[0].areaEffects = [pullArea, blastArea]
+        ultimate.projectiles[0].unsupportedReasons = reasons
+        ultimate.unsupportedReasons = reasons
+        source.ultimate = ultimate
+        return source
+    }
+
+    func testTaraBlackHoleRequiresTheReviewedPullAnd700msFuse() throws {
+        let original = blackHoleTara()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        let areas = try XCTUnwrap(adapted.ultimate?.projectiles.first?.areaEffects)
+        XCTAssertEqual(areas.map(\.kind), ["Pushback", "DelayedDamage"])
+        XCTAssertEqual(areas[0].pushback, -0.5)
+        XCTAssertEqual(areas[1].delayedDamageSeconds, 0.7)
+        XCTAssertTrue(areas[1].wallBreak)
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-tara-pull-and-delayed-blast700ms"))
+        XCTAssertEqual(try JSONDecoder().decode(ArenaSourceHero.self, from: JSONEncoder().encode(adapted)), adapted)
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, blackHoleTara(), "Imported source traits are never mutated")
+
+        var unreviewed = original
+        unreviewed.ultimate?.projectiles[0].areaEffects[1].rawSource["CustomValue"] = "900"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.ultimate?.projectiles[0].areaEffects[0].radius = 7
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.unsupportedReasons.append("unknown hero trait")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.ultimate?.projectiles[0].directDamage = true
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+    }
+
+    func testTaraDelayedExplosionFiresOnceAfterFuseEvenWithLongStep() throws {
+        let adapted = ArenaSourceCompatibility.adapt(blackHoleTara())
+        let blast = try XCTUnwrap(adapted.ultimate?.projectiles[0].areaEffects[1])
+        var state = ArenaSourceAreaState(definition: blast)
+        XCTAssertFalse(state.takeDelayedExplosion())
+        state.advance(dt: 0.699)
+        XCTAssertFalse(state.takeDelayedExplosion())
+        state.advance(dt: 0.001)
+        XCTAssertTrue(state.takeDelayedExplosion())
+        XCTAssertFalse(state.takeDelayedExplosion())
+        let restored = try JSONDecoder().decode(ArenaSourceAreaState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(restored, state)
+        var decoded = restored
+        XCTAssertFalse(decoded.takeDelayedExplosion(), "A replay or decoded save cannot repeat the blast")
+        var skipped = ArenaSourceAreaState(definition: blast)
+        skipped.advance(dt: 2)
+        XCTAssertTrue(skipped.expired)
+        XCTAssertTrue(skipped.takeDelayedExplosion(), "Crossing the fuse and expiry together must not lose damage")
+        XCTAssertFalse(skipped.takeDelayedExplosion())
+    }
+
+    func testTaraPullMovesOnlyEnemiesAndExplosionWaitsForFuseInMixedRoster() throws {
+        let tara = ArenaSourceCompatibility.adapt(blackHoleTara())
+        let rows = (0..<13).map { y in String((0..<23).map { x -> Character in
+            if x == 0 || x == 22 || y == 0 || y == 12 { return "#" }
+            if x == 3 && y == 6 { return "a" }
+            if x == 18 && y == 6 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Tara", brawler: .ranger, isBot: false, team: 0, sourceHero: tara),
+            ArenaGame.Entrant(name: "Project ally", brawler: .ranger, isBot: false, team: 0),
+            ArenaGame.Entrant(name: "Project enemy", brawler: .knight, isBot: false, team: 1),
+            ArenaGame.Entrant(name: "Source enemy", brawler: .ranger, isBot: false, team: 1, sourceHero: hero())
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 809, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(3.5, 6.5)
+        game.fighters[1].pos = V2(8.5, 5)
+        game.fighters[2].pos = V2(10.5, 6.5)
+        game.fighters[3].pos = V2(8.5, 9.2)
+        let originalPositions = game.fighters.map(\.pos)
+        let originalHealth = game.fighters.map(\.health)
+        let areas = try XCTUnwrap(tara.ultimate?.projectiles.first?.areaEffects)
+        for area in areas {
+            game.applySourceArea(ArenaSourceAreaSpawn(skillID: "BlackHoleUlti", role: .ultimate,
+                area: area, position: V2(8.5, 6.5), damage: 800, chargeDamage: 800), owner: 0)
+        }
+        XCTAssertEqual(game.sourceAreas.count, 2)
+        XCTAssertEqual(game.fighters.map(\.health), originalHealth, "Neither pull nor delayed blast damages at spawn")
+        runWorld(&game, frames: 35)
+        XCTAssertEqual(game.fighters[0].pos, originalPositions[0])
+        XCTAssertEqual(game.fighters[1].pos, originalPositions[1], "Teammates are not pulled")
+        XCTAssertLessThan(game.fighters[2].pos.distance(to: V2(8.5, 6.5)), 1)
+        XCTAssertLessThan(game.fighters[3].pos.distance(to: V2(8.5, 6.5)), 1)
+        XCTAssertEqual(game.fighters.map(\.health), originalHealth, "No blast damage before 0.7s")
+        runWorld(&game, frames: 8)
+        XCTAssertEqual(game.fighters[2].health, originalHealth[2] - 800)
+        XCTAssertEqual(game.fighters[3].health, originalHealth[3] - 800)
+        XCTAssertEqual(game.fighters[1].health, originalHealth[1])
+        runWorld(&game, frames: 50)
+        XCTAssertTrue(game.sourceAreas.isEmpty)
+        XCTAssertEqual(game.fighters[2].health, originalHealth[2] - 800, "Delayed blast hits only once")
+    }
+
+    func testTaraDelayedBlastBreaksOnlyDestructibleWallAtFuse() throws {
+        var game = try world()
+        let floor = ArenaTerrainState.Rule(id: "floor", blocksMovement: false, blocksProjectiles: false,
+            concealsHeroes: false, destroyedByNormalWeapons: false, destroyedByWallBreakers: false,
+            destroyedInOvertime: false, visualKind: .floor)
+        let wall = ArenaTerrainState.Rule(id: "breakable", blocksMovement: true, blocksProjectiles: true,
+            concealsHeroes: false, destroyedByNormalWeapons: false, destroyedByWallBreakers: true,
+            destroyedInOvertime: false, visualKind: .wall)
+        var ids = Array(repeating: "floor", count: 15 * 9)
+        ids[4 * 15 + 6] = "breakable"
+        game.terrainState = try ArenaTerrainState(width: 15, height: 9, rules: [floor, wall],
+            terrainIDs: ids, sourceSymbols: ids.map { $0 == "floor" ? "." : "#" })
+        let tara = ArenaSourceCompatibility.adapt(blackHoleTara())
+        let blast = try XCTUnwrap(tara.ultimate?.projectiles.first?.areaEffects[1])
+        game.applySourceArea(ArenaSourceAreaSpawn(skillID: "BlackHoleUlti", role: .ultimate,
+            area: blast, position: V2(6.5, 4.5), damage: 800, chargeDamage: 800), owner: 0)
+        XCTAssertTrue(try XCTUnwrap(game.terrainState).blocksMovement(6, 4))
+        runWorld(&game, frames: 41)
+        XCTAssertTrue(try XCTUnwrap(game.terrainState).blocksMovement(6, 4), "No premature terrain damage")
+        runWorld(&game, frames: 2)
+        XCTAssertFalse(try XCTUnwrap(game.terrainState).blocksMovement(6, 4), "Exploding center breaks the reviewed wall")
+        XCTAssertEqual(game.terrainState?.revision, 1)
+        runWorld(&game, frames: 45)
+        XCTAssertEqual(game.terrainState?.revision, 1, "The destruction event must not recur")
+    }
+
+    func testTaraPullCannotDragEnemyThroughBlockingTerrain() throws {
+        var game = try world(wall: true)
+        game.fighters[1].isBot = false
+        game.fighters[1].pos = V2(8.5, 4.5)
+        let tara = ArenaSourceCompatibility.adapt(blackHoleTara())
+        let pull = try XCTUnwrap(tara.ultimate?.projectiles.first?.areaEffects[0])
+        game.applySourceArea(ArenaSourceAreaSpawn(skillID: "BlackHoleUlti", role: .ultimate,
+            area: pull, position: V2(4.5, 4.5), damage: 800, chargeDamage: 800), owner: 0)
+        runWorld(&game, frames: 36)
+        XCTAssertGreaterThan(game.fighters[1].pos.x, 7.2, "The wall at x=6 must block the inward pull")
+        XCTAssertLessThan(game.fighters[1].pos.x, 8.5, "The suction still moves the fighter toward the wall")
+        XCTAssertEqual(game.fighters[1].health, game.fighters[1].maxHealth, "Attraction itself does not deal damage")
+    }
+
+    func testTaraUltimateLaunchesIndirectProjectileAndResolvesBothAreas() throws {
+        let tara = ArenaSourceCompatibility.adapt(blackHoleTara())
+        let rows = (0..<13).map { y in String((0..<23).map { x -> Character in
+            if x == 0 || x == 22 || y == 0 || y == 12 { return "#" }
+            if x == 4 && y == 6 { return "a" }
+            if x == 19 && y == 6 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Tara", brawler: .ranger, isBot: false, team: 0, sourceHero: tara),
+            ArenaGame.Entrant(name: "Enemy", brawler: .ranger, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 810, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(4.5, 6.5)
+        game.fighters[1].pos = V2(11.5, 6.5)
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(7, 0))
+        XCTAssertEqual(game.projectiles.count, 1)
+        XCTAssertEqual(game.projectiles[0].sourceLaunch?.projectile.id, "BlackHoleUltiProjectile")
+        runWorld(&game, frames: 32)
+        XCTAssertTrue(game.projectiles.isEmpty)
+        XCTAssertEqual(Set(game.sourceAreas.map(\.kind)), Set(["Pushback", "DelayedDamage"]))
+        XCTAssertEqual(game.fighters[1].health, game.fighters[1].maxHealth)
+        runWorld(&game, frames: 46)
+        XCTAssertEqual(game.fighters[1].health, game.fighters[1].maxHealth - 800)
+    }
+
     func testSandySmokeAndThreePelletFanRequireExactReviewedSource() throws {
         let original = smokeSandy()
         XCTAssertFalse(original.canPlay)
@@ -1118,6 +1322,22 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects.first?.kind, "SmokeScreen")
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects.first?.duration, 9)
         XCTAssertEqual(adapted.rawSource, original.rawSource)
+    }
+
+    func testPrivateTaraProfilePreservesBothOriginalBlackHoleAreas() throws {
+        let original = try privateHero("BlackHole")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.id, "BlackHoleWeapon")
+        XCTAssertEqual(adapted.ultimate?.id, "BlackHoleUlti")
+        XCTAssertEqual(adapted.ultimate?.damage, 800)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects.map(\.id),
+                       ["BlackHoleUltiSuck", "BlackHoleUltiExplosion"])
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects[1].delayedDamageSeconds, 0.7)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects[1].rawSource,
+                       original.ultimate?.projectiles.first?.areaEffects[1].rawSource)
     }
 
     func testWorldOncePerVolleyKeysIncludeActivationAndExpire() throws {
