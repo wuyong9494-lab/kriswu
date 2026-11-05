@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "source_sha": "f4ee3ee4754e77fc0a86aaf30a41d99960db0a8a",
+  "source_tree": "b6cbddcb5d7af60a405c9eb8f9d127446b310443",
+  "branch": "codex/plan-photo-rules",
+  "run_id": 41965055385,
+  "build_number": 514,
+  "linux": {
+    "job_id": 127040042306,
+    "tests": 616,
+    "skipped": 15,
+    "failures": 0,
+    "seconds": 78.349,
+    "conclusion": "success"
+  },
+  "native_audio": {
+    "job_id": 127040042232,
+    "device": "iPhone 17 Pro Max",
+    "runtime": "iOS 26.2 simulator",
+    "tests": 15,
+    "new_tests": 8,
+    "skipped": 0,
+    "failures": 0,
+    "seconds": 10.984,
+    "conclusion": "success",
+    "artifact_id": 13386879974,
+    "artifact_name": "site-tests-514-1",
+    "artifact_bytes": 152807,
+    "artifact_digest": "sha256:2c128c4f0124f57a7b01af277bd5f3e0602e73ff049115422886e55ba4c1f752",
+    "cases": [
+      "ArenaAudioTests.testCompletedThemeDefaultsOnAndPreservesExplicitChoice",
+      "ArenaAudioTests.testEveryEffectPredecodesToSharedPCMWithoutTruncation",
+      "ArenaAudioTests.testMixerActuallySelectsBothCompletedResultThemesAndLegacyChoice",
+      "ArenaAudioTests.testPersistentMixerActuallyRendersAndClearsQueuedSoundsOnPause",
+      "ArenaAudioTests.testRendererAndBackgroundPausePreserveBattleAudioScene",
+      "ArenaAudioTests.testThemeFilesDecodeAndKeepRequiredDurations",
+      "ArenaAudioTests.testThemeReplacementPreservesPausedBattleAndDoesNotRestartAudio",
+      "ArenaResultAudioTests.testCompletedResultDoesNotReplayAfterResumeOrThemeChange",
+      "ArenaResultAudioTests.testLobbyReappearanceDoesNotEraseActiveResult",
+      "ArenaResultAudioTests.testNewOwnerAndStaleTeardownKeepCurrentMusic",
+      "ArenaResultAudioTests.testRepeatedFinishDoesNotRestartResultAndNextMatchStartsAtZero",
+      "ArenaResultAudioTests.testResultFinishingWhileMutedStartsAfterUnmute",
+      "ArenaResultAudioTests.testResultResumesForSameRendererAfterBackground",
+      "ArenaResultAudioTests.testReturningLobbyStopsResultBeforeLobbyCallback",
+      "ArenaResultAudioTests.testThemeReplacementWhilePausedKeepsResultPosition"
+    ]
+  },
+  "macos_and_ios": {
+    "job_id": 127040042029,
+    "tests": 616,
+    "skipped": 14,
+    "failures": 0,
+    "seconds": 253.172,
+    "core_status": "success",
+    "asset_configuration": "success",
+    "ios_release_compile": "success",
+    "unsigned_ipa_package": "success",
+    "concurrency_warnings": 0,
+    "conclusion": "success",
+    "ipa_artifact_publication": "skipped",
+    "github_release_publication": "skipped"
+  },
+  "local_checks": [
+    "generated asset configuration matches source",
+    "workflow YAML and 40 shell steps parsed",
+    "git diff --check"
+  ],
+  "new_testflight_upload": false,
+  "limitations": [
+    "Generated test tones only; no private-source asset upload",
+    "No physical-device FPS acceptance",
+    "No full private-resource gameplay or listening acceptance"
+  ],
+  "conclusion": "success",
+  "completed_at": "2026-11-05T04:23:01Z"
+}
