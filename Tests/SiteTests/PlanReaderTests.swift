@@ -645,8 +645,14 @@ final class PlanReaderTests: XCTestCase {
         let firstCell = try XCTUnwrap(PlanReader.identifierCellRegion(column: 0, of: rows[0].region!, layout: layout))
         let firstReadings = PlanReader.namedIdentifierReadings(firstCell, source: CIImage(cgImage: source), context: CIContext(),
                                                                width: Double(source.width), height: Double(source.height)) ?? []
-        print("OCRNAMEDTEST|syntheticCell|\(firstReadings)")
-        XCTAssertEqual(result[0].satelliteID, actual[0], "必须实际读取编号格，不得从名称合成完整编号；实际候选 \(firstReadings)")
+        let fallbackReadings = PlanReader.namedIdentifierReadings(firstCell, source: CIImage(cgImage: source), context: CIContext(),
+                                                                  width: Double(source.width), height: Double(source.height),
+                                                                  languageCorrection: true) ?? []
+        let bilingualReadings = PlanReader.namedIdentifierReadings(firstCell, source: CIImage(cgImage: source), context: CIContext(),
+                                                                   width: Double(source.width), height: Double(source.height),
+                                                                   languages: ["zh-Hans", "en-US"]) ?? []
+        print("OCRNAMEDTEST|syntheticCell|primary=\(firstReadings)|fallback=\(fallbackReadings)|bilingualProbe=\(bilingualReadings)")
+        XCTAssertEqual(result[0].satelliteID, actual[0], "必须实际读取编号格，不得从名称合成完整编号；实际候选 \(firstReadings) / \(fallbackReadings)")
         XCTAssertEqual(result[0].cells[0].filter { !$0.isWhitespace }.uppercased(), actual[0])
         XCTAssertEqual(result[0].emergencyBadge, true)
         XCTAssertTrue(result[0].recognitionIssues?.contains("保留已有疑项") == true)

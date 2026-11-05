@@ -348,14 +348,31 @@ enum PlanReader {
         return await Task.detached(priority: .userInitiated) {
             let trace = Trace(settings.diagnostics, "namedIdentifierCells", "targets=\(targets.count)|limit=64")
             let context = CIContext(), source = CIImage(cgImage: image)
-            var result = rows, attempts = 0, changed = 0
-            defer { trace.end("cropAttempts=\(attempts)|changed=\(changed)") }
+            var result = rows, attempts = 0, changed = 0, fallbackAttempts = 0
+            var unresolved: [Int] = []
+            defer { trace.end("cropAttempts=\(attempts)|fallbackAttempts=\(fallbackAttempts)|changed=\(changed)") }
             for index in targets {
                 guard attempts < 64, let region = result[index].region,
                       let cell = identifierCellRegion(column: column, of: region, layout: layout),
                       let readings = namedIdentifierReadings(cell, source: source, context: context,
                                                              width: Double(image.width), height: Double(image.height)) else { continue }
                 attempts += 1
+                let reviewed = PassPlan.reviewNamedIdentifierRereads(result[index], rereads: readings, layout: layout)
+                if reviewed.satelliteID != result[index].satelliteID { changed += 1 }
+                else if readings.allSatisfy({
+                    PassPlan.reviewNamedIdentifierReread(result[index], reread: $0, layout: layout).satelliteID == result[index].satelliteID
+                }) { unresolved.append(index) }
+                result[index] = reviewed
+            }
+            // 先完成全部首轮请求，再用剩余的同一份 64 次预算补读无支持候选的格。
+            // 已有两个可支持编号的歧义不交给另一种设置覆盖；已采用的完整读数也不再改写。
+            for index in unresolved {
+                guard attempts < 64, let region = result[index].region,
+                      let cell = identifierCellRegion(column: column, of: region, layout: layout),
+                      let readings = namedIdentifierReadings(cell, source: source, context: context,
+                                                             width: Double(image.width), height: Double(image.height),
+                                                             languageCorrection: true) else { continue }
+                attempts += 1; fallbackAttempts += 1
                 let reviewed = PassPlan.reviewNamedIdentifierRereads(result[index], rereads: readings, layout: layout)
                 if reviewed.satelliteID != result[index].satelliteID { changed += 1 }
                 result[index] = reviewed
@@ -367,15 +384,16 @@ enum PlanReader {
     /// 同一次原格请求的前三个完整候选；多 observation 仍只拼接各自第一读数，不组合字符猜词。
     /// 不输出业务文字，测试可用虚构像素检查实际候选。
     static func namedIdentifierReadings(_ cell: PassPlan.Region, source: CIImage, context: CIContext,
-                                        width: Double, height: Double) -> [String]? {
+                                        width: Double, height: Double, languageCorrection: Bool = false,
+                                        languages: [String] = ["en-US"]) -> [String]? {
         guard let straight = straightened(cell, source: source, width: width, height: height),
               straight.extent.width > 2, straight.extent.height > 2,
               let crop = context.createCGImage(straight, from: straight.extent) else { return nil }
         let piece = prepared(crop, smooth: false, enlarge: true)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
-        request.recognitionLanguages = ["en-US"]
-        request.usesLanguageCorrection = false
+        request.recognitionLanguages = languages
+        request.usesLanguageCorrection = languageCorrection
         request.customWords = []
         guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { return [] }
         let observations = request.results ?? []
