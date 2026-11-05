@@ -599,6 +599,66 @@ final class PlanReaderTests: XCTestCase {
         }
     }
 
+    func testNamedIdentifierRereadUsesActualCellAndPreservesUnsupportedDifferences() async throws {
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星ID", column: .satelliteID, x: 0.22),
+            .init(label: "卫星名称", column: .satellite, x: 0.60),
+            .init(label: "开始时间", column: .start, x: 0.85),
+        ])
+        var rows = (0..<6).map { index -> PassPlanRow in
+            let start = String(format: "2032-06-18 %02d:23:45", 8 + index)
+            return .init(orbit: "\(20000 + index)", satelliteID: "DEMOO7D02", satellite: "演示07D星",
+                         station: "演示甲站-01", start: start, end: String(format: "2032-06-18 %02d:29:39", 8 + index),
+                         cells: ["DEMOO7D02", "演示07D星", start],
+                         region: .init(y0: Double(60 + index * 100) / 640, slope: 0,
+                                       height: 80.0 / 640, left: 0, right: 1))
+        }
+        rows[0].emergencyBadge = true
+        rows[0].recognitionIssues = ["保留已有疑项"]
+        rows[2].testStatusDetected = true
+        rows[3].satelliteID = "DEMO07D02"; rows[3].cells[0] = rows[3].satelliteID
+        rows[4].satellite = "演示O7D星"; rows[4].cells[1] = rows[4].satellite
+        let actual = ["DEMO07D02", "DEMX07D02", "DEMO07D02", "DEMO08C02", "DEMO07D02", "DEMO07D03"]
+        let source = try await MainActor.run {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 640), format: format).image { output in
+                UIColor.white.setFill()
+                output.cgContext.fill(CGRect(x: 0, y: 0, width: 1200, height: 640))
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.monospacedSystemFont(ofSize: 32, weight: .medium),
+                    .foregroundColor: UIColor.black,
+                ]
+                for index in actual.indices {
+                    for (text, x) in [(actual[index], CGFloat(1200 * 0.22)), ("OTHER07D02", CGFloat(1200 * 0.60))] {
+                        let size = (text as NSString).size(withAttributes: attributes)
+                        (text as NSString).draw(at: CGPoint(x: x - size.width / 2,
+                                                            y: CGFloat(60 + index * 100) - size.height / 2),
+                                               withAttributes: attributes)
+                    }
+                }
+            }
+            return try XCTUnwrap(image.cgImage)
+        }
+        let result = await PlanReader.rereadNamedIdentifiers(rows, layout: layout, in: source, settings: .standard)
+        XCTAssertEqual(result.count, rows.count)
+        guard result.count == rows.count else { return }
+        XCTAssertEqual(result[0].satelliteID, actual[0], "必须实际读取编号格，不得从名称合成完整编号")
+        XCTAssertEqual(result[0].cells[0].filter { !$0.isWhitespace }.uppercased(), actual[0])
+        XCTAssertEqual(result[0].emergencyBadge, true)
+        XCTAssertTrue(result[0].recognitionIssues?.contains("保留已有疑项") == true)
+        XCTAssertTrue(result[0].recognitionIssues?.contains(where: { $0.contains("原读数「DEMOO7D02」") }) == true)
+        for index in 1..<rows.count {
+            XCTAssertEqual(result[index], rows[index], "不同前后缀、test、已相符编号或不可用名称不得被改写：\(index)")
+        }
+        for index in rows.indices {
+            XCTAssertEqual(result[index].start, rows[index].start)
+            XCTAssertEqual(result[index].satellite, rows[index].satellite)
+            XCTAssertEqual(result[index].region, rows[index].region)
+        }
+        let required = PassPlan.requiringPhotoIdentifierReview(result[0], column: .satelliteID)
+        XCTAssertTrue(required.recognitionIssues?.contains("照片中的卫星编号需对照原图确认") == true)
+    }
+
     private var statusRereadLayout: PassPlan.Layout {
         .init(slots: [
             .init(label: "卫星名称", column: .satellite, x: 0.13),

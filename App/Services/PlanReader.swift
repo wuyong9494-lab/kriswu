@@ -170,6 +170,8 @@ enum PlanReader {
                     }
                 }
             }
+            // 名称中明确显示的片段仅用于核对完整的原格读数；片段外字符不能被覆盖。
+            result.rows = await rereadNamedIdentifiers(result.rows, layout: found, in: picture, settings: settings)
             // 编号即使格式合法也可能把 0/C、1/L、5/6 读错。用原格的英文无纠错读数核对，
             // 只为当前可发送的记录补充疑项；不同读数不自动覆盖原值。
             result.rows = await reviewIdentifiers(result.rows, layout: found, in: picture, rules: rules, settings: settings)
@@ -335,6 +337,40 @@ enum PlanReader {
             bounded.right = min(bounded.right, xs[last] + (xs[last] - xs[last - 1]) / 2)
         }
         return boundedCellRegion(column: column, of: bounded, layout: layout)
+    }
+
+    /// 编号与名称的实际片段冲突时补读编号格，每页最多 64 次；不把复识相符当作人工确认。
+    static func rereadNamedIdentifiers(_ rows: [PassPlanRow], layout: PassPlan.Layout,
+                                        in image: CGImage, settings: Settings) async -> [PassPlanRow] {
+        guard let column = layout.slots.firstIndex(where: { $0.column == .satelliteID }) else { return rows }
+        let targets = rows.indices.filter { PassPlan.identifierRereadFragment(rows[$0], layout: layout) != nil }
+        guard !targets.isEmpty else { return rows }
+        return await Task.detached(priority: .userInitiated) {
+            let trace = Trace(settings.diagnostics, "namedIdentifierCells", "targets=\(targets.count)|limit=64")
+            let context = CIContext(), source = CIImage(cgImage: image)
+            var result = rows, attempts = 0, changed = 0
+            defer { trace.end("cropAttempts=\(attempts)|changed=\(changed)") }
+            for index in targets {
+                guard attempts < 64, let region = result[index].region,
+                      let cell = identifierCellRegion(column: column, of: region, layout: layout),
+                      let straight = straightened(cell, source: source, width: Double(image.width), height: Double(image.height)),
+                      straight.extent.width > 2, straight.extent.height > 2,
+                      let crop = context.createCGImage(straight, from: straight.extent) else { continue }
+                attempts += 1
+                let piece = prepared(crop, smooth: false, enlarge: true)
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.recognitionLanguages = ["en-US"]
+                request.usesLanguageCorrection = false
+                request.customWords = []
+                guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { continue }
+                let raw = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+                let reviewed = PassPlan.reviewNamedIdentifierReread(result[index], reread: raw, layout: layout)
+                if reviewed.satelliteID != result[index].satelliteID { changed += 1 }
+                result[index] = reviewed
+            }
+            return result
+        }.value
     }
 
     /// 已有疑项或 test 的行无需再消耗识别请求；每页最多 100 格，未能核对的格子保留核对提示。
