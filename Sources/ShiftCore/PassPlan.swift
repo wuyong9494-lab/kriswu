@@ -17,6 +17,8 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public var region: PassPlan.Region?
     /// 多次识别互相矛盾、需要对原图核实的内容。nil 兼容旧版本保存的计划；重排、合并时保留。
     public var recognitionIssues: [String]?
+    /// 用户实际核对过的状态原文；自动读数发生变化后不再沿用这次确认。
+    public var reviewedStatus: String?
     /// 无表头左侧栏的独立「应急」标签。true 是文字证据；false 只用于已确认版式的无标签行或手动确认。
     public var emergencyBadge: Bool?
     /// 任一读数在状态列明确识别到 test。即使另一遍选择了别的状态文字，也不能把这条发出去。
@@ -25,7 +27,7 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
     public init(orbit: String = "", satelliteID: String = "", satellite: String = "", station: String = "",
                 start: String = "", end: String = "", info: String = "", status: String = "", cells: [String] = [],
                 region: PassPlan.Region? = nil, recognitionIssues: [String]? = nil,
-                emergencyBadge: Bool? = nil, testStatusDetected: Bool? = nil) {
+                emergencyBadge: Bool? = nil, testStatusDetected: Bool? = nil, reviewedStatus: String? = nil) {
         self.orbit = orbit
         self.satelliteID = satelliteID
         self.satellite = satellite
@@ -37,6 +39,7 @@ public struct PassPlanRow: Codable, Equatable, Hashable, Sendable {
         self.cells = cells
         self.region = region
         self.recognitionIssues = recognitionIssues
+        self.reviewedStatus = reviewedStatus
         self.emergencyBadge = emergencyBadge
         self.testStatusDetected = testStatusDetected
     }

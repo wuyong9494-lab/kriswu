@@ -128,6 +128,15 @@ final class PlanReaderTests: XCTestCase {
             if let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]) {
                 print("OCRROW|\(fixture)|\(String(decoding: data, as: UTF8.self))")
             }
+            let delivery: [String: Any] = [
+                "index": index,
+                "originalProblems": PassPlan.deliveryProblems(row, format: .originalImage, rules: rules, layout: reading.layout),
+                "hasStrip": row.region.flatMap { reading.strips[$0] } != nil,
+                "hasHeader": reading.header.flatMap { reading.strips[$0] } != nil,
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: delivery, options: [.sortedKeys]) {
+                print("OCRDELIVERY|\(fixture)|\(String(decoding: data, as: UTF8.self))")
+            }
         }
     }
 
@@ -873,6 +882,68 @@ final class PlanReaderTests: XCTestCase {
             XCTAssertEqual(try XCTUnwrap(mixed.pngData()), try XCTUnwrap(baseline.pngData()))
             XCTAssertNil(PassPlanOriginal.image(name: "演示甲", rows: [excluded], header: header,
                                                 strips: strips, caption: "合成测试"))
+        }
+    }
+
+    func testOriginalImageKeepsSourcePixelsDespiteBadTranscriptionAndDifferentDates() async throws {
+        try await MainActor.run {
+            @MainActor func tile(_ text: String) throws -> Data {
+                let format = UIGraphicsImageRendererFormat(); format.scale = 1
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 64), format: format).image { output in
+                    UIColor.white.setFill(); output.cgContext.fill(CGRect(x: 0, y: 0, width: 900, height: 64))
+                    (text as NSString).draw(at: CGPoint(x: 10, y: 12), withAttributes: [
+                        .font: UIFont.monospacedSystemFont(ofSize: 22, weight: .medium), .foregroundColor: UIColor.black,
+                    ])
+                }
+                return try XCTUnwrap(image.pngData())
+            }
+            let layout = PassPlan.Layout(slots: [
+                .init(label: "卫星ID", column: .satelliteID, x: 0.2),
+                .init(label: "地面站", column: .station, x: 0.5),
+                .init(label: "状态", column: .status, x: 0.9),
+            ])
+            let rules = [PassPlan.OperatorRule(name: "演示甲", prefixes: ["演示甲站"])]
+            let header = PassPlan.Region(y0: 0.1, slope: 0, height: 0.1, left: 0, right: 1)
+            let region = PassPlan.Region(y0: 0.3, slope: 0, height: 0.1, left: 0, right: 1)
+            let strips = [header: try tile("ID / STATION / START / STATUS"),
+                          region: try tile("DEMO07D02 / DEMO-A / 2032-06-18 08:00:00 / WAITING")]
+            let correct = PassPlanRow(orbit: "808", satelliteID: "DEMO07D02", satellite: "演示07D星",
+                                      station: "演示甲站-01", start: "2032-06-18 08:00:00", end: "2032-06-18 08:05:00",
+                                      status: "等待数传", region: region, emergencyBadge: true)
+            var wrong = correct
+            wrong.orbit = "8O8"; wrong.satelliteID = "DEM007D02"; wrong.satellite = ""
+            wrong.start = "2040-12-31 19:00:00"; wrong.end = ""; wrong.info = "错误的识别文字"
+            wrong = PassPlan.requiringPhotoIdentifierReview(wrong, column: .satelliteID)
+            XCTAssertTrue(PassPlan.deliveryProblems(wrong, format: .originalImage, rules: rules, layout: layout).isEmpty)
+            XCTAssertFalse(PassPlan.deliveryProblems(wrong, format: .recognizedContent, rules: rules, layout: layout).isEmpty)
+            let caption = PassPlan.caption([wrong], layout: layout, normal: "普通", urgent: "应急优先")
+            XCTAssertEqual(caption, "应急优先")
+            let baseline = try XCTUnwrap(PassPlanOriginal.image(name: "演示甲", rows: [correct], header: header, strips: strips, caption: caption))
+            let actual = try XCTUnwrap(PassPlanOriginal.image(name: "演示甲", rows: [wrong], header: header, strips: strips, caption: caption))
+            XCTAssertEqual(try XCTUnwrap(actual.pngData()), try XCTUnwrap(baseline.pngData()),
+                           "原图正文与标题不能受错误编号、时间或识别文字影响")
+            XCTAssertNil(PassPlanOriginal.image(name: "演示甲", rows: [wrong], header: header, strips: [header: strips[header]!], caption: caption))
+            XCTAssertNil(PassPlanOriginal.image(name: "演示甲", rows: [wrong], header: header,
+                                                strips: [header: Data("broken".utf8), region: strips[region]!], caption: caption))
+        }
+    }
+
+    func testShareItemRequiresTextAndRenderedImagesToKeepFullChecks() async {
+        await MainActor.run {
+            let image = UIImage()
+            let source = PassPlanRow(station: "演示甲站-01", status: "等待数传",
+                                     region: .init(y0: 0.4, slope: 0, height: 0.1, left: 0, right: 1),
+                                     recognitionIssues: ["照片中的卫星编号需对照原图确认"])
+            let rules = [PassPlan.OperatorRule(name: "演示甲", prefixes: ["演示甲站"])]
+            let original = PassPlanShareItem.originalImage(image)
+            XCTAssertTrue(PassPlan.deliveryProblems(source, format: original.format, rules: rules).isEmpty)
+            for item in [PassPlanShareItem.text("读错的文字"), .renderedImage(image)] {
+                XCTAssertEqual(item.format, .recognizedContent)
+                XCTAssertFalse(PassPlan.deliveryProblems(source, format: item.format, rules: rules).isEmpty,
+                               "当前页面开着发原图也不能放行文字或重绘图片")
+            }
+            XCTAssertTrue(original.value is UIImage)
+            XCTAssertEqual(PassPlanShareItem.text("正文").value as? String, "正文")
         }
     }
 
