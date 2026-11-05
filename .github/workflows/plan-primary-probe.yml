@@ -1,4 +1,4 @@
-name: Plan OCR Probe 7 minimum text height
+name: Plan OCR baseline 516 validation
 
 on:
   push:
@@ -15,9 +15,9 @@ env:
 jobs:
   primary-probe:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
-      PLAN_SOURCE: ${{ github.sha }}
+      PLAN_SOURCE: 154375598308d3583afcf32a9bb667d30967b7e9
       PLAN_WORKFLOW_SHA: ${{ github.workflow_sha }}
     concurrency:
       group: plan-primary-probe-${{ github.ref }}
@@ -25,8 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.sha }}
-      - name: Verify diagnostic source and record workflow provenance
+          ref: 154375598308d3583afcf32a9bb667d30967b7e9
+      - name: Verify exact product source and record workflow provenance
         run: |
           python3 - <<'PY'
           import json, os, subprocess
@@ -34,12 +34,9 @@ jobs:
           expected = os.environ['PLAN_SOURCE']
           tested = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           if tested != expected:
-              raise SystemExit(f'Wrong diagnostic source: expected {expected}, checked out {tested}')
+              raise SystemExit(f'Wrong product source: expected {expected}, checked out {tested}')
           manifest = {
               'schemaVersion': 1,
-              'scope': 'independent-diagnostic',
-              'probe': 7,
-              'probeBaseCommit': 'cbfa12a2bad062fbe209b410605bee0d97156974',
               'workflowSHA': os.environ['PLAN_WORKFLOW_SHA'],
               'triggerSHA': os.environ['GITHUB_SHA'],
               'workflowRef': os.environ.get('GITHUB_WORKFLOW_REF'),
@@ -48,19 +45,9 @@ jobs:
               'expectedSourceSHA': expected,
               'testedSourceSHA': tested,
               'testedSourceTree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
-              'testTarget': 'SiteTests/PlanReaderStatusProbe7Tests',
-              'expectedTestMethods': 4,
-              'expectedOCRRequests': 32,
-              'expectedPreparedImages': 16,
-              'fixtures': ['status_probe_web_photo'],
-              'fixtureSHA256': 'd6c7d3c30672244ae5b8713061d3cb7d4fff4996f27e193c58eabb128434ffba',
-              'geometrySHA256': 'd2107acbde65dc3a0446debea2097efd836c53c13608929d1f79b8d783254a37',
-              'rows': [1, 4, 7, 10, 13, 16, 19, 22],
-              'geometry': 'headerCapped',
-              'scales': [1, 3],
-              'minimumHeightModes': ['min10', 'min0'],
-              'minimumHeightPolicy': '10/baseCrop.height at both scales versus 0; no claim of disabling all internal resizing',
-              'requestRevision': 3,
+              'testTarget': 'SiteTests/PlanReaderTests',
+              'expectedTestMethods': 27,
+              'fixtures': ['excel_photo', 'excel_scan', 'web_photo', 'long_table'],
           }
           Path('source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
           print(json.dumps(manifest, indent=2))
@@ -83,16 +70,16 @@ jobs:
           from pathlib import Path
           identity = plistlib.loads(Path('App/Info.plist').read_bytes())['ArenaCommitSHA']
           if identity != os.environ['PLAN_SOURCE']:
-              raise SystemExit('Embedded app identity does not match the verified diagnostic source')
+              raise SystemExit('Embedded app identity does not match the verified product source')
           path = Path('source-manifest.json')
           manifest = json.loads(path.read_text())
           manifest['embeddedBuildIdentitySHA'] = identity
           path.write_text(json.dumps(manifest, indent=2) + '\n')
-          print(f'Embedded diagnostic source: {identity}')
+          print(f'Embedded product source: {identity}')
           PY
           xcodegen generate
-      - name: Run only the 32 serial Probe 7 requests
-        timeout-minutes: 20
+      - name: Validate all product PlanReaderTests methods and four fixtures
+        timeout-minutes: 30
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c "
@@ -106,7 +93,7 @@ jobs:
               json.dump({'runtime': runtime, 'name': device['name'], 'udid': device['udid']}, stream, indent=2)
           print(device['udid'])")
           cat test-device.json
-          TEST_TARGET=SiteTests/PlanReaderStatusProbe7Tests
+          TEST_TARGET=SiteTests/PlanReaderTests
           echo "测试范围：$TEST_TARGET"
           set +e
           xcodebuild test \
@@ -114,164 +101,27 @@ jobs:
             -scheme ShiftReminder \
             -destination "id=$DEVICE" \
             -only-testing:"$TEST_TARGET" \
-            -parallel-testing-enabled NO \
-            -maximum-concurrent-test-simulator-destinations 1 \
-            -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 180 \
-            -maximum-test-execution-time-allowance 180 \
             -derivedDataPath build \
-            -resultBundlePath primary-probe7.xcresult \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee probe.log
+            -resultBundlePath site-tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
           status=${PIPESTATUS[0]}
           set -e
-          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" probe.log || true
+          grep -E "error:|Test Case .*(passed|failed)|XCTAssert|Executed" test.log || true
+          grep -o "OCR|.*" test.log | sed 's/^/::notice::/' || true
+          grep -oE "OCR(BOX|ROW|LAYOUT|STRIPS)\|.*" test.log || true
           if [ $status -ne 0 ]; then
-            tail -80 probe.log
-            grep -E "error:" probe.log | head -20 | sed 's/^/::error::/' || true
+            tail -80 test.log
+            grep -E "error:" test.log | head -20 | sed 's/^/::error::/' || true
           fi
           exit $status
-      - name: Verify the complete Probe 7 request and image ledger
-        if: always()
-        run: |
-          python3 - <<'PY'
-          import collections, hashlib, json, math, re, struct, sys
-          from pathlib import Path
-          report = {'schemaVersion': 1, 'probe': 7, 'scope': 'execution-and-log-integrity-only',
-                    'accuracyEvaluated': False, 'attachmentBytesIndependentlyVerified': False}
-          def require(condition, message):
-              if not condition:
-                  raise ValueError(message)
-          try:
-              source = json.loads(Path('source-manifest.json').read_text())
-              raw = Path('probe.log').read_bytes()
-              text = raw.decode('utf-8')
-              report['canonicalLogSHA256'] = hashlib.sha256(raw).hexdigest()
-              records = []
-              for line_number, line in enumerate(text.splitlines(), 1):
-                  if 'OCRPROBE7|' in line:
-                      try:
-                          records.append(json.loads(line.split('OCRPROBE7|', 1)[1]))
-                      except ValueError as error:
-                          raise ValueError(f'Invalid JSON at canonical log line {line_number}: {error}')
-              report['recordCounts'] = dict(collections.Counter(e['kind'] for e in records))
-              def events(kind):
-                  return [e for e in records if e['kind'] == kind]
-              def unique(kind, key, expected):
-                  values = events(kind)
-                  ids = [e[key] for e in values]
-                  require(len(ids) == len(expected) and len(set(ids)) == len(ids)
-                          and set(ids) == set(expected), f'Incomplete or duplicate {kind}: {ids}')
-                  return {e[key]: e for e in values}
-              rows = [1, 4, 7, 10, 13, 16, 19, 22]
-              groups = {(1, 4), (7, 10), (13, 16), (19, 22)}
-              images = {f'row-{row}-headerCapped-{scale}x': (row, scale)
-                        for row in rows for scale in (1, 3)}
-              requests = {f'{image_id}-{mode}': (image_id, mode)
-                          for image_id in images for mode in ('min10', 'min0')}
-              bases = unique('baseCrop', 'row', rows)
-              prepared = unique('prepared', 'imageID', images)
-              starts = unique('requestStart', 'requestID', requests)
-              ends = unique('requestEnd', 'requestID', requests)
-              require(not events('requestError'), 'At least one Vision request failed; no fallback is allowed')
-              for kind in ('methodStart', 'methodEnd', 'attachmentsSaved'):
-                  values = events(kind)
-                  require(len(values) == 4 and {tuple(e['rows']) for e in values} == groups,
-                          f'Incomplete or duplicate {kind} row groups')
-              for e in events('methodStart'):
-                  require(e['scope'] == 'independent-diagnostic'
-                          and e['runtimeCommit'] == source['testedSourceSHA']
-                          and e['sourceSHA256'] == source['fixtureSHA256']
-                          and e['geometrySHA256'] == source['geometrySHA256']
-                          and e['expectedRequests'] == 8 and e['expectedPrepared'] == 4
-                          and e['totalProbeRequests'] == 32 and e['totalPrepared'] == 16
-                          and e['scales'] == [1, 3] and e['minimumHeightModes'] == ['min10', 'min0']
-                          and e['requestRevision'] == 3 and 3 in e['supportedRevisions'],
-                          'Method provenance or fixed request budget changed')
-              require(source['scope'] == 'independent-diagnostic' and source['probe'] == 7
-                      and source['testedSourceSHA'] == source['expectedSourceSHA'] == source['triggerSHA']
-                      and source['embeddedBuildIdentitySHA'] == source['testedSourceSHA']
-                      and source['expectedTestMethods'] == 4 and source['expectedOCRRequests'] == 32
-                      and source['expectedPreparedImages'] == 16, 'Source manifest mismatch')
-              for e in events('methodEnd'):
-                  wanted_images = {key for key, (row, _) in images.items() if row in e['rows']}
-                  wanted_requests = {key for key, (image_id, _) in requests.items() if image_id in wanted_images}
-                  require(e['requests'] == 8 and e['prepared'] == 4
-                          and len(e['requestIDs']) == 8 and set(e['requestIDs']) == wanted_requests
-                          and len(e['imageIDs']) == 4 and set(e['imageIDs']) == wanted_images,
-                          'Method completed ledger does not match its fixed row group')
-              for e in events('attachmentsSaved'):
-                  wanted = {key for key, (row, _) in images.items() if row in e['rows']}
-                  require(e['count'] == 4 and len(e['imageIDs']) == 4 and set(e['imageIDs']) == wanted
-                          and len(e['pngNames']) == 4
-                          and set(e['pngNames']) == {f'probe7-{key}.png' for key in wanted},
-                          'Native attachment ledger is incomplete')
-              for image_id, (row, scale) in images.items():
-                  e = prepared[image_id]
-                  base = bases[row]['baseCropSize']
-                  require(e['row'] == row and e['geometry'] == 'headerCapped' and e['scale'] == scale
-                          and e['baseCropSize'] == base and e['size'] == [n * scale for n in base]
-                          and e['pngName'] == f'probe7-{image_id}.png'
-                          and e['pngBytes'] > 0
-                          and all(re.fullmatch('[0-9a-f]{64}', e[k]) for k in ('pngSHA256', 'pixelSHA256'))
-                          and len(e['requestIDs']) == 2
-                          and set(e['requestIDs']) == {f'{image_id}-min10', f'{image_id}-min0'},
-                          f'Prepared image metadata mismatch: {image_id}')
-              for request_id, (image_id, mode) in requests.items():
-                  e, end, image = starts[request_id], ends[request_id], prepared[image_id]
-                  configured = struct.unpack('f', struct.pack('f', 10.0 / image['baseCropSize'][1]))[0] if mode == 'min10' else 0.0
-                  require(e['imageID'] == end['imageID'] == image_id
-                          and e['minimumHeightMode'] == mode and e['scale'] == image['scale']
-                          and e['row'] == image['row'] and e['geometry'] == 'headerCapped'
-                          and e['size'] == image['size'] and e['baseCropSize'] == image['baseCropSize']
-                          and e['configuredMinHeight'] == e['normalizedMinHeight'] == configured
-                          and math.isclose(e['effectiveMinPixels'], configured * image['size'][1], rel_tol=0, abs_tol=1e-10)
-                          and e['level'] == 'accurate' and e['languages'] == ['zh-Hans', 'en-US']
-                          and set(e['languages']).issubset(e['supportedLanguages'])
-                          and e['languageCorrection'] is False and e['customWords'] == []
-                          and e['requestRevision'] == 3 and e['orientation'] == 'up'
-                          and e['topCandidates'] == 3
-                          and e['pixelSHA256'] == image['pixelSHA256'] and e['pngSHA256'] == image['pngSHA256'],
-                          f'Image reference or request configuration mismatch: {request_id}')
-                  observations = [o for o in events('observation') if o['requestID'] == request_id]
-                  candidates = [c for c in events('candidate') if c['requestID'] == request_id]
-                  require(len(observations) == end['observations'] and len(candidates) == end['candidates']
-                          and sorted(o['index'] for o in observations) == list(range(end['observations'])),
-                          f'Observation or candidate count mismatch: {request_id}')
-                  for o in observations:
-                      found = [c for c in candidates if c['observation'] == o['index']]
-                      require(0 <= o['candidates'] <= 3 and len(found) == o['candidates']
-                              and sorted(c['rank'] for c in found) == list(range(1, o['candidates'] + 1)),
-                              f'Incomplete candidate ranks: {request_id}/{o["index"]}')
-              require(len({e['automaticallyDetectsLanguage'] for e in starts.values()}) == 1,
-                      'Untouched automatic-language default changed between requests')
-              for e in records:
-                  if 'requestID' in e:
-                      require(e['requestID'] in requests and e['imageID'] == requests[e['requestID']][0],
-                              'An observation or character record refers to an unknown request/image')
-              expected_methods = {'testCells01And04', 'testCells07And10', 'testCells13And16', 'testCells19And22'}
-              for event in ('started', 'passed'):
-                  names = re.findall(r"Test Case '-\[\S*PlanReaderStatusProbe7Tests (test\w+)\]' " + event, text)
-                  require(len(names) == 4 and set(names) == expected_methods, f'Incomplete XCTest {event} methods')
-              require('** TEST SUCCEEDED **' in text and not re.search(r"Test Case .* failed ", text),
-                      'Native test execution did not succeed')
-              report.update(ok=True, methods=4, baseCrops=8, preparedImages=16, startedRequests=32, endedRequests=32,
-                            testedSourceSHA=source['testedSourceSHA'],
-                            note='Execution integrity only; PNG extraction/CRC/hash and recognition scoring are separate')
-          except Exception as error:
-              report.update(ok=False, error=str(error))
-          Path('probe-integrity.json').write_text(json.dumps(report, indent=2) + '\n')
-          print(json.dumps(report, indent=2))
-          sys.exit(0 if report['ok'] else 1)
-          PY
-      - name: Save independent Probe 7 evidence
+      - name: Save product source native validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: plan-primary-probe7-${{ github.run_number }}-${{ github.run_attempt }}
+          name: plan-ocr-baseline-516-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
-            probe.log
+            test.log
             test-device.json
-            primary-probe7.xcresult
+            site-tests.xcresult
             source-manifest.json
-            probe-integrity.json
           if-no-files-found: warn
