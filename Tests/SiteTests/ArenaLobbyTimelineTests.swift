@@ -102,6 +102,53 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         XCTAssertThrowsError(try fixture(objects: [shape(1),mismatched]))
     }
 
+    func testSourceTextRequiresBindingsAndReusedInstancesHaveIndependentValues() throws {
+        let text: [String: Any] = ["id":1,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":20,"left":0,"top":0,"right":40,"bottom":30,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        var root = clip(10, children: [(1,0),(1,0)], frames: [[[0,-1,-1],[1,-1,-1]]])
+        root["children"] = [["objectID":1,"blendMode":0,"name":"coins"],
+                            ["objectID":1,"blendMode":0,"name":"trophies"]]
+        XCTAssertThrowsError(try fixture(objects: [text,root]))
+        let scene = try fixture(objects: [text,root], interfaceState: .init(text: ["coins":"12","trophies":"34"]))
+        let values = try scene.frame(time: 0).operations.compactMap { operation -> String? in
+            if case .text(let text) = operation { return text.value }; return nil
+        }
+        XCTAssertEqual(values,["12","34"])
+        scene.interfaceState = .init(text: ["coins":"99"], hidden: ["trophies"])
+        XCTAssertEqual(try scene.frame(time: 0).operations.count,1)
+        scene.interfaceState = .init(text: ["coins":"99"])
+        XCTAssertThrowsError(try scene.frame(time: 0), "An unbound counter must not show a source placeholder")
+    }
+
+    func testInterfaceStateSelectsNamedFrameAndRejectsUnknownState() throws {
+        var root = clip(10, children: [(1,0)], frames: [[[0,-1,0]],[[0,-1,1]]], fps: 1)
+        root["frameLabels"] = ["up","down"]
+        let scene = try fixture(objects: [shape(1),root], interfaceState: .init(frames: ["":"down"]))
+        assertPixel(try makeRenderer(scene).snapshot(time: 0,width:4,height:4),[0,0,255,255])
+        scene.interfaceState = .init(frames: ["":"up"])
+        assertPixel(try makeRenderer(scene).snapshot(time: 1,width:4,height:4),[255,0,0,255])
+        scene.interfaceState = .init(frames: ["":"missing"])
+        XCTAssertThrowsError(try scene.frame(time: 0))
+    }
+
+    func testSourceTextRendersThroughMetalAndRespondsToDataChanges() throws {
+        let text: [String: Any] = ["id":1,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":30,"left":0,"top":0,"right":80,"bottom":40,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        let root = clip(10,children:[(1,0)],frames:[[[0,-1,-1]]])
+        let scene = try fixture(objects:[text,root],viewport:[0,0,80,40],
+            interfaceState:.init(text:["#0:":"12"]))
+        let renderer = try makeRenderer(scene)
+        let first = try renderer.snapshot(time:0,width:80,height:40)
+        XCTAssertGreaterThan(first.filter { $0 > 0 }.count, 100)
+        scene.interfaceState = .init(text:["#0:":"99"])
+        let second = try renderer.snapshot(time:0,width:80,height:40)
+        XCTAssertNotEqual(first,second)
+        scene.interfaceState = .init(text:["#0:":""])
+        XCTAssertTrue(try renderer.snapshot(time:0,width:80,height:40).allSatisfy { $0 == 0 })
+    }
+
     func testClockBoundariesAndAspectFillKeepCorrectCrop() {
         XCTAssertEqual(ArenaLobbyTimelineScene.frameIndex(time: 600.0/60, fps: 60, count: 600), 0)
         XCTAssertEqual(ArenaLobbyTimelineScene.frameIndex(time: 600.0/60, fps: 60, count: 703), 600)
@@ -129,7 +176,8 @@ final class ArenaLobbyTimelineTests: XCTestCase {
 
     private func fixture(objects: [[String: Any]], colors: [[Double]]? = nil,
                          matrices: [[Double]] = [], status: String = "ready",
-                         exclusions: [[String:Any]] = [], viewport: [Double]? = nil) throws -> ArenaLobbyTimelineScene {
+                         exclusions: [[String:Any]] = [], viewport: [Double]? = nil,
+                         interfaceState: ArenaLobbyInterfaceState? = nil) throws -> ArenaLobbyTimelineScene {
         let palette = colors ?? [[255,0,0,255,0,0,0],[0,0,255,255,0,0,0],
                                  [0,255,0,255,0,0,0],[255,255,255,128,0,0,0],
                                  [255,0,0,128,0,0,0],[0,0,255,128,0,0,0]]
@@ -143,7 +191,8 @@ final class ArenaLobbyTimelineTests: XCTestCase {
             "exports":["fixture":["objectID":10,"status":status]],"exclusions":exclusions]
         let document = try JSONDecoder().decode(ArenaLobbyTimelineDocument.self,
             from: JSONSerialization.data(withJSONObject:value))
-        return try ArenaLobbyTimelineScene(document: document, exportName: "fixture", sourceRect: viewport)
+        return try ArenaLobbyTimelineScene(document: document, exportName: "fixture", sourceRect: viewport,
+            interfaceState: interfaceState)
     }
 
     private func exclusionFixture(returnsToViewport: Bool, viewport: [Double]? = nil) throws -> ArenaLobbyTimelineScene {

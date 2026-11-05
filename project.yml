@@ -114,6 +114,7 @@ targets:
       - path: App/Services/ArenaLobbyTimelineScene.swift
       - path: App/Services/ArenaLobbyTimelineShaders.swift
       - path: App/Services/ArenaLobbyTimelineRenderer.swift
+      - path: App/Services/ArenaImportedFonts.swift
       - path: App/Services/ArenaAudioDecoder.swift
     settings:
       base:

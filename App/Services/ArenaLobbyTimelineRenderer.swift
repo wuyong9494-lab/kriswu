@@ -91,6 +91,13 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
     private var firstFrameDelivered = false
     private var drawCalls = 0
     private var renderPasses = 0
+    private struct TextKey: Hashable {
+        let style: ArenaLobbySourceText
+        let value: String
+        let scale: Int
+    }
+    private var textTextures: [TextKey: MTLTexture] = [:]
+    private var textPixels = 0
 
     nonisolated static func loadAtlases(document: ArenaLobbyTimelineDocument,
                                       resourceURL: (String) -> URL?) throws -> [Atlas] {
@@ -294,6 +301,18 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
             case .draw(let draw):
                 result.append(PreparedDraw(texture: textures[draw.textureIndex], vertices: draw.vertices,
                     blend: draw.blendMode, framebuffer: false, mask: mask))
+            case .text(let text):
+                let texture = try sourceTextTexture(text, density: density)
+                let r = text.style.rect
+                let corners = [[r[0],r[1]],[r[2],r[1]],[r[0],r[3]],[r[2],r[3]]]
+                let uv: [SIMD2<Float>] = [.init(0,0),.init(1,0),.init(0,1),.init(1,1)]
+                let vertices = [0,1,2,1,3,2].map { index -> Scene.Vertex in
+                    let point = text.transform.point(corners[index])
+                    return Scene.Vertex(position: SIMD2(Float(point.x),Float(point.y)), uv: uv[index],
+                        multiply: text.color.multiply, add: text.color.add)
+                }
+                result.append(PreparedDraw(texture: texture, vertices: vertices,
+                    blend: 0, framebuffer: true, mask: mask))
             case .layer(let children, let blend, let bounds):
                 guard pipelines[blend] != nil else { throw ArenaLobbyTimelineError.invalid("Unsupported lobby group blend") }
                 if children.count == 1, case .draw(let draw) = children[0], draw.blendMode == 0 {
@@ -321,6 +340,77 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
             }
         }
         return result
+    }
+
+    /// Glyphs change only with game state. Cache their premultiplied texture;
+    /// animations move the source quad without typesetting every display frame.
+    private func sourceTextTexture(_ text: Scene.TextDraw, density: Double) throws -> MTLTexture {
+        let scale = min(4, max(1, Int(ceil(density))))
+        let key = TextKey(style: text.style, value: text.value, scale: scale)
+        if let texture = textTextures[key] { return texture }
+        let style = text.style, r = style.rect
+        let width = Int(ceil((r[2]-r[0])*Double(scale)))
+        let height = Int(ceil((r[3]-r[1])*Double(scale)))
+        guard width > 0, height > 0, width <= 8192, height <= 8192, width*height <= 4_000_000 else {
+            throw ArenaLobbyTimelineError.invalid("Source text exceeds its raster budget")
+        }
+        guard let font = ArenaImportedFonts.font(named: style.fontName, size: CGFloat(style.size))
+            ?? (style.deviceFont ? UIFont(name: style.fontName, size: CGFloat(style.size)) : nil) else {
+            throw ArenaLobbyTimelineError.invalid("Source font is unavailable: \(style.fontName)")
+        }
+        func color(_ packed: UInt32) -> UIColor {
+            UIColor(red: CGFloat(packed & 255)/255, green: CGFloat((packed >> 8) & 255)/255,
+                    blue: CGFloat((packed >> 16) & 255)/255, alpha: CGFloat((packed >> 24) & 255)/255)
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = style.alignment & 1 != 0 ? .right
+            : style.alignment & 2 != 0 ? .center : style.alignment & 4 != 0 ? .justified : .left
+        paragraph.lineBreakMode = style.multiline ? .byWordWrapping : .byClipping
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: color(style.color), .paragraphStyle: paragraph
+        ]
+        if style.outlined {
+            attributes[.strokeColor] = color(style.outlineColor)
+            attributes[.strokeWidth] = -6.0
+        }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = CGFloat(scale); format.opaque = false
+        let size = CGSize(width: CGFloat(r[2]-r[0]), height: CGFloat(r[3]-r[1]))
+        let options: NSStringDrawingOptions = style.multiline ? [.usesLineFragmentOrigin,.usesFontLeading] : [.usesLineFragmentOrigin]
+        let measured = (text.value as NSString).boundingRect(with: size, options: options,
+            attributes: attributes, context: nil).height
+        let top = style.alignment & 8 != 0 ? max(0,size.height-measured)
+            : style.alignment & 16 != 0 ? max(0,(size.height-measured)/2) : 0
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            (text.value as NSString).draw(with: CGRect(x: 0, y: top, width: size.width, height: size.height-top),
+                options: options,
+                attributes: attributes, context: nil)
+        }
+        guard let cg = image.cgImage else { throw ArenaLobbyTimelineError.invalid("Unable to rasterize source text") }
+        var pixels = [UInt8](repeating: 0, count: width*height*4)
+        try pixels.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width*4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else {
+                throw ArenaLobbyTimelineError.invalid("Unable to allocate source text pixels")
+            }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,
+            width: width, height: height, mipmapped: false)
+        descriptor.storageMode = .shared; descriptor.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            throw ArenaLobbyTimelineError.invalid("Unable to allocate source text texture")
+        }
+        pixels.withUnsafeBytes { bytes in
+            texture.replace(region: MTLRegionMake2D(0,0,width,height), mipmapLevel: 0,
+                withBytes: bytes.baseAddress!, bytesPerRow: width*4)
+        }
+        if textTextures.count >= 256 || textPixels + width*height > 8_000_000 {
+            textTextures.removeAll(); textPixels = 0
+        }
+        textTextures[key] = texture; textPixels += width*height
+        return texture
     }
 
     private func encode(_ draws: [PreparedDraw], texture: MTLTexture, viewport: Scene.Rect,

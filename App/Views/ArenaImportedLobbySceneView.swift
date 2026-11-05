@@ -13,19 +13,21 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
     let sourceRect: CGRect?
     let sceneSHA256: String?
     let live: Bool
+    let interfaceState: ArenaLobbyInterfaceState?
     let resourceURL: (String) -> URL?
     let onFailure: ((String) -> Void)?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(sceneURL: URL, exportName: String, sourceRect: CGRect? = nil,
-         sceneSHA256: String? = nil, live: Bool = true,
+         sceneSHA256: String? = nil, live: Bool = true, interfaceState: ArenaLobbyInterfaceState? = nil,
          resourceURL: @escaping (String) -> URL?, onFailure: ((String) -> Void)? = nil) {
         self.sceneURL = sceneURL
         self.exportName = exportName
         self.sourceRect = sourceRect
         self.sceneSHA256 = sceneSHA256
         self.live = live
+        self.interfaceState = interfaceState
         self.resourceURL = resourceURL
         self.onFailure = onFailure
     }
@@ -57,7 +59,7 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
         let rect = sourceRect.map { [Double($0.minX), Double($0.minY), Double($0.maxX), Double($0.maxY)] }
         context.coordinator.update(view, request: Coordinator.Request(url: sceneURL,
             sha256: sceneSHA256, export: exportName, rect: rect),
-            live: live, active: scenePhase == .active, reduceMotion: reduceMotion,
+            live: live, active: scenePhase == .active, reduceMotion: reduceMotion, interfaceState: interfaceState,
             resourceURL: resourceURL, onFailure: onFailure)
     }
 
@@ -85,14 +87,23 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
         private var initialFrameSubmitted = false
         private var submittingInitialFrame = false
         private var onFailure: ((String) -> Void)?
+        private var interfaceState: ArenaLobbyInterfaceState?
+        private var renderFailed = false
 
         func update(_ view: ArenaLobbyMetalView, request next: Request,
-                    live: Bool, active: Bool, reduceMotion: Bool,
+                    live: Bool, active: Bool, reduceMotion: Bool, interfaceState: ArenaLobbyInterfaceState?,
                     resourceURL: @escaping (String) -> URL?, onFailure: ((String) -> Void)?) {
             self.live = live; self.active = active; self.reduceMotion = reduceMotion
             self.onFailure = onFailure
-            guard request != next else { applyPlayback(to: view); return }
+            let changed = self.interfaceState != interfaceState
+            self.interfaceState = interfaceState
+            guard request != next || (changed && renderFailed) else {
+                renderer?.scene.interfaceState = interfaceState
+                if changed, view.isPaused, ready { view.draw() }
+                applyPlayback(to: view); return
+            }
             cancel(view)
+            renderFailed = false
             request = next
             generation = UUID()
             let token = generation
@@ -127,7 +138,8 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
                     try Task.checkCancellation()
                     guard self.generation == token, self.request == next else { return }
                     guard let device = view.device else { throw ArenaLobbyTimelineError.invalid("Metal is unavailable on this device") }
-                    let scene = try ArenaLobbyTimelineScene(document: document, exportName: next.export, sourceRect: next.rect)
+                    let scene = try ArenaLobbyTimelineScene(document: document, exportName: next.export, sourceRect: next.rect,
+                        interfaceState: self.interfaceState)
                     let renderer = try ArenaLobbyTimelineRenderer(device: device, scene: scene, atlases: atlases)
                     renderer.onFirstFrame = { [weak self, weak view] in
                         guard let self, let view, self.generation == token else { return }
@@ -137,6 +149,7 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
                     }
                     renderer.onFailure = { [weak self, weak view] reason in
                         guard let self, let view, self.generation == token else { return }
+                        self.renderFailed = true
                         view.alpha = 0
                         view.isPaused = true
                         self.onFailure?(reason)
@@ -148,6 +161,7 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
                     // A replacement theme/pack owns the next visible frame.
                 } catch {
                     guard let self, let view, self.generation == token else { return }
+                    self.renderFailed = true
                     view.alpha = 0
                     view.isPaused = true
                     self.onFailure?(error.localizedDescription)

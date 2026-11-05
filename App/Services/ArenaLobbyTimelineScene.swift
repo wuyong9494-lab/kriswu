@@ -22,6 +22,51 @@ indirect enum ArenaLobbyTimelineJSONValue: Decodable, Sendable {
         else if let item = try? value.decode([ArenaLobbyTimelineJSONValue].self) { self = .array(item) }
         else { self = .object(try value.decode([String: ArenaLobbyTimelineJSONValue].self)) }
     }
+
+    var number: Double? { if case .number(let value) = self { return value }; return nil }
+    var string: String? { if case .string(let value) = self { return value }; return nil }
+}
+
+/// Bindings address instances, not object IDs: one source clip can be reused
+/// for multiple counters with different values. Empty names use #childIndex.
+struct ArenaLobbyInterfaceState: Equatable, Sendable {
+    var text: [String: String] = [:]
+    var frames: [String: String] = [:]
+    var hidden: Set<String> = []
+}
+
+struct ArenaLobbySourceText: Hashable, Sendable {
+    let fontName: String
+    let size: Double
+    let rect: [Double]
+    let color: UInt32
+    let outlineColor: UInt32
+    let outlined: Bool
+    let multiline: Bool
+    let deviceFont: Bool
+    let alignment: Int
+
+    init(_ fields: [String: ArenaLobbyTimelineJSONValue]) throws {
+        guard let font = fields["fontName"]?.string, !font.isEmpty, font.utf8.count <= 240,
+              let size = fields["fontSize"]?.number, size.isFinite, (0...255).contains(size),
+              let left = fields["left"]?.number, let top = fields["top"]?.number,
+              let right = fields["right"]?.number, let bottom = fields["bottom"]?.number,
+              [left,top,right,bottom].allSatisfy({ $0.isFinite && abs($0) <= 65_536 }),
+              right > left, bottom > top, right-left <= 4096, bottom-top <= 4096,
+              let color = fields["fontColor"]?.number, color.rounded() == color,
+              (0...Double(UInt32.max)).contains(color),
+              let outline = fields["outlineColor"]?.number, outline.rounded() == outline,
+              (0...Double(UInt32.max)).contains(outline),
+              let styles = fields["styles"]?.number, styles.rounded() == styles, (0...127).contains(styles),
+              let align = fields["align"]?.number, align.rounded() == align, (0...255).contains(align) else {
+            throw ArenaLobbyTimelineError.invalid("Invalid source text geometry or typography")
+        }
+        fontName = font; self.size = size; rect = [left,top,right,bottom]
+        self.color = UInt32(color); outlineColor = UInt32(outline)
+        outlined = Int(styles) & 2 != 0; multiline = Int(styles) & 16 != 0
+        deviceFont = Int(styles) & 1 != 0
+        alignment = Int(align)
+    }
 }
 
 struct ArenaLobbyTimelineDocument: Decodable, Sendable {
@@ -149,13 +194,22 @@ final class ArenaLobbyTimelineScene {
         let bounds: Rect
         let blendMode: Int
     }
+    struct TextDraw {
+        let style: ArenaLobbySourceText
+        let value: String
+        let transform: Affine
+        let color: Color
+        let bounds: Rect
+    }
     indirect enum Operation {
         case draw(Draw)
+        case text(TextDraw)
         case layer([Operation], blendMode: Int, bounds: Rect)
         case masked(mask: [Operation], content: [Operation], bounds: Rect)
         var bounds: Rect {
             switch self {
             case .draw(let draw): return draw.bounds
+            case .text(let text): return text.bounds
             case .layer(_, _, let bounds), .masked(_, _, let bounds): return bounds
             }
         }
@@ -177,8 +231,12 @@ final class ArenaLobbyTimelineScene {
     private var frameEnds: [Int: [Int]] = [:]
     private var reachableClocks = Set<Int>()
     private var frameLookups: [Int: Int] = [:]
+    private var textStyles: [Int: ArenaLobbySourceText] = [:]
+    private var childSegments: [Int: [String]] = [:]
+    var interfaceState: ArenaLobbyInterfaceState?
 
-    init(document: ArenaLobbyTimelineDocument, exportName: String, sourceRect: [Double]? = nil) throws {
+    init(document: ArenaLobbyTimelineDocument, exportName: String, sourceRect: [Double]? = nil,
+         interfaceState: ArenaLobbyInterfaceState? = nil) throws {
         guard document.schemaVersion == 1, document.canvasSize.count == 2,
               document.canvasSize.allSatisfy({ (1...4096).contains($0) }),
               document.sourceRect.count == 4, document.sourceRect.allSatisfy(\.isFinite),
@@ -187,7 +245,8 @@ final class ArenaLobbyTimelineScene {
               (1...16).contains(document.textures.count), document.objects.count <= 50_000,
               document.matrices.count <= 1_000_000, document.colors.count <= 500_000,
               document.exclusions.count <= 128,
-              let selected = document.exports[exportName], selected.status == "ready" else {
+              let selected = document.exports[exportName],
+              selected.status == "ready" || (interfaceState != nil && selected.status == "requires_layout_text_and_state_bindings") else {
             throw ArenaLobbyTimelineError.invalid("Unsupported or unbound lobby scene")
         }
         let viewport = sourceRect ?? document.sourceRect
@@ -218,6 +277,7 @@ final class ArenaLobbyTimelineScene {
         matrices = document.matrices.map(Affine.init)
         colors = document.colors.map(Color.init)
         proofs = proofTable
+        self.interfaceState = interfaceState
         try validate()
         try verifyOffscreenExclusions()
     }
@@ -246,9 +306,25 @@ final class ArenaLobbyTimelineScene {
             }
             if visited.contains(id) { return }
             visited.insert(id)
-            guard item.textField == nil, item.scalingGrid == nil,
-                  item.modifier == nil || [38, 39, 40].contains(item.modifier!) else {
-                throw ArenaLobbyTimelineError.invalid("Lobby export needs text, nine-slice or unknown modifier support")
+            guard item.modifier == nil || [38, 39, 40].contains(item.modifier!) else {
+                throw ArenaLobbyTimelineError.invalid("Unknown source modifier")
+            }
+            if let fields = item.textField {
+                guard interfaceState != nil else {
+                    throw ArenaLobbyTimelineError.invalid("Source text requires interface bindings")
+                }
+                textStyles[id] = try ArenaLobbySourceText(fields)
+            }
+            if let grid = item.scalingGrid {
+                guard interfaceState != nil, let left = grid["left"], let top = grid["top"],
+                      let right = grid["right"], let bottom = grid["bottom"],
+                      [left,top,right,bottom].allSatisfy({ $0.isFinite && abs($0) <= 65_536 }),
+                      right >= left, bottom >= top else {
+                    throw ArenaLobbyTimelineError.invalid("Invalid source scaling grid")
+                }
+                // Intrinsic source-size rendering does not resize the nine
+                // regions. Keep the grid for a future explicit resize request;
+                // never stretch a source button to an unrelated host rectangle.
             }
             for command in item.commands {
                 guard document.textures.indices.contains(command.textureIndex), (3...8192).contains(command.vertices.count),
@@ -263,6 +339,10 @@ final class ArenaLobbyTimelineScene {
                       let children = item.children, frames.count <= count,
                       item.frameLabels?.count == count else { throw ArenaLobbyTimelineError.invalid("Invalid lobby clock") }
                 reachableClocks.insert(id)
+                let nameCounts = Dictionary(grouping: children, by: \.name).mapValues(\.count)
+                childSegments[id] = children.enumerated().map { index, child in
+                    child.name.isEmpty || nameCounts[child.name, default: 0] > 1 ? "#\(index):\(child.name)" : child.name
+                }
                 var total = 0
                 var ends: [Int] = []
                 var next = ancestry
@@ -318,7 +398,7 @@ final class ArenaLobbyTimelineScene {
                 // Preserve and validate declared but currently unused children
                 // too; later source states must not conceal cycles or bad data.
                 for child in children { try walk(child.objectID, ancestry: next) }
-            } else if item.commands.isEmpty && item.modifier == nil {
+            } else if item.commands.isEmpty && item.modifier == nil && item.textField == nil {
                 throw ArenaLobbyTimelineError.invalid("Lobby object has no drawing data")
             }
         }
@@ -410,9 +490,26 @@ final class ArenaLobbyTimelineScene {
         })
         var totalVertices = 0
         func union(_ ops: [Operation]) -> Rect? { ops.map(\.bounds).reduce(nil) { a,b in a.map { $0.union(b) } ?? b } }
-        func draw(_ id: Int, transform: Affine, color: Color, depth: Int) throws -> [Operation] {
+        func draw(_ id: Int, path: String, transform: Affine, color: Color, depth: Int) throws -> [Operation] {
             guard depth < 48, let item = objects[id] else { throw ArenaLobbyTimelineError.invalid("Lobby drawing depth exceeded") }
+            if interfaceState?.hidden.contains(path) == true { return [] }
             var output: [Operation] = []
+            if let style = textStyles[id] {
+                guard let value = interfaceState?.text[path], value.utf8.count <= 4096 else {
+                    throw ArenaLobbyTimelineError.invalid("Unbound source text instance: \(path)")
+                }
+                if !value.isEmpty, color.multiply.w > 0 {
+                    guard style.size > 0 else {
+                        throw ArenaLobbyTimelineError.invalid("Source placeholder requires an explicit font size: \(path)")
+                    }
+                    let r = style.rect
+                    let points = [[r[0],r[1]],[r[2],r[1]],[r[0],r[3]],[r[2],r[3]]].map(transform.point)
+                    let bounds = Rect([points.map(\.x).min()!,points.map(\.y).min()!,points.map(\.x).max()!,points.map(\.y).max()!])
+                    if let visible = bounds.intersection(sourceRect) {
+                        output.append(.text(TextDraw(style: style, value: value, transform: transform, color: color, bounds: visible)))
+                    }
+                }
+            }
             for command in item.commands {
                 let points = command.vertices.map(transform.point)
                 let bounds = Rect([points.map(\.x).min()!, points.map(\.y).min()!,
@@ -443,7 +540,14 @@ final class ArenaLobbyTimelineScene {
                 }
                 content = []
             }
-            for e in elements(id, frame: frameLookups[id] ?? 0) {
+            var selectedFrame = frameLookups[id] ?? 0
+            if let label = interfaceState?.frames[path] {
+                guard let index = item.frameLabels?.firstIndex(of: label) else {
+                    throw ArenaLobbyTimelineError.invalid("Unknown source state label at \(path)")
+                }
+                selectedFrame = index
+            }
+            for e in elements(id, frame: selectedFrame) {
                 let child = children[e[0]]
                 if let modifier = objects[child.objectID]?.modifier {
                     switch modifier {
@@ -459,7 +563,9 @@ final class ArenaLobbyTimelineScene {
                 if child.excludedByProof != nil { continue }
                 let matrix = transform.appending(e[1] == -1 ? .identity : matrices[e[1]])
                 let tint = color.appending(e[2] == -1 ? .identity : colors[e[2]])
-                var next = try draw(child.objectID, transform: matrix, color: tint, depth: depth+1)
+                let name = childSegments[id]![e[0]]
+                let childPath = path.isEmpty ? name : path + "/" + name
+                var next = try draw(child.objectID, path: childPath, transform: matrix, color: tint, depth: depth+1)
                 if child.blendMode != 0, let bounds = union(next) {
                     // A non-normal child is composited as a group before its
                     // blend is applied. Flattening every triangle to ADD would
@@ -473,7 +579,7 @@ final class ArenaLobbyTimelineScene {
             if active { flushMask() }
             return output
         }
-        return Frame(operations: try draw(root, transform: .identity, color: .identity, depth: 0),
+        return Frame(operations: try draw(root, path: "", transform: .identity, color: .identity, depth: 0),
                      clipFrames: frameLookups, sourceTime: time)
     }
 }

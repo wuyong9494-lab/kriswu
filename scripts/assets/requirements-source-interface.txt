@@ -1,0 +1,5 @@
+numpy==2.3.5
+zstandard==0.25.0
+Pillow==13.0.0
+texture2ddecoder==1.0.6
+flatbuffers==25.12.19
