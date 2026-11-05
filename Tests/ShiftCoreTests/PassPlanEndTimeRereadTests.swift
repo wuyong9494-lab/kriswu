@@ -76,7 +76,12 @@ final class PassPlanEndTimeRereadTests: XCTestCase {
         XCTAssertEqual(result, expected)
         XCTAssertEqual(result.recognitionIssues?.prefix(2), first.recognitionIssues?.prefix(2))
         XCTAssertTrue(result.recognitionIssues?.contains("结束时间由原格复识与多轮候选核对，请核对原图") == true)
-        XCTAssertEqual(Array(PassPlan.table([result], layout: layout).cells[0].dropFirst()), expected.cells)
+        let exported = PassPlan.table([result], layout: layout)
+        XCTAssertEqual(exported.headers, ["No.", "应急", "卫星ID", "卫星名称", "圈号", "地面站",
+                                          "开始时间", "结束时间", "数传信息", "状态", "备注"])
+        XCTAssertEqual(exported.cells, [["1", "应急", "DEMO02B03", "虚构02B03星", "12345", "虚构甲站-01",
+                                          "2032-06-18 08:23:45", "2032-06-18 08:29:39",
+                                          "通道1:800M", "等待数传", "保留备注"]])
         XCTAssertEqual(PassPlan.emergency(result, layout: layout), true)
     }
 
