@@ -128,7 +128,12 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/ShiftReminder.app Payload/
           zip -qr ShiftReminder.ipa Payload
 
+      # A code-only planning branch verifies compilation and IPA packaging but
+      # does not distribute an installation artifact. Avoid failing its full
+      # build solely because GitHub's optional artifact service times out.
+      # Release/TestFlight branches still require their normal upload path.
       - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/heads/codex/plan-') && !startsWith(github.head_ref, 'codex/plan-') }}
         with:
           name: ShiftReminder-ipa
           path: ShiftReminder.ipa
