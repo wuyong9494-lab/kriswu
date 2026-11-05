@@ -69,6 +69,10 @@ final class GLTFModel: @unchecked Sendable {
     private let meshes: [[Primitive]]
     private let skins: [Skin]
 
+    /// Static scenery can share an instanced scene-node template. Skinned meshes
+    /// need their own bone hierarchy and must never reuse a cloned skinner.
+    var hasSkinning: Bool { !skins.isEmpty }
+
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
     /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
     init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false) throws {

@@ -9,6 +9,9 @@ import simd
 final class ArenaImportedMapArt {
     let node = SCNNode()
     private var models: [String: GLTFModel] = [:]
+    /// A tile of the same source role/variant must not allocate another scene
+    /// graph and another set of materials when only its placement changes.
+    private var staticTemplates: [String: SCNNode] = [:]
     private var cells: [ArenaImportedMap.Cell: SCNNode] = [:]
     private var animations: [(model: GLTFModel, instance: GLTFModel.Instance, clip: GLTFModel.Clip)] = []
     private var lastRevision: UInt64 = .max
@@ -17,6 +20,7 @@ final class ArenaImportedMapArt {
     private var fileKinds: [String: ArenaResourcePackManifest.File.Kind]
     private(set) var missingRoles: Set<String> = []
     private(set) var hasGround = false
+    private(set) var hasGemSpawn = false
 
     private struct Catalog: Decodable { let schemaVersion: Int; let themes: [Theme] }
     private struct Theme: Decodable { let id: String; let roles: [String: [Part]] }
@@ -29,7 +33,8 @@ final class ArenaImportedMapArt {
         let materialOverrides: [ArenaImportedMaterialOverride]?
     }
 
-    init?(themeID: String, terrain: ArenaTerrainState, store: ArenaResourcePackStore = .shared) {
+    init?(themeID: String, terrain: ArenaTerrainState, gemSpawn: V2? = nil,
+          showDecorativeBushes: Bool = true, store: ArenaResourcePackStore = .shared) {
         guard store.enabled, let pack = store.manifest, let path = pack.mapArtworkFile,
               let file = pack.files.first(where: { $0.path == path && $0.kind == .data }), file.bytes <= 8 * 1024 * 1024,
               let url = store.url(for: path), let data = try? Data(contentsOf: url), data.count == file.bytes,
@@ -51,6 +56,7 @@ final class ArenaImportedMapArt {
         }
         for y in 0..<terrain.height { for x in 0..<terrain.width {
             guard let cell = terrain.cell(x, y), cell.isVisible, !cell.isOutOfBounds,
+                  (showDecorativeBushes || cell.visualKind != .bush),
                   cell.visualKind != .floor || cell.terrainID == "DecoDestructible" else { continue }
             let role = Self.role(for: cell.terrainID, visual: cell.visualKind)
             let seed = x * 31 + y * 17
@@ -66,6 +72,17 @@ final class ArenaImportedMapArt {
             node.addChildNode(placement)
             cells[cell.cell] = placement
         } }
+        // The private theme catalog includes the original mine mesh and its
+        // environment animation. Keep the existing generic objective disc only
+        // when this exact source asset is absent or cannot be decoded.
+        if let gemSpawn, let mine = make(role: "MineGemSpawnModelOverride", variant: 0),
+           !mine.childNodes.isEmpty {
+            let placement = SCNNode()
+            placement.simdPosition = SIMD3(Float(gemSpawn.x), -Float(gemSpawn.y), 0)
+            placement.addChildNode(mine)
+            node.addChildNode(placement)
+            hasGemSpawn = true
+        }
         update(terrain: terrain, time: 0)
     }
 
@@ -96,6 +113,8 @@ final class ArenaImportedMapArt {
         guard let parts = theme.roles[role], !parts.isEmpty else { return nil }
         let part = parts[variant % parts.count]
         if part.status == "empty_source_scene" { return SCNNode() }
+        let templateKey = "\(role):\(variant % parts.count)"
+        if let template = staticTemplates[templateKey] { return template.clone() }
         guard part.status == "converted", let path = part.file, fileKinds[path] == .model,
               let url = store.url(for: path) else { missingRoles.insert(role); return nil }
         let model: GLTFModel
@@ -125,6 +144,10 @@ final class ArenaImportedMapArt {
         }
         if let name = part.animationName, let clip = model.clips[name] {
             animations.append((model, instance, clip))
+        } else if part.animationName == nil, !model.hasSkinning {
+            // Model geometry and adapted materials are immutable map dressing;
+            // clone only nodes, retaining shared geometry/material references.
+            staticTemplates[templateKey] = instance.root
         }
         return instance.root
     }

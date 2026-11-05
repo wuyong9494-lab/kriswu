@@ -496,7 +496,9 @@ final class ArenaWorldView: SCNView {
         let width = Float(map.width), height = Float(map.height)
         let look = ThemeLook.of(map.theme)
         if let theme = controller.sourceEnvironmentThemeID, let terrain = game.terrainState {
-            importedMapArt = ArenaImportedMapArt(themeID: theme, terrain: terrain)
+            importedMapArt = ArenaImportedMapArt(themeID: theme, terrain: terrain,
+                gemSpawn: game.mode == .stars ? game.map.center : nil,
+                showDecorativeBushes: ArenaDiagnostics.shared.variant != .noBushes)
             if let importedMapArt { root.addChildNode(importedMapArt.node) }
         }
         let harborSample = map.id == ArenaMap.twinGates.id
@@ -613,6 +615,7 @@ final class ArenaWorldView: SCNView {
             root.addChildNode(rimNode)
             zone = (discNode, rimNode, -1)
         case .stars:
+            if importedMapArt?.hasGemSpawn == true { break }
             let pad = SCNCylinder(radius: 0.7, height: 0.01)
             pad.radialSegmentCount = 48
             pad.firstMaterial = ArenaAvatar.decal(UIColor.purple.withAlphaComponent(0.35))

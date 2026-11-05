@@ -240,6 +240,22 @@ public enum ArenaSourceCompatibility {
                 }
             }
         }
+        // A bounded host compatibility policy (not a verified native formula):
+        // taking a full base-health bar of enemy damage contributes 24% or 28%
+        // of a super when the archived source field matches exactly. This must
+        // be resolved before the Bull identity adapter below checks its rate:
+        // a single adaptation pass is required for private source catalogs.
+        if let raw = result.rawSource["ChargeUltiFromDamage"],
+           let perMille = Int(raw), [240, 280].contains(perMille), result.health > 0 {
+            let reason = "hero.\(result.id).ChargeUltiFromDamage=\(raw): requires a dedicated hero rule"
+            if result.unsupportedReasons.contains(reason), result.damageTakenChargePerDamage == nil {
+                let rate = Double(perMille) / (1000 * Double(result.health))
+                if rate.isFinite, rate > 0, rate <= 1 {
+                    result.damageTakenChargePerDamage = rate
+                    resolved.insert(reason)
+                }
+            }
+        }
         // Bull already has a supported terrain-breaking charge and an
         // archived damage-taken Super coefficient. His remaining manual
         // switch and identity markers use a bounded host policy: release
@@ -316,20 +332,6 @@ public enum ArenaSourceCompatibility {
                 skill.unsupportedReasons.removeAll { $0 == reason }
                 if skill.isSupported {
                     result.ultimate = skill
-                    resolved.insert(reason)
-                }
-            }
-        }
-        // A bounded host compatibility policy (not a verified native formula):
-        // taking a full base-health bar of enemy damage contributes 24% or 28%
-        // of a super when the archived source field matches exactly.
-        if let raw = result.rawSource["ChargeUltiFromDamage"],
-           let perMille = Int(raw), [240, 280].contains(perMille), result.health > 0 {
-            let reason = "hero.\(result.id).ChargeUltiFromDamage=\(raw): requires a dedicated hero rule"
-            if result.unsupportedReasons.contains(reason), result.damageTakenChargePerDamage == nil {
-                let rate = Double(perMille) / (1000 * Double(result.health))
-                if rate.isFinite, rate > 0, rate <= 1 {
-                    result.damageTakenChargePerDamage = rate
                     resolved.insert(reason)
                 }
             }
