@@ -141,7 +141,7 @@ final class ArenaSourceCombatTests: XCTestCase {
 
         let adapted = ArenaSourceCompatibility.adapt(original)
         XCTAssertTrue(adapted.canPlay)
-        XCTAssertEqual(adapted.damageTakenChargePerDamage, 0.24 / 5400.0)
+        XCTAssertEqual(try XCTUnwrap(adapted.damageTakenChargePerDamage), 0.24 / 5400.0, accuracy: 1e-12)
         XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
         XCTAssertTrue(adapted.compatibilityPolicy.contains("host-damage-taken-permille-health"))
         XCTAssertTrue(adapted.compatibilityPolicy.contains("host-self-shield60"))
@@ -600,7 +600,7 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.health, 5400)
         XCTAssertEqual(adapted.ultimate?.behavior, "Shield")
         XCTAssertEqual(adapted.ultimate?.shieldDamageMultiplier, 0.4)
-        XCTAssertEqual(adapted.damageTakenChargePerDamage, 0.24 / 5400.0)
+        XCTAssertEqual(try XCTUnwrap(adapted.damageTakenChargePerDamage), 0.24 / 5400.0, accuracy: 1e-12)
         XCTAssertEqual(adapted.ultimate?.projectiles.count, 0)
         XCTAssertEqual(adapted.weapon?.id, original.weapon?.id)
         XCTAssertEqual(adapted.rawSource, original.rawSource)
