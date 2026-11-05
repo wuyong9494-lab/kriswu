@@ -67,6 +67,7 @@ final class ArenaImportedAudioAssets {
 
     private let store: ArenaResourcePackStore
     private var loadedKey: CacheKey?
+    private var retryAfter: Date = .distantPast
     private var definitions: [String: Definition] = [:]
     private var bindings: [Binding] = []
     private var fileKinds: [String: ArenaResourcePackManifest.File.Kind] = [:]
@@ -114,7 +115,10 @@ final class ArenaImportedAudioAssets {
             reset(); return
         }
         let key = CacheKey(url: url, sha256: file.sha256)
-        guard key != loadedKey else { return }
+        // A transient protected-file/read failure must not permanently silence
+        // this resource pack until the user restarts the App. Limit retries so
+        // menu re-renders do not repeatedly parse a genuinely corrupt catalog.
+        guard key != loadedKey || (errorDescription != nil && Date() >= retryAfter) else { return }
         reset()
         loadedKey = key
         do {
@@ -129,7 +133,10 @@ final class ArenaImportedAudioAssets {
             definitions = Dictionary(uniqueKeysWithValues: catalog.cues.map { ($0.id, $0) })
             bindings = catalog.bindings
             fileKinds = Dictionary(uniqueKeysWithValues: pack.files.map { ($0.path, $0.kind) })
-        } catch { errorDescription = "导入的音效清单暂时无法读取" }
+        } catch {
+            errorDescription = "导入的音效清单暂时无法读取"
+            retryAfter = Date().addingTimeInterval(5)
+        }
     }
 
     private func reset() {
@@ -138,6 +145,7 @@ final class ArenaImportedAudioAssets {
         bindings.removeAll()
         fileKinds.removeAll()
         errorDescription = nil
+        retryAfter = .distantPast
     }
 
     private struct CacheKey: Equatable { let url: URL; let sha256: String }

@@ -206,7 +206,7 @@ extension ArenaGame.Event {
     /// 第 4 段才有的事件（小道具、超级充能）
     var isLate: Bool {
         switch self {
-        case .gadget, .hyper, .emote: return true
+        case .gadget, .hyper, .sourceReload, .emote: return true
         default: return false
         }
     }
@@ -308,7 +308,7 @@ extension ArenaSnapshot {
             case .round(let winner): w.u8(10); w.u8(winner ?? 255)
             case .reset: w.u8(11)
             case .chestHit(let chest, let amount): w.u8(12); w.u8(chest); w.u16(min(amount, 65535))
-            case .gadget, .hyper, .emote: break
+            case .gadget, .hyper, .sourceReload, .emote: break
             }
         }
         guard version >= 2 else { return w.data }
@@ -383,6 +383,7 @@ extension ArenaSnapshot {
             switch event {
             case .gadget(let fighter): w.u8(13); w.u8(fighter)
             case .hyper(let fighter): w.u8(14); w.u8(fighter)
+            case .sourceReload(let fighter): w.u8(15); w.u8(fighter)
             // 表情：编号放在种类里（16 起），和别的一样两个字节，老版本读到不认识的种类跳过
             case .emote(let fighter, let emote): w.u8(16 + min(max(emote, 0), 239)); w.u8(fighter)
             default: break
@@ -562,6 +563,7 @@ extension ArenaSnapshot {
                 switch kind {
                 case 13: events.append(.gadget(fighter: f))
                 case 14: events.append(.hyper(fighter: f))
+                case 15: events.append(.sourceReload(fighter: f))
                 case 16...255: events.append(.emote(fighter: f, emote: kind - 16))
                 default: break
                 }

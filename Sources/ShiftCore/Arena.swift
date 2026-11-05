@@ -608,6 +608,9 @@ public struct ArenaGame: Sendable {
         case explosion(at: V2, radius: Double)
         case pickup(fighter: Int)
         case respawn(fighter: Int)
+        /// A source weapon finished refilling one or more whole ammo slots.
+        /// Kept separate from the classic hero reload policy and wire events.
+        case sourceReload(fighter: Int)
         case special(fighter: Int)
         /// 开了一枪（普通攻击），画面上放出手的动作
         case attack(fighter: Int)

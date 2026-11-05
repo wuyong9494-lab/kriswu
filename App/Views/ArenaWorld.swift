@@ -1873,6 +1873,12 @@ final class ArenaWorldView: SCNView {
             if fighter == controller.me { ArenaSound.shared.play(.respawn) }
             let color = game.fighters[fighter].team == myTeam ? ArenaPalette.blue : ArenaPalette.red
             ring(at: avatars[fighter].node.simdPosition, color: color, to: 1.8)
+        case .sourceReload(let fighter):
+            guard game.fighters.indices.contains(fighter),
+                  let hero = game.fighters[fighter].sourceHero,
+                  game.fighters[fighter].team == myTeam || game.isVisible(game.fighters[fighter], to: myTeam) else { return }
+            ArenaSound.shared.playSource(event: "reload", heroID: hero.id,
+                                         volume: loudness(game.fighters[fighter].pos) * 0.65)
         }
     }
 

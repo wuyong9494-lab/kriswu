@@ -1458,6 +1458,34 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertTrue(game.fighters.allSatisfy { $0.health > 0 })
     }
 
+    func testSourceReloadSoundEventFiresOnceWhenWholeAmmoRefillsAndSurvivesSnapshot() throws {
+        let source = hero()
+        let entrants = [
+            ArenaGame.Entrant(name: "Source", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Project", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 912, map: .canyon)
+        game.step(1.0 / 60, inputs: [0: ArenaInput(attack: V2(1, 0))])
+        XCTAssertEqual(game.fighters[0].sourceWeapon?.ammo, 2)
+        game.events.removeAll()
+
+        var reloadEvents = 0
+        for _ in 0..<210 {
+            game.step(1.0 / 60, inputs: [:])
+            reloadEvents += game.events.filter { $0 == .sourceReload(fighter: 0) }.count
+            XCTAssertFalse(game.events.contains(.sourceReload(fighter: 1)), "Project heroes cannot emit imported reload cues")
+            game.events.removeAll()
+        }
+        XCTAssertEqual(reloadEvents, 1, "Refilling fractional ammo must not play a cue every simulation tick")
+        XCTAssertEqual(game.fighters[0].ammo, 3, accuracy: 1e-9)
+
+        let events: [ArenaGame.Event] = [.attack(fighter: 0), .sourceReload(fighter: 0)]
+        let encoded = game.snapshot(events: events).encoded()
+        XCTAssertEqual(try XCTUnwrap(ArenaSnapshot(data: encoded)).events, events)
+        XCTAssertEqual(try XCTUnwrap(ArenaSnapshot(data: game.snapshot(events: events).encoded(version: 3))).events,
+                       [.attack(fighter: 0)], "Older wire versions must ignore the new sound-only event")
+    }
+
     func testSuperChargeUsesSourceDamageCoefficientInsteadOfClassicCost() throws {
         let source = hero()
         let entrants = [ArenaGame.Entrant(name: "Player", brawler: .knight, isBot: false, team: 0, sourceHero: source),

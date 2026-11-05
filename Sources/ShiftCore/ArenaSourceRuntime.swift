@@ -123,10 +123,14 @@ extension ArenaGame {
             }
         }
         let origin = fighters[i].pos
+        let loadedBefore = Int((fighters[i].sourceWeapon?.ammo ?? 0).rounded(.down))
         let weaponEvents = fighters[i].sourceWeapon?.advance(dt: dt, origin: origin) ?? []
         let ultimateEvents = fighters[i].sourceUltimate?.advance(dt: dt, origin: origin) ?? []
         applySourceEmissions(weaponEvents + ultimateEvents, owner: i)
         fighters[i].ammo = fighters[i].sourceWeapon?.ammo ?? 0
+        if Int(fighters[i].ammo.rounded(.down)) > loadedBefore {
+            events.append(.sourceReload(fighter: i))
+        }
         fighters[i].cooldown = fighters[i].sourceWeapon?.cooldownRemaining ?? 0
         // Existing match regeneration is an explicit host-game compatibility
         // policy, independent of source weapon damage or super charge.

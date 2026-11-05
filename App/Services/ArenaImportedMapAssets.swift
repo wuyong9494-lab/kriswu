@@ -30,6 +30,7 @@ final class ArenaImportedMapAssets {
     private var loadedKey: String?
     private var entries: [Entry] = []
     private var choices: [String: ArenaImportedMapChoice] = [:]
+    private var retryAfter: Date = .distantPast
     private(set) var lastError: String?
 
     func maps(for mode: ArenaGame.Mode) -> [Entry] {
@@ -62,10 +63,15 @@ final class ArenaImportedMapAssets {
         guard store.enabled, let pack = store.manifest, let path = pack.playableMapsFile,
               let asset = pack.files.first(where: { $0.path == path && $0.kind == .data }),
               asset.bytes <= 8 * 1024 * 1024, let url = store.url(for: path) else {
-            loadedKey = nil; entries.removeAll(); choices.removeAll(); return
+            loadedKey = nil; entries.removeAll(); choices.removeAll()
+            lastError = nil; retryAfter = .distantPast
+            return
         }
         let key = url.path + "@" + asset.sha256
-        guard key != loadedKey else { return }
+        // File-protection transitions or interrupted pack installs can make a
+        // validated local catalog temporarily unreadable. Retry periodically
+        // without decoding on every SwiftUI body update if the failure persists.
+        guard key != loadedKey || (lastError != nil && Date() >= retryAfter) else { return }
         loadedKey = key; entries.removeAll(); choices.removeAll(); lastError = nil
         do {
             let data = try Data(contentsOf: url)
@@ -75,6 +81,9 @@ final class ArenaImportedMapAssets {
                   Set(catalog.maps.map(\.id)).count == catalog.maps.count else { throw CocoaError(.fileReadCorruptFile) }
             let paths = Set(pack.files.filter { $0.kind == .data }.map(\.path))
             entries = catalog.maps.filter { paths.contains($0.file) && ArenaGame.Mode(rawValue: $0.runtimeMode) != nil }
-        } catch { lastError = "地图清单暂时无法读取" }
+        } catch {
+            lastError = "地图清单暂时无法读取"
+            retryAfter = Date().addingTimeInterval(5)
+        }
     }
 }

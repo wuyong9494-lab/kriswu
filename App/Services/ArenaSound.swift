@@ -80,7 +80,7 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     private var importedCues: [String: [ArenaImportedAudioAssets.Cue]] = [:]
     private var sourceSequence: [String: Int] = [:]
     private var preparedSourceHeroes: Set<String> = []
-    private static let sourceEvents = ["weapon.attack", "weapon.use", "ultimate.attack", "ultimate.use",
+    private static let sourceEvents = ["weapon.attack", "weapon.use", "ultimate.attack", "ultimate.use", "reload",
         "damage", "death", "voice.start", "voice.attack", "voice.ultimate", "voice.takeDamage", "voice.death", "voice.kill", "voice.lead", "voice.unlock"]
     private var assetsLoaded = false
     private var beds: [Bed: AVAudioPlayer] = [:]

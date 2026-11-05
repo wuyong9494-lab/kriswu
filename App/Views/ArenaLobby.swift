@@ -846,7 +846,11 @@ struct ArenaHomeView: View {
             sheet = .modes
         } label: {
             HStack(spacing: 10) {
-                if let map = ArenaMap.pool(for: playMode).first {
+                if let id = selectedMapID, id.hasPrefix("imported:") {
+                    ArenaImportedMapThumb(id: id)
+                        .frame(width: 46, height: 46)
+                        .accessibilityLabel("原资源地图 \(selectedMapTitle)")
+                } else if let map = selectedMap ?? ArenaMap.pool(for: playMode).first {
                     ArenaMapThumb(map: map)
                         .frame(width: 46, height: 46)
                         .accessibilityLabel("地图 \(map.title)")
@@ -1331,7 +1335,7 @@ struct ArenaHomeView: View {
             Text("\(playMode.title) · 选择地图")
                 .font(.system(size: 16, weight: .black, design: .rounded))
             ScrollView(.horizontal, showsIndicators: true) {
-                HStack(spacing: 10) {
+                LazyHStack(spacing: 10) {
                     if sourceHero == nil { mapChoice(nil) }
                     ForEach(ArenaMap.selectionPool(for: playMode), id: \.id) { map in
                         mapChoice(map)
@@ -1361,12 +1365,15 @@ struct ArenaHomeView: View {
             } catch { mapSelectionError = error.localizedDescription }
         } label: {
             VStack(spacing: 5) {
-                Image(systemName: "map.fill").font(.title2).frame(width: 82, height: 54)
+                ArenaImportedMapThumb(id: entry.id).frame(width: 82, height: 54)
                 Text(entry.title).font(.system(size: 12, weight: .bold)).lineLimit(2).frame(height: 32)
             }.frame(width: 112).padding(8)
                 .background(selectedMapID == entry.id ? Color.blue.opacity(0.55) : Color.black.opacity(0.25),
                             in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain)
+            .accessibilityLabel("原资源地图 \(entry.title)")
+            .accessibilityValue(selectedMapID == entry.id ? "已选择" : "未选择")
+            .accessibilityIdentifier("arena.map.\(entry.id)")
     }
 
     private func mapChoice(_ map: ArenaMap?) -> some View {
@@ -2359,6 +2366,64 @@ struct ArenaMapThumb: View {
         case .wall: return Color(red: 0.62, green: 0.42, blue: 0.24)
         case .bush: return Color(red: 0.12, green: 0.48, blue: 0.18)
         case .goal: return Color(red: 0.95, green: 0.82, blue: 0.2)
+        }
+    }
+}
+
+/// Draw a real imported layout's reviewed water, grass and collision terrain.
+/// Defer JSON decoding until the tile scrolls onscreen: a map picker containing
+/// 119 private entries must not synchronously parse every layout at sheet open.
+@MainActor
+private struct ArenaImportedMapThumb: View {
+    let id: String
+    @ObservedObject private var resources = ArenaResourcePackStore.shared
+    @State private var choice: ArenaImportedMapChoice?
+
+    private var requestKey: String {
+        guard let path = resources.manifest?.playableMapsFile else { return "\(id):\(resources.enabled):missing" }
+        let digest = resources.manifest?.files.first { $0.path == path }?.sha256 ?? ""
+        return "\(id):\(resources.enabled):\(digest)"
+    }
+
+    var body: some View {
+        Group {
+            if let choice {
+                Canvas { context, size in
+                    let map = choice.plan.map
+                    let terrain = choice.plan.terrainState
+                    let cellW = size.width / CGFloat(max(map.width, 1))
+                    let cellH = size.height / CGFloat(max(map.height, 1))
+                    for y in 0..<map.height {
+                        for x in 0..<map.width {
+                            guard let cell = terrain.cell(x, y), !cell.isOutOfBounds else { continue }
+                            let color: Color
+                            if !cell.isVisible || cell.isDestroyed { color = Color(red: 0.48, green: 0.65, blue: 0.4) }
+                            else if map.tile(x, y) == .goal { color = .yellow }
+                            else {
+                                switch cell.visualKind {
+                                case .floor: color = Color(red: 0.48, green: 0.65, blue: 0.4)
+                                case .wall: color = Color(red: 0.6, green: 0.37, blue: 0.55)
+                                case .bush: color = Color(red: 0.14, green: 0.54, blue: 0.23)
+                                case .water: color = Color(red: 0.16, green: 0.55, blue: 0.86)
+                                }
+                            }
+                            let rect = CGRect(x: CGFloat(x) * cellW,
+                                              y: CGFloat(map.height - 1 - y) * cellH,
+                                              width: cellW + 0.5, height: cellH + 0.5)
+                            context.fill(Path(rect), with: .color(color))
+                        }
+                    }
+                }
+            } else {
+                Image(systemName: "map.fill").resizable().scaledToFit()
+                    .foregroundStyle(.white.opacity(0.8)).padding(12)
+            }
+        }
+        .background(Color(red: 0.16, green: 0.21, blue: 0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.black, lineWidth: 2))
+        .task(id: requestKey) {
+            choice = try? ArenaImportedMapAssets.shared.choice(id: id)
         }
     }
 }
