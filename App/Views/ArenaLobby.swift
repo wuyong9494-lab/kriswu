@@ -1383,7 +1383,7 @@ struct ArenaHomeView: View {
     }
 
     private func mapChoice(_ map: ArenaMap?) -> some View {
-        let selected = selectedMap?.id == map?.id
+        let selected = selectedMapID == map?.id
         return Button {
             ArenaSound.shared.menu(.uiSelect)
             selectedMapID = map?.id
