@@ -31,7 +31,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
         "self_shield", "damage_taken_super_charge", "ally_projectile_heal", "charged_ground_dash",
         "caster_tracked_indirect_flight", "smoke_ally_hide", "area_pull", "delayed_area_damage",
-        "lateral_projectile_line"
+        "lateral_projectile_line", "manual_charge_cancel"
     ]
     public var id: String
     public var name: String
@@ -49,12 +49,16 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
     public var requiredCapabilities: [String]? = nil
     public var damageTakenChargePerDamage: Double? = nil
     public var longDash: ArenaSourceLongDash? = nil
+    /// A reviewed host gesture: release and press Super again to end an
+    /// ongoing charge. It is not a claim about the native input state machine.
+    public var manualChargeCancel: Bool? = nil
     public var unavailableCapabilities: [String] {
         var requested = Set(requiredCapabilities ?? [])
         requested.formUnion(weapon?.runtimeCapabilities ?? [])
         requested.formUnion(ultimate?.runtimeCapabilities ?? [])
         if damageTakenChargePerDamage != nil { requested.insert("damage_taken_super_charge") }
         if longDash != nil { requested.insert("charged_ground_dash") }
+        if manualChargeCancel == true { requested.insert("manual_charge_cancel") }
         return requested.subtracting(Self.implementedCapabilities).sorted()
     }
 
@@ -67,6 +71,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
             && initialSuperCharge.isFinite && (0...1).contains(initialSuperCharge)
             && (damageTakenChargePerDamage.map { $0.isFinite && $0 >= 0 && $0 <= 1 } ?? true)
             && (longDash.map { $0.isSupported && weapon?.behavior == "Charge" } ?? true)
+            && (manualChargeCancel != true || (ultimate?.behavior == "Charge" && ultimate?.charge != nil))
             && weapon?.isSupported == true && ultimate?.isSupported == true
     }
 }
@@ -235,6 +240,41 @@ public enum ArenaSourceCompatibility {
                 }
             }
         }
+        // Bull already has a supported terrain-breaking charge and an
+        // archived damage-taken Super coefficient. His remaining manual
+        // switch and identity markers use a bounded host policy: release
+        // Super, then press it during the charge to stop and trigger its
+        // existing slow-at-end area. The source gesture is not proven exact.
+        if result.id == "BullDude", result.health == 5000,
+           result.rawSource["UniqueProperty"] == "IS_BULL_DUDE",
+           result.rawSource["ChargeUltiFromDamage"] == "240",
+           result.damageTakenChargePerDamage == Double(240) / (1000 * Double(5000)),
+           let weapon = result.weapon, weapon.id == "BullDudeWeapon", weapon.isSupported,
+           weapon.projectileCount == 5, weapon.projectiles.count == 1,
+           weapon.projectiles[0].id == "BullDudeProjectile",
+           var ultimate = result.ultimate, ultimate.id == "BullDudeUlti",
+           ultimate.role == .ultimate, ultimate.behavior == "Charge",
+           ultimate.rawSource["SkillChangeType"] == "Manual",
+           ultimate.rawSource["ChargeType"] == "1",
+           ultimate.rawSource["ChargeSpeed"] == "2000",
+           ultimate.damage == 1000, ultimate.range == 11,
+           let charge = ultimate.charge, charge.sourceType == 1,
+           charge.speed == 2000 / 300.0, charge.wallBreak,
+           charge.endAreas.count == 1, charge.endAreas[0].id == "BullSlowArea",
+           charge.endAreas[0].kind == "StatusEffect", charge.endAreas[0].statusEnemy?.id == "BullAreaSlow" {
+            let identity = "hero.BullDude.UniqueProperty=IS_BULL_DUDE: native identity behavior not implemented"
+            let manual = "skill.BullDudeUlti.SkillChangeType=Manual: not yet interpreted"
+            if result.unsupportedReasons.contains(identity), result.unsupportedReasons.contains(manual),
+               ultimate.unsupportedReasons == [manual], result.manualChargeCancel == nil {
+                ultimate.unsupportedReasons.removeAll { $0 == manual }
+                if ultimate.isSupported {
+                    result.ultimate = ultimate
+                    result.manualChargeCancel = true
+                    resolved.insert(identity)
+                    resolved.insert(manual)
+                }
+            }
+        }
         // This archived Brock Super keeps an indirect impact target relative
         // to the moving caster during flight. The native prediction formula is
         // unknown; the host follows caster displacement from launch instead.
@@ -385,6 +425,9 @@ public enum ArenaSourceCompatibility {
             }
             if resolved.contains("projectile.BlowerUltiProjectile.PushbackType=1: not yet interpreted") {
                 result.compatibilityPolicy += "+host-gale-lateral-line-and-forward-knockback"
+            }
+            if resolved.contains("skill.BullDudeUlti.SkillChangeType=Manual: not yet interpreted") {
+                result.compatibilityPolicy += "+host-bull-release-and-press-to-cancel-charge"
             }
         }
         return result

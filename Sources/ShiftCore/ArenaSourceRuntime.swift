@@ -14,6 +14,9 @@ public struct ArenaSourceChargeMotion: Codable, Equatable, Sendable {
     public var definition: ArenaSourceCharge
     public var remaining: Double
     public var hit: Set<Int> = []
+    /// Optional for old replay decoding; a held Super cannot cancel before
+    /// the input was released at least once after charge activation.
+    public var manualCancelArmed: Bool? = nil
 }
 
 public struct ArenaSourceSlow: Codable, Equatable, Sendable {
@@ -85,8 +88,18 @@ extension ArenaGame {
             fighters[i].shield = max(0, fighters[i].shield - dt)
             if fighters[i].shield == 0 { fighters[i].sourceShieldDamageMultiplier = nil }
         }
-        if fighters[i].sourceCharge != nil {
+        if var motion = fighters[i].sourceCharge {
+            var manuallyStopped = false
+            if fighters[i].sourceHero?.manualChargeCancel == true {
+                if input.special == nil { motion.manualCancelArmed = true }
+                else if motion.manualCancelArmed == true {
+                    motion.remaining = 0
+                    manuallyStopped = true
+                }
+                fighters[i].sourceCharge = motion
+            }
             updateSourceCharge(i, dt: dt)
+            if manuallyStopped { fighters[i].sourceUltimate?.cancel() }
         } else {
             let blocked = fighters[i].sourceWeapon?.blocksMovement == true || fighters[i].sourceUltimate?.blocksMovement == true
             let move = blocked ? V2.zero : input.move.clamped(to: 1)

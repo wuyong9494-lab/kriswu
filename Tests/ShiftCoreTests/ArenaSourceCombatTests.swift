@@ -300,6 +300,122 @@ final class ArenaSourceCombatTests: XCTestCase {
         return source
     }
 
+    private func chargingBull() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "BullDude"
+        source.name = "Bull"
+        source.health = 5000
+        source.rawSource = ["UniqueProperty": "IS_BULL_DUDE", "ChargeUltiFromDamage": "240"]
+        let chargeReason = "hero.BullDude.ChargeUltiFromDamage=240: requires a dedicated hero rule"
+        let identityReason = "hero.BullDude.UniqueProperty=IS_BULL_DUDE: native identity behavior not implemented"
+        let manualReason = "skill.BullDudeUlti.SkillChangeType=Manual: not yet interpreted"
+        source.unsupportedReasons = [chargeReason, identityReason, manualReason]
+        var weapon = colt()
+        weapon.id = "BullDudeWeapon"
+        weapon.damage = 440
+        weapon.chargeDamage = 440
+        weapon.range = 16 / 3.0
+        weapon.activeTime = 0.15
+        weapon.projectileCount = 5
+        weapon.spread = .pi / 4
+        weapon.projectiles[0].id = "BullDudeProjectile"
+        source.weapon = weapon
+
+        let slow = ArenaSourceStatusEffect(id: "BullAreaSlow", duration: 1.5,
+            speedReductionAbsolute: 350 / 300.0, speedReductionFraction: 0,
+            refreshable: true, unsupportedReasons: [], rawSource: [:])
+        var slowArea = ArenaSourceAreaEffect(id: "BullSlowArea", kind: "StatusEffect", radius: 3,
+            damage: nil, duration: 1, wallBreak: false, pushback: 0,
+            unsupportedReasons: [], rawSource: [:])
+        slowArea.statusEnemy = slow
+        slowArea.statusTickInterval = 0.1
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "BullDudeUlti"
+        ultimate.behavior = "Charge"
+        ultimate.range = 11
+        ultimate.damage = 1000
+        ultimate.chargeDamage = 1000
+        ultimate.activeTime = 0
+        ultimate.cooldown = 0.05
+        ultimate.projectileCount = 0
+        ultimate.projectiles = []
+        ultimate.charge = ArenaSourceChargeDefinition(sourceType: 1, speed: 2000 / 300.0,
+            wallBreak: true, pushback: 130 / 300.0,
+            alwaysAtMaxRange: false, endAreas: [slowArea])
+        ultimate.rawSource = ["SkillChangeType": "Manual", "ChargeType": "1", "ChargeSpeed": "2000"]
+        ultimate.unsupportedReasons = [manualReason]
+        source.ultimate = ultimate
+        return source
+    }
+
+    func testBullManualChargeEndRequiresExactIdentityAndSupportedDash() throws {
+        let original = chargingBull()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.manualChargeCancel, true)
+        XCTAssertEqual(try XCTUnwrap(adapted.damageTakenChargePerDamage), 0.24 / 5000.0, accuracy: 1e-12)
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertEqual(adapted.ultimate?.charge?.endAreas.first?.statusEnemy?.id, "BullAreaSlow")
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-bull-release-and-press-to-cancel-charge"))
+        XCTAssertEqual(try JSONDecoder().decode(ArenaSourceHero.self, from: JSONEncoder().encode(adapted)), adapted)
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, chargingBull(), "Archived attributes are left intact")
+
+        var unreviewed = original
+        unreviewed.rawSource["UniqueProperty"] = "IS_NEW_BULL"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.ultimate?.rawSource["SkillChangeType"] = "Auto"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.ultimate?.charge?.endAreas.removeAll()
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+        unreviewed = original
+        unreviewed.unsupportedReasons.append("unreviewed passive")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unreviewed).canPlay)
+    }
+
+    func testBullSecondPressStopsDashOnlyAfterReleaseAndAppliesSourceSlow() throws {
+        let bull = ArenaSourceCompatibility.adapt(chargingBull())
+        let rows = (0..<13).map { y in String((0..<23).map { x -> Character in
+            if x == 0 || x == 22 || y == 0 || y == 12 { return "#" }
+            if x == 3 && y == 6 { return "a" }
+            if x == 19 && y == 6 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Bull", brawler: .ranger, isBot: false, team: 0, sourceHero: bull),
+            ArenaGame.Entrant(name: "Project enemy", brawler: .ranger, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 812, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(3.5, 6.5)
+        game.fighters[1].pos = V2(7, 6.5)
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(8, 0))
+        XCTAssertNotNil(game.fighters[0].sourceCharge)
+        let held = ArenaInput(special: V2(1, 0))
+        for _ in 0..<12 { game.step(1 / 60.0, inputs: [0: held]) }
+        XCTAssertNotNil(game.fighters[0].sourceCharge, "Holding the initial button is not a second press")
+        XCTAssertGreaterThan(game.fighters[0].pos.x, 4.5)
+        XCTAssertNotEqual(game.fighters[0].sourceCharge?.manualCancelArmed, true)
+
+        game.step(1 / 60.0, inputs: [:])
+        XCTAssertEqual(game.fighters[0].sourceCharge?.manualCancelArmed, true)
+        game.step(1 / 60.0, inputs: [0: held])
+        XCTAssertNil(game.fighters[0].sourceCharge, "Release then press ends the charge early")
+        XCTAssertEqual(game.fighters[0].sourceUltimate?.active, false,
+                       "Manual cancellation also releases the skill input lock")
+        XCTAssertEqual(game.fighters[0].health, game.fighters[0].maxHealth)
+        XCTAssertTrue(game.sourceAreas.contains { $0.spawn.area.id == "BullSlowArea" })
+        XCTAssertNotNil(game.fighters[1].sourceSlows)
+        XCTAssertEqual(game.moveSpeed(game.fighters[1]), Brawler.ranger.speed - 350 / 300.0,
+                       accuracy: 1e-10)
+        game.step(1 / 60.0, inputs: [0: ArenaInput(attack: V2(1, 0))])
+        XCTAssertEqual(game.fighters[0].sourceWeapon?.active, true,
+                       "Bull can resume his own main attack after stopping the Super")
+    }
+
     func testGaleParallelShotPatternAndForwardKnockbackNeedReviewedProfile() throws {
         let original = blowerGale()
         XCTAssertFalse(original.canPlay)
@@ -1477,6 +1593,24 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.pushback, 1.5)
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.damageOncePerVolley, true)
         XCTAssertEqual(adapted.rawSource, original.rawSource)
+    }
+
+    func testPrivateBullProfileKeepsTerrainBreakingDashAndDamageCharge() throws {
+        let original = try privateHero("BullDude")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.health, 5000)
+        XCTAssertEqual(adapted.weapon?.id, "BullDudeWeapon")
+        XCTAssertEqual(adapted.ultimate?.id, "BullDudeUlti")
+        XCTAssertEqual(adapted.ultimate?.charge?.sourceType, 1)
+        XCTAssertEqual(adapted.ultimate?.charge?.wallBreak, true)
+        XCTAssertEqual(adapted.ultimate?.charge?.endAreas.first?.statusEnemy?.id, "BullAreaSlow")
+        XCTAssertEqual(adapted.manualChargeCancel, true)
+        XCTAssertEqual(try XCTUnwrap(adapted.damageTakenChargePerDamage), 0.24 / 5000.0, accuracy: 1e-12)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
+        XCTAssertEqual(adapted.ultimate?.charge?.endAreas.first?.rawSource,
+                       original.ultimate?.charge?.endAreas.first?.rawSource)
     }
 
     func testWorldOncePerVolleyKeysIncludeActivationAndExpire() throws {

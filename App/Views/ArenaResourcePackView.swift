@@ -186,6 +186,10 @@ struct ArenaResourcePackView: View {
                             Text("盖尔普攻与大招按并排弹道发射，大招能击退敌人；弹道间距及击退方式为本地兼容规则。")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
+                        if profile.compatibilityPolicy.contains("host-bull-release-and-press-to-cancel-charge") {
+                            Text("公牛大招冲锋可在松开后再次点击大招键提前停止，并触发减速区域；操作规则是本地兼容方案。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }
