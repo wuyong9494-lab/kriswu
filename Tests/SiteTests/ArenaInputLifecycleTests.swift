@@ -6,7 +6,10 @@ final class ArenaInputLifecycleTests: XCTestCase {
     private func make(mode: ArenaGame.Mode = .teamFight,
                       scenario: ArenaDiagnosticScenario = .manualTraversal) -> ArenaController {
         ArenaController(setup: .init(mode: mode, brawler: .ranger, name: "Input regression", level: 3,
-            loadout: .basic(.ranger, level: 3), benchmark: true, diagnosticScenario: scenario))
+            loadout: .basic(.ranger, level: 3), mapID: ArenaMap.canyon.id,
+            // Benchmark crowd mode deliberately drives every seat, including
+            // the player. Use the normal seeded roster for manual input tests.
+            benchmark: scenario != .crowdWalk, diagnosticScenario: scenario), seed: 170017)
     }
 
     private func enterMatch(_ controller: ArenaController) {
@@ -173,12 +176,16 @@ final class ArenaInputLifecycleTests: XCTestCase {
     func testQueuedUltimateIsDiscardedWithoutSpendingEarnedCharge() {
         let controller = make(scenario: .crowdWalk)
         enterMatch(controller)
-        // Earn charge through real hits in the deterministic crowd fixture.
-        // Do not inject charge or relax the normal ultimate readiness gate.
-        for _ in 0..<1_500 where controller.mine.superCharge < 1 {
-            controller.fire(.zero)
+        // Navigate and earn charge through the public input callbacks in a
+        // normal seeded match. Never inject charge or apply the bot's ultimate.
+        var driver = ArenaBot(id: controller.me, seed: 170017)
+        for _ in 0..<3_600 where controller.mine.superCharge < 1 {
+            let input = driver.input(in: controller.game, dt: ArenaController.step)
+            controller.setMovement(input.move)
+            if let aim = input.attack { controller.fire(aim.normalized) }
             controller.advance(ArenaController.step)
         }
+        controller.setMovement(.zero)
         XCTAssertGreaterThanOrEqual(controller.mine.superCharge, 1)
         _ = controller.takeEvents()
         controller.fireSpecial(.zero)
