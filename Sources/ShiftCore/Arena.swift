@@ -1585,6 +1585,14 @@ public struct ArenaGame: Sendable {
         fighters[j].health -= amount
         fighters[j].lastHurt = time
         events.append(.hit(target: j, amount: amount))
+        if let attacker, attacker != j, fighters.indices.contains(attacker),
+           fighters[attacker].team != fighters[j].team,
+           let rate = fighters[j].sourceHero?.damageTakenChargePerDamage,
+           rate.isFinite, rate > 0, dealt > 0 {
+            // Charge from actual enemy damage after shield mitigation, not
+            // requested raw damage, friendly fire or environmental damage.
+            fighters[j].superCharge = min(1, fighters[j].superCharge + Double(dealt) * rate)
+        }
         if let attacker, fighters.indices.contains(attacker) {
             fighters[attacker].damageDealt += dealt
             if charges {

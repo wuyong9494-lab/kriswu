@@ -93,10 +93,10 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(game.fighters[0].health, unshielded - 1000)
     }
 
-    func testReviewedRosaShieldDoesNotBypassUnimplementedDamageTakenSuperCharge() throws {
+    func testReviewedRosaShieldDoesNotBypassMissingDamageTakenSourceEvidence() throws {
         var original = hero()
         original.id = "Rosa"
-        original.rawSource = ["ChargeUltiFromDamage": "240"]
+        original.rawSource = [:]
         let remaining = "hero.Rosa.ChargeUltiFromDamage=240: requires a dedicated hero rule"
         let shieldReason = "skill.RosaUlti.BehaviorType=Shield: requires a dedicated behavior adapter"
         original.unsupportedReasons = [remaining, shieldReason]
@@ -122,6 +122,68 @@ final class ArenaSourceCombatTests: XCTestCase {
         unknown = original
         unknown.ultimate?.unsupportedReasons.append("unverified area behavior")
         XCTAssertEqual(ArenaSourceCompatibility.adapt(unknown), unknown)
+    }
+
+    func testRosaHostShieldAndDamageTakenAdaptersEnableOnlyMatchingSourceFields() throws {
+        var original = hero()
+        original.id = "Rosa"
+        original.health = 5400
+        original.rawSource = ["ChargeUltiFromDamage": "240"]
+        let chargeReason = "hero.Rosa.ChargeUltiFromDamage=240: requires a dedicated hero rule"
+        let shieldReason = "skill.RosaUlti.BehaviorType=Shield: requires a dedicated behavior adapter"
+        original.unsupportedReasons = [chargeReason, shieldReason]
+        var special = sourceShield()
+        special.id = "RosaUlti"
+        special.shieldDamageMultiplier = nil
+        special.rawSource = ["BehaviorType": "Shield", "ActiveTime": "4000"]
+        special.unsupportedReasons = [shieldReason]
+        original.ultimate = special
+
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay)
+        XCTAssertEqual(adapted.damageTakenChargePerDamage, 0.24 / 5400.0)
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-damage-taken-permille-health"))
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-self-shield60"))
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original.unsupportedReasons, [chargeReason, shieldReason], "Original data must remain unchanged")
+
+        var nonMatching = original
+        nonMatching.rawSource["ChargeUltiFromDamage"] = "241"
+        let blocked = ArenaSourceCompatibility.adapt(nonMatching)
+        XCTAssertFalse(blocked.canPlay)
+        XCTAssertNil(blocked.damageTakenChargePerDamage)
+        XCTAssertEqual(blocked.unsupportedReasons, [chargeReason])
+
+        nonMatching = original
+        nonMatching.unsupportedReasons.append("unimplemented summoned pet")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(nonMatching).canPlay)
+    }
+
+    func testDamageTakenSuperChargeUsesRealEnemyDamageAfterShieldAndCapsGauge() throws {
+        var source = hero()
+        source.id = "HostTankTester"
+        source.ultimate = sourceShield()
+        source.damageTakenChargePerDamage = 0.24 / Double(source.health)
+        XCTAssertTrue(source.canPlay)
+        XCTAssertTrue(source.unavailableCapabilities.isEmpty)
+        let entrants = [
+            ArenaGame.Entrant(name: "Tank", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Enemy", brawler: .knight, isBot: true, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 702, map: .canyon)
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(1, 0))
+        XCTAssertEqual(game.fighters[0].superCharge, 0)
+        game.hurt(0, 1000, by: 1, charges: false)
+        XCTAssertEqual(game.fighters[0].superCharge, 400 * 0.24 / 3100.0, accuracy: 1e-12)
+        let afterEnemy = game.fighters[0].superCharge
+        game.hurt(0, 100, by: nil, charges: false)
+        game.hurt(0, 100, by: 0, charges: false)
+        XCTAssertEqual(game.fighters[0].superCharge, afterEnemy, accuracy: 1e-12)
+        game.fighters[0].superCharge = 0.99
+        game.hurt(0, 1000, by: 1, charges: false)
+        XCTAssertEqual(game.fighters[0].superCharge, 1, accuracy: 1e-12)
     }
 
     func testActualColt650msProducesSixShotsAnd1250msProducesTwelve() throws {
@@ -528,6 +590,20 @@ final class ArenaSourceCombatTests: XCTestCase {
         struct Catalog: Decodable { var heroes: [ArenaSourceHero] }
         let catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
         return try XCTUnwrap(catalog.heroes.first { $0.id == id })
+    }
+
+    func testPrivateRosaProfileUsesHostShieldAndDamageChargeWithoutClassicSkillFallback() throws {
+        let original = try privateHero("Rosa")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.health, 5400)
+        XCTAssertEqual(adapted.ultimate?.behavior, "Shield")
+        XCTAssertEqual(adapted.ultimate?.shieldDamageMultiplier, 0.4)
+        XCTAssertEqual(adapted.damageTakenChargePerDamage, 0.24 / 5400.0)
+        XCTAssertEqual(adapted.ultimate?.projectiles.count, 0)
+        XCTAssertEqual(adapted.weapon?.id, original.weapon?.id)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
     }
 
     func testWorldOncePerVolleyKeysIncludeActivationAndExpire() throws {

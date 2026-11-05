@@ -154,6 +154,14 @@ struct ArenaResourcePackView: View {
                             Text("技能散射采用本地兼容算法，尚未验证与原客户端逐帧一致。")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
+                        if profile.compatibilityPolicy.contains("host-self-shield60") {
+                            Text("护盾采用本地 60% 减伤兼容规则，原客户端的精确减伤数值尚待核实。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
+                        if profile.compatibilityPolicy.contains("host-damage-taken-permille-health") {
+                            Text("受伤积累大招采用按基础生命值计算的本地兼容规则，尚未验证原客户端精确公式。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }

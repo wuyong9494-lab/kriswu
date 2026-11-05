@@ -13,7 +13,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "projectile_fuse", "pass_environment", "life_steal", "damage_once_per_volley",
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
-        "self_shield"
+        "self_shield", "damage_taken_super_charge"
     ]
     public var id: String
     public var name: String
@@ -34,6 +34,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         var requested = Set(requiredCapabilities ?? [])
         requested.formUnion(weapon?.runtimeCapabilities ?? [])
         requested.formUnion(ultimate?.runtimeCapabilities ?? [])
+        if damageTakenChargePerDamage != nil { requested.insert("damage_taken_super_charge") }
         return requested.subtracting(Self.implementedCapabilities).sorted()
     }
 
@@ -44,6 +45,7 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
             && weaponChargePerDamage.isFinite && weaponChargePerDamage >= 0
             && ultimateChargePerDamage.isFinite && ultimateChargePerDamage >= 0
             && initialSuperCharge.isFinite && (0...1).contains(initialSuperCharge)
+            && (damageTakenChargePerDamage.map { $0.isFinite && $0 >= 0 && $0 <= 1 } ?? true)
             && weapon?.isSupported == true && ultimate?.isSupported == true
     }
 }
@@ -79,8 +81,8 @@ public enum ArenaSourceCompatibility {
         adaptPatternNine(&result.weapon)
         adaptPatternNine(&result.ultimate)
         // Only the explicitly reviewed self-shield source record is adapted.
-        // A host damage multiplier is declared in the policy; the unverified
-        // damage-taken super-charge rule must remain blocked independently.
+        // The host damage multiplier is declared in the policy; unrelated
+        // source blockers remain independent of this shield adapter.
         if result.id == "Rosa", var skill = result.ultimate,
            skill.id == "RosaUlti", skill.role == .ultimate, skill.behavior == "Shield",
            skill.rawSource["BehaviorType"] == "Shield", skill.rawSource["ActiveTime"] == "4000",
@@ -96,6 +98,20 @@ public enum ArenaSourceCompatibility {
                 }
             }
         }
+        // A bounded host compatibility policy (not a verified native formula):
+        // taking a full base-health bar of enemy damage contributes 24% or 28%
+        // of a super when the archived source field matches exactly.
+        if let raw = result.rawSource["ChargeUltiFromDamage"],
+           let perMille = Int(raw), [240, 280].contains(perMille), result.health > 0 {
+            let reason = "hero.\(result.id).ChargeUltiFromDamage=\(raw): requires a dedicated hero rule"
+            if result.unsupportedReasons.contains(reason), result.damageTakenChargePerDamage == nil {
+                let rate = Double(perMille) / (1000 * Double(result.health))
+                if rate.isFinite, rate > 0, rate <= 1 {
+                    result.damageTakenChargePerDamage = rate
+                    resolved.insert(reason)
+                }
+            }
+        }
         if !resolved.isEmpty {
             result.unsupportedReasons.removeAll { resolved.contains($0) }
             if resolved.contains(where: { $0.contains("AttackPattern=9") }) {
@@ -103,6 +119,9 @@ public enum ArenaSourceCompatibility {
             }
             if resolved.contains("skill.RosaUlti.BehaviorType=Shield: requires a dedicated behavior adapter") {
                 result.compatibilityPolicy += "+host-self-shield60"
+            }
+            if resolved.contains(where: { $0.contains(".ChargeUltiFromDamage=") }) {
+                result.compatibilityPolicy += "+host-damage-taken-permille-health"
             }
         }
         return result
