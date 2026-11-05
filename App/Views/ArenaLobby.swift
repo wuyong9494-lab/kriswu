@@ -208,11 +208,22 @@ struct ArenaHomeView: View {
         .onChange(of: resourcePack.combatHeroID) { id in
             guard id != nil else { return }
             ranked = false
-            if ArenaImportedMapAssets.shared.maps(for: mode).isEmpty { mode = .stars }
-            if !ArenaImportedMapAssets.shared.maps(for: mode).contains(where: { $0.id == selectedMapID }) {
-                selectedMapID = ArenaImportedMapAssets.shared.maps(for: mode).first?.id
+            let maps = ArenaImportedMapAssets.shared.maps(for: mode)
+            if maps.isEmpty { mode = .stars }
+            let available = ArenaImportedMapAssets.shared.maps(for: mode)
+            let selectedImported = available.contains(where: { $0.id == selectedMapID })
+            let selectedProject = ArenaMap.selectionPool(for: mode).contains(where: { $0.id == selectedMapID })
+            if !selectedImported && !selectedProject {
+                selectedMapID = available.first?.id
                 UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
             }
+        }
+        .onChange(of: resourcePack.enabled) { enabled in
+            // If the user temporarily disables the imported pack, an old
+            // imported selection must not block classic matches.
+            guard !enabled, selectedMapID?.hasPrefix("imported:") == true else { return }
+            selectedMapID = nil
+            UserDefaults.standard.removeObject(forKey: "arena.map")
         }
         .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
         .fullScreenCover(item: $sheet, onDismiss: {
@@ -981,9 +992,10 @@ struct ArenaHomeView: View {
             ArenaDiagnosticSuiteView()
         } else if item == .resources {
             ArenaResourcePackView(onClose: { sheet = nil }, onSelectHero: { _ in
-                mode = .stars; ranked = false
-                selectedMapID = ArenaImportedMapAssets.shared.maps(for: .stars).first?.id
-                UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
+                // Keep the selected mode and its map when either map family
+                // can host this imported hero. The combat-hero change observer
+                // validates the selection and supplies a fallback if required.
+                ranked = false
                 sheet = nil
             }, onProjectHeroes: { sheet = .brawlers })
         } else if item == .settings {
@@ -2423,7 +2435,8 @@ private struct ArenaImportedMapThumb: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.black, lineWidth: 2))
         .task(id: requestKey) {
-            choice = try? ArenaImportedMapAssets.shared.choice(id: id)
+            choice = nil
+            choice = try? await ArenaImportedMapAssets.shared.previewChoice(id: id)
         }
     }
 }

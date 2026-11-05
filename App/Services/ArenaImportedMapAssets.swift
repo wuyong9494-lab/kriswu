@@ -2,7 +2,7 @@ import Foundation
 
 /// The validated value is passed into a match. Replacing a resource pack after
 /// selection cannot silently replace the selected layout with a classic map.
-struct ArenaImportedMapChoice: Equatable {
+struct ArenaImportedMapChoice: Equatable, Sendable {
     let descriptor: ArenaImportedMap
     let plan: ArenaImportedMap.RuntimePlan
     let environmentThemeID: String
@@ -56,6 +56,54 @@ final class ArenaImportedMapAssets {
         }
         choices[id] = selected
         return selected
+    }
+
+    /// A scrolling picker must not synchronously decode/validate dozens of
+    /// source terrain plans on the main actor. Match startup keeps the normal
+    /// checked synchronous accessor and shares this result cache.
+    func previewChoice(id: String) async throws -> ArenaImportedMapChoice {
+        refresh()
+        if let cached = choices[id] { return cached }
+        let store = ArenaResourcePackStore.shared
+        guard let entry = entries.first(where: { $0.id == id }),
+              let asset = store.manifest?.files.first(where: { $0.path == entry.file && $0.kind == .data }),
+              asset.bytes <= 4 * 1024 * 1024, let url = store.url(for: entry.file) else {
+            throw ArenaResourcePackManifest.ValidationError.invalid("这张地图的资源暂时不可用")
+        }
+        let bytes = asset.bytes
+        let digest = asset.sha256
+        let manifestID = store.manifest?.id
+        let environment = entry.environmentThemeID
+        let expectedMode = entry.runtimeMode
+        let decodeTask = Task.detached(priority: .utility) {
+            try Task.checkCancellation()
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            guard data.count == bytes else { throw CocoaError(.fileReadCorruptFile) }
+            let descriptor = try JSONDecoder().decode(ArenaImportedMap.self, from: data)
+            try Task.checkCancellation()
+            let selected = try ArenaImportedMapChoice(descriptor: descriptor, environmentThemeID: environment)
+            guard selected.plan.mode.rawValue == expectedMode, selected.plan.map.id == id else {
+                throw ArenaResourcePackManifest.ValidationError.invalid("地图规则与清单不一致")
+            }
+            return selected
+        }
+        let result = try await withTaskCancellationHandler {
+            try await decodeTask.value
+        } onCancel: {
+            decodeTask.cancel()
+        }
+        try Task.checkCancellation()
+        // The user may replace the private pack while previews are decoding.
+        // Never publish a stale terrain plan into the new pack's cache.
+        guard store.enabled,
+              store.manifest?.id == manifestID,
+              store.manifest?.files.first(where: { $0.path == entry.file && $0.kind == .data })?.sha256 == digest,
+              entries.contains(where: { $0.id == id && $0.file == entry.file
+                  && $0.runtimeMode == expectedMode && $0.environmentThemeID == environment }) else {
+            throw ArenaResourcePackManifest.ValidationError.invalid("地图资源已更新，请重新选择")
+        }
+        choices[id] = result
+        return result
     }
 
     private func refresh() {
