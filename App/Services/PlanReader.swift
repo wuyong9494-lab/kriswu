@@ -128,8 +128,8 @@ enum PlanReader {
             let combineTrace = Trace(settings.diagnostics, "combine\(page)", "readings=\(pageReadings.count)")
             var result = PassPlan.combine(pageReadings, rules: rules)
             combineTrace.end("rows=\(result.rows.count)")
-            // 两个完整时间冲突时，仅复识对应的结束格。原格读数必须与已有候选一致，
-            // 不从相邻行补秒、不用时长推算，也不把复识通过当成人工确认。
+            // 缺损的结束时间或两个完整时间冲突时，仅复识对应的结束格。
+            // 已有有效候选时必须与其一致；补回缺损格也必须完整读出日期和秒，不能推算。
             if let found = result.layout {
                 let candidates = PassPlan.endTimeRereadCandidates(result, from: pageReadings)
                 result.rows = await rereadEndTimes(result.rows, candidates: candidates, layout: found,
@@ -294,7 +294,7 @@ enum PlanReader {
         return hasLetter && hasDigit && !hasOtherLetter ? index : nil
     }
 
-    /// 只补读已按完整计划身份确认冲突的结束格；每页最多 64 格，预算外保留原值与原有提示。
+    /// 只补读按完整计划身份对应的缺损/冲突结束格；每页最多 64 格，预算外保留原值与原有提示。
     static func rereadEndTimes(_ rows: [PassPlanRow], candidates: [Int: [String]], layout: PassPlan.Layout,
                                in image: CGImage, settings: Settings) async -> [PassPlanRow] {
         guard !candidates.isEmpty, let column = layout.slots.firstIndex(where: { $0.column == .end }) else { return rows }

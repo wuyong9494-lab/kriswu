@@ -989,8 +989,8 @@ public enum PassPlan {
         return result
     }
 
-    /// 结束时间有完整但不同的候选时，找出能进行原格复识的行。
-    /// 必须在至少两轮中双向唯一对应，完整开始日期时间、编号、圈号和站名都相同。
+    /// 结束时间缺损或有完整但不同的候选时，找出能进行原格复识的行。
+    /// 原读数必须双向唯一对应，完整开始日期时间、编号、圈号和站名都相同。
     /// 返回值保留整段日期时间，不按 HH:mm 或卫星名称把不同日期的计划凑在一起。
     public static func endTimeRereadCandidates(_ reading: Reading, from sources: [Reading]) -> [Int: [String]] {
         guard let layout = reading.layout, layout.slots.filter({ $0.column == .end }).count == 1 else { return [:] }
@@ -1008,23 +1008,29 @@ public enum PassPlan {
                   row.orbit.unicodeScalars.allSatisfy({ (48...57).contains($0.value) }),
                   row.cells.count == layout.slots.count else { continue }
             var values: [String] = []
+            var matchingSources = 0
             for source in remapped {
                 let matches = source.filter { $0.region.map { samePhotoPosition(region, $0) } ?? false }
                 guard matches.count == 1, let candidate = matches.first, let candidateRegion = candidate.region,
+                      !isExcludedFromSending(candidate),
                       reading.rows.filter({ $0.region.map { samePhotoPosition(candidateRegion, $0) } ?? false }).count == 1,
                       candidate.satelliteID.isEmpty == row.satelliteID.isEmpty,
                       comparisonValue(candidate.satelliteID.isEmpty ? candidate.satellite : candidate.satelliteID) == identity,
                       candidate.orbit == row.orbit, comparisonValue(candidate.station) == station,
-                      candidate.start == row.start, isValidTime(candidate.end), candidate.end > row.start else { continue }
-                values.append(candidate.end)
+                      candidate.start == row.start else { continue }
+                matchingSources += 1
+                if isValidTime(candidate.end), candidate.end > row.start { values.append(candidate.end) }
             }
             let distinct = Set(values)
-            if distinct.count > 1 { result[index] = distinct.sorted() }
+            if distinct.count > 1 || (!isValidTime(row.end) && matchingSources > 0) {
+                result[index] = distinct.sorted()
+            }
         }
         return result
     }
 
-    /// 原格英文无词语纠错复识只能支持已有候选，不能产生第三个猜测时间。
+    /// 已有完整时间时，原格英文无词语纠错复识只能支持已有候选，不能产生第三个猜测时间。
+    /// 空白或格式损坏的格可由完整原格读数补回；若整页已有有效候选，仍须与其相符。
     /// 即使两路相符也保留所有分歧及人工核对提示，不把它当成已确认的真值。
     public static func reviewEndTimeReread(_ row: PassPlanRow, candidates: [String], reread: String,
                                           layout: Layout) -> PassPlanRow {
@@ -1032,18 +1038,20 @@ public enum PassPlan {
         guard !isExcludedFromSending(row), columns.count == 1, let index = columns.first,
               row.cells.count == layout.slots.count, isValidTime(row.start) else { return row }
         let usable = Set(candidates.filter { isValidTime($0) && $0 > row.start })
+        let missing = !isValidTime(row.end)
         // 当前照片的标准时间为完整 14 位数字；复识漏秒时不能让 normalizedTime 补 00 后参与确认。
         let digits = reread.unicodeScalars.filter { (48...57).contains($0.value) }.count
         let value = normalizedTime(reread)
-        guard usable.count > 1, digits == 14, isValidTime(value), value > row.start else { return row }
-        guard usable.contains(value) else {
+        guard missing || usable.count > 1, digits == 14, isValidTime(value), value > row.start else { return row }
+        guard (missing && usable.isEmpty) || usable.contains(value) else {
             return retainingIssues(row, adding: ["结束时间原格复识与多轮候选不一致，请核对原图"])
         }
         guard value != row.end else { return row }
         var fixed = row
         fixed.end = value
         fixed.cells[index] = reread.trimmingCharacters(in: .whitespacesAndNewlines)
-        return retainingIssues(fixed, adding: ["结束时间由原格复识与多轮候选核对，请核对原图"])
+        let issue = missing ? "结束时间由原格补读，请核对原图" : "结束时间由原格复识与多轮候选核对，请核对原图"
+        return retainingIssues(fixed, adding: [issue])
     }
 
     /// 照片复识一致仍可能同错；照片读取入口显式调用，文字/表格导入不增加这项人工确认要求。

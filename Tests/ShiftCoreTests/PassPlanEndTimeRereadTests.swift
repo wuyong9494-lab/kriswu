@@ -105,6 +105,52 @@ final class PassPlanEndTimeRereadTests: XCTestCase {
             candidates: [firstEnd, "2032-06-18 08:29:00"], reread: "2032-06-18 08:29", layout: layout), first)
     }
 
+    func testMissingOrMalformedEndsBecomeTargetsWithoutInventingCandidates() {
+        let rows = [row(end: "", y: 0.2), row(end: "2032-06-18 08:2:39", y: 0.3), row(y: 0.4)]
+        XCTAssertEqual(PassPlan.endTimeRereadCandidates(reading(rows), from: [reading(rows)]),
+                       [0: [], 1: []])
+        var excluded = rows[0]; excluded.testStatusDetected = true
+        XCTAssertTrue(PassPlan.endTimeRereadCandidates(reading([rows[0]]),
+            from: [reading([excluded])]).isEmpty, "test 原读数不能成为补读依据")
+        XCTAssertTrue(PassPlan.endTimeRereadCandidates(reading([rows[0]]), from: []).isEmpty)
+        var ambiguous = rows[0]; ambiguous.region?.y0 += 0.001
+        XCTAssertTrue(PassPlan.endTimeRereadCandidates(reading([rows[0]]),
+            from: [reading([rows[0], ambiguous])]).isEmpty)
+    }
+
+    func testFullCellTextRestoresOnlyAMissingOrMalformedEnd() {
+        for prior in ["", "2032-06-18 08:2:39"] {
+            var first = row(end: prior)
+            first.emergencyBadge = true
+            first.recognitionIssues = ["保留已有疑项"]
+            let result = PassPlan.reviewEndTimeReread(first, candidates: [], reread: secondEnd, layout: layout)
+            var expected = first
+            expected.end = secondEnd; expected.cells[5] = secondEnd
+            expected.recognitionIssues = ["保留已有疑项", "结束时间由原格补读，请核对原图"]
+            XCTAssertEqual(result, expected)
+        }
+        let missing = row(end: "")
+        XCTAssertEqual(PassPlan.reviewEndTimeReread(missing, candidates: [secondEnd],
+            reread: secondEnd, layout: layout).end, secondEnd)
+        let conflict = PassPlan.reviewEndTimeReread(missing, candidates: [firstEnd],
+            reread: secondEnd, layout: layout)
+        XCTAssertEqual(conflict.end, "")
+        XCTAssertEqual(conflict.cells, missing.cells)
+        XCTAssertTrue(conflict.recognitionIssues?.contains("结束时间原格复识与多轮候选不一致，请核对原图") == true)
+        XCTAssertEqual(PassPlan.reviewEndTimeReread(row(), candidates: [], reread: secondEnd, layout: layout), row(),
+                       "单格新读数不能覆盖已有完整时间")
+    }
+
+    func testMissingEndsCannotBeFilledWithPartialGuessedOrInvalidTimestamps() {
+        let first = row(end: "")
+        for raw in ["", "08:29:39", "2032-06-18 08:29", "2032-06-18 08:29:3O",
+                    "2032-02-30 08:29:39", "2032-06-18 08:20:00", "extra " + secondEnd] {
+            XCTAssertEqual(PassPlan.reviewEndTimeReread(first, candidates: [], reread: raw, layout: layout), first, raw)
+        }
+        var excluded = first; excluded.testStatusDetected = true
+        XCTAssertEqual(PassPlan.reviewEndTimeReread(excluded, candidates: [], reread: secondEnd, layout: layout), excluded)
+    }
+
     func testCrossMidnightFullDatesArePreservedWithoutInferringTheDay() {
         var first = row(end: "2032-06-19 00:10:03")
         first.start = "2032-06-18 23:58:45"; first.cells[4] = first.start

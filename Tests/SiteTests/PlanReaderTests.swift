@@ -532,29 +532,31 @@ final class PlanReaderTests: XCTestCase {
     }
 
     /// 原格内真实时间与左侧干扰时间不同；必须经过 Vision，不能从 candidates 直接选值。
-    func testEndTimeCellRereadConfirmsOnlyExistingFullCandidatesAndPreservesTest() async throws {
+    func testEndTimeCellRereadRepairsMissingValuesAndConfirmsOnlyExistingFullCandidates() async throws {
         let layout = PassPlan.Layout(slots: [
             .init(label: "卫星ID", column: .satelliteID, x: 0.10),
             .init(label: "开始时间", column: .start, x: 0.36),
             .init(label: "结束时间", column: .end, x: 0.76),
         ])
-        let actual = (8...11).map { String(format: "2032-06-18 %02d:29:39", $0) }
-        var rows = (0..<4).map { index -> PassPlanRow in
+        let actual = (8...13).map { String(format: "2032-06-18 %02d:29:39", $0) }
+        var rows = (0..<6).map { index -> PassPlanRow in
             let start = String(format: "2032-06-18 %02d:23:45", 8 + index)
             let end = String(format: "2032-06-18 %02d:30:03", 8 + index)
             return .init(orbit: "12345", satelliteID: "DEMO02B03", satellite: "虚构02B03星",
                          station: "虚构甲站-01", start: start, end: end,
                          cells: ["DEMO02B03", start, end],
-                         region: .init(y0: Double(50 + index * 100) / 440, slope: 0,
-                                       height: 80.0 / 440, left: 0, right: 1))
+                         region: .init(y0: Double(50 + index * 100) / 640, slope: 0,
+                                       height: 80.0 / 640, left: 0, right: 1))
         }
         rows[2].testStatusDetected = true
+        rows[4].end = ""; rows[4].cells[2] = ""
+        rows[5].end = "2032-06-18 13:2:39"; rows[5].cells[2] = rows[5].end
         let original = rows
         let source = try await MainActor.run {
             let format = UIGraphicsImageRendererFormat(); format.scale = 1
-            let image = UIGraphicsImageRenderer(size: CGSize(width: 1280, height: 440), format: format).image { output in
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 1280, height: 640), format: format).image { output in
                 UIColor.white.setFill()
-                output.cgContext.fill(CGRect(x: 0, y: 0, width: 1280, height: 440))
+                output.cgContext.fill(CGRect(x: 0, y: 0, width: 1280, height: 640))
                 let attributes: [NSAttributedString.Key: Any] = [
                     .font: UIFont.monospacedSystemFont(ofSize: 24, weight: .regular),
                     .foregroundColor: UIColor.black,
@@ -573,7 +575,7 @@ final class PlanReaderTests: XCTestCase {
         }
         let candidates = [0: [rows[0].end, actual[0]],
                           1: [rows[1].end, "2032-06-18 09:31:17"],
-                          2: [rows[2].end, actual[2]]]
+                          2: [rows[2].end, actual[2]], 4: [], 5: []]
         let result = await PlanReader.rereadEndTimes(rows, candidates: candidates, layout: layout,
                                                    in: source, settings: .standard)
         XCTAssertEqual(result.count, rows.count)
@@ -585,6 +587,11 @@ final class PlanReaderTests: XCTestCase {
         XCTAssertEqual(result[2], rows[2], "test 不参与这次复识")
         XCTAssertTrue(PassPlan.isExcludedFromSending(result[2]))
         XCTAssertEqual(result[3], rows[3], "未要求补读的行不能改变")
+        for index in [4, 5] {
+            XCTAssertEqual(result[index].end, actual[index], "缺损格必须从原像素读出完整日期和秒")
+            XCTAssertEqual(PassPlan.normalizedTime(result[index].cells[2]), actual[index])
+            XCTAssertTrue(result[index].recognitionIssues?.contains("结束时间由原格补读，请核对原图") == true)
+        }
         for index in rows.indices {
             XCTAssertEqual(result[index].satelliteID, rows[index].satelliteID)
             XCTAssertEqual(result[index].start, rows[index].start)
