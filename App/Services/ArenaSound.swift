@@ -75,6 +75,9 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
 
     private enum Bed { case lobby, battle }
 
+    private let resources: ArenaResourcePackStore
+    private let sourceAudio: ArenaImportedAudioAssets
+    private let makeMusicPlayer: (URL) throws -> AVAudioPlayer
     private let effects = ArenaEffectMixer()
     private let importedEffects = ArenaImportedEffectMixer()
     private var importedCues: [String: [ArenaImportedAudioAssets.Cue]] = [:]
@@ -89,6 +92,7 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     private var resultGains: [Bool: Float] = [:]
     private var resultWon: Bool?
     private var resultCompleted = false
+    private var resultPosition: TimeInterval = 0
     private(set) var loadedMusicFiles: [String: String] = [:]
     private var bed: Bed?
     private var sessionOn = false
@@ -97,7 +101,13 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     private var inMatch: Bool { state.inMatch }
     private var matchOwner: ObjectIdentifier?
 
-    override init() {
+    override convenience init() { self.init(resources: .shared) }
+
+    init(resources: ArenaResourcePackStore,
+         makeMusicPlayer: @escaping (URL) throws -> AVAudioPlayer = { try AVAudioPlayer(contentsOf: $0) }) {
+        self.resources = resources
+        sourceAudio = ArenaImportedAudioAssets(store: resources)
+        self.makeMusicPlayer = makeMusicPlayer
         super.init()
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(engineConfigurationChanged), name: .AVAudioEngineConfigurationChange, object: effects.notificationObject)
@@ -176,10 +186,16 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     private var musicMuted: Bool { muted || UserDefaults.standard.bool(forKey: Self.musicMuteKey) }
     private var effectsMuted: Bool { muted || UserDefaults.standard.bool(forKey: Self.effectsMuteKey) }
 
-    func enterLobby() { stopResultMusic(); state.enterLobby(); reconcile() }
+    func enterLobby() {
+        state.enterLobby()
+        if !inMatch { stopResultMusic() }
+        reconcile()
+    }
     func leaveLobby() { state.leaveLobby(); reconcile() }
     func begin(owner: ObjectIdentifier? = nil) {
-        stopResultMusic()
+        // The renderer also calls begin when reattaching after suspension.
+        // A resumed result belongs to the same match and must keep its cue.
+        if owner != matchOwner || !inMatch { stopResultMusic() }
         if owner != matchOwner {
             stopEffects()
             state.end()
@@ -193,6 +209,7 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     func end(owner: ObjectIdentifier? = nil) {
         guard owner == matchOwner else { return }
         matchOwner = nil
+        stopResultMusic()
         state.end()
         stopEffects()
         reconcile()
@@ -211,7 +228,12 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     func themeChanged() {
         fadeTask?.cancel()
         beds.values.forEach { $0.stop() }
-        stopResultMusic()
+        // A resource/theme change replaces players, not the current outcome.
+        // Remember progress even if loading is deferred while muted/backgrounded.
+        if let resultWon, let player = resultMusic[resultWon] {
+            resultPosition = player.currentTime
+        }
+        resultMusic.values.forEach { $0.stop() }
         resultMusic.removeAll()
         resultGains.removeAll()
         bedGains.removeAll()
@@ -243,30 +265,25 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
         case .off: stopBed()
         case .result:
             beds.values.forEach { $0.pause() }
-            if !resultCompleted, let resultWon, let player = resultMusic[resultWon] {
-                player.volume = level(Self.musicVolumeKey) * (resultGains[resultWon] ?? 1)
-                if player.currentTime < player.duration && !player.isPlaying { player.play() }
-            }
+            resumeResultMusic()
         }
     }
 
     func finish(won: Bool) {
+        guard state.scene == .battle else { return }
         state.finish()
+        // Discard pending shots/voices, including delayed source cues.
+        stopEffects()
+        stopResultMusic()
+        resultWon = won
+        resultMusic[won]?.currentTime = 0
         if let current = bed, let player = beds[current] {
             player.setVolume(0, fadeDuration: 0.4)
         }
-        if let player = resultMusic[won] {
-            stopResultMusic()
-            resultWon = won
-            player.currentTime = 0
-            if state.canPlay, !musicMuted, sessionOn,
-               !AVAudioSession.sharedInstance().secondaryAudioShouldBeSilencedHint {
-                player.volume = level(Self.musicVolumeKey) * (resultGains[won] ?? 1)
-                player.play()
-            }
-            return
-        }
-        play(won ? .win : .lose)
+        // If the match finished while muted, loading and playback stay deferred.
+        // The outcome still exists when the user resumes audio.
+        if state.canPlay, !muted { prepare() }
+        resumeResultMusic()
     }
 
     private func stopEffects() {
@@ -303,8 +320,8 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     func prepareSourceAudio(heroIDs: Set<String>) {
         preparedSourceHeroes = heroIDs
         importedCues.removeAll(); sourceSequence.removeAll()
-        guard ArenaResourcePackStore.shared.enabled else { importedEffects.unload(); return }
-        let resolver = ArenaImportedAudioAssets.shared
+        guard resources.enabled else { importedEffects.unload(); return }
+        let resolver = sourceAudio
         for event in ["menu.click", "menu.back", "menu.dismiss"] {
             importedCues["|" + event] = resolver.cues(event: event)
         }
@@ -340,7 +357,7 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
                     volume: Float = 1, menu: Bool = false) -> Bool {
         let key = (heroID ?? "") + "|" + event + (areaEffectID.map { "|" + $0 } ?? "")
         guard (menu || inMatch), state.canPlay, !effectsMuted, sessionOn,
-              ArenaResourcePackStore.shared.enabled,
+              resources.enabled,
               ArenaDiagnostics.shared.variant != .noEffectAudio,
               let cues = importedCues[key], !cues.isEmpty else { return false }
         var available = false
@@ -377,6 +394,23 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
         resultMusic.values.forEach { $0.stop() }
         resultWon = nil
         resultCompleted = false
+        resultPosition = 0
+    }
+
+    private func resumeResultMusic() {
+        guard state.scene == .result, state.canPlay, !musicMuted, sessionOn,
+              !AVAudioSession.sharedInstance().secondaryAudioShouldBeSilencedHint,
+              !resultCompleted, let resultWon else { return }
+        if let player = resultMusic[resultWon] {
+            player.volume = level(Self.musicVolumeKey) * (resultGains[resultWon] ?? 1)
+            if player.currentTime >= player.duration { resultCompleted = true }
+            else if !player.isPlaying { player.play() }
+        } else if !effectsMuted {
+            // The project fallback is a one-shot PCM cue. Never replay it on
+            // renderer reattachment or resource changes after it was dispatched.
+            play(resultWon ? .win : .lose)
+            resultCompleted = true
+        }
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -422,7 +456,7 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
         prepareSourceAudio(heroIDs: preparedSourceHeroes)
         for (role, bed, legacy) in [("lobby", Bed.lobby, "arena_lobby"),
                                     ("battle", Bed.battle, "arena_music")] {
-            if let source = ArenaResourcePackStore.shared.music(for: role),
+            if let source = resources.music(for: role),
                let player = loop(source.url, repeats: source.track.loop ?? true) {
                 beds[bed] = player
                 bedGains[bed] = Float(source.track.volumePercent ?? 100) / 100
@@ -440,10 +474,11 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
             }
         }
         for (won, role) in [(true, "win"), (false, "lose")] {
-            if let source = ArenaResourcePackStore.shared.music(for: role),
+            if let source = resources.music(for: role),
                let player = loop(source.url, repeats: false) {
                 resultMusic[won] = player
                 player.delegate = self
+                if resultWon == won { player.currentTime = min(resultPosition, player.duration) }
                 resultGains[won] = Float(source.track.volumePercent ?? 100) / 100
                 loadedMusicFiles[role] = source.url.lastPathComponent
             }
@@ -451,7 +486,7 @@ final class ArenaSound: NSObject, AVAudioPlayerDelegate {
     }
 
     private func loop(_ url: URL, repeats: Bool = true) -> AVAudioPlayer? {
-        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        guard let player = try? makeMusicPlayer(url) else { return nil }
         player.numberOfLoops = repeats ? -1 : 0
         guard player.prepareToPlay() else { return nil }
         return player
