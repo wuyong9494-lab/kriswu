@@ -290,6 +290,16 @@ extension ArenaGame {
 
     mutating func resolveSourceArea(_ live: inout ArenaSourceLiveArea) {
         let spawn = live.spawn
+        if spawn.area.kind == "SmokeScreen" {
+            // Refresh a very short concealment window each simulation step.
+            // Leaving the smoke or its expiry releases the effect naturally;
+            // allied project heroes share the same visibility rules.
+            for target in fighters.indices where fighters[target].alive && fighters[target].team == live.team
+                && fighters[target].pos.distance(to: spawn.position) < spawn.area.radius + Self.hitRadius(fighters[target]) {
+                fighters[target].invisible = max(fighters[target].invisible, 0.15)
+            }
+            return
+        }
         var targets = fighters.indices.filter { fighters[$0].alive && fighters[$0].team != live.team
             && fighters[$0].pos.distance(to: spawn.position) < spawn.area.radius + Self.hitRadius(fighters[$0]) }
         targets += boxes.indices.filter { boxes[$0].health > 0
@@ -394,6 +404,18 @@ extension ArenaGame {
         projectile.sourceElapsed = (projectile.sourceElapsed ?? 0) + dt
         if launch.projectile.indirect == true {
             guard var lob = projectile.lob, let impactTime = launch.flightDuration else { return false }
+            if launch.projectile.tracksCasterDisplacement == true,
+               fighters.indices.contains(projectile.owner), fighters[projectile.owner].alive,
+               let originalTarget = launch.target {
+                let target = originalTarget + (fighters[projectile.owner].pos - launch.origin)
+                // A moving hero cannot carry the rocket outside the map or
+                // turn an invalid coordinate into a persistent live projectile.
+                if target.x.isFinite, target.y.isFinite,
+                   target.x >= 0, target.y >= 0,
+                   target.x < Double(map.width), target.y < Double(map.height) {
+                    lob.to = target
+                }
+            }
             lob.elapsed = min(lob.duration, projectile.sourceElapsed ?? 0)
             projectile.pos = V2.lerp(lob.from, lob.to, min(1, lob.elapsed / lob.duration))
             projectile.lob = lob

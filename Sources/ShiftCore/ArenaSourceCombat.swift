@@ -29,7 +29,8 @@ public struct ArenaSourceHero: Codable, Equatable, Sendable, Identifiable {
         "projectile_fuse", "pass_environment", "life_steal", "damage_once_per_volley",
         "projectile_area_impact", "persistent_area", "dot_area", "slow_status",
         "self_pushback", "area_shared_cooldown", "radial_bullet_explosion", "dispersion_seeded",
-        "self_shield", "damage_taken_super_charge", "ally_projectile_heal", "charged_ground_dash"
+        "self_shield", "damage_taken_super_charge", "ally_projectile_heal", "charged_ground_dash",
+        "caster_tracked_indirect_flight", "smoke_ally_hide"
     ]
     public var id: String
     public var name: String
@@ -99,6 +100,81 @@ public enum ArenaSourceCompatibility {
         }
         adaptPatternNine(&result.weapon)
         adaptPatternNine(&result.ultimate)
+        // Sandy's archived three-shot pattern uses a fixed spread and its
+        // once-per-volley hit guard, both already executed by the host fan.
+        // Keep this named as an approximation of the original pattern four.
+        if result.id == "Sandstorm", var weapon = result.weapon,
+           weapon.id == "SandstormWeapon", weapon.role == .weapon,
+           weapon.behavior == "Attack", weapon.rawSource["AttackPattern"] == "4",
+           weapon.rawSource["NumBulletsInOneAttack"] == "3",
+           weapon.rawSource["Spread"] == "80", weapon.damage == 900,
+           weapon.projectileCount == 3, weapon.projectiles.count == 1,
+           weapon.projectiles[0].id == "SandstormProjectile",
+           weapon.projectiles[0].damageOncePerVolley == true,
+           weapon.projectiles[0].piercesCharacters, weapon.spread > 0 {
+            let reason = "skill.SandstormWeapon.AttackPattern=4: not yet interpreted"
+            if result.unsupportedReasons.contains(reason), weapon.unsupportedReasons == [reason] {
+                weapon.unsupportedReasons.removeAll { $0 == reason }
+                if weapon.isSupported {
+                    result.weapon = weapon
+                    resolved.insert(reason)
+                }
+            }
+        }
+        // Sandy's 9s smoke circle grants allies concealment while in range.
+        // Opposing fighters, boxes, safes and scenery are not affected.
+        if result.id == "Sandstorm", var ultimate = result.ultimate,
+           ultimate.id == "SandstormUlti", ultimate.role == .ultimate,
+           ultimate.behavior == "Attack", ultimate.projectiles.count == 1,
+           ultimate.projectiles[0].id == "SandstormUltiProjectile",
+           ultimate.projectiles[0].indirect == true,
+           ultimate.projectiles[0].areaEffects.count == 1,
+           ultimate.projectiles[0].areaEffects[0].id == "Sandy_def_ulti",
+           ultimate.projectiles[0].areaEffects[0].kind == "SmokeScreen",
+           ultimate.projectiles[0].areaEffects[0].rawSource["Type"] == "SmokeScreen",
+           ultimate.projectiles[0].areaEffects[0].duration == 9,
+           ultimate.projectiles[0].areaEffects[0].radius == 2000.0 / 300,
+           ultimate.damage == 0 {
+            let reason = "area.Sandy_def_ulti.Type=SmokeScreen: requires a dedicated area lifecycle"
+            if result.unsupportedReasons.contains(reason), ultimate.unsupportedReasons == [reason],
+               ultimate.projectiles[0].unsupportedReasons == [reason],
+               ultimate.projectiles[0].areaEffects[0].unsupportedReasons == [reason] {
+                ultimate.projectiles[0].areaEffects[0].unsupportedReasons.removeAll { $0 == reason }
+                ultimate.projectiles[0].unsupportedReasons.removeAll { $0 == reason }
+                ultimate.unsupportedReasons.removeAll { $0 == reason }
+                if ultimate.isSupported {
+                    result.ultimate = ultimate
+                    resolved.insert(reason)
+                }
+            }
+        }
+        // This archived Brock Super keeps an indirect impact target relative
+        // to the moving caster during flight. The native prediction formula is
+        // unknown; the host follows caster displacement from launch instead.
+        if result.id == "RocketGirl", var ultimate = result.ultimate,
+           ultimate.id == "RocketGirlUlti", ultimate.role == .ultimate,
+           ultimate.behavior == "Attack", ultimate.projectileCount == 1,
+           ultimate.projectiles.count == 1, ultimate.damage == 1040,
+           ultimate.rawSource["AttackPattern"] == "9",
+           ultimate.rawSource["NumBulletsInOneAttack"] == "1",
+           ultimate.projectiles[0].id == "RocketGirlUltiProjectile",
+           ultimate.projectiles[0].rawSource["BooleanAttributes"] == "IndirectProjectileTracksSource",
+           ultimate.projectiles[0].indirect == true,
+           ultimate.projectiles[0].constantFlightTime == 0.9,
+           ultimate.projectiles[0].areaEffects.allSatisfy(\.isSupported) {
+            let reason = "projectile.RocketGirlUltiProjectile.BooleanAttributes=IndirectProjectileTracksSource: not yet interpreted"
+            if result.unsupportedReasons.contains(reason), ultimate.unsupportedReasons.contains(reason),
+               ultimate.projectiles[0].unsupportedReasons == [reason] {
+                ultimate.projectiles[0].tracksCasterDisplacement = true
+                ultimate.projectiles[0].unsupportedReasons.removeAll { $0 == reason }
+                ultimate.unsupportedReasons.removeAll { $0 == reason }
+                result.ultimate = ultimate
+                resolved.insert(reason)
+                // Pattern nine is only unblocked once the projectile's own
+                // mandatory caster-tracking mechanic has been implemented.
+                adaptPatternNine(&result.ultimate)
+            }
+        }
         // Only the explicitly reviewed self-shield source record is adapted.
         // The host damage multiplier is declared in the policy; unrelated
         // source blockers remain independent of this shield adapter.
@@ -208,6 +284,15 @@ public enum ArenaSourceCompatibility {
             if resolved.contains("hero.Undertaker.UniqueProperty=HAS_LONGER_DASH: native identity behavior not implemented") {
                 result.compatibilityPolicy += "+host-mortis-dash90pct-after6s"
             }
+            if resolved.contains("projectile.RocketGirlUltiProjectile.BooleanAttributes=IndirectProjectileTracksSource: not yet interpreted") {
+                result.compatibilityPolicy += "+host-brock-caster-tracked-impact"
+            }
+            if resolved.contains("skill.SandstormWeapon.AttackPattern=4: not yet interpreted") {
+                result.compatibilityPolicy += "+host-sandy-three-pellet-fan"
+            }
+            if resolved.contains("area.Sandy_def_ulti.Type=SmokeScreen: requires a dedicated area lifecycle") {
+                result.compatibilityPolicy += "+host-sandy-ally-smoke-nine-seconds"
+            }
         }
         return result
     }
@@ -245,6 +330,9 @@ public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable 
     public var healAlliesInsteadOfDamage: Bool? = nil
     /// Heal the caster once when this healing ultimate is activated.
     public var casterHealFraction: Double? = nil
+    /// The rocket's final impact target follows displacement of the hero who
+    /// fired it. Bounded host substitute for a reviewed source attribute.
+    public var tracksCasterDisplacement: Bool? = nil
     public var isSupported: Bool {
         unsupportedReasons.isEmpty && speed.isFinite && speed > 0 && speed <= 1000
             && radius.isFinite && radius >= 0 && radius <= 100
@@ -256,6 +344,7 @@ public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable 
                 .compactMap { $0 }.allSatisfy { $0.isFinite && (0...1).contains($0) }
             && !(healAlliesInsteadOfDamage == true && (allyHealMaxHealthFraction ?? 0) > 0)
             && (healAlliesInsteadOfDamage != true || (piercesCharacters && areaEffects.isEmpty))
+            && (tracksCasterDisplacement != true || (indirect == true && constantFlightTime != nil))
             && areaEffects.allSatisfy(\.isSupported)
     }
 
@@ -271,6 +360,7 @@ public struct ArenaSourceProjectile: Codable, Equatable, Sendable, Identifiable 
         if (allyHealMaxHealthFraction ?? 0) > 0 || healAlliesInsteadOfDamage == true || (casterHealFraction ?? 0) > 0 {
             result.insert("ally_projectile_heal")
         }
+        if tracksCasterDisplacement == true { result.insert("caster_tracked_indirect_flight") }
         for area in areaEffects { result.formUnion(area.runtimeCapabilities) }
         return result
     }
@@ -303,7 +393,7 @@ public struct ArenaSourceAreaEffect: Codable, Equatable, Sendable, Identifiable 
     }
 
     public var isSupported: Bool {
-        unsupportedReasons.isEmpty && ["Damage", "Dot", "StatusEffect", "BulletExplosion"].contains(kind)
+        unsupportedReasons.isEmpty && ["Damage", "Dot", "StatusEffect", "BulletExplosion", "SmokeScreen"].contains(kind)
             && radius.isFinite && radius > 0 && radius <= 100
             && duration.isFinite && duration >= 0 && duration <= 600
             && pushback.isFinite && pushback >= 0 && (damage ?? 0) >= 0 && (damage ?? 0) <= 10_000_000
@@ -321,6 +411,7 @@ public struct ArenaSourceAreaEffect: Codable, Equatable, Sendable, Identifiable 
         var result: Set<String> = ["persistent_area"]
         if kind == "Damage" { result.insert("impact_damage") }
         if kind == "Dot" { result.insert("dot_area") }
+        if kind == "SmokeScreen" { result.insert("smoke_ally_hide") }
         if statusEnemy != nil { result.insert("slow_status") }
         if (ownPushback ?? 0) > 0 { result.insert("self_pushback") }
         if (sharedTargetCooldown ?? 0) > 0 { result.insert("area_shared_cooldown") }

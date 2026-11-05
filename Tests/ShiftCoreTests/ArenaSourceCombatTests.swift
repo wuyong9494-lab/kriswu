@@ -128,6 +128,231 @@ final class ArenaSourceCombatTests: XCTestCase {
         return source
     }
 
+    private func trackedRocketGirl() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "RocketGirl"
+        source.name = "Brock"
+        source.health = 3000
+        var weapon = colt()
+        weapon.id = "RocketGirlWeapon"
+        source.weapon = weapon
+        let pattern = "skill.RocketGirlUlti.AttackPattern=9: not yet interpreted"
+        let spread = "skill.RocketGirlUlti.Spread: single-projectile dispersion needs a source pattern adapter"
+        let tracking = "projectile.RocketGirlUltiProjectile.BooleanAttributes=IndirectProjectileTracksSource: not yet interpreted"
+        source.unsupportedReasons = [pattern, spread, tracking]
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "RocketGirlUlti"
+        ultimate.damage = 1040
+        ultimate.range = 25.0 / 3
+        ultimate.spread = 1.3962634015954636
+        ultimate.activeTime = 1.85
+        ultimate.attackInterval = 0.2
+        ultimate.projectileCount = 1
+        ultimate.rawSource = ["AttackPattern": "9", "NumBulletsInOneAttack": "1"]
+        ultimate.unsupportedReasons = [pattern, spread, tracking]
+        ultimate.projectiles[0].id = "RocketGirlUltiProjectile"
+        ultimate.projectiles[0].indirect = true
+        ultimate.projectiles[0].constantFlightTime = 0.9
+        ultimate.projectiles[0].rawSource["BooleanAttributes"] = "IndirectProjectileTracksSource"
+        ultimate.projectiles[0].unsupportedReasons = [tracking]
+        source.ultimate = ultimate
+        return source
+    }
+
+    private func smokeSandy() -> ArenaSourceHero {
+        var source = hero()
+        source.id = "Sandstorm"
+        source.name = "Sandy"
+        source.health = 3800
+        let pattern = "skill.SandstormWeapon.AttackPattern=4: not yet interpreted"
+        let smoke = "area.Sandy_def_ulti.Type=SmokeScreen: requires a dedicated area lifecycle"
+        source.unsupportedReasons = [pattern, smoke]
+        var weapon = colt()
+        weapon.id = "SandstormWeapon"
+        weapon.damage = 900
+        weapon.chargeDamage = 900
+        weapon.projectileCount = 3
+        weapon.spread = 0.6981317007977318
+        weapon.rawSource["AttackPattern"] = "4"
+        weapon.rawSource["NumBulletsInOneAttack"] = "3"
+        weapon.rawSource["Spread"] = "80"
+        weapon.projectiles[0].id = "SandstormProjectile"
+        weapon.projectiles[0].piercesCharacters = true
+        weapon.projectiles[0].damageOncePerVolley = true
+        weapon.unsupportedReasons = [pattern]
+        source.weapon = weapon
+
+        let area = ArenaSourceAreaEffect(id: "Sandy_def_ulti", kind: "SmokeScreen", radius: 2000 / 300.0,
+            damage: nil, duration: 9, wallBreak: false, pushback: 0,
+            unsupportedReasons: [smoke], rawSource: ["Type": "SmokeScreen"])
+        var ultimate = colt(role: .ultimate)
+        ultimate.id = "SandstormUlti"
+        ultimate.damage = 0
+        ultimate.chargeDamage = 0
+        ultimate.range = 22 / 3.0
+        ultimate.activeTime = 0.15
+        ultimate.projectiles[0].id = "SandstormUltiProjectile"
+        ultimate.projectiles[0].indirect = true
+        ultimate.projectiles[0].directDamage = false
+        ultimate.projectiles[0].wallBreak = false
+        ultimate.projectiles[0].areaEffects = [area]
+        ultimate.projectiles[0].unsupportedReasons = [smoke]
+        ultimate.unsupportedReasons = [smoke]
+        source.ultimate = ultimate
+        return source
+    }
+
+    func testSandySmokeAndThreePelletFanRequireExactReviewedSource() throws {
+        let original = smokeSandy()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertEqual(adapted.weapon?.projectileCount, 3)
+        XCTAssertEqual(adapted.weapon?.projectiles.first?.damageOncePerVolley, true)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects.first?.kind, "SmokeScreen")
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-sandy-three-pellet-fan"))
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-sandy-ally-smoke-nine-seconds"))
+        XCTAssertEqual(try JSONDecoder().decode(ArenaSourceHero.self, from: JSONEncoder().encode(adapted)), adapted)
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, smokeSandy(), "The private source profile is not mutated")
+
+        var unknown = original
+        unknown.weapon?.rawSource["AttackPattern"] = "7"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        unknown = original
+        unknown.ultimate?.projectiles[0].areaEffects[0].duration = 10
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        unknown = original
+        unknown.unsupportedReasons.append("unreviewed smoke attribute")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+    }
+
+    func testSandySmokeConcealsAlliesWhileInsideAndExpiresAfterNineSeconds() throws {
+        let source = ArenaSourceCompatibility.adapt(smokeSandy())
+        let rows = (0..<13).map { y in String((0..<23).map { x -> Character in
+            if x == 0 || x == 22 || y == 0 || y == 12 { return "#" }
+            if x == 4 && y == 6 { return "a" }
+            if x == 19 && y == 6 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Sandy", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Friendly project hero", brawler: .ranger, isBot: false, team: 0),
+            ArenaGame.Entrant(name: "Opponent", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 807, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(4.5, 6.5)
+        game.fighters[1].pos = V2(6, 6.5)
+        game.fighters[2].pos = V2(19.5, 6.5)
+        let area = try XCTUnwrap(source.ultimate?.projectiles.first?.areaEffects.first)
+        game.applySourceArea(ArenaSourceAreaSpawn(skillID: "SandstormUlti", role: .ultimate,
+            area: area, position: V2(5.5, 6.5), damage: 0, chargeDamage: 0), owner: 0)
+        XCTAssertEqual(game.sourceAreas.count, 1)
+        XCTAssertGreaterThan(game.fighters[1].invisible, 0)
+        XCTAssertEqual(game.fighters[2].invisible, 0)
+        XCTAssertFalse(game.isVisible(game.fighters[1], to: 1))
+        game.fighters[1].lastAttack = game.time
+        XCTAssertTrue(game.isVisible(game.fighters[1], to: 1), "Attacking still reveals a concealed fighter")
+        game.fighters[1].lastAttack = -10
+
+        game.fighters[1].pos = V2(18.5, 6.5)
+        runWorld(&game, frames: 20)
+        XCTAssertEqual(game.fighters[1].invisible, 0, accuracy: 1e-9)
+        game.fighters[1].pos = V2(6, 6.5)
+        runWorld(&game, frames: 20)
+        XCTAssertGreaterThan(game.fighters[1].invisible, 0)
+        runWorld(&game, frames: 550)
+        XCTAssertTrue(game.sourceAreas.isEmpty)
+        XCTAssertEqual(game.fighters[1].invisible, 0, accuracy: 1e-9)
+    }
+
+    func testSandyUltimateProjectileCreatesSmokeForProjectHeroTeammates() throws {
+        let source = ArenaSourceCompatibility.adapt(smokeSandy())
+        let rows = (0..<13).map { y in String((0..<23).map { x -> Character in
+            if x == 0 || x == 22 || y == 0 || y == 12 { return "#" }
+            if x == 3 && y == 6 { return "a" }
+            if x == 19 && y == 6 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Sandy", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Classic ally", brawler: .ranger, isBot: false, team: 0),
+            ArenaGame.Entrant(name: "Enemy", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 808, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(3.5, 6.5)
+        game.fighters[1].pos = V2(8.5, 6.5)
+        game.fighters[2].pos = V2(19.5, 6.5)
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(5, 0))
+        XCTAssertFalse(game.projectiles.isEmpty)
+        runWorld(&game, frames: 60)
+        XCTAssertTrue(game.sourceAreas.contains { $0.kind == "SmokeScreen" })
+        XCTAssertGreaterThan(game.fighters[1].invisible, 0)
+        XCTAssertEqual(game.fighters[2].invisible, 0)
+    }
+
+    func testBrockTrackedImpactOnlyUnblocksReviewedSourceAttributes() throws {
+        let original = trackedRocketGirl()
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertTrue(adapted.unavailableCapabilities.isEmpty)
+        XCTAssertEqual(adapted.ultimate?.dispersion, "seeded_cone")
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.tracksCasterDisplacement, true)
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-brock-caster-tracked-impact"))
+        XCTAssertTrue(adapted.compatibilityPolicy.contains("host-pattern9-seeded-cone"))
+        XCTAssertEqual(try JSONDecoder().decode(ArenaSourceHero.self, from: JSONEncoder().encode(adapted)), adapted)
+        XCTAssertEqual(ArenaSourceCompatibility.adapt(adapted), adapted)
+        XCTAssertEqual(original, trackedRocketGirl(), "Original source records remain unchanged")
+
+        var unknown = original
+        unknown.ultimate?.projectiles[0].rawSource["BooleanAttributes"] = "other"
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        unknown = original
+        unknown.ultimate?.projectiles[0].constantFlightTime = nil
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        unknown = original
+        unknown.unsupportedReasons.append("new projectile behavior not understood")
+        XCTAssertFalse(ArenaSourceCompatibility.adapt(unknown).canPlay)
+        var invalid = try XCTUnwrap(adapted.ultimate?.projectiles.first)
+        invalid.indirect = false
+        XCTAssertFalse(invalid.isSupported)
+    }
+
+    func testBrockIndirectImpactTracksCasterMovementDuringFlightAndStaysInMap() throws {
+        let source = ArenaSourceCompatibility.adapt(trackedRocketGirl())
+        let rows = (0..<9).map { y in String((0..<27).map { x -> Character in
+            if x == 0 || x == 26 || y == 0 || y == 8 { return "#" }
+            if x == 3 && y == 4 { return "a" }
+            if x == 23 && y == 4 { return "b" }
+            return "."
+        }) }
+        let entrants = [
+            ArenaGame.Entrant(name: "Brock", brawler: .ranger, isBot: false, team: 0, sourceHero: source),
+            ArenaGame.Entrant(name: "Opponent", brawler: .knight, isBot: false, team: 1)
+        ]
+        var game = try ArenaGame(sourceMode: .teamFight, entrants: entrants, seed: 806, map: ArenaMap(rows: rows))
+        game.fighters[0].pos = V2(3.5, 4.5)
+        game.fighters[1].pos = V2(23.5, 4.5)
+        game.fighters[0].superCharge = 1
+        game.activateSourceSkill(0, role: .ultimate, aim: V2(1, 0))
+        var projectile = try XCTUnwrap(game.projectiles.first)
+        let originalTarget = try XCTUnwrap(projectile.sourceLaunch?.target)
+        XCTAssertEqual(projectile.lob?.to, originalTarget)
+
+        game.fighters[0].pos = V2(3.5, 6)
+        XCTAssertTrue(game.advanceSourceProjectile(&projectile, dt: 0.1))
+        XCTAssertEqual(projectile.lob?.to, originalTarget + V2(0, 1.5))
+        game.fighters[0].pos = V2(3.5, 15) // invalid world position cannot pull the rocket out of bounds
+        XCTAssertTrue(game.advanceSourceProjectile(&projectile, dt: 0.1))
+        XCTAssertEqual(projectile.lob?.to, originalTarget + V2(0, 1.5))
+        game.fighters[0].alive = false // projectile retains last valid destination if owner dies
+        XCTAssertTrue(game.advanceSourceProjectile(&projectile, dt: 0.1))
+        XCTAssertEqual(projectile.lob?.to, originalTarget + V2(0, 1.5))
+    }
+
     func testMortisLongDashOnlyAdaptsReviewedIdentityAndKeepsNativeData() throws {
         let original = longDashMortis()
         XCTAssertFalse(original.canPlay)
@@ -866,6 +1091,32 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(adapted.ultimate?.id, "UndertakerUlti")
         XCTAssertEqual(adapted.longDash, ArenaSourceLongDash(bonusDistanceFraction: 0.9, rechargeAfterSeconds: 6))
         XCTAssertEqual(adapted.ultimate?.projectiles.first?.lifeStealFraction, 1)
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
+    }
+
+    func testPrivateBrockProfileKeepsBothImpactAreasAndTracksSourceMovement() throws {
+        let original = try privateHero("RocketGirl")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.id, "RocketGirlWeapon")
+        XCTAssertEqual(adapted.ultimate?.id, "RocketGirlUlti")
+        XCTAssertEqual(adapted.weapon?.projectiles.first?.areaEffects.count, 2)
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.tracksCasterDisplacement, true)
+        XCTAssertEqual(adapted.ultimate?.dispersion, "seeded_cone")
+        XCTAssertEqual(adapted.rawSource, original.rawSource)
+    }
+
+    func testPrivateSandyProfileKeepsRealSmokeAreaAndThreePelletAttack() throws {
+        let original = try privateHero("Sandstorm")
+        XCTAssertFalse(original.canPlay)
+        let adapted = ArenaSourceCompatibility.adapt(original)
+        XCTAssertTrue(adapted.canPlay, adapted.unsupportedReasons.joined(separator: ", "))
+        XCTAssertEqual(adapted.weapon?.id, "SandstormWeapon")
+        XCTAssertEqual(adapted.weapon?.projectileCount, 3)
+        XCTAssertEqual(adapted.ultimate?.id, "SandstormUlti")
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects.first?.kind, "SmokeScreen")
+        XCTAssertEqual(adapted.ultimate?.projectiles.first?.areaEffects.first?.duration, 9)
         XCTAssertEqual(adapted.rawSource, original.rawSource)
     }
 

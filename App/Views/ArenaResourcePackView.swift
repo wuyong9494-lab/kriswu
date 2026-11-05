@@ -170,6 +170,14 @@ struct ArenaResourcePackView: View {
                             Text("蓄力长冲刺采用本地兼容规则：6 秒不使用普攻后冲刺距离增加 90%；并非已验证的原客户端计时公式。")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
+                        if profile.compatibilityPolicy.contains("host-brock-caster-tracked-impact") {
+                            Text("连续火箭的大招落点会跟随施法者位移；采用可测试的本地预测规则，尚非原客户端精确轨迹。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
+                        if profile.compatibilityPolicy.contains("host-sandy-ally-smoke-nine-seconds") {
+                            Text("沙迪的普攻按三发扇形散射，大招生成持续 9 秒的队友隐蔽区域；属于本地兼容玩法，尚待原客户端对照。")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
                         Button("选择\(hero.name)对战") {
                             store.selectCombatHero(id: hero.id)
                             if let onSelectHero { onSelectHero(profile) } else { onClose() }
