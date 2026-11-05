@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "source_sha": "e35fee8a14d7054b92de63a12778a787b79ec8e1",
+  "source_tree": "9ac85e292e97faef470ed28503f539666c5e5712",
+  "branch": "codex/plan-photo-rules",
+  "core_and_ios": {
+    "run_id": 41961440360,
+    "build_number": 513,
+    "linux": {
+      "job_id": 127028481407,
+      "tests": 616,
+      "skipped": 15,
+      "failures": 0,
+      "seconds": 72.024,
+      "conclusion": "success"
+    },
+    "macos_and_ios": {
+      "job_id": 127028480255,
+      "tests": 616,
+      "skipped": 14,
+      "failures": 0,
+      "seconds": 252.204,
+      "conclusion": "success",
+      "asset_configuration": "success",
+      "ios_release_compile": "success",
+      "unsigned_ipa_package": "success",
+      "concurrency_warnings": 0
+    },
+    "conclusion": "success",
+    "completed_at": "2026-11-05T03:47:42Z"
+  },
+  "native_maps": {
+    "run_id": 41960711189,
+    "job_id": 127026150272,
+    "source_sha": "800f1a1a8d1309504a47cefa5851ec6dc6976f02",
+    "source_difference": "Final source changes only the one-line selected-map card highlight; map loader, resource store, selection policy and native tests are identical.",
+    "device": "iPhone 17 Pro Max",
+    "runtime": "iOS 26.2 simulator",
+    "tests": 5,
+    "skipped": 0,
+    "failures": 0,
+    "seconds": 64.017,
+    "conclusion": "success",
+    "artifact_id": 13384848166,
+    "artifact_name": "site-tests-512-1",
+    "artifact_bytes": 128514,
+    "artifact_digest": "sha256:11a592ccdadb8b69775247bf19379acca17b97368854af7508cc09b4e5b5af5f",
+    "cases": [
+      "testCancelledPreviewRejectsEvenAnAlreadyCachedLayout",
+      "testCatalogueCannotRenameAnUnrelatedLayout",
+      "testDisabledPackRejectsCachedMapAndRecoversWhenEnabled",
+      "testPreviewAndMatchUseTheSameValidatedLayout",
+      "testReplacementWithIdenticalCatalogueReloadsChangedLayout"
+    ]
+  },
+  "local_checks": [
+    "generated asset configuration matches source",
+    "workflow YAML",
+    "git diff --check"
+  ],
+  "new_testflight_upload": false,
+  "limitations": [
+    "Synthetic resource fixtures only",
+    "No physical-device FPS acceptance",
+    "No full private-resource gameplay or visual acceptance"
+  ]
+}
