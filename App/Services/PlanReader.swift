@@ -128,6 +128,13 @@ enum PlanReader {
             let combineTrace = Trace(settings.diagnostics, "combine\(page)", "readings=\(pageReadings.count)")
             var result = PassPlan.combine(pageReadings, rules: rules)
             combineTrace.end("rows=\(result.rows.count)")
+            // 两个完整时间冲突时，仅复识对应的结束格。原格读数必须与已有候选一致，
+            // 不从相邻行补秒、不用时长推算，也不把复识通过当成人工确认。
+            if let found = result.layout {
+                let candidates = PassPlan.endTimeRereadCandidates(result, from: pageReadings)
+                result.rows = await rereadEndTimes(result.rows, candidates: candidates, layout: found,
+                                                   in: picture, settings: settings)
+            }
             // 连拍时取景可能变了：本页重新拍到表头，就用本页的列位置继续向下读。
             // 只接受带几何表头的布局；系统表格识别的 x 是列号（0、1、2…），不能拿来分照片里的列。
             let geometric: PassPlan.Reading? = result.header != nil ? result : pageReadings.filter { $0.header != nil }
@@ -285,6 +292,36 @@ enum PlanReader {
         let hasDigit = scalars.contains { (48...57).contains($0.value) }
         let hasOtherLetter = scalars.contains { $0.value > 127 && CharacterSet.letters.contains($0) }
         return hasLetter && hasDigit && !hasOtherLetter ? index : nil
+    }
+
+    /// 只补读已按完整计划身份确认冲突的结束格；每页最多 64 格，预算外保留原值与原有提示。
+    static func rereadEndTimes(_ rows: [PassPlanRow], candidates: [Int: [String]], layout: PassPlan.Layout,
+                               in image: CGImage, settings: Settings) async -> [PassPlanRow] {
+        guard !candidates.isEmpty, let column = layout.slots.firstIndex(where: { $0.column == .end }) else { return rows }
+        return await Task.detached(priority: .userInitiated) {
+            let trace = Trace(settings.diagnostics, "endTimeCells", "targets=\(candidates.count)|limit=64")
+            let context = CIContext()
+            var attempts = 0
+            var result = rows
+            defer { trace.end("cropAttempts=\(attempts)") }
+            for index in candidates.keys.sorted() where result.indices.contains(index) {
+                guard attempts < 64, !PassPlan.isExcludedFromSending(result[index]),
+                      let region = result[index].region,
+                      let crop = Self.cropCell(column: column, of: region, layout: layout, from: image, context: context) else { continue }
+                attempts += 1
+                let piece = Self.prepared(crop, smooth: false, enlarge: true)
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.recognitionLanguages = ["en-US"]
+                request.usesLanguageCorrection = false
+                request.customWords = []
+                guard (try? VNImageRequestHandler(cgImage: piece, orientation: .up).perform([request])) != nil else { continue }
+                let raw = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+                result[index] = PassPlan.reviewEndTimeReread(result[index], candidates: candidates[index] ?? [],
+                                                            reread: raw, layout: layout)
+            }
+            return result
+        }.value
     }
 
     /// 首列外侧不包含 Excel 行号栏，边界来自表头间距，不根据候选编号或真值猜裁框。

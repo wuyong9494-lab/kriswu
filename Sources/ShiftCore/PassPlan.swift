@@ -989,6 +989,63 @@ public enum PassPlan {
         return result
     }
 
+    /// 结束时间有完整但不同的候选时，找出能进行原格复识的行。
+    /// 必须在至少两轮中双向唯一对应，完整开始日期时间、编号、圈号和站名都相同。
+    /// 返回值保留整段日期时间，不按 HH:mm 或卫星名称把不同日期的计划凑在一起。
+    public static func endTimeRereadCandidates(_ reading: Reading, from sources: [Reading]) -> [Int: [String]] {
+        guard let layout = reading.layout, layout.slots.filter({ $0.column == .end }).count == 1 else { return [:] }
+        var result: [Int: [String]] = [:]
+        let remapped = sources.compactMap { source -> [PassPlanRow]? in
+            guard let sourceLayout = source.layout,
+                  sourceLayout.slots.filter({ $0.column == .end }).count == 1 else { return nil }
+            return remap(source.rows, from: sourceLayout, to: layout)
+        }
+        for (index, row) in reading.rows.enumerated() {
+            let identity = comparisonValue(row.satelliteID.isEmpty ? row.satellite : row.satelliteID)
+            let station = comparisonValue(row.station)
+            guard !isExcludedFromSending(row), let region = row.region, isValidTime(row.start),
+                  !identity.isEmpty, !station.isEmpty, !row.orbit.isEmpty,
+                  row.orbit.unicodeScalars.allSatisfy({ (48...57).contains($0.value) }),
+                  row.cells.count == layout.slots.count else { continue }
+            var values: [String] = []
+            for source in remapped {
+                let matches = source.filter { $0.region.map { samePhotoPosition(region, $0) } ?? false }
+                guard matches.count == 1, let candidate = matches.first, let candidateRegion = candidate.region,
+                      reading.rows.filter({ $0.region.map { samePhotoPosition(candidateRegion, $0) } ?? false }).count == 1,
+                      candidate.satelliteID.isEmpty == row.satelliteID.isEmpty,
+                      comparisonValue(candidate.satelliteID.isEmpty ? candidate.satellite : candidate.satelliteID) == identity,
+                      candidate.orbit == row.orbit, comparisonValue(candidate.station) == station,
+                      candidate.start == row.start, isValidTime(candidate.end), candidate.end > row.start else { continue }
+                values.append(candidate.end)
+            }
+            let distinct = Set(values)
+            if distinct.count > 1 { result[index] = distinct.sorted() }
+        }
+        return result
+    }
+
+    /// 原格英文无词语纠错复识只能支持已有候选，不能产生第三个猜测时间。
+    /// 即使两路相符也保留所有分歧及人工核对提示，不把它当成已确认的真值。
+    public static func reviewEndTimeReread(_ row: PassPlanRow, candidates: [String], reread: String,
+                                          layout: Layout) -> PassPlanRow {
+        let columns = layout.slots.indices.filter { layout.slots[$0].column == .end }
+        guard !isExcludedFromSending(row), columns.count == 1, let index = columns.first,
+              row.cells.count == layout.slots.count, isValidTime(row.start) else { return row }
+        let usable = Set(candidates.filter { isValidTime($0) && $0 > row.start })
+        // 当前照片的标准时间为完整 14 位数字；复识漏秒时不能让 normalizedTime 补 00 后参与确认。
+        let digits = reread.unicodeScalars.filter { (48...57).contains($0.value) }.count
+        let value = normalizedTime(reread)
+        guard usable.count > 1, digits == 14, isValidTime(value), value > row.start else { return row }
+        guard usable.contains(value) else {
+            return retainingIssues(row, adding: ["结束时间原格复识与多轮候选不一致，请核对原图"])
+        }
+        guard value != row.end else { return row }
+        var fixed = row
+        fixed.end = value
+        fixed.cells[index] = reread.trimmingCharacters(in: .whitespacesAndNewlines)
+        return retainingIssues(fixed, adding: ["结束时间由原格复识与多轮候选核对，请核对原图"])
+    }
+
     /// 照片复识一致仍可能同错；照片读取入口显式调用，文字/表格导入不增加这项人工确认要求。
     /// 不根据易混字母猜测，不要求已有裁条，也不改写任何识别值或发送标记。
     public static func requiringPhotoIdentifierReview(_ row: PassPlanRow, column: Column) -> PassPlanRow {
@@ -1021,6 +1078,14 @@ public enum PassPlan {
     private static func differentWhenPresent(_ lhs: String, _ rhs: String) -> Bool {
         let a = comparisonValue(lhs), b = comparisonValue(rhs)
         return !a.isEmpty && !b.isEmpty && a != b
+    }
+
+    private static func samePhotoPosition(_ a: Region, _ b: Region) -> Bool {
+        guard a.page == b.page else { return false }
+        let left = max(a.left, b.left), right = min(a.right, b.right)
+        guard right > left else { return false }
+        let x = (left + right) / 2
+        return abs((a.y0 + a.slope * x) - (b.y0 + b.slope * x)) < min(a.height, b.height) * 0.45
     }
 
     /// 卫星 ID 优先；两边都有但不同的 ID 不能被相同名称掩盖。
@@ -1141,13 +1206,6 @@ public enum PassPlan {
             value.recognitionIssues = nil
             return problems(value, rules: rules, layout: layout).count
         }
-        func samePosition(_ a: Region, _ b: Region) -> Bool {
-            guard a.page == b.page else { return false }
-            let left = max(a.left, b.left), right = min(a.right, b.right)
-            guard right > left else { return false }
-            let x = (left + right) / 2
-            return abs((a.y0 + a.slope * x) - (b.y0 + b.slope * x)) < min(a.height, b.height) * 0.45
-        }
         var rows = base.rows
         for other in ranked.dropFirst() {
             guard let from = other.layout else { continue }
@@ -1156,7 +1214,7 @@ public enum PassPlan {
             for row in remap(other.rows, from: from, to: layout) {
                 guard let region = row.region else { continue }
                 let candidates = (0..<previousCount).filter { i in
-                    rows[i].region.map { samePosition($0, region) } ?? false
+                    rows[i].region.map { samePhotoPosition($0, region) } ?? false
                 }
                 if candidates.count == 1, let i = candidates.first, !matched.contains(i) {
                     matched.insert(i)

@@ -531,6 +531,67 @@ final class PlanReaderTests: XCTestCase {
         await dumpOriginal("badge_overlap", reading, rules)
     }
 
+    /// 原格内真实时间与左侧干扰时间不同；必须经过 Vision，不能从 candidates 直接选值。
+    func testEndTimeCellRereadConfirmsOnlyExistingFullCandidatesAndPreservesTest() async throws {
+        let layout = PassPlan.Layout(slots: [
+            .init(label: "卫星ID", column: .satelliteID, x: 0.10),
+            .init(label: "开始时间", column: .start, x: 0.36),
+            .init(label: "结束时间", column: .end, x: 0.76),
+        ])
+        let actual = (8...11).map { String(format: "2032-06-18 %02d:29:39", $0) }
+        var rows = (0..<4).map { index -> PassPlanRow in
+            let start = String(format: "2032-06-18 %02d:23:45", 8 + index)
+            let end = String(format: "2032-06-18 %02d:30:03", 8 + index)
+            return .init(orbit: "12345", satelliteID: "DEMO02B03", satellite: "虚构02B03星",
+                         station: "虚构甲站-01", start: start, end: end,
+                         cells: ["DEMO02B03", start, end],
+                         region: .init(y0: Double(50 + index * 100) / 440, slope: 0,
+                                       height: 80.0 / 440, left: 0, right: 1))
+        }
+        rows[2].testStatusDetected = true
+        let original = rows
+        let source = try await MainActor.run {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 1280, height: 440), format: format).image { output in
+                UIColor.white.setFill()
+                output.cgContext.fill(CGRect(x: 0, y: 0, width: 1280, height: 440))
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.monospacedSystemFont(ofSize: 24, weight: .regular),
+                    .foregroundColor: UIColor.black,
+                ]
+                for index in actual.indices {
+                    for (text, centerX) in [(original[index].end, CGFloat(1280 * 0.36)),
+                                            (actual[index], CGFloat(1280 * 0.76))] {
+                        let size = (text as NSString).size(withAttributes: attributes)
+                        (text as NSString).draw(at: CGPoint(x: centerX - size.width / 2,
+                                                            y: CGFloat(50 + index * 100) - size.height / 2),
+                                               withAttributes: attributes)
+                    }
+                }
+            }
+            return try XCTUnwrap(image.cgImage)
+        }
+        let candidates = [0: [rows[0].end, actual[0]],
+                          1: [rows[1].end, "2032-06-18 09:31:17"],
+                          2: [rows[2].end, actual[2]]]
+        let result = await PlanReader.rereadEndTimes(rows, candidates: candidates, layout: layout,
+                                                   in: source, settings: .standard)
+        XCTAssertEqual(result.count, rows.count)
+        guard result.count == rows.count else { return }
+        XCTAssertEqual(result[0].end, actual[0], "必须从正确的结束格实际读出秒值")
+        XCTAssertEqual(PassPlan.normalizedTime(result[0].cells[2]), actual[0])
+        XCTAssertEqual(result[1].end, rows[1].end, "新读数不是已有候选，不能自动产生第三个答案")
+        XCTAssertTrue(result[1].recognitionIssues?.contains("结束时间原格复识与多轮候选不一致，请核对原图") == true)
+        XCTAssertEqual(result[2], rows[2], "test 不参与这次复识")
+        XCTAssertTrue(PassPlan.isExcludedFromSending(result[2]))
+        XCTAssertEqual(result[3], rows[3], "未要求补读的行不能改变")
+        for index in rows.indices {
+            XCTAssertEqual(result[index].satelliteID, rows[index].satelliteID)
+            XCTAssertEqual(result[index].start, rows[index].start)
+            XCTAssertEqual(result[index].region, rows[index].region)
+        }
+    }
+
     private var statusRereadLayout: PassPlan.Layout {
         .init(slots: [
             .init(label: "卫星名称", column: .satellite, x: 0.13),
