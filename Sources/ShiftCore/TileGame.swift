@@ -132,8 +132,25 @@ public struct TileGame: Equatable, Sendable {
     public init(level: Level, seed: UInt64, ruleSet: RuleSet = .classic) {
         let spec = ruleSet == .classic ? Spec(level) : Spec.constellation(level)
         var random = SeededRandom(seed: seed &* 0x2545_F491_4F6C_DD1D &+ UInt64(level.rawValue))
-        var spots = Self.layout(spec, using: &random)
-        // 张数凑成 3 的倍数，也不超过最多几张：从最上面拿掉几张
+        var spots = Self.trimmedLayout(spec, ruleSet: ruleSet, using: &random)
+        if ruleSet == .constellation {
+            // 少数随机图形的各层几乎不相交。有限次重取，不能把松散的平铺当成叠层关卡。
+            for _ in 0..<12 {
+                if Self.hasEnoughCover(spots) { break }
+                spots = Self.trimmedLayout(spec, ruleSet: ruleSet, using: &random)
+            }
+            if !Self.hasEnoughCover(spots) { spots = Self.compactLayout(spec) }
+        }
+        let order = Self.removalOrder(spots, using: &random)
+        let kinds = Self.kindSequence(count: spots.count, spec: spec, using: &random)
+        var tiles = spots
+        for (step, index) in order.enumerated() { tiles[index].kind = kinds[step] }
+        self.init(level: level, seed: seed, tiles: tiles, solution: order.map { tiles[$0].id }, ruleSet: ruleSet)
+    }
+
+    private static func trimmedLayout(_ spec: Spec, ruleSet: RuleSet, using random: inout SeededRandom) -> [Tile] {
+        var spots = layout(spec, using: &random)
+        // 旧规则保留原随机数调用顺序，新规则均衡减牌。
         while spots.count > spec.most || spots.count % 3 != 0 {
             let candidates: [Int]
             if ruleSet == .classic {
@@ -152,11 +169,30 @@ public struct TileGame: Equatable, Sendable {
             }
             spots.remove(at: candidates[random.below(candidates.count)])
         }
-        let order = Self.removalOrder(spots, using: &random)
-        let kinds = Self.kindSequence(count: spots.count, spec: spec, using: &random)
-        var tiles = spots
-        for (step, index) in order.enumerated() { tiles[index].kind = kinds[step] }
-        self.init(level: level, seed: seed, tiles: tiles, solution: order.map { tiles[$0].id }, ruleSet: ruleSet)
+        return spots
+    }
+
+    private static func hasEnoughCover(_ tiles: [Tile]) -> Bool {
+        let free = tiles.filter { tile in !tiles.contains { $0.z > tile.z && $0.overlaps(tile) } }.count
+        return free < tiles.count / 2
+    }
+
+    /// 有限重试仍没有足够遮挡时的固定几何模板；图案仍由种子和可解序列分配。
+    static func compactLayout(_ spec: Spec) -> [Tile] {
+        var tiles: [Tile] = []
+        for z in 0..<spec.layers {
+            for y in 0..<3 {
+                for x in 0..<4 {
+                    tiles.append(.init(id: tiles.count, kind: 0, x: 6 + x * size, y: 8 + y * size, z: z))
+                }
+            }
+        }
+        for i in 0..<spec.stack {
+            tiles.append(.init(id: tiles.count, kind: 0, x: i, y: spec.rows * size + 2, z: i))
+            tiles.append(.init(id: tiles.count, kind: 0, x: width - size - i, y: spec.rows * size + 2, z: i))
+        }
+        while tiles.count % 3 != 0 || tiles.count > spec.most { tiles.removeLast() }
+        return tiles
     }
 
     /// 直接给定牌堆（测试用）

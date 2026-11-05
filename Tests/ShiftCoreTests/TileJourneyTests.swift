@@ -11,7 +11,7 @@ final class TileJourneyTests: XCTestCase {
                 XCTAssertTrue(Dictionary(grouping: game.board, by: \.kind).values.allSatisfy { $0.count % 3 == 0 })
                 XCTAssertGreaterThanOrEqual(Set(game.board.map(\.z)).count, level == .hard ? 7 : 4)
                 XCTAssertTrue(game.board.allSatisfy { $0.x >= 0 && $0.x + 4 <= TileGame.width && $0.y >= 0 })
-                XCTAssertLessThan(game.freeIDs.count, game.total / 2, "关卡应当保留真实遮挡，而非平铺凑数量")
+                XCTAssertLessThan(game.freeIDs.count, game.total / 2, "\(level) / \(seed)：关卡应当保留真实遮挡，而非平铺凑数量")
                 for id in game.solution {
                     XCTAssertTrue(game.pick(id), "\(level) / \(seed) / \(id)")
                     XCTAssertNotEqual(game.status, .lost)
@@ -21,6 +21,25 @@ final class TileJourneyTests: XCTestCase {
                 XCTAssertEqual(game.toolsUsed, 0)
                 XCTAssertEqual(game.cleared, game.total)
             }
+        }
+    }
+
+    func testFallbackGeometryIsBoundedLayeredAndSolvable() {
+        for level in TileGame.Level.allCases {
+            let spec = TileGame.Spec.constellation(level)
+            var tiles = TileGame.compactLayout(spec)
+            var random = SeededRandom(seed: 917)
+            let order = TileGame.removalOrder(tiles, using: &random)
+            let kinds = TileGame.kindSequence(count: tiles.count, spec: spec, using: &random)
+            for (step, index) in order.enumerated() { tiles[index].kind = kinds[step] }
+            var game = TileGame(level: level, seed: 917, tiles: tiles, ruleSet: .constellation)
+            XCTAssertLessThan(game.freeIDs.count, game.total / 2)
+            XCTAssertLessThanOrEqual(game.total, spec.most)
+            XCTAssertEqual(game.total % 3, 0)
+            XCTAssertTrue(tiles.allSatisfy { $0.x >= 0 && $0.x + 4 <= TileGame.width && $0.y >= 0 })
+            for index in order { XCTAssertTrue(game.pick(tiles[index].id)); XCTAssertNotEqual(game.status, .lost) }
+            game.settle()
+            XCTAssertEqual(game.status, .won)
         }
     }
 

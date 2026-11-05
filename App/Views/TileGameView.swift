@@ -333,7 +333,7 @@ struct TileBoardView: View {
 
     private var title: String {
         switch play.mode {
-        case .daily: return "今日挑战 · \(play.level.title)"
+        case .daily: return "今日挑战 · \(TileTheme.title(game.level))"
         case .challenge: return "挑战码 \(game.code)"
         case .race: return "对战 · \(play.level.title)"
         case .solo: return TileTheme.title(game.level)
@@ -661,7 +661,7 @@ struct TileBoardView: View {
         guard action(&next) else { return }
         settleTask?.cancel()
         Haptics.select()
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { game = next }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) { game = next }
         if showingResult && game.status == .playing { withAnimation { showingResult = false } }
         afterMove()
     }
