@@ -479,8 +479,12 @@ struct TileBoardView: View {
         if !game.parked.isEmpty {
             HStack(spacing: 6) {
                 ForEach(game.parked) { tile in
-                    TileFace(kind: tile.kind, side: slot(width))
-                        .onTapGesture { pick(tile.id) }
+                    Button { pick(tile.id) } label: {
+                        TileFace(kind: tile.kind, side: max(36, slot(width)))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                        .buttonStyle(.plain)
+                        .disabled(countdown > 0 || showingResult)
                         .matchedGeometryEffect(id: tile.id, in: space)
                 }
                 Text("移出的牌：点一张放回槽里").font(DS.Font.caption).foregroundStyle(.secondary)

@@ -54,6 +54,8 @@ final class TileJourneyTests: XCTestCase {
             XCTAssertFalse(progress.record(stage: stage.id, game: game), "未通关不能解锁")
             for id in game.solution { XCTAssertTrue(game.pick(id)) }
             game.settle()
+            XCTAssertEqual(game.stars, 3, "第 \(stage.id) 关必须有一条可实现三星的完整路径")
+            print("TILESTAGE|id=\(stage.id)|tiles=\(game.total)|combo=\(game.bestCombo)|stars=\(game.stars)|score=\(game.score)")
             XCTAssertTrue(progress.record(stage: stage.id, game: game))
             XCTAssertGreaterThanOrEqual(progress.stars[stage.id] ?? 0, 2)
             XCTAssertEqual(progress.scores[stage.id], game.score)
@@ -62,6 +64,15 @@ final class TileJourneyTests: XCTestCase {
         let encoded = try JSONEncoder().encode(progress)
         XCTAssertEqual(try JSONDecoder().decode(TileJourney.Progress.self, from: encoded), progress)
         XCTAssertGreaterThanOrEqual(progress.totalStars, 24)
+        let first = TileJourney.stages[0]
+        var lower = first.game
+        XCTAssertTrue(lower.pick(lower.solution[0]))
+        XCTAssertTrue(lower.undo())
+        for id in lower.solution { XCTAssertTrue(lower.pick(id)) }
+        lower.settle()
+        XCTAssertEqual(lower.stars, 1)
+        XCTAssertTrue(progress.record(stage: first.id, game: lower))
+        XCTAssertEqual(progress.stars[first.id], 3, "低星重玩不能覆盖最高星级")
         let saved = progress
         XCTAssertFalse(progress.record(stage: 1, game: TileGame(level: .easy, seed: 1)))
         XCTAssertEqual(progress, saved)
@@ -110,7 +121,7 @@ final class TileJourneyTests: XCTestCase {
         XCTAssertEqual(game.stars, 1, "用过道具不再算无道具三星")
     }
 
-    /// 可见信息贪心：先凑三张、再凑对子，再拿能解锁更多牌的牌。不读取生成器解法。
+    /// 固定贪心：先凑三张、再凑对子，再拿覆盖牌数更多的牌；不读取隐藏牌种或生成器解法。
     func testDifficultyAgainstVisibleInformationGreedyPlayer() {
         func wins(_ level: TileGame.Level, _ rules: TileGame.RuleSet) -> Int {
             var wins = 0
