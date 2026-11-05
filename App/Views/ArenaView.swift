@@ -375,11 +375,9 @@ struct ArenaMatchView: View {
         hud.result == nil && (confirmingExit || controller.disconnected || previewDisconnect)
     }
 
-    private func clearDialogInput() {
-        controller.move = .zero
-        controller.aiming = nil
-        controller.superAiming = nil
-        emoting = false
+    private func updateDialogInput() {
+        controller.setInputPaused(blockingDialog, for: .dialog)
+        if blockingDialog { emoting = false }
     }
 
     var body: some View {
@@ -440,10 +438,10 @@ struct ArenaMatchView: View {
                 confirmingExit = preview == "exit"
                 previewDisconnect = preview == "disconnect"
             }
-            if blockingDialog { clearDialogInput() }
+            updateDialogInput()
         }
-        .onChange(of: blockingDialog) { blocked in
-            if blocked { clearDialogInput() }
+        .onChange(of: blockingDialog) { _ in
+            updateDialogInput()
         }
         .onChange(of: hud.result != nil) { finished in
             if finished { confirmingExit = false }
@@ -455,7 +453,10 @@ struct ArenaMatchView: View {
     private var topBar: some View {
         HStack(spacing: DS.Space.s) {
             Button {
-                if hud.result == nil { confirmingExit = true } else { onExit() }
+                if hud.result == nil {
+                    controller.setInputPaused(true, for: .dialog)
+                    confirmingExit = true
+                } else { onExit() }
             } label: {
                 Image(systemName: "xmark").font(.headline).foregroundStyle(.white)
                     .frame(width: 36, height: 36)
@@ -632,8 +633,8 @@ struct ArenaMatchView: View {
         HStack(alignment: .bottom) {
             ArenaStick(kind: .move, onChange: {
                 guard !blockingDialog else { return }
-                controller.move = $0 * flip
-            }, onRelease: { _ in controller.move = .zero })
+                controller.setMovement($0 * flip)
+            }, onRelease: { _ in controller.setMovement(.zero) })
             Spacer()
             // 横屏：大招钮在攻击钮左上；竖屏：在攻击钮上面
             // 小道具钮（绿）：横屏在攻击钮上面，竖屏在攻击钮左边
@@ -678,9 +679,9 @@ struct ArenaMatchView: View {
 
     private var superStick: some View {
         ArenaStick(kind: .special(charge: hud.superCharge, hyper: hud.hyperUnlocked ? hud.hyperCharge : nil, hyperTime: hud.hyperTime),
-                   onChange: { if !blockingDialog { controller.superAiming = $0 * flip } },
+                   onChange: { if !blockingDialog { controller.setAim($0 * flip, special: true) } },
                    onRelease: { drag in
-                       controller.superAiming = nil
+                       controller.setAim(nil, special: true)
                        guard !blockingDialog else { return }
                        controller.fireSpecial(drag * flip)
                    })
@@ -688,9 +689,9 @@ struct ArenaMatchView: View {
 
     private var attackStick: some View {
         ArenaStick(kind: .attack,
-                   onChange: { if !blockingDialog { controller.aiming = $0 * flip } },
+                   onChange: { if !blockingDialog { controller.setAim($0 * flip) } },
                    onRelease: { drag in
-                       controller.aiming = nil
+                       controller.setAim(nil)
                        guard !blockingDialog else { return }
                        controller.fire(drag * flip)
                    })

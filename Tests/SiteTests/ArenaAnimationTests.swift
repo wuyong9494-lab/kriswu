@@ -333,6 +333,18 @@ final class ArenaAnimationTests: XCTestCase {
         controller.advance(ArenaController.step)
         XCTAssertEqual(controller.mine.pos, position)
         XCTAssertEqual(controller.mine.ammo, ammo)
+        // A delayed release can arrive after stop(), even if the old stick was
+        // already removed. The renderer pause must reject it at the controller.
+        controller.move = V2(1, 0)
+        controller.fire(V2(1, 0))
+        controller.advance(ArenaController.step)
+        XCTAssertEqual(controller.mine.pos, position)
+        XCTAssertEqual(controller.mine.ammo, ammo)
+        controller.setInputPaused(false, for: .renderer)
+        controller.advance(ArenaController.step)
+        XCTAssertEqual(controller.move, .zero)
+        XCTAssertEqual(controller.mine.pos, position)
+        XCTAssertEqual(controller.mine.ammo, ammo)
     }
 
     private func assertSamePose(_ reference: ArenaAvatar, _ actual: ArenaAvatar) throws {

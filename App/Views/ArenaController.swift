@@ -42,6 +42,7 @@ struct ArenaStart: Codable, Equatable {
 @MainActor
 final class ArenaController: ObservableObject {
     enum Role { case solo, host, client }
+    enum InputPause: Hashable { case dialog, renderer }
 
     struct HUD: Equatable {
         var timeLeft = 0
@@ -203,6 +204,11 @@ final class ArenaController: ObservableObject {
     private var queuedSpecial: V2?
     private var queuedGadget = false
     private var queuedEmote: Int?
+    private var inputPauses: Set<InputPause> = []
+    private var acceptsLocalInput: Bool {
+        inputPauses.isEmpty && !showingIntro && !disconnected && configurationError == nil
+            && hud.result == nil && game.result == nil && mine.alive
+    }
     private var sceneEvents: [ArenaGame.Event] = []
     private var snapshotDue = false
     private var recorded = false
@@ -431,7 +437,10 @@ final class ArenaController: ObservableObject {
         // 开场对阵画面放着的时候不开打（联机时房主也一样等，别人收到的是开场那一帧）
         if introLeft > 0 {
             introLeft -= max(elapsed, 0)
-            if introLeft <= 0 { showingIntro = false }
+            if introLeft <= 0 {
+                showingIntro = false
+                cancelLocalInput()
+            }
             return
         }
         switch role {
@@ -461,8 +470,10 @@ final class ArenaController: ObservableObject {
     }
 
     private func tick() {
-        var inputs: [Int: ArenaInput] = [me: ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial, gadget: queuedGadget,
-                                                        emote: queuedEmote)]
+        let local = acceptsLocalInput
+            ? ArenaInput(move: move, attack: queuedAttack, special: queuedSpecial, gadget: queuedGadget, emote: queuedEmote)
+            : ArenaInput()
+        var inputs: [Int: ArenaInput] = [me: local]
         queuedAttack = nil
         queuedSpecial = nil
         queuedGadget = false
@@ -551,6 +562,18 @@ final class ArenaController: ObservableObject {
         }
     }
 
+    /// Modal and renderer pauses are independent: foregrounding must not unlock
+    /// controls behind an open dialog. Clear again on release so late callbacks
+    /// cannot leave held movement waiting for the next simulation tick.
+    func setInputPaused(_ paused: Bool, for reason: InputPause) {
+        if paused {
+            inputPauses.insert(reason)
+            cancelLocalInput()
+        } else if inputPauses.remove(reason) != nil {
+            cancelLocalInput()
+        }
+    }
+
     /// Touch-up may never arrive after backgrounding or dismissing the view.
     func cancelLocalInput() {
         move = .zero
@@ -576,25 +599,38 @@ final class ArenaController: ObservableObject {
         return sceneEvents
     }
 
+    /// UI callbacks may outlive the stick that produced them.
+    func setMovement(_ direction: V2) {
+        move = acceptsLocalInput ? direction : .zero
+    }
+
+    func setAim(_ direction: V2?, special: Bool = false) {
+        let accepted = acceptsLocalInput ? direction : nil
+        if special { superAiming = accepted } else { aiming = accepted }
+    }
+
     /// 松开攻击摇杆：拖得很短算点了一下，自动瞄射程里最近的敌人
     func fire(_ drag: V2) {
+        guard acceptsLocalInput else { return }
         let aim = target(for: drag, range: mine.attackRange)
         if role == .client { sendFire(attack: aim, special: nil) } else { queuedAttack = aim }
     }
 
     func fireSpecial(_ drag: V2) {
-        guard mine.superCharge >= 1 else { return }
+        guard acceptsLocalInput, mine.superCharge >= 1 else { return }
         let aim = target(for: drag, range: mine.specialRange)
         if role == .client { sendFire(attack: nil, special: aim) } else { queuedSpecial = aim }
     }
 
     /// 头顶冒个表情
     func emote(_ id: Int) {
+        guard acceptsLocalInput else { return }
         if role == .client { sendFire(attack: nil, special: nil, emote: id) } else { queuedEmote = id }
     }
 
     /// 点小道具按钮（往摇杆的方向用：翻滚、闪烁）
     func fireGadget() {
+        guard acceptsLocalInput else { return }
         let fighter = mine
         guard fighter.alive, fighter.gadget != nil, fighter.gadgetUses > 0, fighter.gadgetCooldown <= 0 else { return }
         if role == .client { sendFire(attack: nil, special: nil, gadget: true) } else { queuedGadget = true }
@@ -628,21 +664,22 @@ final class ArenaController: ObservableObject {
     private func clientFrame(_ dt: Double) {
         guard game.result == nil else { return }
         sequence += 1
-        history.append((sequence, move, dt))
+        let movement = acceptsLocalInput ? move : .zero
+        history.append((sequence, movement, dt))
         if history.count > 180 { history.removeFirst(history.count - 180) }
         if inputCadence.takeSend(at: ProcessInfo.processInfo.systemUptime) {
             sendMovement(delivery: .unreliable)
         }
         let fighter = game.fighters[me]
-        if fighter.alive, !fighter.busy, move.length > 0.05 {
-            game.fighters[me].pos = game.walkingPosition(from: fighter.pos, by: move.clamped(to: 1) * (game.moveSpeed(fighter) * dt))
-            if aiming == nil && superAiming == nil { game.fighters[me].facing = move.normalized }
+        if fighter.alive, !fighter.busy, movement.length > 0.05 {
+            game.fighters[me].pos = game.walkingPosition(from: fighter.pos, by: movement.clamped(to: 1) * (game.moveSpeed(fighter) * dt))
+            if aiming == nil && superAiming == nil { game.fighters[me].facing = movement.normalized }
         }
         game.extrapolate(dt, except: me)
     }
 
     private func sendMovement(delivery: GameRoom.Delivery) {
-        let direction = move.clamped(to: 1)
+        let direction = acceptsLocalInput ? move.clamped(to: 1) : .zero
         var writer = ByteWriter()
         writer.u8(Int(Packet.input))
         writer.u32(sequence)
@@ -794,6 +831,7 @@ final class ArenaController: ObservableObject {
             hud.result = game.result
         }
         if let current = announcement, game.time - current.at > 2.2 || game.time < current.at { announcement = nil }
+        if hud.result != nil, self.hud.result == nil { cancelLocalInput() }
         if feed.contains(where: { game.time - $0.at > 4 || game.time < $0.at }) {
             feed.removeAll { game.time - $0.at > 4 || game.time < $0.at }
         }

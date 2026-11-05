@@ -303,6 +303,7 @@ final class ArenaWorldView: SCNView {
         isPlaying = true
         metrics.reset()
         nextMetricsAt = 0
+        controller.setInputPaused(false, for: .renderer)
         ArenaSound.shared.begin(owner: ObjectIdentifier(self))
         if !sourceStartVoicePlayed, controller.game.fighters.indices.contains(controller.me),
            let hero = controller.game.fighters[controller.me].sourceHero {
@@ -318,7 +319,7 @@ final class ArenaWorldView: SCNView {
     }
 
     func stop() {
-        controller.cancelLocalInput()
+        controller.setInputPaused(true, for: .renderer)
         if link != nil { Self.activeDisplayLinks -= 1 }
         link?.invalidate()
         link = nil
