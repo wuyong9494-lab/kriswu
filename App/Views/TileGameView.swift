@@ -32,29 +32,43 @@ final class TileRecordStore: ObservableObject {
     private static let key = "tileGame.records"
 
     @Published private(set) var records: TileRecords
+    @Published private(set) var constellationRecords: TileRecords
+    @Published private(set) var journey: TileJourney.Progress
 
     private init() {
+        constellationRecords = UserDefaults.standard.data(forKey: "tileGame.records.v2")
+            .flatMap { try? JSONDecoder().decode(TileRecords.self, from: $0) } ?? TileRecords()
+        journey = UserDefaults.standard.data(forKey: "tileGame.journey.v2")
+            .flatMap { try? JSONDecoder().decode(TileJourney.Progress.self, from: $0) } ?? .init()
         records = UserDefaults.standard.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(TileRecords.self, from: $0) } ?? TileRecords()
     }
 
-    func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?) {
+    func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?, ruleSet: TileGame.RuleSet = .classic) {
+        var output = ruleSet == .classic ? records : constellationRecords
         let key = level.rawValue
-        records.played[key, default: 0] += 1
+        output.played[key, default: 0] += 1
         if result.won {
-            records.wins[key, default: 0] += 1
-            if records.best[key].map({ result.seconds < $0 }) ?? true { records.best[key] = result.seconds }
+            output.wins[key, default: 0] += 1
+            if output.best[key].map({ result.seconds < $0 }) ?? true { output.best[key] = result.seconds }
         }
         if let daily {
             let day = daily.description
-            if records.daily[day].map({ result.better(than: $0) }) ?? true { records.daily[day] = result }
-            // 今日挑战只留最近两个月
-            if records.daily.count > 60 {
-                let keep = Set(records.daily.keys.sorted().suffix(60))
-                records.daily = records.daily.filter { keep.contains($0.key) }
+            if output.daily[day].map({ result.better(than: $0) }) ?? true { output.daily[day] = result }
+            if output.daily.count > 60 {
+                let keep = Set(output.daily.keys.sorted().suffix(60))
+                output.daily = output.daily.filter { keep.contains($0.key) }
             }
         }
-        if let data = try? JSONEncoder().encode(records) { UserDefaults.standard.set(data, forKey: Self.key) }
+        if ruleSet == .classic { records = output } else { constellationRecords = output }
+        if let data = try? JSONEncoder().encode(output) {
+            UserDefaults.standard.set(data, forKey: ruleSet == .classic ? Self.key : "tileGame.records.v2")
+        }
+    }
+
+    func finish(stage: Int, game: TileGame) {
+        guard journey.record(stage: stage, game: game), let data = try? JSONEncoder().encode(journey) else { return }
+        UserDefaults.standard.set(data, forKey: "tileGame.journey.v2")
     }
 
     static func time(_ seconds: Double) -> String {
@@ -66,125 +80,14 @@ final class TileRecordStore: ObservableObject {
 /// 开一局：哪一档、哪个种子、哪种玩法
 struct TilePlay: Identifiable, Equatable {
     enum Mode: Equatable {
-        case solo, daily(DayKey), challenge, race
+        case solo, daily(DayKey), challenge, race, journey(Int)
     }
 
     let id = UUID()
     let level: TileGame.Level
     let seed: UInt64
     let mode: Mode
-}
-
-// MARK: - 首页
-
-/// 小游戏「叠叠消」：三档难度自己玩、今日挑战（同一天大家同一局）、挑战码（玩别人发来的那一局）、面对面对战
-struct TileGameHomeView: View {
-    @ObservedObject private var records = TileRecordStore.shared
-    @State private var play: TilePlay?
-    @State private var code = ""
-    @State private var lobby: GameRoomEntry?
-
-    var body: some View {
-        List {
-            Section {
-                Text("点没被压住的牌放进下面的槽，三张一样的自动消掉；槽里放满 7 张还没凑齐就输了。撤回、移出、洗牌三个道具每局各能用一次。每一局都消得完。")
-                    .font(DS.Font.body)
-                    .foregroundStyle(.secondary)
-            }
-            Section("自己玩") {
-                ForEach(TileGame.Level.allCases, id: \.self) { level in
-                    Button { play = TilePlay(level: level, seed: UInt64.random(in: 0..<TileGame.seedLimit), mode: .solo) } label: {
-                        levelRow(level)
-                    }
-                }
-            }
-            dailySection
-            codeSection
-            GameRoomButtons(kind: .tiles, remotePlayers: 2...4, nearbyCapacity: TileRaceGame.most) { lobby = GameRoomEntry(room: $0) }
-        }
-        .appList()
-        .navigationTitle("叠叠消")
-        .fullScreenCover(item: $play) { play in
-            TileBoardView(play: play, race: nil)
-        }
-        .fullScreenCover(item: $lobby) { lobby in
-            TileRaceLobbyView(room: lobby.room)
-        }
-    }
-
-    private func levelRow(_ level: TileGame.Level) -> some View {
-        let key = level.rawValue
-        let detail: String
-        switch level {
-        case .easy: detail = "4 种牌，三十来张，熟悉一下"
-        case .normal: detail = "8 种牌，一百来张，底下两摞"
-        case .hard: detail = "9 种牌，一百多张，七层（今日挑战就是这一档）"
-        }
-        return HStack(spacing: DS.Space.s) {
-            IconBadge(icon: ["leaf", "flame", "bolt"][key - 1], color: DS.Palette.vivid[[6, 4, 3][key - 1]], size: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(level.title).font(DS.Font.headline).foregroundStyle(.primary)
-                Text(detail).font(DS.Font.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                if let best = records.records.best[key] {
-                    Text("最快 \(TileRecordStore.time(best))").font(DS.Font.caption.weight(.semibold)).foregroundStyle(.primary)
-                }
-                if let played = records.records.played[key] {
-                    Text("赢了 \(records.records.wins[key] ?? 0)/\(played) 局").font(DS.Font.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private var dailySection: some View {
-        let today = DayKey.today
-        let result = records.records.daily[today.description]
-        return Section {
-            Button {
-                play = TilePlay(level: .hard, seed: TileGame.dailySeed(today), mode: .daily(today))
-            } label: {
-                HStack(spacing: DS.Space.s) {
-                    IconBadge(icon: "calendar", color: DS.Palette.vivid[1], size: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("今日挑战").font(DS.Font.headline).foregroundStyle(.primary)
-                        Text("今天大家玩的都是这一局（困难），玩完发到群里比比").font(DS.Font.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if let result {
-                        Text(result.won ? "\(TileRecordStore.time(result.seconds)) 通关" : "消了 \(result.cleared)/\(result.total)")
-                            .font(DS.Font.caption.weight(.semibold))
-                            .foregroundStyle(result.won ? DS.Palette.success : .secondary)
-                    }
-                }
-            }
-        }
-    }
-
-    private var codeSection: some View {
-        Section {
-            TextField("挑战码，比如 K7Q2MX", text: $code)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-            PasteButton(payloadType: String.self) { strings in
-                let text = strings.first ?? ""
-                Task { @MainActor in code = text }
-            }
-            Button("开始这一局") {
-                if let decoded = TileGame.decode(code) {
-                    play = TilePlay(level: decoded.level, seed: decoded.seed, mode: .challenge)
-                } else {
-                    ToastCenter.shared.show("没认出挑战码：是 6 个字母和数字，比如 K7Q2MX", style: .warning)
-                }
-            }
-            .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        } header: {
-            Text("挑战码")
-        } footer: {
-            Text("别人玩完发来的挑战码输进来（整段话粘贴进来也行），玩同一局，比比谁快。")
-        }
-    }
+    var ruleSet: TileGame.RuleSet = .constellation
 }
 
 // MARK: - 对战
@@ -340,7 +243,7 @@ struct TileRaceLobbyView: View {
         }
         .onAppear { room.start() }
         .fullScreenCover(item: $race.presented) { round in
-            TileBoardView(play: TilePlay(level: round.level, seed: round.seed, mode: .race), race: race)
+            TileBoardView(play: TilePlay(level: round.level, seed: round.seed, mode: .race, ruleSet: .classic), race: race)
         }
     }
 }
@@ -414,12 +317,16 @@ struct TileBoardView: View {
     @State private var recorded = false
     @State private var showingResult = false
     @State private var confirmingQuit = false
+    @State private var stageID: Int?
+    @State private var settleTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var space
 
     init(play: TilePlay, race: TileRaceGame?) {
         self.play = play
         self.race = race
-        _game = State(initialValue: TileGame(level: play.level, seed: play.seed))
+        _game = State(initialValue: TileGame(level: play.level, seed: play.seed, ruleSet: play.ruleSet))
+        _stageID = State(initialValue: { if case .journey(let id) = play.mode { return id }; return nil }())
         _seed = State(initialValue: play.seed)
         _countdown = State(initialValue: race == nil ? 0 : 3)
     }
@@ -429,7 +336,8 @@ struct TileBoardView: View {
         case .daily: return "今日挑战 · \(play.level.title)"
         case .challenge: return "挑战码 \(game.code)"
         case .race: return "对战 · \(play.level.title)"
-        case .solo: return play.level.title
+        case .solo: return TileTheme.title(game.level)
+        case .journey: return "第 \(stageID ?? 1) 关 · \(TileJourney.stage(stageID ?? 1)?.name ?? "星域航程")"
         }
     }
 
@@ -438,36 +346,74 @@ struct TileBoardView: View {
     var body: some View {
         GeometryReader { proxy in
             let width = min(proxy.size.width, 560)
-            VStack(spacing: DS.Space.s) {
+            VStack(spacing: 10) {
                 topBar
                 if let race { TileRaceStandings(race: race) }
-                GeometryReader { area in
-                    board(in: area.size)
-                        .frame(width: area.size.width, height: area.size.height)
+                if proxy.size.width > 650 && proxy.size.width > proxy.size.height {
+                    HStack(spacing: 20) {
+                        GeometryReader { area in board(in: area.size).frame(width: area.size.width, height: area.size.height) }
+                        VStack(spacing: 14) {
+                            scoreBar
+                            Spacer(minLength: 0)
+                            parkedRow(width: 280)
+                            tray(width: 280)
+                            tools
+                        }
+                        .frame(width: 280)
+                    }
+                    .padding(.horizontal, 20)
+                } else {
+                    scoreBar.padding(.horizontal, 20)
+                    GeometryReader { area in board(in: area.size).frame(width: area.size.width, height: area.size.height) }
+                        .padding(.horizontal, 10)
+                    parkedRow(width: width)
+                    tray(width: width)
+                    tools
                 }
-                .padding(.horizontal, DS.Space.s)
-                parkedRow(width: width)
-                tray(width: width)
-                tools
             }
-            .frame(width: width)
+            .frame(maxWidth: proxy.size.width > 650 && proxy.size.width > proxy.size.height ? .infinity : 560)
             .frame(maxWidth: .infinity)
-            .padding(.bottom, DS.Space.xs)
+            .padding(.bottom, 12)
             .blur(radius: countdown > 0 ? 6 : 0)
             .overlay { countdownOverlay }
             .overlay { if showingResult { resultOverlay } }
         }
-        .background(boardBackground.ignoresSafeArea())
+        .background(TileStarfield().ignoresSafeArea())
+        .foregroundStyle(.white)
+        .preferredColorScheme(.dark)
         .task { await runCountdown() }
+        .onDisappear { settleTask?.cancel() }
         .confirmationDialog("退出这一局？", isPresented: $confirmingQuit, titleVisibility: .visible) {
             Button(race == nil ? "退出" : "退出（这局算输）", role: .destructive) { quit() }
             Button("接着玩", role: .cancel) {}
         }
     }
 
-    private var boardBackground: some View {
-        LinearGradient(colors: [Color(light: 0xDDF2C4, dark: 0x1E2A19), Color(light: 0xBFE09E, dark: 0x141D10)],
-                       startPoint: .top, endPoint: .bottom)
+    private var scoreBar: some View {
+        VStack(spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("星光积分").font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.5))
+                    Text("\(game.score)").font(.system(size: 24, weight: .bold, design: .rounded)).monospacedDigit()
+                }
+                Spacer()
+                if game.combo > 1 {
+                    Text("\(game.combo) 连消").font(.system(.headline, design: .rounded)).foregroundStyle(TileTheme.gold)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Text("4 步内再消 · 连消加分").font(.system(size: 11)).foregroundStyle(.white.opacity(0.4))
+                }
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.09))
+                    Capsule().fill(TileTheme.mint)
+                        .frame(width: proxy.size.width * CGFloat(game.cleared + game.clearing.count) / CGFloat(max(game.total, 1)))
+                }
+            }
+            .frame(height: 4)
+            .accessibilityLabel("已消除 \(game.cleared + game.clearing.count) 张，共 \(game.total) 张")
+        }
     }
 
     // MARK: 上面一条
@@ -477,13 +423,14 @@ struct TileBoardView: View {
             Button {
                 if moves > 0 && game.status == .playing { confirmingQuit = true } else { quit() }
             } label: {
-                Image(systemName: "xmark").font(.headline).frame(width: 36, height: 36)
+                Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
                     .background(.ultraThinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("退出牌局").accessibilityIdentifier("tiles.close")
             Spacer()
             VStack(spacing: 2) {
-                Text(title).font(DS.Font.headline)
+                Text(title).font(.system(size: 16, weight: .bold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.75)
                 Text("还剩 \(game.total - game.cleared - game.clearing.count) 张").font(DS.Font.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -503,17 +450,18 @@ struct TileBoardView: View {
     // MARK: 牌堆
 
     private func board(in size: CGSize) -> some View {
-        let unit = min(size.width / CGFloat(TileGame.width), size.height / CGFloat(max(game.height, 1)))
+        let unit = max(1, min((size.width - 12) / CGFloat(TileGame.width), (size.height - 12) / CGFloat(max(game.height, 1))))
         let side = unit * CGFloat(TileGame.size)
         let free = game.freeIDs
         let tiles = game.board.sorted { ($0.z, $0.y, $0.x) < ($1.z, $1.y, $1.x) }
         return ZStack(alignment: .topLeading) {
             ForEach(tiles) { tile in
                 let open = free.contains(tile.id)
-                TileFace(kind: tile.kind, side: side, covered: !open)
-                    .contentShape(Rectangle())
-                    .onTapGesture { pick(tile.id) }
-                    .allowsHitTesting(open)
+                Button { pick(tile.id) } label: {
+                    TileFace(kind: tile.kind, side: side - 1, covered: !open)
+                }
+                    .buttonStyle(.plain).disabled(!open || countdown > 0 || showingResult)
+                    .accessibilityIdentifier("tiles.card.\(tile.id)")
                     .matchedGeometryEffect(id: tile.id, in: space)
                     .position(x: (CGFloat(tile.x) + 2) * unit, y: (CGFloat(tile.y) + 2) * unit)
             }
@@ -543,7 +491,15 @@ struct TileBoardView: View {
 
     private func tray(width: CGFloat) -> some View {
         let side = slot(width)
-        return ZStack(alignment: .leading) {
+        return VStack(spacing: 8) {
+            HStack {
+                Text(game.waiting >= 5 ? "还剩 \(7 - game.waiting) 格 · 留意下一张" : "收集槽 · 三张相同即可消除")
+                Spacer()
+                Text("\(game.waiting)/7").monospacedDigit()
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(game.waiting >= 5 ? TileTheme.gold : .white.opacity(0.55))
+            ZStack(alignment: .leading) {
             HStack(spacing: 6) {
                 ForEach(0..<TileGame.capacity, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
@@ -558,11 +514,14 @@ struct TileBoardView: View {
                         .transition(.scale(scale: 0.2).combined(with: .opacity))
                 }
             }
+            }
         }
-        .padding(DS.Space.s)
-        .background(RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous).fill(Color(light: 0x8A5A35, dark: 0x5C3B22)))
-        .overlay(RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
-            .strokeBorder(game.waiting >= TileGame.capacity - 1 ? DS.Palette.danger : .clear, lineWidth: 2))
+        .padding(12)
+        .frame(width: side * 7 + 6 * 6 + 24)
+        .background(TileTheme.panel, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20)
+            .strokeBorder(game.waiting >= TileGame.capacity - 1 ? TileTheme.gold : .white.opacity(0.12), lineWidth: 1.5))
+        .accessibilityIdentifier("tiles.tray")
     }
 
     // MARK: 道具
@@ -586,15 +545,16 @@ struct TileBoardView: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: icon).font(.title3)
-                Text(left > 0 ? name : "\(name)（用过了）").font(DS.Font.caption)
+                Text(left > 0 ? "\(name) · 1" : "\(name) · 0").font(.system(size: 12, weight: .medium))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, DS.Space.xs)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+            .padding(.vertical, 12)
+            .background(.white.opacity(0.065), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!enabled || countdown > 0)
         .opacity(enabled ? 1 : 0.45)
+        .accessibilityIdentifier("tiles.tool.\(icon)")
     }
 
     // MARK: 倒数、结果
@@ -616,8 +576,11 @@ struct TileBoardView: View {
         return ZStack {
             Color.black.opacity(0.35).ignoresSafeArea()
             VStack(spacing: DS.Space.m) {
-                Text(won ? "通关了！" : "槽满了").font(DS.Font.display)
-                Text(won ? "用时 \(TileRecordStore.time(seconds))" : "消了 \(game.cleared)/\(game.total) 张")
+                Image(systemName: won ? "sparkles" : "square.stack.3d.up.fill")
+                    .font(.system(size: 34)).foregroundStyle(won ? TileTheme.gold : TileTheme.mint)
+                Text(won ? "星域点亮！" : "暂时卡住了").font(.system(size: 28, weight: .bold, design: .rounded))
+                if won { TileStars(count: game.stars).scaleEffect(2).frame(height: 32) }
+                Text(won ? "\(game.score) 分 · 最高 \(game.bestCombo) 连消" : "消了 \(game.cleared)/\(game.total) 张")
                     .font(DS.Font.title)
                     .foregroundStyle(.secondary)
                 if let race {
@@ -630,6 +593,10 @@ struct TileBoardView: View {
                 if canGoOn {
                     Button("用道具接着玩") { withAnimation { showingResult = false } }
                         .buttonStyle(.borderedProminent)
+                }
+                if won, let stageID, let next = TileJourney.stage(stageID + 1) {
+                    Button("下一关 · \(next.name)") { nextStage(next) }
+                        .buttonStyle(TilePrimaryButton()).accessibilityIdentifier("tiles.next")
                 }
                 if race == nil {
                     Button {
@@ -650,7 +617,7 @@ struct TileBoardView: View {
             }
             .padding(DS.Space.l)
             .frame(maxWidth: 360)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
+            .background(TileTheme.panel, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(DS.Space.l)
         }
         .transition(.opacity)
@@ -661,7 +628,8 @@ struct TileBoardView: View {
     private func runCountdown() async {
         guard countdown > 0 else { return }
         while countdown > 0 {
-            try? await Task.sleep(nanoseconds: 800_000_000)
+            do { try await Task.sleep(nanoseconds: 800_000_000) } catch { return }
+            guard !Task.isCancelled else { return }
             withAnimation(DS.Motion.snappy) { countdown -= 1 }
         }
         started = Date()
@@ -672,12 +640,14 @@ struct TileBoardView: View {
         guard countdown == 0 else { return }
         var next = game
         guard next.pick(id) else { return }
+        settleTask?.cancel()
         Haptics.tap()
         moves += 1
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { game = next }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.82)) { game = next }
         if !game.clearing.isEmpty {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 260_000_000)
+            settleTask = Task { @MainActor in
+                do { try await Task.sleep(nanoseconds: 260_000_000) } catch { return }
+                guard !Task.isCancelled else { return }
                 Haptics.success()
                 withAnimation(.easeIn(duration: 0.16)) { game.settle() }
                 afterMove()
@@ -689,6 +659,7 @@ struct TileBoardView: View {
     private func change(_ action: (inout TileGame) -> Bool) {
         var next = game
         guard action(&next) else { return }
+        settleTask?.cancel()
         Haptics.select()
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { game = next }
         if showingResult && game.status == .playing { withAnimation { showingResult = false } }
@@ -717,17 +688,32 @@ struct TileBoardView: View {
     private func record() {
         guard !recorded, moves > 0 else { return }
         recorded = true
-        let result = TileRecords.Result(won: game.status == .won, seconds: seconds, cleared: game.cleared, total: game.total)
+        let result = TileRecords.Result(won: game.status == .won, seconds: seconds, cleared: game.cleared + game.clearing.count, total: game.total)
         var daily: DayKey?
         if case .daily(let day) = play.mode { daily = day }
-        TileRecordStore.shared.add(result, level: play.level, daily: daily)
+        TileRecordStore.shared.add(result, level: game.level, daily: daily, ruleSet: game.ruleSet)
+        if let stageID { TileRecordStore.shared.finish(stage: stageID, game: game) }
     }
 
     private func restart(seed: UInt64) {
         record()
+        settleTask?.cancel()
         self.seed = seed
         withAnimation { showingResult = false }
-        game = TileGame(level: play.level, seed: seed)
+        game = TileGame(level: game.level, seed: seed, ruleSet: game.ruleSet)
+        started = Date()
+        ended = nil
+        moves = 0
+        recorded = false
+    }
+
+    private func nextStage(_ stage: TileJourney.Stage) {
+        record()
+        settleTask?.cancel()
+        stageID = stage.id
+        seed = stage.seed
+        game = stage.game
+        showingResult = false
         started = Date()
         ended = nil
         moves = 0
@@ -735,6 +721,7 @@ struct TileBoardView: View {
     }
 
     private func quit() {
+        settleTask?.cancel()
         record()
         if let race, game.status == .playing {
             // 中途退出：这局算输，别人那边才知道这局打完了
@@ -752,37 +739,11 @@ struct TileBoardView: View {
         let what: String
         switch play.mode {
         case .daily: what = "今日挑战（\(play.level.title)）"
-        default: what = "\(play.level.title)的一局"
+        case .journey: what = "第 \(stageID ?? 1) 关"
+        default: what = "\(TileTheme.title(game.level))的一局"
         }
         let result = game.status == .won ? "用 \(TileRecordStore.time(seconds)) 通关了" : "消了 \(game.cleared)/\(game.total) 张就卡住了"
         let text = "我在「叠叠消」\(what)\(result)！挑战码 \(game.code)：打开「值班提醒」› 全部功能 › 叠叠消，把这段话粘贴进「挑战码」，玩同一局比比谁快。"
         ActivityShare.present([text], excluding: ActivityShare.chatOnly) { _ in }
-    }
-}
-
-// MARK: - 一张牌
-
-struct TileFace: View {
-    let kind: Int
-    let side: CGFloat
-    var covered = false
-    var glowing = false
-
-    /// 牌面：天上的、值班时手边的
-    static let symbols = ["🛰️", "📡", "🚀", "🌍", "🌙", "⭐️", "☀️", "🪐", "☄️", "🔭", "☕️", "⏰"]
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
-        ZStack {
-            // 牌的厚度：底下露出一条
-            shape.fill(Color(light: 0x8DBF5A, dark: 0x5E8A3A)).offset(y: side * 0.07)
-            shape.fill(Color(light: 0xFFFBEA, dark: 0xF1ECD6))
-            shape.strokeBorder(Color.black.opacity(0.12), lineWidth: max(1, side * 0.02))
-            Text(Self.symbols[kind % Self.symbols.count]).font(.system(size: side * 0.56))
-            if covered { shape.fill(Color.black.opacity(0.42)) }
-        }
-        .frame(width: side, height: side)
-        .scaleEffect(glowing ? 1.1 : 1)
-        .accessibilityLabel(covered ? "被压住的牌" : "牌")
     }
 }

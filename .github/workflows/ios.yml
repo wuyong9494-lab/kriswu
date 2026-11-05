@@ -133,14 +133,14 @@ jobs:
       # build solely because GitHub's optional artifact service times out.
       # Release/TestFlight branches still require their normal upload path.
       - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/heads/codex/plan-') && !startsWith(github.head_ref, 'codex/plan-') }}
+        if: ${{ !startsWith(github.ref, 'refs/heads/codex/plan-') && !startsWith(github.head_ref, 'codex/plan-') && !startsWith(github.ref, 'refs/heads/codex/tiles-') && !startsWith(github.head_ref, 'codex/tiles-') }}
         with:
           name: ShiftReminder-ipa
           path: ShiftReminder.ipa
 
       # 固定下载地址：https://github.com/<仓库>/releases/latest/download/ShiftReminder.ipa
       - name: 发布到 Releases（最新版）
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && !startsWith(github.ref, 'refs/heads/codex/plan-')
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/codex/arena-diagnostics-2' && github.ref != 'refs/heads/codex/arena-bush-stability' && github.ref != 'refs/heads/codex/arena-audio-performance' && github.ref != 'refs/heads/codex/arena-reference-fidelity' && github.ref != 'refs/heads/codex/arena-quality-sample' && !startsWith(github.ref, 'refs/heads/codex/plan-') && !startsWith(github.ref, 'refs/heads/codex/tiles-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -218,8 +218,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     # Full suite by default; named markers select the relevant native regression suite.
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[site-tests]') || contains(github.event.head_commit.message, '[plan-ocr-tests]') || contains(github.event.head_commit.message, '[arena-map-tests]') || contains(github.event.head_commit.message, '[arena-audio-tests]') || contains(github.event.head_commit.message, '[arena-input-tests]')))
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.extras == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[site-tests]') || contains(github.event.head_commit.message, '[plan-ocr-tests]') || contains(github.event.head_commit.message, '[arena-map-tests]') || contains(github.event.head_commit.message, '[arena-audio-tests]') || contains(github.event.head_commit.message, '[arena-input-tests]') || contains(github.event.head_commit.message, '[tile-tests]')))
     env:
+      TILE_GAME_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tile-tests]') && !contains(github.event.head_commit.message, '[site-tests]') }}
       PLAN_OCR_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[plan-ocr-tests]') && !contains(github.event.head_commit.message, '[site-tests]') }}
       ARENA_MAP_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[arena-map-tests]') && !contains(github.event.head_commit.message, '[site-tests]') && !contains(github.event.head_commit.message, '[plan-ocr-tests]') }}
       ARENA_AUDIO_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[arena-audio-tests]') && !contains(github.event.head_commit.message, '[site-tests]') && !contains(github.event.head_commit.message, '[plan-ocr-tests]') && !contains(github.event.head_commit.message, '[arena-map-tests]') }}
@@ -239,7 +240,7 @@ jobs:
           xcodebuild -version
 
       - name: 启动仿值班网站
-        if: env.PLAN_OCR_ONLY != 'true' && env.ARENA_MAP_ONLY != 'true' && env.ARENA_AUDIO_ONLY != 'true' && env.ARENA_INPUT_ONLY != 'true'
+        if: env.PLAN_OCR_ONLY != 'true' && env.ARENA_MAP_ONLY != 'true' && env.ARENA_AUDIO_ONLY != 'true' && env.ARENA_INPUT_ONLY != 'true' && env.TILE_GAME_ONLY != 'true'
         run: |
           nohup python3 Tests/MockSite/server.py 8765 > mock.log 2>&1 &
           sleep 2
@@ -272,6 +273,7 @@ jobs:
           TEST_TARGET=SiteTests
           if [ "$PLAN_OCR_ONLY" = true ]; then TEST_TARGET=SiteTests/PlanReaderTests; fi
           if [ "$ARENA_MAP_ONLY" = true ]; then TEST_TARGET=SiteTests/ArenaImportedMapAssetsTests; fi
+          if [ "$TILE_GAME_ONLY" = true ]; then TEST_TARGET=SiteTests/TileVisualTests; fi
           TEST_ARGS=(-only-testing:"$TEST_TARGET")
           if [ "$ARENA_AUDIO_ONLY" = true ]; then
             TEST_ARGS=(-only-testing:SiteTests/ArenaAudioTests -only-testing:SiteTests/ArenaResultAudioTests)
@@ -305,8 +307,19 @@ jobs:
           fi
           exit $status
 
+      - name: 叠叠消实际交互回归
+        if: env.TILE_GAME_ONLY == 'true'
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -destination "id=$DEVICE" -only-testing:ArenaFlowTests/TileFlowTests \
+            -derivedDataPath build -resultBundlePath tile-flow.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee tile-flow.log
+
       - name: 网站访问记录
-        if: always() && env.PLAN_OCR_ONLY != 'true' && env.ARENA_MAP_ONLY != 'true' && env.ARENA_AUDIO_ONLY != 'true' && env.ARENA_INPUT_ONLY != 'true'
+        if: always() && env.PLAN_OCR_ONLY != 'true' && env.ARENA_MAP_ONLY != 'true' && env.ARENA_AUDIO_ONLY != 'true' && env.ARENA_INPUT_ONLY != 'true' && env.TILE_GAME_ONLY != 'true'
         run: tail -150 mock.log
 
       - name: 保存测试日志和识图结果
@@ -318,6 +331,8 @@ jobs:
             test.log
             test-device.json
             site-tests.xcresult
+            tile-flow.xcresult
+            tile-flow.log
             mock.log
           if-no-files-found: warn
 

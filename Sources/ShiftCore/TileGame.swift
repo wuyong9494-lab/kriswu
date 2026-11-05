@@ -5,6 +5,8 @@ import Foundation
 /// 同一档难度、同一个种子摆出来的牌一模一样（几个人玩同一局比快慢）；
 /// 摆牌时先定好一种消法、再按它放牌，所以每一局都消得完
 public struct TileGame: Equatable, Sendable {
+    /// 旧挑战码和多人竞速保留原牌局；新星域关卡有独立的生成规则。
+    public enum RuleSet: String, Codable, Sendable { case classic, constellation }
     public enum Level: Int, Codable, CaseIterable, Sendable {
         case easy = 1, normal, hard
 
@@ -53,6 +55,7 @@ public struct TileGame: Equatable, Sendable {
 
     public let level: Level
     public let seed: UInt64
+    public let ruleSet: RuleSet
     /// 一共几张
     public let total: Int
     /// 牌堆多高（格，含底下两摞）
@@ -71,6 +74,17 @@ public struct TileGame: Equatable, Sendable {
     public private(set) var undos = 1
     public private(set) var moveOuts = 1
     public private(set) var shuffles = 1
+    public private(set) var score = 0
+    public private(set) var combo = 0
+    public private(set) var bestCombo = 0
+    private var picksSinceClear = 0
+    public var toolsUsed: Int { 3 - undos - moveOuts - shuffles }
+    /// 三星需要不用道具，并在同一局完成足够长的连消；失败不授星。
+    public var stars: Int {
+        guard status == .won else { return 0 }
+        guard toolsUsed == 0 else { return 1 }
+        return bestCombo >= level.rawValue + 2 ? 3 : 2
+    }
     /// 上一张放进槽的牌、它从哪来（撤回用；凑齐消掉了就不能撤回）
     private var last: Move?
     /// 摆牌时定好的那种消法（依次拿哪几张，测试里照着拿一遍看消不消得完）
@@ -115,27 +129,41 @@ public struct TileGame: Equatable, Sendable {
         }
     }
 
-    public init(level: Level, seed: UInt64) {
-        let spec = Spec(level)
+    public init(level: Level, seed: UInt64, ruleSet: RuleSet = .classic) {
+        let spec = ruleSet == .classic ? Spec(level) : Spec.constellation(level)
         var random = SeededRandom(seed: seed &* 0x2545_F491_4F6C_DD1D &+ UInt64(level.rawValue))
         var spots = Self.layout(spec, using: &random)
         // 张数凑成 3 的倍数，也不超过最多几张：从最上面拿掉几张
         while spots.count > spec.most || spots.count % 3 != 0 {
-            let top = spots.map(\.z).max()!
-            let candidates = spots.indices.filter { spots[$0].z == top }
+            let candidates: [Int]
+            if ruleSet == .classic {
+                let top = spots.map(\.z).max()!
+                candidates = spots.indices.filter { spots[$0].z == top }
+            } else {
+                // 旧算法从最上层削到张数上限，常把遮挡层一并削没。
+                // 新关卡从最拥挤的层均衡减牌，保留上层和底部储备堆。
+                let main = spots.indices.filter { spots[$0].y < spec.rows * Self.size }
+                let groups = Dictionary(grouping: main, by: { spots[$0].z })
+                let layer = groups.keys.sorted().max { a, b in
+                    let left = groups[a]!.count, right = groups[b]!.count
+                    return left == right ? a > b : left < right
+                }!
+                candidates = groups[layer]!
+            }
             spots.remove(at: candidates[random.below(candidates.count)])
         }
         let order = Self.removalOrder(spots, using: &random)
         let kinds = Self.kindSequence(count: spots.count, spec: spec, using: &random)
         var tiles = spots
         for (step, index) in order.enumerated() { tiles[index].kind = kinds[step] }
-        self.init(level: level, seed: seed, tiles: tiles, solution: order.map { tiles[$0].id })
+        self.init(level: level, seed: seed, tiles: tiles, solution: order.map { tiles[$0].id }, ruleSet: ruleSet)
     }
 
     /// 直接给定牌堆（测试用）
-    init(level: Level, seed: UInt64, tiles: [Tile], solution: [Int] = []) {
+    init(level: Level, seed: UInt64, tiles: [Tile], solution: [Int] = [], ruleSet: RuleSet = .classic) {
         self.level = level
         self.seed = seed
+        self.ruleSet = ruleSet
         self.solution = solution
         board = tiles
         total = tiles.count
@@ -289,11 +317,17 @@ public struct TileGame: Equatable, Sendable {
         }
         let at = tray.lastIndex { $0.kind == tile.kind }.map { $0 + 1 } ?? tray.count
         tray.insert(tile, at: at)
+        picksSinceClear += 1
+        if picksSinceClear > 4 { combo = 0 }
         last = Move(tile: tile, fromParked: fromParked)
         let same = tray.filter { $0.kind == tile.kind }
         if same.count >= 3 {
             clearing = Set(same.prefix(3).map(\.id))
             last = nil
+            combo = picksSinceClear <= 4 ? combo + 1 : 1
+            bestCombo = max(bestCombo, combo)
+            score += 100 * min(combo, 5)
+            picksSinceClear = 0
         }
         updateStatus()
         return true
@@ -316,6 +350,8 @@ public struct TileGame: Equatable, Sendable {
         tray.remove(at: i)
         if move.fromParked { parked.append(move.tile) } else { board.append(move.tile) }
         undos -= 1
+        combo = 0
+        picksSinceClear = 0
         last = nil
         updateStatus()
         return true
@@ -330,6 +366,8 @@ public struct TileGame: Equatable, Sendable {
         parked += tray.prefix(n)
         tray.removeFirst(n)
         moveOuts -= 1
+        combo = 0
+        picksSinceClear = 0
         last = nil
         updateStatus()
         return true
@@ -345,6 +383,8 @@ public struct TileGame: Equatable, Sendable {
         random.shuffle(&kinds)
         for i in board.indices { board[i].kind = kinds[i] }
         shuffles -= 1
+        combo = 0
+        picksSinceClear = 0
         last = nil
         return true
     }
@@ -377,15 +417,24 @@ public struct TileGame: Equatable, Sendable {
         return String(characters.reversed())
     }
 
-    public var code: String { Self.code(level: level, seed: seed) }
+    public var code: String {
+        (ruleSet == .constellation ? "V2-" : "") + Self.code(level: level, seed: seed)
+    }
 
     /// 从挑战码（或贴进来的一整段话，比如别人发的「挑战码 K7Q2MX」）里读出难度和种子
-    public static func decode(_ text: String) -> (level: Level, seed: UInt64)? {
+    public static func decode(_ text: String) -> (level: Level, seed: UInt64, ruleSet: RuleSet)? {
         let upper = text.uppercased()
         let searchFrom = upper.range(of: "挑战码").map { String(upper[$0.upperBound...]) } ?? upper
+        if let version = searchFrom.range(of: "V[0-9]+-", options: .regularExpression) {
+            guard searchFrom[version] == "V2-" else { return nil }
+            let tail = String(searchFrom[version.upperBound...])
+            guard let token = candidates(in: tail).first, tail.hasPrefix(token),
+                  let decoded = decodeExact(token) else { return nil }
+            return (decoded.level, decoded.seed, .constellation)
+        }
         for source in [searchFrom, upper] {
             for match in candidates(in: source) {
-                if let decoded = decodeExact(match) { return decoded }
+                if let decoded = decodeExact(match) { return (decoded.level, decoded.seed, .classic) }
             }
         }
         return nil
