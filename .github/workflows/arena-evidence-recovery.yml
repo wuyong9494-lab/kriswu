@@ -1,7 +1,7 @@
 name: Recover saved arena evidence
 on:
   push:
-    branches: [codex/arena-quality-sample]
+    branches: [codex/arena-interface-next]
     paths: ['.github/workflows/arena-evidence-recovery.yml']
   workflow_dispatch:
 permissions:
@@ -10,40 +10,48 @@ permissions:
 jobs:
   recover:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
         with:
           repository: wuyong9494-lab/kriswu
-          run-id: 41026778508
-          artifact-ids: 12965399501
+          run-id: 42143819665
+          artifact-ids: 13470400968
           github-token: ${{ github.token }}
           path: recovered
           merge-multiple: true
-      - name: Extract original diagnostic files without rerunning tests
+      - name: Summarize validation stages without disclosing diagnostic payloads
         run: |
-          python3 - <<'PY'
-          import pathlib, shutil, json, hashlib
-          root=pathlib.Path('recovered')
-          out=pathlib.Path('diagnostics')
-          entries=[]
-          for p in root.rglob('*'):
-              if not p.is_file() or 'sample-flow.xcresult' in p.parts: continue
-              if p.suffix.lower() not in ('.txt','.json','.png','.log'): continue
-              rel=p.relative_to(root); dest=out/rel
-              dest.parent.mkdir(parents=True,exist_ok=True)
-              shutil.copyfile(p,dest)
-              entries.append(dict(path=str(rel),bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()))
-          (out/'recovery-source.json').write_text(json.dumps(dict(run=41026778508,artifact=12965399501,sourceCommit='7604b56cfd38ef688607488bd705c0120a0f0ea9',files=entries),indent=2))
-          for p in root.rglob('sample-flow.log'):
-              for line in p.read_text(errors='replace').splitlines():
-                  if 'error:' in line or ('Test Case' in line and ('passed' in line or 'failed' in line)): print(line)
-          print('Recovered',len(entries),'original diagnostic files; no build/test executed')
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build465-original-diagnostics
-          path: diagnostics
-          if-no-files-found: error
-          retention-days: 14
+          python3 - <<'PYCODE'
+          import pathlib, json
+          # Output contains only fixed category names and aggregate counts.
+          # Never print filenames, device identifiers, paths, log lines or crash payloads.
+          patterns = {
+              'compile_commands': 'SwiftCompile ',
+              'link_commands': 'Ld ',
+              'codesign_commands': 'CodeSign ',
+              'build_succeeded': '** BUILD SUCCEEDED **',
+              'test_suites_started': "Test Suite '",
+              'test_cases_started': "Test Case '-[",
+              'test_failed': '** TEST FAILED **',
+              'test_succeeded': '** TEST SUCCEEDED **',
+              'test_cancelled': '** TEST INTERRUPTED **',
+              'runner_connection_failed': 'Failed to establish communication with the test runner',
+              'simulator_boot': 'Booting',
+              'simulator_boot_failed': 'Unable to boot',
+              'launch_failed': 'Failed to launch',
+              'timeout_mentions': 'timed out',
+              'testing_started': 'Testing started',
+              'testing_cancelled': 'Testing cancelled',
+              'testing_failed': 'Testing failed',
+              'destination_unavailable': 'Unable to find a destination',
+              'compiler_errors': 'error:',
+          }
+          totals = {key:0 for key in patterns}
+          count = 0
+          for p in pathlib.Path('recovered').rglob('animation-tests.log'):
+              raw = p.read_text(errors='replace')
+              count += 1
+              for key, pattern in patterns.items(): totals[key] += raw.count(pattern)
+          print(json.dumps({'animation_log_count':count,'categories':totals},sort_keys=True))
+          PYCODE

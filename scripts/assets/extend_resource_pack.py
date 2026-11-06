@@ -19,7 +19,7 @@ def extend(original, additions, root, output, pack_id):
     assert original.resolve() != output.resolve(), 'Never overwrite the source pack'
     root = root.resolve()
     spec = json.loads(additions.read_text())
-    assert set(spec) <= {'files', 'fonts'}, 'Unreviewed manifest field'
+    assert set(spec) <= {'files', 'fonts', 'interfaceSceneFile', 'interfaceBindingsFile', 'interfaceLocalizationFile', 'themeScenes'}, 'Unreviewed manifest field'
     opener = gzip.open if original.suffix == '.gz' else open
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(output.name + '.partial')
@@ -35,6 +35,24 @@ def extend(original, additions, root, output, pack_id):
             manifest['schemaVersion'] = 2
             manifest['files'] += spec['files']
             manifest['fonts'] = manifest.get('fonts', []) + spec.get('fonts', [])
+            for key in ['interfaceSceneFile', 'interfaceBindingsFile', 'interfaceLocalizationFile']:
+                if key in spec:
+                    assert key not in previous or previous[key] == spec[key], 'Cannot replace existing interface metadata'
+                    manifest[key] = spec[key]
+            # Add timeline bindings to existing themes without replacing their
+            # stills, IDs, music or ordering. Existing bindings are immutable.
+            theme_scenes = spec.get('themeScenes', {})
+            assert isinstance(theme_scenes, dict)
+            theme_ids = {theme['id'] for theme in manifest['themes']}
+            assert set(theme_scenes) <= theme_ids, 'Unknown theme binding'
+            for theme in manifest['themes']:
+                if theme['id'] not in theme_scenes:
+                    continue
+                scene = theme_scenes[theme['id']]
+                assert set(scene) == {'sceneFile', 'sceneExport', 'sceneSourceRect'}, 'Unreviewed theme scene field'
+                for key, value in scene.items():
+                    assert key not in theme or theme[key] == value, 'Cannot replace existing theme metadata'
+                    theme[key] = value
             assert len({f['id'] for f in manifest['fonts']}) == len(manifest['fonts'])
             validate_files(manifest)
             header = json.dumps(manifest, ensure_ascii=False, separators=(',', ':')).encode()

@@ -28,7 +28,8 @@ final class ArenaResourcePackManifestTests: XCTestCase {
     func testTimelineAndFontReferencesRequireRegisteredMatchingKinds() throws {
         let valid = document()
         XCTAssertNoThrow(try validate(valid))
-        for field in ["sourceRulesFile", "sourceMapCatalogFile", "sourceAssetIndexFile", "lobbyLayoutFile"] {
+        for field in ["sourceRulesFile", "sourceMapCatalogFile", "sourceAssetIndexFile", "lobbyLayoutFile",
+                      "interfaceSceneFile", "interfaceBindingsFile", "interfaceLocalizationFile"] {
             var changed = valid
             changed[field] = "source/missing.json"
             XCTAssertThrowsError(try validate(changed), field)
@@ -41,6 +42,19 @@ final class ArenaResourcePackManifestTests: XCTestCase {
         var incomplete = valid
         incomplete["themes"] = [["id": "Default", "title": "Default", "backgroundFile": "lobby/still.png", "sceneFile": "lobby/scene.json"]]
         XCTAssertThrowsError(try validate(incomplete))
+    }
+
+    func testInterfaceSceneAndInstanceInventoryMustBeRegisteredTogether() throws {
+        var value = document()
+        value["interfaceSceneFile"] = "lobby/scene.json"
+        XCTAssertThrowsError(try validate(value))
+        value["interfaceBindingsFile"] = "source/rules.json"
+        XCTAssertNoThrow(try validate(value))
+        value["interfaceBindingsFile"] = "lobby/still.png"
+        XCTAssertThrowsError(try validate(value))
+        value.removeValue(forKey: "interfaceSceneFile")
+        value["interfaceBindingsFile"] = "source/rules.json"
+        XCTAssertThrowsError(try validate(value))
     }
 
     func testTimelineCropCannotBeMissingReversedOrOutOfRange() throws {

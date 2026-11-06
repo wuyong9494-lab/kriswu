@@ -513,7 +513,7 @@ jobs:
   # 乱斗：模拟器里打开大厅和一局团战，截图留底。不上传。
   arena-look:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     concurrency:
       group: arena-look-${{ github.ref }}
       # Preserve running visual evidence; a newer capture waits instead of cancelling it.
@@ -559,7 +559,7 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || { grep -E "error:" build.log | head -20; exit 1; }
 
       - name: 角色动画回归测试
-        timeout-minutes: 10
+        timeout-minutes: 15
         shell: bash -eo pipefail {0}
         run: |
           xcodebuild test \

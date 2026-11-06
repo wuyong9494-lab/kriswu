@@ -69,9 +69,11 @@ def validate_files(manifest):
             assert len(bounds) == 6 and all(isinstance(v, (int, float)) and math.isfinite(v) and abs(v) < 100000 for v in bounds)
             assert all(bounds[i + 3] >= bounds[i] for i in range(3))
     for field in ["gameAudioFile", "menuArtworkFile", "combatFile", "playableMapsFile", "mapArtworkFile", "skillArtworkFile",
-                  "sourceRulesFile", "sourceMapCatalogFile", "sourceAssetIndexFile", "lobbyLayoutFile"]:
+                  "sourceRulesFile", "sourceMapCatalogFile", "sourceAssetIndexFile", "lobbyLayoutFile",
+                  "interfaceSceneFile", "interfaceBindingsFile", "interfaceLocalizationFile"]:
         if manifest.get(field):
             assert table.get(manifest[field]) == "data"
+    assert (manifest.get('interfaceSceneFile') is None) == (manifest.get('interfaceBindingsFile') is None)
     for theme in manifest["themes"]:
         assert table.get(theme["backgroundFile"]) == "image"
         for file_field, export_field in [("sceneFile", "sceneExport"), ("loadingSceneFile", "loadingSceneExport")]:

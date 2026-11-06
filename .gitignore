@@ -9,3 +9,4 @@ build/
 *.ipa
 Payload/
 *.arenapack
+Tests/PrivateResourceValidation/

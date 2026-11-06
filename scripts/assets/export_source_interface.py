@@ -14,10 +14,12 @@ import math
 import struct
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 import texture2ddecoder
 
 from source_flash import SourceFlash, require
+from source_interface_bindings import inventory
 
 
 def decode_texture(texture):
@@ -40,7 +42,25 @@ def decode_texture(texture):
     return Image.frombytes('RGBA',(width,height),pixels,'raw','BGRA')
 
 
-def compact_atlases(source, objects, output, prefix):
+def straight_alpha_image(image, source_alpha):
+    """PNG stores straight alpha; supplied SC atlases use premultiplied RGB.
+
+    The encoding is explicit, never guessed from dark pixels. Convert once
+    before Core Graphics performs its normal PNG-to-premultiplied boundary.
+    """
+    require(source_alpha in ('straight', 'premultiplied'), 'Unknown source alpha encoding')
+    if source_alpha == 'straight':
+        return image
+    pixels = np.asarray(image, dtype=np.uint8).astype(np.uint32)
+    alpha = pixels[:, :, 3:4]
+    rgb = pixels[:, :, :3]
+    pixels[:, :, :3] = np.where(alpha > 0, np.minimum(255, (rgb*255 + alpha//2)//np.maximum(alpha, 1)), 0)
+    result = Image.fromarray(pixels.astype(np.uint8), 'RGBA')
+    image.close()
+    return result
+
+
+def compact_atlases(source, objects, output, prefix, source_alpha='premultiplied'):
     """Copy referenced texels at native resolution, preserving all source UVs."""
     rectangles = {}
     for item in objects.values():
@@ -76,7 +96,7 @@ def compact_atlases(source, objects, output, prefix):
     require(len(pages) <= 16, 'Source UI exceeds atlas count budget')
     # Decode one original atlas at a time; do not retain nine 4K images.
     for index in sorted({k[0] for k in rectangles}):
-        image = decode_texture(source.textures[index])
+        image = straight_alpha_image(decode_texture(source.textures[index]), source_alpha)
         for key,(page,x,y) in placements.items():
             if key[0] == index:
                 crop=image.crop(key[1]); w,h=crop.size
@@ -111,7 +131,7 @@ def compact_atlases(source, objects, output, prefix):
     return entries
 
 
-def export(source, names, output, prefix='source-interface'):
+def export(source, names, output, prefix='source-interface', source_alpha='premultiplied'):
     require(names and len(names)==len(set(names)), 'Empty or duplicated export selection')
     reachable=source.reachable(names)
     objects={str(i):copy.deepcopy(source.objects[i]) for i in sorted(reachable)}
@@ -130,15 +150,18 @@ def export(source, names, output, prefix='source-interface'):
                         if key not in ids:
                             ids[key]=len(values); values.append(table[element[slot]].tolist())
                         element[slot]=ids[key]
-    textures=compact_atlases(source,objects,output,prefix)
+    textures=compact_atlases(source,objects,output,prefix,source_alpha)
     result={'schemaVersion':1,'sourceSCMember':'Payload/NB.app/res/sc/'+source.path.name,
-        'sourceSCSHA256':source.sha256,'sourceSCVersion':source.version,'canvasSize':[1920,1080],
+        'sourceSCSHA256':source.sha256,'sourceSCVersion':source.version,
+        'sourceTextureAlphaEncoding':source_alpha,'canvasSize':[1920,1080],
         'sourceRect':[-960,-540,960,540],'uvDivisor':65535,'primitiveMode':'triangle_strip',
         'clockPolicy':'independent_absolute_clip_fps','textures':textures,'objects':objects,
         'matrices':matrices,'colors':colors,'exclusions':[],
         'exports':{n:{'objectID':source.exports[n],'status':'requires_layout_text_and_state_bindings'} for n in names}}
     path=output/prefix/'scene.json';path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    (path.parent/'bindings.json').write_text(
+        json.dumps(inventory(result),ensure_ascii=False,separators=(',',':')),encoding='utf-8')
     return result
 
 
@@ -147,10 +170,11 @@ def main():
     parser.add_argument('--source',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--export',action='append',required=True,dest='exports')
+    parser.add_argument('--source-alpha',choices=['straight','premultiplied'],required=True)
     args=parser.parse_args()
     repo=Path(__file__).resolve().parents[2]
     require(not args.output.resolve().is_relative_to(repo),'Private output must be outside the public checkout')
-    result=export(SourceFlash(args.source),args.exports,args.output)
+    result=export(SourceFlash(args.source),args.exports,args.output,source_alpha=args.source_alpha)
     print(json.dumps({'objects':len(result['objects']),'matrices':len(result['matrices']),
                       'atlases':len(result['textures']),'exports':len(result['exports'])}))
 

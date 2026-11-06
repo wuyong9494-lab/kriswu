@@ -16,6 +16,8 @@ struct ArenaHomeView: View {
     @ObservedObject private var records = ArenaRecords.shared
     @ObservedObject private var growth = ArenaProgressStore.shared
     @ObservedObject private var resourcePack = ArenaResourcePackStore.shared
+    @ObservedObject private var sourceLocalization = ArenaImportedLocalization.shared
+    @ObservedObject private var sourceControls = ArenaImportedSourceControls.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
     @State private var mapSelectionError: String?
     @State private var selectedMapID = UserDefaults.standard.string(forKey: "arena.map")
@@ -209,6 +211,10 @@ struct ArenaHomeView: View {
         .onChange(of: resourcePack.combatHeroID) { _ in reconcileMapSelection() }
         .onChange(of: resourcePack.contentRevision) { _ in reconcileMapSelection() }
         .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
+        .task(id: resourcePack.contentRevision) {
+            await sourceLocalization.load(store: resourcePack)
+            await sourceControls.load(store: resourcePack, localization: sourceLocalization)
+        }
         .fullScreenCover(item: $sheet, onDismiss: {
             if let entry = pendingBenchmark {
                 pendingBenchmark = nil
@@ -278,7 +284,25 @@ struct ArenaHomeView: View {
         return tier > 0 && (1...max(tier, 1)).contains { !progress.season.claimed.contains($0) }
     }
 
+    @ViewBuilder
     private func quietMenu(_ title: String, symbol: String, compact: Bool = false, action: @escaping () -> Void) -> some View {
+        if resourcePack.enabled,
+           let role = ArenaLobbySourceControl.Role.allCases.first(where: { $0.title == title }),
+           let control = sourceControls.controls[role] {
+            Button(action: action) {
+                ArenaSourceControlVisual(control: control, live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                    .id(resourcePack.contentRevision)
+                    .frame(width: 67, height: compact ? 44 : 49)
+                    .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+            }.buttonStyle(.plain)
+                .accessibilityLabel(sourceLocalization.menuTitle(title))
+                .accessibilityIdentifier(title == "英雄" ? "arena.openHeroes" : "arena.menu.\(title)")
+        } else {
+            nativeQuietMenu(title, symbol: symbol, compact: compact, action: action)
+        }
+    }
+
+    private func nativeQuietMenu(_ title: String, symbol: String, compact: Bool, action: @escaping () -> Void) -> some View {
         let item = ArenaLobbyEmblem.menu(symbol)
         return Button(action: action) {
             VStack(spacing: -2) {
@@ -289,10 +313,10 @@ struct ArenaHomeView: View {
                     } else { ArenaLobbyIcon(item.asset).foregroundStyle(item.tint) }
                 }.frame(width: 35, height: 31).rotationEffect(.degrees(-5))
                     .shadow(color: .black.opacity(0.8), radius: 0, x: 1, y: 2)
-                Text(title).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
+                Text(sourceLocalization.menuTitle(title)).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
             }.foregroundStyle(.white).frame(width: 67, height: compact ? 44 : 49)
         }.buttonStyle(ArenaLobbyRailStyle())
-            .accessibilityLabel(title)
+            .accessibilityLabel(sourceLocalization.menuTitle(title))
             .accessibilityIdentifier(title == "英雄" ? "arena.openHeroes" : "arena.menu.\(title)")
     }
 
@@ -382,12 +406,21 @@ struct ArenaHomeView: View {
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
-            Button { sheet = .season } label: {
-                VStack(spacing: 1) {
-                    ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
-                    Text("任务").font(.system(size: 12, weight: .black))
-                }.frame(width: 44, height: 56)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
+            if resourcePack.enabled, let control = sourceControls.controls[.quests] {
+                Button { sheet = .season } label: {
+                    ArenaSourceControlVisual(control: control, live: false)
+                        .frame(width: 44, height: 56)
+                        .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+                }.buttonStyle(.plain).accessibilityLabel(sourceLocalization.menuTitle("任务"))
+                    .accessibilityIdentifier("arena.menu.任务")
+            } else {
+                Button { sheet = .season } label: {
+                    VStack(spacing: 1) {
+                        ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
+                        Text("任务").font(.system(size: 12, weight: .black))
+                    }.frame(width: 44, height: 56)
+                }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
+            }
             Spacer(minLength: 0)
             Button { sheet = .modes } label: {
                 HStack(spacing: 8) {
@@ -413,16 +446,27 @@ struct ArenaHomeView: View {
             VStack(spacing: 3) {
                 Text(sourceHero != nil ? "原版英雄 · 普通对战" : threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
                     .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
-                Button { start() } label: {
-                    Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
-                        .frame(width: composition.battleWidth, height: 61)
-                        .background {
-                            if let image = ArenaImportedMenuAssets.shared.image(for: "play") {
-                                Image(uiImage: image).resizable(capInsets: ArenaImportedMenuAssets.shared.capInsets(for: "play"), resizingMode: .stretch).allowsHitTesting(false)
+                if resourcePack.enabled, let control = sourceControls.controls[.battle] {
+                    Button { start() } label: {
+                        ArenaSourceControlVisual(control: control, live: false)
+                            .id(resourcePack.contentRevision)
+                            .frame(width: composition.battleWidth, height: 61)
+                            .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel(sourceLocalization.menuTitle("对战"))
+                        .accessibilityIdentifier("arena.start")
+                } else {
+                    Button { start() } label: {
+                        Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
+                            .frame(width: composition.battleWidth, height: 61)
+                            .background {
+                                if let image = ArenaImportedMenuAssets.shared.image(for: "play") {
+                                    Image(uiImage: image).resizable(capInsets: ArenaImportedMenuAssets.shared.capInsets(for: "play"), resizingMode: .stretch).allowsHitTesting(false)
+                                }
                             }
-                        }
-                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
-                    .accessibilityIdentifier("arena.start")
+                    }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+                        .accessibilityIdentifier("arena.start")
+                }
             }
         }.foregroundStyle(.white).frame(height: 92)
     }

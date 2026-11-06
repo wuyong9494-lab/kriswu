@@ -15,13 +15,15 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
     let live: Bool
     let interfaceState: ArenaLobbyInterfaceState?
     let resourceURL: (String) -> URL?
+    let onFirstFrame: (() -> Void)?
     let onFailure: ((String) -> Void)?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(sceneURL: URL, exportName: String, sourceRect: CGRect? = nil,
          sceneSHA256: String? = nil, live: Bool = true, interfaceState: ArenaLobbyInterfaceState? = nil,
-         resourceURL: @escaping (String) -> URL?, onFailure: ((String) -> Void)? = nil) {
+         resourceURL: @escaping (String) -> URL?, onFirstFrame: (() -> Void)? = nil,
+         onFailure: ((String) -> Void)? = nil) {
         self.sceneURL = sceneURL
         self.exportName = exportName
         self.sourceRect = sourceRect
@@ -29,6 +31,7 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
         self.live = live
         self.interfaceState = interfaceState
         self.resourceURL = resourceURL
+        self.onFirstFrame = onFirstFrame
         self.onFailure = onFailure
     }
 
@@ -60,7 +63,7 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
         context.coordinator.update(view, request: Coordinator.Request(url: sceneURL,
             sha256: sceneSHA256, export: exportName, rect: rect),
             live: live, active: scenePhase == .active, reduceMotion: reduceMotion, interfaceState: interfaceState,
-            resourceURL: resourceURL, onFailure: onFailure)
+            resourceURL: resourceURL, onFirstFrame: onFirstFrame, onFailure: onFailure)
     }
 
     static func dismantleUIView(_ view: ArenaLobbyMetalView, coordinator: Coordinator) {
@@ -87,14 +90,16 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
         private var initialFrameSubmitted = false
         private var submittingInitialFrame = false
         private var onFailure: ((String) -> Void)?
+        private var onFirstFrame: (() -> Void)?
         private var interfaceState: ArenaLobbyInterfaceState?
         private var renderFailed = false
 
         func update(_ view: ArenaLobbyMetalView, request next: Request,
                     live: Bool, active: Bool, reduceMotion: Bool, interfaceState: ArenaLobbyInterfaceState?,
-                    resourceURL: @escaping (String) -> URL?, onFailure: ((String) -> Void)?) {
+                    resourceURL: @escaping (String) -> URL?, onFirstFrame: (() -> Void)?, onFailure: ((String) -> Void)?) {
             self.live = live; self.active = active; self.reduceMotion = reduceMotion
             self.onFailure = onFailure
+            self.onFirstFrame = onFirstFrame
             let changed = self.interfaceState != interfaceState
             self.interfaceState = interfaceState
             guard request != next || (changed && renderFailed) else {
@@ -145,6 +150,7 @@ struct ArenaImportedLobbySceneView: UIViewRepresentable {
                         guard let self, let view, self.generation == token else { return }
                         self.ready = true
                         view.alpha = 1
+                        self.onFirstFrame?()
                         self.applyPlayback(to: view)
                     }
                     renderer.onFailure = { [weak self, weak view] reason in

@@ -91,6 +91,11 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
     public let sourceMapCatalogFile: String?
     public let sourceAssetIndexFile: String?
     public let lobbyLayoutFile: String?
+    /// Source HUD timelines and instance inventory. Presence does not assert
+    /// that every export has a supported, visually accepted native adapter.
+    public let interfaceSceneFile: String?
+    public let interfaceBindingsFile: String?
+    public let interfaceLocalizationFile: String?
     public let fonts: [Font]?
 
     public enum ValidationError: Error, Equatable, LocalizedError {
@@ -211,9 +216,11 @@ public struct ArenaResourcePackManifest: Codable, Sendable {
             try reference(map.layoutFile, .data)
         }
         for path in [gameAudioFile, menuArtworkFile, combatFile, playableMapsFile, mapArtworkFile, skillArtworkFile,
-                     sourceRulesFile, sourceMapCatalogFile, sourceAssetIndexFile, lobbyLayoutFile].compactMap({ $0 }) {
+                     sourceRulesFile, sourceMapCatalogFile, sourceAssetIndexFile, lobbyLayoutFile,
+                     interfaceSceneFile, interfaceBindingsFile, interfaceLocalizationFile].compactMap({ $0 }) {
             try reference(path, .data)
         }
+        try require((interfaceSceneFile == nil) == (interfaceBindingsFile == nil), "界面场景与绑定清单必须成对提供")
     }
 
     public static func safeIdentifier(_ value: String) -> Bool {

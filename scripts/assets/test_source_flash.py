@@ -11,7 +11,40 @@ import zstandard
 from PIL import Image
 
 from source_flash import FormatError, SourceFlash, Table
-from export_source_interface import compact_atlases
+from export_source_interface import compact_atlases, straight_alpha_image
+from source_interface_bindings import inventory
+from export_source_localization import table
+
+
+class InterfaceBindingTests(unittest.TestCase):
+    def testLocalizationSelectsExactLocaleAndPreservesSourceTokens(self):
+        data = b'TID,EN,CN\nstring,string,string\nTID_EXAMPLE,English,"Value <NUM>, second line"\n'
+        self.assertEqual(table(data,'CN'),{'TID_EXAMPLE':'Value <NUM>, second line'})
+        with self.assertRaises(AssertionError):
+            table(data,'CNT')
+        with self.assertRaises(AssertionError):
+            table(data + b'TID_EXAMPLE,Other,Conflicting\n','CN')
+
+    def scene(self):
+        return {'sourceSCSHA256':'a'*64, 'exports': {'hud': {'objectID':1}}, 'objects': {
+            '1': {'children': [{'objectID':2,'name':n,'blendMode':0} for n in ['', 'counter', 'counter']]},
+            '2': {'frameCount':3, 'frameLabels':['idle','','ready'],
+                  'children':[{'objectID':3,'name':'value','blendMode':0}]},
+            '3': {'textField': {'fontName':'Synthetic','text':''}}}}
+
+    def testReusedObjectsRetainIndependentInstancePathsAndSourceFrameIndices(self):
+        nodes = inventory(self.scene())['exports']['hud']
+        self.assertEqual([n['path'] for n in nodes],
+                         ['', '#0:', '#0:/value', '#1:counter', '#1:counter/value', '#2:counter', '#2:counter/value'])
+        self.assertEqual(nodes[1]['labels'], [{'name':'idle','frameIndex':0},{'name':'ready','frameIndex':2}])
+        self.assertEqual(nodes[1]['frameCount'],3)
+
+    def testCyclesAndMissingChildrenFailInsteadOfProducingPartialBindings(self):
+        for target in [1,99]:
+            scene = self.scene()
+            scene['objects']['2']['children'][0]['objectID'] = target
+            with self.assertRaises(FormatError):
+                inventory(scene)
 
 
 def fixture(version=6):
@@ -93,6 +126,19 @@ class SourceFlashTests(unittest.TestCase):
             for vertex, expected in zip(vertices,[(255,0,0,255),(0,255,0,255),(0,0,255,255)]):
                 x,y=round(vertex[2]/65535*4096),round(vertex[3]/65535*4096)
                 self.assertEqual(atlas.getpixel((x,y)),expected)
+
+    def test_png_alpha_boundary_preserves_translucent_source_color(self):
+        source = Image.new('RGBA',(4,1))
+        source.putdata([(128,64,0,128),(17,0,0,0),(255,120,30,255),(40,80,120,128)])
+        converted = straight_alpha_image(source,'premultiplied')
+        self.assertEqual([converted.getpixel((x,0)) for x in range(4)],[(255,128,0,128),(0,0,0,0),(255,120,30,255),(80,159,239,128)])
+        # PNG decoding premultiplies exactly once. Half-red must remain 128,
+        # rather than becoming 64 after an accidental second multiplication.
+        r,g,b,a = converted.getpixel((0,0))
+        self.assertEqual(tuple(round(c*a/255) for c in (r,g,b)),(128,64,0))
+        straight = Image.new('RGBA',(1,1),(255,128,0,128))
+        self.assertIs(straight_alpha_image(straight,'straight'),straight)
+        with self.assertRaises(FormatError): straight_alpha_image(straight,'guessed')
 
 
 if __name__=='__main__': unittest.main()

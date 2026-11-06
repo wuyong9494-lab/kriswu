@@ -4,6 +4,8 @@
 <dict>
 	<key>ArenaResourcePackRequiredForPromotion</key>
 	<true/>
+	<key>ArenaPrivateInterfaceValidationRequired</key>
+	<true/>
 	<key>DefaultSiteURL</key>
 	<string>$(DEFAULT_SITE_URL)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
