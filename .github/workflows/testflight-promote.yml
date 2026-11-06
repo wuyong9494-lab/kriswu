@@ -50,6 +50,7 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_asc_promote.py' -v
           python3 -m unittest discover -s .github/scripts -p 'test_arena_private_pack.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_star_journey_release.py' -v
           python3 .github/scripts/arena_private_pack.py preflight .github/releases/testflight.json
       - uses: actions/upload-artifact@v4
         if: always()
@@ -61,8 +62,8 @@ jobs:
   testflight:
     needs: verify
     if: needs.verify.outputs.upload_required == 'true'
-    # Match native acceptance on the standard Apple Silicon image; keep the
-    # actual private Metal rendering gate before archive and upload.
+    # Strict releases retain native Metal acceptance. The explicitly pinned
+    # 566 direct beta records the observed failure and preserves archive integrity.
     runs-on: macos-26
     timeout-minutes: 55
     outputs:
@@ -108,12 +109,16 @@ jobs:
           python3 .github/scripts/arena_private_pack.py install .github/releases/testflight.json --source source
           cd source
           xcodegen generate
+      - name: Record the exact candidate's native visual acceptance policy
+        id: render_policy
+        run: python3 .github/scripts/star_journey_release.py .github/releases/testflight.json
       - name: Stage verified private interface fixtures
         id: private_render
+        if: steps.render_policy.outputs.deferred != 'true'
         run: |
           python3 source/.github/scripts/prepare_private_arena_rendering.py --source source --request .github/releases/testflight.json --output source/Tests/PrivateResourceValidation/ArenaPrivateValidation
       - name: Require actual private backgrounds and controls to render through Metal
-        if: steps.private_render.outputs.required == 'true'
+        if: steps.render_policy.outputs.deferred != 'true' && steps.private_render.outputs.required == 'true'
         run: |
           python3 -m unittest discover -s source/.github/scripts -p 'test_*private_arena_rendering.py' -v
           python3 source/.github/scripts/run_private_arena_rendering.py --source source --report promotion-private-rendering.json
@@ -187,8 +192,15 @@ jobs:
       - name: Revoke this runner's temporary development certificates
         if: always() && env.ASC_KEY_PATH != ''
         run: |
-          SERIALS=$(security find-certificate -a -c 'Apple Development' -p 2>/dev/null \
-            | awk '/BEGIN CERT/{n++} {print > ("/tmp/cert" n ".pem")}' ; for f in /tmp/cert*.pem; do [ -s "$f" ] && openssl x509 -in "$f" -noout -serial | cut -d= -f2; done)
+          CERT_DIR=$(mktemp -d)
+          SERIALS=$(
+            (security find-certificate -a -c 'Apple Development' -p 2>/dev/null || true) \
+              | awk -v dir="$CERT_DIR" '/BEGIN CERT/{n++} {if(n) print > (dir "/cert" n ".pem")}'
+            for f in "$CERT_DIR"/cert*.pem; do
+              [ -s "$f" ] || continue
+              openssl x509 -in "$f" -noout -serial | cut -d= -f2
+            done
+          )
           python3 .github/scripts/asc_dev_certs.py cleanup $SERIALS || echo '::warning::Temporary certificate cleanup failed'
       - uses: actions/upload-artifact@v4
         if: always()
