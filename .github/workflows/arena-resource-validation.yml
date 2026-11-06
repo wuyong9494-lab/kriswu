@@ -12,6 +12,11 @@ on:
       - 'Tests/SiteTests/ArenaResourcePackTests.swift'
       - 'Tests/SiteTests/ArenaImportedFaceTests.swift'
       - 'Tests/SiteTests/ArenaLobbyTimelineTests.swift'
+      - 'Tests/SiteTests/ArenaPrivateResourceRenderingTests.swift'
+      - '.github/scripts/prepare_private_arena_rendering.py'
+      - '.github/scripts/test_prepare_private_arena_rendering.py'
+      - '.github/scripts/run_private_arena_rendering.py'
+      - '.github/scripts/test_run_private_arena_rendering.py'
       - 'Tests/SiteTests/ArenaALACStorageTests.swift'
       - 'Tests/SiteTests/ArenaALACStorageFixtures.swift'
       - 'scripts/assets/source_flash*'
@@ -52,6 +57,8 @@ jobs:
       - run: python -m unittest discover -s scripts/assets -p test_source_flash.py -v
       - run: python -m unittest discover -s scripts/assets -p test_lobby_background.py -v
       - run: python -m unittest discover -s scripts/assets -p test_extend_resource_pack.py -v
+      - run: python -m unittest discover -s .github/scripts -p test_prepare_private_arena_rendering.py -v
+      - run: python -m unittest discover -s .github/scripts -p test_run_private_arena_rendering.py -v
   resource-runtime:
     runs-on: macos-15
     timeout-minutes: 35
