@@ -1,8 +1,8 @@
 {
-  "build_number": "563",
+  "build_number": "564",
   "version": "1.2",
-  "source_sha": "4a9bf14ef44c761f88a768a11c162750fd9a557d",
-  "source_run_id": 42222065754,
+  "source_sha": "e091100d75ad0a6073446486dce0bb529318e97a",
+  "source_run_id": 42222567022,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
   "private_resource_pack": {
@@ -18,6 +18,6 @@
   "notes": "• 星了个星首页聚焦三关旅程、今日挑战与星图收藏，原有玩法可从玩法库继续进入。\n• 新增清盘、护送星核、限能返航三关连程；三种能力贯穿整轮，近航补给与远航追光带来不同路线和奖励。\n• 指定图案三消后开启星门，独立星核随轨道护送；移轨预览显示遮挡变化和实际耗能。\n• 逐步保存旅程与路线，支持中途退出、恢复和复盘；按六种能力与路线组合记录最佳星级，重复游玩不重复刷取奖励。\n• 完成旅程后逐颗修复星图，新解锁天幕和牌背可立即使用；旧关卡、挑战码及经典模式存档继续保留。\n• 上传以同一提交的设备编译、核心回归、iPhone 17 Pro Max 模拟器实际操作和恢复测试全部通过为前提。现有完整私有资源包继续内置。\n• iPhone 17 Pro Max 真机体验与性能尚待验收。真人难度校准未进行；其他竞技模块的完整还原与真机多人稳定 60 帧仍待验收。",
   "source_validation": {
     "mode": "star-journey-native-verified",
-    "native_run_id": 42222054250
+    "native_run_id": 42222552424
   }
 }
