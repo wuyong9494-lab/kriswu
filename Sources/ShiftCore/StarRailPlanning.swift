@@ -24,7 +24,7 @@ extension StarRail.Game {
     /// Immediate, visible facts only; never a hidden solution or a win forecast.
     public func kindPlans(in state: StarRail.State) -> [KindPlan] {
         let free = freeIDs(in: state)
-        return Set(stage.cards.map(\.kind)).sorted().map { kind in
+        return Set(stage.cards.filter { !isStarCore($0.id) }.map(\.kind)).sorted().map { kind in
             let cards = board(in: state).filter { $0.kind == kind }
             let rails = Set(cards.flatMap { blockers(of: $0.id, in: state) }.compactMap { stage.cards[$0].rail })
             let trayCount = state.tray.filter { stage.cards[$0].kind == kind }.count

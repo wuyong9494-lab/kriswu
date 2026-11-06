@@ -20,10 +20,10 @@ extension StarRail {
                 let gate = game.starGate
                 if let gate, !game.gateOpen(in:game.state) {
                     return .init(title:"星门课堂 · 先配对再通行",instruction:"先消除三张\(StarRail.names[gate.kind])打开星门。点亮的是当前可取的钥匙图案。",
-                        highlightedCards:Set(game.stage.cards.filter { $0.kind == gate.kind && game.freeIDs(in:game.state).contains($0.id) }.map(\.id)),asksForPreview:false)
+                        highlightedCards:Set(game.stage.cards.filter { $0.kind == gate.kind && game.freeIDs(in:game.state).contains($0.id) && !game.isAnchor($0.id,in:game.state) }.map(\.id)),asksForPreview:false)
                 }
                 if config.objective == .escort {
-                    return .init(title:"星核不能取走，需要护送",instruction:"让 B 轨让路，再预览 A 轨的\(config.route == .supply ? "近岔" : "远岔")。清空收集槽并送达星核即可通关，无需清空棋盘。",highlightedCards:[config.coreID!],asksForPreview:true)
+                    return .init(title:"星核不能取走，需要护送",instruction:"至少完成 2 组配对，让 B 轨让路，再预览 A 轨的\(config.route == .supply ? "近岔" : "远岔")。收集槽清空、星核送达即可通关。",highlightedCards:[config.coreID!],asksForPreview:true)
                 }
                 return .init(title:config.chapter == 0 ? "本轮能力 · \(config.ability.title)" : "总耗能有限，先算往返",instruction:config.chapter == 0 ? config.ability.detail : "每次确认移层都会计入总耗能。预览先看成本，再安排两轨返航。",highlightedCards:[],asksForPreview:true)
             }

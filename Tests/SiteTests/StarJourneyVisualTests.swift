@@ -73,8 +73,8 @@ final class StarJourneyVisualTests: XCTestCase {
             .environment(\.accessibilityReduceMotion,true)
         try attach(view,name:"journey-restoration-reward",size:CGSize(width:440,height:956))
         for stars in [0,10] {
-            let map=StarConstellationMap(earned:stars).frame(width:400,height:250)
-            try attach(map,name:"journey-star-map-\(stars)",size:CGSize(width:400,height:250))
+            let map=StarConstellationMap(earned:stars).frame(width:400,height:324)
+            try attach(map,name:"journey-star-map-\(stars)",size:CGSize(width:400,height:324))
         }
     }
     @MainActor

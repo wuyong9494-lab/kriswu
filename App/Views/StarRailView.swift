@@ -199,7 +199,7 @@ struct StarRailBoardView: View {
             HStack(spacing: 8) {
                 RailEnergyMeter(value: game.state.energy, limit: game.stage.energyLimit).accessibilityIdentifier("rails.energy")
                 Spacer(minLength: 0)
-                Text(journeyConfig?.objective == .escort ? "已配对 \(game.state.matches) 组" : "消除 \(game.state.matches * 3)/\(game.stage.cards.count)")
+                Text(journeyConfig?.objective == .escort ? "配对 \(min(2,game.state.matches))/2 组" : "消除 \(game.state.matches * 3)/\(game.stage.cards.count)")
                 Text("移层 \(game.state.shifts)/\(game.stage.plannedMoves)").foregroundStyle(.white.opacity(0.55))
             }
             .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
@@ -428,7 +428,7 @@ struct StarRailBoardView: View {
                 }
                 Section("轨道规则") {
                     if let config = journeyConfig { Text(config.ability.detail) }
-                    Text("三消获得 1 点能量，上限 \(game.stage.energyLimit)；超出部分不储存。普通轨道移动花 1 点；分岔近端花 1 点，远端花 2 点，返航花 1 点。两个分岔之间要先返航。")
+                    Text("三消获得 1 点能量，上限 \(game.stage.energyLimit)；超出部分不储存。普通轨道出发花 1 点；分岔近端花 1 点，远端花 2 点。\(journeyConfig == nil ? "返航花 1 点。" : "返航费用由本轮能力决定，预览会显示实际费用。")两个分岔之间要先返航。")
                     Text("轨道上方有牌时不能移动；终点有同层牌时不能进入。预览中绿色标出新露出的牌，橙色标出将盖住的牌。所有图案始终可查，不需要猜盲牌。")
                     Text("轨道最后一张锚牌要留到目标完成。先储备返程能量，再决定取牌。复盘回到早先步骤会计入试炼和远征的撤回次数；最佳成绩保留。")
                 }
@@ -450,7 +450,8 @@ struct StarRailBoardView: View {
                                 let blockers = game.blockers(of: card.id, in: game.state)
                                 Button { act(.pick(card.id)) } label: {
                                     HStack {
-                                        TileGlyph(kind: card.kind).frame(width: 36, height: 36)
+                                        if game.isStarCore(card.id) { RailStarCoreFace(side:36) }
+                                        else { TileGlyph(kind: card.kind).frame(width: 36, height: 36) }
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text("\(game.isStarCore(card.id) ? "星核（护送目标）" : StarRail.names[card.kind]) · 第 \(card.y/4+1) 行 / \(card.x/4+1) 列")
                                             Text(game.isStarCore(card.id) ? "不可取走：移轨护送到指定岔口" : game.isAnchor(card.id, in: game.state) ? "锚牌：航线完成后才能取" : blockers.isEmpty ? "当前可取" : "被 \(names(Set(blockers))) 盖住")
@@ -476,8 +477,10 @@ struct StarRailBoardView: View {
         return "\(rail.name) · 在\(rail.stopName(game.state.positions[rail.id])) · \(goal ? "航线目标已完成" : "航线目标未完成")"
     }
     private func names(_ ids: Set<Int>) -> String {
-        let counts = Dictionary(grouping: ids, by: { game.stage.cards[$0].kind })
-        return counts.isEmpty ? "无" : counts.keys.sorted().map { "\(StarRail.names[$0]) ×\(counts[$0]!.count)" }.joined(separator: "、")
+        let counts = Dictionary(grouping: ids.filter { !game.isStarCore($0) }, by: { game.stage.cards[$0].kind })
+        var labels = counts.keys.sorted().map { "\(StarRail.names[$0]) ×\(counts[$0]!.count)" }
+        if ids.contains(where:game.isStarCore) { labels.append("星核") }
+        return labels.isEmpty ? "无" : labels.joined(separator:"、")
     }
     private func configureSound() { StarRailSound.shared.configure(active: scenePhase == .active, enabled: sounds) }
     private func clearPreview() { selectedRail = nil; selectedStop = nil }

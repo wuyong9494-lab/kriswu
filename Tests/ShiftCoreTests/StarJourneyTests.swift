@@ -83,6 +83,7 @@ final class StarJourneyTests: XCTestCase {
             let ordinary=initial.stage.cards.filter { !initial.isStarCore($0.id) }
             XCTAssertTrue(Dictionary(grouping:ordinary,by:\.kind).values.allSatisfy { $0.count == 3 })
             XCTAssertFalse(ordinary.contains { $0.kind == initial.stage.cards[core].kind })
+            XCTAssertFalse(initial.kindPlans(in:initial.state).contains { $0.kind == initial.stage.cards[core].kind })
             XCTAssertTrue(initial.rejection(.pick(core),in:initial.state)!.contains("星核"))
             XCTAssertFalse(initial.legalActions(in:initial.state).contains(.pick(core)))
             let won = try win(initial)

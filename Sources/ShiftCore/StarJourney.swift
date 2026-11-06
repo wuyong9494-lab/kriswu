@@ -51,7 +51,7 @@ public enum StarJourney {
         public var objectiveText: String {
             switch objective {
             case .clear: return "完成 A 轨往返并清盘；" + (ability == .navigator ? "导航能力关间不携带能量" : "剩余能量可带入下一关")
-            case .escort: return "配对火箭打开星门，让 B 轨让行，再把星核送到\(route == .supply ? "近岔" : "远岔")；收集槽需清空"
+            case .escort: return "至少配对 2 组，其中火箭开启星门；让 B 轨让行，把星核送到\(route == .supply ? "近岔" : "远岔")，收集槽需清空"
             case .limitedReturn: return "配对地球打开星门，在 \(energyBudget!) 点总耗能内完成双轨往返并清盘"
             }
         }
