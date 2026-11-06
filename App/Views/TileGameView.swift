@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - 战绩（只存在这台手机上）
 
-/// 叠叠消的战绩：每档最快通关、玩了几局赢了几局、每天今日挑战的最好成绩
+/// 星了个星的战绩：每档最快通关、玩了几局赢了几局、每天今日挑战的最好成绩
 struct TileRecords: Codable, Equatable {
     struct Result: Codable, Equatable {
         var won: Bool
@@ -92,7 +92,7 @@ struct TilePlay: Identifiable, Equatable {
 
 // MARK: - 对战
 
-/// 叠叠消对战：房主开局，大家玩同一局，每走一步把自己的进度发给大家（房间负责送到每个人）
+/// 星了个星对战：房主开局，大家玩同一局，每走一步把自己的进度发给大家（房间负责送到每个人）
 @MainActor
 final class TileRaceGame: ObservableObject {
     struct Round: Identifiable, Equatable {
@@ -230,7 +230,7 @@ struct TileRaceLobbyView: View {
                 }
             }
             .appList()
-            .navigationTitle(room.code == nil ? "面对面比叠叠消" : "远程比叠叠消")
+            .navigationTitle(room.code == nil ? "面对面比星了个星" : "远程比星了个星")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -747,7 +747,7 @@ struct TileBoardView: View {
         default: what = "\(TileTheme.title(game.level))的一局"
         }
         let result = game.status == .won ? "用 \(TileRecordStore.time(seconds)) 通关了" : "消了 \(game.cleared)/\(game.total) 张就卡住了"
-        let text = "我在「叠叠消」\(what)\(result)！挑战码 \(game.code)：打开「值班提醒」› 全部功能 › 叠叠消，把这段话粘贴进「挑战码」，玩同一局比比谁快。"
+        let text = "我在「星了个星」\(what)\(result)！挑战码 \(game.code)：打开「值班提醒」› 全部功能 › 小游戏 › 星了个星，把这段话粘贴进「挑战码」，玩同一局比比谁快。"
         ActivityShare.present([text], excluding: ActivityShare.chatOnly) { _ in }
     }
 }

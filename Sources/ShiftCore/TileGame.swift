@@ -1,6 +1,6 @@
 import Foundation
 
-/// 小游戏「叠叠消」：一堆叠着的牌，点没被压住的牌放进下面的槽；槽里凑齐三张一样的就消掉，
+/// 小游戏「星了个星」：一堆叠着的牌，点没被压住的牌放进下面的槽；槽里凑齐三张一样的就消掉，
 /// 槽里放满七张还没凑齐就输了，牌全消完就赢了。
 /// 同一档难度、同一个种子摆出来的牌一模一样（几个人玩同一局比快慢）；
 /// 摆牌时先定好一种消法、再按它放牌，所以每一局都消得完
@@ -504,6 +504,7 @@ public struct TileGame: Equatable, Sendable {
     /// 今日挑战：同一天大家玩同一局（种子按日期算）
     public static func dailySeed(_ day: DayKey) -> UInt64 {
         var hash: UInt64 = 0xCBF2_9CE4_8422_2325
+        // Legacy seed salt is a protocol constant; renaming the game must not change shared daily boards.
         for byte in "叠叠消\(day)".utf8 {
             hash ^= UInt64(byte)
             hash = hash &* 0x0000_0100_0000_01B3

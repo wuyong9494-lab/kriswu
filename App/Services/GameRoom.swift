@@ -2,7 +2,7 @@
 @preconcurrency import MultipeerConnectivity
 import UIKit
 
-/// 小游戏的种类：联机时用来分开（叠叠消的房间不会和五子棋的连到一起）
+/// 小游戏的种类：联机时用来分开（星了个星的房间不会和五子棋的连到一起）
 enum GameKind: String, Codable, Sendable {
     case tiles, gomoku, arena
 
@@ -17,7 +17,7 @@ enum GameKind: String, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .tiles: return "叠叠消"
+        case .tiles: return "星了个星"
         case .gomoku: return "五子棋"
         case .arena: return "勇者乱斗"
         }

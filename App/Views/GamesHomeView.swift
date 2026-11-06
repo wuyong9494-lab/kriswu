@@ -31,7 +31,7 @@ struct GamesHomeView: View {
                 .foregroundStyle(.primary)
                 .accessibilityIdentifier("arena.enter")
                 NavigationLink { TileGameHomeView() } label: {
-                    row("叠叠消", "三张一样的凑一起消掉；今日挑战、挑战码、和同事比谁先消完", "square.stack.3d.up.fill", 6)
+                    row("星了个星", "三消储能、移动叠层；主线航程、每日星约与策略试炼", "square.stack.3d.up.fill", 6)
                 }
                 NavigationLink { GomokuHomeView() } label: {
                     row("五子棋", "和电脑下、两个人一台手机下、面对面、远程，或者轮流下（不用同时在线）", "circle.grid.3x3.fill", 0)

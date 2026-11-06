@@ -1,0 +1,123 @@
+name: Star Tiles native validation
+
+# Deliberately independent of signing, promotion and TestFlight workflows.
+# The selected branch is compiled and tested; no Apple credentials are used.
+on:
+  push:
+    branches: ['codex/star-journey-native-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: star-tiles-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode 26 or newer
+        shell: bash -eo pipefail {0}
+        run: |
+          XCODE=$(python3 - <<'PY'
+          import glob, re
+          paths = []
+          for path in glob.glob('/Applications/Xcode_*.app'):
+              match = re.search(r'Xcode_(\d+)(?:\.(\d+))?', path)
+              if match and int(match[1]) >= 26 and 'beta' not in path.lower():
+                  paths.append(((int(match[1]), int(match[2] or 0)), path))
+          if not paths:
+              raise SystemExit('Xcode 26 or newer is required')
+          print(max(paths)[1])
+          PY
+          )
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version | tee xcode-version.log
+
+      - name: Core rules and archive regression
+        shell: bash -eo pipefail {0}
+        run: swift test 2>&1 | tee star-core-tests.log
+
+      - name: Generate the existing app project
+        shell: bash -eo pipefail {0}
+        run: |
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+
+      - name: Select and boot iPhone 17 Pro Max
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
+          candidates = [(runtime, device) for runtime, rows in devices.items() if 'iOS' in runtime
+                        for device in rows if device['name'] == 'iPhone 17 Pro Max']
+          if not candidates:
+              raise SystemExit('Required iPhone 17 Pro Max simulator is unavailable')
+          runtime, device = sorted(candidates, key=lambda item: item[0])[-1]
+          with open('star-test-device.json', 'w') as file:
+              json.dump({'runtime': runtime, 'name': device['name'], 'udid': device['udid']}, file, indent=2)
+          if device['state'] != 'Booted':
+              subprocess.run(['xcrun', 'simctl', 'boot', device['udid']], check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=180)
+          PY
+
+      - name: Native visuals, store recovery and legacy compatibility
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:SiteTests/TileVisualTests -only-testing:SiteTests/StarRailVisualTests \
+            -only-testing:SiteTests/StarJourneyVisualTests \
+            -derivedDataPath star-validation-build -resultBundlePath star-visual.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee star-visual-tests.log
+          grep -q 'StarRailVisualTests.*testTrialSaveRestoresSeparatelyAndPreservesCampaignAndBestReplay.*passed' star-visual-tests.log
+          grep -q 'StarRailVisualTests.*testBrandedHomeAndContractBoardsRenderAtLargeTextAndCompactWidth.*passed' star-visual-tests.log
+          grep -q 'StarRailVisualTests.*testExpeditionPersistenceCosmeticUnlockAndCorruptJournalIsolation.*passed' star-visual-tests.log
+          grep -q 'StarRailVisualTests.*testExpeditionBranchReplayAndCosmeticsRenderAcrossPhoneSizes.*passed' star-visual-tests.log
+          grep -q 'StarJourneyVisualTests.*testJourneySaveRestoresEveryChapterRewardAndKeepsOtherModes.*passed' star-visual-tests.log
+          grep -q 'StarJourneyVisualTests.*testJourneyGateCoreObjectivesAndRewardRenderAtPhoneSizes.*passed' star-visual-tests.log
+          grep -q 'StarJourneyVisualTests.*testAudioEngineLoadsCuesStopsInBackgroundAndResumes.*passed' star-visual-tests.log
+
+      - name: Actual campaign, contract and classic interactions
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:ArenaFlowTests/TileFlowTests -only-testing:ArenaFlowTests/StarRailFlowTests \
+            -only-testing:ArenaFlowTests/StarTrialFlowTests -only-testing:ArenaFlowTests/StarExpeditionFlowTests \
+            -only-testing:ArenaFlowTests/StarJourneyFlowTests \
+            -derivedDataPath star-validation-build -resultBundlePath star-flow.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee star-flow-tests.log
+          grep -q 'StarTrialFlowTests.*testBrandPrimaryEntryAndAccessibleListPicking.*passed' star-flow-tests.log
+          grep -q 'StarTrialFlowTests.*testContractSurvivesRelaunchCompletesAndRetryKeepsRules.*passed' star-flow-tests.log
+          grep -q 'StarRailFlowTests.*testPreviewUndoBackgroundAndRealWinUnlockNextStage.*passed' star-flow-tests.log
+          grep -q 'TileFlowTests.*testJourneyStartsPicksUndoesAndReturnsHome.*passed' star-flow-tests.log
+          grep -q 'StarExpeditionFlowTests.*testBothBranchPreviewsReplayRestoreAndResume.*passed' star-flow-tests.log
+          grep -q 'StarExpeditionFlowTests.*testActualFarRouteWinKeepsBestReplayAndLightsFirstConstellationStar.*passed' star-flow-tests.log
+          grep -q 'StarJourneyFlowTests.*testThreeChapterJourneyRestoresRouteAndCollectsRewardThroughRealActions.*passed' star-flow-tests.log
+
+      - name: Preserve native acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: star-tiles-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            xcode-version.log
+            star-core-tests.log
+            star-test-device.json
+            star-visual-tests.log
+            star-flow-tests.log
+            star-visual.xcresult
+            star-flow.xcresult
+          if-no-files-found: warn

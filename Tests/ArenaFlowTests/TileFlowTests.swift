@@ -14,9 +14,18 @@ final class TileFlowTests: XCTestCase {
         app.launchArguments = ["-demo", "-screen", "tiles"]
         XCUIDevice.shared.orientation = .portrait
         app.launch()
+        let library = app.buttons["tiles.modes"]
+        XCTAssertTrue(library.waitForExistence(timeout:15))
+        for _ in 0..<6 where !library.isHittable { app.swipeUp() }
+        library.tap()
         let start = app.buttons["tiles.continue"]
         XCTAssertTrue(start.waitForExistence(timeout: 30))
-        XCTAssertFalse(app.buttons["tiles.stage.12"].isEnabled)
+        let locked = app.buttons["tiles.stage.12"]
+        for _ in 0..<6 where !locked.exists { app.swipeUp() }
+        XCTAssertTrue(locked.exists)
+        XCTAssertFalse(locked.isEnabled)
+        for _ in 0..<6 where !start.isHittable { app.swipeDown() }
+        XCTAssertTrue(start.isHittable)
         start.tap()
         let close = app.buttons["tiles.close"]
         XCTAssertTrue(close.waitForExistence(timeout: 15))

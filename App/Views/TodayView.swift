@@ -378,7 +378,7 @@ private struct MonthStatCard: View {
     }
 }
 
-/// 小游戏入口：勇者乱斗一个大按钮（直接进横屏大厅），下面叠叠消、五子棋
+/// 小游戏入口：勇者乱斗一个大按钮（直接进横屏大厅），下面星了个星、五子棋
 private struct GamesCard: View {
     @State private var showingArena = false
     @ObservedObject private var growth = ArenaProgressStore.shared
@@ -419,7 +419,7 @@ private struct GamesCard: View {
             }
             .buttonStyle(PressableStyle())
             HStack(spacing: DS.Space.s) {
-                NavigationLink { TileGameHomeView() } label: { small("叠叠消", "square.stack.3d.up.fill", 6) }
+                NavigationLink { TileGameHomeView() } label: { small("星了个星", "square.stack.3d.up.fill", 6) }
                 NavigationLink { GomokuHomeView() } label: { small("五子棋", "circle.grid.3x3.fill", 0) }
             }
         }
