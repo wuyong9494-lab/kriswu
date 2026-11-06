@@ -2,7 +2,7 @@ name: Arena resource runtime validation
 
 on:
   push:
-    branches: [codex/arena-quality-sample, codex/arena-fidelity-20261105]
+    branches: [codex/arena-quality-sample, codex/arena-fidelity-20261105, codex/arena-interface-next]
     paths:
       - 'App/**'
       - 'project.yml'

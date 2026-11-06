@@ -16,6 +16,7 @@ struct ArenaHomeView: View {
     @ObservedObject private var records = ArenaRecords.shared
     @ObservedObject private var growth = ArenaProgressStore.shared
     @ObservedObject private var resourcePack = ArenaResourcePackStore.shared
+    @ObservedObject private var sourceLocalization = ArenaImportedLocalization.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
     @State private var mapSelectionError: String?
     @State private var selectedMapID = UserDefaults.standard.string(forKey: "arena.map")
@@ -209,6 +210,7 @@ struct ArenaHomeView: View {
         .onChange(of: resourcePack.combatHeroID) { _ in reconcileMapSelection() }
         .onChange(of: resourcePack.contentRevision) { _ in reconcileMapSelection() }
         .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
+        .task(id: resourcePack.contentRevision) { await sourceLocalization.load(store: resourcePack) }
         .fullScreenCover(item: $sheet, onDismiss: {
             if let entry = pendingBenchmark {
                 pendingBenchmark = nil
@@ -289,10 +291,10 @@ struct ArenaHomeView: View {
                     } else { ArenaLobbyIcon(item.asset).foregroundStyle(item.tint) }
                 }.frame(width: 35, height: 31).rotationEffect(.degrees(-5))
                     .shadow(color: .black.opacity(0.8), radius: 0, x: 1, y: 2)
-                Text(title).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
+                Text(sourceLocalization.menuTitle(title)).font(.system(size: 13, weight: .black, design: .rounded)).arenaOutline(1)
             }.foregroundStyle(.white).frame(width: 67, height: compact ? 44 : 49)
         }.buttonStyle(ArenaLobbyRailStyle())
-            .accessibilityLabel(title)
+            .accessibilityLabel(sourceLocalization.menuTitle(title))
             .accessibilityIdentifier(title == "英雄" ? "arena.openHeroes" : "arena.menu.\(title)")
     }
 
