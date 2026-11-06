@@ -266,6 +266,7 @@ def wait_for_source(request):
     sources = {
         ("417", 40895530917, "4de40f69e7d0eb2cb9ff03c5b0b8f4a6aee3b3b0"): "codex/arena-audio-performance",
         ("425", 40908539488, "5b298adf9e4a4adb3e2755daf2491f87b14ff93a"): "codex/arena-reference-fidelity",
+        ("539", 42143819665, "917ff02624c8faeaebb435b19d97238652c44288"): "codex/arena-fidelity-20261105",
     }
     identity = (request["build_number"], request["source_run_id"], request["source_sha"])
     assert identity in sources, "Wait not authorized for this exact source"

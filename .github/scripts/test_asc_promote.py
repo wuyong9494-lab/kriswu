@@ -72,6 +72,30 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaises(AssertionError): promotion.wait_for_source(request)
         with self.assertRaises(AssertionError): promotion.wait_for_source(dict(request, build_number="418"))
 
+
+    def test_539_wait_keeps_all_acceptance_gates_and_exact_identity(self):
+        request = dict(self.request, build_number="539", source_run_id=42143819665,
+                       source_sha="917ff02624c8faeaebb435b19d97238652c44288", wait_for_source=True)
+        head = {"object": {"sha": request["source_sha"]}}
+        run = dict(self.run, head_sha=request["source_sha"], run_number=539)
+        pending = dict(run, status="in_progress", conclusion=None)
+        with patch.object(promotion, "github", side_effect=[head, pending, head, run, {"jobs": self.jobs}]), \
+             patch.object(promotion.time, "sleep") as pause:
+            promotion.wait_for_source(request)
+            pause.assert_called_once_with(30)
+        for conclusion in ("failure", "skipped", "cancelled"):
+            jobs = copy.deepcopy(self.jobs)
+            jobs[2]["conclusion"] = conclusion
+            with patch.object(promotion, "github", side_effect=[head, run, {"jobs": jobs}]):
+                with self.assertRaises(AssertionError):
+                    promotion.wait_for_source(request)
+        with patch.object(promotion, "github", return_value={"object": {"sha": "b" * 40}}):
+            with self.assertRaises(AssertionError):
+                promotion.wait_for_source(request)
+        for key, value in (("build_number", "540"), ("source_run_id", 1), ("source_sha", "b" * 40)):
+            with self.assertRaises(AssertionError):
+                promotion.wait_for_source(dict(request, **{key:value}))
+
     def test_existing_build_is_found_without_uploading(self):
         build = {"id": "existing", "relationships": {"preReleaseVersion": {"data": {"id": "v"}}}}
         response = {"data": [build], "included": [{"type": "preReleaseVersions", "id": "v",
