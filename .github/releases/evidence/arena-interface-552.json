@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "build": "1.2 (552)",
+  "sourceSHA": "b6fd8363c2b529f6a651d531c3b9c1b02784b5b9",
+  "sourceRunID": 42159502326,
+  "sourceTree": "19da1edf61d94eaefcc677caa48f31fe62e26583",
+  "sourceAccepted": true,
+  "privatePack": {
+    "id": "brawl69-interface-timeline-v2",
+    "bytes": 879474319,
+    "sha256": "85a65aa3abcc9d6a0be6d3123302031774201027c6b99fdcf71c9228b6120a91",
+    "files": 5493,
+    "preservedFiles": 5469,
+    "addedFiles": 24,
+    "heroes": 118,
+    "maps": 370,
+    "music": 70,
+    "themes": 8
+  },
+  "visibleChanges": {
+    "sourceControls": [
+      "shop",
+      "heroes",
+      "friends",
+      "quests",
+      "battle"
+    ],
+    "animatedBackgrounds": 8,
+    "correctSourceRect": [
+      -512,
+      -288,
+      512,
+      288
+    ],
+    "sourceAtlasAlpha": "premultiplied converted once to straight PNG"
+  },
+  "validation": {
+    "resourceRunID": 42159502461,
+    "nativeSyntheticTests": {
+      "executed": 51,
+      "failed": 0,
+      "skipped": 0
+    },
+    "pythonSourceAndGateTests": {
+      "executed": 26,
+      "failed": 0
+    },
+    "promotionRegressionTests": {
+      "executed": 80,
+      "failed": 0
+    },
+    "linuxCore": {
+      "executed": 662,
+      "skipped": 16,
+      "failed": 0
+    },
+    "actualPackManifestAndAllPayloadHashes": "passed",
+    "originalPayloadPreservation": "all 5469 payloads retained unchanged",
+    "privateMetal": "pending",
+    "intermediateBudget": {
+      "frames": 19200,
+      "framesPerTheme": 2400,
+      "requestedDensity": 2,
+      "maximumPixels": 16000000,
+      "peakPixelsByTheme": {
+        "basic": 0,
+        "cosmo": 6470400,
+        "windstock2": 2317056,
+        "windstock": 2317824,
+        "backtoschool": 597248,
+        "brawloween26": 5999104,
+        "vince": 4432896,
+        "duolingo": 8205824
+      },
+      "allWithinBudget": true
+    },
+    "arenaLook": {
+      "executed": 48,
+      "failed": 0,
+      "sceneCapture": "passed"
+    }
+  },
+  "testflight": {
+    "uploaded": false,
+    "appleProcessing": "pending"
+  },
+  "remainingAcceptance": [
+    "Full original-client 1:1 visual/gameplay equivalence",
+    "105 remaining source hero rule profiles",
+    "349 unsupported source location configurations",
+    "Full HUD layout, state and remaining controls",
+    "Chinese font parity and Brawloween original-client color comparison",
+    "Actual iPhone 17 Pro Max multiplayer and sustained 60 fps"
+  ]
+}
