@@ -1543,6 +1543,49 @@ final class ArenaSourceCombatTests: XCTestCase {
         }
     }
 
+    func testEveryPlayablePrivateHeroKeepsItsIdentityAcrossModesSnapshotsAndAdventure() throws {
+        guard let path = ProcessInfo.processInfo.environment["ARENA_SOURCE_COMBAT_CATALOG"] else {
+            throw XCTSkip("Optional private source catalog is not bundled in repository tests")
+        }
+        struct Catalog: Decodable { let heroes: [ArenaSourceHero] }
+        let catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: URL(fileURLWithPath:path)))
+        let playable = catalog.heroes.map(ArenaSourceCompatibility.adapt).filter(\.canPlay)
+        XCTAssertTrue(playable.contains { $0.id == "DeadMariachi" }, "The reported Poco selection must be covered")
+        var modeChecks = 0, adventureChecks = 0
+        for source in playable {
+            for mode in ArenaGame.Mode.allCases {
+                let entrants = mode.seatTeams.enumerated().map { seat, team in
+                    ArenaGame.Entrant(name:"seat\(seat)",brawler:.ranger,isBot:seat != 0,team:team,
+                                      sourceHero:seat == 0 ? source : nil)
+                }
+                var host = try ArenaGame(sourceMode:mode,entrants:entrants,seed:123)
+                var client = try ArenaGame(sourceMode:mode,entrants:entrants,seed:123)
+                XCTAssertEqual(host.fighters[0].maxHealth,source.health,source.id)
+                host.step(1/60.0,inputs:[0:ArenaInput(attack:V2(1,0))])
+                for _ in 0..<20 { host.step(1/60.0,inputs:[:]) }
+                let snapshot = try XCTUnwrap(ArenaSnapshot(data:host.snapshot(events:[]).encoded()))
+                client.apply(snapshot)
+                XCTAssertEqual(host.fighters[0].sourceHero?.id,source.id,mode.rawValue)
+                XCTAssertEqual(client.fighters[0].sourceHero,host.fighters[0].sourceHero,source.id)
+                XCTAssertEqual(client.fighters[0].maxHealth,host.fighters[0].maxHealth,source.id)
+                XCTAssertEqual(client.projectiles,host.projectiles,source.id)
+                XCTAssertEqual(client.sourceAreas,host.sourceAreas,source.id)
+                modeChecks += 1
+            }
+            let me = ArenaGame.Entrant(name:"player",brawler:.ranger,isBot:false,team:0,sourceHero:source)
+            for level in ArenaStory.levels {
+                let entrants = level.entrants(me:me)
+                try ArenaGame.validateSourceRoster(entrants,mode:level.mode)
+                let game = ArenaGame(mode:level.mode,entrants:entrants,seed:123,
+                                     map:ArenaMap.named(level.map),bossLevel:level.bossLevel)
+                XCTAssertEqual(game.fighters[0].sourceHero?.id,source.id,level.id)
+                XCTAssertEqual(game.fighters[0].maxHealth,source.health,level.id)
+                adventureChecks += 1
+            }
+        }
+        print("Private playable roster coverage: \(playable.count) heroes, \(modeChecks) mode/snapshot cases, \(adventureChecks) adventure entries")
+    }
+
     func testImportedDuelHeroHandsOffToSelectedProjectPartner() throws {
         let entrants = [ArenaGame.Entrant(name: "source", brawler: .ranger, isBot: false, team: 0,
                                          lineup: [.ranger, .mage, .knight], sourceHero: hero()),
