@@ -217,7 +217,9 @@ struct ArenaLobbyComposition {
     var topGap: CGFloat { narrow ? 4 : 7 }
     var profileWidth: CGFloat { narrow ? 100 : 130 }
     var counterWidth: CGFloat { narrow ? 60 : 76 }
-    var topRequiredWidth: CGFloat { profileWidth + 44 + 3 * counterWidth + 3 * 44 + 8 * topGap }
+    var coinWidth: CGFloat { narrow ? 76 : 100 }
+    var roadWidth: CGFloat { narrow ? 82 : 100 }
+    var topRequiredWidth: CGFloat { profileWidth + roadWidth + coinWidth + 2 * counterWidth + 3 * 44 + 8 * topGap }
     var heroBadgeCenter: CGPoint { CGPoint(x: size.width * 0.51, y: max(78, size.height * 0.21)) }
     var heroBadgeFrame: CGRect { CGRect(x: heroBadgeCenter.x - 120, y: heroBadgeCenter.y - 22, width: 240, height: 44) }
     var heroTop: CGFloat { heroBadgeFrame.maxY + 4 }
@@ -265,13 +267,14 @@ struct ArenaLobbyComposition {
     var controlFrames: [String: CGRect] {
         var frames: [String: CGRect] = [:]
         frames["profile"] = CGRect(x: 12, y: 6, width: profileWidth, height: 44)
-        frames["road"] = CGRect(x: 12 + profileWidth + topGap, y: 6, width: 44, height: 44)
+        frames["road"] = CGRect(x: 12 + profileWidth + topGap, y: 6, width: roadWidth, height: 44)
         var x = size.width - 12
         for name in ["exit", "settings", "sound"] {
             x -= 44; frames[name] = CGRect(x: x, y: 6, width: 44, height: 44); x -= topGap
         }
         for name in ["tier", "points", "coins"] {
-            x -= counterWidth; frames[name] = CGRect(x: x, y: 6, width: counterWidth, height: 44); x -= topGap
+            let width = name == "coins" ? coinWidth : counterWidth
+            x -= width; frames[name] = CGRect(x: x, y: 6, width: width, height: 44); x -= topGap
         }
         frames["heroStatus"] = heroBadgeFrame
         frames["season"] = CGRect(x: compact ? 86 : 14, y: 58.5, width: 68, height: 47)

@@ -19,6 +19,7 @@ final class ArenaImportedSourceControls: ObservableObject {
             let state: ArenaLobbyInterfaceState
         }
         let image: UIImage
+        let title: String
         /// Normalized within image, before SwiftUI's aspect-fit placement.
         let hitRegion: CGRect
         let liveSource: LiveSource?
@@ -26,11 +27,23 @@ final class ArenaImportedSourceControls: ObservableObject {
     static let shared = ArenaImportedSourceControls()
     @Published private(set) var controls: [Role: Control] = [:]
     private var generation = UUID()
+    private var loadedRevision: UUID?
 
-    func load(store: ArenaResourcePackStore = .shared, localization: ArenaImportedLocalization = .shared) async {
+    func load(store: ArenaResourcePackStore = .shared, localization: ArenaImportedLocalization = .shared,
+              values: ArenaLobbySourceControl.Values) async {
         let token = UUID()
         generation = token
-        controls = [:]
+        if loadedRevision != store.contentRevision || !store.enabled {
+            controls = [:]
+            loadedRevision = store.contentRevision
+        }
+        let titles = Dictionary(uniqueKeysWithValues: Role.allCases.map {
+            ($0, values.title(for: $0) ?? localization.menuTitle($0.title))
+        })
+        // A balance update redraws only changed counters. Keep the verified
+        // static controls and shop canvas in place throughout the async load.
+        let roles = Role.allCases.filter { controls[$0]?.title != titles[$0] }
+        guard !roles.isEmpty else { return }
         guard store.enabled, let pack = store.manifest,
               let scenePath = pack.interfaceSceneFile, let bindingsPath = pack.interfaceBindingsFile,
               let sceneFile = pack.files.first(where: { $0.path == scenePath && $0.kind == .data }),
@@ -79,14 +92,14 @@ final class ArenaImportedSourceControls: ObservableObject {
             } onCancel: { atlasWorker.cancel() }
             guard generation == token, !Task.isCancelled, store.enabled,
                   let device = MTLCreateSystemDefaultDevice() else { return }
-            var result: [Role: Control] = [:]
-            for role in Role.allCases {
+            var result = controls
+            for role in roles {
                 try Task.checkCancellation()
                 guard generation == token, store.enabled else { return }
                 // A missing or incompatible control keeps its own native button;
                 // it must not prevent other independently verified controls loading.
                 result[role] = try? Self.render(document: document, atlases: atlases,
-                    device: device, role: role, title: localization.menuTitle(role.title),
+                    device: device, role: role, title: titles[role]!,
                     sceneURL: sceneURL, sceneSHA256: sceneFile.sha256)
                 await Task.yield()
             }
@@ -112,6 +125,7 @@ final class ArenaImportedSourceControls: ObservableObject {
                   intent: .defaultIntent) else { throw CocoaError(.fileReadCorruptFile) }
         let r = source.hitRegion, b = source.bounds
         return Control(image: UIImage(cgImage: cg, scale: scale, orientation: .up),
+                       title: title,
                        hitRegion: CGRect(x: (r.minX-b.minX)/b.width, y: (r.minY-b.minY)/b.height,
                                          width: r.width/b.width, height: r.height/b.height),
                        liveSource: role == .shop ? .init(sceneURL: sceneURL, sceneSHA256: sceneSHA256,

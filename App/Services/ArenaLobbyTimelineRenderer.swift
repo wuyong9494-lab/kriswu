@@ -382,10 +382,11 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
         guard width > 0, height > 0, width <= 8192, height <= 8192, width*height <= 4_000_000 else {
             throw ArenaLobbyTimelineError.invalid("Source text exceeds its raster budget")
         }
-        guard let font = ArenaImportedFonts.font(named: style.fontName, size: CGFloat(style.size))
+        guard let sourceFont = ArenaImportedFonts.font(named: style.fontName, size: CGFloat(style.size))
             ?? (style.deviceFont ? UIFont(name: style.fontName, size: CGFloat(style.size)) : nil) else {
             throw ArenaLobbyTimelineError.invalid("Source font is unavailable: \(style.fontName)")
         }
+        let font = Self.fittedSourceTextFont(sourceFont, value: text.value, style: style)
         func color(_ packed: UInt32) -> UIColor {
             UIColor(red: CGFloat(packed & 255)/255, green: CGFloat((packed >> 8) & 255)/255,
                     blue: CGFloat((packed >> 16) & 255)/255, alpha: CGFloat((packed >> 24) & 255)/255)
@@ -439,6 +440,17 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
         }
         textTextures[key] = texture; textPixels += width*height
         return texture
+    }
+
+    /// Keep exact saved balances readable inside the authored text field.
+    /// Multiline source text retains its own wrapping behavior.
+    static func fittedSourceTextFont(_ font: UIFont, value: String, style: ArenaLobbySourceText) -> UIFont {
+        guard !style.multiline else { return font }
+        let width = CGFloat(style.rect[2] - style.rect[0])
+        let measured = (value as NSString).size(withAttributes: [.font: font]).width
+        let outline = style.outlined ? font.pointSize * 0.06 : 0
+        guard measured + outline > width else { return font }
+        return font.withSize(font.pointSize * width / (measured + outline))
     }
 
     private func encode(_ draws: [PreparedDraw], texture: MTLTexture, viewport: Scene.Rect,

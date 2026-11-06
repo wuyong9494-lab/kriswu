@@ -77,7 +77,7 @@ def prepare(source, request, output):
                 assert hashlib.sha256(data).hexdigest() == entry['sha256']
                 destination=staging/path;destination.parent.mkdir(parents=True,exist_ok=True);destination.write_bytes(data)
             staging.replace(output)
-    return {'required':True,'themes':8,'controls':8,'files':len(selected)}
+    return {'required':True,'themes':8,'controls':10,'files':len(selected)}
 
 
 if __name__=='__main__':

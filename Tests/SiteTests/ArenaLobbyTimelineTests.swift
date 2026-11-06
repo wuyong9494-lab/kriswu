@@ -1,4 +1,5 @@
 import Metal
+import UIKit
 import XCTest
 #if ARENA_RESOURCE_RUNTIME_TESTS
 @testable import ArenaResourceRuntime
@@ -249,6 +250,52 @@ final class ArenaLobbyTimelineTests: XCTestCase {
             }
             let renderer = try makeRenderer(control.scene)
             XCTAssertTrue(try renderer.snapshot(time: 0, width: 12, height: 12).contains { $0 != 0 })
+        }
+    }
+
+    func testNestedCounterRetainsAncestorTransformsAndRefreshesExactSavedBalance() throws {
+        let text: [String:Any] = ["id":3,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"999999","left":0,"top":0,"right":2,"bottom":2,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        var counter = clip(2,children:[(1,0),(3,0)],frames:[[[0,-1,0],[1,-1,-1]]])
+        counter["children"] = [["objectID":1,"name":"icon","blendMode":0],
+                               ["objectID":3,"name":"value_txt","blendMode":0]]
+        var container = clip(4,children:[(2,0),(2,0)],frames:[[[0,0,-1],[1,-1,-1]]])
+        container["children"] = [["objectID":2,"name":"coins","blendMode":0],
+                                 ["objectID":2,"name":"gems","blendMode":0]]
+        var root = clip(10,children:[(4,0),(3,0)],frames:[[[0,0,-1],[1,-1,-1]]])
+        root["children"] = [["objectID":4,"name":"resources","blendMode":0],
+                            ["objectID":3,"name":"debug_value","blendMode":0]]
+        let base = try fixture(objects:[shape(1,extent:2),text,counter,container,root],
+                               matrices:[[1,0,0,1,0.5,0.5]],interfaceState:.init())
+        for value in [120,70,0,1250,2_000_000_000] {
+            let control = try ArenaLobbySourceControl(document:base.document,export:"fixture",
+                instance:"resources/coins",title:String(value),idleLabel:nil,hiddenChildren:[],titlePath:"value_txt")
+            let frame = try control.scene.frame(time:30)
+            XCTAssertEqual(control.hitRegion.values,[1,1,3,3])
+            XCTAssertEqual(frame.operations.count,2)
+            XCTAssertEqual(frame.operations.compactMap { if case .text(let t) = $0 { return t.value }; return nil },[String(value)])
+            XCTAssertEqual(control.scene.interfaceState?.hidden,["resources/gems","debug_value"])
+        }
+        for path in ["resources/missing","resources//coins","resources/coins/", "resources"] {
+            XCTAssertThrowsError(try ArenaLobbySourceControl(document:base.document,export:"fixture",instance:path,
+                title:"70",idleLabel:nil,hiddenChildren:[],titlePath:"value_txt"))
+        }
+    }
+
+    func testLongCounterFitsWithoutChangingItsDigitsOrGrowingShortLabels() throws {
+        let fields: [String:Any] = ["fontName":"Arial","fontSize":22,"text":"","left":0,"top":0,
+            "right":69,"bottom":31,"fontColor":UInt32.max,"outlineColor":0,"styles":2,"align":18]
+        let decoded = try JSONDecoder().decode([String:ArenaLobbyTimelineJSONValue].self,
+                                               from:JSONSerialization.data(withJSONObject:fields))
+        let style = try ArenaLobbySourceText(decoded)
+        let font = try XCTUnwrap(UIFont(name:"Arial",size:22))
+        for value in ["0","70","1250","2000000000"] {
+            let fitted = ArenaLobbyTimelineRenderer.fittedSourceTextFont(font,value:value,style:style)
+            let width = (value as NSString).size(withAttributes:[.font:fitted]).width
+            XCTAssertLessThanOrEqual(width,69)
+            XCTAssertLessThanOrEqual(fitted.pointSize,22)
+            if value.count <= 4 { XCTAssertEqual(fitted.pointSize,22) }
         }
     }
 

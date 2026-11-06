@@ -18,6 +18,7 @@ struct ArenaHomeView: View {
     @ObservedObject private var resourcePack = ArenaResourcePackStore.shared
     @ObservedObject private var sourceLocalization = ArenaImportedLocalization.shared
     @ObservedObject private var sourceControls = ArenaImportedSourceControls.shared
+    @State private var localizationRevision: UUID?
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
     @State private var mapSelectionError: String?
     @State private var selectedMapID = UserDefaults.standard.string(forKey: "arena.map")
@@ -65,6 +66,11 @@ struct ArenaHomeView: View {
     }
 
     private var progress: ArenaProgress { growth.progress }
+
+    private var sourceControlRequest: ArenaLobbySourceControl.Request {
+        .init(revision: resourcePack.contentRevision,
+              values: .init(coins: progress.coins, trophies: progress.totalTrophies))
+    }
 
     /// 选的角色还没解锁（比如换了一台手机）就用第一个
     private var chosen: Brawler {
@@ -206,9 +212,14 @@ struct ArenaHomeView: View {
         .onChange(of: resourcePack.combatHeroID) { _ in reconcileMapSelection() }
         .onChange(of: resourcePack.contentRevision) { _ in reconcileMapSelection() }
         .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
-        .task(id: resourcePack.contentRevision) {
-            await sourceLocalization.load(store: resourcePack)
-            await sourceControls.load(store: resourcePack, localization: sourceLocalization)
+        .task(id: sourceControlRequest) {
+            let request = sourceControlRequest
+            if localizationRevision != request.revision {
+                await sourceLocalization.load(store: resourcePack)
+                guard !Task.isCancelled else { return }
+                localizationRevision = request.revision
+            }
+            await sourceControls.load(store: resourcePack, localization: sourceLocalization, values: request.values)
         }
         .fullScreenCover(item: $sheet, onDismiss: {
             if let entry = pendingBenchmark {
@@ -323,19 +334,13 @@ struct ArenaHomeView: View {
                         .frame(width: 29, height: 29).padding(3).background(.purple)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(name).font(.system(size: 12, weight: .black)).lineLimit(1)
-                        HStack(spacing: 3) {
-                            Image(systemName: "trophy.fill").foregroundStyle(.yellow)
-                            Text("\(progress.totalTrophies)").foregroundStyle(.yellow)
-                        }.font(.system(size: 15, weight: .black, design: .rounded))
+                        Text("英雄收藏").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
                     }
                 }.padding(.horizontal, 6).frame(width: composition.profileWidth, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
-            Button { sheet = .road } label: {
-                Image(systemName: "crown.fill").font(.system(size: 24, weight: .black))
-                    .foregroundStyle(.yellow).frame(width: 44, height: 44)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow)).accessibilityLabel("奖杯之路")
+            trophyRoadButton(width: composition.roadWidth)
             Spacer(minLength: 0)
-            lobbyCounter("\(progress.coins)", asset: "ArenaIconCoins", tint: .yellow, label: "金币，打开商店", width: composition.counterWidth) { sheet = .shop }
+            coinCounter(width: composition.coinWidth)
             lobbyCounter("\(progress.season.points)", asset: "ArenaIconSeason", tint: .green, label: "赛季经验", width: composition.counterWidth) { sheet = .season }
             lobbyCounter("\(progress.season.tier)", asset: "ArenaIconRank", tint: .purple, label: "通行证等级", width: composition.counterWidth) { sheet = .season }
             Button { muted.toggle(); ArenaSound.shared.muteChanged(battle: false) } label: {
@@ -349,6 +354,46 @@ struct ArenaHomeView: View {
                 Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("离开勇者乱斗")
         }.foregroundStyle(.white).frame(height: 44)
+    }
+
+    @ViewBuilder
+    private func trophyRoadButton(width: CGFloat) -> some View {
+        if resourcePack.enabled, let control = sourceControls.controls[.trophies],
+           control.title == String(progress.totalTrophies) {
+            Button { sheet = .road } label: {
+                ArenaSourceControlVisual(control: control, live: false)
+                    .frame(width: width, height: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityLabel("奖杯之路，\(progress.totalTrophies) 奖杯")
+                .accessibilityIdentifier("arena.trophyRoad")
+        } else {
+            Button { sheet = .road } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "trophy.fill").foregroundStyle(.yellow)
+                    Text(compactCounter(String(progress.totalTrophies)))
+                        .font(.system(size: 14, weight: .black)).lineLimit(1).minimumScaleFactor(0.5)
+                }.frame(width: width, height: 44)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
+                .accessibilityLabel("奖杯之路，\(progress.totalTrophies) 奖杯")
+                .accessibilityIdentifier("arena.trophyRoad")
+        }
+    }
+
+    @ViewBuilder
+    private func coinCounter(width: CGFloat) -> some View {
+        if resourcePack.enabled, let control = sourceControls.controls[.coins],
+           control.title == String(progress.coins) {
+            Button { sheet = .shop } label: {
+                ArenaSourceControlVisual(control: control, live: false)
+                    .frame(width: width, height: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityLabel("金币，打开商店，\(progress.coins)")
+                .accessibilityIdentifier("arena.coins")
+        } else {
+            lobbyCounter(String(progress.coins), asset: "ArenaIconCoins", tint: .yellow,
+                         label: "金币，打开商店", width: width) { sheet = .shop }
+                .accessibilityIdentifier("arena.coins")
+        }
     }
 
     @ViewBuilder
