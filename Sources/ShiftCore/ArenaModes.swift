@@ -32,6 +32,10 @@ extension ArenaGame {
         let heroes = fighters.filter { $0.team == 0 }
         let level = fixed ?? (heroes.isEmpty ? 1 : Int((Double(heroes.map(\.level).reduce(0, +)) / Double(heroes.count)).rounded()))
         for i in fighters.indices where fighters[i].team == 1 {
+            fighters[i].sourceHero = nil
+            fighters[i].sourceWeapon = nil
+            fighters[i].sourceUltimate = nil
+            fighters[i].sourceCharge = nil
             fighters[i].isBoss = true
             fighters[i].brawler = .guardian
             fighters[i].name = "骷髅王"

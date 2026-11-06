@@ -14,6 +14,7 @@ struct ArenaStart: Codable, Equatable {
         var lineup: [Brawler]?
         /// 带的小道具、星徽、超级充能（老版本没有：按等级带第一个）
         var loadout: ArenaLoadout?
+        var sourceHeroID: String? = nil
     }
 
     var round: Int
@@ -22,14 +23,16 @@ struct ArenaStart: Codable, Equatable {
     var seats: [Seat]
     /// 地图（ArenaMap.id）；老版本房主发来的没有，用这个玩法的第一张
     var map: String?
+    var sourceCatalogSHA256: String? = nil
 
-    var entrants: [ArenaGame.Entrant] {
+    @MainActor var entrants: [ArenaGame.Entrant] {
         seats.map {
             let level = $0.level ?? 1
             // 带的东西按等级再查一遍（每台手机都这么查，摆出来的一样）
             let loadout = ($0.loadout ?? ArenaLoadout.basic($0.brawler, level: level)).allowed($0.brawler, level: level)
             return ArenaGame.Entrant(name: $0.name, brawler: $0.brawler, isBot: $0.member == nil, team: $0.team, level: level,
-                                     lineup: $0.lineup ?? [], loadout: loadout)
+                                     lineup: $0.lineup ?? [], loadout: loadout,
+                                     sourceHero: $0.sourceHeroID.flatMap { ArenaImportedCombatAssets.shared.hero(id: $0) })
         }
     }
 }
@@ -268,6 +271,8 @@ final class ArenaController: ObservableObject {
     private var sequence = 0
     private var history: [(sequence: Int, move: V2, dt: Double)] = []
     private var lastSnapshot = -1.0
+    private var snapshotFragments = ArenaSnapshotFragments()
+    private var snapshotSequence = 0
 
     /// 自己和电脑打（冒险的一关也是）
     convenience init(setup: Setup, seed: UInt64 = UInt64.random(in: 0..<UInt64.max)) {
@@ -318,6 +323,7 @@ final class ArenaController: ObservableObject {
                 if sourceRoster.isEmpty { configurationError = "原版英雄的技能资源暂时不可用。" }
                 else {
                     for index in entrants.indices.dropFirst() {
+                        if setup.mode == .boss && entrants[index].team == 1 { continue }
                         // The engine supports mixed source/classic fighters.
                         // Only source seats use the imported skill and model;
                         // other seats keep their established project hero.
@@ -372,9 +378,6 @@ final class ArenaController: ObservableObject {
         self.init(role: .solo, game: built, me: 0, room: nil, seed: seed)
         self.configurationError = configurationError
         sourceEnvironmentThemeID = setup.importedMap?.environmentThemeID
-        ArenaSound.shared.prepareSourceAudio(heroIDs: Set(built.fighters.compactMap { $0.sourceHero?.id }))
-        ArenaImportedSkillAssets.shared.prepare(heroes: built.fighters.compactMap(\.sourceHero),
-                                               unitsPerSourcePoint: ArenaSourceAreaArt.unitsPerSourcePoint)
         qualitySample = setup.qualitySample
         threeHeroSample = setup.threeHeroSample
         benchmark = setup.benchmark
@@ -424,10 +427,16 @@ final class ArenaController: ObservableObject {
         self.game = game
         self.game.measuresCPU = ArenaDiagnostics.shared.enabled
         self.me = me
+        startingSourceHero = game.fighters[me].sourceHero
+        ArenaSound.shared.prepareSourceAudio(heroIDs: Set(game.fighters.compactMap { $0.sourceHero?.id }))
+        ArenaImportedSkillAssets.shared.prepare(heroes: game.fighters.compactMap(\.sourceHero),
+                                               unitsPerSourcePoint: ArenaSourceAreaArt.unitsPerSourcePoint)
         self.room = room
         bots = role == .client ? [] : game.fighters.filter(\.isBot).map { ArenaBot(id: $0.id, seed: seed) }
         refreshHUD()
     }
+
+    private var startingSourceHero: ArenaSourceHero?
 
     var mine: Fighter { game.fighters[me] }
 
@@ -657,7 +666,15 @@ final class ArenaController: ObservableObject {
             packet.append(game.snapshot(events: netEvents, acks: remoteAcks).encoded())
         }
         netEvents.removeAll()
-        room?.sendDirect(packet, delivery: game.result == nil ? .unreliable : .reliable)
+        if game.fighters.contains(where: { $0.sourceHero != nil }) || startingSourceHero != nil || !game.sourceAreas.isEmpty || game.projectiles.contains(where: { $0.sourceLaunch != nil }) {
+            snapshotSequence += 1
+            for fragment in ArenaSnapshotFragments.split(Data(packet.dropFirst()), sequence: snapshotSequence) {
+                var part = Data([Packet.sourceSnapshot]); part.append(fragment)
+                room?.sendDirect(part, delivery: game.result == nil ? .unreliable : .reliable)
+            }
+        } else {
+            room?.sendDirect(packet, delivery: game.result == nil ? .unreliable : .reliable)
+        }
     }
 
     /// 其他人：发摇杆、自己先走、子弹和别人先接着飞
@@ -705,6 +722,7 @@ final class ArenaController: ObservableObject {
         static let input: UInt8 = 1
         static let snapshot: UInt8 = 2
         static let fire: UInt8 = 3
+        static let sourceSnapshot: UInt8 = 4
     }
 
     private func receivedDirect(_ data: Data, from: String) {
@@ -725,7 +743,13 @@ final class ArenaController: ObservableObject {
             if hasSpecial == 1 { remoteSpecials[seat] = special }
             if reader.u8() == 1 { remoteGadgets.insert(seat) }
             if let emote = reader.u8(), emote < 255 { remoteEmotes[seat] = emote }
+        case (.client, Packet.sourceSnapshot):
+            guard from == room?.hostID, let assembled = snapshotFragments.receive(Data(body)),
+                  let snapshot = ArenaSnapshot(data: assembled), snapshot.time >= lastSnapshot else { return }
+            lastSnapshot = snapshot.time
+            ArenaDiagnostics.shared.measure(.networkApply) { apply(snapshot) }
         case (.client, Packet.snapshot):
+            guard from == room?.hostID else { return }
             guard let snapshot = ArenaSnapshot(data: Data(body)), snapshot.time >= lastSnapshot else { return }
             lastSnapshot = snapshot.time
             ArenaDiagnostics.shared.measure(.networkApply) { apply(snapshot) }
@@ -843,12 +867,14 @@ final class ArenaController: ObservableObject {
         if hud.result != nil, !recorded, recordsProgress {
             recorded = true
             let store = ArenaProgressStore.shared
-            if let hero = mine.sourceHero {
+            if let story {
+                storyReward = store.finish(story, stars: story.stars(in: game, me: me))
+                if let hero = startingSourceHero {
+                    ArenaSourceProgressStore.shared.record(id: hero.id, won: won(hud.result), kills: mine.kills, damage: mine.damageDealt)
+                }
+            } else if let hero = startingSourceHero {
                 ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
                 ArenaSourceProgressStore.shared.record(id: hero.id, won: won(hud.result), kills: mine.kills, damage: mine.damageDealt)
-            } else if let story {
-                // 冒险不加减奖杯：按星给金币
-                storyReward = store.finish(story, stars: story.stars(in: game, me: me))
             } else if ranked {
                 // 排位不加减奖杯：金币照给，排位分在赛季里算
                 rankedCoins = store.recordRanked(outcome(hud.result))
@@ -856,7 +882,7 @@ final class ArenaController: ObservableObject {
                 ArenaRecords.shared.add(mode: game.mode, won: won(hud.result))
                 reward = store.record(outcome(hud.result), brawler: mine.brawler)
             }
-            if mine.sourceHero == nil {
+            if startingSourceHero == nil {
                 let stats = ArenaMatchStats(mode: game.mode, brawler: mine.brawler, won: won(hud.result), kills: mine.kills,
                                         damage: mine.damageDealt, gadgets: gadgetsUsed, supers: supersUsed, ranked: ranked)
                 seasonGain = store.recordSeason(stats, draw: hud.result == .draw)
@@ -1106,6 +1132,8 @@ final class ArenaLobby: ObservableObject {
         /// 带的小道具、星徽、超级充能（老版本收到不认识：按等级带第一个）
         case loadout(ArenaLoadout)
         case arenaRevision(Int)
+        case sourcePick(String?)
+        case sourceCatalog(String?)
     }
 
     struct Playing: Identifiable {
@@ -1123,14 +1151,52 @@ final class ArenaLobby: ObservableObject {
     private var round = 0
     /// Revision 2 advertised expanded maps but its game initializer discarded
     /// those IDs. Only peers with the fixed initializer may share that pool.
-    /// Revision 4 additionally supports Twin Gates in all five central-objective modes.
-    private static let mapRevision = 4
+    /// Revision 4 supports Twin Gates; revision 5 adds imported hero identities
+    /// and v6 source snapshots. Imported rosters require matching revisions/catalogs.
+    private static let mapRevision = 5
+    @Published private(set) var mySourceHero: ArenaSourceHero?
+    @Published private(set) var sourcePicks: [String: String] = [:]
+    @Published private(set) var sourceCatalogs: [String: String] = [:]
+    private var sourceSelectionsReceived: Set<String> = []
+    var sourceHeroes: [ArenaSourceHero] { ArenaImportedCombatAssets.shared.playable }
+    private var catalogID: String? {
+        let pack = ArenaResourcePackStore.shared
+        guard pack.enabled, let manifest = pack.manifest, let path = manifest.combatFile else { return nil }
+        return manifest.files.first { $0.path == path }?.sha256
+    }
+    func sourceHero(of member: String) -> ArenaSourceHero? {
+        if member == room.me.id { return mySourceHero }
+        return sourcePicks[member].flatMap { ArenaImportedCombatAssets.shared.hero(id: $0) }
+    }
+    func chooseSource(_ hero: ArenaSourceHero) {
+        guard hero.canPlay else { return }
+        mySourceHero = hero
+        membersChanged()
+    }
+    var compatibilityIssue: String? {
+        let peers = room.members.filter { $0.id != room.me.id }
+        if peers.contains(where: { arenaRevisions[$0.id] == Self.mapRevision && !sourceSelectionsReceived.contains($0.id) }) {
+            return "正在同步队友选择的英雄。"
+        }
+        guard mySourceHero != nil || peers.contains(where: { sourcePicks[$0.id] != nil }) else { return nil }
+        if peers.contains(where: { arenaRevisions[$0.id] != Self.mapRevision || !sourceSelectionsReceived.contains($0.id) }) {
+            return "正在确认房间版本；所有队友需使用支持原版英雄联机的新版。"
+        }
+        if peers.contains(where: { sourcePicks[$0.id] != nil && sourceHero(of: $0.id)?.canPlay != true }) {
+            return "队友选择的英雄资源不可用，请检查资源包。"
+        }
+        if catalogID == nil || peers.contains(where: { sourceCatalogs[$0.id] != catalogID }) {
+            return "队友的英雄资源包不一致，请启用同一版本资源包。"
+        }
+        return nil
+    }
     private var arenaRevisions: [String: Int] = [:]
 
-    init(room: GameRoom, mode: ArenaGame.Mode, brawler: Brawler) {
+    init(room: GameRoom, mode: ArenaGame.Mode, brawler: Brawler, sourceHero: ArenaSourceHero? = nil) {
         self.room = room
         self.mode = mode
         myPick = brawler
+        mySourceHero = sourceHero
         room.onPayload = { [weak self] data, from in self?.received(data, from: from) }
         room.onMembersChanged = { [weak self] in self?.membersChanged() }
     }
@@ -1142,6 +1208,8 @@ final class ArenaLobby: ObservableObject {
         send(.level(myLevel))
         send(.loadout(myLoadout))
         send(.arenaRevision(Self.mapRevision))
+        send(.sourceCatalog(catalogID))
+        send(.sourcePick(mySourceHero?.id))
         if room.isHost { send(.mode(mode)) }
         playing?.controller.membersChanged()
     }
@@ -1153,6 +1221,8 @@ final class ArenaLobby: ObservableObject {
 
     func choose(_ brawler: Brawler) {
         myPick = brawler
+        mySourceHero = nil
+        send(.sourcePick(nil))
         picks[room.me.id] = brawler
         send(.pick(brawler))
         send(.level(myLevel))
@@ -1165,21 +1235,22 @@ final class ArenaLobby: ObservableObject {
     }
 
     /// 自己带的
-    var myLoadout: ArenaLoadout { ArenaProgressStore.shared.progress.loadout(for: myPick) }
+    var myLoadout: ArenaLoadout { mySourceHero == nil ? ArenaProgressStore.shared.progress.loadout(for: myPick) : ArenaLoadout() }
 
     /// 谁带的什么（没收到的按等级带第一个）
     func loadout(of member: String) -> ArenaLoadout {
+        if sourceHero(of: member) != nil { return ArenaLoadout() }
         if member == room.me.id { return myLoadout }
         let brawler = pick(of: member) ?? .knight
         return loadouts[member] ?? ArenaLoadout.basic(brawler, level: level(of: member))
     }
 
     /// 自己选的角色几级
-    var myLevel: Int { ArenaProgressStore.shared.progress.level(myPick) }
+    var myLevel: Int { mySourceHero == nil ? ArenaProgressStore.shared.progress.level(myPick) : 1 }
 
     /// 谁的角色几级
     func level(of member: String) -> Int {
-        member == room.me.id ? myLevel : (levels[member] ?? 1)
+        sourceHero(of: member) != nil ? 1 : (member == room.me.id ? myLevel : (levels[member] ?? 1))
     }
 
     func choose(_ newMode: ArenaGame.Mode) {
@@ -1190,12 +1261,12 @@ final class ArenaLobby: ObservableObject {
 
     /// 房主开局
     func start() {
-        guard room.isHost, fits else { return }
+        guard room.isHost, fits, compatibilityIssue == nil else { return }
         round += 1
         let supportsExpanded = room.members.allSatisfy { $0.id == room.me.id || arenaRevisions[$0.id] == Self.mapRevision }
         let maps = supportsExpanded ? ArenaMap.playPool(for: mode) : ArenaMap.pool(for: mode)
         let start = ArenaStart(round: round, mode: mode, seed: UInt64.random(in: 0..<UInt64.max), seats: seats(),
-                               map: maps.randomElement()?.id)
+                               map: maps.randomElement()?.id, sourceCatalogSHA256: catalogID)
         send(.start(start))
         playing = Playing(controller: ArenaController(start: start, room: room))
     }
@@ -1230,7 +1301,8 @@ final class ArenaLobby: ObservableObject {
             let seat = order[k]
             let pick = pick(of: member.id) ?? .knight
             seated[seat] = ArenaStart.Seat(member: member.id, name: member.name, brawler: pick, team: teams[seat], level: level(of: member.id),
-                                           lineup: mode == .duel ? [pick] : nil, loadout: loadout(of: member.id))
+                                           lineup: mode == .duel ? [pick] : nil, loadout: loadout(of: member.id),
+                                           sourceHeroID: sourceHero(of: member.id)?.id)
         }
         var seats: [ArenaStart.Seat] = []
         for (seat, team) in teams.enumerated() {
@@ -1254,10 +1326,19 @@ final class ArenaLobby: ObservableObject {
     private func received(_ data: Data, from: String) {
         guard let message = try? JSONDecoder().decode(Message.self, from: data) else { return }
         switch message {
+        case .sourcePick(let id):
+            sourcePicks[from] = id
+            sourceSelectionsReceived.insert(from)
+        case .sourceCatalog(let id):
+            sourceCatalogs[from] = id
         case .arenaRevision(let revision):
             let first = arenaRevisions[from] == nil
             arenaRevisions[from] = revision
-            if first { send(.arenaRevision(Self.mapRevision)) }
+            if first {
+                send(.arenaRevision(Self.mapRevision))
+                send(.sourceCatalog(catalogID))
+                send(.sourcePick(mySourceHero?.id))
+            }
         case .pick(let brawler):
             picks[from] = brawler
         case .level(let level):
@@ -1267,7 +1348,9 @@ final class ArenaLobby: ObservableObject {
         case .mode(let newMode):
             if from == room.hostID { mode = newMode }
         case .start(let start):
-            guard from == room.hostID else { return }
+            guard from == room.hostID, compatibilityIssue == nil,
+                  !start.seats.contains(where: { $0.sourceHeroID != nil }) || (catalogID != nil && start.sourceCatalogSHA256 == catalogID),
+                  start.seats.allSatisfy({ $0.sourceHeroID == nil || ArenaImportedCombatAssets.shared.hero(id: $0.sourceHeroID!)?.canPlay == true }) else { return }
             round = start.round
             playing = Playing(controller: ArenaController(start: start, room: room))
         }

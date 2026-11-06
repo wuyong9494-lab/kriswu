@@ -9,6 +9,9 @@ struct ArenaStoryView: View {
     let brawler: Brawler
     let partners: [Brawler]
     let name: String
+    var sourceHero: ArenaSourceHero? = nil
+    private var heroName: String { sourceHero?.name ?? brawler.name }
+    private var heroLevel: Int { sourceHero == nil ? progress.level(brawler) : 1 }
     /// 截图用：一打开就放第一关开打前的对话
     var showIntro = false
     @ObservedObject private var growth = ArenaProgressStore.shared
@@ -100,8 +103,8 @@ struct ArenaStoryView: View {
             .frame(height: 38)
             .background(.black.opacity(0.3), in: Capsule())
             HStack(spacing: 6) {
-                BrawlerBadge(brawler: brawler, size: 28)
-                Text("\(brawler.name) \(progress.level(brawler)) 级")
+                if sourceHero == nil { BrawlerBadge(brawler: brawler, size: 28) }
+                Text("\(heroName) \(heroLevel) 级")
             }
             .font(.system(size: 14, weight: .black, design: .rounded))
             .foregroundStyle(.white)
@@ -296,7 +299,7 @@ struct ArenaStoryView: View {
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
                 HStack(spacing: DS.Space.s) {
-                    Text("上场：\(brawler.name) \(progress.level(brawler)) 级")
+                    Text("上场：\(heroName) \(heroLevel) 级")
                         .font(.system(size: 13, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white.opacity(0.85))
                     Spacer()
@@ -340,8 +343,9 @@ struct ArenaStoryView: View {
         current = level
         lastBefore = growth.lastStory
         playing = ArenaHomeView.ArenaEntry(setup: ArenaController.Setup(
-            mode: level.mode, brawler: brawler, name: name, level: progress.level(brawler),
-            lineup: [brawler] + partners, loadout: progress.loadout(for: brawler), story: level))
+            mode: level.mode, brawler: brawler, name: name, level: heroLevel,
+            lineup: [brawler] + partners, loadout: sourceHero == nil ? progress.loadout(for: brawler) : ArenaLoadout(),
+            story: level, sourceHero: sourceHero))
     }
 
     /// 一局关掉了：这一关赢了就放打赢后的对话

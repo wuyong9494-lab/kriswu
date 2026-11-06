@@ -1095,6 +1095,13 @@ public struct ArenaGame: Sendable {
             if fighters[i].lineup.indices.contains(fighters[i].lineupIndex) {
                 fighters[i].brawler = fighters[i].lineup[fighters[i].lineupIndex]
             }
+            // The imported hero occupies the first slot; the chosen partners
+            // retain their own identity and skills when they enter.
+            fighters[i].sourceHero = nil
+            fighters[i].sourceWeapon = nil
+            fighters[i].sourceUltimate = nil
+            fighters[i].sourceCharge = nil
+            fighters[i].sourceLongDashChargeStart = nil
             fighters[i].superCharge = 0
             fighters[i].hyperCharge = 0
             Self.equip(&fighters[i], ArenaLoadout.basic(fighters[i].brawler, level: fighters[i].level))

@@ -141,10 +141,10 @@ struct ArenaHomeView: View {
                 }.position(composition.leftCenter)
                 VStack(spacing: composition.railGap) {
                     quietMenu("好友", symbol: "person.2.fill", compact: compact) { sheet = .friends }
-                    quietMenu("联机", symbol: "shield.fill", compact: compact) { withClassicHero { sheet = .together } }
-                    quietMenu("组队", symbol: "person.3.fill", compact: compact) { withClassicHero { sheet = .party } }
+                    quietMenu("联机", symbol: "shield.fill", compact: compact) { withPlayableHero { sheet = .together } }
+                    quietMenu("组队", symbol: "person.3.fill", compact: compact) { withPlayableHero { sheet = .party } }
                 }.position(composition.socialCenter)
-                Button { withClassicHero { adventure = true } } label: {
+                Button { withPlayableHero { adventure = true } } label: {
                     HStack(spacing: 5) {
                         ArenaLobbyIcon("ArenaIconAdventure").frame(width: 35, height: 35)
                         Text("冒险乐园").font(.system(size: 15, weight: .black))
@@ -163,7 +163,7 @@ struct ArenaHomeView: View {
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
                         .accessibilityLabel("选择英雄和皮肤")
                 }.position(composition.equipmentCenter)
-                Button { withClassicHero { sheet = .party } } label: {
+                Button { withPlayableHero { sheet = .party } } label: {
                     Image(systemName: "plus").font(.system(size: 28, weight: .black))
                         .frame(width: 44, height: 44)
                 }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
@@ -217,12 +217,12 @@ struct ArenaHomeView: View {
             }
             guard let room = pendingRoom else { return }
             pendingRoom = nil
-            lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: chosen))
+            lobby = LobbyEntry(lobby: ArenaLobby(room: room, mode: mode, brawler: chosen, sourceHero: sourceHero))
         }) { item in
             sheetContent(item)
         }
         .fullScreenCover(isPresented: $adventure, onDismiss: { ArenaSound.shared.enterLobby() }) {
-            ArenaStoryView(brawler: chosen, partners: duelPartners, name: name)
+            ArenaStoryView(brawler: chosen, partners: duelPartners, name: name, sourceHero: sourceHero)
         }
         .fullScreenCover(item: $playing, onDismiss: { ArenaSound.shared.enterLobby() }) { entry in
             ArenaPlayView(setup: entry.setup)
@@ -411,7 +411,7 @@ struct ArenaHomeView: View {
                     }
                 }
             VStack(spacing: 3) {
-                Text(sourceHero != nil ? "原版英雄 · 本地对战" : threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
+                Text(sourceHero != nil ? "原版英雄 · 普通对战" : threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
                     .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
                 Button { start() } label: {
                     Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
@@ -826,9 +826,9 @@ struct ArenaHomeView: View {
         UserDefaults.standard.set(mode.rawValue, forKey: "arena.mode")
         UserDefaults.standard.set(selectedMapID, forKey: "arena.map")
     }
-    private func withClassicHero(_ action: () -> Void) {
-        guard sourceHero == nil else {
-            mapSelectionError = "原版英雄目前可参加本地普通对战；此入口请先选择项目英雄。"
+    private func withPlayableHero(_ action: () -> Void) {
+        guard sourceHero?.canPlay != false else {
+            mapSelectionError = "此英雄的技能资源尚未完整适配，请选择已可上场的英雄。"
             return
         }
         action()
@@ -981,7 +981,8 @@ struct ArenaHomeView: View {
             ArenaSampleReview(onClose: { sheet = nil }, onPlay: {
                 pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
                     mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
-                    loadout: progress.loadout(for: chosen), mapID: ArenaMap.twinGates.id))
+                    loadout: sourceHero == nil ? progress.loadout(for: chosen) : ArenaLoadout(),
+                        mapID: ArenaMap.twinGates.id, sourceHero: sourceHero))
                 sheet = nil
             }, playHero: chosen)
         } else if item == .diagnostics {
@@ -1289,10 +1290,11 @@ struct ArenaHomeView: View {
                                             edge: ArenaGameButton.blue.edge, height: 76))
                 .accessibilityIdentifier("arena.sample.threeHeroes")
 
-                Button { withClassicHero {
+                Button { withPlayableHero {
                     pendingBenchmark = ArenaEntry(setup: ArenaController.Setup(
                         mode: .zone, brawler: chosen, name: name, level: progress.level(chosen),
-                        loadout: progress.loadout(for: chosen), mapID: ArenaMap.twinGates.id))
+                        loadout: sourceHero == nil ? progress.loadout(for: chosen) : ArenaLoadout(),
+                        mapID: ArenaMap.twinGates.id, sourceHero: sourceHero))
                     sheet = nil
                 } } label: {
                     VStack(alignment: .leading, spacing: 6) {

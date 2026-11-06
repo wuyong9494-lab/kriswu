@@ -1401,9 +1401,18 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertEqual(catalog.schemaVersion, 1)
         XCTAssertEqual(catalog.heroes.count, 118)
         XCTAssertEqual(Set(catalog.heroes.map(\.id)).count, 118)
+        // The shipped v69 archive predates these reviewed runtime adapters.
+        // Its immutable declaration may omit their derived capabilities; permit
+        // only these named additions, keeping unknown drift a test failure.
+        let legacyDerivedAdditions: [String: Set<String>] = [
+            "BlackHole": ["area_pull", "delayed_area_damage"],
+            "Rosa": ["self_shield"], "Sandstorm": ["smoke_ally_hide"],
+            "Driller": ["area_pull"]
+        ]
         for hero in catalog.heroes {
             let derived = (hero.weapon?.runtimeCapabilities ?? []).union(hero.ultimate?.runtimeCapabilities ?? [])
-            XCTAssertEqual(Set(hero.requiredCapabilities ?? []), derived, hero.id)
+            let declared = Set(hero.requiredCapabilities ?? [])
+            XCTAssertEqual(declared.union(legacyDerivedAdditions[hero.id] ?? []), derived, hero.id)
         }
         let coltHero = try XCTUnwrap(catalog.heroes.first { $0.id == "Gunslinger" })
         XCTAssertEqual(coltHero.health, 3100)
@@ -1514,6 +1523,84 @@ final class ArenaSourceCombatTests: XCTestCase {
 
     private func runWorld(_ game: inout ArenaGame, frames: Int) {
         for _ in 0..<frames { game.step(1 / 60.0, inputs: [:]) }
+    }
+
+    func testImportedHeroCanEnterEveryAdventureLevel() throws {
+        let source = hero()
+        let me = ArenaGame.Entrant(name: "player", brawler: .ranger, isBot: false, team: 0,
+                                  lineup: [.ranger, .knight, .mage], sourceHero: source)
+        for level in ArenaStory.levels {
+            let entrants = level.entrants(me: me)
+            try ArenaGame.validateSourceRoster(entrants, mode: level.mode)
+            let game = ArenaGame(mode: level.mode, entrants: entrants, seed: 123,
+                                 map: ArenaMap.named(level.map), bossLevel: level.bossLevel)
+            XCTAssertEqual(game.fighters[0].sourceHero, source, level.id)
+            XCTAssertEqual(game.fighters[0].maxHealth, source.health, level.id)
+            XCTAssertEqual(game.fighters[0].gadget, nil)
+            if level.mode == .boss {
+                XCTAssertTrue(game.fighters.contains { $0.isBoss && $0.sourceHero == nil })
+            }
+        }
+    }
+
+    func testImportedDuelHeroHandsOffToSelectedProjectPartner() throws {
+        let entrants = [ArenaGame.Entrant(name: "source", brawler: .ranger, isBot: false, team: 0,
+                                         lineup: [.ranger, .mage, .knight], sourceHero: hero()),
+                        ArenaGame.Entrant(name: "enemy", brawler: .knight, isBot: true, team: 1)]
+        var game = try ArenaGame(sourceMode: .duel, entrants: entrants, seed: 123)
+        game.hurt(0, 100_000, by: 1, charges: false)
+        runWorld(&game, frames: 600)
+        XCTAssertTrue(game.fighters[0].alive)
+        XCTAssertEqual(game.fighters[0].lineupIndex, 1)
+        XCTAssertEqual(game.fighters[0].brawler, .mage)
+        XCTAssertNil(game.fighters[0].sourceHero)
+        XCTAssertNil(game.fighters[0].sourceWeapon)
+        XCTAssertNil(game.fighters[0].sourceUltimate)
+        XCTAssertEqual(game.fighters[0].maxHealth, 4256, "The level-one project mage retains its existing player health bonus")
+        var client = try ArenaGame(sourceMode: .duel, entrants: entrants, seed: 123)
+        client.apply(try XCTUnwrap(ArenaSnapshot(data: game.snapshot(events: []).encoded())))
+        XCTAssertNil(client.fighters[0].sourceHero)
+        XCTAssertEqual(client.fighters[0].maxHealth, game.fighters[0].maxHealth)
+    }
+
+    func testSourceSnapshotPreservesProjectilesAreasAndPredictionSlows() throws {
+        var host = try world()
+        host.step(1 / 60.0, inputs: [0: ArenaInput(attack: V2(1, 0))])
+        runWorld(&host, frames: 4)
+        var definition = area()
+        definition.duration = 3
+        host.applySourceArea(ArenaSourceAreaSpawn(skillID: "network-area", role: .ultimate,
+            area: definition, position: V2(5, 4), damage: 100, chargeDamage: 100), owner: 0)
+        host.fighters[0].sourceSlows = [ArenaSourceSlow(id: "slow", remaining: 2,
+                                                      absoluteReduction: 0.5, fractionReduction: 0.1)]
+        let snapshot = host.snapshot(events: host.events)
+        XCTAssertFalse(snapshot.projectiles.isEmpty)
+        XCTAssertFalse(host.sourceAreas.isEmpty)
+        let decoded = try XCTUnwrap(ArenaSnapshot(data: snapshot.encoded()))
+        XCTAssertEqual(decoded.source, snapshot.source)
+        var client = try world()
+        client.apply(decoded)
+        XCTAssertEqual(client.projectiles, host.projectiles)
+        XCTAssertEqual(client.sourceAreas, host.sourceAreas)
+        XCTAssertEqual(client.moveSpeed(client.fighters[0]), host.moveSpeed(host.fighters[0]))
+        XCTAssertEqual(client.fighters[0].sourceHero, host.fighters[0].sourceHero)
+        XCTAssertNil(try XCTUnwrap(ArenaSnapshot(data: snapshot.encoded(version: 5))).source)
+        XCTAssertNil(ArenaSnapshot(data: snapshot.encoded().dropLast()))
+    }
+
+    func testSnapshotFragmentsReorderAndRejectPartialFrames() throws {
+        let first = Data((0..<5000).map { UInt8($0 % 251) })
+        let second = Data(repeating: 42, count: 2600)
+        let a = ArenaSnapshotFragments.split(first, sequence: 1)
+        let b = ArenaSnapshotFragments.split(second, sequence: 2)
+        XCTAssertTrue(a.allSatisfy { $0.count <= 808 })
+        var receiver = ArenaSnapshotFragments()
+        for part in a.dropLast() { XCTAssertNil(receiver.receive(part)) }
+        for part in b.reversed().dropLast() { XCTAssertNil(receiver.receive(part)) }
+        XCTAssertEqual(receiver.receive(b[0]), second)
+        XCTAssertEqual(receiver.receive(a.last!), first)
+        XCTAssertNil(receiver.receive(Data([1, 2, 3])))
+        XCTAssertTrue(ArenaSnapshotFragments.split(Data(), sequence: 3).isEmpty)
     }
 
     private func privateHero(_ id: String) throws -> ArenaSourceHero {

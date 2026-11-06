@@ -3,7 +3,7 @@ import XCTest
 
 final class ArenaMapSelectionTests: XCTestCase {
     func testSwitchingHeroKeepsProjectMapWithoutImportedMapsInThatMode() throws {
-        for mode in ArenaGame.Mode.allCases where mode != .duel && mode != .boss {
+        for mode in ArenaGame.Mode.allCases  {
             let map = try XCTUnwrap(ArenaMap.selectionPool(for: mode).last)
             let selected = ArenaMapSelection.resolve(mode: mode, mapID: map.id, importedHero: true,
                                                      importedMaps: [.stars: ["imported:fixture:one:stars"]])
@@ -32,7 +32,7 @@ final class ArenaMapSelectionTests: XCTestCase {
                                                 importedMaps: [:]).mapID, project.id)
     }
 
-    func testOnlyUnsupportedRosterModesChangeWhenSelectingImportedHero() {
+    func testAdventureRosterModesKeepSelectedMapForImportedHero() {
         for mode in [ArenaGame.Mode.duel, .boss] {
             let map = ArenaMap.selectionPool(for: mode)[0]
             let classic = ArenaMapSelection.resolve(mode: mode, mapID: map.id, importedHero: false,
@@ -41,8 +41,8 @@ final class ArenaMapSelectionTests: XCTestCase {
             XCTAssertEqual(classic.mapID, map.id)
             let source = ArenaMapSelection.resolve(mode: mode, mapID: map.id, importedHero: true,
                                                    importedMaps: [.stars: ["imported:fixture:one:stars"]])
-            XCTAssertEqual(source.mode, .stars)
-            XCTAssertEqual(source.mapID, "imported:fixture:one:stars")
+            XCTAssertEqual(source.mode, mode)
+            XCTAssertEqual(source.mapID, map.id)
         }
     }
 

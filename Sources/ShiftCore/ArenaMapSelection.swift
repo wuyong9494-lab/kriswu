@@ -7,7 +7,7 @@ public struct ArenaMapSelection: Equatable, Sendable {
     public let mapID: String?
 
     public static func supportsImportedHero(_ mode: ArenaGame.Mode) -> Bool {
-        mode != .duel && mode != .boss
+        true
     }
 
     public static func resolve(mode requestedMode: ArenaGame.Mode, mapID: String?,

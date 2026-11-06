@@ -41,6 +41,18 @@ public struct ArenaSnapshot: Equatable, Sendable {
         public var cubes = 0
     }
 
+    public struct SourceState: Codable, Equatable, Sendable {
+        public struct Actor: Codable, Equatable, Sendable {
+            var charge: ArenaSourceChargeMotion?
+            var slows: [ArenaSourceSlow]?
+            var longDashStart: Double?
+            var shieldMultiplier: Double?
+        }
+        var actors: [Actor]
+        var projectiles: [Projectile]
+        var areas: [ArenaSourceLiveArea]
+    }
+    public var source: SourceState? = nil
     public var time: Double
     public var fighters: [FighterState]
     public var projectiles: [Projectile]
@@ -71,6 +83,11 @@ extension ArenaGame {
     /// 现在的样子打成一帧（events：上一帧以来发生的事；acks：每个人的摇杆收到第几次了）
     public func snapshot(events: [Event], acks: [Int: Int] = [:]) -> ArenaSnapshot {
         ArenaSnapshot(
+            source: fighters.contains(where: { $0.sourceHero != nil || $0.sourceSlows?.isEmpty == false }) || !sourceAreas.isEmpty || projectiles.contains(where: { $0.sourceLaunch != nil }) ?
+                ArenaSnapshot.SourceState(actors: fighters.map {
+                    .init(charge: $0.sourceCharge, slows: $0.sourceSlows,
+                          longDashStart: $0.sourceLongDashChargeStart, shieldMultiplier: $0.sourceShieldDamageMultiplier)
+                }, projectiles: projectiles, areas: sourceAreas) : nil,
             time: time,
             fighters: fighters.map { f in
                 ArenaSnapshot.FighterState(pos: f.pos, facing: f.facing, moving: f.moving, health: f.health, ammo: f.ammo,
@@ -110,6 +127,11 @@ extension ArenaGame {
             fighters[i].dash = state.dashing ? Fighter.Dash(direction: state.moving.normalized, remaining: 1, hit: []) : nil
             fighters[i].shield = state.shield
             if let brawler = state.brawler, !fighters[i].isBoss { fighters[i].brawler = brawler }
+            if mode == .duel, state.lineupIndex > 0 {
+                fighters[i].sourceHero = nil
+                fighters[i].sourceWeapon = nil
+                fighters[i].sourceUltimate = nil
+            }
             fighters[i].lineupIndex = state.lineupIndex
             fighters[i].gadgetUses = state.gadgetUses
             fighters[i].gadgetCooldown = state.gadgetCooldown
@@ -131,7 +153,15 @@ extension ArenaGame {
         round = snapshot.round
         roundStart = snapshot.roundStart
         pause = snapshot.pause
-        projectiles = snapshot.projectiles
+        projectiles = snapshot.source?.projectiles ?? snapshot.projectiles
+        sourceAreas = snapshot.source?.areas ?? []
+        for i in fighters.indices {
+            let actor = snapshot.source.flatMap { $0.actors.indices.contains(i) ? $0.actors[i] : nil }
+            fighters[i].sourceCharge = actor?.charge
+            fighters[i].sourceSlows = actor?.slows
+            fighters[i].sourceLongDashChargeStart = actor?.longDashStart
+            fighters[i].sourceShieldDamageMultiplier = actor?.shieldMultiplier
+        }
         stars = snapshot.stars
         teamKills = snapshot.teamKills
         zoneProgress = snapshot.zoneProgress
@@ -215,7 +245,7 @@ extension ArenaGame.Event {
 extension ArenaSnapshot {
     /// 现在的包有几段：1 到事件为止（最早的版本），2 加上亡灵之地、骨塔、骨盾，3 加上后加的玩法，4 加上小道具、超级充能，
     /// 5 加上大乱斗的能量箱、能量块
-    public static let version = 5
+    public static let version = 6
 
     /// 压成字节：位置精确到 1/100 格，血量整数，其余按需要的精度。version：只写到第几段（测试老版本的包用）
     public func encoded(version: Int = ArenaSnapshot.version) -> Data {
@@ -413,6 +443,10 @@ extension ArenaSnapshot {
         }
         w.u8(fighters.count)
         fighters.forEach { w.u8($0.cubes) }
+        if version >= 6, let source, let data = try? JSONEncoder().encode(source) {
+            w.u32(data.count)
+            for byte in data { w.u8(Int(byte)) }
+        }
         return w.data
     }
 
@@ -601,7 +635,17 @@ extension ArenaSnapshot {
                 if fighters.indices.contains(k) { fighters[k].cubes = count }
             }
         }
-        self.init(time: time, fighters: fighters, projectiles: projectiles, stars: stars, teamKills: kills, zoneProgress: zone,
+        var source: SourceState?
+        if r.remaining > 0 {
+            guard let length = r.u32(), length > 0, length <= 2_097_152, length == r.remaining else { return nil }
+            var payload = Data()
+            payload.reserveCapacity(length)
+            for _ in 0..<length { guard let byte = r.u8() else { return nil }; payload.append(UInt8(byte)) }
+            guard let decoded = try? JSONDecoder().decode(SourceState.self, from: payload),
+                  decoded.actors.count == fighters.count else { return nil }
+            source = decoded
+        }
+        self.init(source: source, time: time, fighters: fighters, projectiles: projectiles, stars: stars, teamKills: kills, zoneProgress: zone,
                   countdown: countdown, safeRadius: safeRadius, result: result, events: events, zones: zones, turrets: turrets,
                   score: score, ball: ball, chests: chests, warnings: warnings, round: round, roundStart: roundStart, pause: pause,
                   boxes: boxes, cubes: cubes)
@@ -699,4 +743,41 @@ struct ByteReader {
 private extension Int8 {
     /// 按位当成无符号的一个字节
     var magnitudeAsUInt8: UInt8 { UInt8(bitPattern: self) }
+}
+
+/// Bound each source snapshot datagram and discard incomplete old frames. A lost
+/// fragment cannot combine with a later frame or partially update the game.
+public struct ArenaSnapshotFragments: Sendable {
+    private struct Frame: Sendable { var count: Int; var parts: [Int: Data] = [:] }
+    private var frames: [Int: Frame] = [:]
+    public init() {}
+    public static func split(_ data: Data, sequence: Int) -> [Data] {
+        let size = 800
+        let count = (data.count + size - 1) / size
+        guard count > 0, count <= 512 else { return [] }
+        return (0..<count).map { index in
+            var writer = ByteWriter()
+            writer.u32(sequence); writer.u16(index); writer.u16(count)
+            var packet = writer.data
+            packet.append(data.subdata(in: index * size..<min(data.count, (index + 1) * size)))
+            return packet
+        }
+    }
+    public mutating func receive(_ data: Data) -> Data? {
+        guard data.count > 8, data.count <= 808 else { return nil }
+        var reader = ByteReader(data)
+        guard let sequence = reader.u32(), let index = reader.u16(), let count = reader.u16(),
+              count > 0, count <= 512, index < count else { return nil }
+        if frames[sequence] == nil {
+            if frames.count >= 3, let oldest = frames.keys.min() { frames.removeValue(forKey: oldest) }
+            frames[sequence] = Frame(count: count)
+        }
+        guard frames[sequence]?.count == count else { frames.removeValue(forKey: sequence); return nil }
+        frames[sequence]?.parts[index] = Data(data.dropFirst(8))
+        guard let frame = frames[sequence], frame.parts.count == count else { return nil }
+        frames.removeValue(forKey: sequence)
+        var result = Data()
+        for i in 0..<count { guard let part = frame.parts[i] else { return nil }; result.append(part) }
+        return result
+    }
 }

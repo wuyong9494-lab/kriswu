@@ -264,29 +264,43 @@ struct ArenaRoomView: View {
 
     private var readyRoom: some View {
         VStack(alignment: .leading, spacing: 14) {
-            roomCard("选择角色 · \(lobby.myPick.name)", symbol: "person.crop.square.fill") {
+            roomCard("选择角色 · \(lobby.mySourceHero?.name ?? lobby.myPick.name)", symbol: "person.crop.square.fill") {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 10)], spacing: 10) {
                     ForEach(Brawler.allCases, id: \.self) { brawler in
                         Button { lobby.choose(brawler) } label: {
                             VStack(spacing: 4) {
-                                BrawlerBadge(brawler: brawler, size: 50, selected: lobby.myPick == brawler)
+                                BrawlerBadge(brawler: brawler, size: 50, selected: lobby.mySourceHero == nil && lobby.myPick == brawler)
                                 Text(brawler.name).font(.system(size: 13, weight: .bold, design: .rounded))
                             }
                             .frame(maxWidth: .infinity, minHeight: 78)
-                            .background(lobby.myPick == brawler ? Color.blue : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                            .background(lobby.mySourceHero == nil && lobby.myPick == brawler ? Color.blue : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityAddTraits(lobby.myPick == brawler ? .isSelected : [])
+                        .accessibilityAddTraits(lobby.mySourceHero == nil && lobby.myPick == brawler ? .isSelected : [])
                     }
                 }
             }
-            roomCard("技能装备", symbol: "bolt.fill") {
-                ArenaLoadoutSection(brawler: lobby.myPick, onChange: lobby.loadoutChanged, gameStyle: true)
+            if !lobby.sourceHeroes.isEmpty {
+                roomCard("原版英雄", symbol: "person.3.fill") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))]) {
+                        ForEach(lobby.sourceHeroes, id: \.id) { hero in
+                            Button(hero.name) { lobby.chooseSource(hero) }
+                                .padding(10)
+                                .background(lobby.mySourceHero?.id == hero.id ? Color.blue : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+            }
+            if lobby.mySourceHero == nil {
+                roomCard("技能装备", symbol: "bolt.fill") {
+                    ArenaLoadoutSection(brawler: lobby.myPick, onChange: lobby.loadoutChanged, gameStyle: true)
+                }
             }
             roomCard("房间成员 · \(room.members.count) 人", symbol: "person.3.fill") {
                 ForEach(room.members) { member in
                     HStack(spacing: 10) {
-                        if let pick = lobby.pick(of: member.id) { BrawlerBadge(brawler: pick, size: 38) }
+                        if let hero = lobby.sourceHero(of: member.id) { Text(hero.name).font(.caption.bold()) }
+                        else if let pick = lobby.pick(of: member.id) { BrawlerBadge(brawler: pick, size: 38) }
                         else { Image(systemName: "questionmark.square.fill").frame(width: 38) }
                         Text(member.id == room.me.id ? "\(member.name)（我）" : member.name)
                         Text("Lv. \(lobby.level(of: member.id))").foregroundStyle(.white.opacity(0.7))
@@ -317,10 +331,12 @@ struct ArenaRoomView: View {
                             .frame(maxWidth: .infinity, minHeight: 52)
                     }
                     .buttonStyle(ArenaTileButton(face: Color(red: 0.95, green: 0.66, blue: 0.1), edge: .orange))
-                    .disabled(!lobby.fits)
+                    .disabled(!lobby.fits || lobby.compatibilityIssue != nil)
                     .opacity(lobby.fits ? 1 : 0.45)
+                    if let issue = lobby.compatibilityIssue { Text(issue).foregroundStyle(.yellow) }
                     if !lobby.fits { Text("当前人数不符合玩法要求，请更换玩法或调整人数。 ").foregroundStyle(.yellow) }
                 } else {
+                    if let issue = lobby.compatibilityIssue { Text(issue).foregroundStyle(.yellow) }
                     loading("等待房主开打，开始后自动进入对局。")
                 }
                 Text(lobby.mode.rules).foregroundStyle(.white.opacity(0.75))
