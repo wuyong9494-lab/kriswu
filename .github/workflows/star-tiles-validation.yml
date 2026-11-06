@@ -43,6 +43,32 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version | tee xcode-version.log
 
+      - name: Prepare an isolated iPhone 17 Pro Max before compilation
+        timeout-minutes: 3
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 - <<'PY'
+          import json, re, subprocess
+          devices = json.loads(subprocess.check_output(
+              ['xcrun', 'simctl', 'list', 'devices', 'available', '-j'], timeout=60))['devices']
+          candidates = [(runtime, device) for runtime, rows in devices.items() if '.iOS-' in runtime
+                        for device in rows if device['name'] == 'iPhone 17 Pro Max' and device.get('isAvailable', True)]
+          if not candidates:
+              raise SystemExit('Required iPhone 17 Pro Max simulator is unavailable')
+          runtime, model = max(candidates, key=lambda item: tuple(map(int, re.findall(r'\d+', item[0]))))
+          device = subprocess.check_output(['xcrun', 'simctl', 'create', 'Star Journey Acceptance',
+                                            model['deviceTypeIdentifier'], runtime], text=True, timeout=60).strip()
+          with open('star-test-device.json', 'w') as file:
+              json.dump({'runtime': runtime, 'name': model['name'], 'udid': device}, file, indent=2)
+          # Cold LaunchServices migration exceeded the previous three-minute
+          # wait. Begin it during compilation; still require bootstatus and
+          # actual XCTest interaction success before accepting the build.
+          with open('star-simulator-boot.log', 'w') as log:
+              subprocess.Popen(['xcrun', 'simctl', 'boot', device], stdout=log, stderr=subprocess.STDOUT,
+                               start_new_session=True)
+          print('Prewarming isolated simulator:', device, runtime, flush=True)
+          PY
+
       - name: Core rules and archive regression
         shell: bash -eo pipefail {0}
         run: swift test 2>&1 | tee star-core-tests.log
@@ -55,21 +81,16 @@ jobs:
           xcodegen generate
 
       - name: Select and boot iPhone 17 Pro Max
+        timeout-minutes: 5
         shell: bash -eo pipefail {0}
         run: |
           python3 - <<'PY'
           import json, subprocess
-          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
-          candidates = [(runtime, device) for runtime, rows in devices.items() if 'iOS' in runtime
-                        for device in rows if device['name'] == 'iPhone 17 Pro Max']
-          if not candidates:
-              raise SystemExit('Required iPhone 17 Pro Max simulator is unavailable')
-          runtime, device = sorted(candidates, key=lambda item: item[0])[-1]
-          with open('star-test-device.json', 'w') as file:
-              json.dump({'runtime': runtime, 'name': device['name'], 'udid': device['udid']}, file, indent=2)
-          if device['state'] != 'Booted':
-              subprocess.run(['xcrun', 'simctl', 'boot', device['udid']], check=True)
+          device = json.load(open('star-test-device.json'))
+          assert device['name'] == 'iPhone 17 Pro Max'
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=180)
+          subprocess.run(['xcrun', 'simctl', 'io', device['udid'], 'screenshot', 'star-simulator-ready.png'],
+                         check=True, timeout=30)
           PY
 
       - name: Native visuals, store recovery and legacy compatibility
@@ -109,6 +130,16 @@ jobs:
           grep -q 'StarExpeditionFlowTests.*testActualFarRouteWinKeepsBestReplayAndLightsFirstConstellationStar.*passed' star-flow-tests.log
           grep -q 'StarJourneyFlowTests.*testThreeChapterJourneyRestoresRouteAndCollectsRewardThroughRealActions.*passed' star-flow-tests.log
 
+      - name: Export native screenshots for visual review
+        if: always()
+        shell: bash -eo pipefail {0}
+        run: |
+          for result in star-visual star-flow; do
+            if [ -d "$result.xcresult" ]; then
+              xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "star-screenshots/$result"
+            fi
+          done
+
       - name: Preserve native acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -118,6 +149,9 @@ jobs:
             xcode-version.log
             star-core-tests.log
             star-test-device.json
+            star-simulator-boot.log
+            star-simulator-ready.png
+            star-screenshots
             star-visual-tests.log
             star-flow-tests.log
             star-visual.xcresult
