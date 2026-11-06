@@ -1424,7 +1424,7 @@ struct ArenaHomeView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("双闸交汇 · 抢占据点", systemImage: "map.fill")
                             .font(.system(size: 18, weight: .black, design: .rounded))
-                        Text(sourceHero == nil ? "使用当前英雄 · 本地普通对战 · 正常结算奖励" : "选择项目英雄后参加本地普通对战")
+                        Text("使用当前英雄 · 本地普通对战 · 正常结算奖励")
                             .font(.system(size: 13, weight: .bold))
                         Text("中路抢点，两侧包抄；也可在常规地图选择中选用。")
                             .font(.system(size: 12, weight: .medium))
