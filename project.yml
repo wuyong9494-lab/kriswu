@@ -112,6 +112,7 @@ targets:
       - path: App/Services/ArenaFaceScene.swift
       - path: App/Services/ArenaColorGrade.swift
       - path: App/Services/ArenaLobbyTimelineScene.swift
+      - path: App/Services/ArenaLobbySourceControl.swift
       - path: App/Services/ArenaLobbyTimelineShaders.swift
       - path: App/Services/ArenaLobbyTimelineRenderer.swift
       - path: App/Services/ArenaImportedFonts.swift

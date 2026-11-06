@@ -17,6 +17,7 @@ struct ArenaHomeView: View {
     @ObservedObject private var growth = ArenaProgressStore.shared
     @ObservedObject private var resourcePack = ArenaResourcePackStore.shared
     @ObservedObject private var sourceLocalization = ArenaImportedLocalization.shared
+    @ObservedObject private var sourceControls = ArenaImportedSourceControls.shared
     @State private var mode = ArenaGame.Mode(rawValue: UserDefaults.standard.string(forKey: "arena.mode") ?? "") ?? .teamFight
     @State private var mapSelectionError: String?
     @State private var selectedMapID = UserDefaults.standard.string(forKey: "arena.map")
@@ -210,7 +211,10 @@ struct ArenaHomeView: View {
         .onChange(of: resourcePack.combatHeroID) { _ in reconcileMapSelection() }
         .onChange(of: resourcePack.contentRevision) { _ in reconcileMapSelection() }
         .task { await ArenaResourcePackStore.shared.loadBundledPackIfNeeded() }
-        .task(id: resourcePack.contentRevision) { await sourceLocalization.load(store: resourcePack) }
+        .task(id: resourcePack.contentRevision) {
+            await sourceLocalization.load(store: resourcePack)
+            await sourceControls.load(store: resourcePack, localization: sourceLocalization)
+        }
         .fullScreenCover(item: $sheet, onDismiss: {
             if let entry = pendingBenchmark {
                 pendingBenchmark = nil
@@ -280,7 +284,24 @@ struct ArenaHomeView: View {
         return tier > 0 && (1...max(tier, 1)).contains { !progress.season.claimed.contains($0) }
     }
 
+    @ViewBuilder
     private func quietMenu(_ title: String, symbol: String, compact: Bool = false, action: @escaping () -> Void) -> some View {
+        if resourcePack.enabled,
+           let role = ArenaLobbySourceControl.Role.allCases.first(where: { $0.title == title }),
+           let control = sourceControls.controls[role] {
+            Button(action: action) {
+                Image(uiImage: control.image).resizable().scaledToFit()
+                    .frame(width: 67, height: compact ? 44 : 49)
+                    .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+            }.buttonStyle(.plain)
+                .accessibilityLabel(sourceLocalization.menuTitle(title))
+                .accessibilityIdentifier(title == "英雄" ? "arena.openHeroes" : "arena.menu.\(title)")
+        } else {
+            nativeQuietMenu(title, symbol: symbol, compact: compact, action: action)
+        }
+    }
+
+    private func nativeQuietMenu(_ title: String, symbol: String, compact: Bool, action: @escaping () -> Void) -> some View {
         let item = ArenaLobbyEmblem.menu(symbol)
         return Button(action: action) {
             VStack(spacing: -2) {

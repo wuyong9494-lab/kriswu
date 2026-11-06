@@ -508,7 +508,8 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
         let pool = FramePool()
         let frame = try scene.frame(time: time)
         drawCalls = 0; renderPasses = 0
-        let prepared = try prepare(frame.operations, mask: nil, command: command, pool: pool, density: 1)
+        let density = max(Double(width)/scene.sourceRect.width, Double(height)/scene.sourceRect.height)
+        let prepared = try prepare(frame.operations, mask: nil, command: command, pool: pool, density: density)
         try encode(prepared, texture: output, viewport: scene.sourceRect, command: command)
         command.commit()
         command.waitUntilCompleted()
