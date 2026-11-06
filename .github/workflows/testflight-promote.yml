@@ -61,8 +61,9 @@ jobs:
   testflight:
     needs: verify
     if: needs.verify.outputs.upload_required == 'true'
-    # The same Metal-capable host used by resource validation also checks the actual private pack.
-    runs-on: macos-15
+    # Match native acceptance on the standard Apple Silicon image; keep the
+    # actual private Metal rendering gate before archive and upload.
+    runs-on: macos-26
     timeout-minutes: 55
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}
@@ -89,8 +90,8 @@ jobs:
           python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography
       - name: Select Xcode 26 or newer
         run: |
-          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
-          test -n "$XCODE"
+          XCODE=/Applications/Xcode_26.6.app
+          test -d "$XCODE"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Generate project with the verified source identity
