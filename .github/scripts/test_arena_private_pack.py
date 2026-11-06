@@ -431,7 +431,8 @@ class JourneySourceTests(unittest.TestCase):
             self.validate(run={**self.run, "run_number": self.run["run_number"] + 1})
 
     def testManifestCannotChangeBuildRunsResourcesOrClaimDeviceAcceptance(self):
-        for key, value in (("source_sha", "b" * 40), ("source_run_id", 1), ("build_number", "561"),
+        for key, value in (("source_sha", "b" * 40), ("source_run_id", 1),
+                           ("build_number", str(int(self.request["build_number"]) + 1)),
                            ("notes", "Everything passed"), ("private_resource_pack", None),
                            ("private_resource_pack", {**release.JOURNEY_PACK, "sha256": "0" * 64}),
                            ("private_resource_pack_transport", None),

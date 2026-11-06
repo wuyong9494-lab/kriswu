@@ -42,21 +42,23 @@ TILE_STEPS = ("模拟器里测试同步流程或计划识图", "叠叠消实际�
 # a queued, skipped or superseded check can never authorize an upload.
 JOURNEY_MODE = "star-journey-native-verified"
 JOURNEY_RELEASE = {
-    "build_number": "560",
-    "source_sha": "3badf962f3213589b3a1864e517b20562f486c63",
-    "source_run_id": 42215449813,
+    "build_number": "561",
+    "source_sha": "d8ec384075c1b478ce1c403a3b290b313870bf9f",
+    "source_run_id": 42218756775,
 }
 JOURNEY_BRANCH = "codex/plan-tiles-journey-20261106"
 JOURNEY_NATIVE_BRANCH = "codex/star-journey-native-20261106"
-JOURNEY_NATIVE_RUN = 42215439783
+JOURNEY_NATIVE_RUN = 42218745807
 JOURNEY_DEVICE_NOTE = "iPhone 17 Pro Max 真机体验与性能尚待验收。"
 JOURNEY_STEPS = (
     "Select Xcode 26 or newer",
+    "Prepare an isolated iPhone 17 Pro Max before compilation",
     "Core rules and archive regression",
     "Generate the existing app project",
     "Select and boot iPhone 17 Pro Max",
     "Native visuals, store recovery and legacy compatibility",
     "Actual campaign, contract and classic interactions",
+    "Export native screenshots for visual review",
     "Preserve native acceptance evidence",
 )
 JOURNEY_PACK = {
