@@ -16,9 +16,9 @@ concurrency:
 
 jobs:
   native:
-    # The arm64 pool failed to acquire a host after 15 minutes and the retry
-    # remained queued. Intel also includes Xcode 26 and iPhone 17 Pro Max.
-    runs-on: macos-15-intel
+    # The older arm64 pool could not acquire a host; Intel simulator startup
+    # also stalled compilation. Use the current standard Apple Silicon image.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -28,38 +28,17 @@ jobs:
       - name: Select Xcode 26 or newer
         shell: bash -eo pipefail {0}
         run: |
-          XCODE=$(python3 - <<'PY'
-          import glob, re
-          paths = []
-          for path in glob.glob('/Applications/Xcode_*.app'):
-              match = re.search(r'Xcode_(\d+)(?:\.(\d+))?', path)
-              if match and int(match[1]) >= 26 and 'beta' not in path.lower():
-                  paths.append(((int(match[1]), int(match[2] or 0)), path))
-          if not paths:
-              raise SystemExit('Xcode 26 or newer is required')
-          print(max(paths)[1])
-          PY
-          )
+          XCODE=/Applications/Xcode_26.6.app
+          test -d "$XCODE"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version | tee xcode-version.log
-
-      - name: Prepare an isolated iPhone 17 Pro Max before compilation
-        timeout-minutes: 3
-        shell: bash -eo pipefail {0}
-        run: |
-          python3 - <<'PY'
-          import subprocess, sys
-          with open('star-simulator-boot.log', 'w') as log:
-              subprocess.Popen([sys.executable, '-u', '.github/scripts/prepare_star_simulator.py'],
-                               stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-          print('Prewarming an isolated iPhone 17 Pro Max during core compilation', flush=True)
-          PY
+          uname -m | tee -a xcode-version.log
 
       - name: Core rules and archive regression
         shell: bash -eo pipefail {0}
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_prepare_star_simulator.py' -v
-          swift test 2>&1 | tee star-core-tests.log
+          swift test --jobs 2 2>&1 | tee star-core-tests.log
 
       - name: Generate the existing app project
         shell: bash -eo pipefail {0}
@@ -68,25 +47,26 @@ jobs:
           python3 .github/scripts/build_identity.py
           xcodegen generate
 
+      - name: Prepare an isolated iPhone 17 Pro Max before compilation
+        timeout-minutes: 10
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee star-simulator-boot.log
+
       - name: Select and boot iPhone 17 Pro Max
-        timeout-minutes: 7
+        timeout-minutes: 5
         shell: bash -eo pipefail {0}
         run: |
           python3 - <<'PY'
-          import json, subprocess, time
+          import json, subprocess
           from pathlib import Path
           status = Path('star-simulator-preparation.json')
-          deadline = time.monotonic() + 180
-          while not status.exists():
-              if time.monotonic() >= deadline:
-                  raise SystemExit('Simulator preparation did not finish; inspect star-simulator-boot.log')
-              time.sleep(2)
           prepared = json.loads(status.read_text())
           if prepared.get('prepared') is not True:
               raise SystemExit('Simulator preparation failed: ' + prepared.get('error', 'unknown error'))
           device = json.load(open('star-test-device.json'))
           assert device['name'] == 'iPhone 17 Pro Max' and device['udid'] == prepared['udid']
-          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=180)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=240)
           subprocess.run(['xcrun', 'simctl', 'io', device['udid'], 'screenshot', 'star-simulator-ready.png'],
                          check=True, timeout=30)
           PY
@@ -134,6 +114,7 @@ jobs:
         run: |
           for result in star-visual star-flow; do
             if [ -d "$result.xcresult" ]; then
+              mkdir -p "star-screenshots/$result"
               xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "star-screenshots/$result"
             fi
           done

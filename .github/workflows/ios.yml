@@ -32,9 +32,8 @@ env:
 
 jobs:
   build:
-    # The arm64 pool exhausted its acquisition attempts for this release.
-    # This standard Intel image also includes the required Xcode 26 toolchain.
-    runs-on: macos-15-intel
+    # Match native acceptance and signing on the current standard ARM image.
+    runs-on: macos-26
     concurrency:
       group: build-${{ github.ref }}
       cancel-in-progress: true
@@ -44,9 +43,8 @@ jobs:
       # 和传 TestFlight 用同一个 Xcode（26 或更新）：新系统才有的功能、新编译器才报的错在这一步就能发现
       - name: 选用最新的 Xcode（26 或更新）
         run: |
-          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
-          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
-          [ -n "$XCODE" ] || { echo "::error::这台云端电脑上没有 Xcode 26"; exit 1; }
+          XCODE=/Applications/Xcode_26.6.app
+          test -d "$XCODE"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 

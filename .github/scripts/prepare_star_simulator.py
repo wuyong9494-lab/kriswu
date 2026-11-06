@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Prewarm a disposable, exact-model simulator while core compilation runs."""
+"""Prepare a disposable exact-model simulator after the core compiler exits."""
 import json
 from pathlib import Path
 import re
 import subprocess
+import time
 
 MODEL = "iPhone 17 Pro Max"
 STATUS = Path("star-simulator-preparation.json")
@@ -33,7 +34,10 @@ def prepare():
         # retry rather than treating an empty or timed-out catalog as ready.
         for attempt in range(2):
             try:
+                started = time.monotonic()
+                print("Reading available simulator runtimes (attempt", attempt + 1, ")", flush=True)
                 catalog = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j"], timeout=180))
+                print("Simulator catalog ready after", round(time.monotonic() - started, 1), "seconds", flush=True)
                 break
             except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
                 if attempt == 1:
