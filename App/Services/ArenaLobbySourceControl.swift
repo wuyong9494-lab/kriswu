@@ -74,6 +74,11 @@ struct ArenaLobbySourceControl {
     struct Binding: Equatable, Sendable {
         let title: String
         let season: Season?
+
+        func playsTierIncrease(after previous: Binding?) -> Bool {
+            guard let current = season, let old = previous?.season else { return false }
+            return current.tier > old.tier
+        }
     }
 
     struct Values: Equatable, Sendable {
@@ -113,11 +118,14 @@ struct ArenaLobbySourceControl {
     let layoutBounds: ArenaLobbyTimelineScene.Rect
     let hitRegion: ArenaLobbyTimelineScene.Rect
 
-    init(document: ArenaLobbyTimelineDocument, role: Role, title: String, season: Season? = nil) throws {
+    init(document: ArenaLobbyTimelineDocument, role: Role, title: String, season: Season? = nil,
+         animateSeasonTier: Bool = false) throws {
         let hidden: Set<String>
         var text: [String: String] = [:]
         var progress: [String: Double] = [:]
         var idleLabel = role.idleLabel
+        var fixedFrames: [String: Int] = [:]
+        var oneShots: [String: Int] = [:]
         switch role {
         case .profile:
             // Fame/prestige belongs to the original online account, not the
@@ -133,6 +141,10 @@ struct ArenaLobbySourceControl {
             text = ["tier_number_txt": String(season.tier), "value_txt": "\(season.points)/\(season.pointsPerTier)"]
             let fraction = Double(season.points) / Double(season.pointsPerTier)
             progress = ["progress_bar": fraction, "progress_bar_ready": fraction]
+            // This clip is a tier-change flash; it has identical resting first
+            // and last frames. Playing it continuously obscures the lobby.
+            if animateSeasonTier { oneShots["tier_node"] = 0 }
+            else { fixedFrames["tier_node"] = 0 }
         case .heroes: hidden = ["notification", "progress_bar", "rarity_icon", "fame_tier_ph"]
         case .team:
             // These source decorations depend on the original service's online
@@ -160,13 +172,15 @@ struct ArenaLobbySourceControl {
                       idleLabel: idleLabel, hiddenChildren: hidden,
                       titlePath: role.titlePath,
                       layoutPath: role == .battle ? "brawl_button" : nil,
-                      additionalText: text, progress: progress, includeAnimationBounds: role == .season)
+                      additionalText: text, progress: progress, fixedFrames: fixedFrames, oneShots: oneShots,
+                      includeAnimationBounds: role == .season && animateSeasonTier)
     }
 
     init(document: ArenaLobbyTimelineDocument, export: String, instance: String,
          title: String, idleLabel: String?, hiddenChildren: Set<String>,
          titlePath: String? = "txt", layoutPath: String? = nil,
          additionalText: [String: String] = [:], progress: [String: Double] = [:],
+         fixedFrames: [String: Int] = [:], oneShots: [String: Int] = [:],
          includeAnimationBounds: Bool = false) throws {
         guard !title.isEmpty, title.utf8.count <= 4096,
               let rootID = document.exports[export]?.objectID,
@@ -200,6 +214,8 @@ struct ArenaLobbySourceControl {
         }
         for child in hiddenChildren { state.hidden.insert(instance + "/" + child) }
         if let idleLabel { state.frames[instance] = idleLabel }
+        for (path, index) in fixedFrames { state.frameIndices[instance + "/" + path] = index }
+        for (path, index) in oneShots { state.oneShotRestFrames[instance + "/" + path] = index }
         for (path, fraction) in progress {
             guard fraction.isFinite, (0...1).contains(fraction), !path.isEmpty else {
                 throw ArenaLobbyTimelineError.invalid("Invalid source progress fraction")

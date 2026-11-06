@@ -77,6 +77,8 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
     var onFailure: ((String) -> Void)?
     var onFirstFrame: (() -> Void)?
+    var onPlaybackFinished: (() -> Void)?
+    private var playbackFinished = false
     private(set) var lastStatistics: Statistics?
     private let queue: MTLCommandQueue
     private let textures: [MTLTexture]
@@ -265,6 +267,16 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
             try encode(prepared, descriptor: descriptor, viewport: viewport, command: command)
             lastStatistics = Statistics(drawCalls: drawCalls, renderPasses: renderPasses,
                 transientPixels: pool.pixels, sourceTime: time, sourceClipFrames: frame.clipFrames)
+            if !playbackFinished, try scene.oneShotPlaybackCompleted(at: time) {
+                command.addCompletedHandler { [weak self] buffer in
+                    let succeeded = buffer.error == nil
+                    Task { @MainActor [weak self] in
+                        guard succeeded, let self, !self.failed, !self.playbackFinished else { return }
+                        self.playbackFinished = true
+                        self.onPlaybackFinished?()
+                    }
+                }
+            }
             command.present(drawable)
             command.commit()
         } catch {

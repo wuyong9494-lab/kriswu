@@ -36,6 +36,9 @@ struct ArenaLobbyInterfaceState: Equatable, Sendable {
     /// Zero-based source frames for unlabeled progress bars and icon variants.
     /// A numeric binding freezes only this instance, not its child animations.
     var frameIndices: [String: Int] = [:]
+    /// Play this instance once from frame zero, then hold the specified rest
+    /// frame. Child clocks use the same event epoch, never an endless loop.
+    var oneShotRestFrames: [String: Int] = [:]
 }
 
 struct ArenaLobbySourceText: Hashable, Sendable {
@@ -606,13 +609,19 @@ final class ArenaLobbyTimelineScene {
         }
         for (path, label) in state.frames {
             guard let id = index[path], !label.isEmpty, objects[id]?.frameLabels?.contains(label) == true,
-                  state.frameIndices[path] == nil else {
+                  state.frameIndices[path] == nil, state.oneShotRestFrames[path] == nil else {
                 throw ArenaLobbyTimelineError.invalid("Invalid source named frame binding at \(path)")
             }
         }
         for (path, frame) in state.frameIndices {
-            guard let id = index[path], let count = objects[id]?.frameCount, (0..<count).contains(frame) else {
+            guard let id = index[path], let count = objects[id]?.frameCount, (0..<count).contains(frame),
+                  state.oneShotRestFrames[path] == nil else {
                 throw ArenaLobbyTimelineError.invalid("Invalid source numeric frame binding at \(path)")
+            }
+        }
+        for (path, frame) in state.oneShotRestFrames {
+            guard let id = index[path], let count = objects[id]?.frameCount, (0..<count).contains(frame) else {
+                throw ArenaLobbyTimelineError.invalid("Invalid source one-shot binding at \(path)")
             }
         }
         guard state.hidden.allSatisfy({ index[$0] != nil }) else {
@@ -630,6 +639,17 @@ final class ArenaLobbyTimelineScene {
             }
         }
         interfaceBindingsValidated = true
+    }
+
+    func oneShotPlaybackCompleted(at time: Double) throws -> Bool {
+        guard time.isFinite, time >= 0 else { throw ArenaLobbyTimelineError.invalid("Invalid lobby sample time") }
+        try validateInterfaceBindings()
+        guard let animations = interfaceState?.oneShotRestFrames, !animations.isEmpty else { return false }
+        return animations.keys.allSatisfy { path in
+            guard let id = instanceObjects?[path], let object = objects[id],
+                  let count = object.frameCount, let fps = object.fps else { return false }
+            return time >= Double(count) / fps
+        }
     }
 
     /// Conservative local bounds across every active descendant frame. Cache
@@ -753,6 +773,9 @@ final class ArenaLobbyTimelineScene {
                 content = []
             }
             var selectedFrame = frameLookups[id] ?? 0
+            if let rest = interfaceState?.oneShotRestFrames[path], let count = item.frameCount, let fps = item.fps {
+                selectedFrame = time >= Double(count)/fps ? rest : min(count-1,Int(floor(time*fps)))
+            }
             if let index = interfaceState?.frameIndices[path] {
                 guard interfaceState?.frames[path] == nil,
                       let count = item.frameCount, (0..<count).contains(index) else {

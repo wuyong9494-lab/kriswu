@@ -5,13 +5,15 @@ import UIKit
 
 /// Cache the complete idle controls once per verified pack/language. Rendering
 /// sequentially releases the large source atlas between controls; the lobby
-/// retains small images; only a control with a changing idle timeline needs a
-/// live canvas. The supplied shop clip animates even without a notification.
+/// retains small images; only a changing idle timeline or unconsumed tier
+/// effect needs a live canvas. The supplied shop clip animates at idle.
 @MainActor
 final class ArenaImportedSourceControls: ObservableObject {
     typealias Role = ArenaLobbySourceControl.Role
-    struct Control {
+    @MainActor struct Control {
         let id = UUID()
+        @MainActor final class Playback { var started = false }
+        let playback = Playback()
         struct LiveSource {
             let sceneURL: URL
             let sceneSHA256: String
@@ -105,6 +107,7 @@ final class ArenaImportedSourceControls: ObservableObject {
                 // it must not prevent other independently verified controls loading.
                 result[role] = try? Self.render(document: document, atlases: atlases,
                     device: device, role: role, binding: bindings[role]!,
+                    animateSeasonTier: role == .season && bindings[role]!.playsTierIncrease(after: controls[role]?.binding),
                     sceneURL: sceneURL, sceneSHA256: sceneFile.sha256)
                 await Task.yield()
             }
@@ -117,8 +120,10 @@ final class ArenaImportedSourceControls: ObservableObject {
 
     private static func render(document: ArenaLobbyTimelineDocument, atlases: [ArenaLobbyTimelineRenderer.Atlas],
                                device: MTLDevice, role: Role, binding: ArenaLobbySourceControl.Binding,
+                               animateSeasonTier: Bool,
                                sceneURL: URL, sceneSHA256: String) throws -> Control {
-        let source = try ArenaLobbySourceControl(document: document, role: role, title: binding.title, season: binding.season)
+        let source = try ArenaLobbySourceControl(document: document, role: role, title: binding.title,
+            season: binding.season, animateSeasonTier: animateSeasonTier)
         let renderer = try ArenaLobbyTimelineRenderer(device: device, scene: source.scene, atlases: atlases)
         let scale = min(3.0, max(1.0, Double(UIScreen.main.scale)))
         let width = Int(ceil(source.bounds.width * scale)), height = Int(ceil(source.bounds.height * scale))
@@ -136,7 +141,7 @@ final class ArenaImportedSourceControls: ObservableObject {
                                          width: r.width/b.width, height: r.height/b.height),
                        layoutRegion: CGRect(x: (layout.minX-b.minX)/b.width, y: (layout.minY-b.minY)/b.height,
                                             width: layout.width/b.width, height: layout.height/b.height),
-                       liveSource: role == .shop || role == .season ? .init(sceneURL: sceneURL, sceneSHA256: sceneSHA256,
+                       liveSource: role == .shop || animateSeasonTier ? .init(sceneURL: sceneURL, sceneSHA256: sceneSHA256,
                            exportName: role.export, sourceRect: CGRect(x: b.minX, y: b.minY, width: b.width, height: b.height),
                            state: source.scene.interfaceState!) : nil)
     }

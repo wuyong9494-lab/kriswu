@@ -131,7 +131,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
                 let width = Int(ceil(source.bounds.width*3)),height = Int(ceil(source.bounds.height*3))
                 let first = try renderer.snapshot(time:0,width:width,height:height)
                 XCTAssertTrue(first.contains { $0 != 0 })
-                if role == .shop || role == .season {
+                if role == .shop {
                     let later = try renderer.snapshot(time:0.37,width:width,height:height)
                     XCTAssertTrue(first != later,"Source idle animation must change visible pixels")
                 }
@@ -142,6 +142,17 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
                     XCTAssertTrue(renamed != first,"Changing the nickname must replace the rendered name")
                 }
                 if role == .season {
+                    XCTAssertEqual(try renderer.snapshot(time:0.37,width:width,height:height),first,
+                                   "The pass must stay still unless its actual tier increases")
+                    let event = try ArenaLobbySourceControl(document:document,role:.season,title:title,
+                        season:season,animateSeasonTier:true)
+                    let eventRenderer = try ArenaLobbyTimelineRenderer(device:device,scene:event.scene,atlases:textures)
+                    let w = Int(ceil(event.bounds.width*3)),h = Int(ceil(event.bounds.height*3))
+                    let rest = try eventRenderer.snapshot(time:0,width:w,height:h)
+                    XCTAssertNotEqual(try eventRenderer.snapshot(time:0.37,width:w,height:h),rest)
+                    XCTAssertEqual(try eventRenderer.snapshot(time:1.37,width:w,height:h),rest,
+                                   "The real tier flash must finish instead of looping over the lobby")
+                    XCTAssertTrue(try event.scene.oneShotPlaybackCompleted(at:1.37))
                     var previous = first
                     for saved in [
                         ArenaLobbySourceControl.Season(tier:2,points:99,pointsPerTier:100,hasReward:false),

@@ -325,14 +325,15 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         }
     }
 
-    func testPassRetainsSavedProgressAcrossIdleTimeRewardClaimAndSeasonReset() throws {
+    private func passControlFixture() throws -> ArenaLobbyTimelineScene {
         let text: [String:Any] = ["id":3,"commands":[],"textField":[
             "fontName":"Arial","fontSize":15,"text":"placeholder","left":0,"top":0,"right":2,"bottom":2,
             "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
         let bar = clip(5,children:[(1,0)],frames:(0..<5).map { [[0,-1,$0]] },fps:10)
+        let tier = clip(6,children:[(1,0)],frames:[[[0,-1,0]],[[0,-1,1]],[[0,-1,0]]],fps:3)
         let names = ["art","label_txt","tier_number_txt","value_txt","progress_bar","progress_bar_ready",
-                     "bp_discount","icon_brawl_pass_plus","brawl_pass_reward_icon","notification","new_season_txt"]
-        let ids = [1,3,3,3,5,5,3,3,3,3,3]
+                     "bp_discount","icon_brawl_pass_plus","brawl_pass_reward_icon","notification","new_season_txt","tier_node"]
+        let ids = [1,3,3,3,5,5,3,3,3,3,3,6]
         let normal = names.indices.filter { $0 != 5 }.map { [$0,-1,$0 == 0 ? 0 : -1] }
         let ready = names.indices.filter { $0 != 4 }.map { [$0,-1,$0 == 0 ? 1 : -1] }
         var pass = clip(2,children:ids.map { ($0,0) },frames:[normal,ready,normal])
@@ -342,8 +343,12 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         container["children"] = [["objectID":2,"name":"button_brawl_pass","blendMode":0]]
         var root = clip(10,children:[(4,0)],frames:[[[0,-1,-1]]])
         root["children"] = [["objectID":4,"name":"brawl_pass_container","blendMode":0]]
-        let base = try fixture(objects:[shape(1),text,bar,pass,container,root],interfaceState:.init(),
+        return try fixture(objects:[shape(1),text,bar,tier,pass,container,root],interfaceState:.init(),
                                exportName:"mainscreen_hud_bottom_left")
+    }
+
+    func testPassRetainsSavedProgressAcrossIdleTimeRewardClaimAndSeasonReset() throws {
+        let base = try passControlFixture()
         let instance = ArenaLobbySourceControl.Role.season.instance
         for saved in [ArenaLobbySourceControl.Season(tier:2,points:50,pointsPerTier:100,hasReward:false),
                       .init(tier:3,points:0,pointsPerTier:100,hasReward:true),
@@ -369,6 +374,31 @@ final class ArenaLobbyTimelineTests: XCTestCase {
                       .init(tier:1,points:101,pointsPerTier:100,hasReward:false)] {
             XCTAssertThrowsError(try ArenaLobbySourceControl(document:base.document,role:.season,title:"通行证",season:saved))
         }
+    }
+
+    func testPassTierEffectPlaysOnlyOnceAndSettlesToItsOriginalIdleFrame() throws {
+        let base = try passControlFixture()
+        let season = ArenaLobbySourceControl.Season(tier:3,points:25,pointsPerTier:100,hasReward:true)
+        let source = try ArenaLobbySourceControl(document:base.document,role:.season,title:"通行证",
+                                                 season:season,animateSeasonTier:true)
+        let first = String(describing:try source.scene.frame(time:0).operations)
+        let changed = String(describing:try source.scene.frame(time:0.4).operations)
+        XCTAssertNotEqual(first,changed)
+        for time in [1.0,2.4,60.4] {
+            XCTAssertEqual(String(describing:try source.scene.frame(time:time).operations),first)
+            XCTAssertTrue(try source.scene.oneShotPlaybackCompleted(at:time))
+        }
+        XCTAssertFalse(try source.scene.oneShotPlaybackCompleted(at:0.99))
+        XCTAssertThrowsError(try source.scene.oneShotPlaybackCompleted(at: .nan))
+        XCTAssertThrowsError(try source.scene.oneShotPlaybackCompleted(at: -1))
+        let field = ArenaLobbySourceControl.Role.season.instance + "/tier_node"
+        source.scene.interfaceState?.frameIndices[field] = 0
+        XCTAssertThrowsError(try source.scene.frame(time:0),"Conflicting loop/one-shot bindings must be rejected")
+        let current = ArenaLobbySourceControl.Binding(title:"通行证",season:season)
+        XCTAssertFalse(current.playsTierIncrease(after:nil),"Opening the lobby is not a tier gain")
+        XCTAssertFalse(current.playsTierIncrease(after:current),"Claiming a reward cannot replay a tier gain")
+        XCTAssertTrue(current.playsTierIncrease(after:.init(title:"通行证",season:.init(tier:2,points:99,pointsPerTier:100,hasReward:false))))
+        XCTAssertFalse(current.playsTierIncrease(after:.init(title:"通行证",season:.init(tier:50,points:100,pointsPerTier:100,hasReward:false))),"Season resets must not celebrate a tier gain")
     }
 
     func testSourceControlCacheTracksOnlyItsOwnSavedState() {
