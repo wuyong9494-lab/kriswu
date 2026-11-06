@@ -134,7 +134,7 @@ struct StarRailBoardView: View {
                         VStack(spacing: 8) {
                             objective
                             if preview == nil, let lesson { lessonBanner(lesson) }
-                            if game.status == .playing { railControls }
+                            if game.status == .playing { railControls.layoutPriority(1) }
                             Spacer(minLength: 0)
                             trayAndTools
                         }
@@ -146,7 +146,7 @@ struct StarRailBoardView: View {
                         objective
                         if preview == nil, let lesson { lessonBanner(lesson) }
                         playArea.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if game.status == .playing { railControls }
+                        if game.status == .playing { railControls.layoutPriority(1) }
                         trayAndTools
                     }
                     .padding(.horizontal, 12).padding(.vertical, 6)
@@ -229,6 +229,7 @@ struct StarRailBoardView: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(step.title).font(.system(size: 12, weight: .bold)).foregroundStyle(TileTheme.gold)
+                    .accessibilityIdentifier("rails.lesson")
                 Text(step.instruction).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8)).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -238,12 +239,12 @@ struct StarRailBoardView: View {
             .accessibilityLabel("跳过教学").accessibilityIdentifier("rails.lesson.skip")
         }
         .padding(8).background(TileTheme.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityIdentifier("rails.lesson")
     }
     @ViewBuilder private var playArea: some View {
         if game.status == .playing {
             StarRailCanvas(game: game, state: game.state, preview: preview, back: store.cardBack,
-                           highlighted: lesson?.highlightedCards ?? [], canPick: session.canInteract) { act(.pick($0)) }
+                           highlighted: lesson?.highlightedCards ?? [], canPick: session.canInteract,
+                           onPick: { act(.pick($0)) }, onPreviewRail: { showPreview($0) })
         } else {
             ScrollView { resultPanel }
         }
@@ -260,25 +261,31 @@ struct StarRailBoardView: View {
             }
             HStack(spacing: 8) {
                 ForEach(game.stage.rails) { rail in
-                    Button {
-                        if selectedRail == rail.id { clearPreview() }
-                        else { selectedRail = rail.id; selectedStop = nil; previewSeen = true }
-                    } label: {
+                    Button { showPreview(rail.id) } label: {
                         HStack(spacing: 6) {
                             Text(rail.id == 0 ? "A" : "B").font(.system(size: 16, weight: .heavy, design: .rounded))
-                            Text("\(rail.stopName(game.state.positions[rail.id])) · 预览").font(.system(size: 12, weight: .semibold))
+                            Text("\(rail.stopName(game.state.positions[rail.id])) · \(selectedRail == rail.id ? "预览中" : "预览移层")")
+                                .font(.system(size: 12, weight: .semibold))
                             Spacer(minLength: 0)
                             Image(systemName: "arrow.left.arrow.right").font(.caption)
                         }
-                        .foregroundStyle(RailPalette.rail(rail.id)).padding(.horizontal, 10).frame(minHeight: 38)
+                        .foregroundStyle(RailPalette.rail(rail.id)).padding(.horizontal, 10).frame(minHeight: 44)
                         .background(RailPalette.rail(rail.id).opacity(selectedRail == rail.id ? 0.2 : 0.08), in: RoundedRectangle(cornerRadius: 12))
                         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(lesson?.asksForPreview == true ? TileTheme.gold.opacity(0.6) : .clear))
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).disabled(!session.canInteract)
                     .accessibilityIdentifier("rails.preview.\(rail.id)")
+                    .accessibilityLabel("预览\(rail.name)移层")
+                    .accessibilityValue(selectedRail == rail.id ? "预览中" : "在\(rail.stopName(game.state.positions[rail.id]))")
+                    .accessibilityHint("打开预览后，点确认移动才会消耗能量")
                 }
             }
             if let preview {
+                Text("预览中 · 点下方「确认移动」才会移层")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(TileTheme.mint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("rails.preview.instruction")
                 destinationChoices(preview)
                 HStack(spacing: 6) {
                     Text("露出 \(preview.revealed.count)").foregroundStyle(TileTheme.mint)
@@ -295,15 +302,20 @@ struct StarRailBoardView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack(spacing: 8) {
-                    Button("取消") { clearPreview() }.frame(minHeight: 40).accessibilityIdentifier("rails.preview.cancel")
-                    Spacer(minLength: 0)
+                    Button { clearPreview() } label: {
+                        Text("取消").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).accessibilityIdentifier("rails.preview.cancel")
                     Button {
                         act(game.moveAction(rail: preview.rail, to: preview.proposed.positions[preview.rail]))
                     } label: {
                         let rail = game.stage.rails[preview.rail], stop = preview.proposed.positions[preview.rail]
-                        Label("\(rail.stopName(stop)) · \(game.moveCost(rail:rail.id,to:stop,in:game.state) == 0 ? "免费" : "−\(game.moveCost(rail:rail.id,to:stop,in:game.state))")", systemImage: "bolt.fill")
-                            .font(.system(size: 13, weight: .bold)).padding(.horizontal, 18).frame(minHeight: 40)
+                        let cost = game.moveCost(rail: rail.id, to: stop, in: game.state)
+                        Label("确认移动到\(rail.stopName(stop)) · \(cost == 0 ? "免费" : "−\(cost)能量")", systemImage: "arrow.right")
+                            .font(.system(size: 13, weight: .bold)).padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                             .foregroundStyle(RailPalette.ink).background(TileTheme.mint, in: Capsule())
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).disabled(!preview.canMove || !session.canInteract)
                     .opacity(preview.canMove && session.canInteract ? 1 : 0.35).accessibilityIdentifier("rails.move")
@@ -483,6 +495,13 @@ struct StarRailBoardView: View {
         return labels.isEmpty ? "无" : labels.joined(separator:"、")
     }
     private func configureSound() { StarRailSound.shared.configure(active: scenePhase == .active, enabled: sounds) }
+    private func showPreview(_ rail: Int) {
+        guard session.canInteract else { return }
+        // Repeated taps keep the confirmation visible. Only Cancel closes it.
+        if selectedRail != rail { selectedStop = nil }
+        selectedRail = rail
+        previewSeen = true
+    }
     private func clearPreview() { selectedRail = nil; selectedStop = nil }
     private func act(_ action: StarRail.Action) {
         guard session.canInteract else { return }

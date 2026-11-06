@@ -10,6 +10,7 @@ struct StarRailCanvas: View {
     var highlighted: Set<Int> = []
     var canPick = false
     var onPick: (Int) -> Void = { _ in }
+    var onPreviewRail: ((Int) -> Void)?
 
     var body: some View {
         GeometryReader { geo in
@@ -18,6 +19,7 @@ struct StarRailCanvas: View {
             let origin=CGPoint(x:(geo.size.width-unit*CGFloat(game.stage.width))/2,y:(geo.size.height-unit*CGFloat(game.stage.height))/2)
             ZStack(alignment:.topLeading) {
                 RailBoardBackdrop(columns:max(1,game.stage.width/4),rows:max(1,game.stage.height/4))
+                    .allowsHitTesting(false)
                 ForEach(game.stage.rails) { rail in
                     ForEach(0..<rail.stopCount,id:\.self) { stop in
                         if stop != state.positions[rail.id] && (rail.stopCount == 2 || state.positions[rail.id] == 0 || stop == 0) {
@@ -31,23 +33,30 @@ struct StarRailCanvas: View {
                     let point=game.point(card,in:shown)
                     let free=game.blockers(of:card.id,in:shown).isEmpty
                     let anchor=game.isAnchor(card.id,in:shown)
-                    Button { onPick(card.id) } label: {
+                    Button {
+                        if anchor, let rail = card.rail { onPreviewRail?(rail) }
+                        else { onPick(card.id) }
+                    } label: {
                         if game.isStarCore(card.id) { RailStarCoreFace(side:side,covered:!free) }
                         else {
                             RailTileFace(kind:card.kind,side:side,covered:!free,rail:card.rail,layer:card.z,anchor:anchor,
                                 highlight:highlight(card.id),back:back)
                         }
                     }
-                    .buttonStyle(.plain).disabled(!canPick || preview != nil || !free || anchor || game.status(of:state) != .playing)
+                    .buttonStyle(.plain)
+                    .frame(width: side, height: side)
+                    .contentShape(Rectangle())
+                    .disabled(!canPick || preview != nil || !free || game.isStarCore(card.id) || (anchor && onPreviewRail == nil) || game.status(of:state) != .playing)
                     .position(x:CGFloat(point.x+2)*unit+origin.x+CGFloat(card.z)*2,y:CGFloat(point.y+2)*unit+origin.y-CGFloat(card.z)*4)
                     .zIndex(Double(card.z))
                     .transition(.scale(scale:0.8).combined(with:.opacity))
                     .accessibilityIdentifier("rails.card.\(card.id)")
                     .accessibilityLabel("\(game.isStarCore(card.id) ? "星核，需要护送，不可取走" : StarRail.names[card.kind])，第 \(card.z) 层，\(anchor ? "航线未完成，需保留" : free ? "可取" : "被盖住")")
+                    .accessibilityHint(anchor && !game.isStarCore(card.id) ? "点按预览这条轨道，再确认移动；这张牌会留在棋盘上" : "")
                 }
             }
         }
-        .accessibilityIdentifier("rails.board")
+        .contentShape(Rectangle())
     }
     private func highlight(_ id: Int) -> Color {
         if preview?.revealed.contains(id) == true { return TileTheme.mint }

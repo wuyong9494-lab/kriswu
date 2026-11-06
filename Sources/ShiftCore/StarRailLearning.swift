@@ -38,7 +38,7 @@ extension StarRail {
                              highlightedCards: Set(game.stage.cards.filter { $0.kind == 0 && game.contains($0.id,in:game.state) }.map(\.id)), asksForPreview: false)
             }
             if game.state.shifts == 0 {
-                return .init(title: "2 / 3 · 先预览，再移动", instruction: previewSeen ? "看清露出和盖住的牌后，确认移层，消耗 1 点能量。" : "点 A 预览移层，棋盘会展示终点和遮挡变化。", highlightedCards: [], asksForPreview: true)
+                return .init(title: "2 / 3 · 先预览，再移动", instruction: previewSeen ? "点下方 A 打开预览，再点「确认移动」。带图钉的牌会随轨道一起移动。" : "点棋盘下方的「A · 预览移层」，再点出现的「确认移动」。也可点带图钉的牌打开预览。", highlightedCards: [], asksForPreview: true)
             }
             return .init(title: "3 / 3 · 完成自己的航线", instruction: "现在收集新露出的同类牌。槽内三张会自动消除，清空棋盘即可完成课堂。", highlightedCards: [], asksForPreview: false)
         }

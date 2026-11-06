@@ -95,6 +95,28 @@ final class StarRailTests: XCTestCase {
         XCTAssertEqual(bothMoved.positions, [1, 1]); XCTAssertEqual(bothMoved.energy, 0)
     }
 
+    func testReportedFirstStageAnchorPositionCanMoveAndFinishWithoutRestart() throws {
+        var g = game()
+        perform([0, 1, 2, 11, 4, 6, 5, 7, 8, 9].map(StarRail.Action.pick), on: &g)
+        XCTAssertEqual(g.state.matches, 2)
+        XCTAssertEqual(g.state.shifts, 0)
+        XCTAssertEqual(g.state.energy, 2)
+        XCTAssertEqual(g.state.tray.map { g.stage.cards[$0].kind }, [1, 1, 3, 3])
+        XCTAssertEqual(g.board(in: g.state).map(\.id), [3, 10])
+        XCTAssertTrue(g.isAnchor(10, in: g.state))
+        XCTAssertFalse(g.perform(.pick(10)), "Opening the anchor in the UI must not remove it")
+        let restored = try XCTUnwrap(StarRail.Game(archive: g.archive))
+        XCTAssertEqual(restored, g, "The existing save must remain playable")
+        let preview = try XCTUnwrap(g.preview(0, in: g.state))
+        XCTAssertTrue(preview.canMove)
+        XCTAssertEqual(preview.proposed.energy, 1)
+        XCTAssertEqual(preview.revealed, [3])
+        perform([.shift(0), .pick(3), .pick(10)], on: &g)
+        XCTAssertEqual(g.status, .won)
+        XCTAssertTrue(g.state.tray.isEmpty)
+        XCTAssertEqual(g.state.shifts, 1)
+    }
+
     func testUpperRailLocksLowerRailUntilItMovesAway() {
         let g = game(6)
         var charged = g.state; charged.energy = 2
