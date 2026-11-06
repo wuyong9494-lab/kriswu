@@ -1,6 +1,19 @@
 import copy
+from pathlib import Path
+import struct
+import subprocess
+import tempfile
 import unittest
-from prepare_star_simulator import selection
+from unittest.mock import patch
+import zlib
+from prepare_star_simulator import capture_ready, selection, valid_png
+
+
+def png():
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\0\0\0\0\xff")) + chunk(b"IEND", b""))
 
 
 class SimulatorSelectionTests(unittest.TestCase):
@@ -35,3 +48,42 @@ class SimulatorSelectionTests(unittest.TestCase):
         for catalog in (old, duplicate):
             with self.assertRaises(ValueError):
                 selection(catalog)
+
+
+class SimulatorDisplayTests(unittest.TestCase):
+    def testIncompleteOrCorruptScreenshotsCannotPass(self):
+        image = png()
+        self.assertTrue(valid_png(image))
+        for data in (b"", image[:24], image[:-1], image + b"extra", image[:-5] + b"wrong"):
+            self.assertFalse(valid_png(data))
+
+    @patch("prepare_star_simulator.time.sleep")
+    def testColdDisplayTimeoutRequiresANewSuccessfulCapture(self, sleep):
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "ready.png"
+            calls = []
+            def run(command, **kwargs):
+                self.assertFalse(destination.exists())
+                calls.append(command)
+                destination.write_bytes(png())
+                if len(calls) == 1:
+                    raise subprocess.TimeoutExpired(command, 45)
+                return subprocess.CompletedProcess(command, 0)
+            with patch("prepare_star_simulator.subprocess.run", side_effect=run):
+                capture_ready("exact-device", destination)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[1][3], "exact-device")
+            self.assertTrue(valid_png(destination.read_bytes()))
+            sleep.assert_called_once_with(2)
+
+    @patch("prepare_star_simulator.time.sleep")
+    def testAllFailedAttemptsBlockAcceptanceAndRemoveStaleImage(self, sleep):
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "ready.png"
+            destination.write_bytes(png())
+            with patch("prepare_star_simulator.subprocess.run",
+                       side_effect=subprocess.TimeoutExpired("screenshot", 45)) as run:
+                with self.assertRaises(RuntimeError):
+                    capture_ready("exact-device", destination)
+                self.assertEqual(run.call_count, 3)
+            self.assertFalse(destination.exists())

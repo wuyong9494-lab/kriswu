@@ -3,8 +3,10 @@
 import json
 from pathlib import Path
 import re
+import struct
 import subprocess
 import time
+import zlib
 
 MODEL = "iPhone 17 Pro Max"
 STATUS = Path("star-simulator-preparation.json")
@@ -58,5 +60,68 @@ def prepare():
         raise
 
 
+def valid_png(data):
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return False
+    offset, dimensions, pixels = 8, None, False
+    while offset + 12 <= len(data):
+        size = struct.unpack(">I", data[offset:offset + 4])[0]
+        end = offset + size + 12
+        if end > len(data):
+            return False
+        kind, payload = data[offset + 4:offset + 8], data[offset + 8:end - 4]
+        if zlib.crc32(kind + payload) & 0xffffffff != struct.unpack(">I", data[end - 4:end])[0]:
+            return False
+        if kind == b"IHDR":
+            if dimensions is not None or size != 13:
+                return False
+            dimensions = struct.unpack(">II", payload[:8])
+            if min(dimensions) <= 0:
+                return False
+        elif kind == b"IDAT":
+            if dimensions is None or not payload:
+                return False
+            pixels = True
+        elif kind == b"IEND":
+            return size == 0 and end == len(data) and dimensions is not None and pixels
+        offset = end
+    return False
+
+
+def capture_ready(device, destination=Path("star-simulator-ready.png")):
+    # CoreSimulator reports Finished before its first framebuffer is responsive.
+    # A failed or partial capture is never accepted as a healthy display.
+    command = ["xcrun", "simctl", "io", device, "screenshot", "--type=png", str(destination)]
+    for attempt in range(3):
+        destination.unlink(missing_ok=True)
+        try:
+            subprocess.run(command, check=True, timeout=45)
+            if not destination.is_file() or not valid_png(destination.read_bytes()):
+                raise ValueError("Simulator returned an incomplete screenshot")
+            print("Simulator display ready; complete PNG captured", flush=True)
+            return
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError) as error:
+            destination.unlink(missing_ok=True)
+            print("Display capture attempt", attempt + 1, "failed:", error, flush=True)
+            if attempt == 2:
+                raise RuntimeError("Simulator display did not become ready; native acceptance is blocked") from error
+            time.sleep(2)
+
+
+def wait_ready():
+    prepared = json.loads(STATUS.read_text())
+    if prepared.get("prepared") is not True:
+        raise ValueError("Simulator preparation did not succeed")
+    device = json.loads(Path("star-test-device.json").read_text())
+    if device.get("name") != MODEL or device.get("udid") != prepared.get("udid"):
+        raise ValueError("Prepared simulator identity differs from the target device")
+    subprocess.run(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], check=True, timeout=240)
+    capture_ready(device["udid"])
+
+
 if __name__ == "__main__":
-    prepare()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--ready", action="store_true")
+    args = parser.parse_args()
+    wait_ready() if args.ready else prepare()

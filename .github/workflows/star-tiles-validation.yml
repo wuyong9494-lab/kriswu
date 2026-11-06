@@ -54,22 +54,10 @@ jobs:
           python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee star-simulator-boot.log
 
       - name: Select and boot iPhone 17 Pro Max
-        timeout-minutes: 5
+        timeout-minutes: 7
         shell: bash -eo pipefail {0}
         run: |
-          python3 - <<'PY'
-          import json, subprocess
-          from pathlib import Path
-          status = Path('star-simulator-preparation.json')
-          prepared = json.loads(status.read_text())
-          if prepared.get('prepared') is not True:
-              raise SystemExit('Simulator preparation failed: ' + prepared.get('error', 'unknown error'))
-          device = json.load(open('star-test-device.json'))
-          assert device['name'] == 'iPhone 17 Pro Max' and device['udid'] == prepared['udid']
-          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=240)
-          subprocess.run(['xcrun', 'simctl', 'io', device['udid'], 'screenshot', 'star-simulator-ready.png'],
-                         check=True, timeout=30)
-          PY
+          python3 -u .github/scripts/prepare_star_simulator.py --ready 2>&1 | tee star-simulator-ready.log
 
       - name: Native visuals, store recovery and legacy compatibility
         shell: bash -eo pipefail {0}
@@ -130,6 +118,7 @@ jobs:
             star-test-device.json
             star-simulator-boot.log
             star-simulator-preparation.json
+            star-simulator-ready.log
             star-simulator-ready.png
             star-screenshots
             star-visual-tests.log
