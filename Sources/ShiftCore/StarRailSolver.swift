@@ -41,8 +41,15 @@ public enum StarRailSolver {
             let resourceScore = state.energy*2 - state.tray.count*9 - state.shifts*2 + pairs*2
             return Double(objectiveScore + gateScore + resourceScore) + Double(game.freeIDs(in:state).count)*0.3
         }
-        return Double(state.matches*40+goals*22+state.energy*2-state.tray.count*9-state.shifts*2+pairs*2)
-            + Double(game.freeIDs(in:state).count)*0.3
+        // Keep the same integer arithmetic order without overloading one long
+        // expression; Xcode 26.6 otherwise exceeds its type-checking budget.
+        var score = state.matches * 40
+        score += goals * 22
+        score += state.energy * 2
+        score -= state.tray.count * 9
+        score -= state.shifts * 2
+        score += pairs * 2
+        return Double(score) + Double(game.freeIDs(in:state).count) * 0.3
     }
     public static func solve(_ game:StarRail.Game,nodeLimit:Int=100_000,maxShifts:Int?=nil,maxPeak:Int?=nil,firstDeparture:Int?=nil,firstDepartureRail:Int=0) -> Result {
         var visited:[Key:Int]=[:],path:[StarRail.Action]=[],answer:[StarRail.Action]?
