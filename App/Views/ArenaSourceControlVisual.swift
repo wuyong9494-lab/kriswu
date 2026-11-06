@@ -11,7 +11,9 @@ struct ArenaSourceControlVisual: View {
     var body: some View {
         GeometryReader { geo in
             let size = control.image.size
-            let scale = min(geo.size.width / size.width, geo.size.height / size.height)
+            let layout = control.layoutRegion
+            let scale = min(geo.size.width / (size.width * layout.width),
+                            geo.size.height / (size.height * layout.height))
             ZStack {
                 Image(uiImage: control.image).resizable()
                     .opacity(animatedFrameReady ? 0 : 1)
@@ -26,7 +28,8 @@ struct ArenaSourceControlVisual: View {
                         })
                 }
             }.frame(width: size.width * scale, height: size.height * scale)
-                .position(x: geo.size.width/2, y: geo.size.height/2)
+                .position(x: geo.size.width/2 + (0.5-layout.midX)*size.width*scale,
+                          y: geo.size.height/2 + (0.5-layout.midY)*size.height*scale)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

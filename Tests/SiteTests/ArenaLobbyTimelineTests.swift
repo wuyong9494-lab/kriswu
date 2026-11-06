@@ -306,6 +306,102 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         }
     }
 
+    func testPlayerCardUsesCurrentNameAndOmitsUnownedPrestige() throws {
+        let text: [String:Any] = ["id":3,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"placeholder","left":0,"top":0,"right":2,"bottom":2,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        var card = clip(2,children:[(1,0),(3,0),(3,0)],frames:[[[0,-1,0],[1,-1,-1],[2,-1,-1]]])
+        card["children"] = [["objectID":1,"name":"player_image_ph","blendMode":0],
+            ["objectID":3,"name":"player_name_txt","blendMode":0],["objectID":3,"name":"prestige","blendMode":0]]
+        card["frameLabels"] = ["no_fame"]
+        var root = clip(10,children:[(2,0)],frames:[[[0,-1,-1]]])
+        root["children"] = [["objectID":2,"name":"button_player_card","blendMode":0]]
+        let base = try fixture(objects:[shape(1),text,card,root],interfaceState:.init(),exportName:"mainscreen_hud_top_left")
+        for name in ["玩家", "Renamed Player", "玩家名字ABCDEFGHIJKLMNOPQRSTUVWXYZ"] {
+            let source = try ArenaLobbySourceControl(document:base.document,role:.profile,title:name)
+            let frame = try source.scene.frame(time:30)
+            XCTAssertEqual(frame.operations.count,2)
+            XCTAssertEqual(frame.operations.compactMap { if case .text(let t) = $0 { return t.value }; return nil },[name])
+        }
+    }
+
+    func testPassRetainsSavedProgressAcrossIdleTimeRewardClaimAndSeasonReset() throws {
+        let text: [String:Any] = ["id":3,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"placeholder","left":0,"top":0,"right":2,"bottom":2,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        let bar = clip(5,children:[(1,0)],frames:(0..<5).map { [[0,-1,$0]] },fps:10)
+        let names = ["art","label_txt","tier_number_txt","value_txt","progress_bar","progress_bar_ready",
+                     "bp_discount","icon_brawl_pass_plus","brawl_pass_reward_icon","notification","new_season_txt"]
+        let ids = [1,3,3,3,5,5,3,3,3,3,3]
+        let normal = names.indices.filter { $0 != 5 }.map { [$0,-1,$0 == 0 ? 0 : -1] }
+        let ready = names.indices.filter { $0 != 4 }.map { [$0,-1,$0 == 0 ? 1 : -1] }
+        var pass = clip(2,children:ids.map { ($0,0) },frames:[normal,ready,normal])
+        pass["children"] = zip(names,ids).map { ["objectID":$0.1,"name":$0.0,"blendMode":0] as [String:Any] }
+        pass["frameLabels"] = ["brawl_pass_inprogress","brawl_pass_ready","brawl_pass_new_season"]
+        var container = clip(4,children:[(2,0)],frames:[[[0,-1,-1]]])
+        container["children"] = [["objectID":2,"name":"button_brawl_pass","blendMode":0]]
+        var root = clip(10,children:[(4,0)],frames:[[[0,-1,-1]]])
+        root["children"] = [["objectID":4,"name":"brawl_pass_container","blendMode":0]]
+        let base = try fixture(objects:[shape(1),text,bar,pass,container,root],interfaceState:.init(),
+                               exportName:"mainscreen_hud_bottom_left")
+        let instance = ArenaLobbySourceControl.Role.season.instance
+        for saved in [ArenaLobbySourceControl.Season(tier:2,points:50,pointsPerTier:100,hasReward:false),
+                      .init(tier:3,points:0,pointsPerTier:100,hasReward:true),
+                      .init(tier:3,points:0,pointsPerTier:100,hasReward:false),
+                      .init(tier:50,points:100,pointsPerTier:100,hasReward:true),
+                      .init(tier:0,points:0,pointsPerTier:100,hasReward:false)] {
+            let source = try ArenaLobbySourceControl(document:base.document,role:.season,title:"通行证",season:saved)
+            let index = saved.points * 4 / saved.pointsPerTier
+            XCTAssertEqual(source.scene.interfaceState?.frameIndices[instance + "/progress_bar"],index)
+            XCTAssertEqual(source.scene.interfaceState?.frameIndices[instance + "/progress_bar_ready"],index)
+            XCTAssertEqual(source.scene.interfaceState?.frames[instance],saved.hasReward ? "brawl_pass_ready" : "brawl_pass_inprogress")
+            let drawing = String(describing:try source.scene.frame(time:0).operations)
+            for time in [0.0,0.9,30] {
+                let frame = try source.scene.frame(time:time)
+                XCTAssertEqual(String(describing:frame.operations),drawing,"Idle playback must not advance the progress bar")
+                XCTAssertEqual(frame.operations.compactMap { if case .text(let t) = $0 { return t.value }; return nil },
+                               ["通行证",String(saved.tier),"\(saved.points)/\(saved.pointsPerTier)"])
+            }
+        }
+        XCTAssertThrowsError(try ArenaLobbySourceControl(document:base.document,role:.season,title:"通行证"))
+        for saved in [ArenaLobbySourceControl.Season(tier:0,points:0,pointsPerTier:0,hasReward:false),
+                      .init(tier:-1,points:0,pointsPerTier:100,hasReward:false),
+                      .init(tier:1,points:101,pointsPerTier:100,hasReward:false)] {
+            XCTAssertThrowsError(try ArenaLobbySourceControl(document:base.document,role:.season,title:"通行证",season:saved))
+        }
+    }
+
+    func testSourceControlCacheTracksOnlyItsOwnSavedState() {
+        let before = ArenaLobbySourceControl.Values(coins:100,trophies:10,playerName:"Before",
+            season:.init(tier:2,points:99,pointsPerTier:100,hasReward:false))
+        let after = ArenaLobbySourceControl.Values(coins:50,trophies:10,playerName:"After",
+            season:.init(tier:3,points:0,pointsPerTier:100,hasReward:true))
+        for role in ArenaLobbySourceControl.Role.allCases {
+            let a = before.binding(for:role,localizedTitle:role.title)
+            let b = after.binding(for:role,localizedTitle:role.title)
+            if [.coins,.profile,.season].contains(role) { XCTAssertNotEqual(a,b) }
+            else { XCTAssertEqual(a,b,"Unchanged controls retain their images and animation clocks") }
+        }
+    }
+
+    func testAnimatedControlKeepsButtonFootprintWhileRetainingParticlesOutsideFirstFrame() throws {
+        let particle = clip(2,children:[(1,0)],frames:[[[0,-1,0]],[[0,0,0]]],fps:2)
+        var button = clip(4,children:[(2,0)],frames:[[[0,-1,-1]]])
+        button["children"] = [["objectID":2,"name":"particle","blendMode":0]]
+        var root = clip(10,children:[(4,0)],frames:[[[0,-1,-1]]])
+        root["children"] = [["objectID":4,"name":"button","blendMode":0]]
+        let base = try fixture(objects:[shape(1,extent:2),particle,button,root],
+                               matrices:[[1,0,0,1,10,-8]],interfaceState:.init())
+        let source = try ArenaLobbySourceControl(document:base.document,export:"fixture",instance:"button",
+            title:"Animate",idleLabel:nil,hiddenChildren:[],titlePath:nil,includeAnimationBounds:true)
+        XCTAssertEqual(source.layoutBounds.values,[-2,-2,4,4])
+        XCTAssertEqual(source.bounds.values,[-2,-10,14,4])
+        let moved = try source.scene.frame(time:0.5)
+        XCTAssertEqual(moved.operations.count,1,"Particles beyond the first frame must not be discarded")
+        XCTAssertEqual(moved.operations[0].bounds.values,[10,-8,12,-6])
+        XCTAssertEqual(source.hitRegion.values,[0,0,2,2],"Particle overflow does not enlarge the button's hit area")
+    }
+
     private func iconControlFixture(role: ArenaLobbySourceControl.Role,
                                     unexpectedText: Bool = false) throws -> ArenaLobbyTimelineScene {
         let text: [String:Any] = ["id":3,"commands":[],"textField":[

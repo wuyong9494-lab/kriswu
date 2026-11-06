@@ -104,7 +104,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         return difference / 442368.0
     }
 
-    func testAllTenPrivateControlsRenderBoundTitlesBalancesOrIconsAndShopAnimation() throws {
+    func testAllTwelvePrivateControlsRenderSavedStateAndSourceAnimations() throws {
         let (root,manifest) = try fixtures()
         let device = try XCTUnwrap(MTLCreateSystemDefaultDevice(),"Private validation requires an actual Metal device")
         for font in manifest.fonts ?? [] { _ = try resource(font.file,root:root,manifest:manifest) }
@@ -113,25 +113,54 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         let path = try XCTUnwrap(manifest.interfaceSceneFile)
         let document = try document(path,root:root,manifest:manifest)
         let textures = try atlases(document,root:root,manifest:manifest)
-        XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,10)
-        let values = ArenaLobbySourceControl.Values(coins:2500,trophies:1250)
+        XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,12)
+        let season = ArenaLobbySourceControl.Season(tier:2,points:50,pointsPerTier:100,hasReward:false)
+        let values = ArenaLobbySourceControl.Values(coins:2500,trophies:1250,playerName:"测试玩家",season:season)
         for role in ArenaLobbySourceControl.Role.allCases {
             try autoreleasepool {
                 let title = values.title(for:role) ?? role.title
-                let source = try ArenaLobbySourceControl(document:document,role:role,title:title)
+                let source = try ArenaLobbySourceControl(document:document,role:role,title:title,season:season)
                 let frame = try source.scene.frame(time:0)
                 let titles: [String] = frame.operations.compactMap { operation in
                     if case .text(let text) = operation { return text.value }
                     return nil
                 }
-                XCTAssertEqual(titles,role.titlePath == nil ? [] : [title])
+                let expected = role == .season ? [title,"2","50/100"] : role.titlePath == nil ? [] : [title]
+                XCTAssertEqual(titles,expected)
                 let renderer = try ArenaLobbyTimelineRenderer(device:device,scene:source.scene,atlases:textures)
                 let width = Int(ceil(source.bounds.width*3)),height = Int(ceil(source.bounds.height*3))
                 let first = try renderer.snapshot(time:0,width:width,height:height)
                 XCTAssertTrue(first.contains { $0 != 0 })
-                if role == .shop {
-                    let later = try renderer.snapshot(time:2,width:width,height:height)
-                    XCTAssertTrue(first != later,"Original shop animation must change visible pixels")
+                if role == .shop || role == .season {
+                    let later = try renderer.snapshot(time:0.37,width:width,height:height)
+                    XCTAssertTrue(first != later,"Source idle animation must change visible pixels")
+                }
+                if role == .profile {
+                    let field = role.instance + "/player_name_txt"
+                    source.scene.interfaceState?.text[field] = "Changed Player 玩家"
+                    let renamed = try renderer.snapshot(time:0,width:width,height:height)
+                    XCTAssertTrue(renamed != first,"Changing the nickname must replace the rendered name")
+                }
+                if role == .season {
+                    var previous = first
+                    for saved in [
+                        ArenaLobbySourceControl.Season(tier:2,points:99,pointsPerTier:100,hasReward:false),
+                        .init(tier:3,points:0,pointsPerTier:100,hasReward:true),
+                        .init(tier:3,points:0,pointsPerTier:100,hasReward:false),
+                        .init(tier:50,points:100,pointsPerTier:100,hasReward:true),
+                        .init(tier:0,points:0,pointsPerTier:100,hasReward:false)
+                    ] {
+                        let updated = try ArenaLobbySourceControl(document:document,role:.season,title:title,season:saved)
+                        let updatedRenderer = try ArenaLobbyTimelineRenderer(device:device,scene:updated.scene,atlases:textures)
+                        let frame = try updated.scene.frame(time:0)
+                        let text: [String] = frame.operations.compactMap {
+                            if case .text(let t) = $0 { return t.value }; return nil
+                        }
+                        XCTAssertEqual(text,[title,String(saved.tier),"\(saved.points)/\(saved.pointsPerTier)"])
+                        let pixels = try updatedRenderer.snapshot(time:0,width:width,height:height)
+                        XCTAssertTrue(pixels != previous,"Pass progress, tier, ready and reset states must redraw")
+                        previous = pixels
+                    }
                 }
                 if role == .coins || role == .trophies {
                     let field = role.instance + "/" + (try XCTUnwrap(role.titlePath))

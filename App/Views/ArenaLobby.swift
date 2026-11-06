@@ -69,7 +69,8 @@ struct ArenaHomeView: View {
 
     private var sourceControlRequest: ArenaLobbySourceControl.Request {
         .init(revision: resourcePack.contentRevision,
-              values: .init(coins: progress.coins, trophies: progress.totalTrophies))
+              values: .init(coins: progress.coins, trophies: progress.totalTrophies,
+                            playerName: name, season: sourceSeason))
     }
 
     /// 选的角色还没解锁（比如换了一台手机）就用第一个
@@ -89,7 +90,15 @@ struct ArenaHomeView: View {
         }.prefix(2))
     }
 
-    private var name: String { store.settings.aliases.first ?? "我" }
+    private var name: String {
+        let value = (store.settings.aliases.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "我" : value
+    }
+
+    private var sourceSeason: ArenaLobbySourceControl.Season {
+        .init(tier: progress.season.tier, points: seasonTierPoints,
+              pointsPerTier: ArenaSeason.pointsPerTier, hasReward: hasSeasonPrize)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -328,16 +337,7 @@ struct ArenaHomeView: View {
 
     private func compactTopBar(composition: ArenaLobbyComposition) -> some View {
         HStack(spacing: composition.topGap) {
-            Button { sheet = .brawlers } label: {
-                HStack(spacing: 5) {
-                    ArenaLobbyIcon("ArenaIconHero").foregroundStyle(.white)
-                        .frame(width: 29, height: 29).padding(3).background(.purple)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(name).font(.system(size: 12, weight: .black)).lineLimit(1)
-                        Text("英雄收藏").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
-                    }
-                }.padding(.horizontal, 6).frame(width: composition.profileWidth, height: 44)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
+            profileButton(width: composition.profileWidth)
             trophyRoadButton(width: composition.roadWidth)
             Spacer(minLength: 0)
             coinCounter(width: composition.coinWidth)
@@ -354,6 +354,31 @@ struct ArenaHomeView: View {
                 Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("离开勇者乱斗")
         }.foregroundStyle(.white).frame(height: 44)
+    }
+
+    @ViewBuilder
+    private func profileButton(width: CGFloat) -> some View {
+        if resourcePack.enabled, let control = sourceControls.controls[.profile], control.title == name {
+            Button { sheet = .brawlers } label: {
+                ArenaSourceControlVisual(control: control, live: false)
+                    .frame(width: width, height: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityLabel("\(name)，英雄收藏")
+                .accessibilityIdentifier("arena.profile")
+        } else {
+            Button { sheet = .brawlers } label: {
+                HStack(spacing: 5) {
+                    ArenaLobbyIcon("ArenaIconHero").foregroundStyle(.white)
+                        .frame(width: 29, height: 29).padding(3).background(.purple)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(name).font(.system(size: 12, weight: .black)).lineLimit(1)
+                        Text("英雄收藏").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.75))
+                    }
+                }.padding(.horizontal, 6).frame(width: width, height: 44)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .purple))
+                .accessibilityLabel("\(name)，英雄收藏")
+                .accessibilityIdentifier("arena.profile")
+        }
     }
 
     @ViewBuilder
@@ -462,30 +487,49 @@ struct ArenaHomeView: View {
         return value
     }
 
+    private var seasonPassButton: some View {
+        Group {
+            if resourcePack.enabled, let control = sourceControls.controls[.season],
+               control.binding == sourceControlRequest.values.binding(for: .season,
+                   localizedTitle: sourceLocalization.menuTitle(ArenaLobbySourceControl.Role.season.title)) {
+                Button { sheet = .season } label: {
+                    ArenaSourceControlVisual(control: control,
+                        live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                        .id(control.id)
+                        .frame(width: 110, height: 69).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            } else {
+                Button { sheet = .season } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 5) {
+                            ArenaLobbyIcon("ArenaIconPass").frame(width: 42, height: 31)
+                            Text("\(progress.season.tier)").font(.system(size: 22, weight: .black))
+                        }
+                        Text("乱斗通行证").font(.system(size: 11, weight: .black))
+                        ProgressView(value: Double(seasonTierPoints), total: Double(ArenaSeason.pointsPerTier))
+                            .tint(.yellow).frame(width: 90)
+                        Text("\(seasonTierPoints)/\(ArenaSeason.pointsPerTier)")
+                            .font(.system(size: 9, weight: .black, design: .rounded).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.85))
+                    }.padding(.horizontal, 8).frame(width: 110, height: 69)
+                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if hasSeasonPrize {
+                Text("!").font(.system(size: 13, weight: .black)).foregroundStyle(.white)
+                    .frame(width: 20, height: 20).background(.red, in: Circle())
+                    .overlay(Circle().stroke(.black, lineWidth: 1.5)).offset(x: 5, y: -5)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
+        .accessibilityLabel("乱斗通行证，等级\(progress.season.tier)，进度\(seasonTierPoints)/\(ArenaSeason.pointsPerTier)\(hasSeasonPrize ? "，有奖励可领取" : "")")
+        .accessibilityIdentifier("arena.seasonPass")
+    }
+
     private func lobbyFooter(composition: ArenaLobbyComposition) -> some View {
         HStack(alignment: .bottom, spacing: 8) {
-            Button { sheet = .season } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        ArenaLobbyIcon("ArenaIconPass").frame(width: 42, height: 31)
-                        Text("\(progress.season.tier)").font(.system(size: 22, weight: .black))
-                    }
-                    Text("乱斗通行证").font(.system(size: 11, weight: .black))
-                    ProgressView(value: Double(seasonTierPoints), total: Double(ArenaSeason.pointsPerTier))
-                        .tint(.yellow).frame(width: 90)
-                    Text("\(seasonTierPoints)/\(ArenaSeason.pointsPerTier)")
-                        .font(.system(size: 9, weight: .black, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.85))
-                }.padding(.horizontal, 8).frame(width: 110, height: 69)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow))
-                .overlay(alignment: .topTrailing) {
-                    if hasSeasonPrize {
-                        Text("!").font(.system(size: 13, weight: .black)).foregroundStyle(.white)
-                            .frame(width: 20, height: 20).background(.red, in: Circle())
-                            .overlay(Circle().stroke(.black, lineWidth: 1.5)).offset(x: 5, y: -5)
-                            .allowsHitTesting(false).accessibilityHidden(true)
-                    }
-                }
+            seasonPassButton
             if resourcePack.enabled, let control = sourceControls.controls[.quests] {
                 Button { sheet = .season } label: {
                     ArenaSourceControlVisual(control: control, live: false)

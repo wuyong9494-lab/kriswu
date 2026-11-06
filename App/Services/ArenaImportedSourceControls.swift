@@ -11,6 +11,7 @@ import UIKit
 final class ArenaImportedSourceControls: ObservableObject {
     typealias Role = ArenaLobbySourceControl.Role
     struct Control {
+        let id = UUID()
         struct LiveSource {
             let sceneURL: URL
             let sceneSHA256: String
@@ -19,9 +20,13 @@ final class ArenaImportedSourceControls: ObservableObject {
             let state: ArenaLobbyInterfaceState
         }
         let image: UIImage
-        let title: String
+        let binding: ArenaLobbySourceControl.Binding
+        var title: String { binding.title }
         /// Normalized within image, before SwiftUI's aspect-fit placement.
         let hitRegion: CGRect
+        /// Fit the button to its native layout while allowing its original
+        /// particles to extend outside that footprint without shrinking it.
+        let layoutRegion: CGRect
         let liveSource: LiveSource?
     }
     static let shared = ArenaImportedSourceControls()
@@ -37,12 +42,12 @@ final class ArenaImportedSourceControls: ObservableObject {
             controls = [:]
             loadedRevision = store.contentRevision
         }
-        let titles = Dictionary(uniqueKeysWithValues: Role.allCases.map {
-            ($0, values.title(for: $0) ?? localization.menuTitle($0.title))
+        let bindings = Dictionary(uniqueKeysWithValues: Role.allCases.map {
+            ($0, values.binding(for: $0, localizedTitle: localization.menuTitle($0.title)))
         })
         // A balance update redraws only changed counters. Keep the verified
         // static controls and shop canvas in place throughout the async load.
-        let roles = Role.allCases.filter { controls[$0]?.title != titles[$0] }
+        let roles = Role.allCases.filter { controls[$0]?.binding != bindings[$0] }
         guard !roles.isEmpty else { return }
         guard store.enabled, let pack = store.manifest,
               let scenePath = pack.interfaceSceneFile, let bindingsPath = pack.interfaceBindingsFile,
@@ -99,7 +104,7 @@ final class ArenaImportedSourceControls: ObservableObject {
                 // A missing or incompatible control keeps its own native button;
                 // it must not prevent other independently verified controls loading.
                 result[role] = try? Self.render(document: document, atlases: atlases,
-                    device: device, role: role, title: titles[role]!,
+                    device: device, role: role, binding: bindings[role]!,
                     sceneURL: sceneURL, sceneSHA256: sceneFile.sha256)
                 await Task.yield()
             }
@@ -111,8 +116,9 @@ final class ArenaImportedSourceControls: ObservableObject {
     }
 
     private static func render(document: ArenaLobbyTimelineDocument, atlases: [ArenaLobbyTimelineRenderer.Atlas],
-                               device: MTLDevice, role: Role, title: String, sceneURL: URL, sceneSHA256: String) throws -> Control {
-        let source = try ArenaLobbySourceControl(document: document, role: role, title: title)
+                               device: MTLDevice, role: Role, binding: ArenaLobbySourceControl.Binding,
+                               sceneURL: URL, sceneSHA256: String) throws -> Control {
+        let source = try ArenaLobbySourceControl(document: document, role: role, title: binding.title, season: binding.season)
         let renderer = try ArenaLobbyTimelineRenderer(device: device, scene: source.scene, atlases: atlases)
         let scale = min(3.0, max(1.0, Double(UIScreen.main.scale)))
         let width = Int(ceil(source.bounds.width * scale)), height = Int(ceil(source.bounds.height * scale))
@@ -123,12 +129,14 @@ final class ArenaImportedSourceControls: ObservableObject {
                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
                     .union(.byteOrder32Big), provider: provider, decode: nil, shouldInterpolate: true,
                   intent: .defaultIntent) else { throw CocoaError(.fileReadCorruptFile) }
-        let r = source.hitRegion, b = source.bounds
+        let r = source.hitRegion, b = source.bounds, layout = source.layoutBounds
         return Control(image: UIImage(cgImage: cg, scale: scale, orientation: .up),
-                       title: title,
+                       binding: binding,
                        hitRegion: CGRect(x: (r.minX-b.minX)/b.width, y: (r.minY-b.minY)/b.height,
                                          width: r.width/b.width, height: r.height/b.height),
-                       liveSource: role == .shop ? .init(sceneURL: sceneURL, sceneSHA256: sceneSHA256,
+                       layoutRegion: CGRect(x: (layout.minX-b.minX)/b.width, y: (layout.minY-b.minY)/b.height,
+                                            width: layout.width/b.width, height: layout.height/b.height),
+                       liveSource: role == .shop || role == .season ? .init(sceneURL: sceneURL, sceneSHA256: sceneSHA256,
                            exportName: role.export, sourceRect: CGRect(x: b.minX, y: b.minY, width: b.width, height: b.height),
                            state: source.scene.interfaceState!) : nil)
     }

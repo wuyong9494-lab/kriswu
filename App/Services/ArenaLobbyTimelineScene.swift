@@ -632,6 +632,59 @@ final class ArenaLobbyTimelineScene {
         interfaceBindingsValidated = true
     }
 
+    /// Conservative local bounds across every active descendant frame. Cache
+    /// per instance, so shared clips retain independent bindings. Composing
+    /// rectangles may overestimate rotating particles, but never clips a frame
+    /// or requires sampling a potentially enormous common clock period.
+    func completeContentBounds() throws -> Rect? {
+        try validateInterfaceBindings()
+        var cache: [String: Rect] = [:]
+        var empty = Set<String>()
+        func visit(_ id: Int, path: String, depth: Int) throws -> Rect? {
+            if let bounds = cache[path] { return bounds }
+            if empty.contains(path) || interfaceState?.hidden.contains(path) == true { return nil }
+            guard depth < 48, let item = objects[id] else {
+                throw ArenaLobbyTimelineError.invalid("Source animation bounds exceed their depth budget")
+            }
+            var result: Rect?
+            func include(_ rect: Rect) { result = result.map { $0.union(rect) } ?? rect }
+            if let style = textStyles[id], !layoutMarkerPaths.contains(path) {
+                guard let value = interfaceState?.text[path] else {
+                    throw ArenaLobbyTimelineError.invalid("Unbound animated source text at \(path)")
+                }
+                if !value.isEmpty { include(Rect(style.rect)) }
+            }
+            for command in item.commands {
+                let points = command.vertices
+                include(Rect([points.map { $0[0] }.min()!,points.map { $0[1] }.min()!,
+                              points.map { $0[0] }.max()!,points.map { $0[1] }.max()!]))
+            }
+            if let children = item.children, let frames = item.frames {
+                let runs: [[[Int]]]
+                if let frame = interfaceState?.frameIndices[path] { runs = [elements(id,frame:frame)] }
+                else if let label = interfaceState?.frames[path], let frame = item.frameLabels?.firstIndex(of:label) {
+                    runs = [elements(id,frame:frame)]
+                } else { runs = frames.map(\.elements) }
+                for run in runs {
+                    for e in run {
+                        let child = children[e[0]]
+                        if child.excludedByProof != nil || objects[child.objectID]?.modifier != nil { continue }
+                        let name = childSegments[id]![e[0]]
+                        let childPath = path.isEmpty ? name : path + "/" + name
+                        guard let r = try visit(child.objectID,path:childPath,depth:depth+1) else { continue }
+                        let matrix = e[1] == -1 ? Affine.identity : matrices[e[1]]
+                        let points = [[r.minX,r.minY],[r.maxX,r.minY],[r.minX,r.maxY],[r.maxX,r.maxY]].map(matrix.point)
+                        include(Rect([points.map(\.x).min()!,points.map(\.y).min()!,
+                                      points.map(\.x).max()!,points.map(\.y).max()!]))
+                    }
+                }
+            }
+            if let result { cache[path] = result } else { empty.insert(path) }
+            return result
+        }
+        return try visit(root,path:"",depth:0)
+    }
+
     func frame(time: Double) throws -> Frame {
         guard time.isFinite, time >= 0 else { throw ArenaLobbyTimelineError.invalid("Invalid lobby sample time") }
         try validateInterfaceBindings()
