@@ -221,6 +221,9 @@ final class ArenaLobbyTimelineScene {
         let operations: [Operation]
         let clipFrames: [Int: Int]
         let sourceTime: Double
+        /// Empty source `hit_area` / `bounds` text rectangles in canvas space.
+        /// Native controls can use these without drawing marker glyphs.
+        let layoutRegions: [String: Rect]
     }
 
     let document: ArenaLobbyTimelineDocument
@@ -236,7 +239,12 @@ final class ArenaLobbyTimelineScene {
     private var frameLookups: [Int: Int] = [:]
     private var textStyles: [Int: ArenaLobbySourceText] = [:]
     private var childSegments: [Int: [String]] = [:]
-    var interfaceState: ArenaLobbyInterfaceState?
+    var interfaceState: ArenaLobbyInterfaceState? {
+        didSet { if oldValue != interfaceState { interfaceBindingsValidated = false } }
+    }
+    private var interfaceBindingsValidated = false
+    private var instanceObjects: [String: Int]?
+    private var layoutMarkerPaths = Set<String>()
 
     init(document: ArenaLobbyTimelineDocument, exportName: String, sourceRect: [Double]? = nil,
          interfaceState: ArenaLobbyInterfaceState? = nil) throws {
@@ -485,12 +493,64 @@ final class ArenaLobbyTimelineScene {
         guard verified == Set(proofs.keys) else { throw ArenaLobbyTimelineError.invalid("Unreachable or incomplete lobby proof") }
     }
 
+    /// A mistyped path must not quietly leave a counter or state on its default
+    /// source frame. Build the instance index once and validate only on changes.
+    private func validateInterfaceBindings() throws {
+        guard !interfaceBindingsValidated else { return }
+        guard let state = interfaceState else { interfaceBindingsValidated = true; return }
+        if instanceObjects == nil {
+            var index: [String: Int] = [:]
+            var markers = Set<String>()
+            func walk(_ id: Int, path: String, name: String, depth: Int) throws {
+                guard depth < 48, index.count < 100_000, index[path] == nil else {
+                    throw ArenaLobbyTimelineError.invalid("Ambiguous or oversized source interface instance tree")
+                }
+                index[path] = id
+                if ["hit_area", "bounds"].contains(name), objects[id]?.textField?["text"]?.string == "" {
+                    markers.insert(path)
+                }
+                for (offset, child) in (objects[id]?.children ?? []).enumerated() {
+                    let segment = childSegments[id]![offset]
+                    try walk(child.objectID, path: path.isEmpty ? segment : path + "/" + segment,
+                             name: child.name, depth: depth + 1)
+                }
+            }
+            try walk(root, path: "", name: "", depth: 0)
+            instanceObjects = index
+            layoutMarkerPaths = markers
+        }
+        let index = instanceObjects!
+        for (path, value) in state.text {
+            guard let id = index[path], objects[id]?.textField != nil, value.utf8.count <= 4096,
+                  !layoutMarkerPaths.contains(path) || value.isEmpty else {
+                throw ArenaLobbyTimelineError.invalid("Invalid source text binding at \(path)")
+            }
+        }
+        for (path, label) in state.frames {
+            guard let id = index[path], !label.isEmpty, objects[id]?.frameLabels?.contains(label) == true,
+                  state.frameIndices[path] == nil else {
+                throw ArenaLobbyTimelineError.invalid("Invalid source named frame binding at \(path)")
+            }
+        }
+        for (path, frame) in state.frameIndices {
+            guard let id = index[path], let count = objects[id]?.frameCount, (0..<count).contains(frame) else {
+                throw ArenaLobbyTimelineError.invalid("Invalid source numeric frame binding at \(path)")
+            }
+        }
+        guard state.hidden.allSatisfy({ index[$0] != nil }) else {
+            throw ArenaLobbyTimelineError.invalid("Unknown source visibility binding")
+        }
+        interfaceBindingsValidated = true
+    }
+
     func frame(time: Double) throws -> Frame {
         guard time.isFinite, time >= 0 else { throw ArenaLobbyTimelineError.invalid("Invalid lobby sample time") }
+        try validateInterfaceBindings()
         frameLookups = Dictionary(uniqueKeysWithValues: reachableClocks.map { id in
             let item = objects[id]!
             return (id, Self.frameIndex(time: time, fps: item.fps!, count: item.frameCount!))
         })
+        var layoutRegions: [String: Rect] = [:]
         var totalVertices = 0
         func union(_ ops: [Operation]) -> Rect? { ops.map(\.bounds).reduce(nil) { a,b in a.map { $0.union(b) } ?? b } }
         func draw(_ id: Int, path: String, transform: Affine, color: Color, depth: Int) throws -> [Operation] {
@@ -498,6 +558,13 @@ final class ArenaLobbyTimelineScene {
             if interfaceState?.hidden.contains(path) == true { return [] }
             var output: [Operation] = []
             if let style = textStyles[id] {
+                if layoutMarkerPaths.contains(path) {
+                    let r = style.rect
+                    let points = [[r[0],r[1]],[r[2],r[1]],[r[0],r[3]],[r[2],r[3]]].map(transform.point)
+                    layoutRegions[path] = Rect([points.map(\.x).min()!,points.map(\.y).min()!,
+                                               points.map(\.x).max()!,points.map(\.y).max()!])
+                    return []
+                }
                 guard let value = interfaceState?.text[path], value.utf8.count <= 4096 else {
                     throw ArenaLobbyTimelineError.invalid("Unbound source text instance: \(path)")
                 }
@@ -589,7 +656,7 @@ final class ArenaLobbyTimelineScene {
             if active { flushMask() }
             return output
         }
-        return Frame(operations: try draw(root, path: "", transform: .identity, color: .identity, depth: 0),
-                     clipFrames: frameLookups, sourceTime: time)
+        let operations = try draw(root, path: "", transform: .identity, color: .identity, depth: 0)
+        return Frame(operations: operations, clipFrames: frameLookups, sourceTime: time, layoutRegions: layoutRegions)
     }
 }

@@ -164,6 +164,54 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         XCTAssertThrowsError(try scene.frame(time: 0), "An empty label is not a named state")
     }
 
+    func testInterfaceBindingTyposAndWrongTargetTypesFailBeforeDrawing() throws {
+        let root = clip(10, children: [(1,0)], frames: [[[0,-1,0]],[[0,-1,1]]], fps: 1)
+        let scene = try fixture(objects: [shape(1),root], interfaceState: .init())
+        XCTAssertNoThrow(try scene.frame(time: 0))
+        for state in [ArenaLobbyInterfaceState(text: ["#0:":"wrong target"]),
+                      .init(frameIndices: ["#0:":0]), .init(frameIndices: ["typo":0]),
+                      .init(hidden: ["typo"])] {
+            scene.interfaceState = state
+            XCTAssertThrowsError(try scene.frame(time: 0))
+        }
+        scene.interfaceState = .init(frameIndices: ["":1])
+        XCTAssertNoThrow(try scene.frame(time: 0), "Corrected state must recover after an invalid binding")
+    }
+
+    func testEmptySourceLayoutMarkersProvideTransformedRegionsWithoutGlyphs() throws {
+        let marker: [String:Any] = ["id":1,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"","left":1,"top":2,"right":4,"bottom":6,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":0,"align":0]]
+        var root = clip(10, children:[(1,0)],frames:[[[0,0,-1]]])
+        root["children"] = [["objectID":1,"blendMode":0,"name":"hit_area"]]
+        let scene = try fixture(objects:[marker,root], matrices:[[2,0,0,3,10,20]], interfaceState:.init())
+        let frame = try scene.frame(time:0)
+        XCTAssertTrue(frame.operations.isEmpty)
+        XCTAssertEqual(frame.layoutRegions["hit_area"]?.values,[12,26,18,38])
+        scene.interfaceState = .init(hidden:["hit_area"])
+        XCTAssertTrue(try scene.frame(time:0).layoutRegions.isEmpty)
+        scene.interfaceState = .init(text:["hit_area":"accidental label"])
+        XCTAssertThrowsError(try scene.frame(time:0))
+    }
+
+    func testReusedProgressClipsCanSelectDifferentFramesIndependently() throws {
+        let child = clip(2, children: [(1,0)], frames: [[[0,-1,0]],[[0,-1,1]]], fps: 1)
+        var root = clip(10, children: [(2,0),(2,0)], frames: [[[0,-1,-1],[1,-1,-1]]])
+        root["children"] = [["objectID":2,"blendMode":0,"name":"coins"],
+                            ["objectID":2,"blendMode":0,"name":"trophies"]]
+        let scene = try fixture(objects: [shape(1),child,root],
+            interfaceState: .init(frameIndices: ["coins":0,"trophies":1]))
+        for time in [0.0,1.0,10.0] {
+            let colors = try scene.frame(time: time).operations.compactMap { operation -> SIMD4<Float>? in
+                if case .draw(let draw) = operation { return draw.vertices.first?.multiply }; return nil
+            }
+            XCTAssertEqual(colors,[SIMD4<Float>(1,0,0,1), SIMD4<Float>(0,0,1,1)])
+        }
+        scene.interfaceState = .init(frameIndices: ["":0])
+        // Freezing a container must not stop its independent child clocks.
+        assertPixel(try makeRenderer(scene).snapshot(time: 1,width:4,height:4),[0,0,255,255])
+    }
+
     func testSourceTextRendersThroughMetalAndRespondsToDataChanges() throws {
         let text: [String: Any] = ["id":1,"commands":[],"textField":[
             "fontName":"Arial","fontSize":30,"left":0,"top":0,"right":80,"bottom":40,

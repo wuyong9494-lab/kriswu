@@ -609,7 +609,7 @@ jobs:
             python3 - "$CAPTURE_DATA/Documents/arena-capture-ready.json" "$1" <<'PYCODE'
           import json, pathlib, sys, time
           marker = pathlib.Path(sys.argv[1])
-          expected = 'Rogue.glb' if sys.argv[2] == 'YES' else 'Ranger_Original.glb'
+          expected = 'Rogue.glb' if sys.argv[2] == 'YES' else 'Ranger_FaceSample.glb'
           deadline = time.monotonic() + 120
           while time.monotonic() < deadline:
               if marker.exists():
@@ -766,7 +766,7 @@ jobs:
               before = json.load(open('shots/' + pair + 'Before.json'))
               after = json.load(open('shots/' + pair + 'After.json'))
               assert before.pop('rangerAsset') == 'Rogue.glb'
-              assert after.pop('rangerAsset') == 'Ranger_Original.glb'
+              assert after.pop('rangerAsset') == 'Ranger_FaceSample.glb'
               assert before == after, 'Different simulation state or camera in ' + pair
           PYCODE
           test -s shots/rangerLobbyMotion.mp4
