@@ -4,18 +4,28 @@ import Foundation
 /// application supplies the title and action; source placeholders are never used.
 struct ArenaLobbySourceControl {
     enum Role: String, CaseIterable, Sendable {
-        case shop, heroes, friends
+        case shop, heroes, friends, quests
 
-        var export: String { self == .friends ? "mainscreen_hud_right" : "mainscreen_hud_left" }
+        var export: String {
+            switch self {
+            case .shop, .heroes: return "mainscreen_hud_left"
+            case .friends: return "mainscreen_hud_right"
+            case .quests: return "mainscreen_hud_bottom_left"
+            }
+        }
+        var idleLabel: String? {
+            switch self { case .shop, .heroes: return "idle"; case .friends: return nil; case .quests: return "default" }
+        }
         var instance: String {
             switch self {
             case .shop: return "button_navi_shop"
             case .heroes: return "button_navi_brawlers"
             case .friends: return "button_navi_friends"
+            case .quests: return "button_quests"
             }
         }
         var title: String {
-            switch self { case .shop: return "商店"; case .heroes: return "英雄"; case .friends: return "好友" }
+            switch self { case .shop: return "商店"; case .heroes: return "英雄"; case .friends: return "好友"; case .quests: return "任务" }
         }
     }
 
@@ -26,7 +36,7 @@ struct ArenaLobbySourceControl {
 
     init(document: ArenaLobbyTimelineDocument, role: Role, title: String) throws {
         try self.init(document: document, export: role.export, instance: role.instance, title: title,
-                      idleLabel: role == .friends ? nil : "idle",
+                      idleLabel: role.idleLabel,
                       hiddenChildren: role == .heroes ? ["notification", "progress_bar", "rarity_icon", "fame_tier_ph"] : ["notification"])
     }
 

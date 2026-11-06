@@ -5,14 +5,23 @@ import UIKit
 
 /// Cache the complete idle controls once per verified pack/language. Rendering
 /// sequentially releases the large source atlas between controls; the lobby
-/// retains only the small finished images, not three more live Metal canvases.
+/// retains small images; only a control with a changing idle timeline needs a
+/// live canvas. The supplied shop clip animates even without a notification.
 @MainActor
 final class ArenaImportedSourceControls: ObservableObject {
     typealias Role = ArenaLobbySourceControl.Role
     struct Control {
+        struct LiveSource {
+            let sceneURL: URL
+            let sceneSHA256: String
+            let exportName: String
+            let sourceRect: CGRect
+            let state: ArenaLobbyInterfaceState
+        }
         let image: UIImage
         /// Normalized within image, before SwiftUI's aspect-fit placement.
         let hitRegion: CGRect
+        let liveSource: LiveSource?
     }
     static let shared = ArenaImportedSourceControls()
     @Published private(set) var controls: [Role: Control] = [:]
@@ -77,7 +86,8 @@ final class ArenaImportedSourceControls: ObservableObject {
                 // A missing or incompatible control keeps its own native button;
                 // it must not prevent other independently verified controls loading.
                 result[role] = try? Self.render(document: document, atlases: atlases,
-                    device: device, role: role, title: localization.menuTitle(role.title))
+                    device: device, role: role, title: localization.menuTitle(role.title),
+                    sceneURL: sceneURL, sceneSHA256: sceneFile.sha256)
                 await Task.yield()
             }
             guard generation == token, !Task.isCancelled, store.enabled else { return }
@@ -88,10 +98,10 @@ final class ArenaImportedSourceControls: ObservableObject {
     }
 
     private static func render(document: ArenaLobbyTimelineDocument, atlases: [ArenaLobbyTimelineRenderer.Atlas],
-                               device: MTLDevice, role: Role, title: String) throws -> Control {
+                               device: MTLDevice, role: Role, title: String, sceneURL: URL, sceneSHA256: String) throws -> Control {
         let source = try ArenaLobbySourceControl(document: document, role: role, title: title)
         let renderer = try ArenaLobbyTimelineRenderer(device: device, scene: source.scene, atlases: atlases)
-        let scale = 2.0
+        let scale = min(3.0, max(1.0, Double(UIScreen.main.scale)))
         let width = Int(ceil(source.bounds.width * scale)), height = Int(ceil(source.bounds.height * scale))
         let pixels = try renderer.snapshot(time: 0, width: width, height: height)
         guard let provider = CGDataProvider(data: Data(pixels) as CFData),
@@ -103,6 +113,9 @@ final class ArenaImportedSourceControls: ObservableObject {
         let r = source.hitRegion, b = source.bounds
         return Control(image: UIImage(cgImage: cg, scale: scale, orientation: .up),
                        hitRegion: CGRect(x: (r.minX-b.minX)/b.width, y: (r.minY-b.minY)/b.height,
-                                         width: r.width/b.width, height: r.height/b.height))
+                                         width: r.width/b.width, height: r.height/b.height),
+                       liveSource: role == .shop ? .init(sceneURL: sceneURL, sceneSHA256: sceneSHA256,
+                           exportName: role.export, sourceRect: CGRect(x: b.minX, y: b.minY, width: b.width, height: b.height),
+                           state: source.scene.interfaceState!) : nil)
     }
 }

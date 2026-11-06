@@ -290,7 +290,8 @@ struct ArenaHomeView: View {
            let role = ArenaLobbySourceControl.Role.allCases.first(where: { $0.title == title }),
            let control = sourceControls.controls[role] {
             Button(action: action) {
-                Image(uiImage: control.image).resizable().scaledToFit()
+                ArenaSourceControlVisual(control: control, live: playing == nil && lobby == nil && !adventure && sheet == nil)
+                    .id(resourcePack.contentRevision)
                     .frame(width: 67, height: compact ? 44 : 49)
                     .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
             }.buttonStyle(.plain)
@@ -405,12 +406,21 @@ struct ArenaHomeView: View {
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
-            Button { sheet = .season } label: {
-                VStack(spacing: 1) {
-                    ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
-                    Text("任务").font(.system(size: 12, weight: .black))
-                }.frame(width: 44, height: 56)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
+            if resourcePack.enabled, let control = sourceControls.controls[.quests] {
+                Button { sheet = .season } label: {
+                    ArenaSourceControlVisual(control: control, live: false)
+                        .frame(width: 44, height: 56)
+                        .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+                }.buttonStyle(.plain).accessibilityLabel(sourceLocalization.menuTitle("任务"))
+                    .accessibilityIdentifier("arena.menu.任务")
+            } else {
+                Button { sheet = .season } label: {
+                    VStack(spacing: 1) {
+                        ArenaLobbyIcon("ArenaIconQuest").frame(width: 34, height: 34)
+                        Text("任务").font(.system(size: 12, weight: .black))
+                    }.frame(width: 44, height: 56)
+                }.buttonStyle(ArenaLobbyButtonStyle(tint: .cyan))
+            }
             Spacer(minLength: 0)
             Button { sheet = .modes } label: {
                 HStack(spacing: 8) {
