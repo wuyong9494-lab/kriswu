@@ -68,9 +68,8 @@ final class StarJourneyVisualTests: XCTestCase {
             if chapter < 2 { XCTAssertTrue(save.advance(route:chapter == 0 ? .signal : nil)) }
         }
         let reward=try XCTUnwrap(save.pendingReward)
-        let view=ScrollView { StarJourneyRewardView(reward:reward,done:{}).padding(20) }
+        let view=ScrollView { StarJourneyRewardView(reward:reward,animateRestoration:false,done:{}).padding(20) }
             .background(RailSkyBackdrop(theme:.midnight)).frame(width:440,height:956)
-            .environment(\.accessibilityReduceMotion,true)
         try attach(view,name:"journey-restoration-reward",size:CGSize(width:440,height:956))
         for stars in [0,10] {
             let map=StarConstellationMap(earned:stars).frame(width:400,height:324)

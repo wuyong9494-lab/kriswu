@@ -57,10 +57,12 @@ enum DutyActivityManager {
             if let target, activity.attributes.day == target.day.description, activity.activityState == .active {
                 showing = true
                 if activity.content.state != target.state {
-                    Task { await activity.update(ActivityContent(state: target.state, staleDate: target.state.end)) }
+                    let id = activity.id, state = target.state
+                    Task { await updateActivity(id: id, state: state) }
                 }
             } else {
-                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+                let id = activity.id
+                Task { await endActivity(id: id) }
             }
         }
         // 你划掉了就不再弹出来；系统显示满 8 小时收起后，再打开 App 时重新显示（夜里那段也能看到）
@@ -76,5 +78,18 @@ enum DutyActivityManager {
             UserDefaults.standard.set(target.day.description, forKey: dayKey)
             UserDefaults.standard.set(Date(), forKey: timeKey)
         }
+    }
+
+    // Activity handles aren't Sendable. Cross the executor boundary with value
+    // data only, then resolve a handle inside the async operation that owns it.
+    private nonisolated static func updateActivity(id: String, state: DutyAttributes.ContentState) async {
+        guard let activity = Activity<DutyAttributes>.activities.first(where: { $0.id == id }),
+              activity.activityState == .active else { return }
+        await activity.update(ActivityContent(state: state, staleDate: state.end))
+    }
+
+    private nonisolated static func endActivity(id: String) async {
+        guard let activity = Activity<DutyAttributes>.activities.first(where: { $0.id == id }) else { return }
+        await activity.end(nil, dismissalPolicy: .immediate)
     }
 }

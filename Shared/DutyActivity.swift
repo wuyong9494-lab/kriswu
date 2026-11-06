@@ -3,7 +3,7 @@ import Foundation
 
 /// 值遥测时锁屏、灵动岛上显示的倒计时（实时活动）。App 和小组件共用。
 struct DutyAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
+    struct ContentState: Codable, Hashable, Sendable {
         /// 开始、下班时间
         var start: Date
         var end: Date

@@ -5,9 +5,11 @@ struct StarJourneyRewardView: View {
     @ObservedObject private var store = StarRailStore.shared
     let reward: StarJourney.Reward
     var done: () -> Void
+    private let animateRestoration: Bool
     @State private var displayedStars: Int
-    init(reward:StarJourney.Reward,done:@escaping () -> Void) {
-        self.reward=reward;self.done=done;_displayedStars=State(initialValue:reward.totalBefore)
+    init(reward:StarJourney.Reward,animateRestoration:Bool = true,done:@escaping () -> Void) {
+        self.reward=reward;self.done=done;self.animateRestoration=animateRestoration
+        _displayedStars=State(initialValue:animateRestoration ? reward.totalBefore : reward.totalAfter)
     }
     private var newSkies: [StarRail.SkyTheme] {
         StarRail.SkyTheme.allCases.filter { $0.requiredStars > reward.totalBefore && $0.requiredStars <= reward.totalAfter }
@@ -55,7 +57,7 @@ struct StarJourneyRewardView: View {
             Button("收下奖励 · 选择下一次旅程",action:done).buttonStyle(TilePrimaryButton()).accessibilityIdentifier("journey.reward.done")
         }
         .task(id:reward.id) {
-            if reduceMotion { displayedStars=reward.totalAfter;return }
+            if reduceMotion || !animateRestoration { displayedStars=reward.totalAfter;return }
             let steps=StarRail.StarMap.thresholds.filter { $0 > reward.totalBefore && $0 <= reward.totalAfter }
             for step in steps {
                 do { try await Task.sleep(nanoseconds:150_000_000) } catch { return }
