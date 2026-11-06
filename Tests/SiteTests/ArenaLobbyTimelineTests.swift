@@ -178,6 +178,29 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         XCTAssertNoThrow(try scene.frame(time: 0), "Corrected state must recover after an invalid binding")
     }
 
+    func testUnsupportedBlendRequiresExplicitHiddenInstanceAndFailsWhenEnabled() throws {
+        let root = clip(10, children:[(1,64)],frames:[[[0,-1,-1]]])
+        XCTAssertThrowsError(try fixture(objects:[shape(1),root],interfaceState:.init()))
+        let scene = try fixture(objects:[shape(1),root],interfaceState:.init(hidden:["#0:"]))
+        XCTAssertTrue(try scene.frame(time:0).operations.isEmpty)
+        scene.interfaceState = .init()
+        XCTAssertThrowsError(try scene.frame(time:0), "Showing an unsupported layer must never fall back to normal blending")
+        scene.interfaceState = nil
+        XCTAssertThrowsError(try scene.frame(time:0))
+        scene.interfaceState = .init(hidden:["#0:"])
+        XCTAssertTrue(try scene.frame(time:100).operations.isEmpty)
+    }
+
+    func testHiddenAncestorCoversOnlyItsOwnReusedUnsupportedDescendants() throws {
+        let child = clip(2, children:[(1,64)],frames:[[[0,-1,-1]]])
+        var root = clip(10, children:[(2,0),(2,0)],frames:[[[0,-1,-1],[1,-1,-1]]])
+        root["children"] = [["objectID":2,"blendMode":0,"name":"player"],
+                            ["objectID":2,"blendMode":0,"name":"player_two"]]
+        XCTAssertThrowsError(try fixture(objects:[shape(1),child,root],interfaceState:.init(hidden:["player"])))
+        let scene = try fixture(objects:[shape(1),child,root],interfaceState:.init(hidden:["player","player_two"]))
+        XCTAssertTrue(try scene.frame(time:0).operations.isEmpty)
+    }
+
     func testEmptySourceLayoutMarkersProvideTransformedRegionsWithoutGlyphs() throws {
         let marker: [String:Any] = ["id":1,"commands":[],"textField":[
             "fontName":"Arial","fontSize":15,"text":"","left":1,"top":2,"right":4,"bottom":6,

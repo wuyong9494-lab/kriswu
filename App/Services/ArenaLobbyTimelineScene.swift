@@ -245,6 +245,7 @@ final class ArenaLobbyTimelineScene {
     private var interfaceBindingsValidated = false
     private var instanceObjects: [String: Int]?
     private var layoutMarkerPaths = Set<String>()
+    private var conditionalBlendPaths = Set<String>()
 
     init(document: ArenaLobbyTimelineDocument, exportName: String, sourceRect: [Double]? = nil,
          interfaceState: ArenaLobbyInterfaceState? = nil) throws {
@@ -291,6 +292,7 @@ final class ArenaLobbyTimelineScene {
         self.interfaceState = interfaceState
         try validate()
         try verifyOffscreenExclusions()
+        if interfaceState != nil { try validateInterfaceBindings() }
     }
 
     static func frameIndex(time: Double, fps: Double, count: Int) -> Int {
@@ -348,7 +350,10 @@ final class ArenaLobbyTimelineScene {
                 guard let count = item.frameCount, (1...100_000).contains(count),
                       let fps = item.fps, fps.isFinite, fps > 0, fps <= 240,
                       let children = item.children, frames.count <= count,
-                      item.frameLabels?.count == count else { throw ArenaLobbyTimelineError.invalid("Invalid lobby clock") }
+                      item.frameLabels?.count == count,
+                      children.allSatisfy({ (0...255).contains($0.blendMode) }) else {
+                    throw ArenaLobbyTimelineError.invalid("Invalid lobby clock or child blend declaration")
+                }
                 reachableClocks.insert(id)
                 let nameCounts = Dictionary(grouping: children, by: \.name).mapValues(\.count)
                 childSegments[id] = children.enumerated().map { index, child in
@@ -388,7 +393,12 @@ final class ArenaLobbyTimelineScene {
                             }
                         } else if capturing { capturing = false; hasMask = true }
                         if ![0, 3, 4, 8].contains(child.blendMode) {
-                            guard let proofID = child.excludedByProof, let proof = proofs[proofID],
+                            if child.excludedByProof == nil, interfaceState != nil, (0...255).contains(child.blendMode) {
+                                // A UI adapter may explicitly disable this exact
+                                // instance or an ancestor. Coverage is checked
+                                // after indexing paths and on every state change.
+                            } else {
+                              guard let proofID = child.excludedByProof, let proof = proofs[proofID],
                                   child.blendMode == 64, proof.kind == "complete_timeline_outside_viewport",
                                   proof.parentObjectID == id, proof.childIndex == e[0], proof.objectID == child.objectID,
                                   proof.blendMode == child.blendMode, proof.exportName == exportName,
@@ -396,6 +406,7 @@ final class ArenaLobbyTimelineScene {
                                   proof.sourceRect == sourceRect.values, proof.fps == 60,
                                   (1...36_000).contains(proof.periodFrames), (2...16).contains(proof.margin) else {
                                 throw ArenaLobbyTimelineError.invalid("Unsupported lobby blend without a complete viewport proof")
+                              }
                             }
                         } else if child.excludedByProof != nil {
                             throw ArenaLobbyTimelineError.invalid("Unexpected exclusion of a supported lobby child")
@@ -497,10 +508,16 @@ final class ArenaLobbyTimelineScene {
     /// source frame. Build the instance index once and validate only on changes.
     private func validateInterfaceBindings() throws {
         guard !interfaceBindingsValidated else { return }
-        guard let state = interfaceState else { interfaceBindingsValidated = true; return }
+        guard let state = interfaceState else {
+            guard conditionalBlendPaths.isEmpty else {
+                throw ArenaLobbyTimelineError.invalid("Conditional source layers require explicit interface visibility")
+            }
+            interfaceBindingsValidated = true; return
+        }
         if instanceObjects == nil {
             var index: [String: Int] = [:]
             var markers = Set<String>()
+            var conditional = Set<String>()
             func walk(_ id: Int, path: String, name: String, depth: Int) throws {
                 guard depth < 48, index.count < 100_000, index[path] == nil else {
                     throw ArenaLobbyTimelineError.invalid("Ambiguous or oversized source interface instance tree")
@@ -511,13 +528,18 @@ final class ArenaLobbyTimelineScene {
                 }
                 for (offset, child) in (objects[id]?.children ?? []).enumerated() {
                     let segment = childSegments[id]![offset]
-                    try walk(child.objectID, path: path.isEmpty ? segment : path + "/" + segment,
+                    let childPath = path.isEmpty ? segment : path + "/" + segment
+                    if ![0,3,4,8].contains(child.blendMode), child.excludedByProof == nil {
+                        conditional.insert(childPath)
+                    }
+                    try walk(child.objectID, path: childPath,
                              name: child.name, depth: depth + 1)
                 }
             }
             try walk(root, path: "", name: "", depth: 0)
             instanceObjects = index
             layoutMarkerPaths = markers
+            conditionalBlendPaths = conditional
         }
         let index = instanceObjects!
         for (path, value) in state.text {
@@ -539,6 +561,17 @@ final class ArenaLobbyTimelineScene {
         }
         guard state.hidden.allSatisfy({ index[$0] != nil }) else {
             throw ArenaLobbyTimelineError.invalid("Unknown source visibility binding")
+        }
+        for path in conditionalBlendPaths {
+            var candidate = path
+            var covered = state.hidden.contains("")
+            while !candidate.isEmpty && !covered {
+                covered = state.hidden.contains(candidate)
+                candidate = candidate.lastIndex(of: "/").map { String(candidate[..<$0]) } ?? ""
+            }
+            guard covered else {
+                throw ArenaLobbyTimelineError.invalid("Unsupported visible source blend at \(path)")
+            }
         }
         interfaceBindingsValidated = true
     }
@@ -644,6 +677,9 @@ final class ArenaLobbyTimelineScene {
                 let childPath = path.isEmpty ? name : path + "/" + name
                 var next = try draw(child.objectID, path: childPath, transform: matrix, color: tint, depth: depth+1)
                 if child.blendMode != 0, let bounds = union(next) {
+                    guard [3,4,8].contains(child.blendMode) else {
+                        throw ArenaLobbyTimelineError.invalid("Unsupported visible source blend at draw time")
+                    }
                     // A non-normal child is composited as a group before its
                     // blend is applied. Flattening every triangle to ADD would
                     // change overlapping source graphics.
