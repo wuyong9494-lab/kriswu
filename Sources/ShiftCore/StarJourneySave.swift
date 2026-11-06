@@ -120,8 +120,10 @@ extension StarJourney {
             if let reward = pendingReward {
                 guard let active, active.finished, active.id == reward.id, rewardedRunID == reward.id,
                       reward.score == active.score, reward.route == active.route,
-                      (0...(active.recordKey.flatMap { best[$0]?.rewardStars } ?? 0)).contains(reward.earned), reward.totalBefore >= 0,
-                      reward.totalAfter <= 10_000 + totalStars, reward.totalAfter - reward.totalBefore == reward.earned else { return false }
+                      (0...(active.recordKey.flatMap { best[$0]?.rewardStars } ?? 0)).contains(reward.earned),
+                      (0...(10_000 + totalStars)).contains(reward.totalBefore),
+                      reward.totalAfter >= reward.totalBefore, reward.totalAfter <= 10_000 + totalStars,
+                      reward.totalAfter - reward.totalBefore == reward.earned else { return false }
             }
             return true
         }

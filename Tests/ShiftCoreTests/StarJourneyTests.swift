@@ -244,6 +244,11 @@ final class StarJourneyTests: XCTestCase {
                 json["pendingReward"] = reward
             }),field)
         }
+        XCTAssertNil(StarJourney.Save(data:try edited(save) { json in
+            var reward = json["pendingReward"] as! [String:Any]
+            reward["totalBefore"] = Int.max; reward["totalAfter"] = Int.min
+            json["pendingReward"] = reward
+        }),"Corrupt extreme counters must be rejected before subtraction can overflow")
         XCTAssertNil(StarJourney.Save(data:Data(repeating:0,count:524_289)))
         XCTAssertNil(StarJourney.Save(data:Data("{}".utf8)))
         XCTAssertEqual(StarJourney.Save(data:try XCTUnwrap(StarJourney.Save().encoded())),StarJourney.Save())
