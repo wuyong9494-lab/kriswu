@@ -12,6 +12,39 @@ from PIL import Image
 
 from source_flash import FormatError, SourceFlash, Table
 from export_source_interface import compact_atlases
+from source_interface_bindings import inventory
+from export_source_localization import table
+
+
+class InterfaceBindingTests(unittest.TestCase):
+    def testLocalizationSelectsExactLocaleAndPreservesSourceTokens(self):
+        data = b'TID,EN,CN\nstring,string,string\nTID_EXAMPLE,English,"Value <NUM>, second line"\n'
+        self.assertEqual(table(data,'CN'),{'TID_EXAMPLE':'Value <NUM>, second line'})
+        with self.assertRaises(AssertionError):
+            table(data,'CNT')
+        with self.assertRaises(AssertionError):
+            table(data + b'TID_EXAMPLE,Other,Conflicting\n','CN')
+
+    def scene(self):
+        return {'sourceSCSHA256':'a'*64, 'exports': {'hud': {'objectID':1}}, 'objects': {
+            '1': {'children': [{'objectID':2,'name':n,'blendMode':0} for n in ['', 'counter', 'counter']]},
+            '2': {'frameCount':3, 'frameLabels':['idle','','ready'],
+                  'children':[{'objectID':3,'name':'value','blendMode':0}]},
+            '3': {'textField': {'fontName':'Synthetic','text':''}}}}
+
+    def testReusedObjectsRetainIndependentInstancePathsAndSourceFrameIndices(self):
+        nodes = inventory(self.scene())['exports']['hud']
+        self.assertEqual([n['path'] for n in nodes],
+                         ['', '#0:', '#0:/value', '#1:counter', '#1:counter/value', '#2:counter', '#2:counter/value'])
+        self.assertEqual(nodes[1]['labels'], [{'name':'idle','frameIndex':0},{'name':'ready','frameIndex':2}])
+        self.assertEqual(nodes[1]['frameCount'],3)
+
+    def testCyclesAndMissingChildrenFailInsteadOfProducingPartialBindings(self):
+        for target in [1,99]:
+            scene = self.scene()
+            scene['objects']['2']['children'][0]['objectID'] = target
+            with self.assertRaises(FormatError):
+                inventory(scene)
 
 
 def fixture(version=6):

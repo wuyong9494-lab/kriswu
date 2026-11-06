@@ -149,6 +149,21 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         XCTAssertThrowsError(try scene.frame(time: 0))
     }
 
+    func testUnlabeledProgressFrameIsFrozenAndRejectsConflictingBindings() throws {
+        let root = clip(10, children: [(1,0)], frames: [[[0,-1,0]],[[0,-1,1]]], fps: 1)
+        let scene = try fixture(objects: [shape(1),root], interfaceState: .init(frameIndices: ["":1]))
+        assertPixel(try makeRenderer(scene).snapshot(time: 0,width:4,height:4),[0,0,255,255])
+        assertPixel(try makeRenderer(scene).snapshot(time: 10,width:4,height:4),[0,0,255,255])
+        for index in [-1,2,Int.max] {
+            scene.interfaceState = .init(frameIndices: ["":index])
+            XCTAssertThrowsError(try scene.frame(time: 0))
+        }
+        scene.interfaceState = .init(frames: ["":""], frameIndices: ["":0])
+        XCTAssertThrowsError(try scene.frame(time: 0))
+        scene.interfaceState = .init(frames: ["":""])
+        XCTAssertThrowsError(try scene.frame(time: 0), "An empty label is not a named state")
+    }
+
     func testSourceTextRendersThroughMetalAndRespondsToDataChanges() throws {
         let text: [String: Any] = ["id":1,"commands":[],"textField":[
             "fontName":"Arial","fontSize":30,"left":0,"top":0,"right":80,"bottom":40,

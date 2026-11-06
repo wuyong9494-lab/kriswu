@@ -33,6 +33,9 @@ struct ArenaLobbyInterfaceState: Equatable, Sendable {
     var text: [String: String] = [:]
     var frames: [String: String] = [:]
     var hidden: Set<String> = []
+    /// Zero-based source frames for unlabeled progress bars and icon variants.
+    /// A numeric binding freezes only this instance, not its child animations.
+    var frameIndices: [String: Int] = [:]
 }
 
 struct ArenaLobbySourceText: Hashable, Sendable {
@@ -541,8 +544,15 @@ final class ArenaLobbyTimelineScene {
                 content = []
             }
             var selectedFrame = frameLookups[id] ?? 0
+            if let index = interfaceState?.frameIndices[path] {
+                guard interfaceState?.frames[path] == nil,
+                      let count = item.frameCount, (0..<count).contains(index) else {
+                    throw ArenaLobbyTimelineError.invalid("Invalid or conflicting source frame at \(path)")
+                }
+                selectedFrame = index
+            }
             if let label = interfaceState?.frames[path] {
-                guard let index = item.frameLabels?.firstIndex(of: label) else {
+                guard !label.isEmpty, let index = item.frameLabels?.firstIndex(of: label) else {
                     throw ArenaLobbyTimelineError.invalid("Unknown source state label at \(path)")
                 }
                 selectedFrame = index

@@ -18,6 +18,7 @@ from PIL import Image
 import texture2ddecoder
 
 from source_flash import SourceFlash, require
+from source_interface_bindings import inventory
 
 
 def decode_texture(texture):
@@ -139,6 +140,8 @@ def export(source, names, output, prefix='source-interface'):
         'exports':{n:{'objectID':source.exports[n],'status':'requires_layout_text_and_state_bindings'} for n in names}}
     path=output/prefix/'scene.json';path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    (path.parent/'bindings.json').write_text(
+        json.dumps(inventory(result),ensure_ascii=False,separators=(',',':')),encoding='utf-8')
     return result
 
 

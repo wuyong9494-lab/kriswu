@@ -17,6 +17,8 @@ on:
       - 'scripts/assets/source_flash*'
       - 'scripts/assets/export_source_interface.py'
       - 'scripts/assets/test_source_flash.py'
+      - 'scripts/assets/source_interface_bindings.py'
+      - 'scripts/assets/export_source_localization.py'
       - 'scripts/assets/requirements-source-interface.txt'
       - '.github/workflows/arena-resource-validation.yml'
   workflow_dispatch:
@@ -67,7 +69,16 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
-          devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j'],timeout=60))['devices']
+          # Fresh hosted machines can take over a minute to start CoreSimulator.
+          # Retry discovery only; runtime test failures are never retried here.
+          for attempt in range(2):
+              try:
+                  devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j'],timeout=180))['devices']
+                  break
+              except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+                  if attempt == 1:
+                      raise
+                  print('CoreSimulator discovery is not ready; retrying once', flush=True)
           candidates = [(runtime, d) for runtime, values in devices.items() for d in values
                         if '.iOS-' in runtime and d.get('isAvailable') and d['name'].startswith('iPhone')]
           if not candidates:
@@ -78,7 +89,7 @@ jobs:
               out.write('RESOURCE_DEVICE=' + device['udid'] + '\n')
           if device['state'] != 'Booted':
               subprocess.run(['xcrun','simctl','boot',device['udid']],check=True,timeout=120)
-          subprocess.run(['xcrun','simctl','bootstatus',device['udid'],'-b'],check=True,timeout=600)
+          subprocess.run(['xcrun','simctl','bootstatus',device['udid'],'-b'],check=True,timeout=240)
           PY
       - name: Check synthetic materials, lobby compositing and resource import
         shell: bash -eo pipefail {0}
