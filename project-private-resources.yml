@@ -1,0 +1,10 @@
+# Invoke only after verifying and staging the exact private release pack.
+# XcodeGen merges this resource into the normal test target; public builds
+# use project.yml and never reference this runner-only folder.
+include: project.yml
+targets:
+  ArenaResourceTests:
+    sources:
+      - path: Tests/PrivateResourceValidation/ArenaPrivateValidation
+        type: folder
+        buildPhase: resources

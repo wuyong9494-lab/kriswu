@@ -138,10 +138,6 @@ targets:
       - path: Tests/SiteTests/ArenaImportedFaceTests.swift
       - path: Tests/SiteTests/ArenaLobbyTimelineTests.swift
       - path: Tests/SiteTests/ArenaPrivateResourceRenderingTests.swift
-      - path: Tests/PrivateResourceValidation/ArenaPrivateValidation
-        type: folder
-        buildPhase: resources
-        optional: true
       - path: Tests/SiteTests/ArenaALACStorageTests.swift
       - path: Tests/SiteTests/ArenaALACStorageFixtures.swift
     dependencies:

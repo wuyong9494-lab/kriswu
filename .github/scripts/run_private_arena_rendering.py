@@ -22,7 +22,7 @@ def summary_counts(summary):
 
 def run(source, report):
     assert (source/'Tests/PrivateResourceValidation/ArenaPrivateValidation/manifest.json').is_file()
-    subprocess.run(['xcodegen','generate'],cwd=source,check=True)
+    subprocess.run(['xcodegen','generate','--spec','project-private-resources.yml'],cwd=source,check=True)
     for attempt in range(2):
         try:
             devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j'],timeout=180))['devices']

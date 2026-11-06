@@ -6,6 +6,7 @@ on:
     paths:
       - 'App/**'
       - 'project.yml'
+      - 'project-private-resources.yml'
       - 'Sources/ShiftCore/BoneSampler.swift'
       - 'Sources/ShiftCore/ArenaResourcePack.swift'
       - 'Tests/SiteTests/GLTFMaterialTests.swift'

@@ -53,33 +53,55 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         XCTAssertEqual(manifest.themes.count,8)
         for theme in manifest.themes {
             try autoreleasepool {
-                let document = try document(XCTUnwrap(theme.sceneFile),root:root,manifest:manifest)
-                let scene = try ArenaLobbyTimelineScene(document:document,exportName:XCTUnwrap(theme.sceneExport),
-                                                        sourceRect:theme.sceneSourceRect)
-                let renderer = try ArenaLobbyTimelineRenderer(device:device,scene:scene,
-                    atlases:atlases(document,root:root,manifest:manifest))
-                let first = try renderer.snapshot(time:0,width:512,height:288)
-                let later = try renderer.snapshot(time:2,width:512,height:288)
-                XCTAssertEqual(first.count,512*288*4)
-                XCTAssertTrue(first != later,"Original timeline must not be flattened")
-                XCTAssertTrue(first.contains { $0 != 0 },"Original background must contain visible pixels")
-                // The frozen Brawloween still used child-color replacement;
-                // its color parity requires original-client evidence. All
-                // other previews catch crop and double-alpha regressions.
-                if theme.id != "Brawloween26" {
-                    let reference = try ArenaFacePixels(data:Data(contentsOf:resource(theme.backgroundFile,root:root,manifest:manifest)))
-                    XCTAssertEqual(reference.width,1024);XCTAssertEqual(reference.height,576)
-                    guard reference.width == 1024,reference.height == 576 else { return }
-                    var difference = 0.0
-                    for y in 0..<288 { for x in 0..<512 { for channel in 0..<3 {
-                        let actual = first[(y*512+x)*4+channel]
-                        let expected = reference.rgba[((y*2+1)*1024+x*2+1)*4+channel]
-                        difference += abs(Double(actual)-Double(expected))
-                    } } }
-                    XCTAssertLessThan(difference/Double(512*288*3),6,"Private background differs from its verified framing/color baseline")
+                try checkBackground(theme,root:root,manifest:manifest,device:device)
+            }
+        }
+    }
+
+    private func checkBackground(_ theme: ArenaResourcePackManifest.Theme, root: URL,
+                                 manifest: ArenaResourcePackManifest, device: MTLDevice) throws {
+        let path = try XCTUnwrap(theme.sceneFile)
+        let export = try XCTUnwrap(theme.sceneExport)
+        let document = try document(path,root:root,manifest:manifest)
+        let scene = try ArenaLobbyTimelineScene(document:document,exportName:export,sourceRect:theme.sceneSourceRect)
+        let textures = try atlases(document,root:root,manifest:manifest)
+        let renderer = try ArenaLobbyTimelineRenderer(device:device,scene:scene,atlases:textures)
+        let first = try renderer.snapshot(time:0,width:512,height:288)
+        let later = try renderer.snapshot(time:2,width:512,height:288)
+        XCTAssertEqual(first.count,589824)
+        XCTAssertTrue(first != later,"Original timeline must not be flattened")
+        XCTAssertTrue(first.contains { $0 != 0 },"Original background must contain visible pixels")
+        // The frozen Brawloween still used child-color replacement;
+        // its color parity requires original-client evidence. All other
+        // previews catch crop and double-alpha regressions.
+        if theme.id != "Brawloween26" {
+            let url = try resource(theme.backgroundFile,root:root,manifest:manifest)
+            let data = try Data(contentsOf:url)
+            let reference = try ArenaFacePixels(data:data)
+            XCTAssertEqual(reference.width,1024)
+            XCTAssertEqual(reference.height,576)
+            guard reference.width == 1024,reference.height == 576 else { return }
+            let error = Self.meanBaselineError(first,reference:reference.rgba)
+            XCTAssertLessThan(error,6,"Private background differs from its verified framing/color baseline")
+        }
+    }
+
+    private static func meanBaselineError(_ actual: [UInt8], reference: [UInt8]) -> Double {
+        var difference = 0.0
+        for y in 0..<288 {
+            let actualRow = y * 512
+            let referenceRow = (y * 2 + 1) * 1024
+            for x in 0..<512 {
+                let actualOffset = (actualRow + x) * 4
+                let referenceOffset = (referenceRow + x * 2 + 1) * 4
+                for channel in 0..<3 {
+                    let a = Double(actual[actualOffset + channel])
+                    let b = Double(reference[referenceOffset + channel])
+                    difference += abs(a - b)
                 }
             }
         }
+        return difference / 442368.0
     }
 
     func testAllFivePrivateControlsRenderActualTitlesAndShopAnimation() throws {
@@ -88,14 +110,19 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         for font in manifest.fonts ?? [] { _ = try resource(font.file,root:root,manifest:manifest) }
         ArenaImportedFonts.prepare(manifest:manifest) { root.appendingPathComponent($0) }
         XCTAssertEqual(ArenaImportedFonts.availableNames.count,4)
-        let document = try document(XCTUnwrap(manifest.interfaceSceneFile),root:root,manifest:manifest)
+        let path = try XCTUnwrap(manifest.interfaceSceneFile)
+        let document = try document(path,root:root,manifest:manifest)
         let textures = try atlases(document,root:root,manifest:manifest)
         XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,5)
         for role in ArenaLobbySourceControl.Role.allCases {
             try autoreleasepool {
                 let source = try ArenaLobbySourceControl(document:document,role:role,title:role.title)
                 let frame = try source.scene.frame(time:0)
-                XCTAssertEqual(frame.operations.compactMap { if case .text(let text) = $0 { return text.value }; return nil },[role.title])
+                let titles: [String] = frame.operations.compactMap { operation in
+                    if case .text(let text) = operation { return text.value }
+                    return nil
+                }
+                XCTAssertEqual(titles,[role.title])
                 let renderer = try ArenaLobbyTimelineRenderer(device:device,scene:source.scene,atlases:textures)
                 let width = Int(ceil(source.bounds.width*3)),height = Int(ceil(source.bounds.height*3))
                 let first = try renderer.snapshot(time:0,width:width,height:height)
