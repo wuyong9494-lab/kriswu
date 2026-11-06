@@ -386,6 +386,121 @@ class TileSourceTests(unittest.TestCase):
             archive.assert_not_called()
 
 
+class JourneySourceTests(unittest.TestCase):
+    def setUp(self):
+        self.request = {**release.JOURNEY_RELEASE,
+                        "source_validation": {"mode": release.JOURNEY_MODE,
+                                              "native_run_id": release.JOURNEY_NATIVE_RUN},
+                        "private_resource_pack": dict(release.JOURNEY_PACK),
+                        "private_resource_pack_transport": dict(release.JOURNEY_TRANSPORT),
+                        "notes": release.JOURNEY_DEVICE_NOTE}
+        common = {"head_sha": self.request["source_sha"], "event": "push",
+                  "status": "completed", "conclusion": "success"}
+        self.run = {**common, "id": self.request["source_run_id"],
+                    "run_number": int(self.request["build_number"]),
+                    "head_branch": release.JOURNEY_BRANCH, "path": ".github/workflows/ios.yml"}
+        self.native_run = {**common, "id": release.JOURNEY_NATIVE_RUN,
+                           "head_branch": release.JOURNEY_NATIVE_BRANCH,
+                           "path": ".github/workflows/star-tiles-validation.yml"}
+        self.jobs = [{"name": name, "status": "completed", "conclusion": "success"}
+                     for name in ("build", "core-tests-linux")]
+        self.jobs.append({"name": "arena-look", "status": "completed", "conclusion": "skipped"})
+        self.native_jobs = [{"name": "native", "status": "completed", "conclusion": "success",
+                             "steps": [{"name": name, "status": "completed", "conclusion": "success"}
+                                       for name in release.JOURNEY_STEPS]}]
+
+    def validate(self, **changes):
+        args = dict(request=self.request, run=self.run, jobs=self.jobs,
+                    native_run=self.native_run, native_jobs=self.native_jobs)
+        release.validate_journey_source(**{**args, **changes})
+
+    def responses(self):
+        head = {"object": {"sha": self.request["source_sha"]}}
+        return [head, head, self.run, {"jobs": self.jobs}, self.native_run, {"jobs": self.native_jobs}]
+
+    def testBothPinnedWorkflowsMustFinishOnIdenticalSource(self):
+        self.validate()
+        for name, actual in (("run", self.run), ("native_run", self.native_run)):
+            for key, value in (("id", 1), ("head_sha", "b" * 40), ("head_branch", "main"),
+                               ("path", "other.yml"), ("event", "workflow_dispatch"),
+                               ("status", "queued"), ("status", "in_progress"),
+                               ("conclusion", "failure"), ("conclusion", "cancelled")):
+                with self.subTest(name=name, key=key, value=value), self.assertRaises(ValueError):
+                    self.validate(**{name: {**actual, key: value}})
+        with self.assertRaises(ValueError):
+            self.validate(run={**self.run, "run_number": self.run["run_number"] + 1})
+
+    def testManifestCannotChangeBuildRunsResourcesOrClaimDeviceAcceptance(self):
+        for key, value in (("source_sha", "b" * 40), ("source_run_id", 1), ("build_number", "560"),
+                           ("notes", "Everything passed"), ("private_resource_pack", None),
+                           ("private_resource_pack", {**release.JOURNEY_PACK, "sha256": "0" * 64}),
+                           ("private_resource_pack_transport", None),
+                           ("source_validation", {"mode": release.JOURNEY_MODE, "native_run_id": 1}),
+                           ("source_validation", {"mode": release.JOURNEY_MODE,
+                                                  "native_run_id": release.JOURNEY_NATIVE_RUN, "skip": True})):
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                self.validate(request={**self.request, key: value})
+
+    def testRequiredJobsAndNativeEvidenceCannotBeSkippedOrDuplicated(self):
+        for key, collection, indices in (("jobs", self.jobs, (0, 1)), ("native_jobs", self.native_jobs, (0,))):
+            for index in indices:
+                variants = [collection[:index] + collection[index + 1:], collection + [collection[index]]]
+                variants += [[dict(job, conclusion=value) if i == index else job
+                              for i, job in enumerate(collection)]
+                             for value in ("skipped", "failure", "cancelled", None)]
+                for jobs in variants:
+                    with self.subTest(key=key, index=index, jobs=jobs), self.assertRaises(ValueError):
+                        self.validate(**{key: jobs})
+        for index in range(len(release.JOURNEY_STEPS)):
+            for change in ("missing", "duplicate", "skipped", "failure", "in_progress"):
+                jobs = copy.deepcopy(self.native_jobs)
+                steps = jobs[0]["steps"]
+                if change == "missing":
+                    steps.pop(index)
+                elif change == "duplicate":
+                    steps.append(dict(steps[index]))
+                else:
+                    steps[index]["status" if change == "in_progress" else "conclusion"] = change
+                with self.subTest(index=index, change=change), self.assertRaises(ValueError):
+                    self.validate(native_jobs=jobs)
+        with self.assertRaises(ValueError):
+            self.validate(jobs=self.jobs + [{"name": "other", "status": "completed", "conclusion": "failure"}])
+
+    def testBothBranchHeadsAreCheckedBeforeAppleAccess(self):
+        for changed_index in (0, 1):
+            responses = self.responses()
+            responses[changed_index] = {"object": {"sha": "b" * 40}}
+            with self.subTest(branch=changed_index), \
+                    patch.object(release.promotion, "github", side_effect=responses), \
+                    patch.object(release.promotion, "find_build") as find, \
+                    self.assertRaisesRegex(ValueError, "superseded"):
+                release.preflight(self.request)
+            find.assert_not_called()
+
+    def testPendingNativeRunStopsBeforeAppleAccessAndNeverFallsBack(self):
+        responses = self.responses()
+        responses[4] = {**self.native_run, "status": "queued", "conclusion": None}
+        with patch.object(release.promotion, "github", side_effect=responses), \
+                patch.object(release.promotion, "find_build") as find, \
+                patch.object(release.promotion, "preflight") as fallback, self.assertRaises(ValueError):
+            release.preflight(self.request)
+        find.assert_not_called()
+        fallback.assert_not_called()
+
+    def testSuccessfulPreflightKeepsDuplicateUploadGuardAndActualValidationScope(self):
+        for build in (None, {"id": "existing", "attributes": {"processingState": "VALID"}}):
+            with self.subTest(existing=bool(build)), \
+                    patch.object(release.promotion, "github", side_effect=self.responses()), \
+                    patch.object(release.promotion, "find_build", return_value=build), \
+                    patch.object(release.promotion, "output") as output, \
+                    patch.object(release.promotion, "save_report") as report:
+                release.preflight(self.request)
+                output.assert_any_call("upload_required", "false" if build else "true")
+                self.assertEqual(report.call_args.kwargs["tile_native_and_ui_validation"], "success")
+                self.assertEqual(report.call_args.kwargs["native_run_id"], release.JOURNEY_NATIVE_RUN)
+                self.assertEqual(report.call_args.kwargs["physical_device_validation"], "pending")
+
+
 class DeferredSourceTests(unittest.TestCase):
     def setUp(self):
         self.request = {

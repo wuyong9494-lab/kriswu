@@ -36,6 +36,36 @@ TILE_RELEASE = {
 }
 TILE_BRANCH = "codex/tiles-upgrade-20261105"
 TILE_STEPS = ("模拟器里测试同步流程或计划识图", "叠叠消实际交互回归", "保存测试日志和识图结果")
+# The owner requested upload after the Star Journey checks finish. Bind that
+# release to both device compilation and the independent simulator workflow;
+# a queued, skipped or superseded check can never authorize an upload.
+JOURNEY_MODE = "star-journey-native-verified"
+JOURNEY_RELEASE = {
+    "build_number": "559",
+    "source_sha": "687d296c747fc8c143345e8f65eadac8808c9c73",
+    "source_run_id": 42214324022,
+}
+JOURNEY_BRANCH = "codex/plan-tiles-journey-20261106"
+JOURNEY_NATIVE_BRANCH = "codex/star-journey-native-20261106"
+JOURNEY_NATIVE_RUN = 42212190717
+JOURNEY_DEVICE_NOTE = "iPhone 17 Pro Max 真机体验与性能尚待验收。"
+JOURNEY_STEPS = (
+    "Select Xcode 26 or newer",
+    "Core rules and archive regression",
+    "Generate the existing app project",
+    "Select and boot iPhone 17 Pro Max",
+    "Native visuals, store recovery and legacy compatibility",
+    "Actual campaign, contract and classic interactions",
+    "Preserve native acceptance evidence",
+)
+JOURNEY_PACK = {
+    "id": "brawl69-interface-timeline-v2", "bytes": 879474319,
+    "sha256": "85a65aa3abcc9d6a0be6d3123302031774201027c6b99fdcf71c9228b6120a91",
+}
+JOURNEY_TRANSPORT = {
+    "encoding": "gzip", "bytes": 524243560,
+    "sha256": "e5db1182b9ec71cc6f3aff7b1d7edb32276b265fedf48ee364976415ed5b9ad8",
+}
 ARCHIVE_REPORT = "promotion-private-resources.json"
 OPAQUE_TEXTURE_SOURCES = (
     "App/Arena3D/hexagons_medieval.png",
@@ -83,6 +113,18 @@ def validation_specification(request):
     value = request.get("source_validation")
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("mode") == JOURNEY_MODE:
+        if (value != {"mode": JOURNEY_MODE, "native_run_id": JOURNEY_NATIVE_RUN}
+                or any(request.get(key) != expected for key, expected in JOURNEY_RELEASE.items())
+                or type(request.get("source_run_id")) is not int
+                or type(value.get("native_run_id")) is not int):
+            raise ValueError("Journey release must match the pinned source and native run identities")
+        if (specification(request) != JOURNEY_PACK
+                or transport_specification(request) != JOURNEY_TRANSPORT):
+            raise ValueError("Journey release must preserve the existing private resource pack")
+        if JOURNEY_DEVICE_NOTE not in request.get("notes", ""):
+            raise ValueError("Journey notes must distinguish simulator and physical device validation")
+        return value
     if isinstance(value, dict) and value.get("mode") == TILE_MODE:
         if set(value) != {"mode"} or any(request.get(key) != expected for key, expected in TILE_RELEASE.items()):
             raise ValueError("Tile release must match the pinned Build 529 identity")
@@ -194,10 +236,60 @@ def check_tile_source(request):
             "source_branch_head": head}
 
 
+def validate_journey_source(request, run, jobs, native_run, native_jobs):
+    validation = validation_specification(request)
+    if validation is None or validation["mode"] != JOURNEY_MODE:
+        raise ValueError("Pinned journey validation must be explicitly requested")
+    for actual, run_id, branch, workflow in (
+            (run, request["source_run_id"], JOURNEY_BRANCH, ".github/workflows/ios.yml"),
+            (native_run, JOURNEY_NATIVE_RUN, JOURNEY_NATIVE_BRANCH,
+             ".github/workflows/star-tiles-validation.yml")):
+        expected = {"id": run_id, "head_sha": request["source_sha"], "head_branch": branch,
+                    "path": workflow, "event": "push", "status": "completed", "conclusion": "success"}
+        if any(actual.get(key) != value for key, value in expected.items()):
+            raise ValueError("Journey device and native CI must finish successfully for the exact pinned source")
+    if str(run.get("run_number")) != request["build_number"]:
+        raise ValueError("Journey CI build number mismatch")
+    for collection, name in ((jobs, "build"), (jobs, "core-tests-linux"), (native_jobs, "native")):
+        matched = [job for job in collection if job.get("name") == name]
+        if (len(matched) != 1 or matched[0].get("status") != "completed"
+                or matched[0].get("conclusion") != "success"):
+            raise ValueError("Required journey check failed: " + name)
+        if name == "native":
+            for step_name in JOURNEY_STEPS:
+                steps = [step for step in matched[0].get("steps", []) if step.get("name") == step_name]
+                if (len(steps) != 1 or steps[0].get("status") != "completed"
+                        or steps[0].get("conclusion") != "success"):
+                    raise ValueError("Required journey native step failed: " + step_name)
+    if any(job.get("status") != "completed" or job.get("conclusion") not in ("success", "skipped")
+           for job in jobs + native_jobs):
+        raise ValueError("Journey CI contains an unfinished or failed job")
+
+
+def check_journey_source(request):
+    validation_specification(request)
+    for branch in (JOURNEY_BRANCH, JOURNEY_NATIVE_BRANCH):
+        head = promotion.github("/git/ref/heads/" + branch).get("object", {}).get("sha")
+        if head != request["source_sha"]:
+            raise ValueError("Journey source was superseded; refusing a stale release")
+    source_id = request["source_run_id"]
+    run = promotion.github(f"/actions/runs/{source_id}")
+    jobs = promotion.github(f"/actions/runs/{source_id}/jobs?filter=latest&per_page=100")["jobs"]
+    native_run = promotion.github(f"/actions/runs/{JOURNEY_NATIVE_RUN}")
+    native_jobs = promotion.github(f"/actions/runs/{JOURNEY_NATIVE_RUN}/jobs?filter=latest&per_page=100")["jobs"]
+    validate_journey_source(request, run, jobs, native_run, native_jobs)
+    return {"validation_mode": JOURNEY_MODE, "source_ci_conclusion": "success",
+            "native_run_id": JOURNEY_NATIVE_RUN, "tile_native_and_ui_validation": "success",
+            "physical_device_validation": "pending", "current_source_head_verified": True,
+            "source_branch_head": request["source_sha"]}
+
+
 def check_requested_source(request):
     validation = validation_specification(request)
     if validation is None:
         return {}
+    if validation["mode"] == JOURNEY_MODE:
+        return check_journey_source(request)
     return check_tile_source(request) if validation["mode"] == TILE_MODE else check_deferred_source(request)
 
 
