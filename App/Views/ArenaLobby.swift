@@ -446,16 +446,27 @@ struct ArenaHomeView: View {
             VStack(spacing: 3) {
                 Text(sourceHero != nil ? "原版英雄 · 普通对战" : threeHeroSample ? "三英雄对战 · 本地" : (ranked ? "排位对战" : "普通对战")).font(.system(size: 11, weight: .black))
                     .foregroundStyle(.white).frame(width: composition.battleWidth, height: 24)
-                Button { start() } label: {
-                    Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
-                        .frame(width: composition.battleWidth, height: 61)
-                        .background {
-                            if let image = ArenaImportedMenuAssets.shared.image(for: "play") {
-                                Image(uiImage: image).resizable(capInsets: ArenaImportedMenuAssets.shared.capInsets(for: "play"), resizingMode: .stretch).allowsHitTesting(false)
+                if resourcePack.enabled, let control = sourceControls.controls[.battle] {
+                    Button { start() } label: {
+                        ArenaSourceControlVisual(control: control, live: false)
+                            .id(resourcePack.contentRevision)
+                            .frame(width: composition.battleWidth, height: 61)
+                            .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel(sourceLocalization.menuTitle("对战"))
+                        .accessibilityIdentifier("arena.start")
+                } else {
+                    Button { start() } label: {
+                        Text("对战").font(.system(size: 30, weight: .black, design: .rounded))
+                            .frame(width: composition.battleWidth, height: 61)
+                            .background {
+                                if let image = ArenaImportedMenuAssets.shared.image(for: "play") {
+                                    Image(uiImage: image).resizable(capInsets: ArenaImportedMenuAssets.shared.capInsets(for: "play"), resizingMode: .stretch).allowsHitTesting(false)
+                                }
                             }
-                        }
-                }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
-                    .accessibilityIdentifier("arena.start")
+                    }.buttonStyle(ArenaLobbyButtonStyle(tint: .yellow, primary: true))
+                        .accessibilityIdentifier("arena.start")
+                }
             }
         }.foregroundStyle(.white).frame(height: 92)
     }

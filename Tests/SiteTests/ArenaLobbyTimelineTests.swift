@@ -182,6 +182,32 @@ final class ArenaLobbyTimelineTests: XCTestCase {
             title:"Actual title",idleLabel:"idle",hiddenChildren:[]), "An unbound notification must not leak source placeholders")
     }
 
+    func testNestedSourceActionUsesItsOwnTitleAndHitRegionWithoutRewardPlaceholders() throws {
+        let text: [String:Any] = ["id":3,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"","left":0,"top":0,"right":2,"bottom":2,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        var button = clip(2,children:[(1,0),(3,0),(3,0)],frames:[[[0,-1,0],[1,-1,-1],[2,-1,-1]]])
+        button["children"] = [["objectID":1,"name":"art","blendMode":0],
+            ["objectID":3,"name":"txt","blendMode":0],["objectID":3,"name":"hit_area","blendMode":0]]
+        var container = clip(4,children:[(2,0),(3,0)],frames:[[[0,0,-1],[1,-1,-1]]])
+        container["children"] = [["objectID":2,"name":"action","blendMode":0],
+                                  ["objectID":3,"name":"reward","blendMode":0]]
+        var root = clip(10,children:[(4,0)],frames:[[[0,-1,-1]]])
+        root["children"] = [["objectID":4,"name":"container","blendMode":0]]
+        let base = try fixture(objects:[shape(1,extent:2),text,button,container,root],
+                               matrices:[[1,0,0,1,0.5,0.5]],interfaceState:.init())
+        let control = try ArenaLobbySourceControl(document:base.document,export:"fixture",instance:"container",
+            title:"Play",idleLabel:nil,hiddenChildren:["reward"],titlePath:"action/txt",layoutPath:"action")
+        XCTAssertEqual(control.hitRegion.values,[0.5,0.5,2.5,2.5])
+        let frame = try control.scene.frame(time:5)
+        XCTAssertEqual(frame.operations.count,2)
+        XCTAssertEqual(frame.operations.compactMap { if case .text(let text) = $0 { return text.value }; return nil },["Play"])
+        XCTAssertThrowsError(try ArenaLobbySourceControl(document:base.document,export:"fixture",instance:"container",
+            title:"Play",idleLabel:nil,hiddenChildren:[],titlePath:"action/txt",layoutPath:"action"))
+        XCTAssertThrowsError(try ArenaLobbySourceControl(document:base.document,export:"fixture",instance:"container",
+            title:"Play",idleLabel:nil,hiddenChildren:["reward"],titlePath:"missing/txt",layoutPath:"action"))
+    }
+
     func testUnlabeledProgressFrameIsFrozenAndRejectsConflictingBindings() throws {
         let root = clip(10, children: [(1,0)], frames: [[[0,-1,0]],[[0,-1,1]]], fps: 1)
         let scene = try fixture(objects: [shape(1),root], interfaceState: .init(frameIndices: ["":1]))
