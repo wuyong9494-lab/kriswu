@@ -138,12 +138,13 @@ def main():
     parser.add_argument('--prefix', required=True)
     parser.add_argument('--source-rect', nargs=4, type=float, required=True)
     parser.add_argument('--canvas-size', nargs=2, type=int, required=True)
+    parser.add_argument('--source-alpha', choices=['straight', 'premultiplied'], required=True)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     require(not args.output.resolve().is_relative_to(repo), 'Private output must be outside the public checkout')
     require(args.prefix and all(p and not p.startswith('.') for p in args.prefix.split('/'))
             and not any(c in args.prefix for c in '\\:%'), 'Invalid output prefix')
-    scene = export(SourceFlash(args.source), [args.export_name], args.output, args.prefix)
+    scene = export(SourceFlash(args.source), [args.export_name], args.output, args.prefix, args.source_alpha)
     certify_background(scene, args.export_name, args.source_rect, args.canvas_size)
     path = args.output/args.prefix/'scene.json'
     temporary = path.with_suffix('.partial')

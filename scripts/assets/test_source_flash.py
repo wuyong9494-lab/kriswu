@@ -11,7 +11,7 @@ import zstandard
 from PIL import Image
 
 from source_flash import FormatError, SourceFlash, Table
-from export_source_interface import compact_atlases
+from export_source_interface import compact_atlases, straight_alpha_image
 from source_interface_bindings import inventory
 from export_source_localization import table
 
@@ -126,6 +126,19 @@ class SourceFlashTests(unittest.TestCase):
             for vertex, expected in zip(vertices,[(255,0,0,255),(0,255,0,255),(0,0,255,255)]):
                 x,y=round(vertex[2]/65535*4096),round(vertex[3]/65535*4096)
                 self.assertEqual(atlas.getpixel((x,y)),expected)
+
+    def test_png_alpha_boundary_preserves_translucent_source_color(self):
+        source = Image.new('RGBA',(4,1))
+        source.putdata([(128,64,0,128),(17,0,0,0),(255,120,30,255),(40,80,120,128)])
+        converted = straight_alpha_image(source,'premultiplied')
+        self.assertEqual([converted.getpixel((x,0)) for x in range(4)],[(255,128,0,128),(0,0,0,0),(255,120,30,255),(80,159,239,128)])
+        # PNG decoding premultiplies exactly once. Half-red must remain 128,
+        # rather than becoming 64 after an accidental second multiplication.
+        r,g,b,a = converted.getpixel((0,0))
+        self.assertEqual(tuple(round(c*a/255) for c in (r,g,b)),(128,64,0))
+        straight = Image.new('RGBA',(1,1),(255,128,0,128))
+        self.assertIs(straight_alpha_image(straight,'straight'),straight)
+        with self.assertRaises(FormatError): straight_alpha_image(straight,'guessed')
 
 
 if __name__=='__main__': unittest.main()
