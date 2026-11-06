@@ -53,7 +53,7 @@ class PrivateRenderingPreparationTests(unittest.TestCase):
     def test_verified_subset_is_copied_and_unrelated_payload_stays_private(self):
         self.payloads['unrelated.json'] = b'{"unselected":"not-copied"}'
         result = prepare(self.source,self.pack(),self.output)
-        self.assertEqual(result,{'required':True,'themes':8,'controls':6,'files':6})
+        self.assertEqual(result,{'required':True,'themes':8,'controls':8,'files':6})
         self.assertFalse((self.output/'unrelated.json').exists())
         for name,data in self.payloads.items():
             if name != 'unrelated.json': self.assertEqual((self.output/name).read_bytes(),data)

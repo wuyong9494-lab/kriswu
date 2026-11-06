@@ -165,12 +165,7 @@ struct ArenaHomeView: View {
                     }.buttonStyle(ArenaLobbyButtonStyle(tint: .white))
                         .accessibilityLabel("选择英雄和皮肤")
                 }.position(composition.equipmentCenter)
-                Button { withPlayableHero { sheet = .party } } label: {
-                    Image(systemName: "plus").font(.system(size: 28, weight: .black))
-                        .frame(width: 44, height: 44)
-                }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
-                    .position(composition.inviteCenter)
-                    .accessibilityLabel("邀请队友")
+                inviteButton(composition: composition)
             }
             .overlay(alignment: .top) {
                 if resourcePack.hasBundledPack,
@@ -347,6 +342,50 @@ struct ArenaHomeView: View {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 18, weight: .black))
                     .frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel(muted ? "打开声音" : "静音")
+            settingsButton
+            Button {
+                ArenaOrientation.releaseAll(); ArenaSound.shared.leaveLobby(); dismiss()
+            } label: {
+                Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("离开勇者乱斗")
+        }.foregroundStyle(.white).frame(height: 44)
+    }
+
+    @ViewBuilder
+    private func inviteButton(composition: ArenaLobbyComposition) -> some View {
+        if resourcePack.enabled, let control = sourceControls.controls[.invite] {
+            let frame = composition.sourceInviteFrame
+            Button { withPlayableHero { sheet = .party } } label: {
+                ArenaSourceControlVisual(control: control, live: false)
+                    .frame(width: frame.width, height: frame.height)
+                    .contentShape(ArenaSourceControlHitShape(imageSize: control.image.size, region: control.hitRegion))
+            }.buttonStyle(.plain)
+                .position(x: frame.midX, y: frame.midY)
+                .accessibilityLabel("邀请队友")
+                .accessibilityIdentifier("arena.inviteTeam")
+        } else {
+            Button { withPlayableHero { sheet = .party } } label: {
+                Image(systemName: "plus").font(.system(size: 28, weight: .black))
+                    .frame(width: 44, height: 44)
+            }.buttonStyle(ArenaLobbyButtonStyle(tint: .green))
+                .position(composition.inviteCenter)
+                .accessibilityLabel("邀请队友")
+                .accessibilityIdentifier("arena.inviteTeam")
+        }
+    }
+
+    @ViewBuilder
+    private var settingsButton: some View {
+        if resourcePack.enabled, let control = sourceControls.controls[.menu] {
+            Button { sheet = .settings } label: {
+                ArenaSourceControlVisual(control: control, live: false)
+                    .frame(width: 44, height: 44)
+                    // Keep the header's full 44-point tap target while fitting
+                    // the original wide button without stretching its artwork.
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel("游戏设置")
+                .accessibilityIdentifier("arena.settings")
+        } else {
             Button { sheet = .settings } label: {
                 Group {
                     if let image = ArenaImportedMenuAssets.shared.image(for: "settings") {
@@ -354,12 +393,8 @@ struct ArenaHomeView: View {
                     } else { Image(systemName: "line.3.horizontal").font(.system(size: 22, weight: .black)) }
                 }.frame(width: 44, height: 44)
             }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("游戏设置")
-            Button {
-                ArenaOrientation.releaseAll(); ArenaSound.shared.leaveLobby(); dismiss()
-            } label: {
-                Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
-            }.buttonStyle(ArenaLobbyButtonStyle(tint: .white)).accessibilityLabel("离开勇者乱斗")
-        }.foregroundStyle(.white).frame(height: 44)
+                .accessibilityIdentifier("arena.settings")
+        }
     }
 
     private func lobbyCounter(_ value: String, asset: String, tint: Color, label: String, width: CGFloat = 76,

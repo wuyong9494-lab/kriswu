@@ -104,7 +104,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         return difference / 442368.0
     }
 
-    func testAllSixPrivateControlsRenderActualTitlesAndShopAnimation() throws {
+    func testAllEightPrivateControlsRenderBoundTitlesOrIconsAndShopAnimation() throws {
         let (root,manifest) = try fixtures()
         let device = try XCTUnwrap(MTLCreateSystemDefaultDevice(),"Private validation requires an actual Metal device")
         for font in manifest.fonts ?? [] { _ = try resource(font.file,root:root,manifest:manifest) }
@@ -113,7 +113,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         let path = try XCTUnwrap(manifest.interfaceSceneFile)
         let document = try document(path,root:root,manifest:manifest)
         let textures = try atlases(document,root:root,manifest:manifest)
-        XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,6)
+        XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,8)
         for role in ArenaLobbySourceControl.Role.allCases {
             try autoreleasepool {
                 let source = try ArenaLobbySourceControl(document:document,role:role,title:role.title)
@@ -122,7 +122,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
                     if case .text(let text) = operation { return text.value }
                     return nil
                 }
-                XCTAssertEqual(titles,[role.title])
+                XCTAssertEqual(titles,role.titlePath == nil ? [] : [role.title])
                 let renderer = try ArenaLobbyTimelineRenderer(device:device,scene:source.scene,atlases:textures)
                 let width = Int(ceil(source.bounds.width*3)),height = Int(ceil(source.bounds.height*3))
                 let first = try renderer.snapshot(time:0,width:width,height:height)

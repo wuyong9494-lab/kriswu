@@ -236,6 +236,50 @@ final class ArenaLobbyTimelineTests: XCTestCase {
             title:"Play",idleLabel:nil,hiddenChildren:["reward"],titlePath:"missing/txt",layoutPath:"action"))
     }
 
+    func testIconOnlyControlsKeepSourceHitAreasWithoutInventedTextFields() throws {
+        for role in [ArenaLobbySourceControl.Role.invite, .menu] {
+            let base = try iconControlFixture(role: role)
+            let control = try ArenaLobbySourceControl(document: base.document, role: role, title: role.title)
+            XCTAssertNil(role.titlePath)
+            XCTAssertEqual(control.hitRegion.values, [0,0,2,2])
+            for time in [0.0,2.0,30.0] {
+                let frame = try control.scene.frame(time: time)
+                XCTAssertEqual(frame.operations.count, 1)
+                XCTAssertTrue(frame.operations.allSatisfy { if case .text = $0 { return false }; return true })
+            }
+            let renderer = try makeRenderer(control.scene)
+            XCTAssertTrue(try renderer.snapshot(time: 0, width: 12, height: 12).contains { $0 != 0 })
+        }
+    }
+
+    func testIconOnlyControlStillRejectsUnexpectedUnboundSourceText() throws {
+        for role in [ArenaLobbySourceControl.Role.invite, .menu] {
+            let base = try iconControlFixture(role: role, unexpectedText: true)
+            XCTAssertThrowsError(try ArenaLobbySourceControl(document: base.document, role: role, title: role.title))
+        }
+    }
+
+    private func iconControlFixture(role: ArenaLobbySourceControl.Role,
+                                    unexpectedText: Bool = false) throws -> ArenaLobbyTimelineScene {
+        let text: [String:Any] = ["id":3,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"","left":0,"top":0,"right":2,"bottom":2,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        var names = role == .invite ? ["hit_area","panel_player_online","button_invite_ranked"]
+                                    : ["hit_area","notification"]
+        if unexpectedText { names.append("unexpected_title") }
+        let children = [(1,0)] + names.map { _ in (3,0) }
+        let elements = children.indices.map { [$0,-1,$0 == 0 ? 0 : -1] }
+        var button = clip(2, children: children, frames: [elements])
+        button["children"] = [["objectID":1,"name":"art","blendMode":0]] +
+            names.map { ["objectID":3,"name":$0,"blendMode":0] as [String:Any] }
+        if role == .invite { button["frameLabels"] = ["normal"] }
+        var root = clip(10, children: [(2,0),(3,0)], frames: [[[0,-1,-1],[1,-1,-1]]])
+        root["children"] = [["objectID":2,"name":role.instance,"blendMode":0],
+                            ["objectID":3,"name":"another_menu","blendMode":0]]
+        return try fixture(objects: [shape(1,extent:2),text,button,root],
+                           interfaceState: .init(), exportName: role.export)
+    }
+
     func testUnlabeledProgressFrameIsFrozenAndRejectsConflictingBindings() throws {
         let root = clip(10, children: [(1,0)], frames: [[[0,-1,0]],[[0,-1,1]]], fps: 1)
         let scene = try fixture(objects: [shape(1),root], interfaceState: .init(frameIndices: ["":1]))

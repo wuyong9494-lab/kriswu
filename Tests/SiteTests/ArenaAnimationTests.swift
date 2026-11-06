@@ -31,6 +31,25 @@ final class ArenaAnimationTests: XCTestCase {
         XCTAssertEqual(ArenaLobbyClock.questRefreshLabel(now: date, calendar: calendar), "任务刷新：0小时20分")
     }
 
+    func testSourceInviteKeepsFullSilhouetteWithoutCoveringOtherControls() {
+        let sizes = [CGSize(width:568,height:320), CGSize(width:667,height:320),
+                     CGSize(width:667,height:360), CGSize(width:667,height:375),
+                     CGSize(width:844,height:360), CGSize(width:844,height:390),
+                     CGSize(width:932,height:430), CGSize(width:1024,height:768),
+                     CGSize(width:1194,height:834)]
+        for size in sizes {
+            let layout = ArenaLobbyComposition(size: size)
+            let invite = layout.sourceInviteFrame
+            XCTAssertTrue(CGRect(origin:.zero,size:size).contains(invite), "Invite outside \(size)")
+            XCTAssertGreaterThanOrEqual(invite.width,44)
+            XCTAssertGreaterThanOrEqual(invite.height,44)
+            XCTAssertEqual(invite.height / invite.width,153.0 / 110.0,accuracy:0.0001)
+            for (name,frame) in layout.sourceControlFrames where name != "invite" {
+                XCTAssertFalse(invite.intersects(frame), "Invite overlaps \(name) at \(size)")
+            }
+        }
+    }
+
     func testLobbyCriticalControlsStaySeparateAcrossPhoneAndTabletSizes() {
         for size in [CGSize(width: 568, height: 320), CGSize(width: 667, height: 375), CGSize(width: 844, height: 390), CGSize(width: 932, height: 430), CGSize(width: 1024, height: 768), CGSize(width: 1194, height: 834)] {
             let layout = ArenaLobbyComposition(size: size)

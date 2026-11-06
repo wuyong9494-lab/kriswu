@@ -239,6 +239,25 @@ struct ArenaLobbyComposition {
     var socialFrame: CGRect { railFrame(center: socialCenter) }
     var adventureFrame: CGRect { CGRect(x: adventureCenter.x - adventureSize.width / 2, y: adventureCenter.y - 22.5, width: adventureSize.width, height: 45) }
     var inviteFrame: CGRect { CGRect(x: inviteCenter.x - 22, y: inviteCenter.y - 22, width: 44, height: 44) }
+    /// The original floating invite includes its ground shadow (110 by 153).
+    /// Reserve that full silhouette; never squash it into the native square.
+    var sourceInviteFrame: CGRect {
+        if compact {
+            let left = heroBadgeFrame.maxX + 8
+            let right = socialFrame.minX - 8
+            let width = min(88, right - left, (adventureFrame.minY - 66) * 110 / 153)
+            return CGRect(x: (left + right - width) / 2, y: 58,
+                          width: width, height: width * 153 / 110)
+        }
+        let height: CGFloat = 88 * 153 / 110
+        return CGRect(x: inviteCenter.x - 44, y: min(inviteCenter.y - 22, size.height - 85 - height),
+                      width: 88, height: height)
+    }
+    var sourceControlFrames: [String: CGRect] {
+        var frames = controlFrames
+        frames["invite"] = sourceInviteFrame
+        return frames
+    }
     private func railFrame(center: CGPoint) -> CGRect {
         let h = 3 * menuHeight + 2 * railGap
         return CGRect(x: center.x - 33.5, y: center.y - h / 2, width: 67, height: h)

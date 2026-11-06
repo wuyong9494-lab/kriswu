@@ -4,7 +4,7 @@ import Foundation
 /// application supplies the title and action; source placeholders are never used.
 struct ArenaLobbySourceControl {
     enum Role: String, CaseIterable, Sendable {
-        case shop, heroes, friends, quests, battle, team
+        case shop, heroes, friends, quests, battle, team, invite, menu
 
         var export: String {
             switch self {
@@ -12,10 +12,17 @@ struct ArenaLobbySourceControl {
             case .friends, .team: return "mainscreen_hud_right"
             case .quests: return "mainscreen_hud_bottom_left"
             case .battle: return "mainscreen_hud_bottom_right"
+            case .invite: return "mainscreen_center"
+            case .menu: return "mainscreen_hud_top_right"
             }
         }
         var idleLabel: String? {
-            switch self { case .shop, .heroes: return "idle"; case .friends, .battle, .team: return nil; case .quests: return "default" }
+            switch self {
+            case .shop, .heroes: return "idle"
+            case .friends, .battle, .team, .menu: return nil
+            case .quests: return "default"
+            case .invite: return "normal"
+            }
         }
         var instance: String {
             switch self {
@@ -25,10 +32,21 @@ struct ArenaLobbySourceControl {
             case .quests: return "button_quests"
             case .battle: return "brawl_container"
             case .team: return "button_navi_team"
+            case .invite: return "button_invite_player_2"
+            case .menu: return "button_hamburger"
             }
         }
         var title: String {
-            switch self { case .shop: return "商店"; case .heroes: return "英雄"; case .friends: return "好友"; case .quests: return "任务"; case .battle: return "对战"; case .team: return "组队" }
+            switch self { case .shop: return "商店"; case .heroes: return "英雄"; case .friends: return "好友"; case .quests: return "任务"; case .battle: return "对战"; case .team: return "组队"; case .invite: return "邀请队友"; case .menu: return "设置" }
+        }
+        /// Icon-only source controls have no text field. Their native button
+        /// still supplies an accessibility title, without inventing source text.
+        var titlePath: String? {
+            switch self {
+            case .battle: return "brawl_button/txt"
+            case .invite, .menu: return nil
+            default: return "txt"
+            }
         }
     }
 
@@ -46,6 +64,8 @@ struct ArenaLobbySourceControl {
             // counts and XP state. The native party action has no such state.
             hidden = ["notification", "count_txt", "panel_player_online_ph_left",
                       "xp_multiplier", "TID_TEAM_UP_TITLE"]
+        case .invite:
+            hidden = ["panel_player_online", "button_invite_ranked"]
         case .battle:
             // Reward counters and alternate paid/locked buttons have no native
             // state here. Retain only the actual ordinary-match action.
@@ -55,13 +75,13 @@ struct ArenaLobbySourceControl {
         }
         try self.init(document: document, export: role.export, instance: role.instance, title: title,
                       idleLabel: role.idleLabel, hiddenChildren: hidden,
-                      titlePath: role == .battle ? "brawl_button/txt" : "txt",
+                      titlePath: role.titlePath,
                       layoutPath: role == .battle ? "brawl_button" : nil)
     }
 
     init(document: ArenaLobbyTimelineDocument, export: String, instance: String,
          title: String, idleLabel: String?, hiddenChildren: Set<String>,
-         titlePath: String = "txt", layoutPath: String? = nil) throws {
+         titlePath: String? = "txt", layoutPath: String? = nil) throws {
         guard !title.isEmpty, title.utf8.count <= 4096,
               let rootID = document.exports[export]?.objectID,
               let children = document.objects[String(rootID)]?.children,
@@ -70,7 +90,8 @@ struct ArenaLobbySourceControl {
             throw ArenaLobbyTimelineError.invalid("Source menu control is missing or ambiguous")
         }
         let counts = Dictionary(grouping: children, by: \.name).mapValues(\.count)
-        var state = ArenaLobbyInterfaceState(text: [instance + "/" + titlePath: title], frameIndices: ["": 0])
+        let text = titlePath.map { [instance + "/" + $0: title] } ?? [:]
+        var state = ArenaLobbyInterfaceState(text: text, frameIndices: ["": 0])
         for (index, child) in children.enumerated() where child.name != instance {
             state.hidden.insert(child.name.isEmpty || counts[child.name] != 1 ? "#\(index):\(child.name)" : child.name)
         }
