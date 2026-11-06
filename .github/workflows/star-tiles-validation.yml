@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   native:
-    runs-on: macos-15
+    # The arm64 pool failed to acquire a host after 15 minutes and the retry
+    # remained queued. Intel also includes Xcode 26 and iPhone 17 Pro Max.
+    runs-on: macos-15-intel
     timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1

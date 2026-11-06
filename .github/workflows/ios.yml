@@ -32,9 +32,9 @@ env:
 
 jobs:
   build:
-    # Use the same hosted pool as the existing signing workflow.
-    # The Intel pool failed to acquire a runner for the preceding build.
-    runs-on: macos-15
+    # The arm64 pool exhausted its acquisition attempts for this release.
+    # This standard Intel image also includes the required Xcode 26 toolchain.
+    runs-on: macos-15-intel
     concurrency:
       group: build-${{ github.ref }}
       cancel-in-progress: true
