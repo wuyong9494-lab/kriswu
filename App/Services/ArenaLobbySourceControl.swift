@@ -4,18 +4,18 @@ import Foundation
 /// application supplies the title and action; source placeholders are never used.
 struct ArenaLobbySourceControl {
     enum Role: String, CaseIterable, Sendable {
-        case shop, heroes, friends, quests, battle
+        case shop, heroes, friends, quests, battle, team
 
         var export: String {
             switch self {
             case .shop, .heroes: return "mainscreen_hud_left"
-            case .friends: return "mainscreen_hud_right"
+            case .friends, .team: return "mainscreen_hud_right"
             case .quests: return "mainscreen_hud_bottom_left"
             case .battle: return "mainscreen_hud_bottom_right"
             }
         }
         var idleLabel: String? {
-            switch self { case .shop, .heroes: return "idle"; case .friends, .battle: return nil; case .quests: return "default" }
+            switch self { case .shop, .heroes: return "idle"; case .friends, .battle, .team: return nil; case .quests: return "default" }
         }
         var instance: String {
             switch self {
@@ -24,10 +24,11 @@ struct ArenaLobbySourceControl {
             case .friends: return "button_navi_friends"
             case .quests: return "button_quests"
             case .battle: return "brawl_container"
+            case .team: return "button_navi_team"
             }
         }
         var title: String {
-            switch self { case .shop: return "商店"; case .heroes: return "英雄"; case .friends: return "好友"; case .quests: return "任务"; case .battle: return "对战" }
+            switch self { case .shop: return "商店"; case .heroes: return "英雄"; case .friends: return "好友"; case .quests: return "任务"; case .battle: return "对战"; case .team: return "组队" }
         }
     }
 
@@ -40,6 +41,11 @@ struct ArenaLobbySourceControl {
         let hidden: Set<String>
         switch role {
         case .heroes: hidden = ["notification", "progress_bar", "rarity_icon", "fame_tier_ph"]
+        case .team:
+            // These source decorations depend on the original service's online
+            // counts and XP state. The native party action has no such state.
+            hidden = ["notification", "count_txt", "panel_player_online_ph_left",
+                      "xp_multiplier", "TID_TEAM_UP_TITLE"]
         case .battle:
             // Reward counters and alternate paid/locked buttons have no native
             // state here. Retain only the actual ordinary-match action.

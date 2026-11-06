@@ -182,6 +182,34 @@ final class ArenaLobbyTimelineTests: XCTestCase {
             title:"Actual title",idleLabel:"idle",hiddenChildren:[]), "An unbound notification must not leak source placeholders")
     }
 
+    func testTeamControlKeepsNativeTitleWithoutUnboundOnlineOrXPPlaceholders() throws {
+        let text: [String:Any] = ["id":3,"commands":[],"textField":[
+            "fontName":"Arial","fontSize":15,"text":"","left":0,"top":0,"right":2,"bottom":2,
+            "fontColor":UInt32.max,"outlineColor":0,"styles":1,"align":0]]
+        let names = ["txt","hit_area","notification","count_txt","panel_player_online_ph_left",
+                     "xp_multiplier","TID_TEAM_UP_TITLE"]
+        let children = [(1,0)] + names.map { _ in (3,0) }
+        let elements = children.indices.map { [$0,-1,$0 == 0 ? 0 : -1] }
+        var button = clip(2,children:children,frames:[elements])
+        button["children"] = [["objectID":1,"name":"art","blendMode":0]] +
+            names.map { ["objectID":3,"name":$0,"blendMode":0] as [String:Any] }
+        var root = clip(10,children:[(2,0),(3,0)],frames:[[[0,-1,-1],[1,-1,-1]]])
+        root["children"] = [["objectID":2,"name":"button_navi_team","blendMode":0],
+                            ["objectID":3,"name":"another_menu","blendMode":0]]
+        let base = try fixture(objects:[shape(1,extent:2),text,button,root],
+                               interfaceState:.init(),exportName:"mainscreen_hud_right")
+        let control = try ArenaLobbySourceControl(document:base.document,role:.team,title:"组队")
+        for time in [0.0,2.0,30.0] {
+            let frame = try control.scene.frame(time:time)
+            let titles: [String] = frame.operations.compactMap { operation in
+                if case .text(let text) = operation { return text.value }; return nil
+            }
+            XCTAssertEqual(titles,["组队"])
+            XCTAssertEqual(frame.operations.count,2)
+            XCTAssertEqual(control.hitRegion.values,[0,0,2,2])
+        }
+    }
+
     func testNestedSourceActionUsesItsOwnTitleAndHitRegionWithoutRewardPlaceholders() throws {
         let text: [String:Any] = ["id":3,"commands":[],"textField":[
             "fontName":"Arial","fontSize":15,"text":"","left":0,"top":0,"right":2,"bottom":2,
@@ -369,7 +397,8 @@ final class ArenaLobbyTimelineTests: XCTestCase {
     private func fixture(objects: [[String: Any]], colors: [[Double]]? = nil,
                          matrices: [[Double]] = [], status: String = "ready",
                          exclusions: [[String:Any]] = [], viewport: [Double]? = nil,
-                         interfaceState: ArenaLobbyInterfaceState? = nil) throws -> ArenaLobbyTimelineScene {
+                         interfaceState: ArenaLobbyInterfaceState? = nil,
+                         exportName: String = "fixture") throws -> ArenaLobbyTimelineScene {
         let palette = colors ?? [[255,0,0,255,0,0,0],[0,0,255,255,0,0,0],
                                  [0,255,0,255,0,0,0],[255,255,255,128,0,0,0],
                                  [255,0,0,128,0,0,0],[0,0,255,128,0,0,0]]
@@ -380,10 +409,10 @@ final class ArenaLobbyTimelineTests: XCTestCase {
             "textures":[["file":"fixture.png","width":1,"height":1,"alphaEncoding":"straight",
                          "sha256":String(repeating:"0",count:64)]],
             "objects":nodes,"matrices":matrices,"colors":palette,
-            "exports":["fixture":["objectID":10,"status":status]],"exclusions":exclusions]
+            "exports":[exportName:["objectID":10,"status":status]],"exclusions":exclusions]
         let document = try JSONDecoder().decode(ArenaLobbyTimelineDocument.self,
             from: JSONSerialization.data(withJSONObject:value))
-        return try ArenaLobbyTimelineScene(document: document, exportName: "fixture", sourceRect: viewport,
+        return try ArenaLobbyTimelineScene(document: document, exportName: exportName, sourceRect: viewport,
             interfaceState: interfaceState)
     }
 

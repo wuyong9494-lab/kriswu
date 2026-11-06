@@ -56,7 +56,7 @@ def run(source, report):
                 aggregate.update(counts)
                 aggregate['passed'] = passed and completed.returncode == 0
                 if aggregate['passed']:
-                    aggregate.update({'backgrounds':8,'controls':5})
+                    aggregate.update({'backgrounds':8,'controls':6})
             assert aggregate['passed'], 'Private Metal validation did not pass both required tests without skips'
     finally:
         report.write_text(json.dumps(aggregate,sort_keys=True,indent=2)+'\n')

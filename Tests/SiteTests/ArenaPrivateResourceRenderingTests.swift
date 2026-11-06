@@ -104,7 +104,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         return difference / 442368.0
     }
 
-    func testAllFivePrivateControlsRenderActualTitlesAndShopAnimation() throws {
+    func testAllSixPrivateControlsRenderActualTitlesAndShopAnimation() throws {
         let (root,manifest) = try fixtures()
         let device = try XCTUnwrap(MTLCreateSystemDefaultDevice(),"Private validation requires an actual Metal device")
         for font in manifest.fonts ?? [] { _ = try resource(font.file,root:root,manifest:manifest) }
@@ -113,7 +113,7 @@ final class ArenaPrivateResourceRenderingTests: XCTestCase {
         let path = try XCTUnwrap(manifest.interfaceSceneFile)
         let document = try document(path,root:root,manifest:manifest)
         let textures = try atlases(document,root:root,manifest:manifest)
-        XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,5)
+        XCTAssertEqual(ArenaLobbySourceControl.Role.allCases.count,6)
         for role in ArenaLobbySourceControl.Role.allCases {
             try autoreleasepool {
                 let source = try ArenaLobbySourceControl(document:document,role:role,title:role.title)
