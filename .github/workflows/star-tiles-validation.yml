@@ -48,30 +48,18 @@ jobs:
         shell: bash -eo pipefail {0}
         run: |
           python3 - <<'PY'
-          import json, re, subprocess
-          devices = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'devices', 'available', '-j'], timeout=60))['devices']
-          candidates = [(runtime, device) for runtime, rows in devices.items() if '.iOS-' in runtime
-                        for device in rows if device['name'] == 'iPhone 17 Pro Max' and device.get('isAvailable', True)]
-          if not candidates:
-              raise SystemExit('Required iPhone 17 Pro Max simulator is unavailable')
-          runtime, model = max(candidates, key=lambda item: tuple(map(int, re.findall(r'\d+', item[0]))))
-          device = subprocess.check_output(['xcrun', 'simctl', 'create', 'Star Journey Acceptance',
-                                            model['deviceTypeIdentifier'], runtime], text=True, timeout=60).strip()
-          with open('star-test-device.json', 'w') as file:
-              json.dump({'runtime': runtime, 'name': model['name'], 'udid': device}, file, indent=2)
-          # Cold LaunchServices migration exceeded the previous three-minute
-          # wait. Begin it during compilation; still require bootstatus and
-          # actual XCTest interaction success before accepting the build.
+          import subprocess, sys
           with open('star-simulator-boot.log', 'w') as log:
-              subprocess.Popen(['xcrun', 'simctl', 'boot', device], stdout=log, stderr=subprocess.STDOUT,
-                               start_new_session=True)
-          print('Prewarming isolated simulator:', device, runtime, flush=True)
+              subprocess.Popen([sys.executable, '-u', '.github/scripts/prepare_star_simulator.py'],
+                               stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+          print('Prewarming an isolated iPhone 17 Pro Max during core compilation', flush=True)
           PY
 
       - name: Core rules and archive regression
         shell: bash -eo pipefail {0}
-        run: swift test 2>&1 | tee star-core-tests.log
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_prepare_star_simulator.py' -v
+          swift test 2>&1 | tee star-core-tests.log
 
       - name: Generate the existing app project
         shell: bash -eo pipefail {0}
@@ -81,13 +69,23 @@ jobs:
           xcodegen generate
 
       - name: Select and boot iPhone 17 Pro Max
-        timeout-minutes: 5
+        timeout-minutes: 7
         shell: bash -eo pipefail {0}
         run: |
           python3 - <<'PY'
-          import json, subprocess
+          import json, subprocess, time
+          from pathlib import Path
+          status = Path('star-simulator-preparation.json')
+          deadline = time.monotonic() + 180
+          while not status.exists():
+              if time.monotonic() >= deadline:
+                  raise SystemExit('Simulator preparation did not finish; inspect star-simulator-boot.log')
+              time.sleep(2)
+          prepared = json.loads(status.read_text())
+          if prepared.get('prepared') is not True:
+              raise SystemExit('Simulator preparation failed: ' + prepared.get('error', 'unknown error'))
           device = json.load(open('star-test-device.json'))
-          assert device['name'] == 'iPhone 17 Pro Max'
+          assert device['name'] == 'iPhone 17 Pro Max' and device['udid'] == prepared['udid']
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=180)
           subprocess.run(['xcrun', 'simctl', 'io', device['udid'], 'screenshot', 'star-simulator-ready.png'],
                          check=True, timeout=30)
@@ -150,6 +148,7 @@ jobs:
             star-core-tests.log
             star-test-device.json
             star-simulator-boot.log
+            star-simulator-preparation.json
             star-simulator-ready.png
             star-screenshots
             star-visual-tests.log
