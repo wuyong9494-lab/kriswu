@@ -41,14 +41,18 @@ TILE_STEPS = ("模拟器里测试同步流程或计划识图", "叠叠消实际�
 # release to both device compilation and the independent simulator workflow;
 # a queued, skipped or superseded check can never authorize an upload.
 JOURNEY_MODE = "star-journey-native-verified"
+# The owner subsequently requested "直接上传吧" for this exact candidate.
+# Preserve the strict mode; the explicit alternate records native deferral.
+JOURNEY_DIRECT_MODE = "star-journey-direct-upload-566"
+JOURNEY_DIRECT_NOTE = "按用户要求直接上传；原生界面、音频与完整交互验收未作为本次上传前置条件，结果另行记录。"
 JOURNEY_RELEASE = {
-    "build_number": "564",
-    "source_sha": "e091100d75ad0a6073446486dce0bb529318e97a",
-    "source_run_id": 42222567022,
+    "build_number": "566",
+    "source_sha": "f23e2d16f4c461012917cdfdc2db60f73e8f8c12",
+    "source_run_id": 42226841093,
 }
 JOURNEY_BRANCH = "codex/plan-tiles-journey-20261106"
 JOURNEY_NATIVE_BRANCH = "codex/star-journey-native-20261106"
-JOURNEY_NATIVE_RUN = 42222552424
+JOURNEY_NATIVE_RUN = 42226831245
 JOURNEY_DEVICE_NOTE = "iPhone 17 Pro Max 真机体验与性能尚待验收。"
 JOURNEY_STEPS = (
     "Select Xcode 26 or newer",
@@ -116,8 +120,8 @@ def validation_specification(request):
     value = request.get("source_validation")
     if value is None:
         return None
-    if isinstance(value, dict) and value.get("mode") == JOURNEY_MODE:
-        if (value != {"mode": JOURNEY_MODE, "native_run_id": JOURNEY_NATIVE_RUN}
+    if isinstance(value, dict) and value.get("mode") in (JOURNEY_MODE, JOURNEY_DIRECT_MODE):
+        if (value != {"mode": value["mode"], "native_run_id": JOURNEY_NATIVE_RUN}
                 or any(request.get(key) != expected for key, expected in JOURNEY_RELEASE.items())
                 or type(request.get("source_run_id")) is not int
                 or type(value.get("native_run_id")) is not int):
@@ -127,6 +131,8 @@ def validation_specification(request):
             raise ValueError("Journey release must preserve the existing private resource pack")
         if JOURNEY_DEVICE_NOTE not in request.get("notes", ""):
             raise ValueError("Journey notes must distinguish simulator and physical device validation")
+        if value["mode"] == JOURNEY_DIRECT_MODE and JOURNEY_DIRECT_NOTE not in request.get("notes", ""):
+            raise ValueError("Direct Journey upload must explicitly disclose owner-requested native deferral")
         return value
     if isinstance(value, dict) and value.get("mode") == TILE_MODE:
         if set(value) != {"mode"} or any(request.get(key) != expected for key, expected in TILE_RELEASE.items()):
@@ -245,8 +251,9 @@ class JourneyCIPending(ValueError):
 
 def validate_journey_source(request, run, jobs, native_run, native_jobs):
     validation = validation_specification(request)
-    if validation is None or validation["mode"] != JOURNEY_MODE:
+    if validation is None or validation["mode"] not in (JOURNEY_MODE, JOURNEY_DIRECT_MODE):
         raise ValueError("Pinned journey validation must be explicitly requested")
+    native_deferred = validation["mode"] == JOURNEY_DIRECT_MODE
     pending = False
     for actual, run_id, branch, workflow in (
             (run, request["source_run_id"], JOURNEY_BRANCH, ".github/workflows/ios.yml"),
@@ -256,6 +263,8 @@ def validate_journey_source(request, run, jobs, native_run, native_jobs):
                     "path": workflow, "event": "push"}
         if any(actual.get(key) != value for key, value in expected.items()):
             raise ValueError("Journey device and native CI must match the exact pinned source")
+        if native_deferred and run_id == JOURNEY_NATIVE_RUN:
+            continue
         if actual.get("status") in ("queued", "in_progress", "waiting", "requested", "pending"):
             pending = True
         elif actual.get("status") != "completed" or actual.get("conclusion") != "success":
@@ -264,7 +273,10 @@ def validate_journey_source(request, run, jobs, native_run, native_jobs):
         raise ValueError("Journey CI build number mismatch")
     if pending:
         raise JourneyCIPending("Journey device or native checks are still pending")
-    for collection, name in ((jobs, "build"), (jobs, "core-tests-linux"), (native_jobs, "native")):
+    required = [(jobs, "build"), (jobs, "core-tests-linux")]
+    if not native_deferred:
+        required.append((native_jobs, "native"))
+    for collection, name in required:
         matched = [job for job in collection if job.get("name") == name]
         if (len(matched) != 1 or matched[0].get("status") != "completed"
                 or matched[0].get("conclusion") != "success"):
@@ -276,12 +288,12 @@ def validate_journey_source(request, run, jobs, native_run, native_jobs):
                         or steps[0].get("conclusion") != "success"):
                     raise ValueError("Required journey native step failed: " + step_name)
     if any(job.get("status") != "completed" or job.get("conclusion") not in ("success", "skipped")
-           for job in jobs + native_jobs):
+           for job in jobs + ([] if native_deferred else native_jobs)):
         raise ValueError("Journey CI contains an unfinished or failed job")
 
 
 def check_journey_source(request):
-    validation_specification(request)
+    validation = validation_specification(request)
     for branch in (JOURNEY_BRANCH, JOURNEY_NATIVE_BRANCH):
         head = promotion.github("/git/ref/heads/" + branch).get("object", {}).get("sha")
         if head != request["source_sha"]:
@@ -292,8 +304,12 @@ def check_journey_source(request):
     native_run = promotion.github(f"/actions/runs/{JOURNEY_NATIVE_RUN}")
     native_jobs = promotion.github(f"/actions/runs/{JOURNEY_NATIVE_RUN}/jobs?filter=latest&per_page=100")["jobs"]
     validate_journey_source(request, run, jobs, native_run, native_jobs)
-    return {"validation_mode": JOURNEY_MODE, "source_ci_conclusion": "success",
-            "native_run_id": JOURNEY_NATIVE_RUN, "tile_native_and_ui_validation": "success",
+    native_deferred = validation["mode"] == JOURNEY_DIRECT_MODE
+    return {"validation_mode": validation["mode"], "source_ci_conclusion": "success",
+            "native_run_id": JOURNEY_NATIVE_RUN,
+            "tile_native_and_ui_validation": "deferred-by-owner" if native_deferred else "success",
+            "owner_requested_native_deferral": native_deferred,
+            "native_ci_status": native_run.get("status"), "native_ci_conclusion": native_run.get("conclusion"),
             "physical_device_validation": "pending", "current_source_head_verified": True,
             "source_branch_head": request["source_sha"]}
 
@@ -302,15 +318,14 @@ def check_requested_source(request):
     validation = validation_specification(request)
     if validation is None:
         return {}
-    if validation["mode"] == JOURNEY_MODE:
+    if validation["mode"] in (JOURNEY_MODE, JOURNEY_DIRECT_MODE):
         return check_journey_source(request)
     return check_tile_source(request) if validation["mode"] == TILE_MODE else check_deferred_source(request)
 
 
 def wait_for_journey_source(request):
-    # A bounded wait makes the owner's "upload after completion" instruction
-    # durable if the interactive session stops. Identity changes or failures
-    # still stop immediately, before Apple access or private-pack installation.
+    # Strict mode waits for both workflows. The owner's direct-upload mode
+    # waits for device/core acceptance only and reports native work as deferred.
     deadline = time.monotonic() + 80 * 60
     while True:
         try:
@@ -319,7 +334,8 @@ def wait_for_journey_source(request):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError("Journey validation did not finish in 80 minutes; nothing was uploaded")
-            print("Waiting for the pinned Journey device and native checks before TestFlight upload", flush=True)
+            scope = "device/core" if request["source_validation"]["mode"] == JOURNEY_DIRECT_MODE else "device/native"
+            print(f"Waiting for pinned Journey {scope} checks before TestFlight upload", flush=True)
             time.sleep(min(30, remaining))
 
 
@@ -330,7 +346,7 @@ def preflight(request):
         # Preserve the existing strict acceptance path. Never fall back after it fails.
         promotion.preflight(request)
         return
-    acceptance = (wait_for_journey_source(request) if validation["mode"] == JOURNEY_MODE
+    acceptance = (wait_for_journey_source(request) if validation["mode"] in (JOURNEY_MODE, JOURNEY_DIRECT_MODE)
                   else check_requested_source(request))
     build = promotion.find_build(request)
     promotion.output("upload_required", "false" if build else "true")

@@ -526,6 +526,64 @@ class JourneySourceTests(unittest.TestCase):
                 self.assertEqual(report.call_args.kwargs["physical_device_validation"], "pending")
 
 
+class DirectJourneySourceTests(unittest.TestCase):
+    validate = JourneySourceTests.validate
+    responses = JourneySourceTests.responses
+
+    def setUp(self):
+        JourneySourceTests.setUp(self)
+        self.request["source_validation"]["mode"] = release.JOURNEY_DIRECT_MODE
+        self.request["notes"] += release.JOURNEY_DIRECT_NOTE
+
+    def testExplicitDirectUploadDefersNativeOutcomeOnly(self):
+        for status, conclusion in (("queued", None), ("in_progress", None),
+                                   ("completed", "failure"), ("completed", "success")):
+            with self.subTest(status=status, conclusion=conclusion):
+                self.validate(native_run={**self.native_run, "status": status, "conclusion": conclusion},
+                              native_jobs=[])
+
+    def testDeviceAndCoreAcceptanceStillCannotBeSkipped(self):
+        for change in ({"status": "in_progress", "conclusion": None},
+                       {"status": "completed", "conclusion": "failure"}):
+            with self.assertRaises(ValueError):
+                self.validate(run={**self.run, **change})
+        for index in (0, 1):
+            for conclusion in ("skipped", "failure", None):
+                jobs = copy.deepcopy(self.jobs); jobs[index]["conclusion"] = conclusion
+                with self.assertRaises(ValueError):
+                    self.validate(jobs=jobs)
+
+    def testBothRunIdentitiesAndBothHeadsRemainPinned(self):
+        for key in ("head_sha", "head_branch", "path", "event"):
+            with self.assertRaises(ValueError):
+                self.validate(native_run={**self.native_run, key: "wrong"})
+        for index in (0, 1):
+            responses = self.responses(); responses[index] = {"object": {"sha": "b" * 40}}
+            with patch.object(release.promotion, "github", side_effect=responses), \
+                    patch.object(release.promotion, "find_build") as find, self.assertRaises(ValueError):
+                release.preflight(self.request)
+            find.assert_not_called()
+
+    def testDirectUploadRequiresDeferralDisclosure(self):
+        with self.assertRaisesRegex(ValueError, "native deferral"):
+            self.validate(request={**self.request, "notes": release.JOURNEY_DEVICE_NOTE})
+
+    def testDeferralIsReportedHonestlyAndDuplicateUploadStillPrevented(self):
+        responses = self.responses()
+        responses[4] = {**self.native_run, "status": "in_progress", "conclusion": None}
+        responses[5] = {"jobs": []}
+        with patch.object(release.promotion, "github", side_effect=responses), \
+                patch.object(release.promotion, "find_build", return_value={"id": "existing", "attributes": {"processingState": "VALID"}}), \
+                patch.object(release.promotion, "output") as output, \
+                patch.object(release.promotion, "save_report") as report:
+            release.preflight(self.request)
+        output.assert_any_call("upload_required", "false")
+        self.assertEqual(report.call_args.kwargs["tile_native_and_ui_validation"], "deferred-by-owner")
+        self.assertEqual(report.call_args.kwargs["native_ci_status"], "in_progress")
+        self.assertIsNone(report.call_args.kwargs["native_ci_conclusion"])
+        self.assertTrue(report.call_args.kwargs["owner_requested_native_deferral"])
+
+
 class DeferredSourceTests(unittest.TestCase):
     def setUp(self):
         self.request = {
