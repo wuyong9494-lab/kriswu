@@ -8,6 +8,7 @@ struct ArenaImportedLobbyBackground: View {
     @ObservedObject private var store: ArenaResourcePackStore
     @State private var image: UIImage?
     @State private var loadedRequest: ImageRequest?
+    @State private var displayedScene: SceneRequest?
     private let live: Bool
 
     init(store: ArenaResourcePackStore = .shared, live: Bool = true) {
@@ -28,11 +29,18 @@ struct ArenaImportedLobbyBackground: View {
                         .scaledToFill()
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
+                        .opacity(sceneRequest != nil && displayedScene == sceneRequest ? 0 : 1)
                 }
                 if let scene = sceneRequest {
                     ArenaImportedLobbySceneView(sceneURL: scene.url, exportName: scene.exportName,
                         sourceRect: scene.rect, sceneSHA256: scene.sha256, live: live, resourceURL: store.url(for:),
-                        onFailure: { _ in store.reportLobbySceneFailure(themeID: scene.themeID) })
+                        onFirstFrame: { displayedScene = scene },
+                        onFailure: { _ in
+                            Task { @MainActor in
+                                if displayedScene == scene { displayedScene = nil }
+                                store.reportLobbySceneFailure(themeID: scene.themeID)
+                            }
+                        })
                         .id(scene)
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
