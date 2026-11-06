@@ -47,6 +47,7 @@ public struct ArenaSnapshot: Equatable, Sendable {
             var slows: [ArenaSourceSlow]?
             var longDashStart: Double?
             var shieldMultiplier: Double?
+            var blocksMovement: Bool
         }
         var actors: [Actor]
         var projectiles: [Projectile]
@@ -86,7 +87,8 @@ extension ArenaGame {
             source: fighters.contains(where: { $0.sourceHero != nil || $0.sourceSlows?.isEmpty == false }) || !sourceAreas.isEmpty || projectiles.contains(where: { $0.sourceLaunch != nil }) ?
                 ArenaSnapshot.SourceState(actors: fighters.map {
                     .init(charge: $0.sourceCharge, slows: $0.sourceSlows,
-                          longDashStart: $0.sourceLongDashChargeStart, shieldMultiplier: $0.sourceShieldDamageMultiplier)
+                          longDashStart: $0.sourceLongDashChargeStart, shieldMultiplier: $0.sourceShieldDamageMultiplier,
+                          blocksMovement: $0.sourceWeapon?.blocksMovement == true || $0.sourceUltimate?.blocksMovement == true)
                 }, projectiles: projectiles, areas: sourceAreas) : nil,
             time: time,
             fighters: fighters.map { f in
@@ -161,6 +163,7 @@ extension ArenaGame {
             fighters[i].sourceSlows = actor?.slows
             fighters[i].sourceLongDashChargeStart = actor?.longDashStart
             fighters[i].sourceShieldDamageMultiplier = actor?.shieldMultiplier
+            fighters[i].sourceMovementBlocked = actor?.blocksMovement
         }
         stars = snapshot.stars
         teamKills = snapshot.teamKills
@@ -169,6 +172,18 @@ extension ArenaGame {
         safeRadius = snapshot.safeRadius
         result = snapshot.result
         events.append(contentsOf: snapshot.events)
+    }
+
+    /// Prediction and acknowledgement replay must use the host's source radius,
+    /// source slows and casting locks, rather than a legacy hero's defaults.
+    public func predictedWalkingPosition(for fighter: Fighter, from start: V2, move: V2, dt: Double) -> V2 {
+        guard fighter.alive, !fighter.busy, fighter.sourceMovementBlocked != true,
+              fighter.sourceWeapon?.blocksMovement != true, fighter.sourceUltimate?.blocksMovement != true,
+              dt.isFinite, dt > 0 else { return start }
+        let distance: Double = self.moveSpeed(fighter) * dt
+        let direction = move.clamped(to: 1)
+        let delta = V2(direction.x * distance, direction.y * distance)
+        return walkingPosition(from: start, by: delta, radius: Self.hitRadius(fighter))
     }
 
     /// 两帧之间先自己往前推一点（只是画面：子弹照直飞、人照着刚才的速度走，不算打中）

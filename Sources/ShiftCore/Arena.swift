@@ -388,6 +388,8 @@ public struct Fighter: Equatable, Codable, Sendable, Identifiable {
     /// Source long-dash recharge starts at match entry or respawn and resets
     /// on a weapon dash; it does not depend on ammo or ultimate usage.
     public var sourceLongDashChargeStart: Double? = nil
+    /// Host-reported casting lock for client-side movement prediction.
+    public var sourceMovementBlocked: Bool? = nil
     /// 等级（1–9，血量、伤害按等级加成）
     public var level = 1
     public var pos: V2

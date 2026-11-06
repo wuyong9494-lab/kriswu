@@ -689,7 +689,7 @@ final class ArenaController: ObservableObject {
         }
         let fighter = game.fighters[me]
         if fighter.alive, !fighter.busy, movement.length > 0.05 {
-            game.fighters[me].pos = game.walkingPosition(from: fighter.pos, by: movement.clamped(to: 1) * (game.moveSpeed(fighter) * dt))
+            game.fighters[me].pos = game.predictedWalkingPosition(for: fighter, from: fighter.pos, move: movement, dt: dt)
             if aiming == nil && superAiming == nil { game.fighters[me].facing = movement.normalized }
         }
         game.extrapolate(dt, except: me)
@@ -770,9 +770,8 @@ final class ArenaController: ObservableObject {
         let fighter = game.fighters[me]
         guard fighter.alive, !fighter.busy else { return }
         var position = fighter.pos
-        let speed = game.moveSpeed(fighter)
         for step in history where step.move.length > 0.05 {
-            position = game.walkingPosition(from: position, by: step.move.clamped(to: 1) * (speed * step.dt))
+            position = game.predictedWalkingPosition(for: fighter, from: position, move: step.move, dt: step.dt)
         }
         game.fighters[me].pos = position
     }

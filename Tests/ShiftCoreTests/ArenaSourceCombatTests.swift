@@ -1588,6 +1588,32 @@ final class ArenaSourceCombatTests: XCTestCase {
         XCTAssertNil(ArenaSnapshot(data: snapshot.encoded().dropLast()))
     }
 
+    func testSourceClientPredictionUsesHostRadiusAndCastingLock() throws {
+        var host = try world(wall: true)
+        host.fighters[0].sourceHero?.collisionRadius = 0.8
+        host.fighters[0].pos = V2(5, 4.5)
+        let before = host.fighters[0]
+        let predicted = host.predictedWalkingPosition(for: before, from: before.pos, move: V2(1, 0), dt: 0.4)
+        host.walk(0, by: V2(1, 0))
+        XCTAssertEqual(predicted, host.fighters[0].pos)
+        XCTAssertLessThanOrEqual(predicted.x, 5.2)
+        var skill = colt()
+        skill.canMove = false
+        var state = ArenaSourceSkillState(skill: skill, seed: 1)
+        _ = try state.activate(origin: before.pos, aim: V2(1, 0))
+        host.fighters[0].sourceWeapon = state
+        var client = try world(wall: true)
+        client.apply(try XCTUnwrap(ArenaSnapshot(data: host.snapshot(events: []).encoded())))
+        let stopped = client.fighters[0]
+        XCTAssertEqual(stopped.sourceMovementBlocked, true)
+        XCTAssertEqual(client.predictedWalkingPosition(for: stopped, from: stopped.pos, move: V2(0, 1), dt: 0.1), stopped.pos)
+        host.fighters[0].sourceWeapon?.cancel()
+        client.apply(try XCTUnwrap(ArenaSnapshot(data: host.snapshot(events: []).encoded())))
+        let released = client.fighters[0]
+        XCTAssertEqual(released.sourceMovementBlocked, false)
+        XCTAssertNotEqual(client.predictedWalkingPosition(for: released, from: released.pos, move: V2(0, 1), dt: 0.1), released.pos)
+    }
+
     func testSnapshotFragmentsReorderAndRejectPartialFrames() throws {
         let first = Data((0..<5000).map { UInt8($0 % 251) })
         let second = Data(repeating: 42, count: 2600)
