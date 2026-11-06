@@ -482,10 +482,34 @@ class JourneySourceTests(unittest.TestCase):
         responses[4] = {**self.native_run, "status": "queued", "conclusion": None}
         with patch.object(release.promotion, "github", side_effect=responses), \
                 patch.object(release.promotion, "find_build") as find, \
-                patch.object(release.promotion, "preflight") as fallback, self.assertRaises(ValueError):
+                patch.object(release.promotion, "preflight") as fallback, \
+                patch.object(release.time, "monotonic", side_effect=[0, 4800]), \
+                self.assertRaises(TimeoutError):
             release.preflight(self.request)
         find.assert_not_called()
         fallback.assert_not_called()
+
+    def testWaitRechecksAcceptanceAndNeverTreatsElapsedTimeAsSuccess(self):
+        accepted = {"tile_native_and_ui_validation": "success"}
+        with patch.object(release, "check_journey_source", side_effect=[release.JourneyCIPending(), accepted]) as check, \
+                patch.object(release.time, "monotonic", side_effect=[0, 10]), \
+                patch.object(release.time, "sleep") as sleep:
+            self.assertEqual(release.wait_for_journey_source(self.request), accepted)
+        self.assertEqual(check.call_count, 2)
+        sleep.assert_called_once_with(30)
+
+    def testFinishedFailureOrChangedSourceStopsWithoutWaiting(self):
+        for change in ({"status": "completed", "conclusion": "failure"},
+                       {"status": "queued", "head_sha": "b" * 40}):
+            responses = self.responses()
+            responses[4] = {**self.native_run, **change}
+            with self.subTest(change=change), \
+                    patch.object(release.promotion, "github", side_effect=responses), \
+                    patch.object(release.promotion, "find_build") as find, \
+                    patch.object(release.time, "sleep") as sleep, self.assertRaises(ValueError):
+                release.preflight(self.request)
+            find.assert_not_called()
+            sleep.assert_not_called()
 
     def testSuccessfulPreflightKeepsDuplicateUploadGuardAndActualValidationScope(self):
         for build in (None, {"id": "existing", "attributes": {"processingState": "VALID"}}):

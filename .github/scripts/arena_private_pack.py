@@ -13,6 +13,7 @@ from pathlib import Path
 import plistlib
 import re
 import struct
+import time
 import urllib.parse
 import urllib.request
 import zlib
@@ -236,20 +237,31 @@ def check_tile_source(request):
             "source_branch_head": head}
 
 
+class JourneyCIPending(ValueError):
+    """The pinned checks have started but cannot authorize an upload yet."""
+
+
 def validate_journey_source(request, run, jobs, native_run, native_jobs):
     validation = validation_specification(request)
     if validation is None or validation["mode"] != JOURNEY_MODE:
         raise ValueError("Pinned journey validation must be explicitly requested")
+    pending = False
     for actual, run_id, branch, workflow in (
             (run, request["source_run_id"], JOURNEY_BRANCH, ".github/workflows/ios.yml"),
             (native_run, JOURNEY_NATIVE_RUN, JOURNEY_NATIVE_BRANCH,
              ".github/workflows/star-tiles-validation.yml")):
         expected = {"id": run_id, "head_sha": request["source_sha"], "head_branch": branch,
-                    "path": workflow, "event": "push", "status": "completed", "conclusion": "success"}
+                    "path": workflow, "event": "push"}
         if any(actual.get(key) != value for key, value in expected.items()):
-            raise ValueError("Journey device and native CI must finish successfully for the exact pinned source")
+            raise ValueError("Journey device and native CI must match the exact pinned source")
+        if actual.get("status") in ("queued", "in_progress", "waiting", "requested", "pending"):
+            pending = True
+        elif actual.get("status") != "completed" or actual.get("conclusion") != "success":
+            raise ValueError("Journey device and native CI must finish successfully")
     if str(run.get("run_number")) != request["build_number"]:
         raise ValueError("Journey CI build number mismatch")
+    if pending:
+        raise JourneyCIPending("Journey device or native checks are still pending")
     for collection, name in ((jobs, "build"), (jobs, "core-tests-linux"), (native_jobs, "native")):
         matched = [job for job in collection if job.get("name") == name]
         if (len(matched) != 1 or matched[0].get("status") != "completed"
@@ -293,6 +305,22 @@ def check_requested_source(request):
     return check_tile_source(request) if validation["mode"] == TILE_MODE else check_deferred_source(request)
 
 
+def wait_for_journey_source(request):
+    # A bounded wait makes the owner's "upload after completion" instruction
+    # durable if the interactive session stops. Identity changes or failures
+    # still stop immediately, before Apple access or private-pack installation.
+    deadline = time.monotonic() + 80 * 60
+    while True:
+        try:
+            return check_journey_source(request)
+        except JourneyCIPending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Journey validation did not finish in 80 minutes; nothing was uploaded")
+            print("Waiting for the pinned Journey device and native checks before TestFlight upload", flush=True)
+            time.sleep(min(30, remaining))
+
+
 def preflight(request):
     validation = validation_specification(request)
     transport = transport_specification(request)
@@ -300,7 +328,8 @@ def preflight(request):
         # Preserve the existing strict acceptance path. Never fall back after it fails.
         promotion.preflight(request)
         return
-    acceptance = check_requested_source(request)
+    acceptance = (wait_for_journey_source(request) if validation["mode"] == JOURNEY_MODE
+                  else check_requested_source(request))
     build = promotion.find_build(request)
     promotion.output("upload_required", "false" if build else "true")
     promotion.output("source_sha", request["source_sha"])
