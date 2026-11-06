@@ -91,6 +91,7 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
     private var firstFrameDelivered = false
     private var drawCalls = 0
     private var renderPasses = 0
+    private var intermediateDensityCeiling = 2.0
     private struct TextKey: Hashable {
         let style: ArenaLobbySourceText
         let value: String
@@ -218,7 +219,9 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
     func resume() {
         if let pauseStarted { epoch += CACurrentMediaTime()-pauseStarted; self.pauseStarted = nil }
     }
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        intermediateDensityCeiling = 2
+    }
 
     func draw(in view: MTKView) {
         guard !failed, pauseStarted == nil, view.drawableSize.width > 0, view.drawableSize.height > 0,
@@ -247,8 +250,13 @@ final class ArenaLobbyTimelineRenderer: NSObject, MTKViewDelegate {
         }
         do {
             let viewport = Self.aspectFillRect(scene.sourceRect, width: Double(view.drawableSize.width), height: Double(view.drawableSize.height))
-            let density = min(2, max(1, Double(view.drawableSize.width)/viewport.width))
             let frame = try scene.frame(time: time)
+            let allowedDensity = try Scene.intermediateDensity(operations: frame.operations, sourceRect: scene.sourceRect,
+                                                               requested: Double(view.drawableSize.width)/viewport.width)
+            // Keep a reduced tier until the drawable changes size, avoiding
+            // sharpness changes as a particle crosses an allocation boundary.
+            intermediateDensityCeiling = min(intermediateDensityCeiling, allowedDensity)
+            let density = intermediateDensityCeiling
             drawCalls = 0; renderPasses = 0
             let prepared = try prepare(frame.operations, mask: nil, command: command, pool: pool, density: density)
             descriptor.colorAttachments[0].loadAction = .clear

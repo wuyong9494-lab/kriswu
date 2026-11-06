@@ -226,6 +226,62 @@ final class ArenaLobbyTimelineScene {
         let layoutRegions: [String: Rect]
     }
 
+    /// Match the compositor's bounded, 16-pixel texture buckets before it
+    /// allocates any intermediate. The final drawable keeps its native size.
+    /// Fixed density tiers avoid retaining a different bucket every frame.
+    static func intermediateDensity(operations: [Operation], sourceRect: Rect, requested: Double) throws -> Double {
+        guard requested.isFinite, requested > 0 else {
+            throw ArenaLobbyTimelineError.invalid("Invalid lobby intermediate density")
+        }
+        for tier in [2.0, 1.5, 1.0] {
+            let density = min(max(1, requested), tier)
+            if intermediatePixels(operations: operations, sourceRect: sourceRect, density: density) <= 16_000_000 {
+                return density
+            }
+        }
+        throw ArenaLobbyTimelineError.invalid("Lobby intermediate textures exceed their frame budget")
+    }
+
+    static func intermediatePixels(operations: [Operation], sourceRect: Rect, density: Double) -> Int {
+        guard density.isFinite, density > 0, density <= 1_000_000 else { return Int.max }
+        var pixels = 0
+        func allocate(_ rect: Rect) {
+            let w = ((Int(ceil(rect.width*density))+15)/16)*16
+            let h = ((Int(ceil(rect.height*density))+15)/16)*16
+            guard w > 0, h > 0, w <= 8192, h <= 8192,
+                  pixels <= Int.max - w*h else { pixels = Int.max; return }
+            pixels += w*h
+        }
+        func texture(_ children: [Operation], _ bounds: Rect) -> Rect? {
+            guard let rect = Rect([floor(bounds.minX)-1,floor(bounds.minY)-1,
+                                   ceil(bounds.maxX)+1,ceil(bounds.maxY)+1]).intersection(sourceRect) else { return nil }
+            prepare(children, mask: nil)
+            allocate(rect)
+            return rect
+        }
+        func prepare(_ children: [Operation], mask: Rect?) {
+            for child in children {
+                switch child {
+                case .draw, .text: break
+                case .layer(let content, let blend, let bounds):
+                    if blend != 3, content.count == 1, case .draw(let draw) = content[0], draw.blendMode == 0 { continue }
+                    _ = texture(content, bounds)
+                case .masked(let maskOperations, let content, let bounds):
+                    let maskBounds = maskOperations.map(\.bounds).reduce(nil as Rect?) { a,b in a.map { $0.union(b) } ?? b }
+                    guard let maskBounds, let tight = maskBounds.intersection(bounds),
+                          var combined = texture(maskOperations, tight) else { continue }
+                    if let mask {
+                        guard let rect = combined.intersection(mask) else { continue }
+                        allocate(rect); combined = rect
+                    }
+                    prepare(content, mask: combined)
+                }
+            }
+        }
+        prepare(operations, mask: nil)
+        return pixels
+    }
+
     let document: ArenaLobbyTimelineDocument
     let sourceRect: Rect
     let exportName: String

@@ -318,6 +318,36 @@ final class ArenaLobbyTimelineTests: XCTestCase {
         XCTAssertEqual(rect.values, [-288,-288,288,288])
     }
 
+    func testIntermediateBudgetUsesLowerDensityBeforeAllocatingOversizedLayers() throws {
+        let rect = ArenaLobbyTimelineScene.Rect([0,0,1600,900])
+        let layers = (0..<3).map { _ in ArenaLobbyTimelineScene.Operation.layer([],blendMode:3,bounds:rect) }
+        XCTAssertEqual(ArenaLobbyTimelineScene.intermediatePixels(operations:layers,sourceRect:rect,density:2),17_356_800)
+        XCTAssertEqual(try ArenaLobbyTimelineScene.intermediateDensity(operations:layers,sourceRect:rect,requested:2),1.5)
+        XCTAssertEqual(try ArenaLobbyTimelineScene.intermediateDensity(operations:layers,sourceRect:rect,requested:1.25),1.25)
+        // Even full-resolution intermediates have a hard limit: never drop
+        // source groups or exceed the cap just to make the frame render.
+        let oversized = Array(repeating:layers[0],count:12)
+        XCTAssertThrowsError(try ArenaLobbyTimelineScene.intermediateDensity(operations:oversized,sourceRect:rect,requested:2))
+        XCTAssertThrowsError(try ArenaLobbyTimelineScene.intermediateDensity(operations:layers,sourceRect:rect,requested:.nan))
+        let wide = ArenaLobbyTimelineScene.Rect([0,0,5000,1])
+        let wideLayer = [ArenaLobbyTimelineScene.Operation.layer([],blendMode:3,bounds:wide)]
+        XCTAssertEqual(try ArenaLobbyTimelineScene.intermediateDensity(operations:wideLayer,sourceRect:wide,requested:2),1.5,
+                       "A low pixel count must not bypass the Metal texture dimension limit")
+    }
+
+    func testIntermediateBudgetMatchesMetalForNestedMaskAndMultiply() throws {
+        let inner = clip(2,children:[(38,0),(1,0),(39,0),(1,0),(40,0)],
+            frames:[[[0,-1,-1],[1,-1,3],[2,-1,-1],[3,-1,0],[4,-1,-1]]])
+        let root = clip(10,children:[(38,0),(1,0),(39,0),(2,3),(40,0)],
+            frames:[[[0,-1,-1],[1,-1,3],[2,-1,-1],[3,-1,-1],[4,-1,-1]]])
+        let scene = try fixture(objects:[shape(1),modifier(38),modifier(39),modifier(40),inner,root])
+        let renderer = try makeRenderer(scene)
+        _ = try renderer.snapshot(time:0,width:4,height:4)
+        let predicted = ArenaLobbyTimelineScene.intermediatePixels(operations:try scene.frame(time:0).operations,
+                                                                  sourceRect:scene.sourceRect,density:1)
+        XCTAssertEqual(try XCTUnwrap(renderer.lastStatistics).transientPixels,predicted)
+    }
+
     private func makeRenderer(_ scene: ArenaLobbyTimelineScene) throws -> ArenaLobbyTimelineRenderer {
         guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal device unavailable in this test environment") }
         return try ArenaLobbyTimelineRenderer(device: device, scene: scene,
