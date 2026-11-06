@@ -61,9 +61,9 @@ jobs:
   testflight:
     needs: verify
     if: needs.verify.outputs.upload_required == 'true'
-    # Standard Intel host avoids the hosted ARM capacity failure; signing and gates are unchanged.
-    runs-on: macos-15-intel
-    timeout-minutes: 30
+    # The same Metal-capable host used by resource validation also checks the actual private pack.
+    runs-on: macos-15
+    timeout-minutes: 55
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}
     env:
@@ -105,6 +105,27 @@ jobs:
           ARENA_PRIVATE_PACK_URL: ${{ secrets.ARENA_PRIVATE_PACK_URL }}
         run: |
           python3 .github/scripts/arena_private_pack.py install .github/releases/testflight.json --source source
+          cd source
+          xcodegen generate
+      - name: Stage verified private interface fixtures
+        id: private_render
+        run: |
+          python3 source/.github/scripts/prepare_private_arena_rendering.py --source source --request .github/releases/testflight.json --output source/Tests/PrivateResourceValidation/ArenaPrivateValidation
+      - name: Require actual private backgrounds and controls to render through Metal
+        if: steps.private_render.outputs.required == 'true'
+        run: |
+          python3 -m unittest discover -s source/.github/scripts -p 'test_*private_arena_rendering.py' -v
+          python3 source/.github/scripts/run_private_arena_rendering.py --source source --report promotion-private-rendering.json
+      - name: Remove private test fixtures before archiving
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          fixtures = Path('source/Tests/PrivateResourceValidation')
+          if fixtures.exists():
+              shutil.rmtree(fixtures)
+          PY
           cd source
           xcodegen generate
       - name: Clear previous CI development certificates
@@ -175,6 +196,7 @@ jobs:
           path: |
             promotion-archive.json
             promotion-private-resources.json
+            promotion-private-rendering.json
           if-no-files-found: warn
 
   apple-status:
