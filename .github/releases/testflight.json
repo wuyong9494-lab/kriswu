@@ -1,23 +1,23 @@
 {
-  "build_number": "566",
-  "version": "1.2",
-  "source_sha": "f23e2d16f4c461012917cdfdc2db60f73e8f8c12",
-  "source_run_id": 42226841093,
-  "bundle_id": "com.kriswu.shiftreminder",
-  "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
-  "private_resource_pack": {
-    "id": "brawl69-interface-timeline-v2",
-    "bytes": 879474319,
-    "sha256": "85a65aa3abcc9d6a0be6d3123302031774201027c6b99fdcf71c9228b6120a91"
-  },
-  "private_resource_pack_transport": {
-    "encoding": "gzip",
-    "bytes": 524243560,
-    "sha256": "e5db1182b9ec71cc6f3aff7b1d7edb32276b265fedf48ee364976415ed5b9ad8"
-  },
-  "notes": "• 星了个星首页聚焦三关旅程、今日挑战与星图收藏，原有玩法可从玩法库继续进入。\n• 新增清盘、护送星核、限能返航三关连程；三种能力贯穿整轮，近航补给与远航追光带来不同路线和奖励。\n• 指定图案三消后开启星门，独立星核随轨道护送；移轨预览显示遮挡变化和实际耗能。\n• 逐步保存旅程与路线，支持中途退出、恢复和复盘；按六种能力与路线组合记录最佳星级，重复游玩不重复刷取奖励。\n• 完成旅程后逐颗修复星图，新解锁天幕和牌背可立即使用；旧关卡、挑战码及经典模式存档继续保留。\n• 本版要求同一提交的设备编译和核心回归通过，并校验签名与安装包身份。按用户要求直接上传；原生界面、音频与完整交互验收未作为本次上传前置条件，结果另行记录。现有完整私有资源包继续内置。\n• iPhone 17 Pro Max 真机体验与性能尚待验收。真人难度校准未进行；其他竞技模块的完整还原与真机多人稳定 60 帧仍待验收。\n• 已知验证结果：完整 UI 回归 8 项中 7 项失败；竞技资源 Metal 渲染 2 项中 1 项失败。本版按要求直接上传内测，相关验收延期，不代表通过。",
-  "source_validation": {
-    "mode": "star-journey-direct-upload-566",
-    "native_run_id": 42226831245
-  }
+    "build_number": "566",
+    "version": "1.2",
+    "source_sha": "f23e2d16f4c461012917cdfdc2db60f73e8f8c12",
+    "source_run_id": 42226841093,
+    "bundle_id": "com.kriswu.shiftreminder",
+    "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
+    "private_resource_pack": {
+        "id": "brawl69-interface-timeline-v2",
+        "bytes": 879474319,
+        "sha256": "85a65aa3abcc9d6a0be6d3123302031774201027c6b99fdcf71c9228b6120a91"
+    },
+    "private_resource_pack_transport": {
+        "encoding": "gzip",
+        "bytes": 524243560,
+        "sha256": "e5db1182b9ec71cc6f3aff7b1d7edb32276b265fedf48ee364976415ed5b9ad8"
+    },
+    "notes": "• 星了个星首页聚焦三关旅程、今日挑战与星图收藏，原有玩法可从玩法库继续进入。\n• 新增清盘、护送星核、限能返航三关连程；三种能力贯穿整轮，近航补给与远航追光带来不同路线和奖励。\n• 指定图案三消后开启星门，独立星核随轨道护送；移轨预览显示遮挡变化和实际耗能。\n• 逐步保存旅程与路线，支持中途退出、恢复和复盘；按六种能力与路线组合记录最佳星级，重复游玩不重复刷取奖励。\n• 完成旅程后逐颗修复星图，新解锁天幕和牌背可立即使用；旧关卡、挑战码及经典模式存档继续保留。\n• 本版要求同一提交的设备编译和核心回归通过，并校验签名与安装包身份。按用户要求直接上传；原生界面、音频与完整交互验收未作为本次上传前置条件，结果另行记录。现有完整私有资源包继续内置。\n• iPhone 17 Pro Max 真机体验与性能尚待验收。真人难度校准未进行；其他竞技模块的完整还原与真机多人稳定 60 帧仍待验收。\n• 已知验证结果：完整 UI 回归 8 项中 7 项失败；竞技资源 Metal 渲染 2 项中 1 项失败。本版按要求直接上传内测，相关验收延期，不代表通过。",
+    "source_validation": {
+        "mode": "star-journey-direct-upload-566",
+        "native_run_id": 42226831245
+    }
 }

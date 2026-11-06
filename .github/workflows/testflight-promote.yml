@@ -64,7 +64,9 @@ jobs:
     if: needs.verify.outputs.upload_required == 'true'
     # Strict releases retain native Metal acceptance. The explicitly pinned
     # 566 direct beta records the observed failure and preserves archive integrity.
-    runs-on: macos-26
+    # The 566 ARM signing job could not acquire a hosted runner after 15 minutes.
+    # Use the standard Intel image with the same Xcode 26.6 for this exact beta.
+    runs-on: ${{ needs.verify.outputs.build_number == '566' && needs.verify.outputs.source_sha == 'f23e2d16f4c461012917cdfdc2db60f73e8f8c12' && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 55
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}
