@@ -120,6 +120,9 @@ def validation_specification(request):
     value = request.get("source_validation")
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("mode") == "star-master-replay-verified-582":
+        import star_master_release
+        return star_master_release.validate_request(request)
     if isinstance(value, dict) and value.get("mode") == "star-pulse-direct-upload-569":
         import star_pulse_release
         return star_pulse_release.validate_request(request)
@@ -321,6 +324,9 @@ def check_requested_source(request):
     validation = validation_specification(request)
     if validation is None:
         return {}
+    if validation["mode"] == "star-master-replay-verified-582":
+        import star_master_release
+        return star_master_release.check(request)
     if validation["mode"] == "star-pulse-direct-upload-569":
         import star_pulse_release
         return star_pulse_release.check(request)
@@ -352,6 +358,9 @@ def preflight(request):
         # Preserve the existing strict acceptance path. Never fall back after it fails.
         promotion.preflight(request)
         return
+    if validation["mode"] == "star-master-replay-verified-582":
+        import star_master_release
+        star_master_release.check(request, wait=True)
     if validation["mode"] == "star-pulse-direct-upload-569":
         import star_pulse_release
         star_pulse_release.check(request, wait=True)

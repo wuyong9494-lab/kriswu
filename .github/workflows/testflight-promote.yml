@@ -52,6 +52,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p 'test_arena_private_pack.py' -v
           python3 -m unittest discover -s .github/scripts -p 'test_star_journey_release.py' -v
           python3 -m unittest discover -s .github/scripts -p 'test_star_pulse_release.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_star_master_release.py' -v
           python3 .github/scripts/arena_private_pack.py preflight .github/releases/testflight.json
       - uses: actions/upload-artifact@v4
         if: always()

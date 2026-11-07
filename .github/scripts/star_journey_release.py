@@ -12,6 +12,12 @@ KNOWN_VALIDATION_NOTE = "已知验证结果：完整 UI 回归 8 项中 7 项失
 
 def visual_policy(request):
     validation = private_pack.validation_specification(request)
+    if validation and validation["mode"] == "star-master-replay-verified-582":
+        import star_master_release as master
+        return {"deferred": True, "passed": False, "source_sha": request["source_sha"],
+                "build_number": request["build_number"], "private_resource_pack": private_pack.JOURNEY_PACK,
+                "validation": "unchanged-private-resources-prior-deferral-retained",
+                "tile_native_and_ui_validation": "success", "note": master.NOTE}
     if validation and validation["mode"] == "star-pulse-direct-upload-569":
         return {"deferred": True, "passed": False, "source_sha": request["source_sha"],
                 "build_number": request["build_number"], "validation": "deferred-by-owner-for-direct-beta-upload",
