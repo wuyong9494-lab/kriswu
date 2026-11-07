@@ -382,6 +382,7 @@ public struct DuelGame: Equatable, Sendable {
         let defender = 1 - attacker
         let actual = min(damage, fighters[defender].health)
         fighters[defender].health -= actual; fighters[defender].flash = 8
+        if fighters[defender].health == 0 { fighters[defender].knockdown = 36 }
         landedHits[attacker] += 1; damageDealt[attacker] += actual
         events.append(.hit(attacker: attacker, damage: actual))
     }

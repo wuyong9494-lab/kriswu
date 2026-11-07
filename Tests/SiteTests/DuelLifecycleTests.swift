@@ -118,7 +118,11 @@ final class DuelLifecycleTests: XCTestCase {
             XCTAssertTrue(actor.position.x.isFinite && defender.position.x.isFinite)
             if name == "side-lock" {
                 XCTAssertGreaterThan(actor.position.z - defender.position.z, 0.5, "The attacker must hold from the opponent's side")
-                XCTAssertEqual(abs(defender.eulerAngles.z), Float.pi / 2, accuracy: 0.001)
+                let head = try XCTUnwrap(defender.childNode(withName: "head", recursively: false))
+                let hip = try XCTUnwrap(actor.childNode(withName: "hip", recursively: false))
+                XCTAssertEqual(head.worldPosition.y, defender.position.y, accuracy: 0.02)
+                XCTAssertLessThan(head.worldPosition.x, defender.position.x - 1.5, "The body must lie along the arena, not into the depth axis")
+                XCTAssertGreaterThan(abs(hip.worldPosition.x - head.worldPosition.x), 0.25)
                 XCTAssertLessThan(actor.position.x, defender.position.x - 1.5)
             }
             let renderer = SCNRenderer(device: nil, options: nil)

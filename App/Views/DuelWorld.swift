@@ -2,6 +2,7 @@ import SwiftUI
 import SceneKit
 import UIKit
 import Darwin
+import simd
 
 struct DuelWorld: UIViewRepresentable {
     let session: DuelSession
@@ -228,7 +229,7 @@ private final class DuelActor {
         body = Self.shape(SCNCapsule(capRadius: hero == .ember ? 0.31 : 0.25, height: 0.72), color)
         body.position.y = 1.08; root.addChildNode(body)
         let head = Self.shape(SCNSphere(radius: 0.23), hero == .liu ? skin : UIColor(red: 0.78, green: 0.82, blue: 0.86, alpha: 1))
-        head.position.y = 1.67; root.addChildNode(head)
+        head.name = "head"; head.position.y = 1.67; root.addChildNode(head)
         let visor = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.08, chamferRadius: 0.04), dark)
         visor.position = SCNVector3(0, 1.69, 0.20)
         if hero != .liu { root.addChildNode(visor) }
@@ -243,7 +244,7 @@ private final class DuelActor {
             tie.position = SCNVector3(0, 1.22, 0.28); root.addChildNode(tie)
         }
         let belt = Self.shape(SCNBox(width: 0.53, height: 0.16, length: 0.32, chamferRadius: 0.06), dark)
-        belt.position.y = 0.74; root.addChildNode(belt)
+        belt.name = "hip"; belt.position.y = 0.74; root.addChildNode(belt)
         for (joint, elbow, x) in [(leftArm, leftElbow, Float(-0.37)), (rightArm, rightElbow, Float(0.37))] {
             joint.position = SCNVector3(x, 1.33, 0); root.addChildNode(joint)
             let arm = Self.shape(SCNCapsule(capRadius: 0.105, height: 0.30), hero == .liu ? color : dark)
@@ -271,11 +272,16 @@ private final class DuelActor {
         material.metalness.contents = 0.12; material.lightingModel = .physicallyBased
         geometry.materials = [material]; return SCNNode(geometry: geometry)
     }
+    private func orient(yaw: Float, worldRoll: Float) {
+        // Apply facing before a world-space fall/lean. Combining Euler yaw and
+        // roll would roll first in SceneKit and tip the body into scene depth.
+        root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
+            simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
+    }
     func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int) {
         root.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000, 0)
-        root.eulerAngles.x = 0
-        root.eulerAngles.y = fighter.facing > 0 ? .pi / 2 : -.pi / 2
-        root.eulerAngles.z = fighter.knockdown > 0 ? Float(fighter.facing) * -.pi / 2 : 0
+        let yaw: Float = fighter.facing > 0 ? .pi / 2 : -.pi / 2
+        orient(yaw: yaw, worldRoll: fighter.knockdown > 0 ? Float(fighter.facing) * -.pi / 2 : 0)
         if fighter.knockdown > 0 { root.position.y = 0.25; root.position.x -= Float(fighter.facing) * 0.95 }
         for joint in [leftElbow, rightElbow, leftKnee, rightKnee] { joint.eulerAngles = SCNVector3Zero }
         let swing = fighter.walking ? sin(Float(frame) * 0.24) * 0.5 : 0
@@ -294,7 +300,7 @@ private final class DuelActor {
             if attack.move == .ultimate {
                 leftArm.eulerAngles.x = -0.75; rightArm.eulerAngles.x = -0.8
                 leftElbow.eulerAngles.x = -0.45; rightElbow.eulerAngles.x = -0.40
-                root.eulerAngles.x = 0.10
+                orient(yaw: yaw, worldRoll: -Float(fighter.facing) * 0.10)
             }
         }
         if let hold = grapple {
@@ -307,20 +313,25 @@ private final class DuelActor {
                 // Stable side-on wrist/shoulder hold with a clear gap between
                 // the attacker and the prone opponent's head.
                 let crouch = eased * (1 - release)
-                root.position.y = -0.30 * crouch; root.position.z = 0.55 * eased
-                root.eulerAngles.x = 0.20 * crouch
+                root.position.x += direction * 0.15 * crouch
+                root.position.y = -0.38 * crouch; root.position.z = 0.55 * eased
+                orient(yaw: yaw, worldRoll: -direction * 0.20 * crouch)
                 leftLeg.eulerAngles.x = -0.90 * crouch; rightLeg.eulerAngles.x = -0.55 * crouch
                 leftKnee.eulerAngles.x = 1.55 * crouch; rightKnee.eulerAngles.x = 1.05 * crouch
-                leftArm.eulerAngles.x = -0.85 + 0.30 * crouch; rightArm.eulerAngles.x = -0.80 + 0.25 * crouch
-                leftElbow.eulerAngles.x = -0.15; rightElbow.eulerAngles.x = -0.10
+                let gripArm = direction > 0 ? rightArm : leftArm, gripElbow = direction > 0 ? rightElbow : leftElbow
+                let supportArm = direction > 0 ? leftArm : rightArm, supportElbow = direction > 0 ? leftElbow : rightElbow
+                supportArm.eulerAngles.x = -0.85 + 0.40 * crouch; gripArm.eulerAngles.x = -0.80 + 0.60 * crouch
+                supportElbow.eulerAngles.x = -0.35; gripElbow.eulerAngles.x = -0.20
             } else {
                 root.position.x += direction * (1.35 * eased + 0.30 * release)
                 root.position.y = 0.25 * eased + sin(fall * .pi) * 0.25
-                root.position.z = -0.08 * eased; root.eulerAngles.z = direction * .pi / 2 * eased
+                root.position.z = -0.08 * eased; orient(yaw: yaw, worldRoll: direction * .pi / 2 * eased)
                 leftLeg.eulerAngles.x = -0.12; rightLeg.eulerAngles.x = 0.12
                 leftKnee.eulerAngles.x = 0.18; rightKnee.eulerAngles.x = 0.35
-                leftArm.eulerAngles.x = -0.90 * eased; rightArm.eulerAngles.x = -0.35 * eased
-                leftElbow.eulerAngles.x = -0.55 * eased; rightElbow.eulerAngles.x = -0.75 * eased
+                let heldArm = direction > 0 ? rightArm : leftArm, heldElbow = direction > 0 ? rightElbow : leftElbow
+                let freeArm = direction > 0 ? leftArm : rightArm, freeElbow = direction > 0 ? leftElbow : rightElbow
+                freeArm.eulerAngles.x = -0.90 * eased; heldArm.eulerAngles.x = -3.50 * eased
+                freeElbow.eulerAngles.x = -0.55 * eased; heldElbow.eulerAngles.x = 0
             }
         }
         body.geometry?.firstMaterial?.emission.contents = fighter.flash > 0 ? UIColor(red: 0.22, green: 0.10, blue: 0.02, alpha: 1) : UIColor.black
