@@ -223,7 +223,7 @@ struct TileGameHomeView: View {
                 await worker.value
             } onCancel: { worker.cancel() }
             guard !Task.isCancelled else { return }
-            play = TilePlay(level: .hard, seed: seed, mode: .solo, ruleSet: rule)
+            play = TilePlay(level: .hard, seed: seed, mode: .solo, ruleSet: rule, screenedMaster: true)
             preparingMaster = false
             masterRequest = nil
         }

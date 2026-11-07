@@ -88,6 +88,7 @@ struct TilePlay: Identifiable, Equatable {
     let seed: UInt64
     let mode: Mode
     var ruleSet: TileGame.RuleSet = .constellation
+    var screenedMaster = false
 }
 
 // MARK: - 对战
@@ -317,6 +318,7 @@ struct TileBoardView: View {
     @State private var recorded = false
     @State private var showingResult = false
     @State private var confirmingQuit = false
+    @State private var preparingDeal = false
     @State private var stageID: Int?
     @State private var settleTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -336,7 +338,7 @@ struct TileBoardView: View {
         case .daily: return "今日挑战 · \(TileTheme.title(game.level))"
         case .challenge: return "挑战码 \(game.code)"
         case .race: return "对战 · \(play.level.title)"
-        case .solo: return TileTheme.title(game.level)
+        case .solo: return play.screenedMaster && game.ruleSet == .constellation ? "深空大师" : TileTheme.title(game.level)
         case .journey: return "第 \(stageID ?? 1) 关 · \(TileJourney.stage(stageID ?? 1)?.name ?? "星域航程")"
         }
     }
@@ -382,6 +384,20 @@ struct TileBoardView: View {
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .task { await runCountdown() }
+        .task(id: preparingDeal) {
+            guard preparingDeal else { return }
+            let base = UInt64.random(in: 0..<TileGame.seedLimit)
+            let rule = game.ruleSet
+            let worker = Task.detached(priority: .userInitiated) {
+                TileGame.masterSeed(startingAt: base, ruleSet: rule)
+            }
+            let nextSeed = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: { worker.cancel() }
+            guard !Task.isCancelled else { return }
+            restart(seed: nextSeed)
+            preparingDeal = false
+        }
         .onDisappear { settleTask?.cancel() }
         .confirmationDialog("退出这一局？", isPresented: $confirmingQuit, titleVisibility: .visible) {
             Button(race == nil ? "退出" : "退出（这局算输）", role: .destructive) { quit() }
@@ -610,9 +626,12 @@ struct TileBoardView: View {
                     }
                     .buttonStyle(.bordered)
                     HStack {
-                        Button("重玩这一局") { restart(seed: seed) }
+                        Button("重玩这一局") { restart(seed: seed) }.disabled(preparingDeal)
                         if play.mode == .solo {
-                            Button("换一局") { restart(seed: UInt64.random(in: 0..<TileGame.seedLimit)) }
+                            Button(preparingDeal ? "正在准备…" : "换一局") {
+                                if play.screenedMaster { preparingDeal = true }
+                                else { restart(seed: UInt64.random(in: 0..<TileGame.seedLimit)) }
+                            }.disabled(preparingDeal)
                         }
                     }
                     .buttonStyle(.bordered)
