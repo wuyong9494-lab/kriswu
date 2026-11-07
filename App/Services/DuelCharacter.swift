@@ -108,7 +108,7 @@ final class DuelCharacterInstance {
             let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
             let direction = Float(hold.direction)
             if hold.attacker == index {
-                root.position.x -= direction * 0.05 * eased * (1 - release)
+                root.position.x += direction * 0.12 * eased * (1 - release)
                 root.position.z = 0.55 * eased
                 // The clip contains its own grounded crouch/root translation.
                 // Applying the greybox's extra crouch would sink the shoes.

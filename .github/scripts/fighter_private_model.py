@@ -79,6 +79,7 @@ def write_atomic(path, data):
 
 
 def stage():
+    key()
     encrypted = ROOT / ".github/private/liu-fullbody-v1.glb.enc"
     clear = unseal(encrypted.read_bytes(), "model")
     if len(clear) != SIZE or hashlib.sha256(clear).hexdigest() != SHA:

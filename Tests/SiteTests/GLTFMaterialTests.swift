@@ -161,6 +161,21 @@ final class GLTFMaterialTests: XCTestCase {
         }
     }
 
+    func testPBRIsOptInAndRoutesPackedTextureChannels() throws {
+        let packed: [String: Any] = ["metallicRoughnessTexture": ["index": 0], "roughnessFactor": 0.6, "metallicFactor": 0.2]
+        let legacy = try fixture(pbrOverrides: packed).instantiate()
+        XCTAssertEqual(legacy.materials[0].lightingModel, .lambert)
+        let material = try XCTUnwrap(fixture(physicallyBased: true, pbrOverrides: packed).instantiate().materials.first)
+        XCTAssertEqual(material.lightingModel, .physicallyBased)
+        XCTAssertEqual(material.roughness.textureComponents, .green)
+        XCTAssertEqual(material.metalness.textureComponents, .blue)
+        XCTAssertEqual(material.roughness.intensity, 0.6, accuracy: 0.00001)
+        XCTAssertEqual(material.metalness.intensity, 0.2, accuracy: 0.00001)
+        XCTAssertTrue(material.roughness.contents is UIImage)
+        XCTAssertThrowsError(try fixture(physicallyBased: true, pbrOverrides: ["roughnessFactor": -0.1]))
+        XCTAssertThrowsError(try fixture(physicallyBased: true, pbrOverrides: ["metallicRoughnessTexture": ["index": 99]]))
+    }
+
     func testInvalidMaterialConfigurationFailsInsteadOfSilentlyChangingItsMeaning() throws {
         XCTAssertThrowsError(try fixture(alphaMode: "UNKNOWN"))
         XCTAssertThrowsError(try fixture(alphaMode: "MASK", cutoff: -0.1))
@@ -225,7 +240,8 @@ final class GLTFMaterialTests: XCTestCase {
                          sampler: [String: Int]? = nil, uv: [Float]? = nil,
                          skinned: Bool = false, explicitRoot: Bool = false,
                          texturePNG: Data? = nil, embeddedTexture: Bool = false,
-                         maxTexture: CGFloat = 512) throws -> GLTFModel {
+                         maxTexture: CGFloat = 512, physicallyBased: Bool = false,
+                         pbrOverrides: [String: Any] = [:]) throws -> GLTFModel {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("gltf-material-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
@@ -263,6 +279,7 @@ final class GLTFMaterialTests: XCTestCase {
         }
         var pbr: [String: Any] = ["baseColorFactor": factor]
         if pixel != nil || texturePNG != nil { pbr["baseColorTexture"] = ["index": 0] }
+        pbr.merge(pbrOverrides) { _, new in new }
         var material: [String: Any] = ["name": "synthetic", "alphaMode": alphaMode, "pbrMetallicRoughness": pbr]
         if let cutoff { material["alphaCutoff"] = cutoff }
         var document: [String: Any] = ["asset": ["version": "2.0"], "scene": 0, "scenes": [["nodes": [0]]],
@@ -306,6 +323,6 @@ final class GLTFMaterialTests: XCTestCase {
         try binary.write(to: folder.appendingPathComponent("mesh.bin"))
         let url = folder.appendingPathComponent("fixture.gltf")
         try JSONSerialization.data(withJSONObject: document).write(to: url)
-        return try GLTFModel(url: url, maxTexture: maxTexture)
+        return try GLTFModel(url: url, maxTexture: maxTexture, physicallyBased: physicallyBased)
     }
 }

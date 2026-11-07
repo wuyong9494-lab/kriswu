@@ -76,7 +76,7 @@ final class DuelSession: ObservableObject {
     private var feedbackUntil = 0
     private var serial = 0
     private(set) var animationTick = 0
-    @Published private(set) var characterStatus = ""
+    private(set) var characterStatus = ""
     private var practicedJump = false
     private var practicedSkills = Set<DuelGame.Move>()
     private let interruptions = DuelInterruptionObserver()

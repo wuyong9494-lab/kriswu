@@ -302,8 +302,14 @@ private final class DuelActor {
         guard let character else { return }
         let suffix = hold.direction > 0 ? "R" : "L"
         let name = hold.direction > 0 ? "duel.hand.right" : "duel.hand.left"
-        guard let target = other.character?.bone("hand.\(suffix)") ?? other.root.childNode(withName: name, recursively: true) else { return }
         let fall = min(1, Float(hold.age) / Float(DuelGame.Grapple.takedownTicks))
+        if other.character == nil {
+            // Raise the captured wrist to match the authored adult's shoulder
+            // height; preserve the old greybox pair when no real asset is used.
+            let heldArm = hold.direction > 0 ? other.rightArm : other.leftArm
+            heldArm.eulerAngles.x = -3.85 * fall * fall * (3 - 2 * fall)
+        }
+        guard let target = other.character?.bone("hand.\(suffix)") ?? other.root.childNode(withName: name, recursively: true) else { return }
         let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
         character.reach(suffix: suffix, target: target.simdWorldPosition, weight: fall * fall * (3 - 2 * fall) * (1 - release))
     }

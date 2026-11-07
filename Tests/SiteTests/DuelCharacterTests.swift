@@ -90,7 +90,7 @@ final class DuelCharacterTests: XCTestCase {
             if [12, 65, 210].contains(hold.age) { snapshot(world, name: "liu-native-grapple-\(hold.age)") }
             state.advance()
         }
-        XCTAssertLessThan(worstGap, 0.25, "Imported hand must actually connect to the captured wrist")
+        XCTAssertLessThan(worstGap, 0.10, "Imported hand must actually connect to the captured wrist")
         XCTAssertEqual(state.game.damageDealt[0], 280)
         let evidence = XCTAttachment(string: "worstWristGap=\(worstGap) triangles=70836 joints=42 textureLimit=1024")
         evidence.name = "liu-native-metrics"; evidence.lifetime = .keepAlways; add(evidence)
