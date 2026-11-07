@@ -46,13 +46,24 @@ public struct DuelCharacterAnimation: Equatable, Sendable {
         if case .matchOver(let winner) = phase {
             return .init("result", winner == index ? .victory : .hit, winner == index ? 1 : 0.25, transition: 0)
         }
-        if fighter.stun > 0 { return .init("hurt", .hit, max(0.25, 1 - Float(fighter.stun) / 24), transition: 0) }
+        if fighter.stun > 0 {
+            // Block stun is still a guard pose. A landed hit starts at the
+            // authored impact (frame 4 of 1...13), then recovers over 17 ticks.
+            if fighter.guarding { return .init("guard", .guardPose, transition: 0) }
+            let recovery = Float(max(0, 17 - fighter.stun)) / 17
+            return .init("hurt", .hit, 0.25 + 0.75 * recovery, transition: 0)
+        }
         if let attack = fighter.attack {
             let data = DuelGame.data(attack.move, hero: fighter.hero)
+            // Simulation time and attack age both freeze during hit stop.
+            // Include the start tick so consecutive instances of the same move
+            // restart their transition even if no idle frame was rendered.
+            let key = "attack.\(attack.move.rawValue).\(animationTick - attack.age)"
+            let transition = attack.age < data.startup ? 3 : 0
             if attack.move == .ultimate {
                 let ready = Float(min(attack.age, data.startup)) / Float(data.startup) * 0.5
                 let recover = Float(max(0, attack.age - data.startup - data.active)) / Float(data.recovery)
-                return .init("attack.ultimate", .grab, ready, secondary: .guardPose, weight: recover, transition: 3)
+                return .init(key, .grab, ready, secondary: .guardPose, weight: recover, transition: transition)
             }
             // The authored punches reach contact at frame 8 and begin recovery
             // after frame 11 of a 1...19 source clip. Time-warp each rule phase
@@ -66,7 +77,9 @@ public struct DuelCharacterAnimation: Equatable, Sendable {
             } else {
                 time = recovery + Float(attack.age - data.startup - data.active) / Float(data.recovery) * (1 - recovery)
             }
-            return .init("attack.\(attack.move.rawValue)", attack.move == .jab ? .jab : .cross, time, transition: 3)
+            // Never blend contact back toward an idle pose when a renderer
+            // first observes an attack at impact (including after a skipped draw).
+            return .init(key, attack.move == .jab ? .jab : .cross, time, transition: transition)
         }
         if fighter.y > 0 { return .init("air", .jump, 0.5, transition: 3) }
         if fighter.guarding { return .init("guard", .guardPose) }

@@ -46,4 +46,52 @@ final class DuelCharacterAnimationTests: XCTestCase {
         fighter.knockdown = 20; fighter.attack = .init(move: .jab)
         XCTAssertEqual(DuelCharacterAnimation.sample(fighter, animationTick: 0, grapple: nil, index: 0, phase: .fighting).key, "down")
     }
+    func testImpactCannotBlendBackToStandingPose() {
+        var fighter = DuelGame(hero: .liu).fighters[0]
+        for move in [DuelGame.Move.jab, .cross, .finisher, .heavy, .skill1, .skill2, .ultimate] {
+            let data = DuelGame.data(move, hero: .liu)
+            for age in data.startup..<(data.startup + data.active) {
+                fighter.attack = .init(move: move, age: age)
+                let pose = DuelCharacterAnimation.sample(fighter, animationTick: 100 + age,
+                                                         grapple: nil, index: 0, phase: .fighting)
+                XCTAssertEqual(pose.transitionTicks, 0, "Contact must be visible even on the first draw")
+            }
+        }
+    }
+
+    func testConsecutivePunchInstancesHaveDistinctStableKeys() {
+        var fighter = DuelGame(hero: .liu).fighters[0]
+        for move in [DuelGame.Move.jab, .cross, .finisher] {
+            fighter.attack = .init(move: move, age: 1)
+            let first = DuelCharacterAnimation.sample(fighter, animationTick: 101, grapple: nil, index: 0, phase: .fighting)
+            fighter.attack?.age = 5
+            let later = DuelCharacterAnimation.sample(fighter, animationTick: 105, grapple: nil, index: 0, phase: .fighting)
+            XCTAssertEqual(first.key, later.key)
+            XCTAssertEqual(later, .sample(fighter, animationTick: 105, grapple: nil, index: 0, phase: .fighting))
+            fighter.attack?.age = 1
+            let repeated = DuelCharacterAnimation.sample(fighter, animationTick: 201, grapple: nil, index: 0, phase: .fighting)
+            XCTAssertNotEqual(first.key, repeated.key)
+            XCTAssertEqual(first.progress, repeated.progress)
+        }
+    }
+
+    func testHitStartsAtAuthoredImpactAndBlockStunKeepsGuard() {
+        var fighter = DuelGame(hero: .liu).fighters[0]
+        var previous: Float = 0
+        for stun in stride(from: 17, through: 1, by: -1) {
+            fighter.stun = stun
+            let pose = DuelCharacterAnimation.sample(fighter, animationTick: 42, grapple: nil, index: 0, phase: .fighting)
+            XCTAssertEqual(pose.clip, .hit)
+            XCTAssertEqual(pose.transitionTicks, 0)
+            if stun == 17 { XCTAssertEqual(pose.progress, 0.25) }
+            XCTAssertGreaterThanOrEqual(pose.progress, previous)
+            XCTAssertLessThan(pose.progress, 1)
+            previous = pose.progress
+        }
+        fighter.guarding = true; fighter.stun = 10
+        let blocked = DuelCharacterAnimation.sample(fighter, animationTick: 42, grapple: nil, index: 0, phase: .fighting)
+        XCTAssertEqual(blocked.clip, .guardPose)
+        XCTAssertEqual(blocked.transitionTicks, 0)
+    }
+
 }

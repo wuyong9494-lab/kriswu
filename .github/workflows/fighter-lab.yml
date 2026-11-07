@@ -12,6 +12,11 @@ on:
       - '.github/workflows/fighter-lab.yml'
       - '.github/workflows/ios.yml'
   workflow_dispatch:
+    inputs:
+      private_character:
+        description: Run actual character acceptance (requires separately staged model and key)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -108,6 +113,7 @@ jobs:
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:SiteTests/GLTFMaterialTests -only-testing:SiteTests/DuelLifecycleTests \
+            -only-testing:SiteTests/DuelCharacterTests/testOpeningFeedbackSurvivesFirstTickAndRestart \
             -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
@@ -141,7 +147,7 @@ jobs:
   character:
     # Requires separately authorized private model + key. Push checks below
     # do not count as authored-character acceptance. Run explicitly after staging.
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.private_character }}
     runs-on: macos-26
     timeout-minutes: 40
     env:

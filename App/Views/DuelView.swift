@@ -73,7 +73,7 @@ final class DuelSession: ObservableObject {
     @Published private(set) var report = ""
     var renderPause: ((Bool) -> Void)?
     var inputReset: (() -> Void)?
-    private var feedbackUntil = 0
+    private var feedbackUntil = 75
     private var serial = 0
     private(set) var animationTick = 0
     private(set) var characterStatus = ""
