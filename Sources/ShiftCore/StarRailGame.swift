@@ -83,6 +83,7 @@ public enum StarRail {
         public internal(set) var overflowEnergy = 0
         public internal(set) var spentEnergy = 0
         public internal(set) var freeReturnUsed = false
+        public internal(set) var pulseCharge = 0
     }
     public struct Preview: Equatable, Sendable {
         public let rail: Int
@@ -274,6 +275,7 @@ public enum StarRail {
                 if case .travel(_, let to) = action { destination = to } else { destination = 1-state.positions[id] }
                 let cost = moveCost(rail:id,to:destination,in:state)
                 next.positions[id] = destination
+                if stage.journey?.ability == .pulse { next.pulseCharge = 0 }
                 next.energy -= cost; next.spentEnergy += cost; next.shifts += 1
                 if stage.journey?.ability == .navigator && destination == 0 { next.freeReturnUsed = true }
                 next.arrivals |= stage.arrivalBit(rail: id, stop: destination)
@@ -285,6 +287,7 @@ public enum StarRail {
                 if next.tray.filter({ stage.cards[$0].kind == kind }).count == 3 {
                     next.tray.removeAll { stage.cards[$0].kind == kind }
                     next.matches += 1
+                    if stage.journey?.ability == .pulse { next.pulseCharge = min(2,next.pulseCharge + 1) }
                     if next.energy == stage.energyLimit { next.overflowEnergy += 1 }
                     next.energy = min(stage.energyLimit,next.energy+1)
                 }

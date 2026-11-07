@@ -1,0 +1,25 @@
+name: Star gameplay rules
+on:
+  push:
+    branches: ['codex/star-gameplay-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: star-gameplay-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    container: swift:6.0.3
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Rules and legacy save regression
+        run: swift test --jobs 2 --filter 'StarRail|StarJourney|StarPulse|TileGame'
+      - name: Every ability, route and starting energy
+        run: swift run --skip-build StarJourneyAudit > star-journey-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: star-pulse-audit
+          path: star-journey-audit.json

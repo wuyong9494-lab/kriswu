@@ -230,6 +230,11 @@ struct StarRailBoardView: View {
                     else if config.objective == .escort { Text("星核 → \(config.route == .supply ? "近岔" : "远岔")").accessibilityIdentifier("journey.goal") }
                 }.font(.system(size:10,weight:.semibold)).foregroundStyle(TileTheme.gold)
             }
+            if journeyConfig?.ability == .pulse {
+                Text(game.state.pulseCharge == 2 ? "脉冲就绪 · 下次移层免费，远岔也适用" : "脉冲 \(game.state.pulseCharge)/2 · 移层前再三消 \(2-game.state.pulseCharge) 组可免费移动")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(TileTheme.mint)
+                    .accessibilityIdentifier("journey.pulse")
+            }
             chainMeter
             if let trial {
                 Text("\(trial.rule.title) · 本局撤回 \(game.rewinds) 次 · 零撤回三星可精通")
@@ -527,6 +532,7 @@ struct StarRailBoardView: View {
     private func act(_ action: StarRail.Action) {
         guard session.canInteract else { return }
         let beforeChain = game.chain
+        let pulseWasReady = journeyConfig?.ability == .pulse && game.state.pulseCharge == 2
         let beforeMatches = game.state.matches, beforeOverflow = game.state.overflowEnergy
         let gateWasOpen = game.gateOpen(in:game.state)
         var token: UUID?, accepted = false
@@ -557,6 +563,8 @@ struct StarRailBoardView: View {
             lastFeedback = nil; cue = .pick
             if haptics { Haptics.tap() }
         }
+        if token != nil && pulseWasReady { lastFeedback = "脉冲释放 · 本次移层免费" }
+        else if !pulseWasReady && game.state.pulseCharge == 2 { lastFeedback = "脉冲就绪 · 下次移层免费" }
         let chain = game.chain
         if chain.lastAward > 0 {
             lastFeedback = "\(chain.current) 连消 +\(chain.lastAward) · " + (lastFeedback ?? "")

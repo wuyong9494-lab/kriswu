@@ -106,13 +106,13 @@ struct StarJourneyHomeView: View {
                 else if store.startJourney(selectedAbility), let run=store.journeys.active { play=StarRailPlay(game:run.game) }
             }.buttonStyle(TilePrimaryButton()).accessibilityIdentifier("journey.start")
             if store.journeys.best.count > 0 {
-                Text("已完成 \(store.journeys.best.count)/6 种能力与航线组合 · 最佳累计 \(store.journeys.totalStars) 星章")
+                Text("已完成 \(store.journeys.best.count)/\(StarJourney.Ability.allCases.count * StarJourney.Route.allCases.count) 种能力与航线组合 · 最佳累计 \(store.journeys.totalStars) 星章")
                     .font(.caption).foregroundStyle(TileTheme.gold)
             }
         }
     }
     private func abilitySymbol(_ ability:StarJourney.Ability) -> String {
-        ability == .capacitor ? "bolt.circle.fill" : ability == .navigator ? "arrow.uturn.backward.circle.fill" : "square.stack.3d.up.fill"
+        ability == .capacitor ? "bolt.circle.fill" : ability == .navigator ? "arrow.uturn.backward.circle.fill" : ability == .pulse ? "waveform.path" : "square.stack.3d.up.fill"
     }
 }
 

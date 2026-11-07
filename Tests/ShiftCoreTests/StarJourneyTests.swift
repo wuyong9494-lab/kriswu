@@ -32,7 +32,7 @@ final class StarJourneyTests: XCTestCase {
         edit(&json); return try JSONSerialization.data(withJSONObject:json)
     }
 
-    func testAllSixAbilityRouteChainsCarryExactEnergyAndAwardOnlyTheirBest() throws {
+    func testAllAbilityRouteChainsCarryExactEnergyAndAwardOnlyTheirBest() throws {
         var all = StarJourney.Save()
         for ability in StarJourney.Ability.allCases { for route in StarJourney.Route.allCases {
             all.start(ability:ability)
@@ -52,7 +52,7 @@ final class StarJourneyTests: XCTestCase {
             XCTAssertTrue(all.active!.finished); XCTAssertEqual(all.active!.score,9)
             XCTAssertEqual(all.active!.rewardStars,route == .signal ? 10 : 9)
         } }
-        XCTAssertEqual(all.best.count,6); XCTAssertEqual(all.totalStars,57)
+        XCTAssertEqual(all.best.count,8); XCTAssertEqual(all.totalStars,76)
         XCTAssertEqual(StarJourney.Save(data:try XCTUnwrap(all.encoded())),all)
     }
 

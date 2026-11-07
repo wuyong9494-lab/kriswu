@@ -3,16 +3,17 @@ import Foundation
 /// Independent J1 journey catalog. It never replaces the frozen R1/R2/XP1 boards.
 public enum StarJourney {
     public enum Ability: String, Codable, CaseIterable, Sendable {
-        case capacitor, navigator, buffer
-        public var title: String { self == .capacitor ? "深空电容" : self == .navigator ? "返航导航" : "缓冲舱" }
+        case capacitor, navigator, buffer, pulse
+        public var title: String { self == .capacitor ? "深空电容" : self == .navigator ? "返航导航" : self == .buffer ? "缓冲舱" : "脉冲引擎" }
         public var detail: String {
             switch self {
             case .capacitor: return "储能上限 3，收集槽 6 格；适合提前储备远岔能量。"
             case .navigator: return "每关首次返航免费，收集槽 7 格；关间能量不携带。"
+            case .pulse: return "收集槽 6 格，储能上限 2；两次移层之间三消两组，下次移层免费（含远岔）。每次移层清空脉冲，关间不携带脉冲。"
             case .buffer: return "收集槽 8 格，储能上限 2；每次返航需要 2 点能量。"
             }
         }
-        public var capacity: Int { self == .capacitor ? 6 : self == .buffer ? 8 : 7 }
+        public var capacity: Int { self == .capacitor || self == .pulse ? 6 : self == .buffer ? 8 : 7 }
         public var energyLimit: Int { self == .capacitor ? 3 : 2 }
     }
     public enum Route: String, Codable, CaseIterable, Sendable {
@@ -90,7 +91,9 @@ extension StarRail.Game {
     }
     public func isStarCore(_ id: Int) -> Bool { stage.journey?.coreID == id }
     public func moveCost(rail: Int, to stop: Int, in state: StarRail.State) -> Int {
-        guard let journey = stage.journey, stop == 0 else { return stage.rails[rail].cost(to:stop) }
+        guard let journey = stage.journey else { return stage.rails[rail].cost(to:stop) }
+        if journey.ability == .pulse && state.pulseCharge == 2 { return 0 }
+        guard stop == 0 else { return stage.rails[rail].cost(to:stop) }
         if journey.ability == .buffer { return 2 }
         if journey.ability == .navigator && !state.freeReturnUsed { return 0 }
         return 1

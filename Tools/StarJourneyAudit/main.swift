@@ -23,7 +23,7 @@ func solve(_ initial: StarRail.Game) -> (StarRail.Game, Int, [[String:Any]]) {
             precondition(!game.overlaps(a,b,in:state))
         } }
         trace.append(["action":String(describing:action),"energy":state.energy,"spentEnergy":state.spentEnergy,
-            "tray":state.tray,"positions":state.positions,"gateOpen":game.gateOpen(in:state),"freeReturnUsed":state.freeReturnUsed])
+            "tray":state.tray,"positions":state.positions,"gateOpen":game.gateOpen(in:state),"freeReturnUsed":state.freeReturnUsed,"pulseCharge":state.pulseCharge])
     }
     precondition(game.status == .won && game.stars == 3)
     precondition(StarRail.Game(archive:game.archive) == game)

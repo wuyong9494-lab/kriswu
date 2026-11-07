@@ -16,10 +16,12 @@ public enum StarRailSolver {
         let arrivals:Int
         let spentEnergy:Int
         let freeReturnUsed:Bool
+        let pulseCharge:Int
         init(_ state:StarRail.State,game:StarRail.Game) {
             remaining=state.remaining;energy=state.energy;arrivals=state.arrivals
             spentEnergy = game.stage.journey?.energyBudget == nil ? 0 : state.spentEnergy
             freeReturnUsed = state.freeReturnUsed
+            pulseCharge = state.pulseCharge
             positions=game.stage.poseIndex(state.positions)
             var counts=Array(repeating:UInt64(0),count:StarRail.names.count)
             for id in state.tray { counts[game.stage.cards[id].kind] += 1 }

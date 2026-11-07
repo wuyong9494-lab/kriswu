@@ -114,7 +114,7 @@ extension StarJourney {
             if pendingReward?.id == id { pendingReward = nil }
         }
         public var isValid: Bool {
-            guard version == 1, best.count <= 6, active?.isValid != false,
+            guard version == 1, best.count <= Ability.allCases.count * Route.allCases.count, active?.isValid != false,
                   best.allSatisfy({ key,run in run.isValid && run.finished && run.recordKey == key }) else { return false }
             if let rewardedRunID { guard active?.id == rewardedRunID else { return false } }
             if let reward = pendingReward {

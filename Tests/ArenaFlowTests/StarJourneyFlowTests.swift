@@ -55,6 +55,24 @@ final class StarJourneyFlowTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["journey.reward.stars"].exists,"Acknowledged reward must not reappear")
         XCTAssertTrue(app.buttons["journey.start"].exists)
     }
+    func testPulseSelectionChargePreviewAndRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "tiles", "-rails.testDomain", UUID().uuidString]
+        XCUIDevice.shared.orientation = .portrait; app.launch()
+        tap("tiles.journeyContinue",app); tap("journey.ability.pulse",app); tap("journey.start",app)
+        for id in 0...2 { tap("rails.card.\(id)",app) }
+        XCTAssertTrue(app.staticTexts["journey.pulse"].label.contains("脉冲 1/2"))
+        tap("rails.preview.0",app)
+        XCTAssertTrue(app.staticTexts["journey.pulse"].label.contains("脉冲 1/2"))
+        tap("rails.preview.cancel",app)
+        tap("rails.close",app); tap("journey.close",app)
+        app.terminate(); app.launch(); tap("tiles.journeyContinue",app)
+        XCTAssertTrue(app.staticTexts["journey.pulse"].waitForExistence(timeout:10))
+        XCTAssertTrue(app.staticTexts["journey.pulse"].label.contains("脉冲 1/2"))
+        tap("rails.undo",app)
+        XCTAssertTrue(app.staticTexts["journey.pulse"].label.contains("脉冲 0/2"))
+        capture("journey-pulse-restored-and-undone")
+    }
     private func play(_ step:Step,_ app:XCUIApplication) {
         switch step {
         case .pick(let id):tap("rails.card.\(id)",app)
