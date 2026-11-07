@@ -457,6 +457,7 @@ enum ScreenCatalog {
         case "rulesExplain": RulesExplainView()
         case "allFeatures": AllFeaturesView()
         case "game": GamesHomeView()
+        case "fighter": DuelHomeView()
         case "tiles": TileGameHomeView()
         case "gameBoard": TileBoardView(play: TilePlay(level: .normal, seed: 2026, mode: .solo), race: nil)
         case "arena": ArenaHomeView()

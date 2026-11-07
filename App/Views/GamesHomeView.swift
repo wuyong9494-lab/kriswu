@@ -33,6 +33,9 @@ struct GamesHomeView: View {
                 NavigationLink { TileGameHomeView() } label: {
                     row("星了个星", "三消储能、移动叠层；主线航程、每日星约与策略试炼", "square.stack.3d.up.fill", 6)
                 }
+                NavigationLink { DuelHomeView() } label: {
+                    row("裂隙对决 · 战斗样板", "两名角色，单机三局两胜；练习距离、防御与连击", "figure.boxing", 3)
+                }.accessibilityIdentifier("duel.enter")
                 NavigationLink { GomokuHomeView() } label: {
                     row("五子棋", "和电脑下、两个人一台手机下、面对面、远程，或者轮流下（不用同时在线）", "circle.grid.3x3.fill", 0)
                 }

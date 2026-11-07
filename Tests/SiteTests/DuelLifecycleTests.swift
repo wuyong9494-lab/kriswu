@@ -1,0 +1,87 @@
+import XCTest
+import UIKit
+@testable import ShiftReminder
+
+@MainActor
+final class DuelLifecycleTests: XCTestCase {
+    private func session(_ hero: DuelGame.Hero = .ember, mode: DuelGame.Mode = .practice) -> DuelSession {
+        DuelSession(.init(hero: hero, difficulty: .learning, mode: mode))
+    }
+
+    func testTwoHeldInputsPauseAndRestartCannotLeaveAnAutomaticAction() {
+        let state = session()
+        state.input("right", down: true); state.input("light", down: true)
+        state.advance()
+        XCTAssertGreaterThan(state.game.fighters[0].x, 3500)
+        XCTAssertNotNil(state.game.fighters[0].attack)
+        XCTAssertEqual(state.held, ["right", "light"])
+        state.pause()
+        let paused = state.game
+        state.input("left", down: true); state.input("skill2", down: true)
+        for _ in 0..<120 { state.advance() }
+        XCTAssertEqual(state.game, paused)
+        XCTAssertTrue(state.held.isEmpty)
+        state.resume()
+        let x = state.game.fighters[0].x
+        for _ in 0..<120 { state.advance() }
+        XCTAssertEqual(state.game.fighters[0].x, x)
+        XCTAssertNil(state.game.fighters[0].attack)
+        XCTAssertEqual(state.game.fighters[0].energy, 100)
+        state.input("right", down: true); state.restart(); state.advance()
+        XCTAssertEqual(state.game.fighters[0].x, 3500)
+        XCTAssertTrue(state.held.isEmpty)
+    }
+
+    func testTutorialRequiresJumpGuardAndBothAcceptedSkills() {
+        let state = session(mode: .tutorial)
+        state.input("right", down: true)
+        for _ in 0..<40 { state.advance() }
+        state.input("right", down: false)
+        state.input("light", down: true); state.advance(); state.input("light", down: false)
+        for _ in 0..<60 { state.advance() }
+        XCTAssertEqual(state.tutorialStep, 2)
+        state.input("guard", down: true); state.advance(); state.input("guard", down: false)
+        XCTAssertEqual(state.tutorialStep, 2, "Guard alone cannot complete the jump instruction")
+        state.input("jump", down: true); state.advance(); state.input("jump", down: false)
+        for _ in 0..<45 { state.advance() }
+        state.input("guard", down: true); state.advance(); state.input("guard", down: false)
+        XCTAssertEqual(state.tutorialStep, 3)
+        state.input("skill1", down: true); state.advance(); state.input("skill1", down: false)
+        for _ in 0..<70 { state.advance() }
+        XCTAssertEqual(state.tutorialStep, 3)
+        state.input("skill2", down: true); state.advance(); state.input("skill2", down: false)
+        XCTAssertEqual(state.tutorialStep, 4)
+    }
+
+    func testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
+        let host = UIViewController(); window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        let baseline = DuelWorldView.activeClocks
+        for hero in [DuelGame.Hero.ember, .gale, .ember] {
+            let state = session(hero)
+            var world: DuelWorldView? = DuelWorldView(session: state)
+            weak var released = world
+            world?.frame = host.view.bounds; host.view.addSubview(try XCTUnwrap(world))
+            try await Task.sleep(nanoseconds: 300_000_000)
+            XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
+            XCTAssertGreaterThan(state.game.frame, 0)
+            state.pause()
+            XCTAssertEqual(DuelWorldView.activeClocks, baseline)
+            let paused = state.game.frame
+            try await Task.sleep(nanoseconds: 100_000_000)
+            XCTAssertEqual(state.game.frame, paused)
+            state.resume()
+            XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
+            world?.shutdown(); world?.removeFromSuperview()
+            XCTAssertNil(world?.scene)
+            XCTAssertEqual(DuelWorldView.activeClocks, baseline)
+            world = nil
+            try await Task.sleep(nanoseconds: 100_000_000)
+            XCTAssertNil(released, "SceneKit view must not be retained by its display link or session")
+        }
+    }
+}

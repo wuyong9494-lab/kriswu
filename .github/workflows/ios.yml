@@ -3,7 +3,7 @@ name: iOS
 on:
   push:
     # Journey validation uses its own unsigned workflow, with no TestFlight job.
-    branches-ignore: ['codex/star-journey-native-*']
+    branches-ignore: ['codex/star-journey-native-*', 'codex/fighter-lab-*']
     # A promotion signs an already checked source commit without creating another app build number.
     paths-ignore:
       - '.github/workflows/arena-evidence-recovery.yml'
@@ -32,6 +32,7 @@ env:
 
 jobs:
   build:
+    if: ${{ !startsWith(github.ref, 'refs/heads/codex/fighter-lab-') && !startsWith(github.head_ref, 'codex/fighter-lab-') }}
     # Match native acceptance and signing on the current standard ARM image.
     runs-on: macos-26
     concurrency:
@@ -798,6 +799,7 @@ jobs:
   testflight:
     needs: [build, core-tests-linux, arena-look]
     if: >-
+      !startsWith(github.ref, 'refs/heads/codex/fighter-lab-') &&
       always() && needs.build.result == 'success' && needs.core-tests-linux.result == 'success' &&
       (needs.arena-look.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.arena-look.result == 'skipped')) &&
       (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/arena-performance-1' || (github.ref == 'refs/heads/codex/arena-reference-fidelity' && contains(github.event.head_commit.message, '[lobby-ready]')))))

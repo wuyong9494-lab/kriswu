@@ -1,0 +1,99 @@
+name: Fighter laboratory (unsigned only)
+on:
+  push:
+    branches: ['codex/fighter-lab-*']
+    paths:
+      - 'App/**'
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'project.yml'
+      - '.github/workflows/fighter-lab.yml'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fighter-lab-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    container: swift:6.0.3
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fight rules and existing app regressions
+        shell: bash -eo pipefail {0}
+        run: swift test --jobs 2 2>&1 | tee fighter-core.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fighter-core
+          path: fighter-core.log
+  native:
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode and generate existing app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Compile device app without signing or distribution
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath fighter-device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" 2>&1 | tee fighter-device.log
+          grep -E 'warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)' \
+            fighter-device.log | sort -u > fighter-concurrency.log || true
+          test ! -s fighter-concurrency.log
+      - name: Prepare iPhone 17 Pro Max simulator
+        timeout-minutes: 12
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee fighter-simulator.log
+          python3 -u .github/scripts/prepare_star_simulator.py --ready 2>&1 | tee -a fighter-simulator.log
+      - name: Check interruption, input and SceneKit resource lifetime
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:SiteTests/DuelLifecycleTests \
+            -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
+      - name: Play both characters and restore portrait app
+        timeout-minutes: 10
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:ArenaFlowTests/DuelFlowTests \
+            -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log
+      - name: Export rendered evidence
+        if: always()
+        run: |
+          for result in fighter-lifecycle fighter-flow; do
+            if [ -d "$result.xcresult" ]; then
+              mkdir -p "fighter-evidence/$result"
+              xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "fighter-evidence/$result"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fighter-native
+          path: |
+            fighter-evidence
+            fighter-*.log
+            star-test-device.json
