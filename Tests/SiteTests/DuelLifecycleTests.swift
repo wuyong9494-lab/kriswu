@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SceneKit
 @testable import ShiftReminder
 
 @MainActor
@@ -73,6 +74,64 @@ final class DuelLifecycleTests: XCTestCase {
         XCTAssertTrue(state.held.isEmpty)
     }
 
+    func testGrapplePauseResumeAndRestartClearPendingInputAndTheCapture() {
+        let state = session(.liu)
+        state.input("right", down: true)
+        for _ in 0..<42 { state.advance() }
+        state.input("right", down: false)
+        state.input("ultimate", down: true); state.advance(); state.input("ultimate", down: false)
+        for _ in 0..<70 { state.advance() }
+        XCTAssertEqual(state.game.grapple?.stage, .hold)
+        let frozen = state.game
+        state.input("light", down: true); state.input("left", down: true); state.pause()
+        for _ in 0..<300 { state.advance() }
+        XCTAssertEqual(state.game, frozen)
+        XCTAssertTrue(state.held.isEmpty)
+        state.resume()
+        for _ in 0..<330 { state.advance() }
+        XCTAssertNil(state.game.grapple)
+        XCTAssertEqual(state.game.damageDealt[0], 280)
+        XCTAssertEqual(state.game.landedHits[0], 2)
+        XCTAssertNil(state.game.fighters[0].attack)
+        state.restart()
+        XCTAssertNil(state.game.grapple)
+        XCTAssertEqual(state.game.fighters[0].energy, 100)
+        XCTAssertEqual(state.game.fighters.map(\.x), [3500, 6500])
+    }
+
+    func testGrappleRendersTakedownSideLockAndReleaseFromActualRuleState() throws {
+        let state = session(.liu)
+        state.input("right", down: true)
+        for _ in 0..<42 { state.advance() }
+        state.input("right", down: false)
+        state.input("ultimate", down: true); state.advance(); state.input("ultimate", down: false)
+        for _ in 0..<35 { if state.game.grapple == nil { state.advance() } }
+        XCTAssertNotNil(state.game.grapple)
+        for (name, age) in [("takedown", 12), ("side-lock", 65), ("release", 210)] {
+            while let hold = state.game.grapple, hold.age < age { state.advance() }
+            XCTAssertEqual(state.game.grapple?.age, age)
+            let world = DuelWorldView(session: state)
+            world.frame = CGRect(x: 0, y: 0, width: 956, height: 440); world.layoutIfNeeded()
+            let scene = try XCTUnwrap(world.scene)
+            let actor = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.0", recursively: false))
+            let defender = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.1", recursively: false))
+            XCTAssertTrue(actor.position.x.isFinite && defender.position.x.isFinite)
+            if name == "side-lock" {
+                XCTAssertGreaterThan(actor.position.z - defender.position.z, 0.5, "The attacker must hold from the opponent's side")
+                XCTAssertEqual(abs(defender.eulerAngles.z), Float.pi / 2, accuracy: 0.001)
+                XCTAssertLessThan(actor.position.x, defender.position.x - 1.5)
+            }
+            let renderer = SCNRenderer(device: nil, options: nil)
+            renderer.scene = scene; renderer.pointOfView = world.pointOfView
+            let image = renderer.snapshot(atTime: 0, with: CGSize(width: 1434, height: 660), antialiasingMode: .multisampling2X)
+            let evidence = XCTAttachment(image: image)
+            evidence.name = "fighter-liu-\(name)"; evidence.lifetime = .keepAlways; add(evidence)
+            XCTAssertGreaterThan(image.pngData()?.count ?? 0, 5000)
+            world.shutdown(); state.resume()
+        }
+        state.shutdown()
+    }
+
     func testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries() async throws {
         XCTAssertTrue(ProcessInfo.processInfo.arguments.contains("-demo"), "Use the existing demo launch argument so first-launch permission alerts do not interrupt the host")
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -82,7 +141,7 @@ final class DuelLifecycleTests: XCTestCase {
         let host = UIViewController(); window.rootViewController = host; window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
         let baseline = DuelWorldView.activeClocks
-        for hero in [DuelGame.Hero.ember, .gale, .ember] {
+        for hero in [DuelGame.Hero.ember, .gale, .liu] {
             let state = session(hero)
             var world: DuelWorldView? = DuelWorldView(session: state)
             weak var released = world

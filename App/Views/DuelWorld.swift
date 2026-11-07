@@ -28,6 +28,7 @@ final class DuelWorldView: SCNView {
     private var bolts: [Int: SCNNode] = [:]
     private var hurtNodes: [SCNNode] = []
     private var attackNodes: [SCNNode] = []
+    private var slamRing: SCNNode?
     private var ended = false
 
     init(session: DuelSession) {
@@ -53,8 +54,12 @@ final class DuelWorldView: SCNView {
         fill.light?.color = UIColor.cyan; fill.light?.intensity = 320; fill.position = SCNVector3(8, 4, -2)
         world.rootNode.addChildNode(fill)
         buildStage(world.rootNode)
+        let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
+        ring.geometry?.firstMaterial?.lightingModel = .constant
+        ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
         for fighter in session.game.fighters {
-            let actor = DuelActor(hero: fighter.hero); actors.append(actor); world.rootNode.addChildNode(actor.root)
+            let actor = DuelActor(hero: fighter.hero); actor.root.name = "duel.actor.\(actors.count)"
+            actors.append(actor); world.rootNode.addChildNode(actor.root)
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
         }
@@ -101,7 +106,7 @@ final class DuelWorldView: SCNView {
         guard !ended else { return }
         ended = true; stopClock(); session.clearInput(); session.renderPause = nil
         NotificationCenter.default.removeObserver(self)
-        scene = nil; pointOfView = nil; actors.removeAll(); bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll()
+        scene = nil; pointOfView = nil; actors.removeAll(); bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }
@@ -127,10 +132,25 @@ final class DuelWorldView: SCNView {
         guard scene != nil else { return }
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         for i in 0..<actors.count {
-            actors[i].pose(session.game.fighters[i], frame: session.game.frame)
-            place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0)
+            actors[i].pose(session.game.fighters[i], frame: session.game.frame, grapple: session.game.grapple, index: i)
+            place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
             if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
             else { attackNodes[i].isHidden = true }
+        }
+        slamRing?.isHidden = true
+        pointOfView?.position = SCNVector3(5, 3.6, 14)
+        if let hold = session.game.grapple {
+            let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
+            let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
+            if (0..<18).contains(elapsed), let ring = slamRing {
+                let t = Float(elapsed) / 18, scale = 0.5 + 2.0 * t
+                ring.isHidden = false; ring.opacity = CGFloat(1 - t)
+                ring.position = SCNVector3(Float(session.game.fighters[1 - hold.attacker].x) / 1000, 0.025, 0)
+                ring.scale = SCNVector3(scale, 1, scale)
+                if !UIAccessibility.isReduceMotionEnabled {
+                    pointOfView?.position.y += sin(Float(elapsed) * 1.8) * 0.035 * (1 - t)
+                }
+            }
         }
         let alive = Set(session.game.projectiles.map(\.id))
         for id in Array(bolts.keys) where !alive.contains(id) { bolts.removeValue(forKey: id)?.removeFromParentNode() }
@@ -198,30 +218,49 @@ private final class DuelDisplayTarget: NSObject {
 private final class DuelActor {
     let root = SCNNode()
     let leftArm = SCNNode(), rightArm = SCNNode(), leftLeg = SCNNode(), rightLeg = SCNNode()
+    let leftElbow = SCNNode(), rightElbow = SCNNode(), leftKnee = SCNNode(), rightKnee = SCNNode()
     let shield: SCNNode
     private let body: SCNNode
     init(hero: DuelGame.Hero) {
-        let color = hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
+        let color = hero == .liu ? UIColor(white: 0.88, alpha: 1) : hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
         let dark = UIColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1)
+        let skin = UIColor(red: 0.68, green: 0.48, blue: 0.35, alpha: 1)
         body = Self.shape(SCNCapsule(capRadius: hero == .ember ? 0.31 : 0.25, height: 0.72), color)
         body.position.y = 1.08; root.addChildNode(body)
-        let head = Self.shape(SCNSphere(radius: 0.23), UIColor(red: 0.78, green: 0.82, blue: 0.86, alpha: 1))
+        let head = Self.shape(SCNSphere(radius: 0.23), hero == .liu ? skin : UIColor(red: 0.78, green: 0.82, blue: 0.86, alpha: 1))
         head.position.y = 1.67; root.addChildNode(head)
         let visor = Self.shape(SCNBox(width: 0.30, height: 0.09, length: 0.08, chamferRadius: 0.04), dark)
-        visor.position = SCNVector3(0, 1.69, 0.20); root.addChildNode(visor)
+        visor.position = SCNVector3(0, 1.69, 0.20)
+        if hero != .liu { root.addChildNode(visor) }
+        if hero == .liu {
+            let hair = Self.shape(SCNCapsule(capRadius: 0.225, height: 0.30), dark)
+            hair.scale = SCNVector3(1, 0.40, 1); hair.position = SCNVector3(0, 1.83, -0.015); root.addChildNode(hair)
+            for x in [Float(-0.12), Float(0.12)] {
+                let lapel = Self.shape(SCNBox(width: 0.10, height: 0.28, length: 0.035, chamferRadius: 0.01), .white)
+                lapel.position = SCNVector3(x, 1.23, 0.255); lapel.eulerAngles.z = x > 0 ? -0.28 : 0.28; root.addChildNode(lapel)
+            }
+            let tie = Self.shape(SCNBox(width: 0.06, height: 0.30, length: 0.035, chamferRadius: 0.01), dark)
+            tie.position = SCNVector3(0, 1.22, 0.28); root.addChildNode(tie)
+        }
         let belt = Self.shape(SCNBox(width: 0.53, height: 0.16, length: 0.32, chamferRadius: 0.06), dark)
         belt.position.y = 0.74; root.addChildNode(belt)
-        for (joint, x) in [(leftArm, Float(-0.37)), (rightArm, Float(0.37))] {
+        for (joint, elbow, x) in [(leftArm, leftElbow, Float(-0.37)), (rightArm, rightElbow, Float(0.37))] {
             joint.position = SCNVector3(x, 1.33, 0); root.addChildNode(joint)
-            let arm = Self.shape(SCNCapsule(capRadius: 0.105, height: 0.48), dark); arm.position.y = -0.20; joint.addChildNode(arm)
-            let fist = Self.shape(SCNBox(width: hero == .ember ? 0.29 : 0.21, height: 0.27, length: 0.30, chamferRadius: 0.09), color)
-            fist.position = SCNVector3(0, -0.48, 0.04); joint.addChildNode(fist)
+            let arm = Self.shape(SCNCapsule(capRadius: 0.105, height: 0.30), hero == .liu ? color : dark)
+            arm.position.y = -0.13; joint.addChildNode(arm)
+            elbow.position.y = -0.28; joint.addChildNode(elbow)
+            let forearm = Self.shape(SCNCapsule(capRadius: 0.09, height: 0.24), hero == .liu ? color : dark)
+            forearm.position.y = -0.10; elbow.addChildNode(forearm)
+            let fist = Self.shape(SCNBox(width: hero == .ember ? 0.29 : 0.21, height: 0.22, length: 0.25, chamferRadius: 0.08), hero == .liu ? skin : color)
+            fist.position = SCNVector3(0, -0.24, 0.04); elbow.addChildNode(fist)
         }
-        for (joint, x) in [(leftLeg, Float(-0.17)), (rightLeg, Float(0.17))] {
+        for (joint, knee, x) in [(leftLeg, leftKnee, Float(-0.17)), (rightLeg, rightKnee, Float(0.17))] {
             joint.position = SCNVector3(x, 0.72, 0); root.addChildNode(joint)
-            let leg = Self.shape(SCNCapsule(capRadius: 0.115, height: 0.64), dark); leg.position.y = -0.28; joint.addChildNode(leg)
-            let foot = Self.shape(SCNBox(width: 0.24, height: 0.15, length: 0.40, chamferRadius: 0.05), color)
-            foot.position = SCNVector3(0, -0.65, 0.09); joint.addChildNode(foot)
+            let leg = Self.shape(SCNCapsule(capRadius: 0.115, height: 0.35), dark); leg.position.y = -0.15; joint.addChildNode(leg)
+            knee.position.y = -0.32; joint.addChildNode(knee)
+            let shin = Self.shape(SCNCapsule(capRadius: 0.10, height: 0.34), dark); shin.position.y = -0.15; knee.addChildNode(shin)
+            let foot = Self.shape(SCNBox(width: 0.24, height: 0.15, length: 0.40, chamferRadius: 0.05), hero == .liu ? dark : color)
+            foot.position = SCNVector3(0, -0.33, 0.09); knee.addChildNode(foot)
         }
         shield = Self.shape(SCNTorus(ringRadius: 0.54, pipeRadius: 0.025), .cyan)
         shield.position = SCNVector3(0, 1, 0.55); shield.eulerAngles.x = .pi / 2; shield.isHidden = true
@@ -232,11 +271,13 @@ private final class DuelActor {
         material.metalness.contents = 0.12; material.lightingModel = .physicallyBased
         geometry.materials = [material]; return SCNNode(geometry: geometry)
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int) {
         root.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000, 0)
+        root.eulerAngles.x = 0
         root.eulerAngles.y = fighter.facing > 0 ? .pi / 2 : -.pi / 2
         root.eulerAngles.z = fighter.knockdown > 0 ? Float(fighter.facing) * -.pi / 2 : 0
-        if fighter.knockdown > 0 { root.position.y = 0.25 }
+        if fighter.knockdown > 0 { root.position.y = 0.25; root.position.x -= Float(fighter.facing) * 0.95 }
+        for joint in [leftElbow, rightElbow, leftKnee, rightKnee] { joint.eulerAngles = SCNVector3Zero }
         let swing = fighter.walking ? sin(Float(frame) * 0.24) * 0.5 : 0
         leftLeg.eulerAngles.x = swing; rightLeg.eulerAngles.x = -swing
         leftArm.eulerAngles.x = -0.35 - swing * 0.3; rightArm.eulerAngles.x = -0.35 + swing * 0.3
@@ -250,6 +291,37 @@ private final class DuelActor {
             if attack.move == .cross { leftArm.eulerAngles.x = pose }
             else { rightArm.eulerAngles.x = pose }
             if attack.move == .heavy || attack.move == .skill2 { leftArm.eulerAngles.x = pose }
+            if attack.move == .ultimate {
+                leftArm.eulerAngles.x = -0.75; rightArm.eulerAngles.x = -0.8
+                leftElbow.eulerAngles.x = -0.45; rightElbow.eulerAngles.x = -0.40
+                root.eulerAngles.x = 0.10
+            }
+        }
+        if let hold = grapple {
+            shield.isHidden = true
+            let fall = min(1, Float(hold.age) / Float(DuelGame.Grapple.takedownTicks))
+            let eased = fall * fall * (3 - 2 * fall)
+            let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
+            let direction = Float(hold.direction)
+            if index == hold.attacker {
+                // Stable side-on wrist/shoulder hold with a clear gap between
+                // the attacker and the prone opponent's head.
+                let crouch = eased * (1 - release)
+                root.position.y = -0.30 * crouch; root.position.z = 0.55 * eased
+                root.eulerAngles.x = 0.20 * crouch
+                leftLeg.eulerAngles.x = -0.90 * crouch; rightLeg.eulerAngles.x = -0.55 * crouch
+                leftKnee.eulerAngles.x = 1.55 * crouch; rightKnee.eulerAngles.x = 1.05 * crouch
+                leftArm.eulerAngles.x = -0.85 + 0.30 * crouch; rightArm.eulerAngles.x = -0.80 + 0.25 * crouch
+                leftElbow.eulerAngles.x = -0.15; rightElbow.eulerAngles.x = -0.10
+            } else {
+                root.position.x += direction * (1.35 * eased + 0.30 * release)
+                root.position.y = 0.25 * eased + sin(fall * .pi) * 0.25
+                root.position.z = -0.08 * eased; root.eulerAngles.z = direction * .pi / 2 * eased
+                leftLeg.eulerAngles.x = -0.12; rightLeg.eulerAngles.x = 0.12
+                leftKnee.eulerAngles.x = 0.18; rightKnee.eulerAngles.x = 0.35
+                leftArm.eulerAngles.x = -0.90 * eased; rightArm.eulerAngles.x = -0.35 * eased
+                leftElbow.eulerAngles.x = -0.55 * eased; rightElbow.eulerAngles.x = -0.75 * eased
+            }
         }
         body.geometry?.firstMaterial?.emission.contents = fighter.flash > 0 ? UIColor(red: 0.22, green: 0.10, blue: 0.02, alpha: 1) : UIColor.black
     }

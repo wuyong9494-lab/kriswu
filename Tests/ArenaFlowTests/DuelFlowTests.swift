@@ -19,6 +19,39 @@ final class DuelFlowTests: XCTestCase {
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: app)], timeout: 8), .completed)
     }
+    func testLiuUltimateUsesRealTouchInputPausesAndDealsTwoImpacts() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "fighter"]
+        XCUIDevice.shared.orientation = .portrait; app.launch()
+        let selection = app.buttons["duel.hero.liu"]
+        XCTAssertTrue(selection.waitForExistence(timeout: 20)); selection.tap()
+        app.buttons["duel.practice"].tap()
+        let pause = app.buttons["duel.pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
+        let ultimate = app.buttons["duel.control.ultimate"]
+        XCTAssertTrue(ultimate.isHittable)
+        XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
+        app.buttons["duel.control.right"].press(forDuration: 0.7)
+        ultimate.tap()
+        let status = app.staticTexts["duel.grapple"]
+        let holding = NSPredicate { _, _ in status.exists && status.label.contains("锁臂压制") }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: holding, object: nil)], timeout: 4), .completed)
+        capture("fighter-liu-hold-controls")
+        pause.tap()
+        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 3))
+        XCUIDevice.shared.press(.home); app.activate()
+        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 8))
+        app.buttons["duel.resume"].tap()
+        let finished = NSPredicate { _, _ in app.staticTexts["duel.hits"].label.contains("伤害 280") }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: finished, object: nil)], timeout: 6), .completed)
+        XCTAssertTrue(app.staticTexts["duel.hits"].label.contains("命中 2 次"))
+        capture("fighter-liu-release-controls")
+        pause.tap(); app.buttons["duel.restart"].tap()
+        XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
+        XCTAssertTrue(app.staticTexts["duel.hits"].label.contains("伤害 0"))
+        pause.tap(); app.buttons["duel.exit"].tap()
+        XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: false)
+    }
     func testBothHeroesHitPauseBackgroundExitAndKeepExistingGameEntries() {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "game"]

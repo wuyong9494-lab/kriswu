@@ -3,7 +3,7 @@ import UIKit
 import AVFoundation
 
 struct DuelHomeView: View {
-    @State private var hero = DuelGame.Hero.ember
+    @State private var hero = DuelGame.Hero.liu
     @State private var difficulty = DuelGame.Difficulty.learning
     @State private var match: DuelSetup?
     var body: some View {
@@ -11,12 +11,12 @@ struct DuelHomeView: View {
             VStack(alignment: .leading, spacing: 22) {
                 Text("裂隙对决").font(.largeTitle.bold())
                 Text("读懂距离，把握出手时机。").foregroundStyle(.secondary)
-                HStack(spacing: 12) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(DuelGame.Hero.allCases, id: \.self) { choice in
                         Button { hero = choice } label: {
                             VStack(alignment: .leading, spacing: 12) {
-                                Image(systemName: choice == .ember ? "flame.fill" : "wind")
-                                    .font(.system(size: 42)).foregroundStyle(choice == .ember ? .orange : .cyan)
+                                Image(systemName: choice == .liu ? "person.fill" : choice == .ember ? "flame.fill" : "wind")
+                                    .font(.system(size: 42)).foregroundStyle(choice == .liu ? .white : choice == .ember ? .orange : .cyan)
                                 Text(choice.name).font(.title2.bold())
                                 Text(choice.style).font(.caption)
                                 Text(hero == choice ? "已选择" : "选择角色").font(.subheadline.bold())
@@ -38,6 +38,11 @@ struct DuelHomeView: View {
                 }.buttonStyle(.bordered)
                 Text("赤砾：裂步突进、升龙重击。青岚：远程飞刃、撤步反击。技能消耗能量，普攻命中后继续点击可衔接三段连击。")
                     .font(.subheadline).foregroundStyle(.secondary)
+                if hero == .liu {
+                    Text("刘泉纬 · 擒拿震地：100 能量，近身抓取后锁臂压制 3 秒，再震地击退。抓取不能防御；跳跃、后撤或在前摇时快攻可以反制。不能抓取倒地、硬直或起身保护中的对手。")
+                        .font(.subheadline).accessibilityIdentifier("duel.ultimateHelp")
+                    Text("当前使用白衣动作替身和基础突进、重击。你上传的人物模型尚待骨骼绑定。").font(.footnote).foregroundStyle(.secondary)
+                }
                 Text("战斗玩法样板：当前人物、场景和动作是原创临时模型，用于测试操作与判定。").font(.footnote).foregroundStyle(.secondary)
             }.padding(24).frame(maxWidth: 650)
         }
@@ -73,6 +78,7 @@ final class DuelSession: ObservableObject {
     private var practicedJump = false
     private var practicedSkills = Set<DuelGame.Move>()
     private let interruptions = DuelInterruptionObserver()
+    private let impact = UIImpactFeedbackGenerator(style: .medium)
 
     init(_ setup: DuelSetup) {
         self.setup = setup
@@ -85,6 +91,14 @@ final class DuelSession: ObservableObject {
     var tutorial: String {
         ["按住左侧方向，靠近对手", "方向与普攻可同时按：命中后再点普攻", "先点击跳跃，落地后再按住防御", "分别使出两种技能，注意能量消耗", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
     }
+    var grappleStatus: String {
+        guard let hold = game.grapple else { return "" }
+        switch hold.stage {
+        case .takedown: return "擒拿 · 抓肩摔倒"
+        case .hold: return String(format: "锁臂压制 · %.1f 秒", Double(hold.holdRemaining) / 60)
+        case .release: return "震地击退"
+        }
+    }
     func input(_ name: String, down: Bool) {
         guard !paused else { return }
         if down {
@@ -95,6 +109,7 @@ final class DuelSession: ObservableObject {
             case "heavy": taps.insert(.heavy)
             case "skill1": taps.insert(.skill1)
             case "skill2": taps.insert(.skill2)
+            case "ultimate": taps.insert(.ultimate)
             default: break
             }
         } else { held.remove(name) }
@@ -133,6 +148,10 @@ final class DuelSession: ObservableObject {
             case .guardBreak: feedback = "防御被击破"
             case .whiff(let attacker): if attacker == 0 { feedback = "未命中 · 留意距离与前摇" }
             case .jumped: break
+            case .grappleStarted: feedback = "擒拿成功 · 抓肩摔倒"
+            case .grappleSlam: feedback = "锁臂压制 · 3 秒"; impact.impactOccurred(intensity: 0.6)
+            case .grappleReleased: feedback = "震地击退"; impact.impactOccurred(intensity: 0.9)
+            case .grappleClash: feedback = "双方抓取相抵 · 拉开距离"
             case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == 0 ? "拿下一局" : "对手拿下一局"
             }
             feedbackUntil = game.frame + 75
@@ -166,6 +185,8 @@ struct DuelMatchView: View {
                     Text(session.tutorial).font(.caption.bold()).padding(8).background(.black.opacity(0.65), in: Capsule())
                 }
                 Text(session.feedback).font(.headline.bold()).foregroundStyle(.yellow).frame(height: 24)
+                Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
+                    .accessibilityIdentifier("duel.grapple")
                 if session.setup.mode != .versus {
                     Text("累计命中 \(session.game.landedHits[0]) 次 · 伤害 \(session.game.damageDealt[0])")
                         .font(.caption.monospacedDigit()).accessibilityIdentifier("duel.hits")
@@ -246,7 +267,7 @@ struct DuelMatchView: View {
 struct DuelControls: UIViewRepresentable {
     let session: DuelSession
     func makeUIView(context: Context) -> DuelInputView { DuelInputView(session: session) }
-    func updateUIView(_ uiView: DuelInputView, context: Context) {}
+    func updateUIView(_ uiView: DuelInputView, context: Context) { uiView.updateReadiness() }
     static func dismantleUIView(_ uiView: DuelInputView, coordinator: ()) { uiView.cancelAll() }
 }
 
@@ -259,8 +280,10 @@ final class DuelInputView: UIView {
     private var buttons: [(String, UIButton)] = []
     init(session: DuelSession) {
         self.session = session; super.init(frame: .zero); isMultipleTouchEnabled = true
-        for (name, title) in [("left", "◀"), ("right", "▶"), ("guard", "防御"), ("jump", "跳跃"),
-                               ("light", "普攻"), ("heavy", "重击"), ("skill1", "技能一"), ("skill2", "技能二")] {
+        var controls = [("left", "◀"), ("right", "▶"), ("guard", "防御"), ("jump", "跳跃"),
+                        ("light", "普攻"), ("heavy", "重击"), ("skill1", "技能一"), ("skill2", "技能二")]
+        if session.setup.hero == .liu { controls.append(("ultimate", "大招")) }
+        for (name, title) in controls {
             let button = UIButton(type: .custom)
             button.setTitle(title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)
             button.backgroundColor = UIColor(white: 0.12, alpha: 0.72)
@@ -270,6 +293,7 @@ final class DuelInputView: UIView {
             button.isAccessibilityElement = true; addSubview(button); buttons.append((name, button))
         }
         session.inputReset = { [weak self] in self?.cancelAll(notify: false) }
+        updateReadiness()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layoutSubviews() {
@@ -280,8 +304,16 @@ final class DuelInputView: UIView {
         let points: [CGPoint] = [CGPoint(x: inset, y: floor), CGPoint(x: inset + side + 10, y: floor),
             CGPoint(x: right - 2 * (side + 10), y: floor), CGPoint(x: inset + (side + 10) / 2, y: floor - side - 10),
             CGPoint(x: right - side - 10, y: floor), CGPoint(x: right, y: floor),
-            CGPoint(x: right - side - 10, y: floor - side - 10), CGPoint(x: right, y: floor - side - 10)]
+            CGPoint(x: right - side - 10, y: floor - side - 10), CGPoint(x: right, y: floor - side - 10),
+            CGPoint(x: right - 2 * (side + 10), y: floor - side - 10)]
         for (index, pair) in buttons.enumerated() { pair.1.frame = CGRect(origin: points[index], size: CGSize(width: side, height: side)) }
+    }
+    func updateReadiness() {
+        guard let session, let button = buttons.first(where: { $0.0 == "ultimate" })?.1 else { return }
+        let ready = session.game.fighters[0].energy == 100 && session.game.grapple == nil
+        button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
+        button.accessibilityLabel = "擒拿震地大招"
+        button.accessibilityValue = ready ? "可施放，消耗 100 能量" : "需要 100 能量"
     }
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         buttons.contains { $0.1.frame.contains(point) }
