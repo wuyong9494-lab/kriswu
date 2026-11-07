@@ -17,7 +17,9 @@ for offset in 0..<days {
     let qualified = depth?.phaseDepthVerified ?? old!.planningGapVerified
     let checked = depth?.candidatesChecked ?? old!.candidatesChecked
     let expanded = depth?.expanded ?? old!.expanded
-    if TileGame.dailyPlanningSeed(day) != seed { invalid = true }
+    if depthEdition {
+        if TileGame.dailyDepthSeed(day) != seed { invalid = true }
+    } else if day < TileGame.dailyDepthStart, TileGame.dailyPlanningSeed(day) != seed { invalid = true }
     let baselineSeed = TileGame.dailyMasterSeed(day)
     let baseline = TileGame(level: .hard, seed: baselineSeed, ruleSet: .constellation)
     let game = TileGame(level: .hard, seed: seed, ruleSet: .constellation)
@@ -32,6 +34,39 @@ for offset in 0..<days {
     }
     let replayValid = wide.won && legal && replay.status == .won
     let forks = depthEdition ? game.planningPhaseForks(along: wide.solution) : game.planningForks(along: wide.solution)
+    let phases = Set(forks.map { ($0.pickNumber - 1) * 3 / max(1, wide.solution.count) })
+    let separated = zip(forks, forks.dropFirst()).allSatisfy { pair in
+        pair.1.pickNumber - pair.0.pickNumber >= max(6, wide.solution.count / 4)
+    }
+    func forcedLoss(_ state: TileGame, picks: Int) -> Bool {
+        if state.status == .lost { return true }
+        if state.status == .won || picks == 0 { return false }
+        let ids = state.freeIDs.sorted()
+        guard !ids.isEmpty else { return false }
+        return ids.allSatisfy { id in
+            var next = state
+            guard next.pick(id) else { return false }
+            next.settle()
+            return forcedLoss(next, picks: picks - 1)
+        }
+    }
+    let witnessesValid = forks.allSatisfy { fork in
+        var alternative = game
+        for id in wide.solution.prefix(fork.pickNumber - 1) {
+            guard alternative.pick(id) else { return false }
+            alternative.settle()
+        }
+        if depthEdition {
+            guard let bad = alternative.board.first(where: { $0.id == fork.losingTile }),
+                  let good = alternative.board.first(where: { $0.id == fork.winningTile }),
+                  alternative.tray.filter({ $0.kind == bad.kind }).count == 1,
+                  alternative.tray.filter({ $0.kind == good.kind }).count < 2 else { return false }
+        }
+        guard alternative.pick(fork.losingTile) else { return false }
+        alternative.settle()
+        return alternative.status == .playing && forcedLoss(alternative, picks: 2)
+    }
+    if !witnessesValid || (depthEdition && (!separated || phases.count != forks.count)) { invalid = true }
     if wide.won && !replayValid { invalid = true }
     if qualified && (!replayValid || narrow.won || narrow.budgetReached || forks.count < (depthEdition ? 2 : 1)) { invalid = true }
     let row: [String: Any] = [
@@ -39,6 +74,8 @@ for offset in 0..<days {
         "planningGapVerified": qualified, "phaseDepthVerified": depthEdition && qualified, "criticalForks": forks.count,
         "forks": forks.map { ["pickNumber": $0.pickNumber, "winningTile": $0.winningTile,
                               "losingTile": $0.losingTile, "lossWithinPicks": $0.lossWithinPicks] },
+        "forkWitnessesReplayed": witnessesValid, "distinctPhases": phases.count,
+        "phaseSpacingVerified": !depthEdition || separated,
         "candidatesChecked": checked, "expanded": expanded,
         "narrowWon": narrow.won, "narrowBudgetReached": narrow.budgetReached,
         "wideWon": wide.won, "wideBudgetReached": wide.budgetReached,

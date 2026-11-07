@@ -37,6 +37,10 @@ final class TileDepthTests: XCTestCase {
         for fork in forks {
             var alternative = game
             for id in path.prefix(fork.pickNumber - 1) { XCTAssertTrue(alternative.pick(id)); alternative.settle() }
+            let bad = alternative.board.first { $0.id == fork.losingTile }!
+            let good = alternative.board.first { $0.id == fork.winningTile }!
+            XCTAssertEqual(alternative.tray.filter { $0.kind == bad.kind }.count, 1)
+            XCTAssertLessThan(alternative.tray.filter { $0.kind == good.kind }.count, 2)
             XCTAssertTrue(alternative.pick(fork.losingTile)); alternative.settle()
             XCTAssertEqual(alternative.status, .playing)
             XCTAssertTrue(loses(alternative, remaining: 2))

@@ -320,9 +320,16 @@ extension TileGame {
         for (step, goodID) in path.enumerated() {
             if Task.isCancelled { return [] }
             let phase = min(2, step * 3 / path.count)
+            let counts = Dictionary(grouping: game.tray, by: \.kind).mapValues(\.count)
+            let goodKind = game.board.first { $0.id == goodID }?.kind
+            let goodMatches = goodKind.map { counts[$0, default: 0] } ?? 0
             let separated = forks.last.map { step + 1 - $0.pickNumber >= separation } ?? true
-            if !occupied.contains(phase), separated, budgets[phase] > 0, (4...5).contains(game.waiting) {
+            if !occupied.contains(phase), separated, budgets[phase] > 0, goodMatches < 2, (4...5).contains(game.waiting) {
                 for tile in game.board.sorted(by: { $0.id < $1.id }) where tile.id != goodID && game.isFree(tile) {
+                    // A tempting pair competes with another non-clearing move.
+                    // Arbitrarily adding a fresh unmatched kind, or ignoring an
+                    // immediate triple, does not qualify as strategic depth.
+                    guard counts[tile.kind, default: 0] == 1 else { continue }
                     var alternative = game
                     guard alternative.pick(tile.id) else { continue }
                     alternative.settle()
