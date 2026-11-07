@@ -62,6 +62,7 @@ final class DuelWorldView: SCNView {
             if paused { self?.stopClock() } else { self?.startClock() }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         drawState()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -77,6 +78,12 @@ final class DuelWorldView: SCNView {
         pointOfView?.camera?.orthographicScale = max(3.2, 5.8 / max(0.1, aspect))
     }
     @objc private func interrupted() { session.pause() }
+    @objc private func becameActive() {
+        // A new view may be attached during the first foreground transition.
+        // Start its clock when UIKit is active; an interrupted fight stays
+        // paused until the player explicitly chooses Resume.
+        if !session.paused { startClock() }
+    }
     private func startClock() {
         guard !ended, window != nil, !session.paused, UIApplication.shared.applicationState == .active, link == nil else { return }
         lastTime = nil; clock.reset(); rendersContinuously = true; isPlaying = true
@@ -112,7 +119,7 @@ final class DuelWorldView: SCNView {
         if timestamp - lastReport >= 1 {
             lastReport = timestamp
             let sorted = intervals.sorted(), p95 = sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))] * 1000
-            session.metrics(String(format: "刷新回调 p95 %.1f ms · 慢回调 %d/%d\n内存 %.0f MB · 热状态 %d · 丢弃补步 %.2f s\n回调数据不等于实际呈现帧率；真机 20 分钟尚未验收。",
+            session.metrics(String(format: "刷新回调 p95 %.1f ms · 慢回调 %d/%d\n内存 %.0f MB · 热状态 %d · 丢弃补步 %.2f s",
                 p95, slowCallbacks, sampleCount, Self.memoryMB(), ProcessInfo.processInfo.thermalState.rawValue, clock.droppedSeconds))
         }
     }

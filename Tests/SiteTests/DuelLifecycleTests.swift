@@ -74,6 +74,7 @@ final class DuelLifecycleTests: XCTestCase {
     }
 
     func testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries() async throws {
+        XCTAssertTrue(ProcessInfo.processInfo.arguments.contains("-demo"), "Use the existing demo launch argument so first-launch permission alerts do not interrupt the host")
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)
@@ -87,10 +88,15 @@ final class DuelLifecycleTests: XCTestCase {
             weak var released = world
             world?.frame = host.view.bounds; host.view.addSubview(try XCTUnwrap(world))
             try await Task.sleep(nanoseconds: 300_000_000)
+            let lifecycle = XCTAttachment(string: "hero=\(hero.rawValue) app=\(UIApplication.shared.applicationState.rawValue) scene=\(scene.activationState.rawValue) window=\(world?.window != nil) paused=\(state.paused) frame=\(state.game.frame) clocks=\(DuelWorldView.activeClocks)")
+            lifecycle.name = "fighter-clock-\(hero.rawValue)"; lifecycle.lifetime = .keepAlways; add(lifecycle)
+            XCTAssertEqual(UIApplication.shared.applicationState, .active, "The host must be in the foreground during clock checks")
             XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
             XCTAssertGreaterThan(state.game.frame, 0)
             state.pause()
             XCTAssertEqual(DuelWorldView.activeClocks, baseline)
+            NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+            XCTAssertEqual(DuelWorldView.activeClocks, baseline, "Foregrounding must not automatically resume an interrupted fight")
             let paused = state.game.frame
             try await Task.sleep(nanoseconds: 100_000_000)
             XCTAssertEqual(state.game.frame, paused)

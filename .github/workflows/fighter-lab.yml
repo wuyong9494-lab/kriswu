@@ -43,6 +43,16 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_26.6.app
           brew install xcodegen
           python3 .github/scripts/build_identity.py
+          # Use the App's existing demo path for the hosted unit tests, as the
+          # UI tests already do. Production reminder permissions are unchanged.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('project.yml')
+          source = p.read_text()
+          target = '    scheme:\n      testTargets:\n        - SiteTests'
+          assert source.count(target) == 1
+          p.write_text(source.replace(target, target + '\n      commandLineArguments:\n        "-demo": true'))
+          PY
           xcodegen generate
       - name: Compile device app without signing or distribution
         shell: bash -eo pipefail {0}
@@ -55,6 +65,7 @@ jobs:
             fighter-device.log | sort -u > fighter-concurrency.log || true
           test ! -s fighter-concurrency.log
       - name: Prepare iPhone 17 Pro Max simulator
+        id: simulator
         timeout-minutes: 12
         shell: bash -eo pipefail {0}
         run: |
@@ -71,6 +82,7 @@ jobs:
             -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
+        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
         timeout-minutes: 10
         shell: bash -eo pipefail {0}
         run: |
