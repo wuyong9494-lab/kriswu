@@ -44,7 +44,7 @@ final class TileRecordStore: ObservableObject {
             .flatMap { try? JSONDecoder().decode(TileRecords.self, from: $0) } ?? TileRecords()
     }
 
-    func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?, ruleSet: TileGame.RuleSet = .classic) {
+    func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?, ruleSet: TileGame.RuleSet = .classic, screenedDaily: Bool = false) {
         var output = ruleSet == .classic ? records : constellationRecords
         let key = level.rawValue
         output.played[key, default: 0] += 1
@@ -53,7 +53,7 @@ final class TileRecordStore: ObservableObject {
             if output.best[key].map({ result.seconds < $0 }) ?? true { output.best[key] = result.seconds }
         }
         if let daily {
-            let day = daily.description
+            let day = screenedDaily ? TileGame.dailyMasterRecordKey(daily) : daily.description
             if output.daily[day].map({ result.better(than: $0) }) ?? true { output.daily[day] = result }
             if output.daily.count > 60 {
                 let keep = Set(output.daily.keys.sorted().suffix(60))
@@ -89,6 +89,7 @@ struct TilePlay: Identifiable, Equatable {
     let mode: Mode
     var ruleSet: TileGame.RuleSet = .constellation
     var screenedMaster = false
+    var screenedDaily = false
 }
 
 // MARK: - 对战
@@ -335,7 +336,7 @@ struct TileBoardView: View {
 
     private var title: String {
         switch play.mode {
-        case .daily: return "今日挑战 · \(TileTheme.title(game.level))"
+        case .daily: return play.screenedDaily ? "每日一关 · 深空大师" : "今日挑战 · \(TileTheme.title(game.level))"
         case .challenge: return "挑战码 \(game.code)"
         case .race: return "对战 · \(play.level.title)"
         case .solo: return play.screenedMaster && game.ruleSet == .constellation ? "深空大师" : TileTheme.title(game.level)
@@ -714,7 +715,7 @@ struct TileBoardView: View {
         let result = TileRecords.Result(won: game.status == .won, seconds: seconds, cleared: game.cleared + game.clearing.count, total: game.total)
         var daily: DayKey?
         if case .daily(let day) = play.mode { daily = day }
-        TileRecordStore.shared.add(result, level: game.level, daily: daily, ruleSet: game.ruleSet)
+        TileRecordStore.shared.add(result, level: game.level, daily: daily, ruleSet: game.ruleSet, screenedDaily: play.screenedDaily)
         if let stageID { TileRecordStore.shared.finish(stage: stageID, game: game) }
     }
 

@@ -17,6 +17,7 @@ struct TileGameHomeView: View {
     @State private var journeyHall = false
     @State private var modesExpanded = false
     @State private var preparingMaster = false
+    @State private var dailyRequest: DayKey?
     @State private var masterRequest: TileGame.RuleSet?
     @State private var now = Date()
     @Environment(\.scenePhase) private var scenePhase
@@ -247,7 +248,7 @@ struct TileGameHomeView: View {
             .frame(maxWidth: .infinity, alignment: .leading).padding(20)
             .background(TileTheme.mint.opacity(rule == .classic ? 0.12 : 0.2), in: RoundedRectangle(cornerRadius: 20))
         }
-        .buttonStyle(.plain).disabled(preparingMaster)
+        .buttonStyle(.plain).disabled(preparingMaster || dailyRequest != nil)
         .accessibilityIdentifier("tiles.master.\(rule.rawValue)")
     }
 
@@ -307,12 +308,12 @@ struct TileGameHomeView: View {
     }
 
     private var daily: some View {
-        Button { play = TilePlay(level: .hard, seed: TileGame.dailySeed(.today), mode: .daily(.today)) } label: {
+        Button { dailyRequest = DayKey.today } label: {
             HStack(spacing: 16) {
                 Image(systemName: "sun.max.fill").font(.system(size: 26)).foregroundStyle(TileTheme.gold)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("今日深空挑战").font(.headline)
-                    Text(records.constellationRecords.daily[DayKey.today.description]?.won == true ? "今日已通关，再试一次更高连消" : "每天一张大师牌局，大家同盘比拼")
+                    Text(dailyRequest == nil ? "每日一关 · 深空大师" : "正在准备今日牌局…").font(.headline)
+                    Text(records.constellationRecords.daily[TileGame.dailyMasterRecordKey(.today)]?.won == true ? "今日已通关，再试一次更高连消" : "每天固定一局 · 反复挑战同一盘")
                         .font(.caption).foregroundStyle(.white.opacity(0.6))
                 }
                 Spacer(minLength: 0)
@@ -321,6 +322,17 @@ struct TileGameHomeView: View {
             .padding(20).background(TileTheme.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain).accessibilityIdentifier("tiles.daily")
+        .disabled(preparingMaster || dailyRequest != nil)
+        .task(id: dailyRequest) {
+            guard let day = dailyRequest else { return }
+            let worker = Task.detached(priority: .userInitiated) { TileGame.dailyMasterSeed(day) }
+            let seed = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: { worker.cancel() }
+            guard !Task.isCancelled else { return }
+            play = TilePlay(level: .hard, seed: seed, mode: .daily(day), screenedDaily: true)
+            dailyRequest = nil
+        }
     }
 
     private var challenge: some View {

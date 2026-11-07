@@ -21,14 +21,44 @@ extension TileGame {
         return bestSeed
     }
 
+    /// Edition 1 is frozen: the same date always selects the same board.
+    /// Prefer fewer shallow wins, then greater minimum progress: avoid selecting
+    /// a deal solely because every policy crashes immediately at the opening.
+    public static func dailyMasterSeed(_ day: DayKey) -> UInt64 {
+        let base = dailySeed(day)
+        var chosen = base
+        var bestWins = Int.max
+        var bestProgress = -1
+        for offset in 0..<12 {
+            if Task.isCancelled { break }
+            let seed = (base + UInt64(offset) * 104729) % seedLimit
+            let game = TileGame(level: .hard, seed: seed, ruleSet: .constellation)
+            let progress = (0..<3).map { game.greedyProgress(policy: $0) }
+            let wins = progress.filter { $0 == game.total }.count
+            let minimum = progress.min() ?? 0
+            if wins < bestWins || (wins == bestWins && minimum > bestProgress) {
+                chosen = seed
+                bestWins = wins
+                bestProgress = minimum
+            }
+        }
+        return chosen
+    }
+
+    public static func dailyMasterRecordKey(_ day: DayKey) -> String {
+        "master-v1:" + day.description
+    }
+
     /// Three deliberately shallow players: match first, expose first, and
     /// match first with reversed tie breaks. No tools, hidden solution or randomness.
-    func greedyClear(policy: Int) -> Bool {
+    func greedyClear(policy: Int) -> Bool { greedyProgress(policy: policy) == total }
+
+    func greedyProgress(policy: Int) -> Int {
         var game = self
         while game.status == .playing {
-            if Task.isCancelled { return false }
+            if Task.isCancelled { return game.cleared }
             let free = game.board.filter { game.isFree($0) }
-            guard !free.isEmpty else { return false }
+            guard !free.isEmpty else { return game.cleared }
             let counts = Dictionary(grouping: game.tray, by: \.kind).mapValues(\.count)
             let ranks = free.map { tile -> (tile: Tile, rank: Int) in
                 let match = counts[tile.kind, default: 0]
@@ -45,9 +75,9 @@ extension TileGame {
                 if a.rank != b.rank { return a.rank < b.rank }
                 return policy == 2 ? a.tile.id < b.tile.id : a.tile.id > b.tile.id
             }!.tile
-            guard game.pick(choice.id) else { return false }
+            guard game.pick(choice.id) else { return game.cleared }
             game.settle()
         }
-        return game.status == .won
+        return game.cleared
     }
 }
