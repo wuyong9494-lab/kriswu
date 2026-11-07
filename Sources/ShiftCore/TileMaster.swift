@@ -55,19 +55,27 @@ extension TileGame {
 
     func greedyProgress(policy: Int) -> Int {
         var game = self
+        // Geometry never changes during tool-free trial play. Build cover edges
+        // once instead of rescanning overlapping rectangles for every candidate.
+        let blockers = Dictionary(uniqueKeysWithValues: board.map { lower in
+            (lower.id, board.filter { $0.z > lower.z && $0.overlaps(lower) }.map(\.id))
+        })
         while game.status == .playing {
             if Task.isCancelled { return game.cleared }
-            let free = game.board.filter { game.isFree($0) }
+            let remaining = Set(game.board.map(\.id))
+            var freeIDs = Set<Int>()
+            var openedBy: [Int: Int] = [:]
+            for tile in game.board {
+                let active = (blockers[tile.id] ?? []).filter { remaining.contains($0) }
+                if active.isEmpty { freeIDs.insert(tile.id) }
+                if active.count == 1 { openedBy[active[0], default: 0] += 1 }
+            }
+            let free = game.board.filter { freeIDs.contains($0.id) }
             guard !free.isEmpty else { return game.cleared }
             let counts = Dictionary(grouping: game.tray, by: \.kind).mapValues(\.count)
             let ranks = free.map { tile -> (tile: Tile, rank: Int) in
                 let match = counts[tile.kind, default: 0]
-                let opens = game.board.filter { lower in
-                    lower.z < tile.z && lower.overlaps(tile) &&
-                    !game.board.contains { other in
-                        other.id != tile.id && other.z > lower.z && other.overlaps(lower)
-                    }
-                }.count
+                let opens = openedBy[tile.id, default: 0]
                 let rank = policy == 1 ? (match == 2 ? 10000 : 0) + opens * 10 + match : match * 1000 + opens
                 return (tile, rank)
             }
