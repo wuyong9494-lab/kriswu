@@ -485,8 +485,12 @@ def install(expected, source, transport=None):
         report = verify(temporary, expected, source)
         temporary.replace(output)
         return {**report, **transfer_report}
-    except Exception:
-        raise RuntimeError("Private resource preparation failed; check secret access, expected size and digest") from None
+    except Exception as error:
+        # Report only the error class and HTTP status, never the secret URL or response body.
+        category = type(error).__name__
+        if isinstance(error, urllib.error.HTTPError):
+            category += " status=" + str(error.code)
+        raise RuntimeError("Private resource preparation failed (" + category + "); check secret access, expected size and digest") from None
     finally:
         temporary.unlink(missing_ok=True)
 

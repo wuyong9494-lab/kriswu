@@ -19,5 +19,6 @@
   "source_validation": {
     "mode": "star-pulse-direct-upload-569",
     "rules_run_id": 42329690554
-  }
+  },
+  "resource_fetch_attempt": 2
 }
