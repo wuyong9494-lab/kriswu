@@ -1,8 +1,8 @@
 {
-  "build_number": "569",
+  "build_number": "582",
   "version": "1.2",
-  "source_sha": "a62b36c29a56ad1efd4b38cc991843e7263284f2",
-  "source_run_id": 42329690668,
+  "source_sha": "88c205049acbad9e1d20b79e7b5e41c8658103db",
+  "source_run_id": 42345846863,
   "bundle_id": "com.kriswu.shiftreminder",
   "ranger_sha256": "62ff2a348565b390f3d2b23cabf95286a59ac634a48e27ad1bb129d8e478504d",
   "private_resource_pack": {
@@ -15,10 +15,11 @@
     "bytes": 524243560,
     "sha256": "e5db1182b9ec71cc6f3aff7b1d7edb32276b265fedf48ee364976415ed5b9ad8"
   },
-  "notes": "• 修复移层预览点击区域与重复点击取消问题，明确确认移动。\n• 新增不限时四步连消，撤销和恢复同步还原积分。\n• 新增脉冲引擎：6格收集槽、2点储能；两次移层之间完成两组三消，下次移层免费，包含远岔。提前移层清空充能。\n• 84项规则测试、56种配置和8条完整旅程组合通过；要求同一提交设备编译和核心回归通过，并校验签名、资源包和安装包身份。\n• 本版按要求直接上传内测；脉冲原生交互与真机体验尚未完成验收。既往竞技资源 Metal 渲染失败尚未复验，不代表通过。",
+  "notes": "• 星了个星主入口聚焦大师、深空大师、每日一关，旧移层玩法收进更多模式。\n• 结算新增逐步复盘，支持操作前后牌面和收集槽对比，前后步导航固定显示；查看历史不改变原局及首局结果。\n• 每日关从11月14日起增加跨阶段对子取舍筛选，保留此前日期牌局。七天样本均已重放验证可解，其中四天满足双阶段标准；首局无道具记录与重试结果分开。\n• 核心回归、设备编译、独立日关审计和 iPhone 17 Pro Max 模拟器复盘检查均要求通过，安装包与原资源包继续校验签名及哈希。\n• iPhone 17 Pro Max 模拟器复盘验证通过；真机手感与真人首局千分之一通过率尚未验证。既往竞技资源 Metal 渲染失败未复验，原资源包保持不变。",
   "source_validation": {
-    "mode": "star-pulse-direct-upload-569",
-    "rules_run_id": 42329690554
+    "mode": "star-master-replay-verified-582",
+    "rules_run_id": 42345846960,
+    "native_run_id": 42345846928
   },
-  "resource_fetch_attempt": 2
+  "resource_fetch_attempt": 1
 }
