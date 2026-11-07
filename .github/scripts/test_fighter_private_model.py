@@ -1,4 +1,7 @@
 import os
+import hashlib
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 import fighter_private_model as envelope
@@ -19,6 +22,38 @@ class EnvelopeTests(unittest.TestCase):
         with patch.dict(os.environ, FIGHTER_LIU_MODEL_KEY="b6" * 32):
             with self.assertRaises(ValueError):
                 envelope.unseal(encrypted, "model")
+
+    def test_app_gate_requires_exact_model_and_rejects_staging_material(self):
+        model = b"synthetic model for bundle validation"
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(envelope, "SIZE", len(model)), \
+             patch.object(envelope, "SHA", hashlib.sha256(model).hexdigest()):
+            app = Path(directory) / "Test.app"
+            app.mkdir()
+            with self.assertRaises(ValueError):
+                envelope.verify_app(app)
+            flat = app / "Liu_FullBody_Mobile.glb"
+            flat.write_bytes(model)
+            envelope.verify_app(app)
+            flat.write_bytes(b"x" * len(model))
+            with self.assertRaises(ValueError):
+                envelope.verify_app(app)
+            flat.write_bytes(model)
+            nested = app / "FighterPrivate/Liu_FullBody_Mobile.glb"
+            nested.parent.mkdir()
+            nested.write_bytes(model)
+            with self.assertRaises(ValueError):
+                envelope.verify_app(app)
+            flat.unlink()
+            envelope.verify_app(app)
+            staging = app / "FighterPrivate/Fighter_Liu_Model_Key.txt"
+            staging.write_text("synthetic placeholder, not a key")
+            with self.assertRaises(ValueError):
+                envelope.verify_app(app)
+            staging.unlink()
+            (app / "liu-fullbody-v1.glb.enc").write_bytes(b"synthetic ciphertext")
+            with self.assertRaises(ValueError):
+                envelope.verify_app(app)
 
 
 if __name__ == "__main__":

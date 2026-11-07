@@ -78,12 +78,34 @@ def write_atomic(path, data):
             os.unlink(name)
 
 
+def verify_model(data):
+    if len(data) != SIZE or hashlib.sha256(data).hexdigest() != SHA:
+        raise ValueError("Private fighter asset integrity mismatch")
+
+
+def verify_app(path):
+    """Fail closed before upload if the signed app would use the stand-in."""
+    app = Path(path)
+    if not app.is_dir() or app.suffix != ".app":
+        raise ValueError("Expected a built .app bundle")
+    # Match the exact two locations that DuelCharacterAsset.bundledURL reads.
+    candidates = [app / "Liu_FullBody_Mobile.glb",
+                  app / "FighterPrivate/Liu_FullBody_Mobile.glb"]
+    models = [p for p in candidates if p.is_file()]
+    if len(models) != 1:
+        raise ValueError("Expected exactly one bundled Liu character; refusing stand-in release")
+    verify_model(models[0].read_bytes())
+    # Neither the distribution key nor the ciphertext is an app resource.
+    if any(p.name in ("Fighter_Liu_Model_Key.txt", "liu-fullbody-v1.glb.enc") for p in app.rglob("*")):
+        raise ValueError("Private staging material must not be bundled")
+    print("Bundled Liu character verified; actual model is present")
+
+
 def stage():
     key()
     encrypted = ROOT / ".github/private/liu-fullbody-v1.glb.enc"
     clear = unseal(encrypted.read_bytes(), "model")
-    if len(clear) != SIZE or hashlib.sha256(clear).hexdigest() != SHA:
-        raise ValueError("Private fighter asset integrity mismatch")
+    verify_model(clear)
     write_atomic(ROOT / "App/Resources/FighterPrivate/Liu_FullBody_Mobile.glb", clear)
     print("Private fighter model staged and SHA-256 verified")
 
@@ -92,11 +114,13 @@ def main():
     args = sys.argv[1:]
     if args == ["stage"]:
         stage()
+    elif len(args) == 2 and args[0] == "verify-app":
+        verify_app(args[1])
     elif len(args) == 4 and args[0] in ("seal", "unseal") and args[1] in ("model", "evidence"):
         operation = seal if args[0] == "seal" else unseal
         write_atomic(args[3], operation(Path(args[2]).read_bytes(), args[1]))
     else:
-        raise ValueError("Usage: stage | seal/unseal model/evidence INPUT OUTPUT")
+        raise ValueError("Usage: stage | verify-app APP | seal/unseal model/evidence INPUT OUTPUT")
 
 
 if __name__ == "__main__":

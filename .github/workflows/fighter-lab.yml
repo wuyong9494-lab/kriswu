@@ -145,9 +145,12 @@ jobs:
             fighter-*.log
             star-test-device.json
   character:
-    # Requires separately authorized private model + key. Push checks below
-    # do not count as authored-character acceptance. Run explicitly after staging.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.private_character }}
+    # Use the existing repository secret; never write, print, or package the key.
+    # This recovery branch explicitly validates the authorized encrypted model.
+    # Other fighter branches remain code-only unless private_character is selected.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.private_character) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108')
     runs-on: macos-26
     timeout-minutes: 40
     env:
