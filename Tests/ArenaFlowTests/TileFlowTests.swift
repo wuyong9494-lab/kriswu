@@ -46,4 +46,41 @@ final class TileFlowTests: XCTestCase {
         XCTAssertTrue(quit.waitForExistence(timeout: 5)); quit.tap()
         XCTAssertTrue(start.waitForExistence(timeout: 10))
     }
+    func testResultReplayIsReadOnlyAndReturnsToSameResult() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "gameBoard"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["tiles.close"].waitForExistence(timeout: 20))
+        let replay = app.buttons["tiles.showReplay"]
+        for _ in 0..<120 {
+            if replay.exists { break }
+            let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tiles.card.' AND enabled == true"))
+            guard cards.count > 0 else { break }
+            cards.firstMatch.tap()
+        }
+        XCTAssertTrue(replay.waitForExistence(timeout: 5))
+        let result = app.staticTexts["tiles.resultProgress"].label
+        for _ in 0..<3 where !replay.isHittable { app.swipeUp() }
+        XCTAssertTrue(replay.isHittable)
+        replay.tap()
+        let close = app.buttons["tiles.replay.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        let step = app.staticTexts["tiles.replay.step"]
+        let initial = step.label
+        let previous = app.buttons["tiles.replay.previous"]
+        for _ in 0..<4 where !previous.isHittable { app.swipeUp() }
+        XCTAssertTrue(previous.isEnabled)
+        previous.tap()
+        XCTAssertNotEqual(step.label, initial)
+        app.buttons["tiles.replay.next"].tap()
+        XCTAssertEqual(step.label, initial)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "tiles-replay-interaction"; attachment.lifetime = .keepAlways; add(attachment)
+        for _ in 0..<5 where !close.isHittable { app.swipeDown() }
+        close.tap()
+        XCTAssertTrue(replay.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["tiles.resultProgress"].label, result)
+    }
+
 }

@@ -126,11 +126,12 @@ extension TileGame {
             "2026-11-12": 84198013,
             "2026-11-13": 83988990,
         ]
+        if day >= dailyDepthStart { return dailyDepthSeed(day) }
         return audited[day.description] ?? dailyPlanningSelection(day).seed
     }
 
     public static func dailyPlanningRecordKey(_ day: DayKey) -> String {
-        "master-v2:" + day.description
+        (day >= dailyDepthStart ? "master-v3:" : "master-v2:") + day.description
     }
 }
 
@@ -294,4 +295,100 @@ private func forcedPlanningLoss(_ game: TileGame, plies: Int, remaining: inout I
         if result == nil { unknown = true }
     }
     return unknown ? nil : true
+}
+
+extension TileGame {
+    /// Search all three thirds of a replayed winning route. Separate node
+    /// budgets prevent early branches from starving the later-phase checks.
+    /// Neighbouring pressure states cannot count as separate strategic phases.
+    public func planningPhaseForks(along path: [Int], nodeLimit: Int = 24000) -> [PlanningFork] {
+        guard parked.isEmpty, !path.isEmpty else { return [] }
+        var proof = self
+        proof.settle()
+        for id in path {
+            guard proof.pick(id) else { return [] }
+            proof.settle()
+        }
+        guard proof.status == .won else { return [] }
+        let perPhase = max(0, min(nodeLimit, 48000)) / 3
+        var budgets = [perPhase, perPhase, perPhase]
+        var occupied: Set<Int> = []
+        var forks: [PlanningFork] = []
+        var game = self
+        game.settle()
+        let separation = max(6, path.count / 4)
+        for (step, goodID) in path.enumerated() {
+            if Task.isCancelled { return [] }
+            let phase = min(2, step * 3 / path.count)
+            let separated = forks.last.map { step + 1 - $0.pickNumber >= separation } ?? true
+            if !occupied.contains(phase), separated, budgets[phase] > 0, (4...5).contains(game.waiting) {
+                for tile in game.board.sorted(by: { $0.id < $1.id }) where tile.id != goodID && game.isFree(tile) {
+                    var alternative = game
+                    guard alternative.pick(tile.id) else { continue }
+                    alternative.settle()
+                    guard alternative.status == .playing else { continue }
+                    if forcedPlanningLoss(alternative, plies: 2, remaining: &budgets[phase]) == true {
+                        forks.append(.init(pickNumber: step + 1, winningTile: goodID,
+                                           losingTile: tile.id, lossWithinPicks: 3))
+                        occupied.insert(phase)
+                        break
+                    }
+                    if budgets[phase] == 0 { break }
+                }
+            }
+            guard game.pick(goodID) else { return [] }
+            game.settle()
+        }
+        return forks
+    }
+
+    public struct DailyDepthSelection: Equatable, Sendable {
+        public let seed: UInt64
+        public let phaseDepthVerified: Bool
+        public let forks: [PlanningFork]
+        public let candidatesChecked: Int
+        /// Beam-search expansions; fork proofs have their own bounded budget.
+        public let expanded: Int
+    }
+
+    /// Edition 3 starts after the already-published edition-2 week. The board
+    /// generator and challenge-code mapping never change with the selector.
+    public static let dailyDepthStart = DayKey(year: 2026, month: 11, day: 14)
+
+    public static func dailyDepthSeed(_ day: DayKey) -> UInt64 {
+        dailyDepthSelection(day).seed
+    }
+
+    public static func dailyDepthSelection(_ day: DayKey) -> DailyDepthSelection {
+        let fallback = dailyMasterSeed(day)
+        var candidates: [(seed: UInt64, narrow: PlanningReport)] = []
+        var expanded = 0
+        for offset in 0..<16 {
+            if Task.isCancelled { break }
+            let seed = offset == 0 ? fallback : (dailySeed(day) + UInt64(offset) * 104729) % seedLimit
+            guard !candidates.contains(where: { $0.seed == seed }) else { continue }
+            let game = TileGame(level: .hard, seed: seed, ruleSet: .constellation)
+            let narrow = game.planningProbe(width: 4, nodeLimit: 16000)
+            expanded += narrow.expanded
+            candidates.append((seed, narrow))
+        }
+        let shortlist = candidates.filter { !$0.narrow.won && !$0.narrow.budgetReached && !$0.narrow.cancelled }
+            .sorted { a, b in
+                a.narrow.cleared == b.narrow.cleared ? a.seed < b.seed : a.narrow.cleared > b.narrow.cleared
+            }.prefix(5)
+        for candidate in shortlist {
+            if Task.isCancelled { break }
+            let game = TileGame(level: .hard, seed: candidate.seed, ruleSet: .constellation)
+            let wide = game.planningProbe(width: 32, nodeLimit: 100000)
+            expanded += wide.expanded
+            guard wide.won else { continue }
+            let forks = game.planningPhaseForks(along: wide.solution)
+            if forks.count >= 2 {
+                return .init(seed: candidate.seed, phaseDepthVerified: true, forks: forks,
+                             candidatesChecked: candidates.count, expanded: expanded)
+            }
+        }
+        return .init(seed: fallback, phaseDepthVerified: false, forks: [],
+                     candidatesChecked: candidates.count, expanded: expanded)
+    }
 }

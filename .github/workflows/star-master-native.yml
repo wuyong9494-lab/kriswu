@@ -1,0 +1,79 @@
+name: Star master replay native
+on:
+  push:
+    branches: ['codex/star-gameplay-*']
+    paths:
+      - 'App/Views/TileReplayView.swift'
+      - 'App/Views/TileGameView.swift'
+      - 'Tests/ArenaFlowTests/TileFlowTests.swift'
+      - 'Tests/SiteTests/TileVisualTests.swift'
+      - '.github/workflows/star-master-native.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: star-master-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  replay:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode and generate existing app
+        shell: bash -eo pipefail {0}
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Prepare iPhone 17 Pro Max
+        timeout-minutes: 12
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee star-simulator-boot.log
+          python3 -u .github/scripts/prepare_star_simulator.py --ready 2>&1 | tee star-simulator-ready.log
+      - name: Render actual SwiftUI replay
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:SiteTests/TileVisualTests/testReplayRendersPressureStatesAtCompactAndLargeTypeSizes \
+            -derivedDataPath star-master-build -resultBundlePath star-replay-visual.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee star-replay-visual.log
+      - name: Pick to result, scrub replay, return to unchanged result
+        timeout-minutes: 8
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:ArenaFlowTests/TileFlowTests/testResultReplayIsReadOnlyAndReturnsToSameResult \
+            -derivedDataPath star-master-build -resultBundlePath star-replay-flow.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee star-replay-flow.log
+      - name: Export screenshots
+        if: always()
+        run: |
+          for result in star-replay-visual star-replay-flow; do
+            if [ -d "$result.xcresult" ]; then
+              mkdir -p "star-replay-screenshots/$result"
+              xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "star-replay-screenshots/$result"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: star-replay-native
+          path: |
+            star-replay-screenshots
+            star-replay-visual.log
+            star-replay-flow.log
+            star-simulator-boot.log
+            star-simulator-ready.log
+            star-simulator-preparation.json
+            star-test-device.json

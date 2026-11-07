@@ -333,6 +333,8 @@ struct TileBoardView: View {
     @State private var recorded = false
     @State private var dailyAttemptID = UUID().uuidString
     @State private var showingResult = false
+    @State private var showingReplay = false
+    @State private var replay: TileReplay
     @State private var confirmingQuit = false
     @State private var preparingDeal = false
     @State private var stageID: Int?
@@ -343,7 +345,9 @@ struct TileBoardView: View {
     init(play: TilePlay, race: TileRaceGame?) {
         self.play = play
         self.race = race
-        _game = State(initialValue: TileGame(level: play.level, seed: play.seed, ruleSet: play.ruleSet))
+        let initial = TileGame(level: play.level, seed: play.seed, ruleSet: play.ruleSet)
+        _game = State(initialValue: initial)
+        _replay = State(initialValue: TileReplay(game: initial))
         _stageID = State(initialValue: { if case .journey(let id) = play.mode { return id }; return nil }())
         _seed = State(initialValue: play.seed)
         _countdown = State(initialValue: race == nil ? 0 : 3)
@@ -415,6 +419,7 @@ struct TileBoardView: View {
             preparingDeal = false
         }
         .onDisappear { settleTask?.cancel() }
+        .fullScreenCover(isPresented: $showingReplay) { TileReplayView(replay: replay) }
         .confirmationDialog("退出这一局？", isPresented: $confirmingQuit, titleVisibility: .visible) {
             Button(race == nil ? "退出" : "退出（这局算输）", role: .destructive) { quit() }
             Button("接着玩", role: .cancel) {}
@@ -565,13 +570,13 @@ struct TileBoardView: View {
     private var tools: some View {
         HStack(spacing: DS.Space.s) {
             tool("撤回", "arrow.uturn.backward", left: game.undos, enabled: game.canUndo) {
-                change { $0.undo() }
+                change(.undo)
             }
             tool("移出", "tray.and.arrow.up", left: game.moveOuts, enabled: game.moveOuts > 0 && !game.tray.isEmpty) {
-                change { $0.moveOut() }
+                change(.moveOut)
             }
             tool("洗牌", "shuffle", left: game.shuffles, enabled: game.shuffles > 0 && game.status == .playing) {
-                change { $0.shuffle() }
+                change(.shuffle)
             }
         }
         .padding(.horizontal, DS.Space.m)
@@ -611,6 +616,8 @@ struct TileBoardView: View {
         let canGoOn = !won && (game.canUndo || game.moveOuts > 0)
         return ZStack {
             Color.black.opacity(0.35).ignoresSafeArea()
+            GeometryReader { area in
+            ScrollView {
             VStack(spacing: DS.Space.m) {
                 Image(systemName: won ? "sparkles" : "square.stack.3d.up.fill")
                     .font(.system(size: 34)).foregroundStyle(won ? TileTheme.gold : TileTheme.mint)
@@ -619,6 +626,7 @@ struct TileBoardView: View {
                 Text(won ? "\(game.score) 分 · 最高 \(game.bestCombo) 连消" : "消了 \(game.cleared)/\(game.total) 张")
                     .font(DS.Font.title)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("tiles.resultProgress")
                 if let race {
                     VStack(alignment: .leading, spacing: DS.Space.xs) {
                         TileRaceStandings(race: race, compact: false)
@@ -635,6 +643,12 @@ struct TileBoardView: View {
                         .buttonStyle(TilePrimaryButton()).accessibilityIdentifier("tiles.next")
                 }
                 if race == nil {
+                    Button { showingReplay = true } label: {
+                        Label("逐步复盘", systemImage: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(replay.actionCount == 0 || preparingDeal)
+                    .accessibilityIdentifier("tiles.showReplay")
                     Button {
                         share()
                     } label: {
@@ -658,6 +672,9 @@ struct TileBoardView: View {
             .frame(maxWidth: 360)
             .background(TileTheme.panel, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(DS.Space.l)
+            .frame(maxWidth: .infinity, minHeight: area.size.height)
+            }
+            }
         }
         .transition(.opacity)
     }
@@ -679,6 +696,7 @@ struct TileBoardView: View {
         guard countdown == 0 else { return }
         var next = game
         guard next.pick(id) else { return }
+        replay.append(.pick(id), resultingIn: next)
         settleTask?.cancel()
         Haptics.tap()
         moves += 1
@@ -695,9 +713,10 @@ struct TileBoardView: View {
         afterMove()
     }
 
-    private func change(_ action: (inout TileGame) -> Bool) {
+    private func change(_ action: TileReplay.Action) {
         var next = game
-        guard action(&next) else { return }
+        guard action.apply(to: &next) else { return }
+        replay.append(action, resultingIn: next)
         settleTask?.cancel()
         Haptics.select()
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) { game = next }
@@ -747,6 +766,8 @@ struct TileBoardView: View {
         self.seed = seed
         withAnimation { showingResult = false }
         game = TileGame(level: game.level, seed: seed, ruleSet: game.ruleSet)
+        replay = TileReplay(game: game)
+        showingReplay = false
         started = Date()
         ended = nil
         moves = 0
@@ -760,6 +781,8 @@ struct TileBoardView: View {
         stageID = stage.id
         seed = stage.seed
         game = stage.game
+        replay = TileReplay(game: game)
+        showingReplay = false
         showingResult = false
         started = Date()
         ended = nil

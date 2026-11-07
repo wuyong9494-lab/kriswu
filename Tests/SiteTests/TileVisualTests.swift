@@ -47,6 +47,24 @@ final class TileVisualTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testReplayRendersPressureStatesAtCompactAndLargeTypeSizes() throws {
+        var game = TileGame(level: .hard, seed: 84135585, ruleSet: .constellation)
+        var replay = TileReplay(game: game)
+        for _ in 0..<30 {
+            guard game.status == .playing, let id = game.freeIDs.sorted().first else { break }
+            XCTAssertTrue(game.pick(id))
+            XCTAssertTrue(replay.append(.pick(id), resultingIn: game))
+        }
+        XCTAssertGreaterThan(replay.actionCount, 0)
+        for (name, size) in [("replay-compact", CGSize(width: 375, height: 667)),
+                             ("replay-pro-max", CGSize(width: 440, height: 956))] {
+            try emit(TileReplayView(replay: replay), name: name, size: size)
+        }
+        try emit(TileReplayView(replay: replay).environment(\.dynamicTypeSize, .accessibility2),
+                 name: "replay-large-type", size: CGSize(width: 440, height: 956))
+    }
+
     func testOldRecordsDecodeWithoutAnyNewFields() throws {
         let data = Data(#"{"best":{"1":32.5},"played":{"1":4},"wins":{"1":2},"daily":{"2026-10-27":{"won":true,"seconds":32.5,"cleared":36,"total":36}}}"#.utf8)
         let old = try JSONDecoder().decode(TileRecords.self, from: data)
