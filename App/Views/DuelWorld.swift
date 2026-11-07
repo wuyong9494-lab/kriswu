@@ -20,6 +20,9 @@ final class DuelWorldView: SCNView {
     private var clock = DuelClock()
     private var link: CADisplayLink?
     private var lastTime: Double?
+    private var clockStartedAt: Double?
+    private(set) var clockCallbacks = 0
+    private(set) var firstStepDelay: Double?
     private var lastReport = 0.0
     private var intervals: [Double] = []
     private var intervalCursor = 0
@@ -92,7 +95,8 @@ final class DuelWorldView: SCNView {
     }
     private func startClock() {
         guard !ended, window != nil, !session.paused, UIApplication.shared.applicationState == .active, link == nil else { return }
-        lastTime = nil; clock.reset(); rendersContinuously = true; isPlaying = true
+        lastTime = nil; clock.reset(); clockCallbacks = 0; firstStepDelay = nil
+        clockStartedAt = CACurrentMediaTime(); rendersContinuously = true; isPlaying = true
         let target = DuelDisplayTarget(self)
         let driver = CADisplayLink(target: target, selector: #selector(DuelDisplayTarget.tick(_:)))
         driver.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
@@ -111,10 +115,14 @@ final class DuelWorldView: SCNView {
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }
+        clockCallbacks += 1
         guard let previous = lastTime else { lastTime = timestamp; return }
         lastTime = timestamp
         let elapsed = timestamp - previous
         let steps = clock.consume(seconds: elapsed)
+        if steps > 0, firstStepDelay == nil, let started = clockStartedAt {
+            firstStepDelay = max(0, timestamp - started)
+        }
         for _ in 0..<steps { session.advance() }
         drawState()
         if case .matchOver = session.game.phase { stopClock() }

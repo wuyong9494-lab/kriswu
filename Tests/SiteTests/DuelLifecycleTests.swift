@@ -150,6 +150,23 @@ final class DuelLifecycleTests: XCTestCase {
         state.shutdown()
     }
 
+    private func awaitClockProgress(_ state: DuelSession, world: DuelWorldView, phase: String) async throws {
+        let initial = state.game.frame
+        let deadline = ProcessInfo.processInfo.systemUptime + 3
+        // Wait for the behavior under test, not an assumed 300 ms render warmup.
+        // A registered but non-advancing driver must still fail the bounded wait.
+        while state.game.frame == initial && ProcessInfo.processInfo.systemUptime < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let delay = world.firstStepDelay.map { String(format: "%.4f", $0) } ?? "none"
+        let evidence = XCTAttachment(string: "phase=\(phase) initial=\(initial) frame=\(state.game.frame) callbacks=\(world.clockCallbacks) firstStepDelay=\(delay) app=\(UIApplication.shared.applicationState.rawValue) window=\(world.window != nil) paused=\(state.paused)")
+        evidence.name = "fighter-progress-\(state.setup.hero.rawValue)-\(phase)"
+        evidence.lifetime = .keepAlways; add(evidence)
+        XCTAssertGreaterThan(state.game.frame, initial, "A foreground scene must actually advance its simulation")
+        XCTAssertGreaterThanOrEqual(world.clockCallbacks, 2)
+        XCTAssertNotNil(world.firstStepDelay)
+    }
+
     func testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries() async throws {
         XCTAssertTrue(ProcessInfo.processInfo.arguments.contains("-demo"), "Use the existing demo launch argument so first-launch permission alerts do not interrupt the host")
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -164,7 +181,7 @@ final class DuelLifecycleTests: XCTestCase {
             var world: DuelWorldView? = DuelWorldView(session: state)
             weak var released = world
             world?.frame = host.view.bounds; host.view.addSubview(try XCTUnwrap(world))
-            try await Task.sleep(nanoseconds: 300_000_000)
+            try await awaitClockProgress(state, world: XCTUnwrap(world), phase: "attach")
             let lifecycle = XCTAttachment(string: "hero=\(hero.rawValue) app=\(UIApplication.shared.applicationState.rawValue) scene=\(scene.activationState.rawValue) window=\(world?.window != nil) paused=\(state.paused) frame=\(state.game.frame) clocks=\(DuelWorldView.activeClocks)")
             lifecycle.name = "fighter-clock-\(hero.rawValue)"; lifecycle.lifetime = .keepAlways; add(lifecycle)
             XCTAssertEqual(UIApplication.shared.applicationState, .active, "The host must be in the foreground during clock checks")
@@ -179,6 +196,7 @@ final class DuelLifecycleTests: XCTestCase {
             XCTAssertEqual(state.game.frame, paused)
             state.resume()
             XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
+            try await awaitClockProgress(state, world: XCTUnwrap(world), phase: "resume")
             world?.shutdown(); world?.removeFromSuperview()
             XCTAssertNil(world?.scene)
             XCTAssertEqual(DuelWorldView.activeClocks, baseline)

@@ -30,6 +30,37 @@ jobs:
         with:
           name: fighter-core
           path: fighter-core.log
+  device:
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode and generate device project
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Compile device app without signing or distribution
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath fighter-device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" 2>&1 | tee fighter-device.log
+          grep -E 'warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)' \
+            fighter-device.log | sort -u > fighter-concurrency.log || true
+          test ! -s fighter-concurrency.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fighter-device
+          path: |
+            fighter-device.log
+            fighter-concurrency.log
   native:
     runs-on: macos-26
     timeout-minutes: 40
@@ -54,16 +85,6 @@ jobs:
           p.write_text(source.replace(target, target + '\n      commandLineArguments:\n        "-demo": true'))
           PY
           xcodegen generate
-      - name: Compile device app without signing or distribution
-        shell: bash -eo pipefail {0}
-        run: |
-          xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
-            -derivedDataPath fighter-device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" 2>&1 | tee fighter-device.log
-          grep -E 'warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)' \
-            fighter-device.log | sort -u > fighter-concurrency.log || true
-          test ! -s fighter-concurrency.log
       - name: Prepare iPhone 17 Pro Max simulator
         id: simulator
         timeout-minutes: 12
