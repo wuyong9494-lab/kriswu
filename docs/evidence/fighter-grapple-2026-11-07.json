@@ -1,0 +1,223 @@
+{
+  "branch": "codex/fighter-lab-20261107",
+  "source_sha": "468b6fd6945ac97dcf244cdc259def15c0cc4103",
+  "workflow_run_id": 42369623167,
+  "distribution": "unsigned experiment only; not uploaded to TestFlight",
+  "core": {
+    "job_id": 128394854545,
+    "conclusion": "success",
+    "tests": 776,
+    "skipped": 16,
+    "failures": 0,
+    "grapple_tests": 9,
+    "passed": 760
+  },
+  "device_build": {
+    "job_id": 128394854405,
+    "step_conclusion": "success",
+    "concurrency_warnings": 0,
+    "signed": false,
+    "conclusion": "success"
+  },
+  "native": {
+    "job_id": 128394854586,
+    "conclusion": "success",
+    "lifecycle_tests": 6,
+    "ui_flow_tests": 2,
+    "failures": 0
+  },
+  "render_review": {
+    "conclusion": "accepted for technical sample, not final character art",
+    "source_sha": "468b6fd6945ac97dcf244cdc259def15c0cc4103",
+    "observations": [
+      "Spent ultimate button is gray",
+      "Hold countdown and first impact show 100 damage",
+      "Release shows 2 hits and 280 total damage",
+      "Head and attacker torso are separated while wrist grip stays connected"
+    ],
+    "screenshots": [
+      {
+        "name": "fighter-liu-release-controls-3C7361C8.png",
+        "sha256": "dca9ed4ceba1569e7a14b69893023d4804bcf44fa878399e8164db40a1a5e639",
+        "bytes": 595861
+      },
+      {
+        "name": "fighter-liu-hold-controls-A536A211.png",
+        "sha256": "289e05af6f0b158dd9f2f65e0d05acd4c8aadc7a3f9256bfcfa63f21d4d9bf3e",
+        "bytes": 606376
+      },
+      {
+        "name": "fighter-liu-release-9F0206A3.png",
+        "sha256": "66e3fce180ac2b1950ee94ccd3e959941b4fc136441d7a3992d100f33c1ffad8",
+        "bytes": 195163
+      },
+      {
+        "name": "fighter-liu-side-lock-409D1C39.png",
+        "sha256": "76680d5f79b9e353da10bf1d99399dcb674966c6f16e93c3fdb9a9986f0d2702",
+        "bytes": 189515
+      },
+      {
+        "name": "fighter-liu-takedown-0ADD885B.png",
+        "sha256": "8bd22fc4a97926bf0470fac2b818446cc4991b22e94a51a5e287a7fbb3d69ce3",
+        "bytes": 197689
+      }
+    ]
+  },
+  "physical_device": {
+    "device": "iPhone 17 Pro Max",
+    "tested": false,
+    "presented_fps": "unmeasured"
+  },
+  "art": "Original articulated white-suit placeholder; nonsexual wrestling and side wrist hold",
+  "model_preparation": {
+    "file_name": "liu-static-half-body-60k.glb",
+    "source_triangles": 1963633,
+    "prepared_triangles": 60000,
+    "bytes": 22794692,
+    "sha256": "bfb805155935afc429796e78c7cafd0b2909a64c4eb47eb1db3801aa1a14c149",
+    "roundtrip_render_verified": true,
+    "full_body": false,
+    "rigged": false,
+    "used_in_app": false,
+    "public_repository_uploaded": false
+  },
+  "previous_visual_pass": {
+    "source_sha": "110d854bfb6baec84e8a014b18df75f6e7e88baa",
+    "run_id": 42363559212,
+    "tests_passed": true,
+    "issues_found": [
+      "Ultimate button remained gold after energy was spent",
+      "Defender head silhouette partially overlapped attacker torso"
+    ],
+    "follow_up": "Pass readiness as explicit UIViewRepresentable value; separate torso and head while keeping wrist contact; strengthen UI and geometry assertions"
+  },
+  "ci_jobs": [
+    "core",
+    "device",
+    "native"
+  ],
+  "lifecycle_synchronization": {
+    "previous_run_id": 42365142221,
+    "old_sample_seconds": 0.3,
+    "observed_failure": {
+      "hero": "liu",
+      "app_active": true,
+      "window_attached": true,
+      "paused": false,
+      "active_clocks": 1,
+      "simulation_frame": 0
+    },
+    "new_condition": "Observe actual simulation advancement after attaching and after resuming; retain a 3-second failure deadline and verify at least 2 display callbacks",
+    "retained_assertions": [
+      "foreground application",
+      "one additional clock while active",
+      "zero additional clocks while paused or shut down",
+      "no simulation advancement while paused",
+      "scene and view release"
+    ],
+    "measurements": "Display callback count and first simulation step callback timestamp delta; not physical-device presented FPS",
+    "current_observations": [
+      {
+        "hero": "ember",
+        "phase": "attach",
+        "initial_frame": 0,
+        "observed_frame": 6,
+        "display_callbacks": 2,
+        "first_step_callback_delta_seconds": 0.1228,
+        "application_state_raw": 0,
+        "window_attached": true,
+        "paused": false,
+        "attachment": "fighter-progress-ember-attach-37985875.txt"
+      },
+      {
+        "hero": "ember",
+        "phase": "resume",
+        "initial_frame": 6,
+        "observed_frame": 7,
+        "display_callbacks": 2,
+        "first_step_callback_delta_seconds": 0.024,
+        "application_state_raw": 0,
+        "window_attached": true,
+        "paused": false,
+        "attachment": "fighter-progress-ember-resume-467229FF.txt"
+      },
+      {
+        "hero": "gale",
+        "phase": "attach",
+        "initial_frame": 0,
+        "observed_frame": 1,
+        "display_callbacks": 2,
+        "first_step_callback_delta_seconds": 0.0277,
+        "application_state_raw": 0,
+        "window_attached": true,
+        "paused": false,
+        "attachment": "fighter-progress-gale-attach-E18E74B9.txt"
+      },
+      {
+        "hero": "gale",
+        "phase": "resume",
+        "initial_frame": 1,
+        "observed_frame": 2,
+        "display_callbacks": 2,
+        "first_step_callback_delta_seconds": 0.0315,
+        "application_state_raw": 0,
+        "window_attached": true,
+        "paused": false,
+        "attachment": "fighter-progress-gale-resume-4F4AA434.txt"
+      },
+      {
+        "hero": "liu",
+        "phase": "attach",
+        "initial_frame": 0,
+        "observed_frame": 3,
+        "display_callbacks": 2,
+        "first_step_callback_delta_seconds": 0.0519,
+        "application_state_raw": 0,
+        "window_attached": true,
+        "paused": false,
+        "attachment": "fighter-progress-liu-attach-1DF50C0B.txt"
+      },
+      {
+        "hero": "liu",
+        "phase": "resume",
+        "initial_frame": 3,
+        "observed_frame": 4,
+        "display_callbacks": 2,
+        "first_step_callback_delta_seconds": 0.0183,
+        "application_state_raw": 0,
+        "window_attached": true,
+        "paused": false,
+        "attachment": "fighter-progress-liu-resume-20916AEF.txt"
+      }
+    ],
+    "simulation_logic_changed": false
+  },
+  "workflow_conclusion": "success",
+  "workflow_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/42369623167",
+  "completed_at": "2026-11-07T12:00:25Z",
+  "simulator": {
+    "device": "iPhone 17 Pro Max",
+    "runtime": "iOS 26.5"
+  },
+  "artifacts": [
+    {
+      "id": 13573656858,
+      "name": "fighter-native",
+      "bytes": 28284006,
+      "digest": "sha256:4d865aa03e9ec353240daf44af4cff57d1e7d520bacc4b55088f92611b4b8459"
+    },
+    {
+      "id": 13573292812,
+      "name": "fighter-core",
+      "bytes": 32049,
+      "digest": "sha256:f2e92b16f7c9c27213eb74d840ef6e8e53183367b5225a18bbdb66a5e1d8ba7a"
+    },
+    {
+      "id": 13572959081,
+      "name": "fighter-device",
+      "bytes": 25818,
+      "digest": "sha256:dc00b943954e92b61f8c7cd51392819437c0930149bd3736a6784191c0a6c4d8"
+    }
+  ],
+  "native_artifact_digest_verified": true
+}
