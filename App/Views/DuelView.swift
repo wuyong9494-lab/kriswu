@@ -41,9 +41,9 @@ struct DuelHomeView: View {
                 if hero == .liu {
                     Text("刘泉纬 · 擒拿震地：100 能量，近身抓取后锁臂压制 3 秒，再震地击退。抓取不能防御；跳跃、后撤或在前摇时快攻可以反制。不能抓取倒地、硬直或起身保护中的对手。")
                         .font(.subheadline).accessibilityIdentifier("duel.ultimateHelp")
-                    Text("当前使用白衣动作替身和基础突进、重击。你上传的人物模型尚待骨骼绑定。").font(.footnote).foregroundStyle(.secondary)
+                    Text(DuelCharacterAsset.bundledURL == nil ? "当前构建使用白衣动作替身。" : "已接入全身人物：移动、出拳、防御与擒拿动作随战斗切换。").font(.footnote).foregroundStyle(.secondary)
                 }
-                Text("战斗玩法样板：当前人物、场景和动作是原创临时模型，用于测试操作与判定。").font(.footnote).foregroundStyle(.secondary)
+                Text("战斗样板：人物动作与场景仍在打磨，可在练习场测试操作与判定。").font(.footnote).foregroundStyle(.secondary)
             }.padding(24).frame(maxWidth: 650)
         }
         .navigationTitle("裂隙对决")
@@ -75,6 +75,8 @@ final class DuelSession: ObservableObject {
     var inputReset: (() -> Void)?
     private var feedbackUntil = 0
     private var serial = 0
+    private(set) var animationTick = 0
+    @Published private(set) var characterStatus = ""
     private var practicedJump = false
     private var practicedSkills = Set<DuelGame.Move>()
     private let interruptions = DuelInterruptionObserver()
@@ -120,7 +122,7 @@ final class DuelSession: ObservableObject {
     func resume() { clearInput(); paused = false; renderPause?(false) }
     func restart() {
         clearInput(); game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode)
-        feedback = "保持距离，观察出手"; tutorialStep = 0; serial = 0; feedbackUntil = 75
+        feedback = "保持距离，观察出手"; tutorialStep = 0; serial = 0; animationTick = 0; feedbackUntil = 75
         practicedJump = false; practicedSkills.removeAll(); resume(); objectWillChange.send()
     }
     func advance() {
@@ -128,7 +130,9 @@ final class DuelSession: ObservableObject {
         if case .matchOver = game.phase { return }
         let move = (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0)
         let input = DuelGame.Input(move: move, guardHeld: held.contains("guard"), taps: taps)
+        let frozen = game.hitStop > 0 && game.grapple == nil
         taps = []; game.step(input); serial += 1
+        if !frozen { animationTick += 1 }
         if setup.mode == .tutorial {
             if tutorialStep == 0 && move != 0 { tutorialStep = 1 }
             if tutorialStep == 1 && game.landedHits[0] > 0 { tutorialStep = 2 }
@@ -161,6 +165,7 @@ final class DuelSession: ObservableObject {
         if serial % 6 == 0 || !game.events.isEmpty { objectWillChange.send() }
     }
     func metrics(_ value: String) { report = value }
+    func characterLoaded(_ status: String) { characterStatus = status }
     func shutdown() { pause(); renderPause = nil; inputReset = nil }
 }
 
@@ -245,6 +250,7 @@ struct DuelMatchView: View {
             Button("继续对决") { session.resume() }.accessibilityIdentifier("duel.resume")
             Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.restart")
             Button("返回角色选择") { session.shutdown(); dismiss() }.accessibilityIdentifier("duel.exit")
+            Text(session.characterStatus).font(.caption).accessibilityIdentifier("duel.characterStatus")
             Text(session.report).font(.caption2.monospaced()).foregroundStyle(.secondary)
         }
     }

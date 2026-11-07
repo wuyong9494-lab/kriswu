@@ -7,6 +7,8 @@ on:
       - 'Sources/**'
       - 'Tests/**'
       - 'project.yml'
+      - '.github/private/**'
+      - '.github/scripts/*fighter*'
       - '.github/workflows/fighter-lab.yml'
       - '.github/workflows/ios.yml'
   workflow_dispatch:
@@ -22,6 +24,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - name: Verify private asset envelope
+        run: python3 -m unittest discover -s .github/scripts -p test_fighter_private_model.py
       - name: Fight rules and existing app regressions
         shell: bash -eo pipefail {0}
         run: swift test --jobs 2 2>&1 | tee fighter-core.log
@@ -41,7 +45,7 @@ jobs:
       - name: Select Xcode and generate device project
         run: |
           sudo xcode-select -s /Applications/Xcode_26.6.app
-          brew install xcodegen
+          brew install xcodegen openssl@3
           python3 .github/scripts/build_identity.py
           xcodegen generate
       - name: Compile device app without signing or distribution
@@ -72,7 +76,7 @@ jobs:
       - name: Select Xcode and generate existing app
         run: |
           sudo xcode-select -s /Applications/Xcode_26.6.app
-          brew install xcodegen
+          brew install xcodegen openssl@3
           python3 .github/scripts/build_identity.py
           # Use the App's existing demo path for the hosted unit tests, as the
           # UI tests already do. Production reminder permissions are unchanged.
@@ -128,5 +132,91 @@ jobs:
           name: fighter-native
           path: |
             fighter-evidence
+            fighter-*.log
+            star-test-device.json
+  character:
+    # Requires separately authorized private model + key. Push checks below
+    # do not count as authored-character acceptance. Run explicitly after staging.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Stage verified private character
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+        run: python3 .github/scripts/fighter_private_model.py stage
+      - name: Select Xcode and generate existing app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          brew install xcodegen openssl@3
+          python3 .github/scripts/build_identity.py
+          # Use the App's existing demo path for the hosted unit tests, as the
+          # UI tests already do. Production reminder permissions are unchanged.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('project.yml')
+          source = p.read_text()
+          target = '    scheme:\n      testTargets:\n        - SiteTests'
+          assert source.count(target) == 1
+          p.write_text(source.replace(target, target + '\n      commandLineArguments:\n        "-demo": true'))
+          PY
+          xcodegen generate
+      - name: Prepare iPhone 17 Pro Max simulator
+        id: simulator
+        timeout-minutes: 12
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee fighter-simulator.log
+          python3 -u .github/scripts/prepare_star_simulator.py --ready 2>&1 | tee -a fighter-simulator.log
+      - name: Check interruption, input and SceneKit resource lifetime
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:SiteTests/DuelLifecycleTests -only-testing:SiteTests/DuelCharacterTests \
+            -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
+      - name: Play both characters and restore portrait app
+        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
+        timeout-minutes: 10
+        shell: bash -eo pipefail {0}
+        run: |
+          DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+            -only-testing:ArenaFlowTests/DuelFlowTests \
+            -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log
+      - name: Export rendered evidence
+        if: always()
+        run: |
+          for result in fighter-lifecycle fighter-flow; do
+            if [ -d "$result.xcresult" ]; then
+              mkdir -p "fighter-evidence/$result"
+              xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "fighter-evidence/$result"
+            fi
+          done
+      - name: Protect portrait evidence before upload
+        if: always()
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+        run: |
+          if [ -d fighter-evidence ]; then
+            python3 -c "import shutil; shutil.make_archive('fighter-evidence-private', 'zip', 'fighter-evidence')"
+            python3 .github/scripts/fighter_private_model.py seal evidence fighter-evidence-private.zip fighter-evidence.enc
+            rm -f fighter-evidence-private.zip
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fighter-character-private
+          path: |
+            fighter-evidence.enc
             fighter-*.log
             star-test-device.json

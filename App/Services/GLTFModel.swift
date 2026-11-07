@@ -75,7 +75,8 @@ final class GLTFModel: @unchecked Sendable {
 
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
     /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
-    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false) throws {
+    init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
+         physicallyBased: Bool = false) throws {
         // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
         guard Thread.isMainThread else { throw LoadError.offMain }
         guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
@@ -137,7 +138,7 @@ final class GLTFModel: @unchecked Sendable {
         let materialDefinitions = json["materials"] as? [[String: Any]] ?? []
         let samplers = json["samplers"] as? [[String: Any]] ?? []
         let materials: [SCNMaterial] = try materialDefinitions.map { info in
-            try Self.material(info, textures: textures, samplers: samplers, image: loadImage)
+            try Self.material(info, textures: textures, samplers: samplers, physicallyBased: physicallyBased, image: loadImage)
         }
 
         // 网格
@@ -173,7 +174,7 @@ final class GLTFModel: @unchecked Sendable {
                 let opaque = materialIndex.flatMap { materialDefinitions.indices.contains($0) ? materialDefinitions[$0]["alphaMode"] as? String : nil } ?? "OPAQUE"
                 // A solid hull would fill masked holes or surround translucent
                 // surfaces with opaque ink. Only opaque primitives get a hull.
-                let hull = normals.count == count * 3 && opaque == "OPAQUE"
+                let hull = !physicallyBased && normals.count == count * 3 && opaque == "OPAQUE"
                     ? SCNGeometry(sources: [vertices, GLTFModel.source(GLTFModel.smoothed(normals, at: positions), .normal, width: 3)], elements: [element])
                     : nil
                 if let material = primitive["material"] as? Int, materials.indices.contains(material) {
@@ -306,7 +307,8 @@ final class GLTFModel: @unchecked Sendable {
     private enum AlphaMode: String { case opaque = "OPAQUE", mask = "MASK", blend = "BLEND" }
 
     private static func material(_ info: [String: Any], textures: [[String: Any]],
-                                 samplers: [[String: Any]], image: (Int, Bool) throws -> UIImage) throws -> SCNMaterial {
+                                 samplers: [[String: Any]], physicallyBased: Bool,
+                                 image: (Int, Bool) throws -> UIImage) throws -> SCNMaterial {
         let pbr = info["pbrMetallicRoughness"] as? [String: Any] ?? [:]
         let factor: [Double]
         if let value = pbr["baseColorFactor"] {
@@ -388,6 +390,38 @@ final class GLTFModel: @unchecked Sendable {
         }
         if let glow = info["emissiveFactor"] as? [Double], glow.count == 3, glow.contains(where: { $0 > 0 }) {
             material.emission.contents = UIColor(red: glow[0], green: glow[1], blue: glow[2], alpha: 1)
+        }
+        if physicallyBased {
+            // Opt-in for the authored fighter. Existing arena material behavior
+            // stays unchanged. glTF packs roughness in G and metalness in B.
+            material.lightingModel = .physicallyBased
+            let roughness = pbr["roughnessFactor"] as? Double ?? 1
+            let metalness = pbr["metallicFactor"] as? Double ?? 1
+            guard roughness.isFinite, metalness.isFinite,
+                  (0...1).contains(roughness), (0...1).contains(metalness) else { throw LoadError.badFormat }
+            material.roughness.contents = roughness; material.metalness.contents = metalness
+            func setTexture(_ value: Any, on property: SCNMaterialProperty) throws {
+                guard let reference = value as? [String: Any], (reference["texCoord"] as? Int ?? 0) == 0,
+                      (reference["extensions"] as? [String: Any] ?? [:]).isEmpty,
+                      let index = reference["index"] as? Int, textures.indices.contains(index),
+                      let source = textures[index]["source"] as? Int else { throw LoadError.badFormat }
+                property.contents = try image(source, true)
+                let samplerIndex = textures[index]["sampler"] as? Int
+                if let samplerIndex, !samplers.indices.contains(samplerIndex) { throw LoadError.badFormat }
+                try configureSampler(samplerIndex.map { samplers[$0] } ?? [:], property: property)
+            }
+            if let packed = pbr["metallicRoughnessTexture"] {
+                try setTexture(packed, on: material.roughness)
+                try setTexture(packed, on: material.metalness)
+                material.roughness.textureComponents = .green; material.roughness.intensity = CGFloat(roughness)
+                material.metalness.textureComponents = .blue; material.metalness.intensity = CGFloat(metalness)
+            }
+            if let normal = info["normalTexture"] as? [String: Any] {
+                try setTexture(normal, on: material.normal)
+                let strength = normal["scale"] as? Double ?? 1
+                guard strength.isFinite else { throw LoadError.badFormat }
+                material.normal.intensity = CGFloat(strength)
+            }
         }
         return material
     }

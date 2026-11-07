@@ -10,3 +10,5 @@ build/
 Payload/
 *.arenapack
 Tests/PrivateResourceValidation/
+
+App/Resources/FighterPrivate/

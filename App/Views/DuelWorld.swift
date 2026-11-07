@@ -11,7 +11,7 @@ struct DuelWorld: UIViewRepresentable {
     static func dismantleUIView(_ view: DuelWorldView, coordinator: ()) { view.shutdown() }
 }
 
-/// Original procedural greybox. Two articulated silhouettes share no arena assets.
+/// Authored Liu plus the existing procedural opponents. Assets live for one fight.
 /// One main-thread clock owns simulation; SceneKit only renders the resulting pose.
 @MainActor
 final class DuelWorldView: SCNView {
@@ -29,13 +29,15 @@ final class DuelWorldView: SCNView {
     private var slowCallbacks = 0
     private var sampleCount = 0
     private var actors: [DuelActor] = []
+    private(set) var characterAsset: DuelCharacterAsset?
+    enum CharacterSource { case bundled, procedural }
     private var bolts: [Int: SCNNode] = [:]
     private var hurtNodes: [SCNNode] = []
     private var attackNodes: [SCNNode] = []
     private var slamRing: SCNNode?
     private var ended = false
 
-    init(session: DuelSession) {
+    init(session: DuelSession, characterSource: CharacterSource = .bundled) {
         self.session = session
         super.init(frame: .zero, options: nil)
         backgroundColor = UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
@@ -61,8 +63,17 @@ final class DuelWorldView: SCNView {
         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
         ring.geometry?.firstMaterial?.lightingModel = .constant
         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
+        if characterSource == .bundled, session.game.fighters.contains(where: { $0.hero == .liu }) {
+            do {
+                guard let url = DuelCharacterAsset.bundledURL else { throw DuelCharacterAsset.AssetError.missing }
+                characterAsset = try DuelCharacterAsset(url: url)
+                session.characterLoaded("刘泉纬 · 全身人物 · 12 段骨骼动作")
+            } catch {
+                session.characterLoaded("人物资源未就绪 · 当前显示动作替身")
+            }
+        }
         for fighter in session.game.fighters {
-            let actor = DuelActor(hero: fighter.hero); actor.root.name = "duel.actor.\(actors.count)"
+            let actor = DuelActor(hero: fighter.hero, asset: fighter.hero == .liu ? characterAsset : nil); actor.root.name = "duel.actor.\(actors.count)"
             actors.append(actor); world.rootNode.addChildNode(actor.root)
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
@@ -111,7 +122,7 @@ final class DuelWorldView: SCNView {
         guard !ended else { return }
         ended = true; stopClock(); session.clearInput(); session.renderPause = nil
         NotificationCenter.default.removeObserver(self)
-        scene = nil; pointOfView = nil; actors.removeAll(); bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }
@@ -137,14 +148,17 @@ final class DuelWorldView: SCNView {
                 p95, slowCallbacks, sampleCount, Self.memoryMB(), ProcessInfo.processInfo.thermalState.rawValue, clock.droppedSeconds))
         }
     }
-    private func drawState() {
+    func drawState() {
         guard scene != nil else { return }
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         for i in 0..<actors.count {
-            actors[i].pose(session.game.fighters[i], frame: session.game.frame, grapple: session.game.grapple, index: i)
+            actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase)
             place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
             if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
             else { attackNodes[i].isHidden = true }
+        }
+        if let hold = session.game.grapple {
+            actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
         }
         slamRing?.isHidden = true
         pointOfView?.position = SCNVector3(5, 3.6, 14)
@@ -231,7 +245,9 @@ private final class DuelActor {
     let shield: SCNNode
     private let body: SCNNode
     private var feet: [SCNNode] = []
-    init(hero: DuelGame.Hero) {
+    private let character: DuelCharacterInstance?
+    init(hero: DuelGame.Hero, asset: DuelCharacterAsset?) {
+        character = asset.map { DuelCharacterInstance($0) }
         let color = hero == .liu ? UIColor(white: 0.88, alpha: 1) : hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
         let dark = UIColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1)
         let skin = UIColor(red: 0.68, green: 0.48, blue: 0.35, alpha: 1)
@@ -277,6 +293,19 @@ private final class DuelActor {
         shield = Self.shape(SCNTorus(ringRadius: 0.54, pipeRadius: 0.025), .cyan)
         shield.position = SCNVector3(0, 1, 0.55); shield.eulerAngles.x = .pi / 2; shield.isHidden = true
         root.addChildNode(shield)
+        if let character {
+            for child in root.childNodes where child !== shield { child.isHidden = true }
+            root.addChildNode(character.instance.root)
+        }
+    }
+    func connectWrist(to other: DuelActor, hold: DuelGame.Grapple) {
+        guard let character else { return }
+        let suffix = hold.direction > 0 ? "R" : "L"
+        let name = hold.direction > 0 ? "duel.hand.right" : "duel.hand.left"
+        guard let target = other.character?.bone("hand.\(suffix)") ?? other.root.childNode(withName: name, recursively: true) else { return }
+        let fall = min(1, Float(hold.age) / Float(DuelGame.Grapple.takedownTicks))
+        let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
+        character.reach(suffix: suffix, target: target.simdWorldPosition, weight: fall * fall * (3 - 2 * fall) * (1 - release))
     }
     static func shape(_ geometry: SCNGeometry, _ color: UIColor) -> SCNNode {
         let material = SCNMaterial(); material.diffuse.contents = color; material.roughness.contents = 0.7
@@ -289,7 +318,12 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase) {
+        if let character {
+            character.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, root: root)
+            shield.isHidden = !fighter.guarding || grapple != nil
+            return
+        }
         root.position = SCNVector3(Float(fighter.x) / 1000, Float(fighter.y) / 1000, 0)
         let yaw: Float = fighter.facing > 0 ? .pi / 2 : -.pi / 2
         orient(yaw: yaw, worldRoll: fighter.knockdown > 0 ? Float(fighter.facing) * -.pi / 2 : 0)

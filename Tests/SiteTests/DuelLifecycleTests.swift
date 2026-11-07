@@ -110,7 +110,7 @@ final class DuelLifecycleTests: XCTestCase {
         for (name, age) in [("takedown", 12), ("side-lock", 65), ("release", 210)] {
             while let hold = state.game.grapple, hold.age < age { state.advance() }
             XCTAssertEqual(state.game.grapple?.age, age)
-            let world = DuelWorldView(session: state)
+            let world = DuelWorldView(session: state, characterSource: .procedural)
             world.frame = CGRect(x: 0, y: 0, width: 956, height: 440); world.layoutIfNeeded()
             let scene = try XCTUnwrap(world.scene)
             let actor = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.0", recursively: false))
