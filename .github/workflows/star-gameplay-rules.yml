@@ -16,10 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Rules and legacy save regression
-        run: swift test --jobs 2 --filter 'StarRail|StarJourney|StarPulse|TileGame|TileMaster'
+        run: swift test --jobs 2 --filter 'StarRail|StarJourney|StarPulse|TileGame|TileMaster|TilePlanning'
       - name: Every ability, route and starting energy
         run: swift run --skip-build StarJourneyAudit > star-journey-audit.json
+      - name: Seven daily boards with bounded planning search
+        run: swift run --skip-build TileDailyAudit --days 7 > tile-daily-audit.json
       - uses: actions/upload-artifact@v4
         with:
           name: star-pulse-audit
-          path: star-journey-audit.json
+          path: |
+            star-journey-audit.json
+            tile-daily-audit.json

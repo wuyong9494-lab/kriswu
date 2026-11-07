@@ -8,6 +8,7 @@ let package = Package(
     platforms: [.iOS(.v16), .macOS(.v13)],
     products: [
         .library(name: "ShiftCore", targets: ["ShiftCore"]),
+        .executable(name: "TileDailyAudit", targets: ["TileDailyAudit"]),
         .executable(name: "StarRailAudit", targets: ["StarRailAudit"]),
         .executable(name: "StarExpeditionAudit", targets: ["StarExpeditionAudit"]),
         .executable(name: "StarJourneyAudit", targets: ["StarJourneyAudit"]),
@@ -18,6 +19,7 @@ let package = Package(
         .executableTarget(name: "StarRailAudit", dependencies: ["ShiftCore"], path: "Tools/StarRailAudit"),
         .executableTarget(name: "StarExpeditionAudit", dependencies: ["ShiftCore"], path: "Tools/StarExpeditionAudit"),
         .executableTarget(name: "StarJourneyAudit", dependencies: ["ShiftCore"], path: "Tools/StarJourneyAudit"),
+        .executableTarget(name: "TileDailyAudit", dependencies: ["ShiftCore"], path: "Tools/TileDailyAudit"),
         .testTarget(name: "ShiftCoreTests", dependencies: ["ShiftCore"]),
     ]
 )
