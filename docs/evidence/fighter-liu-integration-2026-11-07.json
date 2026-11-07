@@ -1,0 +1,50 @@
+{
+  "code_sha": "327aba3795b4432a75382b1586a7b8381f526208",
+  "branch": "codex/fighter-lab-20261107",
+  "run_id": 42376880443,
+  "run_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/42376880443",
+  "core": {
+    "tests": 779,
+    "skipped": 16,
+    "failures": 0
+  },
+  "native": {
+    "lifecycle": 6,
+    "material": 12,
+    "ui": 2,
+    "failures": 0,
+    "actual_character_executed": false
+  },
+  "device": {
+    "unsigned_release_build": "passed",
+    "concurrency_gate": "passed"
+  },
+  "encrypted_envelope": {
+    "synthetic_test": "passed"
+  },
+  "character_acceptance": {
+    "status": "blocked_on_authorization",
+    "executed": false
+  },
+  "testflight_uploaded": false,
+  "artifacts": [
+    {
+      "id": 13576560753,
+      "name": "fighter-core",
+      "sha256": "sha256:c250611beec6192e36720322407669203a430a8200ba156ad22cdcbb49b8aea8",
+      "size_bytes": 31852
+    },
+    {
+      "id": 13576114111,
+      "name": "fighter-native",
+      "sha256": "sha256:63ab9566f91182f4a2bbdb86781f8f58b7f72086c62d4dde6df5692af73368c0",
+      "size_bytes": 27942756
+    },
+    {
+      "id": 13576093533,
+      "name": "fighter-device",
+      "sha256": "sha256:5a7b8e45f89a220e3dea20d3e2e8248e8c2f3dd8d0b9f3d9bfc725586e5ee1b8",
+      "size_bytes": 25790
+    }
+  ]
+}
