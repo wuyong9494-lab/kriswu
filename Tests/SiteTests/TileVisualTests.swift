@@ -48,7 +48,7 @@ final class TileVisualTests: XCTestCase {
     }
 
     @MainActor
-    func testReplayRendersPressureStatesAtCompactAndLargeTypeSizes() throws {
+    func testReplayRendersPressureStatesAtCompactAndLargeTypeSizes() async throws {
         var game = TileGame(level: .hard, seed: 84135585, ruleSet: .constellation)
         var replay = TileReplay(game: game)
         for _ in 0..<30 {
@@ -59,9 +59,9 @@ final class TileVisualTests: XCTestCase {
         XCTAssertGreaterThan(replay.actionCount, 0)
         for (name, size) in [("replay-compact", CGSize(width: 375, height: 667)),
                              ("replay-pro-max", CGSize(width: 440, height: 956))] {
-            try emit(TileReplayView(replay: replay), name: name, size: size)
+            try await emitHosted(TileReplayView(replay: replay), name: name, size: size)
         }
-        try emit(TileReplayView(replay: replay).environment(\.dynamicTypeSize, .accessibility2),
+        try await emitHosted(TileReplayView(replay: replay).environment(\.dynamicTypeSize, .accessibility2),
                  name: "replay-large-type", size: CGSize(width: 440, height: 956))
     }
 
@@ -70,6 +70,52 @@ final class TileVisualTests: XCTestCase {
         let old = try JSONDecoder().decode(TileRecords.self, from: data)
         XCTAssertEqual(old.best[1], 32.5)
         XCTAssertEqual(old.daily["2026-10-27"]?.total, 36)
+    }
+
+    /// GeometryReader/ScrollView may produce only the background through an
+    /// offscreen ImageRenderer. Mount a real window and reject an empty board.
+    @MainActor
+    private func emitHosted<V: View>(_ view: V, name: String, size: CGSize) async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(origin: .zero, size: size)
+        let host = UIHostingController(rootView: view.environment(\.colorScheme, .dark))
+        host.overrideUserInterfaceStyle = .dark
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 250_000_000)
+        host.view.layoutIfNeeded()
+        XCTAssertEqual(window.bounds.size, size)
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        var drew = false
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            drew = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        XCTAssertTrue(drew)
+        let cg = try XCTUnwrap(image.cgImage)
+        let width = cg.width, height = cg.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        try pixels.withUnsafeMutableBytes { bytes in
+            let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        }
+        var bright = 0
+        for y in height / 3 ..< height * 3 / 4 {
+            for x in width / 10 ..< width * 9 / 10 {
+                let i = (y * width + x) * 4
+                if pixels[i] > 180 && pixels[i + 1] > 180 && pixels[i + 2] > 180 { bright += 1 }
+            }
+        }
+        XCTAssertGreaterThan(bright, 800, "复盘中央区域必须包含实际牌面，不能只截到星空背景")
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "tiles-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
     @MainActor

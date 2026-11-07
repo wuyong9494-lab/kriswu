@@ -363,7 +363,17 @@ extension TileGame {
     public static let dailyDepthStart = DayKey(year: 2026, month: 11, day: 14)
 
     public static func dailyDepthSeed(_ day: DayKey) -> UInt64 {
-        dailyDepthSelection(day).seed
+        // Recomputed and checked against the frozen selector by the daily audit.
+        let audited: [String: UInt64] = [
+            "2026-11-14": 83675238,
+            "2026-11-15": 83570944,
+            "2026-11-16": 84828127,
+            "2026-11-17": 83571814,
+            "2026-11-18": 83565289,
+            "2026-11-19": 83984640,
+            "2026-11-20": 85470081,
+        ]
+        return audited[day.description] ?? dailyDepthSelection(day).seed
     }
 
     public static func dailyDepthSelection(_ day: DayKey) -> DailyDepthSelection {

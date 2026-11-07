@@ -68,8 +68,20 @@ final class TileFlowTests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         let step = app.staticTexts["tiles.replay.step"]
         let initial = step.label
+        let board = app.otherElements["tiles.replay.board"]
+        XCTAssertTrue(board.exists)
+        XCTAssertGreaterThan(board.frame.height, 150)
+        let comparison = app.segmentedControls["tiles.replay.comparison"]
+        XCTAssertTrue(comparison.exists)
+        let afterCount = app.staticTexts["tiles.replay.trayCount"].label
+        comparison.buttons["操作前"].tap()
+        XCTAssertTrue(app.staticTexts["操作前的收集槽"].exists)
+        XCTAssertNotEqual(app.staticTexts["tiles.replay.trayCount"].label, afterCount)
+        comparison.buttons["操作后"].tap()
+        XCTAssertTrue(app.staticTexts["操作后的收集槽"].exists)
+        XCTAssertEqual(app.staticTexts["tiles.replay.trayCount"].label, afterCount)
         let previous = app.buttons["tiles.replay.previous"]
-        for _ in 0..<4 where !previous.isHittable { app.swipeUp() }
+        XCTAssertTrue(previous.isHittable, "复盘步数按钮应固定可见")
         XCTAssertTrue(previous.isEnabled)
         previous.tap()
         XCTAssertNotEqual(step.label, initial)
@@ -77,7 +89,7 @@ final class TileFlowTests: XCTestCase {
         XCTAssertEqual(step.label, initial)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "tiles-replay-interaction"; attachment.lifetime = .keepAlways; add(attachment)
-        for _ in 0..<5 where !close.isHittable { app.swipeDown() }
+        XCTAssertTrue(close.isHittable, "关闭按钮应固定可见")
         close.tap()
         XCTAssertTrue(replay.waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["tiles.resultProgress"].label, result)

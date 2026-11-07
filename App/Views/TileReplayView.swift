@@ -30,31 +30,36 @@ struct TileReplayView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: 14) {
-                    header
-                    facts
-                    Picker("对比这一步", selection: $before) {
-                        Text("操作前").tag(true)
-                        Text("操作后").tag(false)
+        VStack(spacing: 0) {
+            header.padding(.horizontal, 16).padding(.top, 8)
+            GeometryReader { area in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        facts
+                        Picker("对比这一步", selection: $before) {
+                            Text("操作前").tag(true)
+                            Text("操作后").tag(false)
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(step == 0)
+                        .accessibilityIdentifier("tiles.replay.comparison")
+                        board(in: CGSize(width: min(area.size.width - 32, 528),
+                                         height: max(180, min(430, area.size.height - 230))))
+                        trays
+                        milestones
+                        Text("金框标记所取的牌，绿框标记这一步新露出的牌。槽位紧张不代表这一步一定走错。")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("这里只回看操作。关闭后回到原结算，首局结果不变。")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .pickerStyle(.segmented)
-                    .disabled(step == 0)
-                    .accessibilityIdentifier("tiles.replay.comparison")
-                    board(in: CGSize(width: min(proxy.size.width - 32, 528), height: max(220, min(430, proxy.size.height * 0.44))))
-                    trays
-                    controls
-                    Text("金框标记所取的牌，绿框标记这一步新露出的牌。槽位紧张不代表这一步一定走错。")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("这里只回看操作。关闭后回到原结算，首局结果不变。")
-                        .font(.caption).foregroundStyle(.secondary)
+                    .padding(16)
                 }
-                .padding(16)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
             }
+            controls.padding(.horizontal, 16).padding(.vertical, 8)
+                .background(TileTheme.panel)
         }
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
         .background(TileStarfield().ignoresSafeArea())
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
@@ -117,6 +122,7 @@ struct TileReplayView: View {
         }
         .frame(width: unit * CGFloat(TileGame.width), height: unit * CGFloat(game.height))
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tiles.replay.board")
     }
 
@@ -132,6 +138,7 @@ struct TileReplayView: View {
                 Text(before ? "操作前的收集槽" : "操作后的收集槽")
                 Spacer()
                 Text("\(boardGame.waiting)/7").monospacedDigit()
+                    .accessibilityIdentifier("tiles.replay.trayCount")
             }
             .font(.caption).foregroundStyle(.secondary)
             GeometryReader { area in
@@ -175,19 +182,21 @@ struct TileReplayView: View {
                 .disabled(step == replay.actionCount).accessibilityIdentifier("tiles.replay.next")
             }
             .buttonStyle(.bordered).frame(minHeight: 44)
-            if !replay.turningPoints.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(replay.turningPoints, id: \.self) { index in
-                            let state = replay.frames[index].game
-                            Button("第 \(index) 步 · \(state.waiting)/7") { step = index }
-                                .buttonStyle(.bordered)
-                                .tint(step == index ? TileTheme.gold : TileTheme.mint)
-                        }
+        }
+    }
+    @ViewBuilder private var milestones: some View {
+        if !replay.turningPoints.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(replay.turningPoints, id: \.self) { index in
+                        let state = replay.frames[index].game
+                        Button("第 \(index) 步 · \(state.waiting)/7") { step = index }
+                            .buttonStyle(.bordered)
+                            .tint(step == index ? TileTheme.gold : TileTheme.mint)
                     }
                 }
-                .accessibilityLabel("槽位紧张或使用道具的步骤")
             }
+            .accessibilityLabel("槽位紧张或使用道具的步骤")
         }
     }
 }

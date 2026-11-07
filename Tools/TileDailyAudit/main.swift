@@ -67,6 +67,7 @@ for offset in 0..<days {
         return alternative.status == .playing && forcedLoss(alternative, picks: 2)
     }
     if !witnessesValid || (depthEdition && (!separated || phases.count != forks.count)) { invalid = true }
+    if depthEdition && (narrow.won || narrow.budgetReached) { invalid = true }
     if wide.won && !replayValid { invalid = true }
     if qualified && (!replayValid || narrow.won || narrow.budgetReached || forks.count < (depthEdition ? 2 : 1)) { invalid = true }
     let row: [String: Any] = [

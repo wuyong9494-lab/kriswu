@@ -1,0 +1,228 @@
+{
+  "days" : [
+    {
+      "baselineSeed" : 83989425,
+      "baselineWideWon" : false,
+      "candidatesChecked" : 15,
+      "criticalForks" : 2,
+      "day" : "2026-11-14",
+      "distinctPhases" : 2,
+      "elapsedSeconds" : 7.536303758621216,
+      "expanded" : 120999,
+      "forks" : [
+        {
+          "losingTile" : 17,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 9,
+          "winningTile" : 79
+        },
+        {
+          "losingTile" : 2,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 90,
+          "winningTile" : 30
+        }
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : true,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : true,
+      "seed" : 83675238,
+      "selectedForks" : 2,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    },
+    {
+      "baselineSeed" : 84408776,
+      "baselineWideWon" : true,
+      "candidatesChecked" : 15,
+      "criticalForks" : 2,
+      "day" : "2026-11-15",
+      "distinctPhases" : 2,
+      "elapsedSeconds" : 22.158312797546387,
+      "expanded" : 615087,
+      "forks" : [
+        {
+          "losingTile" : 41,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 48,
+          "winningTile" : 116
+        },
+        {
+          "losingTile" : 30,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 101,
+          "winningTile" : 54
+        }
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : true,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : true,
+      "seed" : 83570944,
+      "selectedForks" : 2,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    },
+    {
+      "baselineSeed" : 83676108,
+      "baselineWideWon" : true,
+      "candidatesChecked" : 15,
+      "criticalForks" : 2,
+      "day" : "2026-11-16",
+      "distinctPhases" : 2,
+      "elapsedSeconds" : 10.245755791664124,
+      "expanded" : 212428,
+      "forks" : [
+        {
+          "losingTile" : 25,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 42,
+          "winningTile" : 28
+        },
+        {
+          "losingTile" : 89,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 77,
+          "winningTile" : 86
+        }
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : true,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : true,
+      "seed" : 84828127,
+      "selectedForks" : 2,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    },
+    {
+      "baselineSeed" : 84304917,
+      "baselineWideWon" : false,
+      "candidatesChecked" : 15,
+      "criticalForks" : 0,
+      "day" : "2026-11-17",
+      "distinctPhases" : 0,
+      "elapsedSeconds" : 27.4580956697464,
+      "expanded" : 662887,
+      "forks" : [
+
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : false,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : false,
+      "seed" : 83571814,
+      "selectedForks" : 0,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    },
+    {
+      "baselineSeed" : 83460560,
+      "baselineWideWon" : true,
+      "candidatesChecked" : 16,
+      "criticalForks" : 0,
+      "day" : "2026-11-18",
+      "distinctPhases" : 0,
+      "elapsedSeconds" : 28.66888928413391,
+      "expanded" : 669951,
+      "forks" : [
+
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : false,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : false,
+      "seed" : 83565289,
+      "selectedForks" : 0,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    },
+    {
+      "baselineSeed" : 84403556,
+      "baselineWideWon" : false,
+      "candidatesChecked" : 15,
+      "criticalForks" : 1,
+      "day" : "2026-11-19",
+      "distinctPhases" : 1,
+      "elapsedSeconds" : 26.66977846622467,
+      "expanded" : 669289,
+      "forks" : [
+        {
+          "losingTile" : 72,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 86,
+          "winningTile" : 43
+        }
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : false,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : false,
+      "seed" : 83984640,
+      "selectedForks" : 1,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    },
+    {
+      "baselineSeed" : 84946436,
+      "baselineWideWon" : true,
+      "candidatesChecked" : 15,
+      "criticalForks" : 2,
+      "day" : "2026-11-20",
+      "distinctPhases" : 2,
+      "elapsedSeconds" : 19.0679452419281,
+      "expanded" : 432893,
+      "forks" : [
+        {
+          "losingTile" : 40,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 75,
+          "winningTile" : 75
+        },
+        {
+          "losingTile" : 121,
+          "lossWithinPicks" : 3,
+          "pickNumber" : 113,
+          "winningTile" : 93
+        }
+      ],
+      "forkWitnessesReplayed" : true,
+      "narrowBudgetReached" : false,
+      "narrowWon" : false,
+      "phaseDepthVerified" : true,
+      "phaseSpacingVerified" : true,
+      "planningGapVerified" : true,
+      "seed" : 85470081,
+      "selectedForks" : 2,
+      "wideBudgetReached" : false,
+      "wideWon" : true,
+      "winningPathReplayed" : true
+    }
+  ],
+  "edition" : "master-v3",
+  "humanWinRateMeasured" : false,
+  "phaseSeparationRequired" : true,
+  "qualification" : "narrow search fails without budget exhaustion; wider search has a replayed winning path and proven delayed-loss alternatives (edition 3 requires two separate thirds, at least a quarter of the route apart)",
+  "sampleDays" : 7,
+  "targetFirstAttemptNoToolsWinRate" : 0.001,
+  "valid" : true
+}
