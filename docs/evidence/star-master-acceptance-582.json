@@ -1,0 +1,364 @@
+{
+  "source_sha": "88c205049acbad9e1d20b79e7b5e41c8658103db",
+  "build_number": "582",
+  "reviewed_at": "2026-11-07",
+  "core_tests": {
+    "linux": {
+      "total": 755,
+      "skipped": 16,
+      "failed": 0
+    },
+    "macOS": {
+      "total": 755,
+      "skipped": 15,
+      "failed": 0
+    },
+    "concurrency_warnings": 0
+  },
+  "checks": {
+    "source": {
+      "run": {
+        "id": 42345846863,
+        "head_sha": "88c205049acbad9e1d20b79e7b5e41c8658103db",
+        "head_branch": "codex/star-gameplay-master-20261107",
+        "event": "push",
+        "path": ".github/workflows/ios.yml",
+        "run_number": 582,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/42345846863"
+      },
+      "jobs": [
+        {
+          "id": 128323291054,
+          "name": "core-tests-linux",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Initialize containers",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "核心逻辑单元测试（Linux）",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Stop containers",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 128323291271,
+          "name": "build",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "选用最新的 Xcode（26 或更新）",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "核心逻辑单元测试",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "生成 Xcode 工程",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "编译 App（未签名）",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "检查 App 名称（侧载工具注册 App ID 时只接受英文）",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "写入 entitlements（ad-hoc 签名）",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "打包未签名 IPA",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "发布到 Releases（最新版）",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 128323292176,
+          "name": "site-tests",
+          "status": "completed",
+          "conclusion": "skipped",
+          "steps": []
+        },
+        {
+          "id": 128323292233,
+          "name": "arena-look",
+          "status": "completed",
+          "conclusion": "skipped",
+          "steps": []
+        },
+        {
+          "id": 128323292488,
+          "name": "screenshots",
+          "status": "completed",
+          "conclusion": "skipped",
+          "steps": []
+        },
+        {
+          "id": 128325794339,
+          "name": "whats-new",
+          "status": "completed",
+          "conclusion": "skipped",
+          "steps": []
+        },
+        {
+          "id": 128325794426,
+          "name": "testflight",
+          "status": "completed",
+          "conclusion": "skipped",
+          "steps": []
+        }
+      ]
+    },
+    "rules": {
+      "run": {
+        "id": 42345846960,
+        "head_sha": "88c205049acbad9e1d20b79e7b5e41c8658103db",
+        "head_branch": "codex/star-gameplay-master-20261107",
+        "event": "push",
+        "path": ".github/workflows/star-gameplay-rules.yml",
+        "run_number": 13,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/42345846960"
+      },
+      "jobs": [
+        {
+          "id": 128323291214,
+          "name": "rules",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Initialize containers",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Rules and legacy save regression",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Every ability, route and starting energy",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Seven daily boards with bounded planning search",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Seven phase-depth daily boards with replayed fork witnesses",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Stop containers",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    },
+    "native": {
+      "run": {
+        "id": 42345846928,
+        "head_sha": "88c205049acbad9e1d20b79e7b5e41c8658103db",
+        "head_branch": "codex/star-gameplay-master-20261107",
+        "event": "push",
+        "path": ".github/workflows/star-master-native.yml",
+        "run_number": 3,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/42345846928"
+      },
+      "jobs": [
+        {
+          "id": 128323291021,
+          "name": "replay",
+          "status": "completed",
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Select Xcode and generate existing app",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prepare iPhone 17 Pro Max",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Render actual SwiftUI replay",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Pick to result, scrub replay, return to unchanged result",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Export screenshots",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "native_artifact": {
+    "id": 13564096335,
+    "sha256": "1a5ee69dba4dc8e872653c10f82eb2a62cb608a0e371c3f1df8c76e9cf98ed48"
+  },
+  "manual_review": {
+    "screens": [
+      "375x667",
+      "440x956",
+      "440x956-accessibility2",
+      "actual-interaction-1320x2868"
+    ],
+    "board_visible": true,
+    "fixed_navigation_visible": true,
+    "small_screen_and_large_type_content_scrolls": true
+  },
+  "daily": {
+    "cutover": "2026-11-14",
+    "days": 7,
+    "winning_paths_replayed": 7,
+    "two_phase_forks_proved": 4,
+    "single_phase": 1,
+    "no_short_horizon_proof": 2
+  },
+  "physical_device_validation": "pending",
+  "human_win_rate_measured": false,
+  "target_first_attempt_no_tools_win_rate": 0.001,
+  "private_arena_rendering": "unchanged-prior-deferral"
+}
