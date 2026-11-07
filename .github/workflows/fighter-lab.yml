@@ -1,7 +1,7 @@
 name: Fighter laboratory (unsigned only)
 on:
   push:
-    branches: ['codex/fighter-lab-*']
+    branches: ['codex/fighter-lab-*', 'codex/plan-fighter-recovery-20261108']
     paths:
       - 'App/**'
       - 'Sources/**'
