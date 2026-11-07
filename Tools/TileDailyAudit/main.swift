@@ -76,6 +76,7 @@ for offset in 0..<days {
                               "losingTile": $0.losingTile, "lossWithinPicks": $0.lossWithinPicks] },
         "forkWitnessesReplayed": witnessesValid, "distinctPhases": phases.count,
         "phaseSpacingVerified": !depthEdition || separated,
+        "selectedForks": depth?.forks.count ?? forks.count,
         "candidatesChecked": checked, "expanded": expanded,
         "narrowWon": narrow.won, "narrowBudgetReached": narrow.budgetReached,
         "wideWon": wide.won, "wideBudgetReached": wide.budgetReached,

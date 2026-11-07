@@ -49,6 +49,19 @@ final class TileDepthTests: XCTestCase {
         XCTAssertTrue(game.planningPhaseForks(along: path, nodeLimit: 0).isEmpty)
     }
 
+    func testDepthSelectionMatchesPublishedSeedAndBoundedSearch() {
+        let day = TileGame.dailyDepthStart
+        let selection = TileGame.dailyDepthSelection(day)
+        XCTAssertEqual(TileGame.dailyPlanningSeed(day), selection.seed)
+        XCTAssertLessThanOrEqual(selection.candidatesChecked, 16)
+        XCTAssertLessThanOrEqual(selection.expanded, 1056000)
+        if selection.phaseDepthVerified { XCTAssertGreaterThanOrEqual(selection.forks.count, 2) }
+        else { XCTAssertLessThan(selection.forks.count, 2) }
+        var game = TileGame(level: .hard, seed: selection.seed, ruleSet: .constellation)
+        for id in game.solution { XCTAssertTrue(game.pick(id)); game.settle() }
+        XCTAssertEqual(game.status, .won)
+    }
+
     func testAlreadyPublishedDaysKeepTheirBoardAndRecordNamespace() {
         let days: [(Int, UInt64)] = [(7, 84135585), (8, 84550586), (9, 83817048), (10, 84616059),
                                     (11, 83778662), (12, 84198013), (13, 83988990)]

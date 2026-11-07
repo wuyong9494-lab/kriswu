@@ -382,7 +382,11 @@ extension TileGame {
         let shortlist = candidates.filter { !$0.narrow.won && !$0.narrow.budgetReached && !$0.narrow.cancelled }
             .sorted { a, b in
                 a.narrow.cleared == b.narrow.cleared ? a.seed < b.seed : a.narrow.cleared > b.narrow.cleared
-            }.prefix(5)
+            }.prefix(8)
+        // If the strongest requirement cannot be proved, prefer a replayed
+        // winning route with one tempting fork, then another narrow-resistant
+        // solvable deal. Do not revert to an old deal a narrow player can clear.
+        var partial: (seed: UInt64, forks: [PlanningFork])?
         for candidate in shortlist {
             if Task.isCancelled { break }
             let game = TileGame(level: .hard, seed: candidate.seed, ruleSet: .constellation)
@@ -390,12 +394,15 @@ extension TileGame {
             expanded += wide.expanded
             guard wide.won else { continue }
             let forks = game.planningPhaseForks(along: wide.solution)
+            if partial == nil || forks.count > partial!.forks.count {
+                partial = (candidate.seed, forks)
+            }
             if forks.count >= 2 {
                 return .init(seed: candidate.seed, phaseDepthVerified: true, forks: forks,
                              candidatesChecked: candidates.count, expanded: expanded)
             }
         }
-        return .init(seed: fallback, phaseDepthVerified: false, forks: [],
+        return .init(seed: partial?.seed ?? shortlist.first?.seed ?? fallback, phaseDepthVerified: false, forks: partial?.forks ?? [],
                      candidatesChecked: candidates.count, expanded: expanded)
     }
 }
