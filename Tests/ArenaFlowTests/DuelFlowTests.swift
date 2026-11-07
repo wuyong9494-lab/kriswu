@@ -19,6 +19,30 @@ final class DuelFlowTests: XCTestCase {
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: app)], timeout: 8), .completed)
     }
+    private func approachGrappleRange(_ app: XCUIApplication) {
+        func position(_ index: Int) -> Int? {
+            guard let value = app.staticTexts["duel.stats.\(index)"].value as? String,
+                  let range = value.range(of: "位置 ") else { return nil }
+            let field = value[range.upperBound...].split(separator: "，").first ?? ""
+            return Int(field.filter { $0.isNumber })
+        }
+        // A wall-clock press does not guarantee 42 simulation ticks on a busy
+        // simulator. Observe position after real touch input instead of firing
+        // the ultimate from outside its unchanged 1050-unit grab range.
+        for _ in 0..<12 {
+            guard let player = position(0), let opponent = position(1) else {
+                XCTFail("Fighter positions must be available before the grab"); return
+            }
+            if abs(opponent - player) <= 1000 { return }
+            app.buttons[opponent > player ? "duel.control.right" : "duel.control.left"]
+                .press(forDuration: 0.25)
+        }
+        guard let player = position(0), let opponent = position(1) else {
+            XCTFail("Fighter positions disappeared during approach"); return
+        }
+        XCTAssertLessThanOrEqual(abs(opponent - player), 1000, "Real directional input must reach grab range")
+    }
+
     func testLiuUltimateUsesRealTouchInputPausesAndDealsTwoImpacts() {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "fighter"]
@@ -31,7 +55,7 @@ final class DuelFlowTests: XCTestCase {
         let ultimate = app.buttons["duel.control.ultimate"]
         XCTAssertTrue(ultimate.isHittable)
         XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
-        app.buttons["duel.control.right"].press(forDuration: 0.7)
+        approachGrappleRange(app)
         ultimate.tap()
         let status = app.staticTexts["duel.grapple"]
         let holding = NSPredicate { _, _ in status.exists && status.label.contains("锁臂压制") }
