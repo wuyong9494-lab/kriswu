@@ -64,7 +64,6 @@ struct TileReplayView: View {
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onChange(of: step) { _ in before = false }
-        .accessibilityIdentifier("tiles.replay")
     }
 
     private var header: some View {
