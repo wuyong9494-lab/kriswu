@@ -83,7 +83,7 @@ final class DuelSession: ObservableObject {
             }
     }
     var tutorial: String {
-        ["按住左侧方向，靠近对手", "方向与普攻可同时按：命中后再点普攻", "按跳跃越过攻击，再按住防御", "试试两种技能，注意能量消耗", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
+        ["按住左侧方向，靠近对手", "方向与普攻可同时按：命中后再点普攻", "先点击跳跃，落地后再按住防御", "分别使出两种技能，注意能量消耗", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
     }
     func input(_ name: String, down: Bool) {
         guard !paused else { return }
@@ -99,7 +99,7 @@ final class DuelSession: ObservableObject {
             }
         } else { held.remove(name) }
     }
-    func clearInput() { held.removeAll(); taps = []; inputReset?() }
+    func clearInput() { held.removeAll(); taps = []; game.cancelBufferedInputs(); inputReset?() }
     func pause() { clearInput(); paused = true; renderPause?(true) }
     func resume() { clearInput(); paused = false; renderPause?(false) }
     func restart() {

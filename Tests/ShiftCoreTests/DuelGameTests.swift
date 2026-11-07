@@ -26,6 +26,33 @@ final class DuelGameTests: XCTestCase {
         for _ in 0..<30 { trade.step(.neutral, opponent: .neutral) }
         XCTAssertEqual(trade.landedHits, [1, 1])
     }
+    func testGaleProjectileHitsAtRangeOnceAndCanBeJumpedOver() {
+        var ranged = DuelGame(hero: .gale)
+        ranged.step(.init(taps: .skill1), opponent: .neutral)
+        for _ in 0..<100 { ranged.step(.neutral, opponent: .neutral) }
+        XCTAssertEqual(ranged.damageDealt[0], 135)
+        XCTAssertEqual(ranged.landedHits[0], 1)
+        XCTAssertTrue(ranged.projectiles.isEmpty)
+        var dodge = DuelGame(hero: .gale)
+        dodge.step(.init(taps: .skill1), opponent: .neutral)
+        for tick in 0..<100 {
+            dodge.step(.neutral, opponent: .init(taps: tick == 15 ? .jump : []))
+        }
+        XCTAssertEqual(dodge.damageDealt[0], 0)
+        XCTAssertTrue(dodge.projectiles.isEmpty)
+    }
+    func testConfirmedLightAttacksChainThroughThreeDistinctMoves() {
+        var game = closeRange(), seen = Set<DuelGame.Move>()
+        game.step(.init(taps: .light), opponent: .neutral)
+        seen.insert(.jab)
+        for tick in 0..<110 {
+            game.step(.init(taps: tick < 60 && tick % 3 == 0 ? .light : []), opponent: .neutral)
+            if let move = game.fighters[0].attack?.move { seen.insert(move) }
+        }
+        XCTAssertEqual(seen, [.jab, .cross, .finisher])
+        XCTAssertEqual(game.damageDealt[0], 75 + 90 + 125)
+        XCTAssertEqual(game.landedHits[0], 3)
+    }
     func testGuardPreventsHealthLossAndConsumesGuardMeter() {
         var game = closeRange()
         game.step(.init(taps: .heavy), opponent: .init(guardHeld: true))
@@ -78,6 +105,19 @@ final class DuelGameTests: XCTestCase {
             if game.fighters[1].knockdown == 0 && game.fighters[1].invulnerable > 0 { return }
         }
         XCTFail("Expected protected wakeup")
+    }
+    func testLandingOnAnOpponentAtEitherWallKeepsBothBodiesInside() {
+        for direction in [-1, 1] {
+            var game = DuelGame(hero: .gale, mode: .practice)
+            for tick in 0..<450 {
+                game.step(.init(move: direction, taps: tick % 55 == 0 ? .jump : []),
+                          opponent: .init(move: direction))
+                for f in game.fighters { XCTAssertTrue((DuelGame.leftWall...DuelGame.rightWall).contains(f.x)) }
+                if abs(game.fighters[0].y - game.fighters[1].y) < 1250 {
+                    XCTAssertGreaterThanOrEqual(abs(game.fighters[0].x - game.fighters[1].x), DuelGame.bodyWidth)
+                }
+            }
+        }
     }
     func testBestOfThreeReachesResultThroughActualHitsAndCanRestart() {
         for hero in DuelGame.Hero.allCases {

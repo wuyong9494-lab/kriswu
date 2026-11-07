@@ -53,6 +53,26 @@ final class DuelLifecycleTests: XCTestCase {
         XCTAssertEqual(state.tutorialStep, 4)
     }
 
+    func testPauseDiscardsTheComboTapBufferedDuringHitStop() {
+        let state = session()
+        state.input("right", down: true)
+        for _ in 0..<40 { state.advance() }
+        state.input("right", down: false)
+        state.input("light", down: true); state.advance(); state.input("light", down: false)
+        for _ in 0..<20 {
+            state.advance()
+            if state.game.hitStop > 0 { break }
+        }
+        XCTAssertGreaterThan(state.game.hitStop, 0)
+        XCTAssertEqual(state.game.landedHits[0], 1)
+        state.input("light", down: true); state.advance()
+        state.pause(); state.resume()
+        for _ in 0..<120 { state.advance() }
+        XCTAssertEqual(state.game.landedHits[0], 1, "A pre-pause combo command must not fire after resuming")
+        XCTAssertNil(state.game.fighters[0].attack)
+        XCTAssertTrue(state.held.isEmpty)
+    }
+
     func testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first { $0.isKeyWindow }

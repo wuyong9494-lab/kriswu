@@ -118,6 +118,13 @@ public struct DuelGame: Equatable, Sendable {
                     Fighter(hero: hero == .ember ? .gale : .ember, x: 6500, facing: -1)]
     }
     public var round: Int { wins.reduce(0, +) + 1 }
+    /// Pause/interruption cancels future commands, without undoing a move that
+    /// already started. Hit-stop buffers and queued combo links are input too.
+    public mutating func cancelBufferedInputs() {
+        buffered = [[], []]
+        for i in fighters.indices { fighters[i].attack?.comboQueued = false }
+        botHeld = .neutral
+    }
     public static func data(_ move: Move, hero: Hero) -> MoveData {
         let long = hero == .gale ? 240 : 0
         switch move {
@@ -257,8 +264,11 @@ public struct DuelGame: Equatable, Sendable {
         fighters[1].x = min(Self.rightWall, max(Self.leftWall, fighters[1].x + sign * (overlap + 1) / 2))
         let residual = Self.bodyWidth - abs(fighters[1].x - fighters[0].x)
         if residual > 0 {
-            if fighters[0].x == Self.leftWall || fighters[0].x == Self.rightWall { fighters[1].x = fighters[0].x + sign * Self.bodyWidth }
-            else { fighters[0].x = fighters[1].x - sign * Self.bodyWidth }
+            // Landing can put both centers on the same wall. Resolve the pair
+            // inside the arena instead of pushing the second body outside it.
+            let left = sign > 0 ? 0 : 1, right = 1 - left
+            fighters[left].x = min(fighters[left].x, Self.rightWall - Self.bodyWidth)
+            fighters[right].x = fighters[left].x + Self.bodyWidth
         }
     }
     private func canHit(_ attacker: Int, reach: Int) -> Bool {
