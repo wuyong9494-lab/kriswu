@@ -99,6 +99,7 @@ final class DuelSession: ObservableObject {
         case .release: return "震地击退"
         }
     }
+    var ultimateReady: Bool { game.fighters[0].energy == 100 && game.grapple == nil }
     func input(_ name: String, down: Bool) {
         guard !paused else { return }
         if down {
@@ -178,7 +179,7 @@ struct DuelMatchView: View {
     var body: some View {
         ZStack {
             DuelWorld(session: session).ignoresSafeArea()
-            DuelControls(session: session).ignoresSafeArea(edges: .bottom)
+            DuelControls(session: session, ultimateReady: session.ultimateReady).ignoresSafeArea(edges: .bottom)
             VStack {
                 hud
                 if session.setup.mode == .tutorial {
@@ -266,8 +267,9 @@ struct DuelMatchView: View {
 
 struct DuelControls: UIViewRepresentable {
     let session: DuelSession
+    let ultimateReady: Bool
     func makeUIView(context: Context) -> DuelInputView { DuelInputView(session: session) }
-    func updateUIView(_ uiView: DuelInputView, context: Context) { uiView.updateReadiness() }
+    func updateUIView(_ uiView: DuelInputView, context: Context) { uiView.updateReadiness(ready: ultimateReady) }
     static func dismantleUIView(_ uiView: DuelInputView, coordinator: ()) { uiView.cancelAll() }
 }
 
@@ -293,7 +295,7 @@ final class DuelInputView: UIView {
             button.isAccessibilityElement = true; addSubview(button); buttons.append((name, button))
         }
         session.inputReset = { [weak self] in self?.cancelAll(notify: false) }
-        updateReadiness()
+        updateReadiness(ready: session.ultimateReady)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layoutSubviews() {
@@ -308,9 +310,8 @@ final class DuelInputView: UIView {
             CGPoint(x: right - 2 * (side + 10), y: floor - side - 10)]
         for (index, pair) in buttons.enumerated() { pair.1.frame = CGRect(origin: points[index], size: CGSize(width: side, height: side)) }
     }
-    func updateReadiness() {
-        guard let session, let button = buttons.first(where: { $0.0 == "ultimate" })?.1 else { return }
-        let ready = session.game.fighters[0].energy == 100 && session.game.grapple == nil
+    func updateReadiness(ready: Bool) {
+        guard let button = buttons.first(where: { $0.0 == "ultimate" })?.1 else { return }
         button.backgroundColor = ready ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor(white: 0.16, alpha: 0.78)
         button.accessibilityLabel = "擒拿震地大招"
         button.accessibilityValue = ready ? "可施放，消耗 100 能量" : "需要 100 能量"

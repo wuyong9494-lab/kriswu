@@ -131,7 +131,12 @@ final class DuelLifecycleTests: XCTestCase {
                 let hip = try XCTUnwrap(actor.childNode(withName: "hip", recursively: false))
                 XCTAssertEqual(head.worldPosition.y, defender.position.y, accuracy: 0.02)
                 XCTAssertLessThan(head.worldPosition.x, defender.position.x - 1.5, "The body must lie along the arena, not into the depth axis")
-                XCTAssertGreaterThan(abs(hip.worldPosition.x - head.worldPosition.x), 0.25)
+                XCTAssertGreaterThan(abs(hip.worldPosition.x - head.worldPosition.x), 0.45, "The opponent's head silhouette must remain clear of the attacker's torso")
+                let grip = try XCTUnwrap(actor.childNode(withName: "duel.hand.right", recursively: true))
+                let held = try XCTUnwrap(defender.childNode(withName: "duel.hand.right", recursively: true))
+                let a = grip.worldPosition, b = held.worldPosition
+                let distanceSquared = (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z)
+                XCTAssertLessThan(distanceSquared, 0.25 * 0.25, "The wrist hold must stay connected when separating the silhouettes")
                 XCTAssertLessThan(actor.position.x, defender.position.x - 1.5)
             }
             let renderer = SCNRenderer(device: nil, options: nil)

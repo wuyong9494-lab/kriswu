@@ -254,6 +254,7 @@ private final class DuelActor {
             let forearm = Self.shape(SCNCapsule(capRadius: 0.09, height: 0.24), hero == .liu ? color : dark)
             forearm.position.y = -0.10; elbow.addChildNode(forearm)
             let fist = Self.shape(SCNBox(width: hero == .ember ? 0.29 : 0.21, height: 0.22, length: 0.25, chamferRadius: 0.08), hero == .liu ? skin : color)
+            fist.name = x < 0 ? "duel.hand.left" : "duel.hand.right"
             fist.position = SCNVector3(0, -0.24, 0.04); elbow.addChildNode(fist)
         }
         for (joint, knee, x) in [(leftLeg, leftKnee, Float(-0.17)), (rightLeg, rightKnee, Float(0.17))] {
@@ -316,7 +317,7 @@ private final class DuelActor {
                 // Stable side-on wrist/shoulder hold with a clear gap between
                 // the attacker and the prone opponent's head.
                 let crouch = eased * (1 - release)
-                root.position.x += direction * 0.15 * crouch
+                root.position.x -= direction * 0.05 * crouch
                 root.position.y = -0.38 * crouch; root.position.z = 0.55 * eased
                 orient(yaw: yaw, worldRoll: -direction * 0.20 * crouch)
                 leftLeg.eulerAngles.x = -0.90 * crouch; rightLeg.eulerAngles.x = -0.82 * crouch
@@ -329,7 +330,7 @@ private final class DuelActor {
                 root.position.y += max(0, -0.05 - lowestSole)
                 let gripArm = direction > 0 ? rightArm : leftArm, gripElbow = direction > 0 ? rightElbow : leftElbow
                 let supportArm = direction > 0 ? leftArm : rightArm, supportElbow = direction > 0 ? leftElbow : rightElbow
-                supportArm.eulerAngles.x = -0.85 + 0.40 * crouch; gripArm.eulerAngles.x = -0.80 + 0.60 * crouch
+                supportArm.eulerAngles.x = -0.85 + 0.40 * crouch; gripArm.eulerAngles.x = -0.80 + 0.30 * crouch
                 supportElbow.eulerAngles.x = -0.35; gripElbow.eulerAngles.x = -0.20
             } else {
                 root.position.x += direction * (1.35 * eased + 0.30 * release)

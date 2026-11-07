@@ -36,6 +36,7 @@ final class DuelFlowTests: XCTestCase {
         let status = app.staticTexts["duel.grapple"]
         let holding = NSPredicate { _, _ in status.exists && status.label.contains("锁臂压制") }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: holding, object: nil)], timeout: 4), .completed)
+        XCTAssertTrue((ultimate.value as? String ?? "").contains("需要 100 能量"), "Spending energy must update the live button state")
         capture("fighter-liu-hold-controls")
         pause.tap()
         XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 3))
@@ -45,6 +46,7 @@ final class DuelFlowTests: XCTestCase {
         let finished = NSPredicate { _, _ in app.staticTexts["duel.hits"].label.contains("伤害 280") }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: finished, object: nil)], timeout: 6), .completed)
         XCTAssertTrue(app.staticTexts["duel.hits"].label.contains("命中 2 次"))
+        XCTAssertTrue((ultimate.value as? String ?? "").contains("需要 100 能量"))
         capture("fighter-liu-release-controls")
         pause.tap(); app.buttons["duel.restart"].tap()
         XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
