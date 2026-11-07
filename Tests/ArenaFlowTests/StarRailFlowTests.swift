@@ -105,6 +105,24 @@ final class StarRailFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["移层 1/1"].waitForExistence(timeout: 5))
     }
 
+    func testPlanningChainCountsMovesAndRestoresOnUndo() {
+        let app = openFirstStage()
+        for id in [0, 1, 2] { tap("rails.card.\(id)", in: app) }
+        XCTAssertEqual(app.staticTexts["rails.chain"].label, "1 连消 · 余 4 步")
+        XCTAssertEqual(app.staticTexts["rails.score"].label, "本局 100 分")
+        tap("rails.preview.0", in: app)
+        XCTAssertEqual(app.staticTexts["rails.chain"].label, "1 连消 · 余 4 步")
+        tap("rails.move", in: app)
+        XCTAssertEqual(app.staticTexts["rails.chain"].label, "1 连消 · 余 3 步")
+        tap("rails.undo", in: app)
+        XCTAssertEqual(app.staticTexts["rails.chain"].label, "1 连消 · 余 4 步")
+        tap("rails.preview.0", in: app); tap("rails.move", in: app)
+        for id in [9, 10, 11] { tap("rails.card.\(id)", in: app) }
+        XCTAssertEqual(app.staticTexts["rails.chain"].label, "2 连消 · 余 4 步")
+        XCTAssertEqual(app.staticTexts["rails.score"].label, "本局 300 分")
+        attachScreen("planning-chain-two")
+    }
+
     private func openFirstStage() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "tiles", "-rails.testDomain", UUID().uuidString]

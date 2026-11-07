@@ -15,10 +15,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rules:
+    runs-on: ubuntu-latest
+    container: swift:6.0.3
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Core rules, chain planning and save recovery
+        run: swift test --jobs 2 --filter 'StarRail|StarJourney|TileGame'
   native:
-    # The older arm64 pool could not acquire a host; Intel simulator startup
-    # also stalled compilation. Use the current standard Apple Silicon image.
-    runs-on: macos-26
+    # The previous ARM attempt ended before any runner steps executed.
+    # Keep bounded simulator readiness checks on the standard Intel pool.
+    runs-on: macos-26-intel
     timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1

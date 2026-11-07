@@ -194,6 +194,19 @@ struct StarRailBoardView: View {
             StarRailSound.shared.configure(active: false, enabled: sounds)
         }
     }
+    private var chainMeter: some View {
+        let chain = game.chain
+        return HStack(spacing: 6) {
+            Image(systemName: "sparkles").foregroundStyle(TileTheme.gold)
+            Text(chain.current > 0 ? "\(chain.current) 连消 · 余 \(chain.stepsLeft) 步" : "三消后4步内续连")
+                .accessibilityIdentifier("rails.chain")
+            Spacer(minLength: 4)
+            Text("本局 \(chain.score) 分").monospacedDigit()
+                .accessibilityIdentifier("rails.score")
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(chain.current > 0 ? TileTheme.gold : .white.opacity(0.65))
+    }
     private var objective: some View {
         VStack(spacing: 5) {
             HStack(spacing: 8) {
@@ -217,6 +230,7 @@ struct StarRailBoardView: View {
                     else if config.objective == .escort { Text("星核 → \(config.route == .supply ? "近岔" : "远岔")").accessibilityIdentifier("journey.goal") }
                 }.font(.system(size:10,weight:.semibold)).foregroundStyle(TileTheme.gold)
             }
+            chainMeter
             if let trial {
                 Text("\(trial.rule.title) · 本局撤回 \(game.rewinds) 次 · 零撤回三星可精通")
                     .font(.system(size: 10)).foregroundStyle(TileTheme.gold).accessibilityIdentifier("rails.rewinds")
@@ -373,6 +387,9 @@ struct StarRailBoardView: View {
     private var resultPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
             RailBrandMark(side: 48)
+            Text("本局 \(game.chain.score) 分 · 最高 \(game.chain.best) 连消")
+                .font(.headline).foregroundStyle(TileTheme.gold)
+                .accessibilityIdentifier("rails.chain.result")
             Text(game.status == .won ? "航线完成" : "这条路暂时走不通").font(.title2.bold()).accessibilityIdentifier("rails.result")
             if game.status == .won {
                 TileStars(count: game.stars)
@@ -437,6 +454,10 @@ struct StarRailBoardView: View {
                     Text("三星：移层不超过 \(game.stage.plannedMoves) 次、三消结算后槽位峰值不超过 \(game.stage.targetPeak)。不限时。")
                     if let trial { Text(trial.rule.detail); ShareLink(item: trial.shareText) { Text("分享同一星约") } }
                     if let expedition { ShareLink(item: expedition.shareText) { Text("分享同一远征航线") } }
+                }
+                Section("规划连消 · 不限时") {
+                    Text("每次三消后，接下来四步内再完成三消即可延续连消。取牌、确认移层各算一步；预览和思考不扣步数。")
+                    Text("每组从 100 分起，随连消递增，五连及以上每组 500 分。中断后下一组从一连重新开始；不扣已有分数，不改变通关和星级要求。撤回和复盘会同时恢复当时的分数。")
                 }
                 Section("轨道规则") {
                     if let config = journeyConfig { Text(config.ability.detail) }
@@ -505,6 +526,7 @@ struct StarRailBoardView: View {
     private func clearPreview() { selectedRail = nil; selectedStop = nil }
     private func act(_ action: StarRail.Action) {
         guard session.canInteract else { return }
+        let beforeChain = game.chain
         let beforeMatches = game.state.matches, beforeOverflow = game.state.overflowEnergy
         let gateWasOpen = game.gateOpen(in:game.state)
         var token: UUID?, accepted = false
@@ -534,6 +556,12 @@ struct StarRailBoardView: View {
         } else {
             lastFeedback = nil; cue = .pick
             if haptics { Haptics.tap() }
+        }
+        let chain = game.chain
+        if chain.lastAward > 0 {
+            lastFeedback = "\(chain.current) 连消 +\(chain.lastAward) · " + (lastFeedback ?? "")
+        } else if beforeChain.current > 0 && chain.current == 0 && game.status == .playing {
+            lastFeedback = "连消暂断 · 下一组三消重新起连"
         }
         if sounds { StarRailSound.shared.play(cue) }
         if let lastFeedback { UIAccessibility.post(notification: .announcement, argument: lastFeedback) }
