@@ -116,6 +116,15 @@ final class DuelLifecycleTests: XCTestCase {
             let actor = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.0", recursively: false))
             let defender = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.1", recursively: false))
             XCTAssertTrue(actor.position.x.isFinite && defender.position.x.isFinite)
+            for footName in ["duel.foot.left", "duel.foot.right"] {
+                let foot = try XCTUnwrap(actor.childNode(withName: footName, recursively: true))
+                for x in [Float(-0.12), Float(0.12)] {
+                    for z in [Float(-0.20), Float(0.20)] {
+                        let sole = foot.convertPosition(SCNVector3(x, -0.075, z), to: nil)
+                        XCTAssertGreaterThanOrEqual(sole.y, -0.06, "A grappling pose must keep its soles above the stage floor")
+                    }
+                }
+            }
             if name == "side-lock" {
                 XCTAssertGreaterThan(actor.position.z - defender.position.z, 0.5, "The attacker must hold from the opponent's side")
                 let head = try XCTUnwrap(defender.childNode(withName: "head", recursively: false))

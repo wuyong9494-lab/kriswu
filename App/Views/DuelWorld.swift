@@ -222,6 +222,7 @@ private final class DuelActor {
     let leftElbow = SCNNode(), rightElbow = SCNNode(), leftKnee = SCNNode(), rightKnee = SCNNode()
     let shield: SCNNode
     private let body: SCNNode
+    private var feet: [SCNNode] = []
     init(hero: DuelGame.Hero) {
         let color = hero == .liu ? UIColor(white: 0.88, alpha: 1) : hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
         let dark = UIColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1)
@@ -261,7 +262,8 @@ private final class DuelActor {
             knee.position.y = -0.32; joint.addChildNode(knee)
             let shin = Self.shape(SCNCapsule(capRadius: 0.10, height: 0.34), dark); shin.position.y = -0.15; knee.addChildNode(shin)
             let foot = Self.shape(SCNBox(width: 0.24, height: 0.15, length: 0.40, chamferRadius: 0.05), hero == .liu ? dark : color)
-            foot.position = SCNVector3(0, -0.33, 0.09); knee.addChildNode(foot)
+            foot.name = x < 0 ? "duel.foot.left" : "duel.foot.right"
+            foot.position = SCNVector3(0, -0.33, 0.09); knee.addChildNode(foot); feet.append(foot)
         }
         shield = Self.shape(SCNTorus(ringRadius: 0.54, pipeRadius: 0.025), .cyan)
         shield.position = SCNVector3(0, 1, 0.55); shield.eulerAngles.x = .pi / 2; shield.isHidden = true
@@ -284,6 +286,7 @@ private final class DuelActor {
         orient(yaw: yaw, worldRoll: fighter.knockdown > 0 ? Float(fighter.facing) * -.pi / 2 : 0)
         if fighter.knockdown > 0 { root.position.y = 0.25; root.position.x -= Float(fighter.facing) * 0.95 }
         for joint in [leftElbow, rightElbow, leftKnee, rightKnee] { joint.eulerAngles = SCNVector3Zero }
+        for foot in feet { foot.eulerAngles = SCNVector3Zero }
         let swing = fighter.walking ? sin(Float(frame) * 0.24) * 0.5 : 0
         leftLeg.eulerAngles.x = swing; rightLeg.eulerAngles.x = -swing
         leftArm.eulerAngles.x = -0.35 - swing * 0.3; rightArm.eulerAngles.x = -0.35 + swing * 0.3
@@ -316,8 +319,14 @@ private final class DuelActor {
                 root.position.x += direction * 0.15 * crouch
                 root.position.y = -0.38 * crouch; root.position.z = 0.55 * eased
                 orient(yaw: yaw, worldRoll: -direction * 0.20 * crouch)
-                leftLeg.eulerAngles.x = -0.90 * crouch; rightLeg.eulerAngles.x = -0.55 * crouch
-                leftKnee.eulerAngles.x = 1.55 * crouch; rightKnee.eulerAngles.x = 1.05 * crouch
+                leftLeg.eulerAngles.x = -0.90 * crouch; rightLeg.eulerAngles.x = -0.82 * crouch
+                leftKnee.eulerAngles.x = 2.38 * crouch; rightKnee.eulerAngles.x = 2.36 * crouch
+                // Keep the soles level and lift the root during the transition
+                // when straight interpolation would sink the shins below stage.
+                feet[0].eulerAngles.x = -(leftLeg.eulerAngles.x + leftKnee.eulerAngles.x + 0.20 * crouch)
+                feet[1].eulerAngles.x = -(rightLeg.eulerAngles.x + rightKnee.eulerAngles.x + 0.20 * crouch)
+                let lowestSole = min(feet[0].worldPosition.y, feet[1].worldPosition.y) - 0.075
+                root.position.y += max(0, -0.05 - lowestSole)
                 let gripArm = direction > 0 ? rightArm : leftArm, gripElbow = direction > 0 ? rightElbow : leftElbow
                 let supportArm = direction > 0 ? leftArm : rightArm, supportElbow = direction > 0 ? leftElbow : rightElbow
                 supportArm.eulerAngles.x = -0.85 + 0.40 * crouch; gripArm.eulerAngles.x = -0.80 + 0.60 * crouch
