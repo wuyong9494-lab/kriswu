@@ -1,0 +1,84 @@
+{
+  "branch": "codex/fighter-lab-20261107",
+  "source_sha": "68f613aa442804f25a375862bb30ce96f1d62676",
+  "baseline_sha": "a5d15a2b97adb8c817387c8a0eca952346a2aee3",
+  "workflow_run_id": 42353006204,
+  "distribution": "unsigned experiment only; absent from TestFlight 582",
+  "core": {
+    "job_id": 128344961228,
+    "conclusion": "success",
+    "tests": 767,
+    "skipped": 16,
+    "failures": 0,
+    "fighter_tests": 12,
+    "fighter_skipped": 0
+  },
+  "device_build": {
+    "job_id": 128344961373,
+    "step_conclusion": "success",
+    "concurrency_warnings": 0,
+    "signed": false
+  },
+  "native": {
+    "job_id": 128344961373,
+    "conclusion": "success",
+    "lifecycle_tests": 4,
+    "ui_flow_tests": 1,
+    "skipped": 0,
+    "failures": 0,
+    "ui_flow_seconds": 57.546,
+    "simulator": "iPhone 17 Pro Max",
+    "runtime": "iOS 26.5",
+    "actual_gale_damage": 135,
+    "actual_ember_damage": 75,
+    "repeated_scene_entries": 3,
+    "clocks_per_entry": 1,
+    "clocks_after_exit": 0
+  },
+  "physical_device": {
+    "device": "iPhone 17 Pro Max",
+    "twenty_minute_session": "not_performed",
+    "multi_touch": "not_verified_on_device",
+    "presented_fps": "unmeasured"
+  },
+  "art": "original procedural greybox; not final models or production animation",
+  "testflight_582": {
+    "source_sha": "88c205049acbad9e1d20b79e7b5e41c8658103db",
+    "run_id": 42351097322,
+    "processing_state": "VALID",
+    "internal_build_state": "IN_BETA_TESTING",
+    "external_build_state": "READY_FOR_BETA_SUBMISSION",
+    "notes_written": true
+  },
+  "artifact": {
+    "id": 13566488704,
+    "name": "fighter-native",
+    "bytes": 17372518,
+    "sha256": "e7d8f817a6aa866f129d913245fcfaa24b41913105ec241369b8f264b1b67a3f",
+    "run_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/42353006204"
+  },
+  "screenshots": [
+    {
+      "name": "fighter-ember-practice-731F59F7.png",
+      "sha256": "7779f84c08668c79229c55d858327f9570817d9f0e67c722ffd13b13fb95dc15",
+      "reviewed": true
+    },
+    {
+      "name": "fighter-final-17EFFCAF.png",
+      "sha256": "ef73d3875f8388782e78f8b5d66fb482501d09d6b15e1f0155cf209656503d7b",
+      "reviewed": true
+    },
+    {
+      "name": "fighter-gale-practice-7F97F5CD.png",
+      "sha256": "b8c59d96325cf19b61331e50fa2e921c3b6f0a330ae40399f50c6c97d04ba3b5",
+      "reviewed": true
+    }
+  ],
+  "visual_review": {
+    "both_original_greybox_characters_render": true,
+    "controls_visible": true,
+    "debug_boxes_visible": true,
+    "returned_to_portrait_games_list": true,
+    "final_art_accepted": false
+  }
+}
