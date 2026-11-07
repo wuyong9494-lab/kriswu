@@ -17,6 +17,8 @@ final class StarPulseTests: XCTestCase {
         for id in 3..<6 { XCTAssertTrue(game.perform(.pick(id))) }
         XCTAssertEqual(game.state.pulseCharge,2)
         let charged = game.state
+        var emptyBattery = charged; emptyBattery.energy = 0
+        XCTAssertEqual(game.transition(.travel(rail:0,to:2),from:emptyBattery)?.energy,0,"Charged travel works with an empty battery")
         XCTAssertTrue(try XCTUnwrap(game.preview(0,to:2,in:game.state)).canMove)
         XCTAssertEqual(game.state,charged)
         XCTAssertTrue(game.perform(.travel(rail:0,to:2)))
@@ -39,6 +41,14 @@ final class StarPulseTests: XCTestCase {
         XCTAssertEqual(game.state.energy,0)
         for id in 3..<6 { XCTAssertTrue(game.perform(.pick(id))) }
         XCTAssertEqual(game.state.pulseCharge,1)
+    }
+    func testChargedTravelStillRespectsClosedStarGate() {
+        let config = StarJourney.Configuration(runID:UUID(),ability:.pulse,chapter:1,route:.signal)
+        let game = StarRail.Game(stage:config.stage)
+        var charged = game.state; charged.pulseCharge = 2
+        XCTAssertFalse(game.gateOpen(in:charged))
+        XCTAssertNil(game.transition(.travel(rail:0,to:2),from:charged))
+        XCTAssertTrue(game.rejection(.travel(rail:0,to:2),in:charged)!.contains("星门"))
     }
     func testEveryRealJourneyPrefixRestoresPulseFromActions() throws {
         for route in StarJourney.Route.allCases {

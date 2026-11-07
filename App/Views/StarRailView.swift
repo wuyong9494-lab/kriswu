@@ -563,8 +563,8 @@ struct StarRailBoardView: View {
             lastFeedback = nil; cue = .pick
             if haptics { Haptics.tap() }
         }
-        if token != nil && pulseWasReady { lastFeedback = "脉冲释放 · 本次移层免费" }
-        else if !pulseWasReady && game.state.pulseCharge == 2 { lastFeedback = "脉冲就绪 · 下次移层免费" }
+        if token != nil && pulseWasReady { lastFeedback = (lastFeedback ?? "") + " · 脉冲释放，本次免费" }
+        else if !pulseWasReady && game.state.pulseCharge == 2 && game.status == .playing { lastFeedback = (lastFeedback ?? "") + " · 脉冲就绪" }
         let chain = game.chain
         if chain.lastAward > 0 {
             lastFeedback = "\(chain.current) 连消 +\(chain.lastAward) · " + (lastFeedback ?? "")
