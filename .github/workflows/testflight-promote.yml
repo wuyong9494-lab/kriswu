@@ -51,6 +51,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p 'test_asc_promote.py' -v
           python3 -m unittest discover -s .github/scripts -p 'test_arena_private_pack.py' -v
           python3 -m unittest discover -s .github/scripts -p 'test_star_journey_release.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_star_pulse_release.py' -v
           python3 .github/scripts/arena_private_pack.py preflight .github/releases/testflight.json
       - uses: actions/upload-artifact@v4
         if: always()
@@ -66,7 +67,7 @@ jobs:
     # 566 direct beta records the observed failure and preserves archive integrity.
     # The 566 ARM signing job could not acquire a hosted runner after 15 minutes.
     # Use the standard Intel image with the same Xcode 26.6 for this exact beta.
-    runs-on: ${{ needs.verify.outputs.build_number == '566' && needs.verify.outputs.source_sha == 'f23e2d16f4c461012917cdfdc2db60f73e8f8c12' && 'macos-26-intel' || 'macos-26' }}
+    runs-on: ${{ ((needs.verify.outputs.build_number == '566' && needs.verify.outputs.source_sha == 'f23e2d16f4c461012917cdfdc2db60f73e8f8c12') || (needs.verify.outputs.build_number == '569' && needs.verify.outputs.source_sha == 'a62b36c29a56ad1efd4b38cc991843e7263284f2')) && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 55
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}

@@ -12,6 +12,10 @@ KNOWN_VALIDATION_NOTE = "已知验证结果：完整 UI 回归 8 项中 7 项失
 
 def visual_policy(request):
     validation = private_pack.validation_specification(request)
+    if validation and validation["mode"] == "star-pulse-direct-upload-569":
+        return {"deferred": True, "passed": False, "source_sha": request["source_sha"],
+                "build_number": request["build_number"], "validation": "deferred-by-owner-for-direct-beta-upload",
+                "note": "Pulse native interactions remain unverified; prior private Metal failure remains unverified. Archive integrity checks remain mandatory."}
     if not validation or validation["mode"] != private_pack.JOURNEY_DIRECT_MODE:
         return {"deferred": False}
     if KNOWN_VALIDATION_NOTE not in request.get("notes", ""):

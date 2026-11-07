@@ -120,6 +120,9 @@ def validation_specification(request):
     value = request.get("source_validation")
     if value is None:
         return None
+    if isinstance(value, dict) and value.get("mode") == "star-pulse-direct-upload-569":
+        import star_pulse_release
+        return star_pulse_release.validate_request(request)
     if isinstance(value, dict) and value.get("mode") in (JOURNEY_MODE, JOURNEY_DIRECT_MODE):
         if (value != {"mode": value["mode"], "native_run_id": JOURNEY_NATIVE_RUN}
                 or any(request.get(key) != expected for key, expected in JOURNEY_RELEASE.items())
@@ -318,6 +321,9 @@ def check_requested_source(request):
     validation = validation_specification(request)
     if validation is None:
         return {}
+    if validation["mode"] == "star-pulse-direct-upload-569":
+        import star_pulse_release
+        return star_pulse_release.check(request)
     if validation["mode"] in (JOURNEY_MODE, JOURNEY_DIRECT_MODE):
         return check_journey_source(request)
     return check_tile_source(request) if validation["mode"] == TILE_MODE else check_deferred_source(request)
@@ -346,6 +352,9 @@ def preflight(request):
         # Preserve the existing strict acceptance path. Never fall back after it fails.
         promotion.preflight(request)
         return
+    if validation["mode"] == "star-pulse-direct-upload-569":
+        import star_pulse_release
+        star_pulse_release.check(request, wait=True)
     acceptance = (wait_for_journey_source(request) if validation["mode"] in (JOURNEY_MODE, JOURNEY_DIRECT_MODE)
                   else check_requested_source(request))
     build = promotion.find_build(request)
