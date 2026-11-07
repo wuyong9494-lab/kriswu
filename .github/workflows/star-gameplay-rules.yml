@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Rules and legacy save regression
-        run: swift test --jobs 2 --filter 'StarRail|StarJourney|StarPulse|TileGame'
+        run: swift test --jobs 2 --filter 'StarRail|StarJourney|StarPulse|TileGame|TileMaster'
       - name: Every ability, route and starting energy
         run: swift run --skip-build StarJourneyAudit > star-journey-audit.json
       - uses: actions/upload-artifact@v4

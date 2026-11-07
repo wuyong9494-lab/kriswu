@@ -16,6 +16,8 @@ struct TileGameHomeView: View {
     @State private var collection = false
     @State private var journeyHall = false
     @State private var modesExpanded = false
+    @State private var preparingMaster = false
+    @State private var masterRequest: TileGame.RuleSet?
     @State private var now = Date()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -23,20 +25,22 @@ struct TileGameHomeView: View {
         ScrollView {
             VStack(spacing: 24) {
                 hero
-                StarExpeditionDailyCard(date: now) { route in railPlay = StarRailPlay(game: rails.expeditions.game(for: route)) }
-                constellationEntry
+                masterEntries
+                daily
                 Button { modesExpanded.toggle() } label: {
-                    HStack { Label("玩法库",systemImage:"square.grid.2x2"); Spacer(); Image(systemName:modesExpanded ? "chevron.up" : "chevron.down") }
+                    HStack { Label("更多玩法 · 原进度保留",systemImage:"square.grid.2x2"); Spacer(); Image(systemName:modesExpanded ? "chevron.up" : "chevron.down") }
                         .font(.headline).padding(16).background(.white.opacity(0.05),in:RoundedRectangle(cornerRadius:16))
                 }.buttonStyle(.plain).accessibilityIdentifier("tiles.modes")
                 if modesExpanded {
+                    journeyEntry
+                    constellationEntry
+                    StarExpeditionDailyCard(date: now) { route in railPlay = StarRailPlay(game: rails.expeditions.game(for: route)) }
                     legacyResume
                     expeditionEntries
                     trialEntry
                     starRailEntry
                     journey
                     quickPlay
-                    daily
                     challenge
                     Button { social = true } label: {
                         Label("和朋友比一局", systemImage: "person.2.fill")
@@ -153,7 +157,7 @@ struct TileGameHomeView: View {
                 Image(systemName: "arrow.triangle.swap").font(.system(size: 27, weight: .semibold))
                     .foregroundStyle(TileTheme.mint)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("主线航程 · 星轨移层").font(.system(.title3, design: .rounded).bold())
+                    Text("移排练习 · 星轨移层").font(.system(.title3, design: .rounded).bold())
                     Text("6 关手工航线 · 从观察到双轨规划")
                         .font(.caption).foregroundStyle(.white.opacity(0.7))
                 }
@@ -174,12 +178,19 @@ struct TileGameHomeView: View {
                         .minimumScaleFactor(0.65).lineLimit(1)
                     Text("留一格，想三步。")
                         .font(.system(.subheadline, design: .rounded)).foregroundStyle(.white.opacity(0.65))
-                    Label("\(rails.earnedStars) · 累计星章", systemImage: "star.fill")
+                    Label("大师通关 \(records.records.wins[3, default: 0]) · 深空通关 \(records.constellationRecords.wins[3, default: 0])", systemImage: "star.fill")
                         .font(.system(.subheadline, design: .rounded).weight(.bold)).foregroundStyle(TileTheme.gold)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 RailHomeArtwork(back: rails.cardBack).scaleEffect(0.9).frame(width: 130, height: 145)
             }
+
+
+        }
+    }
+
+    private var journeyEntry: some View {
+        VStack(spacing: 12) {
             Button { journeyHall = true } label: {
                 HStack {
                     Text(rails.journeys.pendingReward != nil ? "查看旅程奖励" : rails.journeys.active?.finished == false ? "继续旅程" : "开始星际旅程")
@@ -191,8 +202,53 @@ struct TileGameHomeView: View {
             if let run=rails.journeys.active, !run.finished {
                 JourneyChapterStrip(chapter:run.chapter,completed:run.completed.count)
             }
-
         }
+    }
+
+    private var masterEntries: some View {
+        VStack(spacing: 12) {
+            masterButton("大师", detail: "9 种图案 · 拆开遮挡，留好下一组三张", rule: .classic)
+            masterButton("深空大师", detail: "12 种图案 · 更多交错，提前安排取牌顺序", rule: .constellation)
+            if preparingMaster {
+                ProgressView("正在准备牌局…").tint(TileTheme.mint)
+            }
+        }
+        .task(id: masterRequest) {
+            guard let rule = masterRequest else { return }
+            let base = UInt64.random(in: 0..<TileGame.seedLimit)
+            let worker = Task.detached(priority: .userInitiated) {
+                TileGame.masterSeed(startingAt: base, ruleSet: rule)
+            }
+            let seed = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: { worker.cancel() }
+            guard !Task.isCancelled else { return }
+            play = TilePlay(level: .hard, seed: seed, mode: .solo, ruleSet: rule)
+            preparingMaster = false
+            masterRequest = nil
+        }
+    }
+
+    private func masterButton(_ title: String, detail: String, rule: TileGame.RuleSet) -> some View {
+        Button {
+            preparingMaster = true
+            masterRequest = rule
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: rule == .classic ? "star.fill" : "sparkles")
+                    .font(.title).foregroundStyle(TileTheme.gold)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.system(.title2, design: .rounded).bold())
+                    Text(detail).font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.right")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(20)
+            .background(TileTheme.mint.opacity(rule == .classic ? 0.12 : 0.2), in: RoundedRectangle(cornerRadius: 20))
+        }
+        .buttonStyle(.plain).disabled(preparingMaster)
+        .accessibilityIdentifier("tiles.master.\(rule.rawValue)")
     }
 
     private var journey: some View {
@@ -316,14 +372,14 @@ struct TileGameHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    helpRow("✧", "三关星际旅程", "先选择贯穿整轮的能力，依次完成清盘、星核护送和限能返航。第一关后选择近航补给或远航追光；星门由指定图案三消开启。护送关不用清盘，但星核必须留在轨道，抵达目标时收集槽需为空。关间能量按所选能力继承，退出会保存当前进度。")
-                    helpRow("✦", "分岔远征与星图", "近岔花 1 点能量，远岔花 2 点，返航花 1 点。预览两端的遮挡，再选择路线。完成主线、星约和远征，累计最佳星级修复星图，解锁天幕和星牌外观。复盘能逐手回看并从某一步重试。")
-                    helpRow("★", "星轨主线与试炼", "每消除一组三张为轨道充能。预览移层后，决定先开窗还是留槽。星约试炼会改变槽位、储能和移层预算；三星且全程不撤回可点亮精通星章，允许随时重试。")
                     helpRow("01", "经典规则：先看遮挡，再选牌", "只能拿没有被压住的牌。三张相同自动消除，槽内七张未能消除就会卡住。底部两摞也是牌堆，需要逐层取出。")
                     helpRow("02", "给下一组三张留位置", "越往深空走，牌种越多、遮挡越复杂。不要见一对就拿，先想第三张被谁压住。每个初始牌局都有通关路径。")
                     helpRow("03", "连消靠规划，不靠手速", "每次消除后的四次取牌内再消除，连消加一；单次得分从 100 分递增，五连及以上每次 500 分。使用道具会中断连消。")
                     helpRow("04", "把一星变成三星", "通关得一星；不用道具得两星；再达到轻松 3 连、进阶 4 连、大师 5 连即可三星。成绩只保留最好的一次。")
                     helpRow("05", "道具各用一次", "撤回上一张未消除的牌；移出槽左侧最多三张；洗牌只打乱牌堆中的图案。洗牌不会替你清槽，也不保证当前选择能被挽回。")
+                    helpRow("✧", "三关星际旅程", "先选择贯穿整轮的能力，依次完成清盘、星核护送和限能返航。第一关后选择近航补给或远航追光；星门由指定图案三消开启。护送关不用清盘，但星核必须留在轨道，抵达目标时收集槽需为空。关间能量按所选能力继承，退出会保存当前进度。")
+                    helpRow("✦", "分岔远征与星图", "近岔花 1 点能量，远岔花 2 点，返航花 1 点。预览两端的遮挡，再选择路线。完成主线、星约和远征，累计最佳星级修复星图，解锁天幕和星牌外观。复盘能逐手回看并从某一步重试。")
+                    helpRow("★", "星轨主线与试炼", "每消除一组三张为轨道充能。预览移层后，决定先开窗还是留槽。星约试炼会改变槽位、储能和移层预算；三星且全程不撤回可点亮精通星章，允许随时重试。")
                 }
                 .padding(24)
             }
