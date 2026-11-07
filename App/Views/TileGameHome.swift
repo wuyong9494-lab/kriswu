@@ -18,6 +18,7 @@ struct TileGameHomeView: View {
     @State private var modesExpanded = false
     @State private var preparingMaster = false
     @State private var dailyRequest: DayKey?
+    @State private var preparedDaily: (day: DayKey, seed: UInt64)?
     @State private var masterRequest: TileGame.RuleSet?
     @State private var now = Date()
     @Environment(\.scenePhase) private var scenePhase
@@ -308,13 +309,17 @@ struct TileGameHomeView: View {
     }
 
     private var daily: some View {
-        Button { dailyRequest = DayKey.today } label: {
+        Button { dailyRequest = DayKey(date: Date(), calendar: .dayMath) } label: {
             HStack(spacing: 16) {
                 Image(systemName: "sun.max.fill").font(.system(size: 26)).foregroundStyle(TileTheme.gold)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(dailyRequest == nil ? "每日一关 · 深空大师" : "正在准备今日牌局…").font(.headline)
-                    Text(records.constellationRecords.daily[TileGame.dailyMasterRecordKey(.today)]?.won == true ? "今日已通关，再试一次更高连消" : "每天固定一局 · 反复挑战同一盘")
+                    Text(records.constellationRecords.daily[TileGame.dailyPlanningRecordKey(DayKey(date: now, calendar: .dayMath))]?.won == true ? "今日已通关，再试一次更高连消" : "北京时间每日更新 · 同日同一盘")
                         .font(.caption).foregroundStyle(.white.opacity(0.6))
+                    if let entry = records.dailyAttempts.entries[TileGame.dailyPlanningRecordKey(DayKey(date: now, calendar: .dayMath))] {
+                        Text("今日 \(entry.attempts) 次尝试 · 首局\(firstAttemptTitle(entry.firstOutcome))")
+                            .font(.caption).foregroundStyle(.white.opacity(0.6))
+                    }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "arrow.up.right")
@@ -325,13 +330,29 @@ struct TileGameHomeView: View {
         .disabled(preparingMaster || dailyRequest != nil)
         .task(id: dailyRequest) {
             guard let day = dailyRequest else { return }
-            let worker = Task.detached(priority: .userInitiated) { TileGame.dailyMasterSeed(day) }
-            let seed = await withTaskCancellationHandler {
-                await worker.value
-            } onCancel: { worker.cancel() }
+            let seed: UInt64
+            if let cached = preparedDaily, cached.day == day {
+                seed = cached.seed
+            } else {
+                let worker = Task.detached(priority: .userInitiated) { TileGame.dailyPlanningSeed(day) }
+                seed = await withTaskCancellationHandler {
+                    await worker.value
+                } onCancel: { worker.cancel() }
+            }
             guard !Task.isCancelled else { return }
-            play = TilePlay(level: .hard, seed: seed, mode: .daily(day), screenedDaily: true)
+            preparedDaily = (day, seed)
+            play = TilePlay(level: .hard, seed: seed, mode: .daily(day), screenedDaily: true, planningDaily: true)
             dailyRequest = nil
+        }
+    }
+
+    private func firstAttemptTitle(_ outcome: TileDailyAttempts.Outcome) -> String {
+        switch outcome {
+        case .pending: return "结果待定"
+        case .wonWithoutTools: return "无道具通关"
+        case .lost: return "未通关"
+        case .usedTools: return "使用道具"
+        case .abandoned: return "中途退出"
         }
     }
 

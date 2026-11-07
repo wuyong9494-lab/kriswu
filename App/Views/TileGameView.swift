@@ -34,8 +34,11 @@ final class TileRecordStore: ObservableObject {
     @Published private(set) var records: TileRecords
     @Published private(set) var constellationRecords: TileRecords
     @Published private(set) var journey: TileJourney.Progress
+    @Published private(set) var dailyAttempts: TileDailyAttempts
 
     private init() {
+        dailyAttempts = UserDefaults.standard.data(forKey: "tileGame.dailyAttempts.v2")
+            .flatMap { try? JSONDecoder().decode(TileDailyAttempts.self, from: $0) } ?? .init()
         constellationRecords = UserDefaults.standard.data(forKey: "tileGame.records.v2")
             .flatMap { try? JSONDecoder().decode(TileRecords.self, from: $0) } ?? TileRecords()
         journey = UserDefaults.standard.data(forKey: "tileGame.journey.v2")
@@ -44,7 +47,7 @@ final class TileRecordStore: ObservableObject {
             .flatMap { try? JSONDecoder().decode(TileRecords.self, from: $0) } ?? TileRecords()
     }
 
-    func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?, ruleSet: TileGame.RuleSet = .classic, screenedDaily: Bool = false) {
+    func add(_ result: TileRecords.Result, level: TileGame.Level, daily: DayKey?, ruleSet: TileGame.RuleSet = .classic, screenedDaily: Bool = false, planningDaily: Bool = false) {
         var output = ruleSet == .classic ? records : constellationRecords
         let key = level.rawValue
         output.played[key, default: 0] += 1
@@ -53,10 +56,10 @@ final class TileRecordStore: ObservableObject {
             if output.best[key].map({ result.seconds < $0 }) ?? true { output.best[key] = result.seconds }
         }
         if let daily {
-            let day = screenedDaily ? TileGame.dailyMasterRecordKey(daily) : daily.description
+            let day = planningDaily ? TileGame.dailyPlanningRecordKey(daily) : screenedDaily ? TileGame.dailyMasterRecordKey(daily) : daily.description
             if output.daily[day].map({ result.better(than: $0) }) ?? true { output.daily[day] = result }
             if output.daily.count > 60 {
-                let keep = Set(output.daily.keys.sorted().suffix(60))
+                let keep = Set(output.daily.keys.sorted { (String($0.suffix(10)), $0) < (String($1.suffix(10)), $1) }.suffix(60))
                 output.daily = output.daily.filter { keep.contains($0.key) }
             }
         }
@@ -64,6 +67,16 @@ final class TileRecordStore: ObservableObject {
         if let data = try? JSONEncoder().encode(output) {
             UserDefaults.standard.set(data, forKey: ruleSet == .classic ? Self.key : "tileGame.records.v2")
         }
+    }
+
+    func trackDailyAttempt(day: DayKey, id: String, game: TileGame, abandoned: Bool = false) {
+        var updated = dailyAttempts
+        updated.begin(day: day, attemptID: id)
+        updated.observe(day: day, attemptID: id, won: game.status == .won,
+                        lost: game.status == .lost, toolsUsed: game.toolsUsed > 0, abandoned: abandoned)
+        guard updated != dailyAttempts, let data = try? JSONEncoder().encode(updated) else { return }
+        dailyAttempts = updated
+        UserDefaults.standard.set(data, forKey: "tileGame.dailyAttempts.v2")
     }
 
     func finish(stage: Int, game: TileGame) {
@@ -90,6 +103,7 @@ struct TilePlay: Identifiable, Equatable {
     var ruleSet: TileGame.RuleSet = .constellation
     var screenedMaster = false
     var screenedDaily = false
+    var planningDaily = false
 }
 
 // MARK: - 对战
@@ -317,6 +331,7 @@ struct TileBoardView: View {
     @State private var countdown: Int
     @State private var moves = 0
     @State private var recorded = false
+    @State private var dailyAttemptID = UUID().uuidString
     @State private var showingResult = false
     @State private var confirmingQuit = false
     @State private var preparingDeal = false
@@ -692,6 +707,9 @@ struct TileBoardView: View {
 
     /// 走完一步：赢了、输了停表、记成绩、弹结果；对战时告诉大家
     private func afterMove() {
+        if moves > 0, play.planningDaily, case .daily(let day) = play.mode {
+            TileRecordStore.shared.trackDailyAttempt(day: day, id: dailyAttemptID, game: game)
+        }
         switch game.status {
         case .won:
             if ended == nil { ended = Date() }
@@ -712,10 +730,14 @@ struct TileBoardView: View {
     private func record() {
         guard !recorded, moves > 0 else { return }
         recorded = true
+        if play.planningDaily, case .daily(let day) = play.mode {
+            TileRecordStore.shared.trackDailyAttempt(day: day, id: dailyAttemptID, game: game,
+                                                     abandoned: game.status == .playing)
+        }
         let result = TileRecords.Result(won: game.status == .won, seconds: seconds, cleared: game.cleared + game.clearing.count, total: game.total)
         var daily: DayKey?
         if case .daily(let day) = play.mode { daily = day }
-        TileRecordStore.shared.add(result, level: game.level, daily: daily, ruleSet: game.ruleSet, screenedDaily: play.screenedDaily)
+        TileRecordStore.shared.add(result, level: game.level, daily: daily, ruleSet: game.ruleSet, screenedDaily: play.screenedDaily, planningDaily: play.planningDaily)
         if let stageID { TileRecordStore.shared.finish(stage: stageID, game: game) }
     }
 
@@ -729,6 +751,7 @@ struct TileBoardView: View {
         ended = nil
         moves = 0
         recorded = false
+        dailyAttemptID = UUID().uuidString
     }
 
     private func nextStage(_ stage: TileJourney.Stage) {

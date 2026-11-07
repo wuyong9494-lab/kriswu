@@ -63,6 +63,14 @@ final class TilePlanningTests: XCTestCase {
         XCTAssertTrue(loses(game, depth: 2))
     }
 
+    func testParkedRescueTilesAreNotIgnoredByForcedLossProof() {
+        var game = fixture
+        for id in path.prefix(3) { XCTAssertTrue(game.pick(id)); game.settle() }
+        XCTAssertTrue(game.moveOut())
+        XCTAssertFalse(game.parked.isEmpty)
+        XCTAssertTrue(game.planningForks(along: path).isEmpty)
+    }
+
     func testMasksCrossBothWordBoundaries() {
         let tiles = (0..<171).map { TileGame.Tile(id: $0 * 2, kind: ($0 / 3) % 12, x: $0 * 8, y: 0, z: 0) }
         var game = TileGame(level: .hard, seed: 0, tiles: tiles)
@@ -76,6 +84,7 @@ final class TilePlanningTests: XCTestCase {
         let day = DayKey(year: 2026, month: 11, day: 7)
         let selection = TileGame.dailyPlanningSelection(day)
         XCTAssertEqual(selection, TileGame.dailyPlanningSelection(day))
+        XCTAssertEqual(TileGame.dailyPlanningSeed(day), selection.seed)
         XCTAssertNotEqual(TileGame.dailyPlanningRecordKey(day), TileGame.dailyMasterRecordKey(day))
         XCTAssertLessThanOrEqual(selection.candidatesChecked, 8)
         XCTAssertLessThanOrEqual(selection.expanded, 428000)

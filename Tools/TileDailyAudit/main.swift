@@ -11,6 +11,7 @@ for offset in 0..<days {
     let day = start.adding(days: offset, calendar: .dayMath)
     let began = Date()
     let selection = TileGame.dailyPlanningSelection(day)
+    if TileGame.dailyPlanningSeed(day) != selection.seed { invalid = true }
     let baselineSeed = TileGame.dailyMasterSeed(day)
     let baseline = TileGame(level: .hard, seed: baselineSeed, ruleSet: .constellation)
     let game = TileGame(level: .hard, seed: selection.seed, ruleSet: .constellation)

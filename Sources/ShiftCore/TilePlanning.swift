@@ -78,6 +78,9 @@ extension TileGame {
     /// Its alternative remains alive immediately, but every continuation within
     /// the next two picks loses. Budget exhaustion is unknown, never a proof.
     public func planningForks(along path: [Int], nodeLimit: Int = 8000) -> [PlanningFork] {
+        // Parked tiles are additional legal moves; this no-tools proof does not
+        // model them, so it must decline rather than report a false forced loss.
+        guard parked.isEmpty else { return [] }
         var proof = self
         proof.settle()
         for id in path {
@@ -109,6 +112,21 @@ extension TileGame {
             game.settle()
         }
         return forks
+    }
+
+    /// Pre-audited results avoid repeating the bounded search on launch.
+    /// The audit checks these values against the frozen edition-2 selector.
+    public static func dailyPlanningSeed(_ day: DayKey) -> UInt64 {
+        let audited: [String: UInt64] = [
+            "2026-11-07": 84135585,
+            "2026-11-08": 84550586,
+            "2026-11-09": 83817048,
+            "2026-11-10": 84616059,
+            "2026-11-11": 83778662,
+            "2026-11-12": 84198013,
+            "2026-11-13": 83988990,
+        ]
+        return audited[day.description] ?? dailyPlanningSelection(day).seed
     }
 
     public static func dailyPlanningRecordKey(_ day: DayKey) -> String {
