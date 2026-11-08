@@ -49,8 +49,34 @@ and [SceneKit geometry sources](https://developer.apple.com/documentation/scenek
 Native checks use nonwhite vertex colors, midrange material/lightmap values
 and nontrivial alpha to distinguish the intended result from missing gain,
 double-applied color or changed coverage. The actual palace checks also
-inspect the roof color and repeated scene instances. Full native results and
-the before/after render review are pending.
+inspect the roof color and repeated scene instances.
+
+In [run 42471549711](https://github.com/wuyong9494-lab/kriswu/actions/runs/42471549711),
+the standard native group passed 25 unit tests and two UI tests at commit
+`c6b54e83236fa54d3070e07f2574a78b22d15697`. The new source-color pixel test
+passed in 1.351 seconds. It checks the intended modulation against an independent
+ordinary-material reference, repeated instances, explicit and missing white
+colors, the unchanged default/nonmatching path, BLEND coverage and node opacity.
+The actual-asset group also passed: 43 native tests and two UI tests, zero
+failures and no skipped real-asset tests. This includes the 1,985 actual roof
+colors and a second execution of the source-color pixel test (1.327 seconds).
+The actual-asset unit tests took 448.283 seconds and the UI tests took 214.161
+seconds, within the unchanged 15- and 10-minute test-step budgets. All five
+workflow jobs completed successfully.
+
+The private evidence artifact `13614017171` is 87,497,142 bytes, SHA-256
+`249cc9e79f9a70b203053d7ac4355e2d0e2b0522da83dfed9355b285bc13d3ab`.
+Its archive hash and evidence-envelope authentication passed. All 37 native
+PNGs and 14 text attachments were retained with their originating test names.
+
+Manual review compared the same idle camera with the accepted neutral-fill
+baseline, run 42469636762, and inspected the final touch-driven Sun practice,
+Liu hold, reverse-direction hold and both original-rig lobby captures. Palace
+paving, walls and roof detail are more legible while the neutral character
+lighting is retained. The darkest overhangs and vegetation remain dark. This
+confirms the bounded RGB correction in the native scene; it does not approve
+final art quality or complete source-renderer parity. The two lobby captures
+remain visually consistent; only the Liu pair is exactly pixel-identical.
 
 This change does not establish complete source-renderer parity. Fog, MatCap,
 animated effects, shadow-form lighting and original game color-space settings

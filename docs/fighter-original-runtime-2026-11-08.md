@@ -98,14 +98,57 @@ test selectors with `test-without-building`. The lifecycle and UI test limits
 remain 15 and 10 minutes, and the job remains bounded at 40 minutes. Build and
 test failures still propagate through `pipefail`; exported private render
 evidence, its authentication and the existing source-asset hashes are retained.
-No source ciphertext was uploaded again. Complete validation of this change
-and the resulting rendered evidence is pending.
+No source ciphertext was uploaded again.
 
-The battle's rear fill now uses neutral white at intensity 180 instead of pure
-cyan at 320, addressing the strong colored rim seen in the accepted runtime
-captures. The baked environment materials are unchanged: this is a character
-lighting adjustment, not a claim to have recovered the original lightmap
-decoding or fixed the dark palace background.
+Commit `61f4fb9cc50f44152a61a1c16332270afefec879` passed all five jobs in
+[run 42469636762](https://github.com/wuyong9494-lab/kriswu/actions/runs/42469636762):
+790 core tests (16 existing skips), six envelope/staging tests, unsigned device
+compilation with an empty concurrency-warning report, 24 standard native tests
+plus two UI tests, and 42 actual-asset native tests plus two UI tests. All
+reported zero failures. The actual-asset unit tests took 475.253 seconds and
+the UI tests took 237.429 seconds, within their unchanged separate budgets.
+This completes validation of the first-draw/restart correction and the
+compilation split after the earlier incomplete run.
+
+The private evidence archive `13613109613` is 78,992,530 bytes, SHA-256
+`2e313294c7f5867628b028294122f319984e7a5479866df5783cdc02604de24d`.
+The download digest and evidence-envelope authentication passed; 37 native
+PNGs and their test associations were retained. Both hold directions again
+completed 180 samples with worst wrist gaps 0.00030452127 and 0.00068015594.
+
+At that accepted code head, the battle's rear fill uses neutral white at
+intensity 180 instead of pure cyan at 320. Side-by-side review of the same idle
+camera confirms that the cyan cast on hair, skin and armor is substantially
+reduced. The baked environment materials are unchanged at that head and the
+palace remains dark. Those captures are the intermediate baseline for the
+subsequent [bounded palace source-color correction](fighter-scene-lighting-2026-11-08.md).
+The practice screenshot's green boxes were explicitly enabled by the UI test;
+they are the existing optional hit-box display.
+
+## Final palace correction acceptance
+
+Commit `c6b54e83236fa54d3070e07f2574a78b22d15697` passed all five jobs in
+[run 42471549711](https://github.com/wuyong9494-lab/kriswu/actions/runs/42471549711):
+790 core tests (16 existing skips), six envelope/staging tests, unsigned Release
+device compilation and its concurrency gate, 25 standard native tests plus
+two UI tests, and 43 actual-asset native tests plus two UI tests. Every group
+reported zero failures and no actual-asset test was skipped.
+
+This adds the source-color pixel test and verifies the actual palace roof's
+byte-color normalization. Full implementation scope and the authenticated
+87,497,142-byte evidence artifact are recorded in
+[the palace review](fighter-scene-lighting-2026-11-08.md). The 37 final native
+PNGs are retained privately, together with the earlier cyan-lighting baseline,
+the accepted neutral-lighting baseline and the interrupted run's provenance.
+The final real-asset unit and UI checks took 448.283 and 214.161 seconds; the
+original test limits were not relaxed. Both 180-sample hold directions retain
+the same passing wrist gaps recorded above.
+
+The reviewed final captures show more legible palace paving, walls and roof
+detail, with neutral character fill preserved. Dark overhangs and vegetation
+remain. Source fog, MatCap, shadow-form effects, the complete GPU color-space
+path and the autumn lobby's source-material parity are not established by this
+bounded correction. Final art quality and continuous-motion review remain open.
 
 The six envelope/staging tests above are distinct from the 16 promotion-gate
 tests. An earlier local total of 22 combined those categories; the native
