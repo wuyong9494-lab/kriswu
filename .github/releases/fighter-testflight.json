@@ -1,0 +1,11 @@
+{
+  "channel": "testflight-internal",
+  "source_sha": "69199575a55436324ea4f2a8749322e5739d7f59",
+  "source_run_id": 42394062552,
+  "fighter_run_id": 42394062512,
+  "build_number": "586",
+  "version": "1.2",
+  "bundle_id": "com.kriswu.shiftreminder",
+  "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
+  "notes": "真实刘泉纬模型已接入。修复受击姿态、连续普攻动画重启和开场提示。请重点测试锁臂压制、释放击退与暂停恢复。已通过 iOS 构建、核心测试及全部 Fighter 原生和真实模型测试。尚未验证真机持续帧率、发热与耗电；本次不包含旧竞技场的完整视觉回归。"
+}
