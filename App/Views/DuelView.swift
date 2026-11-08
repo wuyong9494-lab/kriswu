@@ -44,7 +44,10 @@ struct DuelHomeView: View {
                     Button("练习场") { start(.practice) }.accessibilityIdentifier("duel.practice")
                     Button("操作教学") { start(.tutorial) }.accessibilityIdentifier("duel.tutorial")
                 }.buttonStyle(.bordered)
-                Text("孙登：裂步突进、升龙重击。青岚：远程飞刃、撤步反击。技能消耗能量，普攻命中后继续点击可衔接三段连击。")
+                Text(hero.name + "的技能").font(.headline)
+                Text(hero.skillHelp)
+                    .font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("duel.skillHelp")
+                Text("普攻命中后继续点击，可衔接三段连击。")
                     .font(.subheadline).foregroundStyle(.secondary)
                 if hero == .liu {
                     Text("刘泉纬 · 擒拿震地：100 能量，近身抓取后锁臂压制 3 秒，再震地击退。抓取不能防御；跳跃、后撤或在前摇时快攻可以反制。不能抓取倒地、硬直或起身保护中的对手。")
@@ -300,11 +303,13 @@ final class DuelInputView: UIView {
     init(session: DuelSession) {
         self.session = session; super.init(frame: .zero); isMultipleTouchEnabled = true
         var controls = [("left", "◀"), ("right", "▶"), ("guard", "防御"), ("jump", "跳跃"),
-                        ("light", "普攻"), ("heavy", "重击"), ("skill1", "技能一"), ("skill2", "技能二")]
+                        ("light", "普攻"), ("heavy", "重击"), ("skill1", session.setup.hero.skill1Name),
+                        ("skill2", session.setup.hero.skill2Name)]
         if session.setup.hero == .liu { controls.append(("ultimate", "大招")) }
         for (name, title) in controls {
             let button = UIButton(type: .custom)
             button.setTitle(title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)
+            button.titleLabel?.adjustsFontSizeToFitWidth = true; button.titleLabel?.minimumScaleFactor = 0.7
             button.backgroundColor = UIColor(white: 0.12, alpha: 0.72)
             button.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor; button.layer.borderWidth = 1
             button.layer.cornerRadius = 24; button.isUserInteractionEnabled = false
