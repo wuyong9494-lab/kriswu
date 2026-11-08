@@ -43,7 +43,9 @@ checks (785 tests, 16 pre-existing optional/platform skips, zero failures),
 device compilation/concurrency gate, and standard native checks (23 unit and
 2 UI tests) passed.
 
-The actual-resource tests exposed three issues now prepared for follow-up:
+The first actual-resource run had 8 failed assertions in 3 of 36 unit test
+cases; both of its UI tests passed. The three issues were corrected in
+`231b7153582c04e0a6b174b876ec6da0928a4cdd`:
 
 - The older grapple assertion measured the hidden procedural opponent. It now
   measures the visible Sun wrist/head. Sun's captured Hit pose also left the
@@ -55,13 +57,49 @@ The actual-resource tests exposed three issues now prepared for follow-up:
   pass. It now flushes that transaction before its autorelease pool drains;
   both scene and skeleton weak-reference assertions remain. This follows
   [SceneKit's transaction lifecycle](https://developer.apple.com/documentation/scenekit/scntransaction/flush%28%29)
-  and still requires native revalidation; no delay or relaxed assertion is used.
+  and passed native revalidation; no delay or relaxed assertion is used.
 - Autumn-lobby background meshes reference uniform 32x32 gray lightmaps but
   contain only UV0. The loader rejected the entire scene. Small lightmaps are
   now checked pixel by pixel; uniform images can use UV0 without changing the
   sampled value, while spatial atlases still require UV1. Synthetic rendering
   covers the constant case, and missing-UV rejection uses a nonuniform texture.
   The original encrypted scenery bytes and their integrity checks stay intact.
+
+## Completed native acceptance
+
+Run [42459804189](https://github.com/wuyong9494-lab/kriswu/actions/runs/42459804189)
+completed successfully on the exact code commit `231b7153582c04e0a6b174b876ec6da0928a4cdd`.
+All five jobs passed:
+
+| Check | Result |
+| --- | --- |
+| Core regression | 785 tests, 16 existing optional-resource/platform skips, 0 failures |
+| Authenticated envelopes and staging | 22 tests, 0 failures |
+| Device compilation | Release build succeeded; concurrency-warning gate passed |
+| Standard native and UI | 24 unit tests and 2 UI tests, 0 failures |
+| Actual Sun/Liu models, scenes and original rigs | 37 unit tests and 2 UI tests, 0 failures; no actual-asset suite skipped |
+
+The previously failing visible-wrist contact, autumn lobby and repeated
+original-skeleton release cases all passed. Both UI cases exercised the actual
+staged resources, including touch-driven ultimate input, pause/resume, two
+damage impacts, both selections, exit and the existing app entries.
+
+The private evidence artifact is `fighter-character-private` (`13609384233`,
+68,483,354 bytes), SHA-256
+`3722a944160371f29bdd2eb9c3b614d20a65b5e2392dfb68fd7789f2f417f1ee`.
+Its ZIP digest and authenticated evidence envelope were verified after download.
+The 22 PNG attachments include both autumn-lobby characters, palace selections,
+the grapple stages, four source-rig poses and real UI captures. Manual inspection
+confirmed the newly loaded autumn backdrop, both full-body lobby models and
+the revised captured arm in the hold/UI render. Private images remain outside
+the public repository. The source-rig diagnostic lighting is overexposed, and
+these captures are not final visual-quality approval.
+
+The fixes changed no ciphertext. The published resource subtrees remain
+`0a0a9c51b4ebec684989416f3b12c996939a06f5` (`sf3`) and
+`e8cac8ef097d58a506be0821128b637d7fee460f` (`sf3-original`). No duplicate
+resource upload or extra workflow dispatch was needed. This final record is
+documentation only and does not request another build.
 
 ## Remaining scope
 
