@@ -281,8 +281,18 @@ final class DuelWeaponFlowTests: XCTestCase {
     }
     private func integer(after marker: String, in text: String) -> Int? {
         guard let range = text.range(of: marker) else { return nil }
-        let field = text[range.upperBound...].prefix { $0.isNumber || $0 == "-" }
-        return Int(field)
+        // SwiftUI localizes interpolated integers (for example "位置 6,021").
+        // Read only this field and validate grouping before removing separators;
+        // never merge the next position/height or accept a truncated prefix.
+        let field = text[range.upperBound...].prefix { $0.isNumber || $0 == "-" || $0 == "," }
+        let negative = field.first == "-"
+        let unsigned = negative ? field.dropFirst() : field
+        let groups = unsigned.split(separator: ",", omittingEmptySubsequences: false)
+        guard !groups.isEmpty, groups.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else { return nil }
+        if groups.count > 1 {
+            guard (1...3).contains(groups[0].count), groups.dropFirst().allSatisfy({ $0.count == 3 }) else { return nil }
+        }
+        return Int((negative ? "-" : "") + groups.joined())
     }
     private func observedPosition(_ app: XCUIApplication, index: Int) -> Int? {
         integer(after: "位置 ", in: app.staticTexts["duel.stats.\(index)"].value as? String ?? "")

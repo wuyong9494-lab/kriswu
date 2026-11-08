@@ -79,16 +79,30 @@ final class DuelFlowTests: XCTestCase {
         XCTAssertTrue(ultimate.isHittable)
         XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
         approachGrappleRange(app)
-        ultimate.tap()
+        // The legacy ultimate triggers once on Down. Keep the real finger down
+        // through its 24-tick startup and 24-tick takedown, then immediately use
+        // the real pause button. Reading the short hold label before pausing can
+        // lose the entire hold to cross-process accessibility query latency.
+        let pauseFrame = pause.frame
+        let pausePoint = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: pauseFrame.midX, dy: pauseFrame.midY))
+        ultimate.press(forDuration: 1.0)
+        pausePoint.tap()
+        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 3))
         let status = app.staticTexts["duel.grapple"]
         let holding = NSPredicate { _, _ in status.exists && status.label.contains("锁臂压制") }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: holding, object: nil)], timeout: 4), .completed)
+        let heldStatus = status.label, heldHits = app.staticTexts["duel.hits"].label
+        let heldOpponent = app.staticTexts["duel.stats.1"].value as? String
+        XCTAssertTrue(heldHits.contains("命中 1 次") && heldHits.contains("伤害 100"))
+        XCTAssertTrue((heldOpponent ?? "").contains("生命 900，"))
         XCTAssertTrue((ultimate.value as? String ?? "").contains("需要 100 能量"), "Spending energy must update the live button state")
         capture("fighter-liu-hold-controls")
-        pause.tap()
-        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 3))
         XCUIDevice.shared.press(.home); app.activate()
         XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 8))
+        XCTAssertEqual(status.label, heldStatus, "A paused hold must not advance while backgrounded")
+        XCTAssertEqual(app.staticTexts["duel.hits"].label, heldHits)
+        XCTAssertEqual(app.staticTexts["duel.stats.1"].value as? String, heldOpponent)
         app.buttons["duel.resume"].tap()
         let finished = NSPredicate { _, _ in app.staticTexts["duel.hits"].label.contains("伤害 280") }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: finished, object: nil)], timeout: 6), .completed)
