@@ -36,7 +36,11 @@ metadata = {
     "deviceUDID": device,
     "recordCommand": record_command,
     "testCommand": command,
-    "testScope": "Existing ArenaFlowTests/DuelFlowTests (two UI tests, unchanged selectors)",
+    "testScope": (
+        "UI test invocation recorded in testCommand: DuelFlowTests legacy regression and, "
+        "when selected, DuelWeaponFlowTests equipped fighters/source controls. "
+        "XCTest results define the executed cases and outcomes."
+    ),
     "geometrySource": "Original MP4 stream, including Simulator orientation changes; no rotation or crop applied",
     "timeSource": "Host UTC clock for wall times; original MP4 for media timestamps",
     "recordingComplete": False,
