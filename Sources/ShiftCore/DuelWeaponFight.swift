@@ -284,9 +284,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
         guard tick > 0 else { return 0 }
         let a = endpoints(i, clip: clip, phase: clip.phase(at: tick - 1), command: command)
         let b = endpoints(i, clip: clip, phase: clip.phase(at: tick), command: command)
-        return zip(a, b).map { p, q in
-            sqrt((q.x - p.x) * (q.x - p.x) + (q.y - p.y) * (q.y - p.y) + (q.z - p.z) * (q.z - p.z))
-        }.max() ?? 0
+        var fastestSquared: Double = 0
+        for (p, q) in zip(a, b) {
+            let dx = q.x - p.x
+            let dy = q.y - p.y
+            let dz = q.z - p.z
+            let squared = dx * dx + dy * dy + dz * dz
+            fastestSquared = max(fastestSquared, squared)
+        }
+        return sqrt(fastestSquared)
     }
     private func swingTick(_ i: Int, clip: DuelWeaponClip, command: DuelWeaponCommand, after: Int) -> Int {
         let start = max(after + 1, Int(ceil(Double(clip.ticks) * 0.12)))
