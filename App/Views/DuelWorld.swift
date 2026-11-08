@@ -61,7 +61,8 @@ final class DuelWorldView: SCNView {
         key.light?.shadowColor = UIColor.black.withAlphaComponent(0.32)
         key.eulerAngles = SCNVector3(-0.8, -0.5, 0); world.rootNode.addChildNode(key)
         let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .omni
-        fill.light?.color = UIColor.cyan; fill.light?.intensity = 320; fill.position = SCNVector3(8, 4, -2)
+        // Neutral, softer rear fill keeps skin and pale clothing from taking on a cyan cast.
+        fill.light?.color = UIColor.white; fill.light?.intensity = 180; fill.position = SCNVector3(8, 4, -2)
         world.rootNode.addChildNode(fill)
         buildStage(world.rootNode)
         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)

@@ -108,6 +108,18 @@ jobs:
           p.write_text(source.replace(target, target + '\n      commandLineArguments:\n        "-demo": true'))
           PY
           xcodegen generate
+      - name: Build native and UI test bundles
+        id: test_build
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          # Keep cold compilation outside the XCTest time budgets. Both schemes
+          # are replayed below from these same Debug simulator products.
+          for SCHEME in ShiftReminder ArenaFlow; do
+            xcodebuild build-for-testing -project ShiftReminder.xcodeproj -scheme "$SCHEME" \
+              -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath fighter-native CODE_SIGNING_ALLOWED=NO 2>&1 | tee "fighter-build-$SCHEME.log"
+          done
       - name: Prepare iPhone 17 Pro Max simulator
         id: simulator
         timeout-minutes: 12
@@ -120,20 +132,20 @@ jobs:
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+          xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:SiteTests/GLTFMaterialTests -only-testing:SiteTests/DuelLifecycleTests \
             -only-testing:SiteTests/DuelCharacterTests/testOpeningFeedbackSurvivesFirstTickAndRestart \
             -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
-        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.test_build.outcome == 'success' && steps.simulator.outcome == 'success' }}
         timeout-minutes: 10
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
-            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+          xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:ArenaFlowTests/DuelFlowTests \
             -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log
@@ -199,6 +211,18 @@ jobs:
           p.write_text(source.replace(target, target + '\n      commandLineArguments:\n        "-demo": true'))
           PY
           xcodegen generate
+      - name: Build native and UI test bundles
+        id: test_build
+        timeout-minutes: 15
+        shell: bash -eo pipefail {0}
+        run: |
+          # Keep cold compilation outside the XCTest time budgets. Both schemes
+          # are replayed below from these same Debug simulator products.
+          for SCHEME in ShiftReminder ArenaFlow; do
+            xcodebuild build-for-testing -project ShiftReminder.xcodeproj -scheme "$SCHEME" \
+              -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath fighter-native CODE_SIGNING_ALLOWED=NO 2>&1 | tee "fighter-build-$SCHEME.log"
+          done
       - name: Prepare iPhone 17 Pro Max simulator
         id: simulator
         timeout-minutes: 12
@@ -218,20 +242,20 @@ jobs:
           if [ "$FIGHTER_ORIGINAL_ASSETS" = "true" ]; then
             PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests" "-only-testing:SiteTests/DuelOriginalCombatTests")
           fi
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+          xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:SiteTests/GLTFMaterialTests -only-testing:SiteTests/DuelLifecycleTests -only-testing:SiteTests/DuelCharacterTests \
             "${PERSONAL_TESTS[@]}" \
             -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
-        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.test_build.outcome == 'success' && steps.simulator.outcome == 'success' }}
         timeout-minutes: 10
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
-          xcodebuild test -project ShiftReminder.xcodeproj -scheme ArenaFlow \
-            -destination "id=$DEVICE" -parallel-testing-enabled NO \
+          xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+            -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:ArenaFlowTests/DuelFlowTests \
             -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log

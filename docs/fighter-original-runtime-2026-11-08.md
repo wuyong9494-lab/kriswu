@@ -53,6 +53,64 @@ at attack contact in both directions, pause/hit stop/restart, jump lift, both
 directions of actual-rule wrist contact/grounding/body separation and repeated
 asset/scene/skeleton release. Missing real assets cannot pass by skipping.
 
-Native results are pending for this code change. Source FPS, original skill
-logic/effects, final art quality and physical-device performance remain
-unverified. This branch's workflow is unsigned and does not upload TestFlight.
+## Runtime base acceptance
+
+Commit `bb8b7cfb88f27d46f75141a0277d7e7cb28330c8` passed all five jobs in
+[run 42463078676](https://github.com/wuyong9494-lab/kriswu/actions/runs/42463078676):
+790 core tests (16 existing optional/platform skips), 6 envelope/staging tests,
+unsigned Release device compilation and its concurrency gate, 24 standard
+native tests plus 2 UI tests, and 42 actual-asset native tests plus 2 UI tests.
+All reported zero failures; no actual-asset suite was skipped.
+
+Both original-wrist hold directions passed all 180 hold samples, with worst
+gaps 0.00030452127 and 0.00068015594, below the unchanged 0.10 limit. The private
+artifact `13611326905` is 78,898,593 bytes, SHA-256
+`e2afe4859ad35fa9d1514a30c6146ae232efa5e97a469b3fca74f529b062b0e2`.
+Its archive digest and evidence envelope authentication passed. All 37 native
+PNGs were preserved privately. Manual review confirmed both personal heads on
+the source armored bodies in the actual lobby and touch-driven battle, the
+reverse-facing hold and the heavy contact pose. The battlefield remains dark
+with strong cyan rim lighting; contact diagnostics are overexposed. This is
+functional integration evidence, not final visual polish or continuous-motion
+certification.
+
+Review also found a first-draw/restart edge: a second draw at the same tick could
+incorrectly enable a transition from the discarded pose. Commit
+`8d2844da0b3760b5b978f110bef39ff263304230` records whether a transition was valid
+when its key changed and tests both the first sampled walk pose and repeated
+draws immediately after restart.
+
+## Resumed validation after the interrupted run
+
+Run [42464779065](https://github.com/wuyong9494-lab/kriswu/actions/runs/42464779065)
+tested `8d2844da0b3760b5b978f110bef39ff263304230`. Core regression (790 tests,
+16 existing skips, zero failures), the six envelope/staging tests, unsigned
+device compilation and standard native checks (24 unit plus 2 UI tests) passed.
+The actual-asset job's unit-test step expired after 15 minutes. It spent about
+eight minutes compiling before XCTest began; every completed test had passed,
+including all five original-runtime tests, but the final personal-asset and
+material checks did not finish within that step. Its two UI tests passed.
+This run is incomplete actual-asset acceptance, not a successful final result.
+
+The native and actual-asset jobs now build both existing Debug simulator test
+bundles with `build-for-testing` in a separate step, then execute the unchanged
+test selectors with `test-without-building`. The lifecycle and UI test limits
+remain 15 and 10 minutes, and the job remains bounded at 40 minutes. Build and
+test failures still propagate through `pipefail`; exported private render
+evidence, its authentication and the existing source-asset hashes are retained.
+No source ciphertext was uploaded again. Complete validation of this change
+and the resulting rendered evidence is pending.
+
+The battle's rear fill now uses neutral white at intensity 180 instead of pure
+cyan at 320, addressing the strong colored rim seen in the accepted runtime
+captures. The baked environment materials are unchanged: this is a character
+lighting adjustment, not a claim to have recovered the original lightmap
+decoding or fixed the dark palace background.
+
+The six envelope/staging tests above are distinct from the 16 promotion-gate
+tests. An earlier local total of 22 combined those categories; the native
+workflow's `envelope` job itself runs six tests.
+
+Source FPS, original skill logic/effects, final art quality and physical-device
+performance remain unverified. This branch's workflow is unsigned and does not
+upload TestFlight.
