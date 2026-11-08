@@ -184,6 +184,31 @@ final class GLTFMaterialTests: XCTestCase {
         XCTAssertThrowsError(try fixture(sampler: ["minFilter": 9988]))
     }
 
+    func testBakedLightmapUsesIndependentUVsAndStaysUnlitWithPBRLoader() throws {
+        let left = [[Float]](repeating: [Float(0.25), 0.5], count: 4).flatMap { $0 }
+        let right = [[Float]](repeating: [Float(0.75), 0.5], count: 4).flatMap { $0 }
+        let material: [String: Any] = ["extensions": ["KHR_materials_unlit": [String: Any]()],
+            "extras": ["sf3Lightmap": ["index": 0, "texCoord": 1]]]
+        let instance = try fixture(pixel: [255, 255, 255, 255, 255, 0, 0, 255],
+            sampler: ["magFilter": 9728, "minFilter": 9728], uv: left,
+            physicallyBased: true, materialOverrides: material, uv1: right).instantiate()
+        XCTAssertEqual(instance.materials[0].lightingModel, .constant)
+        XCTAssertEqual(instance.materials[0].multiply.mappingChannel, 1)
+        assertPixel(try snapshot(instance).center, equals: SIMD3(255, 0, 0))
+    }
+
+    func testBakedLightmapRejectsMissingUVsAndBrokenTextureReferences() throws {
+        let unlit: [String: Any] = ["KHR_materials_unlit": [String: Any]()]
+        let valid: [String: Any] = ["extensions": unlit,
+            "extras": ["sf3Lightmap": ["index": 0, "texCoord": 1]]]
+        XCTAssertThrowsError(try fixture(materialOverrides: valid))
+        let uv = [Float](repeating: 0.5, count: 8)
+        XCTAssertThrowsError(try fixture(materialOverrides: ["extensions": unlit,
+            "extras": ["sf3Lightmap": ["index": 99, "texCoord": 1]]], uv1: uv))
+        XCTAssertThrowsError(try fixture(materialOverrides: ["extensions": unlit,
+            "extras": ["sf3Lightmap": ["index": 0, "texCoord": 0]]], uv1: uv))
+    }
+
     private func assertPixel(_ actual: SIMD3<Float>, equals expected: SIMD3<Float>, accuracy: Float = 10,
                              file: StaticString = #filePath, line: UInt = #line) {
         for i in 0..<3 { XCTAssertEqual(actual[i], expected[i], accuracy: accuracy, file: file, line: line) }
@@ -241,7 +266,8 @@ final class GLTFMaterialTests: XCTestCase {
                          skinned: Bool = false, explicitRoot: Bool = false,
                          texturePNG: Data? = nil, embeddedTexture: Bool = false,
                          maxTexture: CGFloat = 512, physicallyBased: Bool = false,
-                         pbrOverrides: [String: Any] = [:]) throws -> GLTFModel {
+                         pbrOverrides: [String: Any] = [:], materialOverrides: [String: Any] = [:],
+                         uv1: [Float]? = nil) throws -> GLTFModel {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("gltf-material-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
@@ -265,6 +291,7 @@ final class GLTFMaterialTests: XCTestCase {
         let indexValues: [UInt16] = [0, 1, 2, 0, 2, 3]
         let indices = append(indexValues.withUnsafeBufferPointer { Data(buffer: $0) }, component: 5123, type: "SCALAR", count: 6)
         var attributes = ["POSITION": positions, "NORMAL": normals, "TEXCOORD_0": texcoords]
+        if let uv1 { attributes["TEXCOORD_1"] = floats(uv1, type: "VEC2", width: 2) }
         var nodes: [[String: Any]] = [["name": "mesh", "mesh": 0]]
         var skin: [String: Any]?
         if skinned {
@@ -281,6 +308,7 @@ final class GLTFMaterialTests: XCTestCase {
         if pixel != nil || texturePNG != nil { pbr["baseColorTexture"] = ["index": 0] }
         pbr.merge(pbrOverrides) { _, new in new }
         var material: [String: Any] = ["name": "synthetic", "alphaMode": alphaMode, "pbrMetallicRoughness": pbr]
+        material.merge(materialOverrides) { _, new in new }
         if let cutoff { material["alphaCutoff"] = cutoff }
         var document: [String: Any] = ["asset": ["version": "2.0"], "scene": 0, "scenes": [["nodes": [0]]],
             "nodes": nodes, "meshes": [["primitives": [["attributes": attributes, "indices": indices, "material": 0]]]],

@@ -30,6 +30,8 @@ final class DuelWorldView: SCNView {
     private var sampleCount = 0
     private var actors: [DuelActor] = []
     private(set) var characterAsset: DuelCharacterAsset?
+    private(set) var stageAsset: DuelStageAsset?
+    private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     enum CharacterSource { case bundled, procedural }
     private var bolts: [Int: SCNNode] = [:]
     private var hurtNodes: [SCNNode] = []
@@ -95,7 +97,12 @@ final class DuelWorldView: SCNView {
         // Keep all ten world units visible even during the rotation transition.
         guard bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Double(bounds.width / bounds.height)
-        pointOfView?.camera?.orthographicScale = max(3.2, 5.8 / max(0.1, aspect))
+        if stageAsset != nil {
+            let vertical = 2 * atan(5.8 / (7.7 * max(0.1, aspect))) * 180 / .pi
+            pointOfView?.camera?.fieldOfView = CGFloat(min(100, max(35, vertical)))
+        } else {
+            pointOfView?.camera?.orthographicScale = max(3.2, 5.8 / max(0.1, aspect))
+        }
     }
     @objc private func interrupted() { session.pause() }
     @objc private func becameActive() {
@@ -122,7 +129,7 @@ final class DuelWorldView: SCNView {
         guard !ended else { return }
         ended = true; stopClock(); session.clearInput(); session.renderPause = nil
         NotificationCenter.default.removeObserver(self)
-        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }
@@ -161,7 +168,7 @@ final class DuelWorldView: SCNView {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
         }
         slamRing?.isHidden = true
-        pointOfView?.position = SCNVector3(5, 3.6, 14)
+        pointOfView?.position = cameraBasePosition
         if let hold = session.game.grapple {
             let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
             let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
@@ -201,6 +208,18 @@ final class DuelWorldView: SCNView {
         node.scale = SCNVector3(Float(box.maxX - box.minX) / 1000, Float(box.maxY - box.minY) / 1000, 1)
     }
     private func buildStage(_ root: SCNNode) {
+        if let url = DuelStageAsset.bundledURL, let asset = try? DuelStageAsset(url: url) {
+            stageAsset = asset
+            root.addChildNode(asset.makeRoot())
+            cameraBasePosition = SCNVector3(5, 2, 7.7)
+            pointOfView?.camera?.usesOrthographicProjection = false
+            pointOfView?.camera?.projectionDirection = .vertical
+            pointOfView?.camera?.fieldOfView = 35
+            pointOfView?.camera?.zFar = 350
+            pointOfView?.position = cameraBasePosition
+            pointOfView?.look(at: SCNVector3(5, 1.2, 0))
+            return
+        }
         let floor = DuelActor.shape(SCNBox(width: 11.5, height: 0.3, length: 3.2, chamferRadius: 0.12),
                                     UIColor(red: 0.14, green: 0.16, blue: 0.28, alpha: 1))
         floor.position = SCNVector3(5, -0.2, 0); root.addChildNode(floor)

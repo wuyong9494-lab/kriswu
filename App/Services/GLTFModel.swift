@@ -142,8 +142,8 @@ final class GLTFModel: @unchecked Sendable {
         }
 
         // 网格
-        meshes = (json["meshes"] as? [[String: Any]] ?? []).map { mesh in
-            (mesh["primitives"] as? [[String: Any]] ?? []).compactMap { primitive -> Primitive? in
+        meshes = try (json["meshes"] as? [[String: Any]] ?? []).map { mesh in
+            try (mesh["primitives"] as? [[String: Any]] ?? []).compactMap { primitive throws -> Primitive? in
                 guard (primitive["mode"] as? Int ?? 4) == 4,
                       let attributes = primitive["attributes"] as? [String: Int],
                       let positionIndex = attributes["POSITION"] else { return nil }
@@ -164,13 +164,26 @@ final class GLTFModel: @unchecked Sendable {
                     let uvs = reader.floats(uvIndex)
                     if uvs.count == count * 2 { sources.append(GLTFModel.source(uvs, .texcoord, width: 2)) }
                 }
+                // Baked scenery uses a separate atlas UV set. Preserve its
+                // channel number instead of sampling it with the diffuse UVs.
+                let materialIndex = primitive["material"] as? Int
+                let lightmap = materialIndex.flatMap { index -> Any? in
+                    guard materialDefinitions.indices.contains(index) else { return nil }
+                    return (materialDefinitions[index]["extras"] as? [String: Any])?["sf3Lightmap"]
+                }
+                if let uvIndex = attributes["TEXCOORD_1"] {
+                    let uvs = reader.floats(uvIndex)
+                    if let baseUV = attributes["TEXCOORD_0"], reader.floats(baseUV).count == count * 2,
+                       uvs.count == count * 2 {
+                        sources.append(GLTFModel.source(uvs, .texcoord, width: 2))
+                    } else if lightmap != nil { throw LoadError.badFormat }
+                } else if lightmap != nil { throw LoadError.badFormat }
                 var indices: [UInt32] = (primitive["indices"] as? Int).map { reader.integers($0) }
                     ?? (0..<UInt32(count)).map { $0 }
                 guard !indices.isEmpty, indices.allSatisfy({ Int($0) < count }) else { return nil }
                 indices = Self.outwardTriangleIndices(indices, positions: positions, normals: normals)
                 let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
                 let geometry = SCNGeometry(sources: sources, elements: [element])
-                let materialIndex = primitive["material"] as? Int
                 let opaque = materialIndex.flatMap { materialDefinitions.indices.contains($0) ? materialDefinitions[$0]["alphaMode"] as? String : nil } ?? "OPAQUE"
                 // A solid hull would fill masked holes or surround translucent
                 // surfaces with opaque ink. Only opaque primitives get a hull.
@@ -422,6 +435,19 @@ final class GLTFModel: @unchecked Sendable {
                 guard strength.isFinite else { throw LoadError.badFormat }
                 material.normal.intensity = CGFloat(strength)
             }
+        }
+        let extensions = info["extensions"] as? [String: Any] ?? [:]
+        if extensions["KHR_materials_unlit"] != nil { material.lightingModel = .constant }
+        if let value = (info["extras"] as? [String: Any])?["sf3Lightmap"] {
+            guard extensions["KHR_materials_unlit"] != nil,
+                  let reference = value as? [String: Any], reference["texCoord"] as? Int == 1,
+                  let index = reference["index"] as? Int, textures.indices.contains(index),
+                  let source = textures[index]["source"] as? Int else { throw LoadError.badFormat }
+            material.multiply.contents = try image(source, true)
+            material.multiply.mappingChannel = 1
+            let samplerIndex = textures[index]["sampler"] as? Int
+            if let samplerIndex, !samplers.indices.contains(samplerIndex) { throw LoadError.badFormat }
+            try configureSampler(samplerIndex.map { samplers[$0] } ?? [:], property: material.multiply)
         }
         return material
     }
