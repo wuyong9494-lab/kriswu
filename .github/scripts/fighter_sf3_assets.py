@@ -5,6 +5,7 @@ Uses the existing private fighter key. No network access or key output.
 """
 import hashlib
 import json
+import argparse
 from pathlib import Path
 
 import fighter_private_model as envelope
@@ -18,23 +19,33 @@ EXPECTED = {
         11_164_484, "616d5cb125f49c6b378cf280c90cf10e927b5b71aa461ecb34d7cdaad08c62c1"),
 }
 
+# Separate review assets: the 64-bone source rig must not silently replace the
+# existing 42-bone game profile or its custom grapple timings.
+ORIGINAL_RIG = {
+    "Sun_OriginalRig_ActionSet.glb": (
+        5_985_528, "b38d30c4e3afd3bc94b9e62ed40964e8d6fe70548a0f29576dfe07665a2451df"),
+    "Liu_OriginalRig_ActionSet.glb": (
+        5_351_896, "16381ae1b4d3a8c291ceb883a9bd83474655d90d8e63dcaf1296344a3e3f40d5"),
+}
+
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def verified_assets(source):
+def verified_assets(source, expected=None):
+    expected = EXPECTED if expected is None else expected
     source = Path(source)
     manifest = json.loads((source / "manifest.json").read_text())
     if manifest.get("version") != 1:
         raise ValueError("Unsupported private asset manifest version")
     rows = manifest.get("assets", [])
-    if len(rows) != len(EXPECTED) or {row["file"] for row in rows} != set(EXPECTED):
+    if len(rows) != len(expected) or {row["file"] for row in rows} != set(expected):
         raise ValueError("Missing or unexpected private asset")
     clear = {}
     for row in rows:
         name = row["file"]
-        size, expected_digest = EXPECTED[name]
+        size, expected_digest = expected[name]
         purpose = "asset:" + name
         if (row["bytes"], row["sha256"], row["purpose"]) != (size, expected_digest, purpose):
             raise ValueError("Private asset identity mismatch")
@@ -60,14 +71,18 @@ def verified_assets(source):
     return clear
 
 
-def stage(source, destination):
+def stage(source, destination, expected=None):
     # A corrupt last asset must not leave earlier assets partially installed.
-    assets = verified_assets(source)
+    assets = verified_assets(source, expected)
     for name, data in assets.items():
         envelope.write_atomic(Path(destination) / name, data)
     print(f"Authenticated and staged {len(assets)} personal fighter/scenery assets")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--original-rig", action="store_true")
+    args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    stage(root / ".github/private/sf3", root / "App/Resources/FighterPrivate")
+    stage(root / (".github/private/sf3-original" if args.original_rig else ".github/private/sf3"),
+          root / "App/Resources/FighterPrivate", ORIGINAL_RIG if args.original_rig else EXPECTED)

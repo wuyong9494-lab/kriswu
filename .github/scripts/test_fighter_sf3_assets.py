@@ -42,6 +42,14 @@ class PersonalAssetStagingTests(unittest.TestCase):
         assets.stage(self.source, self.destination)
         self.assertEqual({p.name: p.read_bytes() for p in self.destination.iterdir()}, self.clear)
 
+    def test_selected_asset_profile_cannot_accept_another_set(self):
+        with self.assertRaises(ValueError):
+            assets.stage(self.source, self.destination, assets.ORIGINAL_RIG)
+        self.assertFalse(self.destination.exists())
+        custom = {name: (len(data), assets.digest(data)) for name, data in self.clear.items()}
+        assets.stage(self.source, self.destination, custom)
+        self.assertEqual({p.name: p.read_bytes() for p in self.destination.iterdir()}, self.clear)
+
     def test_rejects_missing_reordered_redirected_or_wrong_purpose_parts(self):
         variants = []
         missing = copy.deepcopy(self.manifest); missing["assets"].pop(); variants.append(missing)
