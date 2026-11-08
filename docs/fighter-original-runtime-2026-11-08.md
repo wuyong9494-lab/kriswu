@@ -157,3 +157,38 @@ workflow's `envelope` job itself runs six tests.
 Source FPS, original skill logic/effects, final art quality and physical-device
 performance remain unverified. This branch's workflow is unsigned and does not
 upload TestFlight.
+
+## Autumn lobby and recorded UI follow-up
+
+Commit `ed048cb3a58e6fa203e60a17fe2fa8f139084eb3` passed all five jobs in
+[run 42479153124](https://github.com/wuyong9494-lab/kriswu/actions/runs/42479153124).
+Core reported 790 tests, 16 existing skips and zero failures; the envelope job
+again ran six tests. Unsigned Release device compilation succeeded and the
+concurrency-warning report was empty. Standard native checks passed 25 unit
+and two UI tests (15.145 and 149.405 seconds). The actual-asset group passed
+43 unit and two UI tests (417.327 and 247.448 seconds), without skips or failures.
+The existing separate 15-minute unit and 10-minute UI limits were retained.
+
+The independently reviewed autumn material variants now opt into the verified
+static RGB path; the separate MatCap variant stays excluded. Lobby fill now
+uses neutral white at intensity 180. See
+[the source-color review](fighter-scene-lighting-2026-11-08.md) for scope,
+actual material/leaf assertions and the remaining bright-highlight limitation.
+Both lobby comparisons were inspected; the battle-idle pair is pixel-identical.
+
+The two existing UI tests now also exercise Sun's heavy attack and two skills
+after isolated restarts and real directional input. Each action passed its
+single-hit damage check (165, 135 and 155 respectively), and all three new
+screenshots were exported. Liu's touch-driven hold, pause/background/resume,
+two impacts and restart still pass. Both original-rig contact directions again
+sampled 180 frames with maximum wrist gaps 0.00030452127 and 0.00068015594.
+These remain app-authored martial hold rules, not full original backthrow logic.
+
+The raw Simulator recording and provenance were included in the authenticated
+private artifact with 40 PNGs and 14 text attachments. Its source commit, run,
+exit codes, original video bytes and hash are retained. Detailed playback
+scope is recorded in [the motion review](fighter-native-motion-2026-11-08.md).
+The source FPS follow-up still finds no verified timing link for the 25 selected
+TextAsset clips; generic IL2CPP metadata names do not establish their rate.
+No unchanged source ciphertext was uploaded again, and this run did not publish
+a TestFlight build.

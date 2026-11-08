@@ -123,5 +123,27 @@ test's unchecked buffer reads. It reuses existing scene instances and adds no
 large asset loads. Lobby character fill changes from blue at intensity 240 to
 neutral white at 180, consistent with the accepted battle fill.
 
-Native execution and visual review of this follow-up are pending. Previous
-palace acceptance above applies only to its recorded commit and run.
+The follow-up passed all five jobs at commit
+`ed048cb3a58e6fa203e60a17fe2fa8f139084eb3` in
+[run 42479153124](https://github.com/wuyong9494-lab/kriswu/actions/runs/42479153124).
+The actual-asset group passed 43 unit tests and two UI tests, with no failures
+or skips. The augmented autumn test passed in 26.030 seconds, the palace/roof
+test in 30.667 seconds and the shared source-color pixel test in 0.900 seconds.
+The standard native group passed 25 unit tests and two UI tests; its pixel
+test took 2.995 seconds. No source asset or encrypted chunk changed.
+
+Manual comparison of both original-rig lobby captures against run 42471549711
+confirms reduced blue/cyan cast on hair, armor and boots, with warmer skin and
+more legible rail panels, fallen leaves and distant background. The scene
+retains its dark atmosphere. Warm shoulder/upper-arm highlights remain very
+bright, and broad floor/column regions remain dark; final art quality is still
+open. Counts of encoded channel values at 255 are not a linear-light clipping
+measurement. The corresponding battle-idle captures are exactly equal across
+all 946,440 decoded RGBA pixels, consistent with the lobby-only lighting change.
+
+The authenticated private artifact is `13617546740`, 485,392,397 bytes,
+SHA-256 `8fd1b03bf8f499b7f2ce98b9778e6619fc545e31ac6d4e86b6bab1ef94a925b9`.
+Its 40 native PNGs, 14 text attachments and recorded UI evidence are retained
+privately. This acceptance establishes the five-material static RGB correction
+and inspected scene appearance; full source rendering and physical-device
+performance remain separate open items.
