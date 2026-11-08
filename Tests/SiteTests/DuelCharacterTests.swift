@@ -28,7 +28,7 @@ final class DuelCharacterTests: XCTestCase {
     }
     func testPausedAndHitStopAnimationClockAndAssetLifetime() throws {
         let state = DuelSession(.init(hero: .liu, difficulty: .learning, mode: .practice))
-        var world: DuelWorldView? = DuelWorldView(session: state)
+        var world: DuelWorldView? = DuelWorldView(session: state, characterSource: .legacy)
         weak var retainedAsset = world?.characterAsset
         XCTAssertNotNil(retainedAsset)
         state.input("right", down: true)
@@ -51,7 +51,7 @@ final class DuelCharacterTests: XCTestCase {
     }
     func testRealLiuGrappleGroundingContactAndRenderedEvidence() throws {
         let state = DuelSession(.init(hero: .liu, difficulty: .learning, mode: .practice))
-        let world = DuelWorldView(session: state)
+        let world = DuelWorldView(session: state, characterSource: .legacy)
         defer { world.shutdown(); state.shutdown() }
         XCTAssertNotNil(world.characterAsset)
         world.frame = CGRect(x: 0, y: 0, width: 956, height: 440); world.layoutIfNeeded()

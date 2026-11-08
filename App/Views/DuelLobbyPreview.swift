@@ -15,6 +15,7 @@ final class DuelLobbySceneView: SCNView {
     private(set) var selectedHero: DuelGame.Hero?
     private var stage: DuelStageAsset?
     private var character: DuelCharacterAsset?
+    private var originalCharacter: DuelOriginalRigAsset?
     private var characterRoot: SCNNode?
 
     init(hero: DuelGame.Hero) {
@@ -50,7 +51,19 @@ final class DuelLobbySceneView: SCNView {
     func select(_ hero: DuelGame.Hero) {
         guard selectedHero != hero, let scene else { return }
         selectedHero = hero
-        characterRoot?.removeFromParentNode(); characterRoot = nil; character = nil
+        characterRoot?.removeFromParentNode(); characterRoot = nil; character = nil; originalCharacter = nil
+        if let identity = DuelOriginalRigAsset.identity(for: hero),
+           let url = DuelOriginalRigAsset.bundledURL(for: identity) {
+            guard let asset = try? DuelOriginalRigAsset(url: url, identity: identity) else { return }
+            let actor = DuelOriginalRigInstance(asset)
+            actor.apply(.init(clip: .idle, phase: 0))
+            actor.instance.root.position = SCNVector3(4.7, -0.14, -0.35)
+            actor.instance.root.eulerAngles.y = .pi
+            actor.instance.root.name = "duel.lobby.character.\(hero.rawValue)"
+            scene.rootNode.addChildNode(actor.instance.root)
+            originalCharacter = asset; characterRoot = actor.instance.root; setNeedsDisplay()
+            return
+        }
         guard let url = DuelCharacterAsset.bundledURL(for: hero),
               let asset = try? DuelCharacterAsset(url: url, hero: hero) else { return }
         let instance = asset.model.instantiate()
@@ -68,7 +81,7 @@ final class DuelLobbySceneView: SCNView {
         // Detach resource-owning nodes even if SceneKit keeps an autoreleased
         // scene or renderer alive until the current event finishes.
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-        scene = nil; pointOfView = nil; stage = nil; character = nil; characterRoot = nil
+        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil
         rendersContinuously = false; isPlaying = false
     }
 }

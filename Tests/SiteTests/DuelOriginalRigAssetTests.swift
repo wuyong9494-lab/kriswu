@@ -4,8 +4,8 @@ import SceneKit
 import simd
 @testable import ShiftReminder
 
-/// Explicit private-asset review only. These source-rig clips are not the
-/// current gameplay profile, so successful loading cannot certify combat timing.
+/// Source integrity and frame review. Successful loading alone cannot certify
+/// combat timing; the default gameplay binding has its own acceptance suite.
 @MainActor
 final class DuelOriginalRigAssetTests: XCTestCase {
     private let identities: [(String, Int, String)] = [

@@ -103,7 +103,9 @@ documentation only and does not request another build.
 
 ## Remaining scope
 
-The two original-rig action sets remain a native review profile. They have not
-replaced the existing gameplay rig. Source animation rate, original hero skill
+At the accepted commit above, the two original-rig action sets were a native
+review profile. The subsequent [runtime integration](fighter-original-runtime-2026-11-08.md)
+changes the default lobby and combat model and records its separate validation.
+Source animation rate, original hero skill
 rules/hit timing, full effects and physical-device 60 FPS are not certified by
 these loading/pose/lifecycle tests. This workflow does not upload to TestFlight.

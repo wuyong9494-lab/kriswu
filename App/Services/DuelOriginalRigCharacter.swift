@@ -2,9 +2,9 @@ import Foundation
 import CryptoKit
 import SceneKit
 
-/// Deliberately not a DuelCharacterAsset replacement. This preserves the source
-/// rig, all source clips and personal head for native inspection. It provides no
-/// hit windows, root locomotion, IK or fallback to the 42-bone gameplay rig.
+/// Strict source asset shared by review and gameplay. It preserves the source
+/// rig, all clips and personal head. Combat presentation belongs to
+/// DuelOriginalCombatInstance; this loader never substitutes the 42-bone rig.
 @MainActor
 final class DuelOriginalRigAsset {
     enum Identity: String, CaseIterable {
@@ -17,6 +17,9 @@ final class DuelOriginalRigAsset {
         }
     }
     enum AssetError: Error { case integrity, incomplete }
+    static func identity(for hero: DuelGame.Hero) -> Identity? {
+        switch hero { case .liu: return .liu; case .ember: return .sun; case .gale: return nil }
+    }
     let identity: Identity
     let model: GLTFModel
     private let starts: [String: Float]

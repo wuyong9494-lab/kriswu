@@ -71,7 +71,7 @@ final class DuelPersonalAssetTests: XCTestCase {
     func testBothMatchSelectionsLoadPersonalOpponentsAndPalace() throws {
         for hero in [DuelGame.Hero.ember, .liu] {
             let state = DuelSession(.init(hero: hero, difficulty: .learning, mode: .practice))
-            let world = DuelWorldView(session: state)
+            let world = DuelWorldView(session: state, characterSource: .legacy)
             defer { world.shutdown(); state.shutdown() }
             world.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
             world.layoutIfNeeded()

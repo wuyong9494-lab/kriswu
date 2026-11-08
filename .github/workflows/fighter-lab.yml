@@ -22,7 +22,7 @@ on:
         type: boolean
         default: false
       private_original_fighters:
-        description: Review both real 64-bone action sets separately from gameplay (requires approved encrypted assets)
+        description: Validate both original 64-bone action sets and gameplay bindings (requires approved encrypted assets)
         type: boolean
         default: false
 permissions:
@@ -216,7 +216,7 @@ jobs:
             PERSONAL_TESTS=("-only-testing:SiteTests/DuelPersonalAssetTests")
           fi
           if [ "$FIGHTER_ORIGINAL_ASSETS" = "true" ]; then
-            PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests")
+            PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests" "-only-testing:SiteTests/DuelOriginalCombatTests")
           fi
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \

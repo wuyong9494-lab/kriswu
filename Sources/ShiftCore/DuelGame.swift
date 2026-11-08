@@ -71,6 +71,7 @@ public struct DuelGame: Equatable, Sendable {
         public var attack: Attack?
         public var flash = 0
         public var walking = false
+        public var movementDirection = 0
     }
     public struct Projectile: Equatable, Sendable {
         public let id: Int
@@ -129,6 +130,7 @@ public struct DuelGame: Equatable, Sendable {
         return Box(minX: min(near, far), maxX: max(near, far), minY: f.y + 275, maxY: f.y + 1525)
     }
     public static let ticksPerSecond = 60
+    public static let jumpVelocity = 235, gravity = 18
     public static let leftWall = 550, rightWall = 9450, bodyWidth = 620
     public let selectedHero: Hero
     public let difficulty: Difficulty
@@ -280,13 +282,13 @@ public struct DuelGame: Equatable, Sendable {
     private mutating func updateFighter(_ i: Int, input: Input, taps: Buttons) {
         var f = fighters[i]
         f.flash = max(0, f.flash - 1); f.invulnerable = max(0, f.invulnerable - 1)
-        f.stun = max(0, f.stun - 1); f.walking = false
+        f.stun = max(0, f.stun - 1); f.walking = false; f.movementDirection = 0
         if f.knockdown > 0 {
             f.knockdown -= 1; f.guarding = false
             if f.knockdown == 0 { f.invulnerable = 20 }
         }
         if f.y > 0 || f.velocityY > 0 {
-            f.y = max(0, f.y + f.velocityY); f.velocityY -= 18
+            f.y = max(0, f.y + f.velocityY); f.velocityY -= Self.gravity
             if f.y == 0 { f.velocityY = 0 }
         }
         if f.attack == nil { f.facing = fighters[1 - i].x >= f.x ? 1 : -1 }
@@ -295,12 +297,13 @@ public struct DuelGame: Equatable, Sendable {
         if frame % 12 == 0 { f.energy = min(100, f.energy + 1) }
         if f.stun == 0 && f.knockdown == 0 {
             if taps.contains(.jump) && f.y == 0 && f.attack == nil {
-                f.velocityY = 235; f.guarding = false; events.append(.jumped(player: i))
+                f.velocityY = Self.jumpVelocity; f.guarding = false; events.append(.jumped(player: i))
             }
             if !f.guarding {
                 let speed = (f.hero == .gale ? 78 : 68) * (f.attack == nil ? 10 : 4) / 10
                 if f.attack?.move != .ultimate {
                     f.x += min(1, max(-1, input.move)) * speed; f.walking = input.move != 0
+                    f.movementDirection = min(1, max(-1, input.move))
                 }
                 if var attack = f.attack {
                     let data = Self.data(attack.move, hero: f.hero)
@@ -363,7 +366,7 @@ public struct DuelGame: Equatable, Sendable {
         for i in 0..<2 {
             fighters[i].y = 0; fighters[i].velocityY = 0; fighters[i].stun = 0
             fighters[i].knockdown = 0; fighters[i].attack = nil; fighters[i].guarding = false
-            fighters[i].walking = false; fighters[i].flash = 0
+            fighters[i].walking = false; fighters[i].movementDirection = 0; fighters[i].flash = 0
         }
         fighters[attacker].facing = direction; fighters[defender].facing = -direction
         grapple = Grapple(attacker: attacker, direction: direction)
