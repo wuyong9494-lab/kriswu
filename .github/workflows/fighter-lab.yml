@@ -254,7 +254,10 @@ jobs:
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
-          xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ArenaFlow \
+          # One unretimed Simulator recording covers this existing UI test run.
+          # The complete native-motion directory is sealed with the portrait evidence below.
+          bash .github/scripts/fighter_native_video.sh "$DEVICE" -- \
+            xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:ArenaFlowTests/DuelFlowTests \
             -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \

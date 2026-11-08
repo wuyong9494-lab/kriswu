@@ -43,6 +43,29 @@ final class DuelFlowTests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(opponent - player), 1000, "Real directional input must reach grab range")
     }
 
+    private func exerciseSunMotion(_ app: XCUIApplication) {
+        // Record distinct attacks through real controls. Restarting isolates
+        // each input from the previous move's knockdown, energy use and drift.
+        for (control, damage) in [("heavy", 165), ("skill1", 135), ("skill2", 155)] {
+            app.buttons["duel.pause"].tap()
+            XCTAssertTrue(app.buttons["duel.restart"].waitForExistence(timeout: 3))
+            app.buttons["duel.restart"].tap()
+            approachGrappleRange(app)
+            let button = app.buttons["duel.control.\(control)"]
+            XCTAssertTrue(button.isHittable)
+            button.tap()
+            let connected = NSPredicate { _, _ in
+                let hits = app.staticTexts["duel.hits"].label
+                return hits.contains("命中 1 次") && hits.contains("伤害 \(damage)")
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: connected, object: nil)], timeout: 5), .completed)
+            capture("fighter-ember-motion-\(control)")
+        }
+        app.buttons["duel.pause"].tap(); app.buttons["duel.restart"].tap()
+        let reset = NSPredicate { _, _ in app.staticTexts["duel.hits"].label.contains("伤害 0") }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reset, object: nil)], timeout: 3), .completed)
+    }
+
     func testLiuUltimateUsesRealTouchInputPausesAndDealsTwoImpacts() {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "fighter"]
@@ -100,6 +123,10 @@ final class DuelFlowTests: XCTestCase {
             let hit = NSPredicate { _, _ in app.staticTexts["duel.hits"].label != initial }
             XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: hit, object: nil)], timeout: 5), .completed)
             app.buttons["duel.boxes"].tap(); capture("fighter-\(hero)-practice")
+            if hero == "ember" {
+                app.buttons["duel.boxes"].tap()
+                exerciseSunMotion(app)
+            }
             pause.tap()
             XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 4))
             app.buttons["duel.resume"].tap()

@@ -42,7 +42,8 @@ final class DuelLobbySceneView: SCNView {
         key.light?.intensity = 1100; key.light?.color = UIColor(red: 1, green: 0.91, blue: 0.8, alpha: 1)
         key.eulerAngles = SCNVector3(-0.7, -0.4, 0); world.rootNode.addChildNode(key)
         let fill = SCNNode(); fill.light = SCNLight(); fill.light?.type = .omni
-        fill.light?.intensity = 240; fill.light?.color = UIColor(red: 0.5, green: 0.65, blue: 1, alpha: 1)
+        // Neutral fill keeps the personal face and armor consistent with combat.
+        fill.light?.intensity = 180; fill.light?.color = UIColor.white
         fill.position = SCNVector3(7, 3, -1); world.rootNode.addChildNode(fill)
         select(hero)
     }

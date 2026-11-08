@@ -1,4 +1,4 @@
-# Palace source color correction
+# Source scene color corrections
 
 The native palace captures were markedly darker than the character lighting.
 The scene uses baked unlit materials, so changing the character's ambient or
@@ -83,3 +83,45 @@ animated effects, shadow-form lighting and original game color-space settings
 still require separate evidence. The autumn lobby has no confirmed correction
 in this change, and physical-device performance is not established by simulator
 captures.
+
+## Autumn lobby follow-up
+
+The exact existing autumn export (11,164,484 bytes, SHA-256
+`616d5cb125f49c6b378cf280c90cf10e927b5b71aa461ecb34d7cdaad08c62c1`)
+has now been traced through its source hierarchy, mesh channels, material
+references and matching compiled shader variants. All 96 exported renderers
+and their main/baked texture associations were checked. Decoded source texture
+pixels match the embedded PNG pixels; this establishes asset identity, not
+equivalent GPU color management.
+
+Five material names (`ALFA`, `BG`, `ALFA_BG`, `Base_mat`, `Leavs_mat`) cover
+82 renderers and use the same static RGB formula described above. Their exact
+empty-keyword and `USE_FOG` compiled variants have identical relevant program
+bytes. `Base_mat` binds a MatCap texture but does not enable its MatCap keyword.
+The independent autumn allowlist enables the existing compatibility path only
+after the original size/hash gate succeeds.
+
+The remaining 14 renderers use `Matcup_mat` with `USE_MATCAP_LOCAL`. That variant
+adds a texture- and alpha-dependent MatCap term, so it is excluded from this
+bounded correction. Shader object identity alone would not justify treating
+all six materials alike. Fog, shadow-form transitions and omitted dynamic
+effects are not restored by this change.
+
+Only two autumn primitives contain source colors: `Leaves_01` (196 vertices)
+and `Leaves_002` (214 vertices). Their source UNorm8 colors were exported as
+FLOAT `[255,255,255,255]`; the verified path normalizes RGB and preserves
+independent texture coverage. The other eligible meshes receive identity
+white. The distant tree imagery belongs to the panorama atlas and is distinct
+from these two explicit leaf meshes. Uniform grey lightmaps on `BG`, `ALFA_BG`
+and `Leavs_mat` retain the loader's channel-zero optimization; the nonuniform
+lightmap retains UV1.
+
+The existing real-lobby test now checks every material count, retained baked
+map and selected gain marker, plus the two actual leaf color arrays and two
+background arrays. Its safe Float4 inspection also replaces the palace roof
+test's unchecked buffer reads. It reuses existing scene instances and adds no
+large asset loads. Lobby character fill changes from blue at intensity 240 to
+neutral white at 180, consistent with the accepted battle fill.
+
+Native execution and visual review of this follow-up are pending. Previous
+palace acceptance above applies only to its recorded commit and run.

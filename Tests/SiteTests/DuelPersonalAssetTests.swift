@@ -45,14 +45,38 @@ final class DuelPersonalAssetTests: XCTestCase {
     func testLobbyLoadsBothRealModelsAndBakedScene() throws {
         let sceneAsset = try DuelStageAsset(url: XCTUnwrap(DuelStageAsset.bundledURL(for: .autumnLobby)), kind: .autumnLobby)
         let sceneRoot = sceneAsset.makeRoot()
-        var lightmapped = 0
+        let sourceMaterials: Set<String> = ["ALFA", "BG", "ALFA_BG", "Base_mat", "Leavs_mat"]
+        let uniformLightmaps: Set<String> = ["BG", "ALFA_BG", "Leavs_mat"]
+        var materialCounts = [String: Int]()
         sceneRoot.enumerateChildNodes { node, _ in
-            for material in node.geometry?.materials ?? [] where material.multiply.mappingChannel == 1 {
+            guard let geometry = node.geometry else { return }
+            for material in geometry.materials {
+                let name = material.name ?? ""
+                materialCounts[name, default: 0] += 1
                 XCTAssertEqual(material.lightingModel, .constant)
-                lightmapped += 1
+                XCTAssertNotNil(material.multiply.contents)
+                XCTAssertEqual(material.multiply.mappingChannel, uniformLightmaps.contains(name) ? 0 : 1,
+                               "The actual lobby must retain its uniform or UV1 baked lightmap: \(name)")
+                let surface = material.shaderModifiers?[.surface] ?? ""
+                XCTAssertEqual(surface.components(separatedBy: GLTFModel.sourceLocationColorMarker).count - 1,
+                               sourceMaterials.contains(name) ? 1 : 0, "Unexpected source RGB gain: \(name)")
+                if name == "Matcup_mat" {
+                    XCTAssertTrue(geometry.sources(for: .color).isEmpty,
+                                  "The MatCap variant must remain outside the static color compatibility mode")
+                }
             }
         }
-        XCTAssertGreaterThan(lightmapped, 0, "The real lobby must preserve its baked lightmap UVs")
+        XCTAssertEqual(materialCounts, ["ALFA": 5, "BG": 1, "ALFA_BG": 11,
+                                        "Base_mat": 63, "Matcup_mat": 14, "Leavs_mat": 2])
+        // The two leaf meshes stored white UNorm8 colors as FLOAT 255. The
+        // distant background cards have no source colors and need identity RGB.
+        // Inspect this existing instance instead of loading another large model.
+        for (name, count) in [("Leaves_01", 196), ("Leaves_002", 214), ("BG_01", 52), ("BG_ALf_0000", 32)] {
+            let node = try XCTUnwrap(sceneRoot.childNode(withName: name, recursively: true))
+            let geometry = try XCTUnwrap(node.childNodes.compactMap(\.geometry).first)
+            let colors = try XCTUnwrap(geometry.sources(for: .color).first)
+            assertWhiteSourceColors(colors, count: count, label: name)
+        }
         let clocks = DuelWorldView.activeClocks
         let lobby = DuelLobbySceneView(hero: .ember)
         defer { lobby.shutdown() }
@@ -84,18 +108,7 @@ final class DuelPersonalAssetTests: XCTestCase {
                 let roof = try XCTUnwrap(palace.childNode(withName: "roof_back", recursively: true))
                 let geometry = try XCTUnwrap(roof.childNodes.compactMap(\.geometry).first)
                 let colors = try XCTUnwrap(geometry.sources(for: .color).first)
-                XCTAssertEqual(colors.vectorCount, 1985)
-                XCTAssertEqual(colors.componentsPerVector, 4)
-                XCTAssertEqual(colors.bytesPerComponent, MemoryLayout<Float>.size)
-                let white = colors.data.withUnsafeBytes { bytes in
-                    (0..<colors.vectorCount).allSatisfy { vertex in
-                        (0..<4).allSatisfy { channel in
-                            let offset = colors.dataOffset + vertex * colors.dataStride + channel * MemoryLayout<Float>.size
-                            return abs(bytes.loadUnaligned(fromByteOffset: offset, as: Float.self) - 1) < 0.00001
-                        }
-                    }
-                }
-                XCTAssertTrue(white, "Source byte colors must not overexpose the real palace roof")
+                assertWhiteSourceColors(colors, count: 1985, label: "roof_back")
             }
             for (index, fighter) in state.game.fighters.enumerated() {
                 let actor = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.\(index)", recursively: false))
@@ -106,6 +119,34 @@ final class DuelPersonalAssetTests: XCTestCase {
             XCTAssertEqual(state.game.fighters[0].hero, hero)
             XCTAssertEqual(state.game.fighters[1].hero, hero == .liu ? .ember : .liu)
         }
+    }
+
+    private func assertWhiteSourceColors(_ source: SCNGeometrySource, count: Int, label: String,
+                                         file: StaticString = #filePath, line: UInt = #line) {
+        let vectorBytes = 4 * MemoryLayout<Float>.size
+        guard count > 0, source.vectorCount == count, source.usesFloatComponents,
+              source.componentsPerVector == 4, source.bytesPerComponent == MemoryLayout<Float>.size else {
+            XCTFail("Expected \(count) Float4 source colors for \(label)", file: file, line: line)
+            return
+        }
+        // Validate the complete last vector before any load. Division keeps
+        // malformed strides/counts from overflowing the bounds calculation.
+        guard source.dataOffset >= 0, source.dataOffset <= source.data.count,
+              source.dataStride >= vectorBytes, source.data.count - source.dataOffset >= vectorBytes,
+              count - 1 <= (source.data.count - source.dataOffset - vectorBytes) / source.dataStride else {
+            XCTFail("Source color layout exceeds its buffer for \(label)", file: file, line: line)
+            return
+        }
+        let white = source.data.withUnsafeBytes { bytes in
+            (0..<count).allSatisfy { vertex in
+                (0..<4).allSatisfy { channel in
+                    let offset = source.dataOffset + vertex * source.dataStride + channel * MemoryLayout<Float>.size
+                    let value = bytes.loadUnaligned(fromByteOffset: offset, as: Float.self)
+                    return value.isFinite && abs(value - 1) < 0.00001
+                }
+            }
+        }
+        XCTAssertTrue(white, "Expected normalized white RGB and independent alpha for \(label)", file: file, line: line)
     }
 
     private func capture(_ view: SCNView, name: String) {

@@ -8,11 +8,16 @@ import SceneKit
 final class DuelStageAsset {
     enum AssetError: Error { case integrity, incomplete }
     static let digest = "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8"
-    // Verified against the palace's original location shader and this exact
-    // export. Other scenery and all characters retain their existing shading.
+    // Each list is verified against original source materials and the exact
+    // export gated below. Characters retain their existing shading.
     private static let palaceSourceLocationMaterials: Set<String> = [
         "home_01", "gold_01", "back", "alfa_gold", "alfa_back",
         "cust05", "back_home", "cust04", "floor_01", "metal_01"
+    ]
+    // These autumn materials use MainTex * (2 * vertex RGB) * baked lightmap.
+    // Matcup_mat has an additional MatCap term and is deliberately excluded.
+    private static let autumnSourceLocationMaterials: Set<String> = [
+        "ALFA", "BG", "ALFA_BG", "Base_mat", "Leavs_mat"
     ]
     enum Kind { case palace, autumnLobby }
     static var bundledURL: URL? { bundledURL(for: .palace) }
@@ -34,7 +39,7 @@ final class DuelStageAsset {
             throw AssetError.integrity
         }
         let decoded = try GLTFModel(url: url, animations: [], maxTexture: 2048, physicallyBased: true,
-                                    sourceLocationMaterials: kind == .palace ? Self.palaceSourceLocationMaterials : [])
+                                    sourceLocationMaterials: kind == .palace ? Self.palaceSourceLocationMaterials : Self.autumnSourceLocationMaterials)
         guard !decoded.hasSkinning, decoded.node(named: "SF3_Stage_Meters") != nil,
               decoded.node(named: kind == .palace ? "palace_exterior_raid" : "dojo_autumn_lobby") != nil else { throw AssetError.incomplete }
         model = decoded
