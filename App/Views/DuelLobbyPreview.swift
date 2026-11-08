@@ -65,6 +65,9 @@ final class DuelLobbySceneView: SCNView {
         character = asset; characterRoot = instance.root; setNeedsDisplay()
     }
     func shutdown() {
+        // Detach resource-owning nodes even if SceneKit keeps an autoreleased
+        // scene or renderer alive until the current event finishes.
+        scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         scene = nil; pointOfView = nil; stage = nil; character = nil; characterRoot = nil
         rendersContinuously = false; isPlaying = false
     }

@@ -23,16 +23,32 @@ final class DuelLifecycleTests: XCTestCase {
 
     func testLobbySelectionDoesNotStartCombatClockAndReleasesScene() {
         let clocks = DuelWorldView.activeClocks
-        let lobby = DuelLobbySceneView(hero: .liu)
-        weak var scene = lobby.scene
-        XCTAssertNotNil(scene)
-        lobby.select(.ember); XCTAssertEqual(lobby.selectedHero, .ember)
-        lobby.select(.liu); XCTAssertEqual(lobby.selectedHero, .liu)
-        XCTAssertFalse(lobby.rendersContinuously)
-        XCTAssertFalse(lobby.isPlaying)
-        XCTAssertEqual(DuelWorldView.activeClocks, clocks)
-        lobby.shutdown()
-        XCTAssertNil(lobby.scene); XCTAssertNil(lobby.pointOfView); XCTAssertNil(scene)
+        for hero in [DuelGame.Hero.liu, .ember, .liu] {
+            weak var releasedScene: SCNScene?
+            var retainedView: DuelLobbySceneView?
+            autoreleasepool {
+                let lobby = DuelLobbySceneView(hero: hero)
+                retainedView = lobby
+                let scene = lobby.scene
+                releasedScene = scene
+                XCTAssertNotNil(scene)
+                lobby.select(.ember); XCTAssertEqual(lobby.selectedHero, .ember)
+                lobby.select(.liu); XCTAssertEqual(lobby.selectedHero, .liu)
+                XCTAssertFalse(lobby.rendersContinuously)
+                XCTAssertFalse(lobby.isPlaying)
+                XCTAssertEqual(DuelWorldView.activeClocks, clocks)
+                lobby.shutdown()
+                XCTAssertNil(lobby.scene); XCTAssertNil(lobby.pointOfView)
+                XCTAssertEqual(scene?.rootNode.childNodes.count, 0,
+                               "Closing the lobby must detach its resource-owning scene nodes immediately")
+            }
+            // SceneKit uses Objective-C temporary objects. Drain the event's
+            // autorelease pool before checking lifetime, while retaining the
+            // SCNView itself to detect a hidden renderer-to-scene reference.
+            XCTAssertNotNil(retainedView)
+            XCTAssertNil(releasedScene, "A retained lobby view must not keep the closed scene alive")
+            retainedView = nil
+        }
     }
 
     func testTwoHeldInputsPauseAndRestartCannotLeaveAnAutomaticAction() {

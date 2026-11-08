@@ -88,3 +88,20 @@ GitHub Actions run 42442176810 passed unsigned device compilation, core regressi
 The separate private-character job was skipped: this is not acceptance of the
 new real scenery or Sun model. The follow-up lobby/pairing changes require a new
 run. This branch is unsigned-only and has not uploaded a new TestFlight build.
+
+
+Follow-up run 42443778433: unsigned device/core/envelope checks and both UI flows
+passed. Of 23 native unit checks, the new lobby scene lifetime assertion failed
+because it inspected an Objective-C scene before the surrounding autorelease
+pool drained. The follow-up detaches all scene nodes immediately at shutdown and
+checks that the closed scene is released after a scoped autorelease pool drains,
+while deliberately retaining the view. No sleep, relaxed assertion, or skipped
+check is used. Three repeated lobby entries are checked. A new native run is
+required to confirm this fix.
+
+The new encrypted asset upload was rejected by automatic approval review on the
+ground that this new personal-model copy had not been explicitly approved for
+publication to the public repository. No new binary resource was published. The
+three resources, their 56 encrypted parts, verified fingerprints, and a fail-closed
+staging helper are retained privately for review. Existing key handling is reused;
+no new key or credential has been committed.
