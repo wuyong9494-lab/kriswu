@@ -100,4 +100,27 @@ final class DuelOriginalRigAssetTests: XCTestCase {
         }
         XCTAssertEqual(digests.count, 4, "Distinct actual clips must change the rendered poses")
     }
+
+    func testOriginalRigReviewReleasesBothScenesAndSkeletonsAfterRepeatedEntry() throws {
+        for _ in 0..<3 {
+            for identity in DuelOriginalRigAsset.Identity.allCases {
+                weak var releasedScene: SCNScene?
+                weak var releasedHead: SCNNode?
+                try autoreleasepool {
+                    let asset = try DuelOriginalRigAsset(
+                        url: XCTUnwrap(DuelOriginalRigAsset.bundledURL(for: identity)), identity: identity)
+                    let actor = DuelOriginalRigInstance(asset)
+                    actor.apply(.init(clip: .jab, phase: 0.5))
+                    let scene = SCNScene()
+                    releasedScene = scene
+                    releasedHead = actor.instance.nodes[try XCTUnwrap(asset.model.node(named: "head"))]
+                    scene.rootNode.addChildNode(actor.instance.root)
+                    XCTAssertNotNil(releasedHead)
+                    actor.instance.root.removeFromParentNode()
+                }
+                XCTAssertNil(releasedScene, "Closing a review must release its scene")
+                XCTAssertNil(releasedHead, "A discarded skinned instance must release its skeleton")
+            }
+        }
+    }
 }
