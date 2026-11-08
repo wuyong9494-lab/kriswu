@@ -219,6 +219,51 @@ final class GLTFMaterialTests: XCTestCase {
         assertPixel(try snapshot(instance).center, equals: SIMD3(255, 0, 0))
     }
 
+    func testSourceLocationByteColorsMultiplyBakedRGBOnceAndPreserveCoverage() throws {
+        let left = [[Float]](repeating: [Float(0.25), 0.5], count: 4).flatMap { $0 }
+        let right = [[Float]](repeating: [Float(0.75), 0.5], count: 4).flatMap { $0 }
+        let colors = [[Float]](repeating: [128, 64, 192, 17], count: 4).flatMap { $0 }
+        let material: [String: Any] = ["name": "home_01",
+            "extensions": ["KHR_materials_unlit": [String: Any]()],
+            "extras": ["sf3Lightmap": ["index": 0, "texCoord": 1]]]
+        // A white base texel and a mid-gray lightmap make a missing gain,
+        // duplicate vertex modulation, or unnormalized 255 observable.
+        func surface(_ factor: [Double], mode: String = "OPAQUE", vertexColors: [Float]? = nil,
+                     enabled: Bool = false, name: String = "home_01") throws -> GLTFModel {
+            var definition = material; definition["name"] = name
+            return try fixture(alphaMode: mode, factor: factor,
+                pixel: [255, 255, 255, 255, 188, 188, 188, 255],
+                sampler: ["magFilter": 9728, "minFilter": 9728], uv: left,
+                physicallyBased: true, materialOverrides: definition, uv1: right,
+                vertexColors: vertexColors, sourceLocationMaterials: enabled ? ["home_01"] : [])
+        }
+        let factor = [0.5, 0.5, 0.5, 0.5]
+        let expectedFactor = [128.0 / 255, 64.0 / 255, 192.0 / 255, 0.5]
+        let model = try surface(factor, vertexColors: colors, enabled: true)
+        let expected = try snapshot(surface(expectedFactor).instantiate()).center
+        assertPixel(try snapshot(model.instantiate()).center, equals: expected, accuracy: 5)
+        assertPixel(try snapshot(model.instantiate()).center, equals: expected, accuracy: 5)
+        XCTAssertGreaterThan(expected.x, 40); XCTAssertLessThan(expected.x, 100)
+
+        let ordinary = try snapshot(surface(factor).instantiate()).center
+        assertPixel(try snapshot(surface(factor, vertexColors: colors).instantiate()).center,
+                    equals: ordinary, accuracy: 5)
+        assertPixel(try snapshot(surface(factor, vertexColors: colors, enabled: true,
+                                        name: "unrelated").instantiate()).center, equals: ordinary, accuracy: 5)
+        let white = [Float](repeating: 255, count: 16)
+        let whiteExpected = try snapshot(surface([1, 1, 1, 0.5]).instantiate()).center
+        assertPixel(try snapshot(surface(factor, vertexColors: white, enabled: true).instantiate()).center,
+                    equals: whiteExpected, accuracy: 5)
+        assertPixel(try snapshot(surface(factor, enabled: true).instantiate()).center,
+                    equals: whiteExpected, accuracy: 5)
+
+        let blended = try surface(factor, mode: "BLEND", vertexColors: colors, enabled: true).instantiate()
+        let blendReference = try surface(expectedFactor, mode: "BLEND").instantiate()
+        assertPixel(try snapshot(blended).center, equals: try snapshot(blendReference).center, accuracy: 5)
+        blended.root.opacity = 0.5; blendReference.root.opacity = 0.5
+        assertPixel(try snapshot(blended).center, equals: try snapshot(blendReference).center, accuracy: 5)
+    }
+
     private func assertPixel(_ actual: SIMD3<Float>, equals expected: SIMD3<Float>, accuracy: Float = 10,
                              file: StaticString = #filePath, line: UInt = #line) {
         for i in 0..<3 { XCTAssertEqual(actual[i], expected[i], accuracy: accuracy, file: file, line: line) }
@@ -277,7 +322,8 @@ final class GLTFMaterialTests: XCTestCase {
                          texturePNG: Data? = nil, embeddedTexture: Bool = false,
                          maxTexture: CGFloat = 512, physicallyBased: Bool = false,
                          pbrOverrides: [String: Any] = [:], materialOverrides: [String: Any] = [:],
-                         uv1: [Float]? = nil) throws -> GLTFModel {
+                         uv1: [Float]? = nil, vertexColors: [Float]? = nil,
+                         sourceLocationMaterials: Set<String> = []) throws -> GLTFModel {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("gltf-material-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
@@ -302,6 +348,7 @@ final class GLTFMaterialTests: XCTestCase {
         let indices = append(indexValues.withUnsafeBufferPointer { Data(buffer: $0) }, component: 5123, type: "SCALAR", count: 6)
         var attributes = ["POSITION": positions, "NORMAL": normals, "TEXCOORD_0": texcoords]
         if let uv1 { attributes["TEXCOORD_1"] = floats(uv1, type: "VEC2", width: 2) }
+        if let vertexColors { attributes["COLOR_0"] = floats(vertexColors, type: "VEC4", width: 4) }
         var nodes: [[String: Any]] = [["name": "mesh", "mesh": 0]]
         var skin: [String: Any]?
         if skinned {
@@ -361,6 +408,7 @@ final class GLTFMaterialTests: XCTestCase {
         try binary.write(to: folder.appendingPathComponent("mesh.bin"))
         let url = folder.appendingPathComponent("fixture.gltf")
         try JSONSerialization.data(withJSONObject: document).write(to: url)
-        return try GLTFModel(url: url, maxTexture: maxTexture, physicallyBased: physicallyBased)
+        return try GLTFModel(url: url, maxTexture: maxTexture, physicallyBased: physicallyBased,
+                             sourceLocationMaterials: sourceLocationMaterials)
     }
 }

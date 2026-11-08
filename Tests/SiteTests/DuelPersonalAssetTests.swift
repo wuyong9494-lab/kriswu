@@ -77,7 +77,26 @@ final class DuelPersonalAssetTests: XCTestCase {
             world.layoutIfNeeded()
             let scene = try XCTUnwrap(world.scene)
             XCTAssertNotNil(world.stageAsset)
-            XCTAssertNotNil(scene.rootNode.childNode(withName: "duel.stage.palace", recursively: false))
+            let palace = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.stage.palace", recursively: false))
+            if hero == .ember {
+                // The captured roof stored 1985 white UNorm8 colors as FLOAT
+                // 255. Verify the actual asset is normalized before rendering.
+                let roof = try XCTUnwrap(palace.childNode(withName: "roof_back", recursively: true))
+                let geometry = try XCTUnwrap(roof.childNodes.compactMap(\.geometry).first)
+                let colors = try XCTUnwrap(geometry.sources(for: .color).first)
+                XCTAssertEqual(colors.vectorCount, 1985)
+                XCTAssertEqual(colors.componentsPerVector, 4)
+                XCTAssertEqual(colors.bytesPerComponent, MemoryLayout<Float>.size)
+                let white = colors.data.withUnsafeBytes { bytes in
+                    (0..<colors.vectorCount).allSatisfy { vertex in
+                        (0..<4).allSatisfy { channel in
+                            let offset = colors.dataOffset + vertex * colors.dataStride + channel * MemoryLayout<Float>.size
+                            return abs(bytes.loadUnaligned(fromByteOffset: offset, as: Float.self) - 1) < 0.00001
+                        }
+                    }
+                }
+                XCTAssertTrue(white, "Source byte colors must not overexpose the real palace roof")
+            }
             for (index, fighter) in state.game.fighters.enumerated() {
                 let actor = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.\(index)", recursively: false))
                 XCTAssertNotNil(actor.childNode(withName: "duel.\(fighter.hero.rawValue).skinned", recursively: false))

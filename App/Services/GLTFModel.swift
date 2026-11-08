@@ -76,7 +76,7 @@ final class GLTFModel: @unchecked Sendable {
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
     /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
     init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
-         physicallyBased: Bool = false) throws {
+         physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = []) throws {
         // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
         guard Thread.isMainThread else { throw LoadError.offMain }
         guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
@@ -138,7 +138,19 @@ final class GLTFModel: @unchecked Sendable {
         let materialDefinitions = json["materials"] as? [[String: Any]] ?? []
         let samplers = json["samplers"] as? [[String: Any]] ?? []
         let materials: [SCNMaterial] = try materialDefinitions.map { info in
-            try Self.material(info, textures: textures, samplers: samplers, physicallyBased: physicallyBased, image: loadImage)
+            let material = try Self.material(info, textures: textures, samplers: samplers,
+                                             physicallyBased: physicallyBased, image: loadImage)
+            if let name = info["name"] as? String, sourceLocationMaterials.contains(name) {
+                guard material.lightingModel == .constant,
+                      (info["extras"] as? [String: Any])?["sf3Lightmap"] != nil else { throw LoadError.badFormat }
+                // The captured location shader doubles vertex RGB before the
+                // base texture and baked lightmap multiply. Keep coverage separate.
+                let gain = "\(Self.sourceLocationColorMarker)\n#pragma body\n_surface.diffuse.rgb *= 2.0;"
+                var modifiers = material.shaderModifiers ?? [:]
+                modifiers[.surface] = Self.combiningShaderModifiers(modifiers[.surface] ?? "", gain)
+                material.shaderModifiers = modifiers
+            }
+            return material
         }
 
         // 网格
@@ -167,6 +179,31 @@ final class GLTFModel: @unchecked Sendable {
                 // Baked scenery uses a separate atlas UV set. Preserve its
                 // channel number instead of sampling it with the diffuse UVs.
                 let materialIndex = primitive["material"] as? Int
+                let sourceLocationColor = materialIndex.flatMap { index -> String? in
+                    guard materialDefinitions.indices.contains(index) else { return nil }
+                    return materialDefinitions[index]["name"] as? String
+                }.map { sourceLocationMaterials.contains($0) } ?? false
+                if sourceLocationColor {
+                    var colors = [Float](repeating: 1, count: count * 4)
+                    if let colorIndex = attributes["COLOR_0"] {
+                        let definitions = json["accessors"] as? [[String: Any]] ?? []
+                        guard definitions.indices.contains(colorIndex),
+                              definitions[colorIndex]["componentType"] as? Int == 5126,
+                              definitions[colorIndex]["type"] as? String == "VEC4" else { throw LoadError.badFormat }
+                        let source = reader.floats(colorIndex)
+                        // This verified scene export stored Unity UNorm8 colors
+                        // as FLOAT byte values. This opt-in must not reinterpret
+                        // normalized glTF colors in any other model.
+                        guard source.count == colors.count,
+                              source.allSatisfy({ $0.isFinite && (0...255).contains($0) }) else { throw LoadError.badFormat }
+                        for vertex in 0..<count {
+                            for channel in 0..<3 { colors[vertex * 4 + channel] = source[vertex * 4 + channel] / 255 }
+                        }
+                    }
+                    // Source vertex alpha controls optional mesh animation, not
+                    // material coverage. The static scene keeps color alpha at one.
+                    sources.append(GLTFModel.source(colors, .color, width: 4))
+                }
                 let lightmap = materialIndex.flatMap { index -> Any? in
                     guard materialDefinitions.indices.contains(index) else { return nil }
                     return (materialDefinitions[index]["extras"] as? [String: Any])?["sf3Lightmap"]
@@ -319,6 +356,7 @@ final class GLTFModel: @unchecked Sendable {
     // multipliers before lighting; alpha coverage is evaluated after sampling.
     // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#alpha-coverage
     static let materialSurfaceMarker = "// glTF base color and coverage"
+    static let sourceLocationColorMarker = "// Source location vertex RGB gain"
 
     private enum AlphaMode: String { case opaque = "OPAQUE", mask = "MASK", blend = "BLEND" }
 

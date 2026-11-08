@@ -8,6 +8,12 @@ import SceneKit
 final class DuelStageAsset {
     enum AssetError: Error { case integrity, incomplete }
     static let digest = "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8"
+    // Verified against the palace's original location shader and this exact
+    // export. Other scenery and all characters retain their existing shading.
+    private static let palaceSourceLocationMaterials: Set<String> = [
+        "home_01", "gold_01", "back", "alfa_gold", "alfa_back",
+        "cust05", "back_home", "cust04", "floor_01", "metal_01"
+    ]
     enum Kind { case palace, autumnLobby }
     static var bundledURL: URL? { bundledURL(for: .palace) }
     static func bundledURL(for kind: Kind) -> URL? {
@@ -27,7 +33,8 @@ final class DuelStageAsset {
               SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == expectedDigest else {
             throw AssetError.integrity
         }
-        let decoded = try GLTFModel(url: url, animations: [], maxTexture: 2048, physicallyBased: true)
+        let decoded = try GLTFModel(url: url, animations: [], maxTexture: 2048, physicallyBased: true,
+                                    sourceLocationMaterials: kind == .palace ? Self.palaceSourceLocationMaterials : [])
         guard !decoded.hasSkinning, decoded.node(named: "SF3_Stage_Meters") != nil,
               decoded.node(named: kind == .palace ? "palace_exterior_raid" : "dojo_autumn_lobby") != nil else { throw AssetError.incomplete }
         model = decoded
