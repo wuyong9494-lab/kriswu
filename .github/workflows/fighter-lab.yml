@@ -17,6 +17,10 @@ on:
         description: Run actual character acceptance (requires separately staged model and key)
         type: boolean
         default: false
+      private_personal_fighters:
+        description: Validate actual Sun, Liu, autumn lobby and palace (requires approved encrypted assets)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -42,7 +46,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Verify authenticated envelopes with synthetic data
-        run: python3 -m unittest discover -s .github/scripts -p test_fighter_private_model.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p test_fighter_private_model.py
+          python3 -m unittest discover -s .github/scripts -p test_fighter_sf3_assets.py
   device:
     runs-on: macos-26
     timeout-minutes: 40
@@ -149,7 +155,7 @@ jobs:
     # This recovery branch explicitly validates the authorized encrypted model.
     # Other fighter branches remain code-only unless private_character is selected.
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.private_character) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.private_character || inputs.private_personal_fighters)) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108')
     runs-on: macos-26
     timeout-minutes: 40
@@ -161,9 +167,13 @@ jobs:
       - name: Stage verified private character
         env:
           FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PERSONAL_ASSETS: ${{ inputs.private_personal_fighters }}
         run: |
           brew install openssl@3
           python3 .github/scripts/fighter_private_model.py stage
+          if [ "$FIGHTER_PERSONAL_ASSETS" = "true" ]; then
+            python3 .github/scripts/fighter_sf3_assets.py
+          fi
       - name: Select Xcode and generate existing app
         run: |
           sudo xcode-select -s /Applications/Xcode_26.6.app
@@ -190,11 +200,18 @@ jobs:
       - name: Check interruption, input and SceneKit resource lifetime
         timeout-minutes: 15
         shell: bash -eo pipefail {0}
+        env:
+          FIGHTER_PERSONAL_ASSETS: ${{ inputs.private_personal_fighters }}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
+          PERSONAL_TESTS=()
+          if [ "$FIGHTER_PERSONAL_ASSETS" = "true" ]; then
+            PERSONAL_TESTS=("-only-testing:SiteTests/DuelPersonalAssetTests")
+          fi
           xcodebuild test -project ShiftReminder.xcodeproj -scheme ShiftReminder \
             -destination "id=$DEVICE" -parallel-testing-enabled NO \
             -only-testing:SiteTests/GLTFMaterialTests -only-testing:SiteTests/DuelLifecycleTests -only-testing:SiteTests/DuelCharacterTests \
+            "${PERSONAL_TESTS[@]}" \
             -derivedDataPath fighter-native -resultBundlePath fighter-lifecycle.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
