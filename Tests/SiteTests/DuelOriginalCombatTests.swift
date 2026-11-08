@@ -63,6 +63,13 @@ final class DuelOriginalCombatTests: XCTestCase {
                 let asset = try asset(identity), actor = DuelOriginalCombatInstance(asset)
                 let root = SCNNode(); root.addChildNode(actor.instance.root); scene.rootNode.addChildNode(root)
                 var fighter = DuelGame(hero: identity == .liu ? .liu : .ember).fighters[0]
+                fighter.walking = true; fighter.movementDirection = 1
+                actor.pose(fighter, tick: 9, grapple: nil, index: 0, phase: .fighting, root: root)
+                let first = actor.instance.nodes.map(\.simdWorldTransform)
+                actor.pose(fighter, tick: 9, grapple: nil, index: 0, phase: .fighting, root: root)
+                XCTAssertEqual(actor.instance.nodes.map(\.simdWorldTransform), first,
+                    "The first sampled pose must remain stable when rendered again at the same tick")
+                fighter.walking = false; fighter.movementDirection = 0
                 fighter.attack = .init(move: move, age: DuelGame.data(move, hero: fighter.hero).startup)
                 for direction in [1, -1] {
                     fighter.facing = direction; fighter.x = direction == 1 ? -1000 : 1000
@@ -184,6 +191,9 @@ final class DuelOriginalCombatTests: XCTestCase {
         let reference = DuelOriginalCombatInstance(try XCTUnwrap(world.originalAssets[.liu]))
         reference.apply(.sample(state.game.fighters[0], animationTick: 0, grapple: nil, index: 0, phase: .fighting), tick: 0)
         XCTAssertEqual(hand.simdTransform, try XCTUnwrap(reference.bone("hand.R")).simdTransform)
+        let restarted = hand.simdWorldTransform
+        for _ in 0..<5 { world.drawState() }
+        XCTAssertEqual(hand.simdWorldTransform, restarted, "A reset must not re-enable blending from the discarded match")
     }
 
     func testOriginalRuntimeAssetsScenesAndSkeletonsReleaseAfterRepeatedEntries() throws {

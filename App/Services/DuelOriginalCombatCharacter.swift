@@ -12,6 +12,7 @@ final class DuelOriginalCombatInstance {
     private var transition: GLTFModel.Pose
     private var lastKey: String?
     private var changedAt = 0
+    private var transitionEnabled = false
     private var lastTick = -1
     private var soles: [SCNNode] = []
     private var idlePelvisHeight: Float = 0
@@ -53,13 +54,16 @@ final class DuelOriginalCombatInstance {
     func apply(_ selection: DuelOriginalCombatAnimation, tick: Int) {
         if tick < lastTick { lastKey = nil }
         let hadPose = lastKey != nil
-        if lastKey != selection.key { transition.reset(from: pose); changedAt = tick }
+        if lastKey != selection.key {
+            transition.reset(from: pose); changedAt = tick
+            transitionEnabled = hadPose && selection.transitionTicks > 0
+        }
         asset.sample(selection.selection, into: &pose)
         if let selected = selection.secondary {
             asset.sample(selected, into: &secondary)
             pose.blend(toward: secondary, weight: selection.secondaryWeight, nodes: asset.model.animated)
         }
-        if hadPose, selection.transitionTicks > 0 {
+        if transitionEnabled, selection.transitionTicks > 0 {
             pose.blend(toward: transition,
                        weight: max(0, 1 - Float(max(0, tick - changedAt)) / Float(selection.transitionTicks)),
                        nodes: asset.model.animated)

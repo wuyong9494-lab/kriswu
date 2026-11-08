@@ -31,8 +31,11 @@ The core catalog preserves source motion names, hashes and frame counts from
 26th source move. Source FPS and combat timing are explicitly unverified.
 Horizontal pelvis motion was removed by the exporter. No guessed wrist peak,
 forward direction, startup/contact/recovery boundary or combo splice is supplied.
-The source set has no Grab, SideLock or Release, so it cannot replace the existing
-grapple profile. Playback does not move the gameplay simulation or change hits.
+The source set has no Grab, SideLock or Release, so it cannot directly play the
+existing grapple profile. Playback does not move the gameplay simulation or
+change hits. The subsequent [runtime integration](fighter-original-runtime-2026-11-08.md)
+adds a separate presentation adapter with application-authored pose windows and
+a blended arm hold on the original bones; this review sampler remains exact.
 
 ## Verification
 
