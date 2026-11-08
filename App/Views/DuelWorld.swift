@@ -32,6 +32,9 @@ final class DuelWorldView: SCNView {
     private(set) var characterAsset: DuelCharacterAsset?
     private var characterAssets: [DuelGame.Hero: DuelCharacterAsset] = [:]
     private(set) var originalAssets: [DuelGame.Hero: DuelOriginalRigAsset] = [:]
+    private(set) var weaponAssets: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
+    private(set) var sourceEffects: DuelSourceEffects?
+    private(set) var weaponEffects: DuelWeaponEffects?
     private(set) var stageAsset: DuelStageAsset?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     enum CharacterSource { case bundled, legacy, procedural }
@@ -70,7 +73,12 @@ final class DuelWorldView: SCNView {
         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
         if characterSource != .procedural {
             for hero in Set(session.game.fighters.map(\.hero)) where hero != .gale {
-                if characterSource == .bundled, let identity = DuelOriginalRigAsset.identity(for: hero),
+                if session.setup.originalWeapons {
+                    do {
+                        guard let assets = session.weaponAssets else { throw DuelWeaponAssets.AssetError.missing }
+                        weaponAssets[hero] = try assets.character(for: hero)
+                    } catch { session.characterFailed() }
+                } else if characterSource == .bundled, let identity = DuelOriginalRigAsset.identity(for: hero),
                    let url = DuelOriginalRigAsset.bundledURL(for: identity) {
                     // A present-but-invalid source asset must not be silently
                     // replaced by another person's older model.
@@ -81,17 +89,32 @@ final class DuelWorldView: SCNView {
                 }
             }
             characterAsset = characterAssets[.liu]
-            let loaded = session.game.fighters.compactMap { characterAssets[$0.hero] == nil && originalAssets[$0.hero] == nil ? nil : $0.hero.name }
-            session.characterLoaded(loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
+            let loaded = session.game.fighters.compactMap { characterAssets[$0.hero] == nil && originalAssets[$0.hero] == nil && weaponAssets[$0.hero] == nil ? nil : $0.hero.name }
+            session.characterLoaded(session.setup.originalWeapons ? loaded.joined(separator: "、") + " · 武士刀 / 双锤" : loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
         }
         for fighter in session.game.fighters {
-            let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero], originalAsset: originalAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
+            let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero], originalAsset: originalAssets[fighter.hero], weaponAsset: weaponAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
+            if session.setup.originalWeapons && weaponAssets[fighter.hero] == nil { actor.root.isHidden = true }
             actors.append(actor); world.rootNode.addChildNode(actor.root)
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
         }
         session.renderPause = { [weak self] paused in
+            self?.sourceEffects?.setPaused(paused)
+            self?.weaponEffects?.setPaused(paused)
             if paused { self?.stopClock() } else { self?.startClock() }
+        }
+        if session.setup.originalWeapons, let directory = session.weaponAssets?.directory {
+            do {
+                sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory)
+                weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
+            }
+            catch { session.characterFailed() }
+            session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
+            session.didReset = { [weak self] in
+                self?.sourceEffects?.reset(); self?.weaponEffects?.reset()
+            }
+            consumeFeedback(session.game, tick: 0)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -137,9 +160,11 @@ final class DuelWorldView: SCNView {
     }
     func shutdown() {
         guard !ended else { return }
-        ended = true; stopClock(); session.clearInput(); session.renderPause = nil
+        ended = true; stopClock(); session.clearInput(); session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
+        sourceEffects?.shutdown(); sourceEffects = nil
+        weaponEffects?.shutdown(); weaponEffects = nil
         NotificationCenter.default.removeObserver(self)
-        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }
@@ -205,6 +230,38 @@ final class DuelWorldView: SCNView {
             node.position = SCNVector3(Float(projectile.x) / 1000, 0.9, 0.15)
         }
         SCNTransaction.commit()
+    }
+    private func consumeFeedback(_ game: DuelGame, tick: Int) {
+        guard let fight = game.weaponFight else { return }
+        let contacts = fight.contacts.map { contact in
+            DuelSourceEffects.Contact(kind: contact.kind == .hit ? .hit : .block,
+                position: SCNVector3(Float(contact.position.x), Float(contact.position.y), Float(contact.position.z)),
+                direction: contact.direction, heavy: contact.heavy,
+                sound: !contact.usesWeapon ? .unarmed : fight.profiles[contact.attacker].isKatana ? .katana : .dualHammers)
+        }
+        let swings = fight.swings.map {
+            DuelSourceEffects.Swing(heavy: $0.heavy, sound: !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
+        }
+        // Called for every fixed simulation step, including all catch-up steps.
+        // A display frame is not an event queue and must not drop earlier hits.
+        sourceEffects?.consumeStep(contacts: contacts, swings: swings, animationTick: tick)
+        let poses: [DuelWeaponEffects.Pose] = fight.fighters.enumerated().compactMap { index, fighter in
+            guard let pose = fighter.weaponPose, let clip = fight.profiles[index].clip(named: pose.clip) else { return nil }
+            let profile = fight.profiles[index], tracks = clip.tracks
+            func world(_ value: DuelWeaponPoint) -> SCNVector3 {
+                SCNVector3(Float(fighter.x) / 1000 + Float(value.x) * Float(fighter.facing),
+                           Float(value.y + pose.groundLift), Float(value.z) * Float(fighter.facing))
+            }
+            let endpoints: [DuelWeaponEffects.Endpoints] = profile.activeWeaponSides.map { side in
+                .init(slot: side == "left" ? 0 : 1,
+                      base: world(tracks.sample(side == "left" ? tracks.weaponBaseL : tracks.weaponBaseR, phase: pose.phase)),
+                      tip: world(tracks.sample(side == "left" ? tracks.weaponTipL : tracks.weaponTipR, phase: pose.phase)))
+            }
+            return .init(fighterID: index, family: profile.isKatana ? .katana : .dualHammers,
+                         motionID: fight.weaponTrailIsActive(index) ? "\(pose.clip):\(tick - pose.tick)" : nil,
+                         isShadow: fight.shadowIsActive(index), endpoints: endpoints)
+        }
+        weaponEffects?.consumeStep(poses: poses, animationTick: tick)
     }
     private func debugBox(_ color: UIColor) -> SCNNode {
         let node = DuelActor.shape(SCNBox(width: 1, height: 1, length: 0.02, chamferRadius: 0), color)
@@ -276,9 +333,11 @@ private final class DuelActor {
     private var feet: [SCNNode] = []
     private let character: DuelCharacterInstance?
     private let original: DuelOriginalCombatInstance?
-    init(hero: DuelGame.Hero, asset: DuelCharacterAsset?, originalAsset: DuelOriginalRigAsset? = nil) {
+    private let weapon: DuelWeaponCharacterInstance?
+    init(hero: DuelGame.Hero, asset: DuelCharacterAsset?, originalAsset: DuelOriginalRigAsset? = nil, weaponAsset: DuelWeaponCharacterAsset? = nil) {
         character = asset.map { DuelCharacterInstance($0) }
         original = originalAsset.map { DuelOriginalCombatInstance($0) }
+        weapon = weaponAsset.map { DuelWeaponCharacterInstance($0) }
         let color = hero == .liu ? UIColor(white: 0.88, alpha: 1) : hero == .ember ? UIColor.systemOrange : UIColor.systemTeal
         let dark = UIColor(red: 0.10, green: 0.13, blue: 0.22, alpha: 1)
         let skin = UIColor(red: 0.68, green: 0.48, blue: 0.35, alpha: 1)
@@ -324,7 +383,7 @@ private final class DuelActor {
         shield = Self.shape(SCNTorus(ringRadius: 0.54, pipeRadius: 0.025), .cyan)
         shield.position = SCNVector3(0, 1, 0.55); shield.eulerAngles.x = .pi / 2; shield.isHidden = true
         root.addChildNode(shield)
-        if let presentedRoot = original?.instance.root ?? character?.instance.root {
+        if let presentedRoot = weapon?.instance.root ?? original?.instance.root ?? character?.instance.root {
             for child in root.childNodes where child !== shield { child.isHidden = true }
             root.addChildNode(presentedRoot)
         }
@@ -370,6 +429,10 @@ private final class DuelActor {
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
     func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase) {
+        if let weapon {
+            weapon.pose(fighter, root: root); shield.isHidden = true
+            return
+        }
         if let original {
             original.pose(fighter, tick: frame, grapple: grapple, index: index, phase: phase, root: root)
             shield.isHidden = !fighter.guarding || grapple != nil

@@ -17,6 +17,7 @@ final class DuelLobbySceneView: SCNView {
     private var character: DuelCharacterAsset?
     private var originalCharacter: DuelOriginalRigAsset?
     private var characterRoot: SCNNode?
+    private var weaponAssets: DuelWeaponAssets?
 
     init(hero: DuelGame.Hero) {
         super.init(frame: .zero, options: nil)
@@ -53,6 +54,20 @@ final class DuelLobbySceneView: SCNView {
         guard selectedHero != hero, let scene else { return }
         selectedHero = hero
         characterRoot?.removeFromParentNode(); characterRoot = nil; character = nil; originalCharacter = nil
+        if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"), DuelWeaponAssets.catalogURL() != nil {
+            do {
+                if weaponAssets == nil { weaponAssets = try DuelWeaponAssets() }
+                guard let asset = try weaponAssets?.character(for: hero), let idle = asset.profile.clip(role: "idle") else { return }
+                let actor = DuelWeaponCharacterInstance(asset)
+                actor.apply(.init(clip: idle.name, tick: 0, duration: idle.ticks, groundLift: idle.tracks.lift(phase: 0)))
+                actor.instance.root.position = SCNVector3(4.7, -0.14 + Float(idle.tracks.lift(phase: 0)), -0.35)
+                actor.instance.root.eulerAngles.y = .pi
+                actor.instance.root.name = "duel.lobby.character.\(hero.rawValue)"
+                scene.rootNode.addChildNode(actor.instance.root); characterRoot = actor.instance.root
+                setNeedsDisplay()
+            } catch { return }
+            return
+        }
         if let identity = DuelOriginalRigAsset.identity(for: hero),
            let url = DuelOriginalRigAsset.bundledURL(for: identity) {
             guard let asset = try? DuelOriginalRigAsset(url: url, identity: identity) else { return }
@@ -82,7 +97,7 @@ final class DuelLobbySceneView: SCNView {
         // Detach resource-owning nodes even if SceneKit keeps an autoreleased
         // scene or renderer alive until the current event finishes.
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil
+        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil
         rendersContinuously = false; isPlaying = false
     }
 }

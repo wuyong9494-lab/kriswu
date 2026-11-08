@@ -22,6 +22,9 @@ targets:
         excludes:
           - Info.plist
           - Resources/*.arenapack
+          - Resources/FighterPrivate/SF3UI_*.png
+          - Resources/FighterPrivate/SF3FX_*.png
+          - Resources/FighterPrivate/SF3WE_*.png
           - Arena3D/hexagons_medieval.png
           - Arena3D/skeleton_texture.png
           - ArenaVendor/vendor_axe_texture.png
@@ -39,6 +42,9 @@ targets:
           - ArenaVendor/vendor_knight_texture.png
           - ArenaVendor/vendor_mage_texture.png
           - ArenaVendor/vendor_rogue_texture.png
+          - Resources/FighterPrivate/SF3UI_*.png
+          - Resources/FighterPrivate/SF3FX_*.png
+          - Resources/FighterPrivate/SF3WE_*.png
         buildPhase:
           copyFiles:
             destination: resources

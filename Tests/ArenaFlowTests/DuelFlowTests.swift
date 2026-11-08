@@ -68,7 +68,7 @@ final class DuelFlowTests: XCTestCase {
 
     func testLiuUltimateUsesRealTouchInputPausesAndDealsTwoImpacts() {
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "fighter"]
+        app.launchArguments = ["-demo", "-screen", "fighter", "-duel-legacy-controls"]
         XCUIDevice.shared.orientation = .portrait; app.launch()
         let selection = app.buttons["duel.hero.liu"]
         XCTAssertTrue(selection.waitForExistence(timeout: 20)); selection.tap()
@@ -103,7 +103,7 @@ final class DuelFlowTests: XCTestCase {
     }
     func testBothHeroesHitPauseBackgroundExitAndKeepExistingGameEntries() {
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-screen", "game"]
+        app.launchArguments = ["-demo", "-screen", "game", "-duel-legacy-controls"]
         XCUIDevice.shared.orientation = .portrait; app.launch()
         let entry = app.buttons["duel.enter"]
         XCTAssertTrue(entry.waitForExistence(timeout: 20)); entry.tap()

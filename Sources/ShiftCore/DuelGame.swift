@@ -42,8 +42,21 @@ public struct DuelGame: Equatable, Sendable {
         public var move: Int
         public var guardHeld: Bool
         public var taps: Buttons
-        public init(move: Int = 0, guardHeld: Bool = false, taps: Buttons = []) {
+        public var vertical: Int
+        public var weaponCommand: DuelWeaponCommand?
+        public init(move: Int = 0, guardHeld: Bool = false, taps: Buttons = [], vertical: Int = 0,
+                    weaponCommand: DuelWeaponCommand? = nil) {
             self.move = min(1, max(-1, move)); self.guardHeld = guardHeld; self.taps = taps
+            self.vertical = min(1, max(-1, vertical)); self.weaponCommand = weaponCommand
+        }
+        private enum CodingKeys: String, CodingKey { case move, guardHeld, taps, vertical, weaponCommand }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(move: try c.decodeIfPresent(Int.self, forKey: .move) ?? 0,
+                      guardHeld: try c.decodeIfPresent(Bool.self, forKey: .guardHeld) ?? false,
+                      taps: try c.decodeIfPresent(Buttons.self, forKey: .taps) ?? [],
+                      vertical: try c.decodeIfPresent(Int.self, forKey: .vertical) ?? 0,
+                      weaponCommand: try c.decodeIfPresent(DuelWeaponCommand.self, forKey: .weaponCommand))
         }
         public static let neutral = Input()
     }
@@ -72,6 +85,7 @@ public struct DuelGame: Equatable, Sendable {
         public var flash = 0
         public var walking = false
         public var movementDirection = 0
+        public var weaponPose: DuelWeaponPose?
     }
     public struct Projectile: Equatable, Sendable {
         public let id: Int
@@ -115,10 +129,12 @@ public struct DuelGame: Equatable, Sendable {
         }
     }
     public func hurtBox(_ index: Int) -> Box {
+        if let weaponFight { return weaponFight.hurtBox(index) }
         let f = fighters[index]
         return Box(minX: f.x - 310, maxX: f.x + 310, minY: f.y + 275, maxY: f.y + 1525)
     }
     public func attackBox(_ index: Int) -> Box? {
+        if let weaponFight { return weaponFight.attackBox(index) }
         let f = fighters[index]
         guard grapple == nil, let attack = f.attack, !(f.hero == .gale && attack.move == .skill1) else { return nil }
         let data = Self.data(attack.move, hero: f.hero)
@@ -146,23 +162,32 @@ public struct DuelGame: Equatable, Sendable {
     public private(set) var events: [Event] = []
     public private(set) var landedHits = [0, 0]
     public private(set) var damageDealt = [0, 0]
+    public private(set) var weaponFight: DuelWeaponFight?
     private var random: UInt64
     private var nextProjectile = 0
     private var botHeld = Input.neutral
     private var buffered: [Buttons] = [[], []]
     private let opponentHero: Hero
+    private let weaponModeRequested: Bool
 
     public init(hero: Hero = .ember, difficulty: Difficulty = .learning, mode: Mode = .versus, seed: UInt64 = 20261107,
-                opponentHero: Hero? = nil) {
+                opponentHero: Hero? = nil, weaponCatalog: DuelWeaponCatalog? = nil) {
         selectedHero = hero; self.difficulty = difficulty; self.mode = mode; random = seed
-        self.opponentHero = opponentHero ?? (hero == .gale ? .ember : .gale)
+        weaponModeRequested = weaponCatalog != nil
+        self.opponentHero = opponentHero ?? (weaponCatalog != nil ? (hero == .liu ? .ember : .liu) : (hero == .gale ? .ember : .gale))
         fighters = [Fighter(hero: hero, x: 3500, facing: 1),
                     Fighter(hero: self.opponentHero, x: 6500, facing: -1)]
+        if let weaponCatalog {
+            weaponFight = DuelWeaponFight(fighters: fighters, mode: mode, difficulty: difficulty,
+                                           catalog: weaponCatalog, seed: seed)
+            if let weaponFight { fighters = weaponFight.fighters }
+        }
     }
     public var round: Int { wins.reduce(0, +) + 1 }
     /// Pause/interruption cancels future commands, without undoing a move that
     /// already started. Hit-stop buffers and queued combo links are input too.
     public mutating func cancelBufferedInputs() {
+        weaponFight?.cancelBufferedInputs()
         buffered = [[], []]
         for i in fighters.indices { fighters[i].attack?.comboQueued = false }
         botHeld = .neutral
@@ -184,6 +209,17 @@ public struct DuelGame: Equatable, Sendable {
     /// Passing opponent input is useful for deterministic local tests and future replay tools.
     public mutating func step(_ player: Input, opponent: Input? = nil) {
         if case .matchOver = phase { return }
+        if var fight = weaponFight {
+            fight.step(player, opponent: opponent); weaponFight = fight
+            fighters = fight.fighters; phase = fight.phase; frame = fight.frame
+            remainingTicks = fight.remainingTicks; wins = fight.wins; hitStop = fight.hitStop
+            events = fight.events; landedHits = fight.landedHits; damageDealt = fight.damageDealt
+            projectiles = []; grapple = nil
+            return
+        }
+        // Invalid equipped resources cannot silently turn into the common
+        // laboratory moveset. The native session presents its resource error.
+        if weaponModeRequested { events.removeAll(keepingCapacity: true); return }
         events.removeAll(keepingCapacity: true)
         advance(player, opponent: opponent)
     }

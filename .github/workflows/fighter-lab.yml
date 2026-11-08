@@ -22,7 +22,7 @@ on:
         type: boolean
         default: false
       private_original_fighters:
-        description: Validate both original 64-bone action sets and gameplay bindings (requires approved encrypted assets)
+        description: Validate original rigs, distinct katana/hammers, source controls and feedback (requires approved encrypted assets)
         type: boolean
         default: false
 permissions:
@@ -53,6 +53,7 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p test_fighter_private_model.py
           python3 -m unittest discover -s .github/scripts -p test_fighter_sf3_assets.py
+          python3 -m unittest discover -s .github/scripts -p test_fighter_sf3_distinct.py
   device:
     runs-on: macos-26
     timeout-minutes: 40
@@ -194,6 +195,7 @@ jobs:
           fi
           if [ "$FIGHTER_ORIGINAL_ASSETS" = "true" ]; then
             python3 .github/scripts/fighter_sf3_assets.py --original-rig
+            python3 .github/scripts/fighter_sf3_distinct.py
           fi
       - name: Select Xcode and generate existing app
         run: |
@@ -240,7 +242,7 @@ jobs:
             PERSONAL_TESTS=("-only-testing:SiteTests/DuelPersonalAssetTests")
           fi
           if [ "$FIGHTER_ORIGINAL_ASSETS" = "true" ]; then
-            PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests" "-only-testing:SiteTests/DuelOriginalCombatTests")
+            PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests" "-only-testing:SiteTests/DuelOriginalCombatTests" "-only-testing:SiteTests/DuelSourceControlsTests" "-only-testing:SiteTests/DuelSourceEffectsTests" "-only-testing:SiteTests/DuelWeaponEffectsTests" "-only-testing:SiteTests/DuelWeaponAssetTests" "-only-testing:SiteTests/DuelWeaponGameplayTests")
           fi
           xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ShiftReminder \
             -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
@@ -250,16 +252,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
         if: ${{ !cancelled() && steps.test_build.outcome == 'success' && steps.simulator.outcome == 'success' }}
-        timeout-minutes: 10
+        timeout-minutes: 18
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
-          # One unretimed Simulator recording covers this existing UI test run.
+          FLOW_TESTS=("-only-testing:ArenaFlowTests/DuelFlowTests")
+          if [ "$FIGHTER_ORIGINAL_ASSETS" = "true" ]; then
+            FLOW_TESTS+=("-only-testing:ArenaFlowTests/DuelWeaponFlowTests")
+          fi
+          # One recording covers both the explicit legacy regression and the
+          # new source-controls/equipped-character UI flow.
           # The complete native-motion directory is sealed with the portrait evidence below.
           bash .github/scripts/fighter_native_video.sh "$DEVICE" -- \
             xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ArenaFlow \
             -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
-            -only-testing:ArenaFlowTests/DuelFlowTests \
+            "${FLOW_TESTS[@]}" \
             -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log
       - name: Export rendered evidence
