@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "file": "Sun_OriginalRig_ActionSet.glb",
+      "bytes": 5985528,
+      "sha256": "b38d30c4e3afd3bc94b9e62ed40964e8d6fe70548a0f29576dfe07665a2451df",
+      "purpose": "asset:Sun_OriginalRig_ActionSet.glb",
+      "cipher_sha256": "1a00ca89c2ec9c9d448325591a8bad2cae1f067d880fa7d7be383e54eff02a2b",
+      "parts": [
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.000",
+          "bytes": 524288,
+          "sha256": "56d0043149ea7c92d1cc1a391a3c565d60a66004a93f6449f8c85c15bcdb847d"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.001",
+          "bytes": 524288,
+          "sha256": "9f92eb6876babaea66b5be4726a673cf19854cb605223b5d873d230076f4ad8b"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.002",
+          "bytes": 524288,
+          "sha256": "1da4ed084e2ccf54e9fd04b3f218debed283ef43a35d98f0cce93212af401b6a"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.003",
+          "bytes": 524288,
+          "sha256": "3eb361c494dfe4af5f860b212792f873ea2340c42998d471bcfe902179fa08d7"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.004",
+          "bytes": 524288,
+          "sha256": "669b7a3b0c0de939f532cf198482f95002c65dd467b2cdfca010a2e5643f6d76"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.005",
+          "bytes": 524288,
+          "sha256": "380c06104214d374ced66f553f8211e9e0f6f8ea17bb2b2b76d6399685cfb062"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.006",
+          "bytes": 524288,
+          "sha256": "39ab5dcf8907198ef2cb3080da6d8df98d68dfb9884f6321ae0daec037a22913"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.007",
+          "bytes": 524288,
+          "sha256": "1c74df2c6c681120ffe56d2eb4fd0ed09729f5dd9cb4379e795090ccf5db80a0"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.008",
+          "bytes": 524288,
+          "sha256": "fbcd12e0d334f042cc7ab39033facce3cbaaa88d9286f73a082cd65e34bfcda1"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.009",
+          "bytes": 524288,
+          "sha256": "f4e397086b503a6a7b859d36b4565e55102a9f31ee3a5508525059234d7203ff"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.010",
+          "bytes": 524288,
+          "sha256": "4253592e8c7a60a59a88948e69be2e60315536f3fc5e554f31297634a575ffae"
+        },
+        {
+          "file": "Sun_OriginalRig_ActionSet.glb.enc.011",
+          "bytes": 218461,
+          "sha256": "dea07fe6c689463d586cf2af6ad4dd77cd3556a90552af65b7e7bfe0e6396d77"
+        }
+      ]
+    },
+    {
+      "file": "Liu_OriginalRig_ActionSet.glb",
+      "bytes": 5351896,
+      "sha256": "16381ae1b4d3a8c291ceb883a9bd83474655d90d8e63dcaf1296344a3e3f40d5",
+      "purpose": "asset:Liu_OriginalRig_ActionSet.glb",
+      "cipher_sha256": "da24a036abd1cb4667ce69491f4f6749c6327ca3f038953f61cd8685e6f0f21b",
+      "parts": [
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.000",
+          "bytes": 524288,
+          "sha256": "4a7e87a2b8043c3672111d98eb79848f0bc9754b8b6094eb8630d1cc4f53ced8"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.001",
+          "bytes": 524288,
+          "sha256": "984f41167603ee1f9a5ccb11b5b1f6a87a80a9c33ba8c8eafa622d53bb9cfcaf"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.002",
+          "bytes": 524288,
+          "sha256": "a2eee84bcf6ebf928f81ca3a067b45a475faddf81225edeccbc851deb694a69d"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.003",
+          "bytes": 524288,
+          "sha256": "d586dc321deadbd7dad9d1d9fcafb2d8c10b314f67ae16d6c786dc237865d132"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.004",
+          "bytes": 524288,
+          "sha256": "d5897dfe3ce4e70751a0281f7a47e4ab9ce7f71e4cf3b682fc71de1245d3f971"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.005",
+          "bytes": 524288,
+          "sha256": "ca2ad26f6622af1133aa01b96abd4776d40f48811c2041941bbf30d0fc6e48f4"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.006",
+          "bytes": 524288,
+          "sha256": "d26f0e33dfa71130699a6906dea2332197f8ba01029fa449d39ca3ba2acf158b"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.007",
+          "bytes": 524288,
+          "sha256": "bb79a330046043ed1e7be9bfa7adedc5fcc8be4f60b7acb3e83b67e45fe3af99"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.008",
+          "bytes": 524288,
+          "sha256": "5f689062967c16ee53764635406a3ac8664a004adda0663ed135164fcf62c4a6"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.009",
+          "bytes": 524288,
+          "sha256": "790111cd3cbc4e7f775030239a257d62877a232338eee0f6cda062957bbe29e2"
+        },
+        {
+          "file": "Liu_OriginalRig_ActionSet.glb.enc.010",
+          "bytes": 109117,
+          "sha256": "bb3a3907cdb6e3054b3c91db61f299cd72eef40756a1ee76be037052c092a7f5"
+        }
+      ]
+    }
+  ]
+}

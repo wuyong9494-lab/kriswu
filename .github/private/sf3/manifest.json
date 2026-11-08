@@ -1,0 +1,312 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "file": "Sun_FullBody_Prototype.glb",
+      "bytes": 7953392,
+      "sha256": "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241",
+      "purpose": "asset:Sun_FullBody_Prototype.glb",
+      "cipher_sha256": "5e9a14055509eca01fdaedecd86c1fdc1a515752eebc50e7e4b5905ded7f6ebb",
+      "parts": [
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.000",
+          "bytes": 524288,
+          "sha256": "fa246e181ea880fc10d9e15ab10005f64b07a4a5d1ec21171e36d201a417c5cd"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.001",
+          "bytes": 524288,
+          "sha256": "18f9ee166774b80c6121c22a25b707d16c8497baefa2eaeb7bc11e5741fc4bf5"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.002",
+          "bytes": 524288,
+          "sha256": "4cf0dbccb23d8a5368d2183c8dff7cbcd3d118f5c7a4ffd8df02dc02beb60947"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.003",
+          "bytes": 524288,
+          "sha256": "2c331ad0bcf7832394c146c6761bbb0f50d3803247123e11bf7ec450b57b3ae1"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.004",
+          "bytes": 524288,
+          "sha256": "6c4b868da018b7bb0a73558cd0a134764833fa8af4dedc28e915867b14e1b7ac"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.005",
+          "bytes": 524288,
+          "sha256": "670027ede1df9377c675a6f0a3cd93d0dabb9ff2a0f41999c48977644fe7c208"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.006",
+          "bytes": 524288,
+          "sha256": "bd1374ded20b5418b6d76b56ff32153248f4d5468a1339adcc2a5755f3ad82c0"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.007",
+          "bytes": 524288,
+          "sha256": "91bbcc271acaf35e93ac6f817cb8370dbc0ffad03bf539de290248640b19e532"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.008",
+          "bytes": 524288,
+          "sha256": "5881466414ac9403f3f5e0b827246017a0c3215a5df83aaa80c6862089b100f3"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.009",
+          "bytes": 524288,
+          "sha256": "6d1a1cc2a26a4b2067f813b423d6e2b5e10e97028b3b76a5f7d50534505334b4"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.010",
+          "bytes": 524288,
+          "sha256": "29486e461aec2b7c3a675c7928cc01c2831f11927ef3f87474e5f2cb7bf4d019"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.011",
+          "bytes": 524288,
+          "sha256": "889cd21868c9c8b4618e5e2e0ff3d2db6d445fd8b8ad89147669def3d776c4e3"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.012",
+          "bytes": 524288,
+          "sha256": "541b9ae1a8653f24c3fcc387f417295936e81c3de959324ed99cfb4cd7e0aff7"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.013",
+          "bytes": 524288,
+          "sha256": "2c1ce54c5a828152370de46a1f41ce419e463e95142a283906edf9a0c8e4e4f4"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.014",
+          "bytes": 524288,
+          "sha256": "363c9f3573d50ca4c5794cf7716cc40cc91b745124adb41409ce036ea9953299"
+        },
+        {
+          "file": "Sun_FullBody_Prototype.glb.enc.015",
+          "bytes": 89178,
+          "sha256": "5839f1a95abd4796a20ded9c379151393abf01ea2eb87cfddf3a803eb5bfd29c"
+        }
+      ]
+    },
+    {
+      "file": "SF3_Palace_Exterior.glb",
+      "bytes": 9292540,
+      "sha256": "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8",
+      "purpose": "asset:SF3_Palace_Exterior.glb",
+      "cipher_sha256": "c97c179a4ad749556d0e56a621d6ecaed4a13a887ac5089ca016795329814f36",
+      "parts": [
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.000",
+          "bytes": 524288,
+          "sha256": "2e6cc5226486e739fc54e00495fd28f5edf6b96c59973bee0b49854bde85ce86"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.001",
+          "bytes": 524288,
+          "sha256": "36f93e4deff0b779503405c1e8bebf229706cc968a138a179499d5efb7ae5895"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.002",
+          "bytes": 524288,
+          "sha256": "65a43df18f8cbbc29e3c5c698079886a02f141479803babb6ca71bdc721e3eeb"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.003",
+          "bytes": 524288,
+          "sha256": "2619e43676f01488ad87ebafe0a81fd434b5e943d0da1f6dc20c3df563e2f126"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.004",
+          "bytes": 524288,
+          "sha256": "a6c1da0f6eb1bcfa462a10d6e6a15d7fc39e737a7432beb4d56050eac1bd9fc0"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.005",
+          "bytes": 524288,
+          "sha256": "c9ee9b2e2e7e3d3410367b2498aa7c853e28cbcbd0edc458a93b080c366ff5b9"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.006",
+          "bytes": 524288,
+          "sha256": "c6d1bc230f32e19d3095eca56a5486c317780c9285443012685cb6f84fab0b83"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.007",
+          "bytes": 524288,
+          "sha256": "6c58f5906ce9be657a406a96721fc0679dc667040c924408b9a281976a2f74c2"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.008",
+          "bytes": 524288,
+          "sha256": "4f5ccc18ce997c2c9258f731227e93afc5a79d4e566e4c80e652f042487175fd"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.009",
+          "bytes": 524288,
+          "sha256": "c0eec175e3e57daa4b90da37a18f02c59ecd86e77af1b681f8b4c1ac5ea39133"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.010",
+          "bytes": 524288,
+          "sha256": "cc1afa26c2e7b1f7747db8759fe70f2e04bde64e4e651f0f6fa55ce18083f536"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.011",
+          "bytes": 524288,
+          "sha256": "659e71f5f041e91db951bb8224be1a7f906d66ebaa682b894c0c05fb6506d8dc"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.012",
+          "bytes": 524288,
+          "sha256": "4eee49a1fe8af7422f225e993baadd56f1e571e93be4382014d96b5394357bab"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.013",
+          "bytes": 524288,
+          "sha256": "b714df6e22281773bc2bc3d827e40cf21654f58b10138644645fda66a2351570"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.014",
+          "bytes": 524288,
+          "sha256": "b2e5a9a6a6bbfe2c7681694949694bd24d77b75801fbd17dd11a87da9ce21e32"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.015",
+          "bytes": 524288,
+          "sha256": "be3ba2c9138dedf7bc58950f8ab05aaba70bb4cc53e819dd35e84a3a5bd5f136"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.016",
+          "bytes": 524288,
+          "sha256": "a8b77f7e9d7887a37fac9a6829fa8cd9a8254f685dc87dee7f4970b5532e19e2"
+        },
+        {
+          "file": "SF3_Palace_Exterior.glb.enc.017",
+          "bytes": 379735,
+          "sha256": "311352acec75e11d26debd678ffd25fa79540e95e3abb2e866dd3c3e5ae52d15"
+        }
+      ]
+    },
+    {
+      "file": "SF3_Autumn_Lobby.glb",
+      "bytes": 11164484,
+      "sha256": "616d5cb125f49c6b378cf280c90cf10e927b5b71aa461ecb34d7cdaad08c62c1",
+      "purpose": "asset:SF3_Autumn_Lobby.glb",
+      "cipher_sha256": "bf8c62bf8007bedc92858dcc78568659600c1202c41966ebd61f7acb8df40660",
+      "parts": [
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.000",
+          "bytes": 524288,
+          "sha256": "a71403426cd9fc563a7939ebb9f78aaa9a9f9a7c979b60a3d91ecd1d392417d1"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.001",
+          "bytes": 524288,
+          "sha256": "e66ae94f457c01c2088825403ccb30a558afd395fc63e9c60e8459b484ee0ef0"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.002",
+          "bytes": 524288,
+          "sha256": "cc5e35a29341d284bbf6baac78cde238c64ada60c21d9f55b30fae4c9754e279"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.003",
+          "bytes": 524288,
+          "sha256": "d1dc2f69cd4958c5e13b7d26352e6f1f6bcac4308441d8e2d4d1c240b71e694f"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.004",
+          "bytes": 524288,
+          "sha256": "4238db6ff9c648177f29bae599e0695192cbf1b76f13d95dc49b73c18f4e4494"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.005",
+          "bytes": 524288,
+          "sha256": "3c0b6a011497d7f19eceaea92e045ea2df89cbf62c2d91ea62433b0f08df2967"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.006",
+          "bytes": 524288,
+          "sha256": "dcd819de97f6fc7e65fefbd1b223fb4a8ae229af58c7f9ced8c782e248597e5a"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.007",
+          "bytes": 524288,
+          "sha256": "a0b0e1d7703013878a2634a5256415eee2e8d8b167a215025824dea51beb2e4e"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.008",
+          "bytes": 524288,
+          "sha256": "2eec5df65c2e3013ccc558bbbc82f5782255b270d3caccc9e581d5f62836ff57"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.009",
+          "bytes": 524288,
+          "sha256": "21ae6f100ab7b34d88e403e0e6e8a7338f833ebc41756fc1f7d6d36a0a3abe40"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.010",
+          "bytes": 524288,
+          "sha256": "b32370fea779ae7b2a6b2804ccc0a893f1ca26101c774c019f5e2d526ed04ca4"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.011",
+          "bytes": 524288,
+          "sha256": "ea50315e6281506eec4187cf09b6795bb3257f3d7d3947e0e8378c0250b36620"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.012",
+          "bytes": 524288,
+          "sha256": "9d4f1a35bb06d99527c199b24eea677e0587625acf54aa8eda4905faac99be0f"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.013",
+          "bytes": 524288,
+          "sha256": "54fbb0d848fe82cf49ade7a0db2f41e9c53880c96b7e751bab096ed3c2611587"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.014",
+          "bytes": 524288,
+          "sha256": "fdc3b10f47dd7ac195e4afcfd79be40e6b1a01767e9035811b0a0c3032715b91"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.015",
+          "bytes": 524288,
+          "sha256": "976766a5b09d44bbb2816465c975a0b35b2ce1ffb687d682cefdaf05452d7ebc"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.016",
+          "bytes": 524288,
+          "sha256": "bae6cdb70231022e0080af5054e3abbb39a098af21c45577a5b1698072cce9aa"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.017",
+          "bytes": 524288,
+          "sha256": "2c07095b0d6f7b00a6560751dd473840f257cb842bddcb272f450d0c1c55cecc"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.018",
+          "bytes": 524288,
+          "sha256": "344576932e00f421ab15e978b949a807095b9b08da9ec40933599687064fdbaa"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.019",
+          "bytes": 524288,
+          "sha256": "22ab04160ba352bc48c29aea1ce94c4db5d73d30eac18c41627f5ae5b3454953"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.020",
+          "bytes": 524288,
+          "sha256": "f0fff544d8418e36ef35b7d4ed7348cf839e96f0eb1ab5d152d81abafd4ecbcd"
+        },
+        {
+          "file": "SF3_Autumn_Lobby.glb.enc.021",
+          "bytes": 154532,
+          "sha256": "13985eb42acbd4d654129e8c24f222ae8a6a9ec28e7a263293232a7abf72e1c0"
+        }
+      ]
+    }
+  ]
+}
