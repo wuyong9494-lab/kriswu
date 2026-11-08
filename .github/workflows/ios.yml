@@ -799,6 +799,7 @@ jobs:
   testflight:
     needs: [build, core-tests-linux, arena-look]
     if: >-
+      github.ref != 'refs/heads/codex/plan-fighter-recovery-20261108' &&
       !startsWith(github.ref, 'refs/heads/codex/fighter-lab-') &&
       always() && needs.build.result == 'success' && needs.core-tests-linux.result == 'success' &&
       (needs.arena-look.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.arena-look.result == 'skipped')) &&
