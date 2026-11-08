@@ -171,13 +171,16 @@ final class GLTFModel: @unchecked Sendable {
                     guard materialDefinitions.indices.contains(index) else { return nil }
                     return (materialDefinitions[index]["extras"] as? [String: Any])?["sf3Lightmap"]
                 }
+                let needsLightmapUV = lightmap != nil && materialIndex.map {
+                    materials.indices.contains($0) && materials[$0].multiply.mappingChannel == 1
+                } == true
                 if let uvIndex = attributes["TEXCOORD_1"] {
                     let uvs = reader.floats(uvIndex)
                     if let baseUV = attributes["TEXCOORD_0"], reader.floats(baseUV).count == count * 2,
                        uvs.count == count * 2 {
                         sources.append(GLTFModel.source(uvs, .texcoord, width: 2))
-                    } else if lightmap != nil { throw LoadError.badFormat }
-                } else if lightmap != nil { throw LoadError.badFormat }
+                    } else if needsLightmapUV { throw LoadError.badFormat }
+                } else if needsLightmapUV { throw LoadError.badFormat }
                 var indices: [UInt32] = (primitive["indices"] as? Int).map { reader.integers($0) }
                     ?? (0..<UInt32(count)).map { $0 }
                 guard !indices.isEmpty, indices.allSatisfy({ Int($0) < count }) else { return nil }
@@ -443,13 +446,35 @@ final class GLTFModel: @unchecked Sendable {
                   let reference = value as? [String: Any], reference["texCoord"] as? Int == 1,
                   let index = reference["index"] as? Int, textures.indices.contains(index),
                   let source = textures[index]["source"] as? Int else { throw LoadError.badFormat }
-            material.multiply.contents = try image(source, true)
-            material.multiply.mappingChannel = 1
+            let lightmap = try image(source, true)
+            material.multiply.contents = lightmap
+            // Background layers can reference a small uniform placeholder
+            // lightmap without a second UV set. Every coordinate samples the
+            // same value; spatial lightmaps still require their own UVs.
+            material.multiply.mappingChannel = isUniformLightmap(lightmap) ? 0 : 1
             let samplerIndex = textures[index]["sampler"] as? Int
             if let samplerIndex, !samplers.indices.contains(samplerIndex) { throw LoadError.badFormat }
             try configureSampler(samplerIndex.map { samplers[$0] } ?? [:], property: material.multiply)
         }
         return material
+    }
+
+    private static func isUniformLightmap(_ image: UIImage) -> Bool {
+        guard let cg = image.cgImage, cg.width > 0, cg.height > 0,
+              cg.width <= 64, cg.height <= 64 else { return false }
+        // Inspect the full small texture, never infer uniformity from one
+        // sampled pixel or scan a large atlas on the main thread.
+        var pixels = [UInt8](repeating: 0, count: cg.width * cg.height * 4)
+        let decoded = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(data: bytes.baseAddress, width: cg.width, height: cg.height,
+                    bitsPerComponent: 8, bytesPerRow: cg.width * 4, space: space,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.interpolationQuality = .none
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+            return true
+        }
+        return decoded && pixels.indices.allSatisfy { pixels[$0] == pixels[$0 % 4] }
     }
 
     private static func configureSampler(_ sampler: [String: Any], property: SCNMaterialProperty) throws {

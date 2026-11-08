@@ -117,6 +117,11 @@ final class DuelOriginalRigAssetTests: XCTestCase {
                     scene.rootNode.addChildNode(actor.instance.root)
                     XCTAssertNotNil(releasedHead)
                     actor.instance.root.removeFromParentNode()
+                    // This synchronous test does not return to the run loop
+                    // between entries. Commit SceneKit's pending automatic
+                    // transaction before draining Objective-C temporaries;
+                    // otherwise it still owns the recently sampled bones.
+                    SCNTransaction.flush()
                 }
                 XCTAssertNil(releasedScene, "Closing a review must release its scene")
                 XCTAssertNil(releasedHead, "A discarded skinned instance must release its skeleton")

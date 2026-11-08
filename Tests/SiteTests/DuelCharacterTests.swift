@@ -60,6 +60,18 @@ final class DuelCharacterTests: XCTestCase {
         let skin = try XCTUnwrap(actor.childNode(withName: "duel.liu.skinned", recursively: false))
         XCTAssertFalse(skin.isHidden)
         let defender = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.1", recursively: false))
+        let capturedWrist: SCNNode
+        let defenderHead: SCNNode
+        if let defenderSkin = defender.childNode(withName: "duel.\(state.game.fighters[1].hero.rawValue).skinned", recursively: false) {
+            XCTAssertFalse(defenderSkin.isHidden)
+            capturedWrist = try XCTUnwrap(defenderSkin.childNode(withName: "hand.R", recursively: true))
+            defenderHead = try XCTUnwrap(defenderSkin.childNode(withName: "head", recursively: true))
+        } else {
+            // The Liu-only workflow retains a procedural opponent. When the
+            // personal Sun asset is staged, only its visible skeleton counts.
+            capturedWrist = try XCTUnwrap(defender.childNode(withName: "duel.hand.right", recursively: true))
+            defenderHead = try XCTUnwrap(defender.childNode(withName: "head", recursively: false))
+        }
         snapshot(world, name: "liu-native-idle")
         state.input("right", down: true)
         for _ in 0..<42 { state.advance() }
@@ -78,14 +90,18 @@ final class DuelCharacterTests: XCTestCase {
             }
             if hold.stage == .hold {
                 let hand = try XCTUnwrap(skin.childNode(withName: "hand.R", recursively: true))
-                let held = try XCTUnwrap(defender.childNode(withName: "duel.hand.right", recursively: true))
-                let a = hand.worldPosition, b = held.worldPosition
+                let a = hand.worldPosition, b = capturedWrist.worldPosition
                 let gap = ((a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y) + (a.z-b.z)*(a.z-b.z)).squareRoot()
                 worstGap = max(worstGap, gap)
                 XCTAssertGreaterThan(actor.position.z - defender.position.z, 0.5)
-                let head = try XCTUnwrap(defender.childNode(withName: "head", recursively: false))
                 let hip = try XCTUnwrap(skin.childNode(withName: "hips", recursively: true))
-                XCTAssertGreaterThan(abs(hip.worldPosition.x - head.worldPosition.x), 0.45)
+                XCTAssertGreaterThan(abs(hip.worldPosition.x - defenderHead.worldPosition.x), 0.45)
+                if hold.age == 65 {
+                    let grip = hand.simdWorldTransform, captured = capturedWrist.simdWorldTransform
+                    world.drawState()
+                    XCTAssertEqual(hand.simdWorldTransform, grip, "A repeated hold draw must not drift the grip")
+                    XCTAssertEqual(capturedWrist.simdWorldTransform, captured, "A repeated hold draw must not drift the captured arm")
+                }
             }
             if [12, 65, 210].contains(hold.age) { snapshot(world, name: "liu-native-grapple-\(hold.age)") }
             state.advance()

@@ -325,15 +325,25 @@ private final class DuelActor {
         let suffix = hold.direction > 0 ? "R" : "L"
         let name = hold.direction > 0 ? "duel.hand.right" : "duel.hand.left"
         let fall = min(1, Float(hold.age) / Float(DuelGame.Grapple.takedownTicks))
+        let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
+        let weight = fall * fall * (3 - 2 * fall) * (1 - release)
         if other.character == nil {
             // Raise the captured wrist to match the authored adult's shoulder
             // height; preserve the old greybox pair when no real asset is used.
             let heldArm = hold.direction > 0 ? other.rightArm : other.leftArm
             heldArm.eulerAngles.x = -3.85 * fall * fall * (3 - 2 * fall)
+        } else if let captured = other.character,
+                  let shoulder = character.bone("upper_arm.\(suffix)"),
+                  let capturedShoulder = captured.bone("upper_arm.\(suffix)") {
+            // A skinned opponent's Hit pose leaves its wrist on the floor,
+            // beyond the attacker's reach. Raise that arm toward a shared
+            // contact between the shoulders before constraining the grip.
+            // Both skeletons retain their authored arm lengths.
+            let contact = (shoulder.simdWorldPosition + capturedShoulder.simdWorldPosition) * 0.5
+            captured.reach(suffix: suffix, target: contact, weight: weight)
         }
         guard let target = other.character?.bone("hand.\(suffix)") ?? other.root.childNode(withName: name, recursively: true) else { return }
-        let release = max(0, Float(hold.age - DuelGame.Grapple.takedownTicks - DuelGame.Grapple.holdTicks) / Float(DuelGame.Grapple.releaseTicks))
-        character.reach(suffix: suffix, target: target.simdWorldPosition, weight: fall * fall * (3 - 2 * fall) * (1 - release))
+        character.reach(suffix: suffix, target: target.simdWorldPosition, weight: weight)
     }
     static func shape(_ geometry: SCNGeometry, _ color: UIColor) -> SCNNode {
         let material = SCNMaterial(); material.diffuse.contents = color; material.roughness.contents = 0.7

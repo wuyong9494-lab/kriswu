@@ -201,12 +201,22 @@ final class GLTFMaterialTests: XCTestCase {
         let unlit: [String: Any] = ["KHR_materials_unlit": [String: Any]()]
         let valid: [String: Any] = ["extensions": unlit,
             "extras": ["sf3Lightmap": ["index": 0, "texCoord": 1]]]
-        XCTAssertThrowsError(try fixture(materialOverrides: valid))
+        XCTAssertThrowsError(try fixture(pixel: [255, 255, 255, 255, 255, 0, 0, 255], materialOverrides: valid))
         let uv = [Float](repeating: 0.5, count: 8)
         XCTAssertThrowsError(try fixture(materialOverrides: ["extensions": unlit,
             "extras": ["sf3Lightmap": ["index": 99, "texCoord": 1]]], uv1: uv))
         XCTAssertThrowsError(try fixture(materialOverrides: ["extensions": unlit,
             "extras": ["sf3Lightmap": ["index": 0, "texCoord": 0]]], uv1: uv))
+    }
+
+    func testUniformLightmapRendersWithoutInventingASecondUVSet() throws {
+        let material: [String: Any] = ["extensions": ["KHR_materials_unlit": [String: Any]()],
+            "extras": ["sf3Lightmap": ["index": 0, "texCoord": 1]]]
+        let instance = try fixture(pixel: [255, 0, 0, 255, 255, 0, 0, 255],
+            physicallyBased: true, materialOverrides: material).instantiate()
+        XCTAssertEqual(instance.materials[0].lightingModel, .constant)
+        XCTAssertEqual(instance.materials[0].multiply.mappingChannel, 0)
+        assertPixel(try snapshot(instance).center, equals: SIMD3(255, 0, 0))
     }
 
     private func assertPixel(_ actual: SIMD3<Float>, equals expected: SIMD3<Float>, accuracy: Float = 10,
