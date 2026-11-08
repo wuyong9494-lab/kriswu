@@ -9,6 +9,32 @@ final class DuelLifecycleTests: XCTestCase {
         DuelSession(.init(hero: hero, difficulty: .learning, mode: mode))
     }
 
+    func testPersonalCharactersRemainPairedAfterRestart() {
+        for hero in [DuelGame.Hero.liu, .ember] {
+            let state = session(hero)
+            let expected: [DuelGame.Hero] = hero == .liu ? [.liu, .ember] : [.ember, .liu]
+            XCTAssertEqual(state.game.fighters.map(\.hero), expected)
+            state.input("right", down: true); state.advance(); state.restart()
+            XCTAssertEqual(state.game.fighters.map(\.hero), expected)
+            XCTAssertEqual(state.game.fighters.map(\.x), [3500, 6500])
+            state.shutdown()
+        }
+    }
+
+    func testLobbySelectionDoesNotStartCombatClockAndReleasesScene() {
+        let clocks = DuelWorldView.activeClocks
+        let lobby = DuelLobbySceneView(hero: .liu)
+        weak var scene = lobby.scene
+        XCTAssertNotNil(scene)
+        lobby.select(.ember); XCTAssertEqual(lobby.selectedHero, .ember)
+        lobby.select(.liu); XCTAssertEqual(lobby.selectedHero, .liu)
+        XCTAssertFalse(lobby.rendersContinuously)
+        XCTAssertFalse(lobby.isPlaying)
+        XCTAssertEqual(DuelWorldView.activeClocks, clocks)
+        lobby.shutdown()
+        XCTAssertNil(lobby.scene); XCTAssertNil(lobby.pointOfView); XCTAssertNil(scene)
+    }
+
     func testTwoHeldInputsPauseAndRestartCannotLeaveAnAutomaticAction() {
         let state = session()
         state.input("right", down: true); state.input("light", down: true)

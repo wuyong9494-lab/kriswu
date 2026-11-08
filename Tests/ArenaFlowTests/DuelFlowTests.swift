@@ -92,6 +92,8 @@ final class DuelFlowTests: XCTestCase {
             XCTAssertTrue(pause.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
             let initial = app.staticTexts["duel.hits"].label
             if hero == "ember" {
+                XCTAssertEqual(app.staticTexts["duel.name.0"].label, "孙登 · 你")
+                XCTAssertEqual(app.staticTexts["duel.name.1"].label, "刘泉纬 · 对手")
                 app.buttons["duel.control.right"].press(forDuration: 0.8)
                 app.buttons["duel.control.light"].tap()
             } else { app.buttons["duel.control.skill1"].tap() }

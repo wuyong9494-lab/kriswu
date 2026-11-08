@@ -11,7 +11,7 @@ struct DuelWorld: UIViewRepresentable {
     static func dismantleUIView(_ view: DuelWorldView, coordinator: ()) { view.shutdown() }
 }
 
-/// Authored Liu plus the existing procedural opponents. Assets live for one fight.
+/// Authored personal characters plus procedural fallbacks. Assets live for one fight.
 /// One main-thread clock owns simulation; SceneKit only renders the resulting pose.
 @MainActor
 final class DuelWorldView: SCNView {
@@ -30,6 +30,7 @@ final class DuelWorldView: SCNView {
     private var sampleCount = 0
     private var actors: [DuelActor] = []
     private(set) var characterAsset: DuelCharacterAsset?
+    private var characterAssets: [DuelGame.Hero: DuelCharacterAsset] = [:]
     private(set) var stageAsset: DuelStageAsset?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     enum CharacterSource { case bundled, procedural }
@@ -65,17 +66,19 @@ final class DuelWorldView: SCNView {
         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
         ring.geometry?.firstMaterial?.lightingModel = .constant
         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
-        if characterSource == .bundled, session.game.fighters.contains(where: { $0.hero == .liu }) {
-            do {
-                guard let url = DuelCharacterAsset.bundledURL else { throw DuelCharacterAsset.AssetError.missing }
-                characterAsset = try DuelCharacterAsset(url: url)
-                session.characterLoaded("刘泉纬 · 全身人物 · 12 段骨骼动作")
-            } catch {
-                session.characterLoaded("人物资源未就绪 · 当前显示动作替身")
+        if characterSource == .bundled {
+            for hero in Set(session.game.fighters.map(\.hero)) where hero != .gale {
+                if let url = DuelCharacterAsset.bundledURL(for: hero),
+                   let asset = try? DuelCharacterAsset(url: url, hero: hero) {
+                    characterAssets[hero] = asset
+                }
             }
+            characterAsset = characterAssets[.liu]
+            let loaded = session.game.fighters.compactMap { characterAssets[$0.hero] == nil ? nil : $0.hero.name }
+            session.characterLoaded(loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
         }
         for fighter in session.game.fighters {
-            let actor = DuelActor(hero: fighter.hero, asset: fighter.hero == .liu ? characterAsset : nil); actor.root.name = "duel.actor.\(actors.count)"
+            let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
             actors.append(actor); world.rootNode.addChildNode(actor.root)
             let hurt = debugBox(.green), attack = debugBox(.orange)
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
@@ -129,7 +132,7 @@ final class DuelWorldView: SCNView {
         guard !ended else { return }
         ended = true; stopClock(); session.clearInput(); session.renderPause = nil
         NotificationCenter.default.removeObserver(self)
-        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }

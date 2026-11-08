@@ -11,6 +11,14 @@ struct DuelHomeView: View {
             VStack(alignment: .leading, spacing: 22) {
                 Text("裂隙对决").font(.largeTitle.bold())
                 Text("读懂距离，把握出手时机。").foregroundStyle(.secondary)
+                if DuelStageAsset.bundledURL(for: .autumnLobby) != nil,
+                   DuelCharacterAsset.bundledURL(for: hero) != nil {
+                    if match == nil {
+                        DuelLobbyPreview(hero: hero)
+                            .frame(height: 320).clipShape(RoundedRectangle(cornerRadius: 20))
+                            .accessibilityIdentifier("duel.lobby.preview")
+                    } else { Color.clear.frame(height: 320) }
+                }
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(DuelGame.Hero.allCases, id: \.self) { choice in
                         Button { hero = choice } label: {
@@ -36,7 +44,7 @@ struct DuelHomeView: View {
                     Button("练习场") { start(.practice) }.accessibilityIdentifier("duel.practice")
                     Button("操作教学") { start(.tutorial) }.accessibilityIdentifier("duel.tutorial")
                 }.buttonStyle(.bordered)
-                Text("赤砾：裂步突进、升龙重击。青岚：远程飞刃、撤步反击。技能消耗能量，普攻命中后继续点击可衔接三段连击。")
+                Text("孙登：裂步突进、升龙重击。青岚：远程飞刃、撤步反击。技能消耗能量，普攻命中后继续点击可衔接三段连击。")
                     .font(.subheadline).foregroundStyle(.secondary)
                 if hero == .liu {
                     Text("刘泉纬 · 擒拿震地：100 能量，近身抓取后锁臂压制 3 秒，再震地击退。抓取不能防御；跳跃、后撤或在前摇时快攻可以反制。不能抓取倒地、硬直或起身保护中的对手。")
@@ -84,7 +92,8 @@ final class DuelSession: ObservableObject {
 
     init(_ setup: DuelSetup) {
         self.setup = setup
-        game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode)
+        game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+                        opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil)
         interruptions.token = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification,
             object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.pause() }
@@ -121,7 +130,8 @@ final class DuelSession: ObservableObject {
     func pause() { clearInput(); paused = true; renderPause?(true) }
     func resume() { clearInput(); paused = false; renderPause?(false) }
     func restart() {
-        clearInput(); game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode)
+        clearInput(); game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+                        opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil)
         feedback = "保持距离，观察出手"; tutorialStep = 0; serial = 0; animationTick = 0; feedbackUntil = 75
         practicedJump = false; practicedSkills.removeAll(); resume(); objectWillChange.send()
     }
@@ -237,6 +247,7 @@ struct DuelMatchView: View {
         let f = session.game.fighters[i]
         return VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
             Text("\(f.hero.name) · \(i == 0 ? "你" : "对手")").font(.caption.bold())
+                .accessibilityIdentifier("duel.name.\(i)")
             ProgressView(value: Double(f.health), total: 1000).tint(i == 0 ? .orange : .cyan)
             Text("生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
                 .font(.system(size: 10, design: .monospaced))

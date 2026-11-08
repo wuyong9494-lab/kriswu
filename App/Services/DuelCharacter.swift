@@ -10,16 +10,33 @@ import simd
 final class DuelCharacterAsset {
     enum AssetError: Error { case missing, integrity, incomplete }
     static let digest = "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9"
-    static var bundledURL: URL? {
-        Bundle.main.url(forResource: "Liu_FullBody_Mobile", withExtension: "glb") ??
-        Bundle.main.url(forResource: "Liu_FullBody_Mobile", withExtension: "glb", subdirectory: "FighterPrivate")
+    static var bundledURL: URL? { bundledURL(for: .liu) }
+    static func bundledURL(for hero: DuelGame.Hero) -> URL? {
+        let name: String
+        switch hero {
+        case .liu: name = "Liu_FullBody_Mobile"
+        case .ember: name = "Sun_FullBody_Prototype"
+        case .gale: return nil
+        }
+        return Bundle.main.url(forResource: name, withExtension: "glb") ??
+            Bundle.main.url(forResource: name, withExtension: "glb", subdirectory: "FighterPrivate")
     }
+    let hero: DuelGame.Hero
     let model: GLTFModel
     let starts: [String: Float]
-    init(url: URL) throws {
+    init(url: URL, hero: DuelGame.Hero = .liu) throws {
+        self.hero = hero
+        let expectedBytes: Int, expectedDigest: String
+        switch hero {
+        case .liu: expectedBytes = 5_043_964; expectedDigest = Self.digest
+        case .ember:
+            expectedBytes = 7_953_392
+            expectedDigest = "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241"
+        case .gale: throw AssetError.incomplete
+        }
         let bytes = try Data(contentsOf: url)
-        guard bytes.count == 5_043_964,
-              SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == Self.digest else {
+        guard bytes.count == expectedBytes,
+              SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == expectedDigest else {
             throw AssetError.integrity
         }
         let decoded = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true)
@@ -49,7 +66,7 @@ final class DuelCharacterInstance {
         self.asset = asset; instance = asset.model.instantiate()
         pose = asset.model.restPose; secondary = pose; transition = pose
         originalEmission = instance.materials.map { $0.emission.contents }
-        instance.root.name = "duel.liu.skinned"
+        instance.root.name = "duel.\(asset.hero.rawValue).skinned"
         // Markers use the authored outsole footprint in the glTF bind space.
         // They follow the actual foot bones, including during blended poses.
         for (suffix, sign) in [("L", Float(-1)), ("R", Float(1))] {

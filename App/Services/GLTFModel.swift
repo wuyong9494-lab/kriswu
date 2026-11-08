@@ -399,7 +399,7 @@ final class GLTFModel: @unchecked Sendable {
         if alpha == .blend {
             // SceneKit cannot infer transparency introduced by a surface
             // modifier. Keep this pragma out of the surface color-grade chain.
-            material.shaderModifiers?[.fragment] = "#pragma transparent\n#pragma body\n// glTF BLEND keeps the sampled base-color coverage."
+            material.shaderModifiers?[.fragment] = "#pragma transparent\n#pragma body\n_output.color.a *= 1.0; // Preserve coverage while keeping a valid fragment body."
         }
         if let glow = info["emissiveFactor"] as? [Double], glow.count == 3, glow.contains(where: { $0 > 0 }) {
             material.emission.contents = UIColor(red: glow[0], green: glow[1], blue: glow[2], alpha: 1)

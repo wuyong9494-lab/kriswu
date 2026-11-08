@@ -45,3 +45,46 @@ static upper-body mesh and still needs a complete body and a battle rig.
   unsigned fighter workflow. Synthetic fixtures do not validate the private
   converted map on a device.
 - No release or TestFlight upload is part of this adapter change.
+
+
+## Supplementary package and personal-character follow-up
+
+The official Xiaomi Android 1.45.3 package finished downloading: 2,683,387,431 bytes,
+SHA-256 `29eab6cb60ebec8aeb0a47c2efcfebc5e38320c2c659add3fa5670067ece13ab`.
+All 3,434 ZIP entries passed CRC validation. All 2,205 Unity bundles indexed without
+parse errors: 55 locations, 8 lobby locations, 128 animation bundles, 170 effects
+bundles and 119 audio bundles. These are package categories, not accepted playable
+maps or implemented skills. The iOS IPA remains 1.46.1; Android resources do not
+establish identical platform/version behavior.
+
+The compressed-motion decoder now recognizes both observed declared-size forms
+(packed 12-byte and expanded 28-byte transform sizes), with strict dimensions,
+bone IDs, byte consumption and quaternion validation. All 2,711 motion TextAssets
+passed those structural checks. Source playback rate and combat timing remain
+unverified. An experimental punch retarget failed visual acceptance (bone-axis
+and mesh deformation problems); it is excluded from the application.
+
+The autumn lobby conversion resolves two shared dependencies and retains separate
+UVs and baked lighting. Its custom fog/projector/particle/MatCap effects are not
+reconstructed. The static lobby and palace have offline Blender previews; these
+are not SceneKit or iPhone screenshots.
+
+Sun Deng's supplied file is a static bust. The full-body prototype preserves his
+head/neck and uses the existing complete clothed body with the 42-bone rig and
+12 existing clips. A first cut-shirt splice failed visual review and was replaced.
+This prototype still needs native skinning/seam/performance acceptance. It does
+not contain accepted SF3 moves.
+
+The app maps the existing `ember` identity to Sun Deng, loads each personal model
+with a separate SHA-256/size identity, and pairs Sun Deng/Liu in personal matches
+and after restart. The legacy Gale training character is retained. The lobby uses
+a separate static SceneKit view and releases its resources before a fight.
+Missing or invalid private assets retain the existing procedural presentation.
+No raw assets or personal portraits are committed publicly.
+
+Validation of commit `2c56dbe869c6259fd5f9ffc04c72834a13f8ba2b`:
+GitHub Actions run 42442176810 passed unsigned device compilation, core regressions,
+21 native unit checks (including both lightmap tests), and 2 touch-driven UI flows.
+The separate private-character job was skipped: this is not acceptance of the
+new real scenery or Sun model. The follow-up lobby/pairing changes require a new
+run. This branch is unsigned-only and has not uploaded a new TestFlight build.

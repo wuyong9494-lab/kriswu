@@ -6,7 +6,7 @@ public struct DuelGame: Equatable, Sendable {
     public enum Hero: String, CaseIterable, Codable, Sendable {
         case ember, gale, liu
         public var name: String {
-            switch self { case .ember: return "赤砾"; case .gale: return "青岚"; case .liu: return "刘泉纬" }
+            switch self { case .ember: return "孙登"; case .gale: return "青岚"; case .liu: return "刘泉纬" }
         }
         public var style: String {
             switch self {
