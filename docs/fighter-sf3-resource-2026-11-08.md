@@ -23,7 +23,7 @@ character selection, other games and reminder functions are unchanged.
 
 The source candidate is the official Xiaomi Android 1.45.3 package, rather than
 an exact iOS 1.46.1 companion. Its runtime serialized-file version was read as
-Unity 6000.3.11f1. Full download and resource indexing are being completed.
+Unity 6000.3.11f1. The full download and resource index are complete, as detailed below.
 
 The current static palace conversion contains 24 meshes, 30,087 triangles and
 four embedded textures. The GLB is 9,292,540 bytes with SHA-256
@@ -36,7 +36,7 @@ claimed. This resource file is not included in the public code commit.
 An independent compressed-motion decoder read representative real animation
 frames and bone transforms. Retargeting, source playback rate, hit windows and
 native motion acceptance remain separate work. Sun Deng's supplied source is a
-static upper-body mesh and still needs a complete body and a battle rig.
+static upper-body mesh; the prototype described below adds an existing body and rig.
 
 ## Verification
 
@@ -92,7 +92,7 @@ run. This branch is unsigned-only and has not uploaded a new TestFlight build.
 
 Follow-up run 42443778433: unsigned device/core/envelope checks and both UI flows
 passed. Of 23 native unit checks, the new lobby scene lifetime assertion failed
-because it inspected an Objective-C scene before the surrounding autorelease
+while inspecting an Objective-C scene before the surrounding autorelease
 pool drained. The follow-up detaches all scene nodes immediately at shutdown and
 checks that the closed scene is released after a scoped autorelease pool drains,
 while deliberately retaining the view. No sleep, relaxed assertion, or skipped
@@ -105,3 +105,31 @@ publication to the public repository. No new binary resource was published. The
 three resources, their 56 encrypted parts, verified fingerprints, and a fail-closed
 staging helper are retained privately for review. Existing key handling is reused;
 no new key or credential has been committed.
+
+## Final code verification
+
+Commit `110878227a23196f57ebf28909e2cc18c3181de0` passed GitHub Actions run
+[42444782188](https://github.com/wuyong9494-lab/kriswu/actions/runs/42444782188):
+unsigned Release device compilation, core regressions, authenticated-envelope
+checks, all 23 native unit tests, and both touch-driven UI flows. The three-entry
+lobby shutdown/lifetime test passed. The device concurrency-warning gate passed;
+the native log contains no invalid empty-fragment modifier error.
+
+The private-character job was skipped. None of these results validates the new
+Sun model, autumn lobby, or palace resource inside SceneKit. Those three binary
+resources remain unpublished after the automatic approval rejection above.
+No TestFlight build was uploaded.
+
+Separately, offline deformation sampling checked all 12 existing Sun prototype
+clips at 34 distinct start/middle/end poses. All skinned coordinates were finite
+and within the coarse 4-metre span limit. This catches obvious broken geometry;
+it does not establish seam quality, natural motion, contact accuracy, original
+SF3 motion timing, or device performance.
+
+The updated private integration checkpoint contains the four model/scenery GLBs,
+56 encrypted parts for the three new resources, fingerprints, conversion limits,
+offline previews, and deformation evidence. The separate source archive preserves
+128 motion bundles and the selected scene dependencies. The next native asset
+step requires explicit approval to publish the encrypted new resources to this
+public repository, install the staging helper, and run private-character checks
+with the existing repository secret. Raw models and the secret remain private.
