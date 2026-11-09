@@ -121,7 +121,9 @@ final class DuelWeaponCharacterInstance {
             if elapsed < 0 || elapsed >= Self.idleBlendTicks {
                 idleBlendSource = nil
             } else {
-                let t = Float(elapsed + 1) / Float(Self.idleBlendTicks)
+                // Keep the exact recovery pose on the first idle simulation tick.
+                // Reach the unmodified idle sample on the final transition tick.
+                let t = Float(elapsed) / Float(Self.idleBlendTicks - 1)
                 let eased = t * t * (3 - 2 * t)
                 for index in asset.model.animated {
                     pose.translation[index] = simd_mix(source.translation[index], pose.translation[index],
