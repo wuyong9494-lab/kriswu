@@ -2,7 +2,7 @@ import SwiftUI
 import SceneKit
 import UIKit
 
-/// Static lobby presentation: no simulation clock remains behind a full-screen fight.
+/// Interactive 3D character showroom; its lightweight idle clock stops offscreen.
 struct DuelLobbyPreview: UIViewRepresentable {
     let hero: DuelGame.Hero
     func makeUIView(context: Context) -> DuelLobbySceneView { DuelLobbySceneView(hero: hero) }
@@ -18,12 +18,23 @@ final class DuelLobbySceneView: SCNView {
     private var originalCharacter: DuelOriginalRigAsset?
     private var characterRoot: SCNNode?
     private var weaponAssets: DuelWeaponAssets?
+    private var equippedActor: DuelWeaponCharacterInstance?
+    private var equippedIdle: DuelWeaponClip?
+    private var idleDriver: CADisplayLink?
+    private var idleTick = 0
+    private var lastIdleTime: CFTimeInterval?
+    private var accumulatedIdleTime: CFTimeInterval = 0
+    private var yaw: Float = .pi
+    private var zoom: Float = 1
+    private var cameraNode: SCNNode?
+    private let showroomCenter = SCNVector3(4.7, 0.85, -0.35)
+    private(set) var showroomFrameCount = 0
 
     init(hero: DuelGame.Hero) {
         super.init(frame: .zero, options: nil)
         backgroundColor = UIColor(red: 0.045, green: 0.04, blue: 0.075, alpha: 1)
         antialiasingMode = .multisampling2X
-        rendersContinuously = false; isPlaying = false; isUserInteractionEnabled = false
+        rendersContinuously = false; isPlaying = false; isUserInteractionEnabled = true
         isAccessibilityElement = false; accessibilityElementsHidden = true
         let world = SCNScene(); scene = world
         if let url = DuelStageAsset.bundledURL(for: .autumnLobby),
@@ -35,7 +46,9 @@ final class DuelLobbySceneView: SCNView {
         camera.camera?.zNear = 0.05; camera.camera?.zFar = 100
         camera.position = SCNVector3(5, 1.6, 4.8)
         camera.look(at: SCNVector3(4.7, 0.85, -0.35))
-        world.rootNode.addChildNode(camera); pointOfView = camera
+        world.rootNode.addChildNode(camera); pointOfView = camera; cameraNode = camera
+        addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(rotateCharacter(_:))))
+        addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(zoomCharacter(_:))))
         let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient
         ambient.light?.intensity = 450; ambient.light?.color = UIColor(white: 0.8, alpha: 1)
         world.rootNode.addChildNode(ambient)
@@ -48,12 +61,64 @@ final class DuelLobbySceneView: SCNView {
         fill.position = SCNVector3(7, 3, -1); world.rootNode.addChildNode(fill)
         select(hero)
     }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { stopIdle() } else { startIdle() }
+    }
+    private func startIdle() {
+        guard window != nil, equippedActor != nil, idleDriver == nil else { return }
+        let driver = CADisplayLink(target: self, selector: #selector(advanceIdle(_:)))
+        driver.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
+        driver.add(to: .main, forMode: .common)
+        idleDriver = driver
+        lastIdleTime = nil
+    }
+    private func stopIdle() {
+        idleDriver?.invalidate(); idleDriver = nil
+        lastIdleTime = nil; accumulatedIdleTime = 0
+    }
+    @objc private func advanceIdle(_ link: CADisplayLink) {
+        guard let actor = equippedActor, let idle = equippedIdle else { return }
+        defer { lastIdleTime = link.timestamp }
+        guard let lastIdleTime else { return }
+        accumulatedIdleTime += min(0.1, max(0, link.timestamp - lastIdleTime))
+        let steps = Int(accumulatedIdleTime * 60)
+        guard steps > 0 else { return }
+        accumulatedIdleTime -= Double(steps) / 60
+        idleTick = (idleTick + steps) % max(1, idle.ticks)
+        let phase = idle.phase(at: idleTick)
+        actor.apply(.init(clip: idle.name, tick: idleTick, duration: idle.ticks,
+                          groundLift: idle.tracks.lift(phase: phase)))
+        showroomFrameCount += 1
+        setNeedsDisplay()
+    }
+    @objc private func rotateCharacter(_ gesture: UIPanGestureRecognizer) {
+        guard let characterRoot else { return }
+        let translation = gesture.translation(in: self)
+        gesture.setTranslation(.zero, in: self)
+        yaw += Float(translation.x) * 0.008
+        characterRoot.eulerAngles.y = yaw
+        setNeedsDisplay()
+    }
+    @objc private func zoomCharacter(_ gesture: UIPinchGestureRecognizer) {
+        guard let cameraNode else { return }
+        zoom = min(1.5, max(0.7, zoom / Float(gesture.scale)))
+        gesture.scale = 1
+        cameraNode.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
+        cameraNode.look(at: showroomCenter)
+        setNeedsDisplay()
+    }
+
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func select(_ hero: DuelGame.Hero) {
         guard selectedHero != hero, let scene else { return }
-        selectedHero = hero
+        stopIdle()
+        selectedHero = hero; idleTick = 0; yaw = .pi; zoom = 1
+        cameraNode?.position = SCNVector3(5, 1.6, 4.8)
+        cameraNode?.look(at: showroomCenter)
         characterRoot?.removeFromParentNode(); characterRoot = nil; character = nil; originalCharacter = nil
+        equippedActor = nil; equippedIdle = nil
         if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"), DuelWeaponAssets.catalogURL() != nil {
             do {
                 if weaponAssets == nil { weaponAssets = try DuelWeaponAssets() }
@@ -64,7 +129,8 @@ final class DuelLobbySceneView: SCNView {
                 actor.instance.root.eulerAngles.y = .pi
                 actor.instance.root.name = "duel.lobby.character.\(hero.rawValue)"
                 scene.rootNode.addChildNode(actor.instance.root); characterRoot = actor.instance.root
-                setNeedsDisplay()
+                equippedActor = actor; equippedIdle = idle
+                startIdle(); setNeedsDisplay()
             } catch { return }
             return
         }
@@ -96,8 +162,10 @@ final class DuelLobbySceneView: SCNView {
     func shutdown() {
         // Detach resource-owning nodes even if SceneKit keeps an autoreleased
         // scene or renderer alive until the current event finishes.
+        stopIdle()
+        gestureRecognizers?.forEach { removeGestureRecognizer($0) }
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil
+        scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil
         rendersContinuously = false; isPlaying = false
     }
 }
