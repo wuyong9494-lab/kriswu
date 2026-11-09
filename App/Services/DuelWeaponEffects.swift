@@ -220,6 +220,8 @@ final class DuelWeaponEffects {
             material.diffuse.contents = textures[manifest.whiteTexture]
             material.diffuse.mipFilter = .none
             material.shaderModifiers = [.fragment: Self.fragment(profile)]
+            // Reduce the broad katana fan without altering authenticated art or hitboxes.
+            material.setValue(NSNumber(value: pose.family == .katana ? 0.48 : 1.0), forKey: "presentationOpacity")
             for (name, file) in profile.textures {
                 // Every profile reference was validated before attachment.
                 let property = SCNMaterialProperty(contents: textures[file]!)
@@ -319,6 +321,7 @@ final class DuelWeaponEffects {
         uniform vec4 sourceParameters;
         uniform vec4 sourceTint;
         uniform float sourceTime;
+        uniform float presentationOpacity;
         \(curve(layer.colorKeys, name: "sourceColorAt", vector: true))
         \(curve(layer.alphaKeys, name: "sourceAlphaAt", vector: false))
         #pragma transparent
@@ -336,7 +339,7 @@ final class DuelWeaponEffects {
             float weaponMask = texture2D(sourceMask, mainUV).r;
             weaponRGB = mix(weaponRGB, weaponRGB * sourceTint.rgb, weaponMask);
             float opacity = texture2D(sourceAlpha, trailUV).r * sourceParameters.x * sourceAlphaAt(trailAge);
-            _output.color = vec4(weaponRGB * sourceColorAt(trailAge) * sourceParameters.x * sourceParameters.y, opacity);
+            _output.color = vec4(weaponRGB * sourceColorAt(trailAge) * sourceParameters.x * sourceParameters.y, opacity * presentationOpacity);
             """
         case "dashGlow":
             body = """
