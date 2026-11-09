@@ -57,7 +57,7 @@ struct DuelHomeView: View {
                 Text(hero.name + "的技能").font(.headline)
                 Text(usesOriginalWeapons ? (hero == .ember ? "武士刀：配合方向使用上斩、下斩、回身斩与连斩；长按攻击使出重斩。" : "双锤：配合方向使用上击、低扫、回身攻击与双锤连击；长按攻击使出重击。") : hero.skillHelp)
                     .font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("duel.skillHelp")
-                Text(usesOriginalWeapons ? "左侧摇杆移动、跳跃与下蹲；右侧武器和踢击按钮配合方向出招，长按武器使出重击。站定时自动防御。" : "普攻命中后继续点击，可衔接三段连击。")
+                Text(usesOriginalWeapons ? "左侧摇杆移动、跳跃与下蹲；右侧武器和踢击按钮配合方向出招，长按武器使出重击。停止操作并完成短暂收招后自动防御。" : "普攻命中后继续点击，可衔接三段连击。")
                     .font(.subheadline).foregroundStyle(.secondary)
                 if hero == .liu && !usesOriginalWeapons {
                     Text("刘泉纬 · 擒拿震地：100 能量，近身抓取后锁臂压制 3 秒，再震地击退。抓取不能防御；跳跃、后撤或在前摇时快攻可以反制。不能抓取倒地、硬直或起身保护中的对手。")
