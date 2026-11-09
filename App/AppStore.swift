@@ -557,10 +557,27 @@ final class AppStore: ObservableObject {
         let key = "\(dataRevision)-\(covered.count)"
         if let cached = myScheduleCache, cached.key == key { return cached.value }
         var s = schedule
-        if let me = myRosterName, let mine = roster[me] {
-            for (day, raw) in mine where s[day] == nil
-                && (RosterExtractor.isLeave(raw, matcher: matcher) || !covered.contains(day)) {
-                s[day] = raw
+        if let me = myRosterName {
+            let mine = roster[me] ?? [:]
+            for (day, raw) in mine {
+                // A published team roster is the current assignment for the
+                // selected person. The separately cached "my duty" endpoint can
+                // lag after an administrator reassigns a group.
+                if publishedDays.contains(day) ||
+                    (s[day] == nil && (RosterExtractor.isLeave(raw, matcher: matcher) || !covered.contains(day))) {
+                    s[day] = raw
+                }
+            }
+            // If a published group is explicitly assigned to someone else,
+            // never continue showing that group as mine just because an older
+            // personal schedule response has not refreshed yet.
+            for (day, raw) in schedule where publishedDays.contains(day) && mine[day] == nil {
+                let post = matcher.displayName(raw)
+                guard post.hasPrefix("组"),
+                      roster.contains(where: { name, days in
+                          name != me && days[day].map { $0.split(separator: "+").map(String.init).contains(post) } == true
+                      }) else { continue }
+                s.removeValue(forKey: day)
             }
         }
         myScheduleCache = (key, s)
