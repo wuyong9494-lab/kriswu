@@ -20,10 +20,13 @@ final class DuelNetworkSelectionModel: ObservableObject {
     @Published private(set) var error: String?
     private let lobby: DuelNetworkLobby
     private let router: DuelNetworkMessageRouter?
+    private let borrowed: Bool
+    private var requestClose: ((String?) -> Void)?
     private var observations = Set<AnyCancellable>()
     private var deadline: Task<Void, Never>?
     private var attemptedAttachment = false
     private var closing = false
+    private var updatingCloseReason = false
     private let timeoutNanoseconds: UInt64
 
     /// Keep direct lobby injection available to protocol/presentation tests.
@@ -43,9 +46,21 @@ final class DuelNetworkSelectionModel: ObservableObject {
         self.init(transport: DuelGameRoomTransport(room: room), timeoutNanoseconds: timeoutNanoseconds)
     }
 
-    private init(lobby: DuelNetworkLobby, router: DuelNetworkMessageRouter?, timeoutNanoseconds: UInt64) {
+    /// UI-only borrower. The room coordinator owns attachment, root leases and
+    /// teardown. A timeout asks that owner to close the entire room.
+    convenience init(borrowing lobby: DuelNetworkLobby, localID: String,
+                     timeoutNanoseconds: UInt64 = 10_000_000_000,
+                     requestClose: @escaping (String?) -> Void) {
+        self.init(lobby: lobby, router: nil, timeoutNanoseconds: timeoutNanoseconds,
+                  borrowed: true, requestClose: requestClose)
+        self.localID = localID
+    }
+
+    private init(lobby: DuelNetworkLobby, router: DuelNetworkMessageRouter?, timeoutNanoseconds: UInt64,
+                 borrowed: Bool = false, requestClose: ((String?) -> Void)? = nil) {
         self.lobby = lobby
         self.router = router
+        self.borrowed = borrowed; self.requestClose = requestClose
         self.timeoutNanoseconds = timeoutNanoseconds
         lobby.$snapshot.sink { [weak self] in self?.received($0) }.store(in: &observations)
         lobby.$status.sink { [weak self] in self?.changedStatus($0) }.store(in: &observations)
@@ -74,7 +89,7 @@ final class DuelNetworkSelectionModel: ObservableObject {
     /// The owning screen calls this only after the room is ready. Never silently
     /// attach a second session following a disconnect, timeout or host change.
     func attach(localID: String) {
-        guard !attemptedAttachment else { return }
+        guard !borrowed, !attemptedAttachment else { return }
         attemptedAttachment = true
         self.localID = localID
         do {
@@ -100,37 +115,51 @@ final class DuelNetworkSelectionModel: ObservableObject {
         submit(.ready(!localPlayer.isReady, selectionRevision: snapshot.selectionRevision))
     }
 
-    func startSelection() {
-        guard canStart, let snapshot else { return }
-        submit(.start(selectionRevision: snapshot.selectionRevision))
+    @discardableResult
+    func startSelection() -> Bool {
+        guard canStart, let snapshot else { return false }
+        // Only this settled return may authorize the room's subsequent offer.
+        // @Published snapshot/status observers run before lobby publication/send.
+        return submit(.start(selectionRevision: snapshot.selectionRevision)) &&
+            lobby.status == .started && lobby.snapshot?.phase == .started && !closing
     }
 
     func close(reason: String? = nil) {
+        let firstClose = !closing
+        closing = true // Reserve terminal ownership before any @Published callback.
+        if let reason, !updatingCloseReason, error != reason {
+            updatingCloseReason = true
+            error = reason
+            updatingCloseReason = false
+        }
+        guard firstClose else { return }
         attemptedAttachment = true
         deadline?.cancel(); deadline = nil
-        pending = nil
-        if let reason { error = reason }
-        guard !closing else { return }
-        closing = true
-        lobby.shutdown()
-        router?.close()
-        closing = false
+        observations.removeAll(); pending = nil; snapshot = nil
+        let request = requestClose; requestClose = nil
+        if !borrowed { lobby.shutdown(); router?.close() }
+        status = .closed
+        request?(reason)
     }
 
-    private func submit(_ command: Selection.Command) {
-        guard let snapshot, let localPlayer else { return }
+    @discardableResult
+    private func submit(_ command: Selection.Command) -> Bool {
+        guard !closing, let snapshot, let localPlayer else { return false }
         error = nil
         pending = Pending(command: command, sessionID: snapshot.sessionID,
                           lastSequence: localPlayer.lastSequence,
                           selectionRevision: snapshot.selectionRevision)
-        // Publish intent before submitting: the host and offline test transports
-        // can synchronously publish acceptance while submit() is still running.
-        if !lobby.submit(command) {
+        // An intent observer can close synchronously. Never submit after that.
+        guard !closing else { return false }
+        let accepted = lobby.submit(command)
+        guard !closing else { return false }
+        if !accepted {
             pending = nil
             error = "操作未获确认，请按当前选角状态重试。"
         } else if pending != nil {
             armDeadline()
         }
+        return accepted
     }
 
     private func received(_ value: Selection.Snapshot?) {
@@ -164,7 +193,7 @@ final class DuelNetworkSelectionModel: ObservableObject {
             finishPending(error: error ?? "选角连接已结束，请离开后重新进入房间。")
             // Protocol-driven closure (for example a replaced host session)
             // also retires the root. Explicit close finishes lobby teardown first.
-            if !closing { router?.close() }
+            if !closing, !borrowed { router?.close() }
         } else if value == .started {
             finishPending(error: nil)
         }

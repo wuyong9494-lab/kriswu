@@ -19,14 +19,14 @@ struct DuelNetworkEntryView: View {
                     VStack(spacing: 20) { nearby; remote }
                 }
                 .padding(20)
-                Text("当前仅测试双人选角与准备同步，尚不能联机战斗。人到齐后不会自动开打。")
+                Text("面对面可进入双人格斗测试：先校验本机完整资源，再连接、选角与准备。远程当前仍仅测试选角。")
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
                     .padding([.horizontal, .bottom], 20)
                     .accessibilityIdentifier("duel.network.scope")
             }
             .background(DuelNetworkBackdrop())
             .foregroundStyle(.white)
-            .navigationTitle("双人选角 · 联机测试")
+            .navigationTitle("双人格斗 · 联机测试")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -61,7 +61,7 @@ struct DuelNetworkEntryView: View {
 
     private var remote: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("远程 · 两位玩家", systemImage: "globe.asia.australia").font(.title3.bold())
+            Label("远程 · 仅选角测试", systemImage: "globe.asia.australia").font(.title3.bold())
             HStack {
                 TextField("2 开头的 4 位房间号", text: $code)
                     .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
@@ -70,14 +70,14 @@ struct DuelNetworkEntryView: View {
                 Button("随机") { code = String(RoomCode.make(players: 2)) }
                     .buttonStyle(.bordered)
             }
-            Button("进入双人房间") {
+            Button("进入远程选角测试") {
                 guard let parsed = DuelNetworkSelectionModel.roomCode(code) else { return }
                 open(.remote(code: parsed))
             }
             .buttonStyle(.borderedProminent).tint(.orange)
             .disabled(DuelNetworkSelectionModel.roomCode(code) == nil)
             .accessibilityIdentifier("duel.network.remote")
-            Text("双方输入同一个房间号。需要联网并登录各自的 Game Center；配对成功后由房间确定房主。")
+            Text("双方输入同一个房间号。需要各自的 Game Center；此入口不启动联机战斗。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
         }
         .duelNetworkPanel()
@@ -89,19 +89,69 @@ struct DuelNetworkEntryView: View {
     }
 }
 
-/// Owns exactly one room lifetime. No navigation path here reaches offline combat.
+/// Keeps one screen mounted while selection is replaced inline by combat.
+/// The pending committed mount, not coordinator.presentation, drives rendering.
 struct DuelNetworkRoomView: View {
     @ObservedObject private var room: GameRoom
-    @StateObject private var model: DuelNetworkSelectionModel
+    @StateObject private var owner: DuelNetworkRoomModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @State private var didStart = false
-    @State private var didLeave = false
 
     init(room: GameRoom) {
         self.room = room
-        _model = StateObject(wrappedValue: DuelNetworkSelectionModel(room: room))
+        _owner = StateObject(wrappedValue: DuelNetworkRoomModel(room: room))
     }
+
+    #if DEBUG
+    init(testing room: GameRoom, owner: DuelNetworkRoomModel) {
+        self.room = room
+        _owner = StateObject(wrappedValue: owner)
+    }
+    #endif
+
+    var body: some View {
+        // A concrete persistent container owns lifecycle, not a transparent
+        // Group whose conditional branch can disappear during the inline swap.
+        ZStack {
+            if let preparation = owner.pendingPreparation, owner.state != .closed {
+                // Match content also requests exit while being dismantled.
+                // Keep terminal reasons visible; only the room's Leave dismisses.
+                DuelMatchView(external: preparation) { owner.close() }
+            } else if let selection = owner.selection, owner.state != .closed {
+                DuelNetworkLobbyContent(room: room, model: selection, owner: owner)
+            } else {
+                VStack(spacing: 20) {
+                    if owner.state == .closed {
+                        Text(owner.error ?? "房间已关闭，请重新进入。").multilineTextAlignment(.center)
+                            .accessibilityIdentifier("duel.network.closed")
+                    } else {
+                        ProgressView(owner.nearbyCombat ? "正在校验并准备本机联机资源…" : "正在打开远程选角测试…").tint(.orange)
+                            .accessibilityIdentifier("duel.network.preflight")
+                        Text(owner.nearbyCombat ? "此步骤会在本机同步解码原始资源，完成前不会连接房间。" : "此入口只同步选角，不会启动联机战斗。")
+                            .font(.caption).foregroundStyle(.white.opacity(0.7))
+                    }
+                    Button("离开") { owner.close(); dismiss() }.buttonStyle(.bordered)
+                        .accessibilityIdentifier("duel.network.leave")
+                }
+                .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .foregroundStyle(.white).background(DuelNetworkBackdrop())
+            }
+        }
+        .modifier(ArenaLandscape())
+        .interactiveDismissDisabled()
+        .onAppear { owner.begin() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { owner.begin() } else { owner.interrupt() }
+        }
+        .onDisappear { owner.close() }
+    }
+}
+
+private struct DuelNetworkLobbyContent: View {
+    @ObservedObject var room: GameRoom
+    @ObservedObject var model: DuelNetworkSelectionModel
+    @ObservedObject var owner: DuelNetworkRoomModel
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         GeometryReader { geometry in
@@ -125,48 +175,30 @@ struct DuelNetworkRoomView: View {
             .background(DuelNetworkBackdrop())
             .foregroundStyle(.white)
         }
-        .modifier(ArenaLandscape())
-        .interactiveDismissDisabled()
-        .onAppear {
-            guard !didStart else { return }
-            didStart = true
-            room.start()
-            attachIfReady()
-        }
-        .onChange(of: room.phase) { _ in attachIfReady() }
-        .onChange(of: room.members) { _ in attachIfReady() }
-        .onChange(of: model.status) { if $0 == .closed { leaveTransport() } }
-        .onChange(of: scenePhase) {
-            if $0 == .background {
-                model.close(reason: "应用已进入后台，选角已结束。请离开后重新进入房间。")
-                leaveTransport()
-            }
-        }
-        .onDisappear { model.close(); leaveTransport() }
     }
 
     private var header: some View {
         HStack {
-            Button { model.close(); leaveTransport(); dismiss() } label: {
+            Button { owner.close(); dismiss() } label: {
                 Label("离开", systemImage: "chevron.left")
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("duel.network.leave")
             Spacer()
             VStack(spacing: 2) {
-                Text("裂隙对决 · 双人选角").font(.headline)
+                Text(owner.nearbyCombat ? "裂隙对决 · 面对面对战" : "裂隙对决 · 远程选角").font(.headline)
                 Text(room.code.map { "远程房间 \($0)" } ?? "面对面房间")
                     .font(.caption).foregroundStyle(.white.opacity(0.65))
             }
             Spacer()
-            Text("选角测试").font(.caption.bold()).foregroundStyle(.orange)
+            Text(owner.nearbyCombat ? "联机测试" : "仅选角").font(.caption.bold()).foregroundStyle(.orange)
         }
     }
 
     private var showcase: some View {
         ZStack(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 20).fill(.black.opacity(0.3))
-            if let hero = model.localPlayer?.choice?.hero, model.status != .closed, hasPreview(hero) {
+            if let hero = model.localPlayer?.choice?.hero, owner.state == .selecting, model.status == .selecting, hasPreview(hero) {
                 DuelLobbyPreview(hero: hero)
                     .clipShape(RoundedRectangle(cornerRadius: 20))
                     .accessibilityIdentifier("duel.network.preview")
@@ -207,7 +239,7 @@ struct DuelNetworkRoomView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("选角与准备同步测试；联机战斗尚未接入。")
+            Text(owner.nearbyCombat ? "双方选角、准备后由房主开始；画面与操作界面确认就绪后进入对战。" : "远程仅选角与准备同步测试，不启动联机战斗。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
                 .accessibilityIdentifier("duel.network.scope")
             if let notice = room.notice { message(notice, warning: true) }
@@ -217,8 +249,13 @@ struct DuelNetworkRoomView: View {
             if case .closed(let reason) = room.phase {
                 message(reason, warning: true).accessibilityIdentifier("duel.network.disconnected")
             } else if model.status == .started {
-                message("双方选角已确认。本阶段到此结束，尚未启动联机战斗；请离开房间。", warning: false)
-                    .accessibilityIdentifier("duel.network.selectionComplete")
+                if owner.nearbyCombat {
+                    ProgressView("双方选角已确认，正在确认联机画面与操作界面…").tint(.orange)
+                        .accessibilityIdentifier("duel.network.starting")
+                } else {
+                    message("远程选角已确认；此入口不启动联机战斗，请离开房间。", warning: false)
+                        .accessibilityIdentifier("duel.network.selectionComplete")
+                }
             } else if model.status == .selecting {
                 selectionControls
             } else if model.status == .connecting {
@@ -251,7 +288,7 @@ struct DuelNetworkRoomView: View {
                 .disabled(!model.canReady)
                 .accessibilityIdentifier("duel.network.ready")
             if model.isHost {
-                Button("锁定双方选角") { model.startSelection() }
+                Button(owner.nearbyCombat ? "开始面对面对战" : "锁定双方选角") { owner.startSelection() }
                     .buttonStyle(.bordered).disabled(!model.canStart)
                     .accessibilityIdentifier("duel.network.start")
             } else {
@@ -308,17 +345,6 @@ struct DuelNetworkRoomView: View {
     private func message(_ text: String, warning: Bool) -> some View {
         Label(text, systemImage: warning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
             .font(.callout).foregroundStyle(warning ? Color.orange : Color.green)
-    }
-
-    private func attachIfReady() {
-        guard !didLeave, room.phase == .ready else { return }
-        model.attach(localID: room.me.id)
-    }
-
-    private func leaveTransport() {
-        guard !didLeave else { return }
-        didLeave = true
-        room.leave()
     }
 
     private static func choiceName(_ choice: DuelMultiplayerSelection.Choice) -> String {

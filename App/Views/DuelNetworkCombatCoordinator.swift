@@ -3,7 +3,7 @@ import Combine
 import UIKit
 import AVFoundation
 
-/// An opt-in native integration seam, deliberately NOT connected to the room UI.
+/// One-shot combat owner used by the explicit nearby room integration.
 /// One owner keeps selection/start/combat leases for an entire, one-shot match.
 /// The injected loader must report actual resource and renderer readiness; this
 /// type never treats a timer, catalog validation, or scene construction as GPU readiness.
@@ -93,6 +93,33 @@ final class DuelNetworkCombatCoordinator {
     private(set) var configuration: Configuration?
     private(set) var host: DuelNetworkCombatHost?
     private(set) var replay: DuelNetworkReplay?
+    /// Delivered after an outer transition has finished, never from a property's
+    /// willSet. The host must still offer only after submit(.start) returns.
+    var didChange: (@MainActor () -> Void)?
+    private struct Observation: Equatable {
+        let state: State
+        let failure: Failure?
+        let configuration: Configuration?
+        let presentation: ObjectIdentifier?
+    }
+    private var transitionDepth = 0
+    private var notifying = false
+    private var lastObservation: Observation?
+
+    private func beginTransition() { transitionDepth += 1 }
+    private func endTransition() {
+        transitionDepth -= 1
+        guard transitionDepth == 0, !notifying else { return }
+        notifying = true
+        defer { notifying = false }
+        while true {
+            let value = Observation(state: state, failure: failure, configuration: configuration,
+                                    presentation: presentation.map(ObjectIdentifier.init))
+            guard value != lastObservation else { return }
+            lastObservation = value
+            didChange?()
+        }
+    }
 
     private let router: DuelNetworkMessageRouter
     private let startChannel: DuelNetworkMessageRouter.Channel
@@ -179,6 +206,7 @@ final class DuelNetworkCombatCoordinator {
     /// Register ALL phase receivers before lobby.attach can send/receive offers.
     /// Attach only once to an already established, authenticated two-seat room.
     func attach() throws {
+        beginTransition(); defer { endTransition() }
         guard state == .idle else { throw Failure.invalidState }
         do {
             try router.attach()
@@ -210,6 +238,7 @@ final class DuelNetworkCombatCoordinator {
     /// sends the started snapshot before this offer on the reliable ordered link.
     /// A selection observer must not call this reentrantly from @Published.
     func offer(startID: String, seed: UInt64) throws {
+        beginTransition(); defer { endTransition() }
         guard state == .awaitingOffer, var value = barrier,
               value.localPlayerID == value.hostID, lobby.status == .started else { throw Failure.invalidState }
         guard checkedBoundaryTime() != nil else { throw failure ?? Failure.invalidState }
@@ -222,12 +251,14 @@ final class DuelNetworkCombatCoordinator {
 
     /// Scene backgrounding, audio interruption, navigation and renderer failure
     /// are terminal. There is no pause/resume, rematch, or host migration here.
+    func validateRoom() { checkRoom() }
     func interrupt() { close(.interrupted) }
     func close() { close(.interrupted) }
 
     /// Monotonic watchdog AND one host tick. Production owns a 60 Hz task;
     /// deterministic tests call this explicitly. Never catch up a stalled clock.
     func service() {
+        beginTransition(); defer { endTransition() }
         guard state != .idle, state != .closed, !servicing else { return }
         servicing = true
         defer { servicing = false }
@@ -257,6 +288,7 @@ final class DuelNetworkCombatCoordinator {
     private var isHost: Bool { pinned?.localID == pinned?.hostID && pinned != nil }
 
     private func selectionChanged(_ snapshot: DuelMultiplayerSelection.Snapshot?) {
+        beginTransition(); defer { endTransition() }
         guard state != .closed, state != .idle, let snapshot, checkedBoundaryTime() != nil else { return }
         if let started {
             guard started == snapshot else { close(.protocolViolation); return }
@@ -276,6 +308,7 @@ final class DuelNetworkCombatCoordinator {
     }
 
     private func receiveStart(_ data: Data, sender: String) {
+        beginTransition(); defer { endTransition() }
         guard acceptPacket(sender: sender), var value = barrier else { return }
         let outcome = value.receive(data, authenticatedSenderID: sender)
         guard outcome == .applied else {
@@ -301,6 +334,7 @@ final class DuelNetworkCombatCoordinator {
                 if case .success(let resources) = result { resources.release() }
                 return
             }
+            self.beginTransition(); defer { self.endTransition() }
             guard self.state != .closed, self.loadToken == token,
                   self.checkedBoundaryTime() != nil else {
                 if case .success(let resources) = result, resources !== self.resources { resources.release() }
@@ -368,6 +402,7 @@ final class DuelNetworkCombatCoordinator {
                 if case .success(let session) = result { session.shutdown() }
                 return
             }
+            self.beginTransition(); defer { self.endTransition() }
             guard self.state != .closed, self.presentationToken == token,
                   self.checkedBoundaryTime() != nil else {
                 if case .success(let session) = result, session !== self.presentation { session.shutdown() }
@@ -435,6 +470,7 @@ final class DuelNetworkCombatCoordinator {
     }
 
     private func receiveCombat(_ data: Data, sender: String) {
+        beginTransition(); defer { endTransition() }
         guard acceptPacket(sender: sender), let configuration else { return }
         if data.count <= Self.maximumControlBytes,
            let control = try? JSONDecoder().decode(Control.self, from: data) {
@@ -524,6 +560,7 @@ final class DuelNetworkCombatCoordinator {
     }
 
     private func finishedCheckpoint(_ digest: String?, tick: UInt64, token: UUID) {
+        beginTransition(); defer { endTransition() }
         guard state == .running, hashToken == token, checkedBoundaryTime() != nil else { return }
         hashToken = nil; hashTask = nil; computingCheckpoint = nil
         guard let digest else { close(.protocolViolation); return }
@@ -594,6 +631,7 @@ final class DuelNetworkCombatCoordinator {
     }
 
     private func checkRoom() {
+        beginTransition(); defer { endTransition() }
         guard state != .closed, let pinned else { return }
         let current = startChannel.state
         guard state != .closed else { return }
@@ -605,6 +643,7 @@ final class DuelNetworkCombatCoordinator {
     }
 
     private func close(_ reason: Failure, notifyPeer: Bool = true) {
+        beginTransition(); defer { endTransition() }
         guard state != .closed else { return }
         // Invalidate EVERY callback before calling transport, loader or renderer.
         state = .closed; failure = reason; loadToken = nil; presentationToken = nil
