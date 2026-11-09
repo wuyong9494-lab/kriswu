@@ -168,7 +168,23 @@ struct DuelSetup: Identifiable {
 /// Shared input mailbox and low-frequency HUD. SceneKit owns its own view lifetime.
 @MainActor
 final class DuelSession: ObservableObject {
+    enum Driver { case offline, externalAuthoritative }
+    enum PresentationFailure: Error, Equatable {
+        case invalidLocalFighterIndex, invalidRoster, invalidAssets, configurationMismatch
+        case notExternal, notAwaitingStart, notRunning, outOfOrderStep, reentrantPublication, closed
+    }
+    private enum ExternalState { case awaitingStart, starting, running, stopped }
+
     let setup: DuelSetup
+    let driver: Driver
+    /// Host remains 0 and guest remains 1 on both devices. Never reorder game arrays.
+    let localFighterIndex: Int
+    let committedConfiguration: DuelNetworkStartBarrier.Configuration?
+    private var externalState = ExternalState.awaitingStart
+    private(set) var nextPresentationTick: UInt64 = 0
+    private var authoritativeCancellationPublished = false
+    private var resettingPhysicalInput = false
+    private var publishingAuthoritativeStep = false
     private(set) var game: DuelGame
     private(set) var held = Set<String>()
     private var taps: DuelGame.Buttons = []
@@ -184,6 +200,9 @@ final class DuelSession: ObservableObject {
     var inputReset: (() -> Void)?
     var didSimulateStep: ((DuelGame, Int) -> Void)?
     var didReset: (() -> Void)?
+    /// A local interruption requests coordinator teardown. It is not permission
+    /// to modify authoritative buffers or to resume this protocol-1 match.
+    var didRequestAuthoritativeStop: (() -> Void)?
     private var feedbackUntil = 75
     private var serial = 0
     private var ended = false
@@ -196,6 +215,7 @@ final class DuelSession: ObservableObject {
 
     init(_ setup: DuelSetup) {
         self.setup = setup
+        driver = .offline; localFighterIndex = 0; committedConfiguration = nil
         var assets: DuelWeaponAssets?
         var failure: String?
         if setup.originalWeapons {
@@ -208,6 +228,52 @@ final class DuelSession: ObservableObject {
                         weaponCatalog: assets?.catalog)
         if setup.originalWeapons && game.weaponFight == nil { failure = "人物资源无法载入，请返回后重试。" }
         loadError = failure; paused = failure != nil
+        observeInterruptions()
+    }
+
+    private init(presentation game: DuelGame, localFighterIndex: Int,
+                 assets: DuelWeaponAssets?, configuration: DuelNetworkStartBarrier.Configuration?) throws {
+        guard (0...1).contains(localFighterIndex) else { throw PresentationFailure.invalidLocalFighterIndex }
+        guard game.fighters.count == 2 else { throw PresentationFailure.invalidRoster }
+        setup = .init(hero: game.fighters[localFighterIndex].hero, difficulty: game.difficulty,
+                      mode: game.mode, originalWeapons: game.weaponFight != nil)
+        driver = .externalAuthoritative; self.localFighterIndex = localFighterIndex
+        committedConfiguration = configuration; self.game = game; weaponAssets = assets
+        paused = true
+        observeInterruptions()
+    }
+
+    /// Production construction is deliberately separate from asset-free test
+    /// presentation. A decoded configuration or a matching hero name is not enough.
+    /// The coordinator must own this locally committed barrier and keep its
+    /// cancellation/transport lifecycle live after construction.
+    static func networkPresentation(committed barrier: DuelNetworkStartBarrier,
+                                    verified identity: DuelNetworkCompatibilityIdentity,
+                                    assets: DuelWeaponAssets) throws -> DuelSession {
+        let configuration = try DuelNetworkCombatProtocol.configuration(
+            from: barrier, host: barrier.localPlayerID == barrier.hostID,
+            loadedCompatibility: identity.compatibility, catalog: assets.catalog)
+        guard identity.catalog == assets.catalog else { throw PresentationFailure.invalidAssets }
+        for hero in [configuration.host.choice.hero, configuration.guest.choice.hero] {
+            _ = try assets.character(for: hero)
+        }
+        let game = DuelGame(hero: configuration.host.choice.hero, difficulty: configuration.difficulty,
+                            mode: configuration.mode, seed: configuration.seed,
+                            opponentHero: configuration.guest.choice.hero, weaponCatalog: assets.catalog)
+        guard game.weaponFight != nil else { throw PresentationFailure.invalidAssets }
+        return try DuelSession(presentation: game, localFighterIndex: barrier.localPlayerID == barrier.hostID ? 0 : 1,
+                               assets: assets, configuration: configuration)
+    }
+
+    #if DEBUG
+    /// Synthetic native-test seam only. Not a network factory, asset-loader
+    /// fallback, or authorization to display a playable multiplayer match.
+    convenience init(presentationFixture game: DuelGame, localFighterIndex: Int) throws {
+        try self.init(presentation: game, localFighterIndex: localFighterIndex, assets: nil, configuration: nil)
+    }
+    #endif
+
+    private func observeInterruptions() {
         interruptions.token = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification,
             object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.pause() }
@@ -227,7 +293,12 @@ final class DuelSession: ObservableObject {
         case .release: return "震地击退"
         }
     }
-    var ultimateReady: Bool { game.fighters[0].energy == 100 && game.grapple == nil }
+    var localFighter: DuelGame.Fighter { game.fighters[localFighterIndex] }
+    var opponentFighterIndex: Int { 1 - localFighterIndex }
+    var localLandedHits: Int { game.landedHits[localFighterIndex] }
+    var localDamageDealt: Int { game.damageDealt[localFighterIndex] }
+    var allowsLocalRestart: Bool { driver == .offline }
+    var ultimateReady: Bool { localFighter.energy == 100 && game.grapple == nil }
     func input(_ name: String, down: Bool) {
         guard !paused else { return }
         if down {
@@ -246,12 +317,45 @@ final class DuelSession: ObservableObject {
     func weaponDirection(x: Int, y: Int) { guard !paused else { return }; weaponInput.direction(x: x, y: y) }
     func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) { guard !paused else { return }; weaponInput.action(action, down: down) }
     func cancelWeaponAction(_ action: DuelWeaponInput.Action) { weaponInput.cancel(action: action) }
-    func cancelWeaponInput() { weaponInput.cancelAll(); game.cancelBufferedInputs() }
-    func clearInput() { held.removeAll(); taps = []; weaponInput.cancelAll(); game.cancelBufferedInputs(); inputReset?() }
-    func pause() { clearInput(); paused = true; renderPause?(true) }
-    func resume() { guard !ended, loadError == nil else { return }; clearInput(); paused = false; renderPause?(false) }
+    func cancelWeaponInput() {
+        weaponInput.cancelAll()
+        if driver == .offline { game.cancelBufferedInputs() }
+    }
+    func clearInput() {
+        held.removeAll(); taps = []; weaponInput.cancelAll()
+        // Guest touch cancellation, view teardown and local interruptions may
+        // never erase the host's already accepted combo/hit-stop buffers.
+        if driver == .offline { game.cancelBufferedInputs() }
+        // Reset hooks can synchronously pause/shut down and clear input again.
+        guard !resettingPhysicalInput else { return }
+        resettingPhysicalInput = true
+        defer { resettingPhysicalInput = false }
+        inputReset?()
+    }
+    func pause() {
+        guard driver == .externalAuthoritative else {
+            clearInput(); paused = true; renderPause?(true)
+            return
+        }
+        // Reserve the terminal transition before invoking ANY callback. Capture
+        // the single stop notification so nested shutdown cannot erase it.
+        let shouldNotify = externalState != .stopped
+        let pauseRender = shouldNotify ? renderPause : nil
+        let requestStop = shouldNotify ? didRequestAuthoritativeStop : nil
+        externalState = .stopped
+        // A nested pause may run inside Published's willSet while its old
+        // value is still false. Only the owner of the transition writes it.
+        if shouldNotify && !paused { paused = true }
+        clearInput()
+        pauseRender?(true)
+        requestStop?()
+    }
+    func resume() {
+        guard driver == .offline, !ended, loadError == nil else { return }
+        clearInput(); paused = false; renderPause?(false)
+    }
     func restart() {
-        guard !ended else { return }
+        guard allowsLocalRestart, !ended else { return }
         clearInput(); game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
                         opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil,
                         weaponCatalog: weaponAssets?.catalog)
@@ -259,48 +363,147 @@ final class DuelSession: ObservableObject {
         practicedJump = false; practicedSkills.removeAll(); didReset?(); resume()
         didSimulateStep?(game, 0); objectWillChange.send()
     }
+
+    /// One physical-input sample, in world coordinates, resolved against the
+    /// local seat's current authoritative facing and airborne state. Consumes
+    /// edges exactly once but never advances the simulation or clears its buffers.
+    func consumeLocalInput() -> DuelGame.Input {
+        guard !ended, !paused else { return .neutral }
+        let input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
+                    airborne: game.weaponFight?.isAirborne(localFighterIndex) ?? false) :
+            DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0),
+                           guardHeld: held.contains("guard"), taps: taps)
+        taps = []
+        return input
+    }
+
+    /// Existing display-link entry point. External presentation has no local
+    /// clock authority, AI fallback or input drain while waiting for host frames.
     func advance() {
-        guard !paused else { return }
+        guard driver == .offline, !ended, !paused else { return }
         if case .matchOver = game.phase { return }
-        let input = setup.originalWeapons ? weaponInput.consume(facing: game.fighters[0].facing,
-                    airborne: game.weaponFight?.isAirborne(0) ?? false) :
-            DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0), guardHeld: held.contains("guard"), taps: taps)
-        let move = input.move
+        let input = consumeLocalInput()
         let frozen = game.hitStop > 0 && game.grapple == nil
-        taps = []; game.step(input); serial += 1
+        game.step(input)
+        presentStep(input: input, frozen: frozen)
+    }
+
+    /// Only the coordinator can enable initial input/rendering after its load
+    /// and commit checks. An interruption is terminal; this cannot resume it.
+    func startAuthoritativePresentation() throws {
+        guard driver == .externalAuthoritative else { throw PresentationFailure.notExternal }
+        guard !ended, loadError == nil else { throw PresentationFailure.closed }
+        guard externalState == .awaitingStart else { throw PresentationFailure.notAwaitingStart }
+        // Input-reset callbacks may stop, shut down, or try to start again.
+        // Reserving start rejects nesting without reopening a terminal state.
+        externalState = .starting
+        clearInput()
+        guard !ended, loadError == nil, externalState == .starting else { throw PresentationFailure.closed }
+        externalState = .running
+        paused = false
+        // Published-property observers and the renderer callback are reentrant
+        // too. A stop always wins, even if it happened inside paused's setter.
+        guard canPresentStep else {
+            if !paused { paused = true }
+            throw PresentationFailure.closed
+        }
+        renderPause?(false)
+        guard canPresentStep else { throw PresentationFailure.closed }
+    }
+
+    /// Publish ONE already validated host/replay step, in fixed host-first order.
+    /// The caller owns wire validation and must supply every consumed tick, not
+    /// just the last state of a multi-frame batch. This is not a wire-state API.
+    func publishAuthoritativeStep(trustedGame: DuelGame, tick: UInt64) throws {
+        guard driver == .externalAuthoritative else { throw PresentationFailure.notExternal }
+        guard !ended else { throw PresentationFailure.closed }
+        guard !publishingAuthoritativeStep else { throw PresentationFailure.reentrantPublication }
+        guard externalState == .running else { throw PresentationFailure.notRunning }
+        // Core wrappers may still consume inbox ticks after a finished game,
+        // whose final event list is retained. Never re-emit that final hit/result.
+        if case .matchOver = game.phase { throw PresentationFailure.notRunning }
+        guard tick == nextPresentationTick, tick < UInt64.max else { throw PresentationFailure.outOfOrderStep }
+        try validatePresentation(trustedGame)
+        publishingAuthoritativeStep = true
+        defer { publishingAuthoritativeStep = false }
+        let frozen = game.hitStop > 0 && game.grapple == nil
+        game = trustedGame; nextPresentationTick += 1
+        presentStep(input: .neutral, frozen: frozen)
+    }
+
+    /// Canonical cancellation is supplied by the coordinator AFTER it cancels
+    /// its host/replay wrapper. Local physical clear/pause never fabricates it.
+    /// May arrive after a local stop request, but never after session teardown.
+    func publishAuthoritativeCancellation(trustedGame: DuelGame) throws {
+        guard driver == .externalAuthoritative else { throw PresentationFailure.notExternal }
+        guard !ended, !authoritativeCancellationPublished else { throw PresentationFailure.closed }
+        try validatePresentation(trustedGame)
+        game = trustedGame; authoritativeCancellationPublished = true
+        externalState = .stopped
+        if !paused { paused = true }
+        clearInput()
+        guard !ended else { return }
+        renderPause?(true)
+        // Cancellation is not a simulation step: do not replay the last hit's
+        // effects/haptics or increment the presentation/animation counters.
+        objectWillChange.send()
+    }
+
+    private func validatePresentation(_ value: DuelGame) throws {
+        guard value.fighters.map(\.hero) == game.fighters.map(\.hero),
+              value.mode == game.mode, value.difficulty == game.difficulty,
+              value.weaponFight?.profiles == game.weaponFight?.profiles else {
+            throw PresentationFailure.configurationMismatch
+        }
+    }
+
+    private var canPresentStep: Bool {
+        !ended && (driver == .offline || (externalState == .running && !paused))
+    }
+
+    private func presentStep(input: DuelGame.Input, frozen: Bool) {
+        // A renderer callback must never make this step read a newer or
+        // cancelled game's event list. External nested publication is rejected;
+        // explicit cancellation remains permitted and ends feedback immediately.
+        let presentedGame = game
+        serial += 1
         if !frozen { animationTick += 1 }
-        didSimulateStep?(game, animationTick)
+        didSimulateStep?(presentedGame, animationTick)
+        guard canPresentStep else { return }
         if setup.mode == .tutorial {
-            if tutorialStep == 0 && move != 0 { tutorialStep = 1 }
-            if tutorialStep == 1 && game.landedHits[0] > 0 { tutorialStep = 2 }
+            if tutorialStep == 0 && input.move != 0 { tutorialStep = 1 }
+            if tutorialStep == 1 && presentedGame.landedHits[localFighterIndex] > 0 { tutorialStep = 2 }
             if tutorialStep == 2 {
-                if game.events.contains(.jumped(player: 0)) { practicedJump = true }
-                if practicedJump && game.fighters[0].guarding { tutorialStep = 3 }
+                if presentedGame.events.contains(.jumped(player: localFighterIndex)) { practicedJump = true }
+                if practicedJump && presentedGame.fighters[localFighterIndex].guarding { tutorialStep = 3 }
             }
             if tutorialStep == 3 && setup.originalWeapons, input.weaponCommand == .kick || input.weaponCommand == .shadow { tutorialStep = 4 }
-            if tutorialStep == 3, let attack = game.fighters[0].attack,
+            if tutorialStep == 3, let attack = presentedGame.fighters[localFighterIndex].attack,
                attack.move == .skill1 || attack.move == .skill2 {
                 practicedSkills.insert(attack.move)
                 if practicedSkills.count == 2 { tutorialStep = 4 }
             }
         }
-        for event in game.events {
+        for event in presentedGame.events {
+            guard canPresentStep else { return }
             switch event {
-            case .hit(let attacker, let damage): feedback = attacker == 0 ? "命中 −\(damage)" : "受到攻击 −\(damage)"
-            case .blocked: feedback = "防御成功"
-            case .guardBreak: feedback = "防御被击破"
-            case .whiff(let attacker): if attacker == 0 { feedback = "未命中 · 留意距离与前摇" }
+            case .hit(let attacker, let damage): feedback = attacker == localFighterIndex ? "命中 −\(damage)" : "受到攻击 −\(damage)"
+            case .blocked(let defender): feedback = defender == localFighterIndex ? "防御成功" : "对手防御成功"
+            case .guardBreak(let defender): feedback = defender == localFighterIndex ? "防御被击破" : "击破对手防御"
+            case .whiff(let attacker): if attacker == localFighterIndex { feedback = "未命中 · 留意距离与前摇" }
             case .jumped: break
-            case .grappleStarted: feedback = "擒拿成功 · 抓肩摔倒"
-            case .grappleSlam: feedback = "锁臂压制 · 3 秒"; impact.impactOccurred(intensity: 0.6)
-            case .grappleReleased: feedback = "震地击退"; impact.impactOccurred(intensity: 0.9)
+            case .grappleStarted(let attacker): feedback = attacker == localFighterIndex ? "擒拿成功 · 抓肩摔倒" : "被对手擒拿 · 抓肩摔倒"
+            case .grappleSlam(let attacker): feedback = attacker == localFighterIndex ? "锁臂压制 · 3 秒" : "被锁臂压制 · 3 秒"; if canPresentStep { impact.impactOccurred(intensity: 0.6) }
+            case .grappleReleased(let attacker): feedback = attacker == localFighterIndex ? "震地击退" : "被震地击退"; if canPresentStep { impact.impactOccurred(intensity: 0.9) }
             case .grappleClash: feedback = "双方抓取相抵 · 拉开距离"
-            case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == 0 ? "拿下一局" : "对手拿下一局"
+            case .roundEnded(let winner): feedback = winner == nil ? "平局 · 重赛" : winner == localFighterIndex ? "拿下一局" : "对手拿下一局"
             }
-            feedbackUntil = game.frame + 75
+            guard canPresentStep else { return }
+            feedbackUntil = presentedGame.frame + 75
         }
-        if game.frame > feedbackUntil && !feedback.isEmpty { feedback = "" }
-        if serial % 6 == 0 || !game.events.isEmpty { objectWillChange.send() }
+        guard canPresentStep else { return }
+        if presentedGame.frame > feedbackUntil && !feedback.isEmpty { feedback = "" }
+        if serial % 6 == 0 || !presentedGame.events.isEmpty { objectWillChange.send() }
     }
     func metrics(_ value: String) { report = value }
     func characterLoaded(_ status: String) { characterStatus = status }
@@ -309,6 +512,7 @@ final class DuelSession: ObservableObject {
         guard !ended else { return }
         ended = true
         pause(); renderPause = nil; inputReset = nil; didSimulateStep = nil; didReset = nil
+        didRequestAuthoritativeStop = nil
         weaponAssets?.releaseCharacters()
         // UIKit can retain the closed SceneKit view and its session until a
         // later event. Release the resource owner at teardown, not at deinit.
@@ -345,7 +549,7 @@ struct DuelMatchView: View {
                 Text(session.grappleStatus).font(.caption.monospacedDigit().bold()).frame(height: 20)
                     .accessibilityIdentifier("duel.grapple")
                 if session.setup.mode != .versus {
-                    Text("累计命中 \(session.game.landedHits[0]) 次 · 伤害 \(session.game.damageDealt[0])")
+                    Text("累计命中 \(session.localLandedHits) 次 · 伤害 \(session.localDamageDealt)")
                         .font(.caption.monospacedDigit()).accessibilityIdentifier("duel.hits")
                 }
                 Spacer()
@@ -363,7 +567,7 @@ struct DuelMatchView: View {
             if session.paused { pausePanel }
             if case .matchOver(let winner) = session.game.phase { resultPanel(winner) }
             if case .roundBreak(let winner, _) = session.game.phase {
-                Text(winner == nil ? "平局 · 准备重赛" : winner == 0 ? "回合胜利" : "回合失利")
+                Text(winner == nil ? "平局 · 准备重赛" : winner == session.localFighterIndex ? "回合胜利" : "回合失利")
                     .font(.largeTitle.bold()).padding(24).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
                     .allowsHitTesting(false)
             }
@@ -387,7 +591,7 @@ struct DuelMatchView: View {
     private func fighterHUD(_ i: Int) -> some View {
         let f = session.game.fighters[i]
         return VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
-            Text("\(f.hero.name) · \(session.game.weaponFight?.profiles[i].weaponTitle ?? (i == 0 ? "你" : "对手"))").font(.caption.bold())
+            Text("\(f.hero.name) · \(session.game.weaponFight?.profiles[i].weaponTitle ?? (i == session.localFighterIndex ? "你" : "对手"))").font(.caption.bold())
                 .accessibilityIdentifier("duel.name.\(i)")
             ProgressView(value: Double(f.health), total: 1000).tint(i == 0 ? .orange : .cyan)
             Text("生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
@@ -400,7 +604,7 @@ struct DuelMatchView: View {
         panel {
             Text("已暂停").font(.title2.bold())
             if let error = session.loadError { Text(error).accessibilityIdentifier("duel.resourceError") }
-            else {
+            else if session.allowsLocalRestart {
                 Button("继续对决") { session.resume() }.accessibilityIdentifier("duel.resume")
                 Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.restart")
             }
@@ -411,9 +615,11 @@ struct DuelMatchView: View {
     }
     private func resultPanel(_ winner: Int) -> some View {
         panel {
-            Text(winner == 0 ? "对决胜利" : "这次惜败").font(.largeTitle.bold())
-            Text("\(session.game.wins[0]) : \(session.game.wins[1]) · 命中 \(session.game.landedHits[0]) 次")
-            Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.rematch")
+            Text(winner == session.localFighterIndex ? "对决胜利" : "这次惜败").font(.largeTitle.bold())
+            Text("\(session.game.wins[0]) : \(session.game.wins[1]) · 命中 \(session.localLandedHits) 次")
+            if session.allowsLocalRestart {
+                Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.rematch")
+            }
             Button("返回角色选择") { session.shutdown(); dismiss() }.accessibilityIdentifier("duel.resultExit")
         }
     }
@@ -445,14 +651,16 @@ struct DuelWeaponControls: UIViewRepresentable {
         updateUIView(view, context: context)
         return view
     }
-    func updateUIView(_ view: DuelSourceControlsView, context: Context) {
+    func updateUIView(_ view: DuelSourceControlsView, context: Context) { updateReadiness(view) }
+    func updateReadiness(_ view: DuelSourceControlsView) {
         view.inputEnabled = !session.paused && session.loadError == nil
-        view.opponentProne = session.game.fighters.count > 1 && session.game.fighters[1].knockdown > 0
+        view.opponentProne = session.game.fighters[session.opponentFighterIndex].knockdown > 0
         guard let fight = session.game.weaponFight else { view.inputEnabled = false; return }
-        let profile = fight.profiles[0], fighter = session.game.fighters[0]
+        let index = session.localFighterIndex
+        let profile = fight.profiles[index], fighter = session.localFighter
         for action in DuelSourceControlsView.Action.allCases {
             guard let command = DuelWeaponCommand(rawValue: action.rawValue) else { continue }
-            let equipped = fight.supports(command, index: 0)
+            let equipped = fight.supports(command, index: index)
             let enough = command != .shadow || fighter.energy >= 100
             let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
             let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : !enough ? "需要 100 能量" : fighter.stun > 0 ? "受击中" : fighter.attack != nil ? "收招中" : "可施放"
@@ -482,9 +690,9 @@ final class DuelInputView: UIView {
     init(session: DuelSession) {
         self.session = session; super.init(frame: .zero); isMultipleTouchEnabled = true
         var controls = [("left", "◀"), ("right", "▶"), ("guard", "防御"), ("jump", "跳跃"),
-                        ("light", "普攻"), ("heavy", "重击"), ("skill1", session.setup.hero.skill1Name),
-                        ("skill2", session.setup.hero.skill2Name)]
-        if session.setup.hero == .liu { controls.append(("ultimate", "大招")) }
+                        ("light", "普攻"), ("heavy", "重击"), ("skill1", session.localFighter.hero.skill1Name),
+                        ("skill2", session.localFighter.hero.skill2Name)]
+        if session.localFighter.hero == .liu { controls.append(("ultimate", "大招")) }
         for (name, title) in controls {
             let button = UIButton(type: .custom)
             button.setTitle(title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)

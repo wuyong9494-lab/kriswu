@@ -12,7 +12,7 @@ struct DuelWorld: UIViewRepresentable {
 }
 
 /// Authored personal characters plus procedural fallbacks. Assets live for one fight.
-/// One main-thread clock owns simulation; SceneKit only renders the resulting pose.
+/// The offline clock advances simulation; external sessions only render supplied state.
 @MainActor
 final class DuelWorldView: SCNView {
     private(set) static var activeClocks = 0
@@ -182,7 +182,8 @@ final class DuelWorldView: SCNView {
         guard !ended else { return }
         ended = true; stopClock()
         session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
-        session.clearInput()
+        if session.driver == .externalAuthoritative { session.pause() }
+        else { session.clearInput() }
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         NotificationCenter.default.removeObserver(self)
@@ -351,6 +352,12 @@ final class DuelWorldView: SCNView {
             pointOfView?.camera?.zFar = 350
             pointOfView?.position = cameraBasePosition
             pointOfView?.look(at: SCNVector3(5, 1.2, 0))
+            return
+        }
+        if session.committedConfiguration != nil {
+            // An external match must not silently replace a missing/corrupt
+            // verified arena with the offline laboratory floor.
+            session.characterFailed()
             return
         }
         let floor = DuelActor.shape(SCNBox(width: 11.5, height: 0.3, length: 3.2, chamferRadius: 0.12),
