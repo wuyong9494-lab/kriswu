@@ -38,8 +38,20 @@ extension AppStore {
         }
     }
 
+    /// Only announce changes that are still present in the merged roster.
+    /// A partial source page or a stale intermediate edit must not become a
+    /// notification that contradicts the day roster shown in the app.
+    func verifiedRosterEdits(_ edits: [RosterEdit]) -> [RosterEdit] {
+        edits.filter { edit in
+            let actual = roster[edit.name]?[edit.day]
+            return !RosterMerger.sameMeaning(edit.old, actual, matcher: matcher)
+                && RosterMerger.sameMeaning(edit.new, actual, matcher: matcher)
+        }
+    }
+
     /// 全员谁和谁换了班：记下来；关注的同事以后的班变了就通知
     func recordTeamChanges(before: Roster, days: Set<DayKey>) async {
+        // Restrict team alerts to dates actually refreshed by this sync.
         let found = RosterDiff.changes(before: before, after: roster, days: days, matcher: matcher)
         guard !found.isEmpty else { return }
         var log = settings.teamChanges
@@ -63,9 +75,10 @@ extension AppStore {
     func notifyRosterEdits(_ edits: [RosterEdit], published: Set<DayKey>) async {
         guard !Self.isDemo, settings.notifyAllChanges else { return }
         let today = DayKey.today
+        let verified = verifiedRosterEdits(edits)
         // 和我对换的同事：我自己的「排班有更新」里已经写了（「组A原来是某某」），这里不再重复一条
         func posts(_ raw: String?) -> Set<String> { Set(raw.map { matcher.posts($0).map(matcher.displayName) } ?? []) }
-        let mine = Dictionary(edits.filter { isMe($0.name) }.map { ($0.day, $0) }, uniquingKeysWith: { a, _ in a })
+        let mine = Dictionary(verified.filter { isMe($0.name) }.map { ($0.day, $0) }, uniquingKeysWith: { a, _ in a })
         func swappedWithMe(_ e: RosterEdit) -> Bool {
             guard settings.notifyChanges, let my = mine[e.day] else { return false }
             // 他让出来的正是我新接的，或者他新接的正是我让出来的
@@ -74,7 +87,7 @@ extension AppStore {
             return !hisRemoved.isDisjoint(with: myAdded) || !hisAdded.isDisjoint(with: myRemoved)
         }
         // 关注的同事另有「⭐」提醒，这里不再重复
-        let upcoming = edits.filter { e in
+        let upcoming = verified.filter { e in
             e.day >= today && published.contains(e.day) && !isMe(e.name)
                 && !(settings.notifyFavorites && isFavorite(e.name)) && !swappedWithMe(e)
         }.sorted { ($0.day, $0.name) < ($1.day, $1.name) }
