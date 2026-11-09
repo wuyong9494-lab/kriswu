@@ -130,11 +130,13 @@ final class DuelWorldView: SCNView {
         // Keep all ten world units visible even during the rotation transition.
         guard bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Double(bounds.width / bounds.height)
+        // A wide fight should show full-height fighters rather than shrinking
+        // them to fit the whole stage. Narrow layouts retain a safe overview.
         if stageAsset != nil {
-            let vertical = 2 * atan(5.8 / (7.7 * max(0.1, aspect))) * 180 / .pi
-            pointOfView?.camera?.fieldOfView = CGFloat(min(100, max(35, vertical)))
+            let vertical = aspect >= 1.5 ? 31.0 : 2 * atan(5.8 / (7.7 * max(0.1, aspect))) * 180 / .pi
+            pointOfView?.camera?.fieldOfView = CGFloat(min(100, max(31, vertical)))
         } else {
-            pointOfView?.camera?.orthographicScale = max(3.2, 5.8 / max(0.1, aspect))
+            pointOfView?.camera?.orthographicScale = aspect >= 1.5 ? 2.85 : max(3.2, 5.8 / max(0.1, aspect))
         }
     }
     @objc private func interrupted() { session.pause() }
