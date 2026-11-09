@@ -87,7 +87,7 @@ final class DuelSession: ObservableObject {
     private(set) var held = Set<String>()
     private var taps: DuelGame.Buttons = []
     private var weaponInput = DuelWeaponInput()
-    let weaponAssets: DuelWeaponAssets?
+    private(set) var weaponAssets: DuelWeaponAssets?
     @Published private(set) var loadError: String?
     @Published private(set) var paused = false
     @Published var showBoxes = false
@@ -100,6 +100,7 @@ final class DuelSession: ObservableObject {
     var didReset: (() -> Void)?
     private var feedbackUntil = 75
     private var serial = 0
+    private var ended = false
     private(set) var animationTick = 0
     private(set) var characterStatus = ""
     private var practicedJump = false
@@ -162,8 +163,9 @@ final class DuelSession: ObservableObject {
     func cancelWeaponInput() { weaponInput.cancelAll(); game.cancelBufferedInputs() }
     func clearInput() { held.removeAll(); taps = []; weaponInput.cancelAll(); game.cancelBufferedInputs(); inputReset?() }
     func pause() { clearInput(); paused = true; renderPause?(true) }
-    func resume() { guard loadError == nil else { return }; clearInput(); paused = false; renderPause?(false) }
+    func resume() { guard !ended, loadError == nil else { return }; clearInput(); paused = false; renderPause?(false) }
     func restart() {
+        guard !ended else { return }
         clearInput(); game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
                         opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil,
                         weaponCatalog: weaponAssets?.catalog)
@@ -218,8 +220,13 @@ final class DuelSession: ObservableObject {
     func characterLoaded(_ status: String) { characterStatus = status }
     func characterFailed() { loadError = "人物资源无法载入，请返回后重试。"; pause() }
     func shutdown() {
+        guard !ended else { return }
+        ended = true
         pause(); renderPause = nil; inputReset = nil; didSimulateStep = nil; didReset = nil
         weaponAssets?.releaseCharacters()
+        // UIKit can retain the closed SceneKit view and its session until a
+        // later event. Release the resource owner at teardown, not at deinit.
+        weaponAssets = nil
     }
 }
 

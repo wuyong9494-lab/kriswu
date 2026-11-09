@@ -43,6 +43,16 @@ Final unrendered trail/particle lifetime probes now drain an explicit Objective-
 
 The failed legacy UI evidence contains two hits and 280 damage. The coordinate-based pause arrived more than five seconds after the ultimate input, beyond the unchanged three-second hold. The test now observes the real hold and uses a real Home event to invoke the production background-pause path before inspecting it. It still requires the frozen hold, one hit/100 damage before resuming, unchanged state across another background cycle, and two hits/280 damage after resuming. The separate flow continues to exercise the pause button.
 
+## Second actual-resource run and resource-owner teardown
+
+[Run 42549436395, attempt 1](https://github.com/wuyong9494-lab/kriswu/actions/runs/42549436395), at `4d7843e5221944199dc3065a6e0c790deb9f525e`, completed 68 actual-resource native cases. Two assertions failed in the same equipped-session teardown case, once per hero: `DuelWeaponGameplayTests.testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes`, line 191, still observed `DuelWeaponAssets` after shutdown. The other cases passed, including both verified model roots, real weapon contact, source controls, source effects and their scene-node lifetime checks. This is not a passing actual-resource run.
+
+The ordinary native job passed 27 native cases and two legacy UI cases. Its artifact contains procedural characters and no video, so it is not visual acceptance of the new equipped models. The actual-resource UI/recording outcome must be read separately.
+
+The session previously held its resource owner in an immutable property; shutdown cleared the owner's character cache but kept the owner itself. A closed SceneKit view can outlive the event and continue holding its session. The focused follow-up now makes that ownership explicit: shutdown releases the character cache and clears the session's `weaponAssets` reference immediately. A terminal session flag makes shutdown idempotent and rejects later resume/restart calls, preventing an already-closed equipped session from rebuilding without its catalog. Normal pause, resume and in-match restart retain their existing behavior.
+
+The native regression now requires the owner to be absent while the session and view are still strongly held, keeps the existing outer weak-reference checks, and checks that resume, restart and input cannot advance a closed session. No waiting period, assertion removal, model bytes, combat timing or damage constants are changed. The game snapshot still owns value-type motion data until the session is released; owner-object release alone is not proof that all CPU/GPU memory has returned to baseline.
+
 ## Required follow-up
 
 Run the updated native and UI suites with the actual encrypted assets, inspect the executed counts and failures, and review fresh rendered/recorded evidence. Until that run finishes successfully, the corrected resources are not declared accepted.

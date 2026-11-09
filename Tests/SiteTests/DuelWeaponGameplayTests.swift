@@ -179,13 +179,26 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     XCTAssertNil(state.game.fighters[0].attack, "Restart must discard a buffered physical button")
                 }
                 renderer.scene = nil; renderer.pointOfView = nil
+                XCTAssertNotNil(releasedAssets)
                 view.shutdown(); state.shutdown()
+                XCTAssertNil(state.weaponAssets)
+                XCTAssertNil(releasedAssets,
+                             "Closing must release the resource owner even while the session and view remain alive")
                 XCTAssertNil(view.scene)
                 XCTAssertTrue(view.weaponAssets.isEmpty)
                 XCTAssertNil(view.sourceEffects)
                 XCTAssertEqual(effects.activeBurstCount, 0)
                 XCTAssertEqual(effects.sourceTextureCount, 0)
                 XCTAssertEqual(effects.sourceAudioCount, 0)
+                let stoppedGame = state.game, stoppedTick = state.animationTick
+                state.resume(); state.restart()
+                state.weaponDirection(x: 1, y: 0)
+                state.weaponAction(.weapon, down: true); state.advance()
+                XCTAssertTrue(state.paused, "A closed session cannot resume or fall back to an unequipped fight")
+                XCTAssertEqual(state.game, stoppedGame)
+                XCTAssertEqual(state.animationTick, stoppedTick)
+                state.shutdown()
+                XCTAssertNil(state.weaponAssets, "Repeated teardown must remain safe")
                 world = nil; session = nil; SCNTransaction.flush()
             }
             XCTAssertNil(releasedAssets)
