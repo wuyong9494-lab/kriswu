@@ -361,6 +361,7 @@ struct DuelWeaponControls: UIViewRepresentable {
     }
     func updateUIView(_ view: DuelSourceControlsView, context: Context) {
         view.inputEnabled = !session.paused && session.loadError == nil
+        view.opponentProne = session.game.fighters.count > 1 && session.game.fighters[1].knockdown > 0
         guard let fight = session.game.weaponFight else { view.inputEnabled = false; return }
         let profile = fight.profiles[0], fighter = session.game.fighters[0]
         for action in DuelSourceControlsView.Action.allCases {
