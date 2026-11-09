@@ -40,3 +40,24 @@ Swift is not installed on this executor; the focused Swift command fails with `s
 - Two-player network selection and combat are not implemented by this patch. Network protocol/authority, disconnect handling and two-device testing remain separate work.
 - Original shadow/ranged source timing remains unavailable. This patch does not invent source-equivalence claims.
 - No TestFlight distribution or release was performed.
+
+## Remote checkpoint: approved candidate 5f5834a
+
+Run [42624654940](https://github.com/wuyong9494-lab/kriswu/actions/runs/42624654940)
+validated the exact first-batch source tree. Core: 836 tests, 16 skips, 0 failures;
+envelope and unsigned device build passed. Native/UI bundles compiled. The first
+native attempt timed out starting the simulator; only that job was retried.
+
+On retry, the new camera regression, repeated-entry clock/resource release test,
+and both real-touch UI flows passed. Native overall remained failed: two existing
+showroom tests made eight success/reset assertions despite the ordinary job not
+staging private character models. Atomic selection intentionally preserves the
+current scene and camera when source files are absent.
+
+The follow-up test correction selects expected behavior using source-file/catalog
+availability, never decoder success. Present assets still require successful
+selection and camera reset; absent assets require unchanged selection, node count,
+yaw and zoom. No test is skipped and no fabricated model substitutes for actual
+resource acceptance. That correction still needs the next native run. The private
+resource job was skipped on this independent branch; browser dispatch is blocked
+by a signed-out GitHub session, so actual-resource coverage is not claimed.

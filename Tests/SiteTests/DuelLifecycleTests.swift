@@ -9,6 +9,17 @@ final class DuelLifecycleTests: XCTestCase {
         DuelSession(.init(hero: hero, difficulty: .learning, mode: mode))
     }
 
+    /// Ordinary CI has no private character pack. Decide expected behavior
+    /// from source availability, never from whether the decoder happened to work.
+    /// A present but broken source must still fail the successful-switch asserts.
+    private func showroomHasSource(for hero: DuelGame.Hero) -> Bool {
+        if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"),
+           DuelWeaponAssets.catalogURL() != nil { return true }
+        if let identity = DuelOriginalRigAsset.identity(for: hero),
+           DuelOriginalRigAsset.bundledURL(for: identity) != nil { return true }
+        return DuelCharacterAsset.bundledURL(for: hero) != nil
+    }
+
     func testCameraKeepsNarrowFramingAcrossRenderAndRestart() throws {
         let state = session()
         let world = DuelWorldView(session: state, characterSource: .procedural)
@@ -57,8 +68,19 @@ final class DuelLifecycleTests: XCTestCase {
                 let scene = lobby.scene
                 releasedScene = scene
                 XCTAssertNotNil(scene)
-                lobby.select(.ember); XCTAssertEqual(lobby.selectedHero, .ember)
-                lobby.select(.liu); XCTAssertEqual(lobby.selectedHero, .liu)
+                XCTAssertEqual(lobby.selectedHero, showroomHasSource(for: hero) ? hero : nil)
+                for choice in [DuelGame.Hero.ember, .liu] {
+                    let previousSelection = lobby.selectedHero
+                    let previousNodeCount = scene?.rootNode.childNodes.count
+                    lobby.select(choice)
+                    if showroomHasSource(for: choice) {
+                        XCTAssertEqual(lobby.selectedHero, choice)
+                    } else {
+                        XCTAssertEqual(lobby.selectedHero, previousSelection,
+                                       "Missing sources must not report a successful character switch")
+                        XCTAssertEqual(scene?.rootNode.childNodes.count, previousNodeCount)
+                    }
+                }
                 XCTAssertFalse(lobby.rendersContinuously)
                 XCTAssertFalse(lobby.isPlaying)
                 XCTAssertEqual(DuelWorldView.activeClocks, clocks)
@@ -90,9 +112,18 @@ final class DuelLifecycleTests: XCTestCase {
         XCTAssertEqual(lobby.zoom, 0.7, accuracy: 0.0001)
         lobby.scalePreview(by: 0.01)
         XCTAssertEqual(lobby.zoom, 1.5, accuracy: 0.0001)
+        let previousSelection = lobby.selectedHero
+        let previousYaw = lobby.yaw, previousZoom = lobby.zoom
         lobby.select(.liu)
-        XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
-        XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+        if showroomHasSource(for: .liu) {
+            XCTAssertEqual(lobby.selectedHero, .liu)
+            XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
+            XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+        } else {
+            XCTAssertEqual(lobby.selectedHero, previousSelection)
+            XCTAssertEqual(lobby.yaw, previousYaw, accuracy: 0.0001)
+            XCTAssertEqual(lobby.zoom, previousZoom, accuracy: 0.0001)
+        }
         lobby.shutdown()
         XCTAssertTrue(lobby.gestureRecognizers?.isEmpty ?? true)
         XCTAssertNil(lobby.scene)

@@ -165,6 +165,10 @@ final class GameRoom: NSObject, ObservableObject {
     var onPayload: ((Data, String) -> Void)?
     /// 收到只在房主和每个人之间来回、不转发的消息（乱斗的摇杆、画面）
     var onDirect: ((Data, String) -> Void)?
+    /// Opt-in direct channel bound to the current transport peer, not a sender
+    /// string supplied by the packet. New authoritative protocols use this.
+    /// Existing game callbacks remain unchanged during incremental migration.
+    var onAuthenticatedDirect: ((Data, String) -> Void)?
     /// 有人进来、走了
     var onMembersChanged: (() -> Void)?
 
@@ -178,6 +182,7 @@ final class GameRoom: NSObject, ObservableObject {
     private var hostPeer: MCPeerID?
     /// 房主：每台连上的手机是房间里的谁
     private var memberOfPeer: [MCPeerID: String] = [:]
+    private var directIdentities = GameRoomDirectIdentity<MCPeerID>()
     private var match: GKMatch?
 
     private enum Envelope: Codable {
@@ -251,6 +256,8 @@ final class GameRoom: NSObject, ObservableObject {
         }
         onPayload = nil
         onDirect = nil
+        onAuthenticatedDirect = nil
+        directIdentities.removeAll()
         onMembersChanged = nil
     }
 
@@ -311,6 +318,40 @@ final class GameRoom: NSObject, ObservableObject {
         return (from, Data(bytes[(2 + length)...]))
     }
 
+    /// Reject identity claims that do not match the live transport binding.
+    /// Nearby IDs are room-scoped identities, not verified real-world accounts.
+    nonisolated static func validatedDirectSender(claimed: String, transport: String?,
+                                                  local: String, memberIDs: [String]) -> String? {
+        guard let transport, !transport.isEmpty, claimed == transport,
+              transport != local, memberIDs.filter({ $0 == transport }).count == 1 else { return nil }
+        return transport
+    }
+
+    private func receiveAuthenticatedDirect(_ direct: (from: String, data: Data),
+                                            peer: MCPeerID, sessionID: ObjectIdentifier) {
+        guard phase == .ready, let session, ObjectIdentifier(session) == sessionID,
+              session.connectedPeers.contains(peer) else { return }
+        let transportID: String?
+        switch mode {
+        case .nearbyHost: transportID = directIdentities.identity(for: peer)
+        case .nearbyGuest: transportID = peer == hostPeer ? directIdentities.identity(for: peer) : nil
+        case .remote: return
+        }
+        guard let sender = Self.validatedDirectSender(claimed: direct.from, transport: transportID,
+                                                      local: me.id, memberIDs: members.map(\.id)) else { return }
+        onAuthenticatedDirect?(direct.data, sender)
+    }
+
+    private func receiveAuthenticatedDirect(_ direct: (from: String, data: Data),
+                                            playerID: String, matchID: ObjectIdentifier) {
+        guard phase == .ready, let match, ObjectIdentifier(match) == matchID,
+              match.players.contains(where: { $0.gamePlayerID == playerID }),
+              isHost || playerID == hostID,
+              let sender = Self.validatedDirectSender(claimed: direct.from, transport: playerID,
+                                                      local: me.id, memberIDs: members.map(\.id)) else { return }
+        onAuthenticatedDirect?(direct.data, sender)
+    }
+
     // MARK: 面对面
 
     private func makeSession() -> MCSession {
@@ -329,6 +370,7 @@ final class GameRoom: NSObject, ObservableObject {
         switch envelope {
         case .hello(let member):
             guard mode == .nearbyHost else { return }
+            directIdentities.bind(peer, to: member.id, localID: me.id)
             memberOfPeer[peer] = member.id
             if !members.contains(where: { $0.id == member.id }) { members.append(member) }
             phase = .ready
@@ -336,6 +378,7 @@ final class GameRoom: NSObject, ObservableObject {
             onMembersChanged?()
         case .lobby(let list, let host):
             guard mode == .nearbyGuest, peer == hostPeer else { return }
+            directIdentities.bind(peer, to: host, localID: me.id)
             members = list
             hostID = host
             phase = .ready
@@ -350,6 +393,7 @@ final class GameRoom: NSObject, ObservableObject {
     }
 
     private func peerChanged(_ peer: MCPeerID, connected: Bool) {
+        if !connected { directIdentities.remove(peer) }
         switch mode {
         case .nearbyHost:
             guard !connected, let id = memberOfPeer.removeValue(forKey: peer) else { return }
@@ -419,16 +463,28 @@ extension GameRoom: MCSessionDelegate {
     nonisolated func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
         guard state != .connecting else { return }
         let connected = state == .connected
-        Task { @MainActor in self.peerChanged(peerID, connected: connected) }
+        let sessionID = ObjectIdentifier(session)
+        Task { @MainActor in
+            guard let current = self.session, ObjectIdentifier(current) == sessionID else { return }
+            self.peerChanged(peerID, connected: connected)
+        }
     }
 
     nonisolated func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
         if let direct = GameRoom.direct(data) {
-            Task { @MainActor in self.onDirect?(direct.data, direct.from) }
+            let sessionID = ObjectIdentifier(session)
+            Task { @MainActor in
+                self.receiveAuthenticatedDirect(direct, peer: peerID, sessionID: sessionID)
+                self.onDirect?(direct.data, direct.from)
+            }
             return
         }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return }
-        Task { @MainActor in self.received(envelope, from: peerID) }
+        let sessionID = ObjectIdentifier(session)
+        Task { @MainActor in
+            guard let current = self.session, ObjectIdentifier(current) == sessionID else { return }
+            self.received(envelope, from: peerID)
+        }
     }
 
     nonisolated func session(_ session: MCSession, didReceiveCertificate certificate: [Any]?, fromPeer peerID: MCPeerID,
@@ -497,7 +553,11 @@ extension GameRoom: MCNearbyServiceBrowserDelegate {
 extension GameRoom: GKMatchDelegate {
     nonisolated func match(_ match: GKMatch, didReceive data: Data, fromRemotePlayer player: GKPlayer) {
         if let direct = GameRoom.direct(data) {
-            Task { @MainActor in self.onDirect?(direct.data, direct.from) }
+            let matchID = ObjectIdentifier(match), playerID = player.gamePlayerID
+            Task { @MainActor in
+                self.receiveAuthenticatedDirect(direct, playerID: playerID, matchID: matchID)
+                self.onDirect?(direct.data, direct.from)
+            }
             return
         }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
