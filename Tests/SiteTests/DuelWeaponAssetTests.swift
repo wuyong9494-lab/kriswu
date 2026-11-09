@@ -276,6 +276,35 @@ final class DuelWeaponAssetTests: XCTestCase {
         attachment.name = "distinct-source-native-geometry"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
+    func testEquippedRecoveryBlendsToIdleWithoutChangingSourceSample() throws {
+        let assets = try DuelWeaponAssets()
+        for hero in [DuelGame.Hero.ember, .liu] {
+            let character = try assets.character(for: hero)
+            let actor = DuelWeaponCharacterInstance(character)
+            let attack = try XCTUnwrap(character.profile.clip(role: "weapon1"))
+            let idle = try XCTUnwrap(character.profile.clip(role: "idle"))
+            actor.apply(.init(clip: attack.name, tick: attack.ticks, duration: attack.ticks, groundLift: 0))
+            let idleStart = DuelWeaponPose(clip: idle.name, tick: 0, duration: idle.ticks, groundLift: 0)
+            var unblended = character.model.restPose
+            character.sample(idleStart, into: &unblended)
+            actor.apply(idleStart)
+            let firstDistances = character.model.animated.map { index in
+                simd_length(actor.instance.nodes[index].simdOrientation.vector - unblended.rotation[index].vector)
+            }
+            XCTAssertTrue(firstDistances.contains { $0 > 0.001 }, "\(hero): first idle frame should retain recovery motion")
+            for tick in 1..<6 {
+                actor.apply(.init(clip: idle.name, tick: tick, duration: idle.ticks, groundLift: 0))
+            }
+            let end = DuelWeaponPose(clip: idle.name, tick: 5, duration: idle.ticks, groundLift: 0)
+            character.sample(end, into: &unblended)
+            for index in character.model.animated {
+                let actual = actor.instance.nodes[index].simdOrientation.vector
+                XCTAssertLessThan(simd_length(actual - unblended.rotation[index].vector), 0.001,
+                                  "\(hero): blend must finish at the exact source idle pose")
+            }
+        }
+    }
+
     func testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads() throws {
         let assets = try DuelWeaponAssets(), scene = SCNScene()
         let actors = try [DuelGame.Hero.ember, .liu].map { hero -> (DuelWeaponCharacterInstance, SCNNode) in
