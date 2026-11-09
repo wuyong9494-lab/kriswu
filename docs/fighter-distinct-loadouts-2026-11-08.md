@@ -61,13 +61,24 @@ hidden attacks. No borrowed Dynasty move fills a missing role.
 Only authenticated encrypted chunks and public integrity metadata are committed.
 The existing authorized key is consumed in memory and is never published.
 
-Current publication boundary: the new batch is prepared locally. Automatic
-approval rejected a later resource chunk after previous explicit authorization
-was recovered and a recheck succeeded. Resource uploads have stopped. Nine
-unreferenced encrypted blob receipts are retained; the accepted asset branch
-has not changed. The separate `codex/fighter-lab-distinct-code-20261108` branch
-validates source code only and contains none of this batch's new encrypted
-chunks. Its ordinary CI cannot establish acceptance of the new private models.
+Published resource baseline: commit
+`b444d0f0e513875ea2ae929b80d3c7b6c4624ca4` on
+`codex/fighter-lab-sf3-resources-20261108` contains all **32/32 encrypted
+parts** and their manifest. All 61 packaged files were verified by exact name,
+byte count and SHA-256; existing successful blobs were reused. This resource
+batch has no remaining parts to upload. Publication does not itself establish
+native, visual or physical-device acceptance. The subsequent executed results,
+runtime corrections and outstanding acceptance gates are recorded in
+[the 2026-11-09 native acceptance log](fighter-distinct-native-2026-11-09.md).
+
+Historical publication pause on 2026-11-08: automatic approval rejected a later
+resource chunk after the earlier authorization was recovered and a recheck
+succeeded. Uploads paused with nine unreferenced encrypted blob receipts and no
+asset-branch update at that point. The published resource baseline above
+supersedes that state. At the time, the separate
+`codex/fighter-lab-distinct-code-20261108` branch validated code without this
+batch's encrypted parts; that code-only CI did not validate the new private
+models.
 
 | Resource | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -81,7 +92,10 @@ The 61-file archive contains two GLBs, the motion catalog, seven control images,
 authenticated before any resource is staged. PNG resources bypass Xcode image
 rewriting so native hash checks verify the exact source bytes.
 
-## Verification at initial publication
+## Verification at initial preparation (historical)
+
+The checks below describe preparation before the published resource baseline.
+For subsequent actual-resource execution, use the linked native acceptance log.
 
 - Local independent skinning/FK validation checks every half-frame; maximum
   endpoint disagreement is 1.433e-7 m. This is offline validation, not iOS evidence.
