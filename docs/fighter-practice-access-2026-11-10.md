@@ -39,3 +39,21 @@ claimed by this local change.
 Local checks: `git diff --check` passed, and all 27 `test_fighter_*.py`
 infrastructure tests passed. Those synthetic-envelope tests do not execute
 this SwiftUI navigation or validate the real character assets.
+
+## Exact candidate validation
+
+Candidate `ce8deb645ffdada48ed1f388857a413f2027e1c8`, run
+https://github.com/wuyong9494-lab/kriswu/actions/runs/42652583146:
+
+- Actual-resource native suite: 114 tests, zero failures; xcodebuild completed
+  within the bounded 20-minute step budget.
+- Original Sun/Liu weapon UI test passed in 559 seconds, including the actual
+  practice navigation, source controls and hit checks. The scroll correction is
+  now exercised, not merely inferred from source.
+- Whole resource job still failed: the separate legacy Gale flow timed out
+  observing its first hit label (`DuelFlowTests.swift:138`). Accessibility queries
+  retried during that wait; this alone does not establish an engine defect or
+  prove a simulator-performance root cause.
+- Ordinary native/UI, device, envelope and 890 core tests (16 skipped) passed.
+  No physical-device latency, visual equivalence or two-device combat claim is
+  implied by these simulator results.

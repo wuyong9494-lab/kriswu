@@ -129,6 +129,51 @@ final class DuelLifecycleTests: XCTestCase {
         XCTAssertNil(lobby.scene)
     }
 
+    func testReleasedGaleTapSurvivesDelayedSimulationAndHitsExactlyOnce() {
+        let state = session(.gale)
+        defer { state.shutdown() }
+        let initial = state.game
+        // A short touch may begin and end before the next display callback.
+        // Releasing it must retain the pending tap without retaining a hold.
+        state.input("skill1", down: true)
+        state.input("skill1", down: false)
+        XCTAssertTrue(state.held.isEmpty)
+        XCTAssertEqual(state.game, initial)
+
+        var clock = DuelClock()
+        // Each one-second hitch advances only six production simulation ticks.
+        // Five seconds on this schedule is not enough for projectile contact.
+        for _ in 0..<5 {
+            let steps = clock.consume(seconds: 1)
+            XCTAssertEqual(steps, 6)
+            for _ in 0..<steps { state.advance() }
+        }
+        XCTAssertEqual(state.game.frame, 30)
+        XCTAssertEqual(state.game.landedHits, [0, 0])
+        XCTAssertEqual(state.game.damageDealt, [0, 0])
+        XCTAssertEqual(state.game.projectiles.count, 1)
+
+        // At the initial 3000-unit gap, startup plus flight reaches the target
+        // on tick 33. This checks progression and real damage, not elapsed time.
+        for _ in 0..<2 { state.advance() }
+        XCTAssertEqual(state.game.landedHits, [0, 0])
+        state.advance()
+        XCTAssertEqual(state.game.frame, 33)
+        XCTAssertEqual(state.game.landedHits, [1, 0])
+        XCTAssertEqual(state.game.damageDealt, [135, 0])
+        XCTAssertEqual(state.game.fighters[1].health, 865)
+        XCTAssertEqual(state.game.fighters[1].x, 6760)
+        XCTAssertTrue(state.game.projectiles.isEmpty)
+
+        for _ in 0..<120 { state.advance() }
+        XCTAssertNil(state.game.fighters[0].attack)
+        XCTAssertEqual(state.game.fighters[1].health, 1000,
+                       "Practice restores health, so UI contact must use persistent hit/damage totals")
+        XCTAssertEqual(state.game.landedHits, [1, 0])
+        XCTAssertEqual(state.game.damageDealt, [135, 0])
+        XCTAssertTrue(state.held.isEmpty)
+    }
+
     func testTwoHeldInputsPauseAndRestartCannotLeaveAnAutomaticAction() {
         let state = session()
         state.input("right", down: true); state.input("light", down: true)

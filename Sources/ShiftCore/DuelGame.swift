@@ -503,3 +503,23 @@ public struct DuelClock: Sendable {
         return ticks
     }
 }
+
+// Kept in this file to inspect private state without widening gameplay access.
+// Stored-property audit and exact field order: fighter-replay-state-encoding.md.
+extension DuelGame {
+    func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
+        try writer.hero(selectedHero); try writer.difficulty(difficulty); try writer.mode(mode)
+        try writer.array(fighters, limit: 2) { try $0.fighter($1) }
+        try writer.array(projectiles) { try $0.projectile($1) }
+        try writer.optional(grapple) { try $0.grapple($1) }
+        try writer.phase(phase); try writer.int(frame); try writer.int(remainingTicks)
+        try writer.array(wins, limit: 2) { try $0.int($1) }; try writer.int(hitStop)
+        try writer.array(events) { try $0.event($1) }
+        try writer.array(landedHits, limit: 2) { try $0.int($1) }
+        try writer.array(damageDealt, limit: 2) { try $0.int($1) }
+        try writer.optional(weaponFight) { writer, fight in try fight.appendReplayState(to: &writer) }
+        try writer.u64(random); try writer.int(nextProjectile); try writer.input(botHeld)
+        try writer.array(buffered, limit: 2) { try $0.int($1.rawValue) }
+        try writer.hero(opponentHero); try writer.bool(weaponModeRequested)
+    }
+}

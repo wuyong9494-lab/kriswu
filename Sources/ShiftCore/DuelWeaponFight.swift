@@ -429,3 +429,35 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 { setPose(i, role: "idle", tick: 0) }
     }
 }
+
+// Kept in this file so action/queue/RNG internals stay private to gameplay.
+extension DuelWeaponFight {
+    func appendReplayState(to writer: inout DuelReplayStateWriter) throws {
+        try writer.array(profiles, limit: 2) { try $0.profile($1) }
+        try writer.array(fighters, limit: 2) { try $0.fighter($1) }
+        try writer.phase(phase); try writer.int(frame); try writer.int(remainingTicks)
+        try writer.array(wins, limit: 2) { try $0.int($1) }; try writer.int(hitStop)
+        try writer.array(landedHits, limit: 2) { try $0.int($1) }
+        try writer.array(damageDealt, limit: 2) { try $0.int($1) }
+        try writer.array(events) { try $0.event($1) }
+        try writer.array(contacts) { try $0.contact($1) }; try writer.array(swings) { try $0.swing($1) }
+        try writer.mode(mode); try writer.difficulty(difficulty)
+        try writer.array(actions, limit: 2) { writer, action in
+            try writer.optional(action) { writer, action in
+                try writer.string(action.name); try writer.string(action.role)
+                try writer.optional(action.command) { try $0.command($1) }
+                try writer.int(action.tick); try writer.int(action.hits); try writer.bool(action.touching)
+                try writer.bool(action.sounded); try writer.bool(action.reaction)
+                try writer.int(action.comboDepth)
+                // Int.max means no sound scheduled; nil makes the sentinel width-independent.
+                try writer.optional(action.soundAt == Int.max ? nil : action.soundAt) { try $0.int($1) }
+            }
+        }
+        try writer.array(queued, limit: 2) { writer, command in
+            try writer.optional(command) { try $0.command($1) }
+        }
+        try writer.array(loopTicks, limit: 2) { try $0.int($1) }
+        try writer.array(loopRoles, limit: 2) { try $0.string($1) }
+        try writer.array(previousX, limit: 2) { try $0.int($1) }; try writer.u64(random)
+    }
+}

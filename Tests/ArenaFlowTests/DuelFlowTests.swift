@@ -19,6 +19,18 @@ final class DuelFlowTests: XCTestCase {
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: app)], timeout: 8), .completed)
     }
+    private func expectSinglePracticeHit(_ counter: XCUIElement, damage: Int,
+                                         file: StaticString = #filePath, line: UInt = #line) {
+        // The resource simulator can spend several seconds resolving one HUD
+        // snapshot. Use the same bounded observation budget as the original
+        // weapon flow, and keep the element as the expectation's stable object.
+        // Only actual cumulative hit/damage counts satisfy this expectation;
+        // a changed/missing label or another attack cannot stand in for contact.
+        let expected = "累计命中 1 次 · 伤害 \(damage)"
+        let hit = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", expected), object: counter)
+        XCTAssertEqual(XCTWaiter.wait(for: [hit], timeout: 12), .completed,
+                       "One real attack must produce exactly one hit and \(damage) damage", file: file, line: line)
+    }
     private func approachGrappleRange(_ app: XCUIApplication) {
         func position(_ index: Int) -> Int? {
             guard let value = app.staticTexts["duel.stats.\(index)"].value as? String,
@@ -127,15 +139,17 @@ final class DuelFlowTests: XCTestCase {
             app.buttons["duel.practice"].tap()
             let pause = app.buttons["duel.pause"]
             XCTAssertTrue(pause.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
-            let initial = app.staticTexts["duel.hits"].label
+            let counter = app.staticTexts["duel.hits"]
+            XCTAssertEqual(counter.label, "累计命中 0 次 · 伤害 0")
             if hero == "ember" {
                 XCTAssertEqual(app.staticTexts["duel.name.0"].label, "孙登 · 你")
                 XCTAssertEqual(app.staticTexts["duel.name.1"].label, "刘泉纬 · 对手")
-                app.buttons["duel.control.right"].press(forDuration: 0.8)
+                // The jab reaches 1030 units. Observe a gap at most 1000
+                // instead of assuming a wall-clock hold advances enough ticks.
+                approachGrappleRange(app)
                 app.buttons["duel.control.light"].tap()
             } else { app.buttons["duel.control.skill1"].tap() }
-            let hit = NSPredicate { _, _ in app.staticTexts["duel.hits"].label != initial }
-            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: hit, object: nil)], timeout: 5), .completed)
+            expectSinglePracticeHit(counter, damage: hero == "gale" ? 135 : 75)
             app.buttons["duel.boxes"].tap(); capture("fighter-\(hero)-practice")
             if hero == "ember" {
                 app.buttons["duel.boxes"].tap()
