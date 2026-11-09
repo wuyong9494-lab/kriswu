@@ -6,6 +6,6 @@
   "version": "1.2",
   "bundle_id": "com.kriswu.shiftreminder",
   "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
-  "notes": "内部测试：孙登武士刀、刘泉纬双锤独立资源与动作、人物展示旋转缩放、收招至待机平滑过渡及 SceneKit 场景释放修复。来源提交 8bfd669a，五项 GitHub 自动化任务全部通过。请重点验收人物头颈衔接、双角色战斗、退出场景内存释放及 iPhone 17 Pro Max 真机流畅度。真机性能与视觉效果尚未完成验收。",
+  "notes": "内部测试：孙登武士刀、刘泉纬双锤独立资源与动作、人物展示旋转缩放、收招至待机平滑过渡及 SceneKit 场景释放修复。来源提交 8bfd669a，五项 GitHub 自动化任务全部通过；发布报告兼容性修复后重新执行前置检查。请重点验收人物头颈衔接、双角色战斗、退出场景内存释放及 iPhone 17 Pro Max 真机流畅度。真机性能与视觉效果尚未完成验收。",
   "source_branch": "codex/fighter-lab-sf3-resources-20261108"
 }
