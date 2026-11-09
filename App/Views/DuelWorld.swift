@@ -38,6 +38,8 @@ final class DuelWorldView: SCNView {
     private(set) var stageAsset: DuelStageAsset?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private var trackedCameraX: Float = 5
+    private var impactShake: Float = 0
+    private var impactPhase: Int = 0
     enum CharacterSource { case bundled, legacy, procedural }
     private var bolts: [Int: SCNNode] = [:]
     private var hurtNodes: [SCNNode] = []
@@ -239,6 +241,18 @@ final class DuelWorldView: SCNView {
         cameraPosition.x = trackedCameraX
         pointOfView?.position = cameraPosition
         pointOfView?.look(at: SCNVector3(trackedCameraX, stageAsset != nil ? 1.2 : 1.0, 0))
+        // A short, decaying impact impulse differentiates heavy hammer blows
+        // from light katana hits. Never allocate SceneKit actions per contact.
+        if impactShake > 0.001 {
+            impactPhase &+= 1
+            if !UIAccessibility.isReduceMotionEnabled {
+                pointOfView?.position.x += sin(Float(impactPhase) * 2.4) * impactShake
+                pointOfView?.position.y += cos(Float(impactPhase) * 1.9) * impactShake * 0.55
+            }
+            impactShake *= 0.70
+        } else {
+            impactShake = 0
+        }
         if let hold = session.game.grapple {
             let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
             let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
@@ -276,6 +290,13 @@ final class DuelWorldView: SCNView {
         }
         let swings = fight.swings.map {
             DuelSourceEffects.Swing(heavy: $0.heavy, sound: !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
+        }
+        // Impact intensity is driven by confirmed combat contacts, not input
+        // presses or display frames. A blocked strike is deliberately softer.
+        for contact in fight.contacts {
+            let intensity: Float = contact.kind == .hit
+                ? (contact.heavy ? 0.065 : 0.028) : 0.012
+            impactShake = min(0.10, max(impactShake, intensity))
         }
         // Called for every fixed simulation step, including all catch-up steps.
         // A display frame is not an event queue and must not drop earlier hits.
