@@ -9,6 +9,31 @@ final class DuelLifecycleTests: XCTestCase {
         DuelSession(.init(hero: hero, difficulty: .learning, mode: mode))
     }
 
+    func testCameraKeepsNarrowFramingAcrossRenderAndRestart() throws {
+        let state = session()
+        let world = DuelWorldView(session: state, characterSource: .procedural)
+        defer { world.shutdown(); state.shutdown() }
+        world.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        world.layoutSubviews()
+        let camera = try XCTUnwrap(world.pointOfView?.camera)
+        let narrowProjection = camera.usesOrthographicProjection
+            ? camera.orthographicScale : Double(camera.fieldOfView)
+        XCTAssertGreaterThan(narrowProjection, 10)
+        for _ in 0..<4 { state.advance(); world.drawState() }
+        let afterRender = camera.usesOrthographicProjection
+            ? camera.orthographicScale : Double(camera.fieldOfView)
+        XCTAssertEqual(afterRender, narrowProjection, accuracy: 0.001)
+        world.frame = CGRect(x: 0, y: 0, width: 844, height: 390)
+        world.layoutSubviews(); world.drawState()
+        let wideProjection = camera.usesOrthographicProjection
+            ? camera.orthographicScale : Double(camera.fieldOfView)
+        XCTAssertLessThan(wideProjection, narrowProjection)
+        state.input("right", down: true)
+        for _ in 0..<10 { state.advance(); world.drawState() }
+        state.restart()
+        XCTAssertEqual(world.pointOfView?.position.x ?? -1, 5, accuracy: 0.001)
+    }
+
     func testPersonalCharactersRemainPairedAfterRestart() {
         for hero in [DuelGame.Hero.liu, .ember] {
             let state = session(hero)

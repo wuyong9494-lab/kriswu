@@ -128,6 +128,118 @@ final class DuelWeaponFightTests: XCTestCase {
         XCTAssertGreaterThan(guarded.fighters[1].health, walking.fighters[1].health)
     }
 
+    func testAutomaticGuardReturnsOnTheFirstReadyTickForBothWeapons() throws {
+        let catalog = Fixture.catalog()
+        for hero in [DuelGame.Hero.ember, .liu] {
+            let other: DuelGame.Hero = hero == .ember ? .liu : .ember
+            var fight = try XCTUnwrap(DuelWeaponFight(
+                fighters: [.init(hero: hero, x: 3500, facing: 1),
+                           .init(hero: other, x: 6500, facing: -1)],
+                mode: .practice, difficulty: .learning, catalog: catalog, seed: 4))
+            let duration = try XCTUnwrap(fight.profiles[0].clip(command: .weapon)?.ticks)
+            fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+            for _ in 0..<duration {
+                fight.step(.init(guardHeld: true), opponent: .neutral)
+                XCTAssertNotNil(fight.fighters[0].attack)
+                XCTAssertFalse(fight.fighters[0].guarding, "Guard must not cancel source recovery")
+            }
+            fight.step(.init(guardHeld: true), opponent: .neutral)
+            XCTAssertNil(fight.fighters[0].attack)
+            XCTAssertTrue(fight.fighters[0].guarding, "No extra vulnerable idle frame after recovery")
+        }
+    }
+
+    func testRecoveryBoundaryAppliesMovementAndCrouchWithoutAnIdleTick() throws {
+        for input in [DuelGame.Input(move: 1, guardHeld: true), .init(guardHeld: true, vertical: -1)] {
+            var fight = try Fixture.fight(distance: 3000)
+            let duration = try XCTUnwrap(fight.profiles[0].clip(command: .weapon)?.ticks)
+            fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+            for _ in 0..<duration { fight.step(.neutral, opponent: .neutral) }
+            fight.step(input, opponent: .neutral)
+            XCTAssertNil(fight.fighters[0].attack)
+            XCTAssertFalse(fight.fighters[0].guarding)
+            if input.move != 0 {
+                XCTAssertTrue(fight.fighters[0].walking)
+                XCTAssertEqual(fight.fighters[0].movementDirection, 1)
+            } else {
+                XCTAssertEqual(fight.fighters[0].weaponPose?.clip, fight.profiles[0].roles["crouch"])
+            }
+        }
+    }
+
+    func testBufferedFollowUpStillTakesPriorityOverAutomaticGuardAtRecovery() throws {
+        var fight = try Fixture.fight(distance: 3000)
+        fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        fight.step(.init(weaponCommand: .kick), opponent: .neutral)
+        let duration = try XCTUnwrap(fight.profiles[0].clip(command: .weapon)?.ticks)
+        for _ in 1..<duration { fight.step(.init(guardHeld: true), opponent: .neutral) }
+        fight.step(.init(guardHeld: true), opponent: .neutral)
+        XCTAssertEqual(fight.fighters[0].weaponPose?.clip, fight.profiles[0].clip(command: .kick)?.name)
+        XCTAssertEqual(fight.fighters[0].weaponPose?.tick, 0)
+        XCTAssertFalse(fight.fighters[0].guarding)
+    }
+
+    func testDirectionalAerialKickDoesNotRequireAGroundDirectionalClip() throws {
+        var fight = try Fixture.fight(distance: 3000)
+        XCTAssertFalse(fight.supports(.kickUp, index: 0))
+        fight.step(.init(taps: .jump), opponent: .neutral)
+        for _ in 0..<4 { fight.step(.neutral, opponent: .neutral) }
+        fight.step(.init(weaponCommand: .kickUp), opponent: .neutral)
+        XCTAssertEqual(fight.fighters[0].weaponPose?.clip, fight.profiles[0].roles["kickJump"])
+    }
+
+    func testHitReactionRecoveryImmediatelyRestoresNeutralDefense() throws {
+        var fight = try Fixture.fight()
+        fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        for _ in 0..<12 where fight.hitStop == 0 { fight.step(.neutral, opponent: .neutral) }
+        XCTAssertTrue(fight.fighters[1].weaponPose?.reaction == true)
+        var recovered = false
+        for _ in 0..<40 {
+            fight.step(.neutral, opponent: .init(guardHeld: true))
+            if fight.fighters[1].weaponPose?.reaction == false {
+                recovered = true
+                XCTAssertTrue(fight.fighters[1].guarding)
+                XCTAssertEqual(fight.fighters[1].stun, 0)
+                break
+            }
+            XCTAssertFalse(fight.fighters[1].guarding)
+        }
+        XCTAssertTrue(recovered)
+    }
+
+    func testUnsupportedCommandsCannotPoisonTheRecoveryBuffer() throws {
+        for unavailable in [DuelWeaponCommand.shadow, .ranged] {
+            var fight = try Fixture.fight(distance: 3000)
+            XCTAssertFalse(fight.canUse(unavailable, index: 0))
+            fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+            fight.step(.init(weaponCommand: unavailable), opponent: .neutral)
+            fight.step(.init(weaponCommand: .kick), opponent: .neutral)
+            let kick = fight.profiles[0].clip(command: .kick)?.name
+            var playedKick = false
+            for _ in 0..<40 {
+                fight.step(.neutral, opponent: .neutral)
+                playedKick = playedKick || fight.fighters[0].weaponPose?.clip == kick
+            }
+            XCTAssertTrue(playedKick, "An unavailable action must leave the buffer free for a valid press")
+        }
+    }
+
+    func testUnsupportedHitStopPressLeavesRoomForAValidFollowUp() throws {
+        var fight = try Fixture.fight()
+        fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        for _ in 0..<12 where fight.hitStop == 0 { fight.step(.neutral, opponent: .neutral) }
+        XCTAssertGreaterThanOrEqual(fight.hitStop, 2)
+        fight.step(.init(weaponCommand: .shadow), opponent: .neutral)
+        fight.step(.init(weaponCommand: .kick), opponent: .neutral)
+        let kick = fight.profiles[0].clip(command: .kick)?.name
+        var playedKick = false
+        for _ in 0..<40 {
+            fight.step(.neutral, opponent: .neutral)
+            playedKick = playedKick || fight.fighters[0].weaponPose?.clip == kick
+        }
+        XCTAssertTrue(playedKick)
+    }
+
     func testJumpAnimationAloneNeverBecomesAnAttack() throws {
         var fight = try Fixture.fight()
         fight.step(.init(taps: .jump), opponent: .neutral)

@@ -122,7 +122,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let inputs = [player, opponent ?? (mode == .versus ? botInput() : .neutral)]
         if hitStop > 0 {
             for i in 0..<2 where queued[i] == nil && !isAirborne(i) && actions[i]?.role != "jump" {
-                queued[i] = inputs[i].weaponCommand
+                if let command = inputs[i].weaponCommand, canUse(command, index: i), actions[i]?.reaction != true {
+                    queued[i] = command
+                }
             }
             hitStop -= 1; return
         }
@@ -164,7 +166,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
                         begin(i, clip: aerial, role: "kickJump", command: command, tick: Int(p * Double(aerial.ticks)))
                         return
                     }
-                } else if !isAirborne(i) && action.command != nil && queued[i] == nil {
+                } else if !isAirborne(i) && action.command != nil && queued[i] == nil && canUse(command, index: i) {
                     let link = profiles[i].combo(from: action.name)
                     if (command == action.command && action.tick <= (link?.sourceFrame ?? -1) * 2) || clip.ticks - action.tick <= 24 {
                         queued[i] = command
@@ -184,7 +186,14 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 if action.role == "getUp" { fighters[i].invulnerable = 20 }
                 let next = queued[i]; queued[i] = nil
                 if let next, !action.reaction { startCommand(i, command: next) }
-                else { setPose(i, role: "idle", tick: 0) }
+                else {
+                    // Recovery has finished. Apply live stance/movement now,
+                    // rather than leaving an extra unguarded idle frame. Attack
+                    // and jump edges seen during recovery remain consumed.
+                    var stance = input
+                    stance.weaponCommand = nil; stance.taps = []
+                    updateReady(i, input: stance)
+                }
                 return
             }
             let t = clip.tracks, delta = t.sample(t.root, phase: clip.phase(at: action.tick)).x - t.sample(t.root, phase: oldPhase).x
@@ -201,6 +210,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
             setPose(i, clip: displayed, tick: action.tick, reaction: action.reaction)
             return
         }
+        updateReady(i, input: input)
+    }
+    private mutating func updateReady(_ i: Int, input: DuelGame.Input) {
         fighters[i].facing = fighters[1 - i].x >= fighters[i].x ? 1 : -1
         fighters[i].guarding = input.guardHeld && input.weaponCommand == nil && input.vertical == 0 && input.move == 0
         if let command = input.weaponCommand ?? queued[i] {

@@ -38,6 +38,7 @@ final class DuelWorldView: SCNView {
     private(set) var stageAsset: DuelStageAsset?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private var trackedCameraX: Float = 5
+    private var perspectiveDistance: Float = 7.7
     private var impactShake: Float = 0
     private var impactPhase: Int = 0
     enum CharacterSource { case bundled, legacy, procedural }
@@ -114,10 +115,14 @@ final class DuelWorldView: SCNView {
             }
             catch { session.characterFailed() }
             session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
-            session.didReset = { [weak self] in
-                self?.sourceEffects?.reset(); self?.weaponEffects?.reset()
-            }
             consumeFeedback(session.game, tick: 0)
+        }
+        session.didReset = { [weak self] in
+            guard let self else { return }
+            self.sourceEffects?.reset(); self.weaponEffects?.reset()
+            self.impactShake = 0; self.impactPhase = 0
+            self.trackedCameraX = 5
+            self.drawState()
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -130,16 +135,22 @@ final class DuelWorldView: SCNView {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Keep all ten world units visible even during the rotation transition.
+        updateCameraFraming()
+    }
+    /// Use the same projection during layout and rendering. A rotation-safe
+    /// layout value must not be replaced by a narrow FOV on the next frame.
+    private func updateCameraFraming() {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Double(bounds.width / bounds.height)
-        // A wide fight should show full-height fighters rather than shrinking
-        // them to fit the whole stage. Narrow layouts retain a safe overview.
+        let separation = session.game.fighters.count == 2
+            ? Double(abs(session.game.fighters[0].x - session.game.fighters[1].x)) / 1000 : 3
+        let framing = DuelCameraFraming(aspect: aspect, separation: separation)
         if stageAsset != nil {
-            let vertical = aspect >= 1.5 ? 31.0 : 2 * atan(5.8 / (7.7 * max(0.1, aspect))) * 180 / .pi
-            pointOfView?.camera?.fieldOfView = CGFloat(min(100, max(31, vertical)))
+            pointOfView?.camera?.fieldOfView = CGFloat(framing.verticalFieldOfView)
+            perspectiveDistance = Float(framing.perspectiveDistance)
+            pointOfView?.position.z = perspectiveDistance
         } else {
-            pointOfView?.camera?.orthographicScale = aspect >= 1.5 ? 2.85 : max(3.2, 5.8 / max(0.1, aspect))
+            pointOfView?.camera?.orthographicScale = framing.orthographicScale
         }
     }
     @objc private func interrupted() { session.pause() }
@@ -228,17 +239,11 @@ final class DuelWorldView: SCNView {
             let right = Float(session.game.fighters[1].x) / 1000
             let midpoint = min(7.0, max(3.0, (left + right) * 0.5))
             trackedCameraX += (midpoint - trackedCameraX) * 0.12
-            let separation = abs(left - right)
-            if stageAsset != nil {
-                let baseFOV: CGFloat = bounds.width > bounds.height * 1.5 ? 31 : 35
-                let extra = CGFloat(max(0, separation - 4.5)) * 3
-                pointOfView?.camera?.fieldOfView = min(47, baseFOV + extra)
-            } else if bounds.width > bounds.height * 1.5 {
-                pointOfView?.camera?.orthographicScale = CGFloat(max(2.85, separation * 0.56 + 0.8))
-            }
         }
+        updateCameraFraming()
         var cameraPosition = cameraBasePosition
         cameraPosition.x = trackedCameraX
+        if stageAsset != nil { cameraPosition.z = perspectiveDistance }
         pointOfView?.position = cameraPosition
         pointOfView?.look(at: SCNVector3(trackedCameraX, stageAsset != nil ? 1.2 : 1.0, 0))
         // A short, decaying impact impulse differentiates heavy hammer blows

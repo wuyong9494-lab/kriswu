@@ -28,7 +28,7 @@ struct DuelHomeView: View {
                     HStack(spacing: 18) {
                         showroom
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        lobbyActions
+                        ScrollView { lobbyActions }
                             .frame(width: min(310, geometry.size.width * 0.36))
                     }
                     .padding(20)
@@ -45,6 +45,7 @@ struct DuelHomeView: View {
             .foregroundStyle(.white)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .modifier(ArenaLandscape())
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
     }
 

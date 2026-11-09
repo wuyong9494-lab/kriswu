@@ -71,7 +71,7 @@ final class DuelFlowTests: XCTestCase {
         app.launchArguments = ["-demo", "-screen", "fighter", "-duel-legacy-controls"]
         XCUIDevice.shared.orientation = .portrait; app.launch()
         let selection = app.buttons["duel.hero.liu"]
-        XCTAssertTrue(selection.waitForExistence(timeout: 20)); selection.tap()
+        XCTAssertTrue(selection.waitForExistence(timeout: 20)); expectOrientation(app, landscape: true); selection.tap()
         app.buttons["duel.practice"].tap()
         let pause = app.buttons["duel.pause"]
         XCTAssertTrue(pause.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
@@ -113,7 +113,7 @@ final class DuelFlowTests: XCTestCase {
         XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
         XCTAssertTrue(app.staticTexts["duel.hits"].label.contains("伤害 0"))
         pause.tap(); app.buttons["duel.exit"].tap()
-        XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: false)
+        XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
     }
     func testBothHeroesHitPauseBackgroundExitAndKeepExistingGameEntries() {
         let app = XCUIApplication()
@@ -151,10 +151,11 @@ final class DuelFlowTests: XCTestCase {
             app.buttons["duel.control.guard"].press(forDuration: 0.4)
             XCTAssertEqual(app.staticTexts["duel.stats.0"].value as? String, stationary)
             pause.tap(); app.buttons["duel.exit"].tap()
-            XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: false)
+            XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
         }
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(entry.waitForExistence(timeout: 8))
+        expectOrientation(app, landscape: false)
         XCTAssertTrue(app.buttons["arena.enter"].exists)
         XCTAssertTrue(app.staticTexts["星了个星"].exists)
         XCTAssertTrue(app.staticTexts["五子棋"].exists)
