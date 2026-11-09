@@ -10,6 +10,8 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public enum Action: String, CaseIterable, Sendable { case weapon, kick, ranged, shadow }
     public static let longPressTicks = 18
     public static let jumpChordGraceTicks = 1
+    // Neutral defense must not engage on the same tick as an attack release.
+    public static let guardRecoveryTicks = 8
     public private(set) var x = 0
     public private(set) var y = 0
 
@@ -28,6 +30,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     private var nextPressOrder: UInt64 = 0
     private var queued: Intent?
     private var pendingJumpTicks: Int?
+    private var guardRecovery = 0
 
     public init() {}
 
@@ -40,7 +43,10 @@ public struct DuelWeaponInput: Equatable, Sendable {
         self.y = nextY
         // Button-first chords remain live until the neutral tap/hold resolves.
         // Capture the direction now even if both fingers end before the next tick.
-        if self.x != 0 || self.y != 0 { resolveHeldDirections() }
+        if self.x != 0 || self.y != 0 {
+            guardRecovery = Self.guardRecoveryTicks
+            resolveHeldDirections()
+        }
     }
 
     public mutating func action(_ action: Action, down: Bool) {
@@ -50,6 +56,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     /// Duplicate Down events are coalesced. The view owns physical finger counts.
     public mutating func press(_ action: Action) {
         guard presses[action] == nil else { return }
+        guardRecovery = Self.guardRecoveryTicks
         presses[action] = Press(order: nextPressOrder)
         nextPressOrder &+= 1
         if action == .ranged || action == .shadow || x != 0 || y != 0 {
@@ -61,6 +68,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public mutating func release(_ action: Action) {
         guard let press = presses.removeValue(forKey: action), !press.resolved else { return }
         enqueue(Intent(action: action, x: x, y: y))
+        guardRecovery = Self.guardRecoveryTicks
     }
 
     /// A cancelled touch is not a completed tap. Already-resolved commands stay
@@ -84,6 +92,8 @@ public struct DuelWeaponInput: Equatable, Sendable {
             presses[action] = press
         }
 
+        let recoveringGuard = guardRecovery > 0
+        if guardRecovery > 0 { guardRecovery -= 1 }
         var jump = false
         if let remaining = pendingJumpTicks {
             if remaining == 0 {
@@ -94,7 +104,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
         let command = queued.map { Self.command(for: $0, facing: facing) }
         let result = DuelGame.Input(
             move: x,
-            guardHeld: !airborne && x == 0 && y == 0 && presses.isEmpty && command == nil &&
+            guardHeld: !recoveringGuard && !airborne && x == 0 && y == 0 && presses.isEmpty && command == nil &&
                 !jump && pendingJumpTicks == nil,
             taps: jump ? .jump : [], vertical: y, weaponCommand: command)
         queued = nil
@@ -106,7 +116,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public mutating func cancelAll() {
         x = 0; y = 0
         presses.removeAll(); nextPressOrder = 0
-        queued = nil; pendingJumpTicks = nil
+        queued = nil; pendingJumpTicks = nil; guardRecovery = 0
     }
 
     public mutating func reset() { cancelAll() }
