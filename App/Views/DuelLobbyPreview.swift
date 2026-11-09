@@ -83,7 +83,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         lastIdleTime = nil; accumulatedIdleTime = 0
     }
     @objc private func advanceIdle(_ link: CADisplayLink) {
-        guard let actor = equippedActor, let idle = equippedIdle else { return }
+        guard equippedActor != nil, equippedIdle != nil else { return }
         defer { lastIdleTime = link.timestamp }
         guard let lastIdleTime else { return }
         accumulatedIdleTime += min(0.1, max(0, link.timestamp - lastIdleTime))
@@ -110,7 +110,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     static func acceptsHorizontalPan(_ movement: CGPoint) -> Bool {
         abs(movement.x) > abs(movement.y) * 1.15 && abs(movement.x) > 1
     }
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
         return Self.acceptsHorizontalPan(pan.translation(in: self))
     }
