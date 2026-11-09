@@ -36,6 +36,7 @@ final class DuelWeaponAssets {
         let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"), profile: profile)
         characters[hero] = value; return value
     }
+    func releaseCharacter(for hero: DuelGame.Hero) { characters.removeValue(forKey: hero) }
     func releaseCharacters() { characters.removeAll() }
     static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 }

@@ -11,7 +11,7 @@ struct DuelLobbyPreview: UIViewRepresentable {
 }
 
 @MainActor
-final class DuelLobbySceneView: SCNView {
+final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private(set) var selectedHero: DuelGame.Hero?
     private var stage: DuelStageAsset?
     private var character: DuelCharacterAsset?
@@ -24,8 +24,8 @@ final class DuelLobbySceneView: SCNView {
     private var idleTick = 0
     private var lastIdleTime: CFTimeInterval?
     private var accumulatedIdleTime: CFTimeInterval = 0
-    private var yaw: Float = .pi
-    private var zoom: Float = 1
+    private(set) var yaw: Float = .pi
+    private(set) var zoom: Float = 1
     private var cameraNode: SCNNode?
     private let showroomCenter = SCNVector3(4.7, 0.85, -0.35)
     private(set) var showroomFrameCount = 0
@@ -47,8 +47,13 @@ final class DuelLobbySceneView: SCNView {
         camera.position = SCNVector3(5, 1.6, 4.8)
         camera.look(at: SCNVector3(4.7, 0.85, -0.35))
         world.rootNode.addChildNode(camera); pointOfView = camera; cameraNode = camera
-        addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(rotateCharacter(_:))))
-        addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(zoomCharacter(_:))))
+        let rotate = UIPanGestureRecognizer(target: self, action: #selector(rotateCharacter(_:)))
+        rotate.maximumNumberOfTouches = 1
+        rotate.delegate = self
+        addGestureRecognizer(rotate)
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(zoomCharacter(_:)))
+        pinch.delegate = self
+        addGestureRecognizer(pinch)
         let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient
         ambient.light?.intensity = 450; ambient.light?.color = UIColor(white: 0.8, alpha: 1)
         world.rootNode.addChildNode(ambient)
@@ -85,28 +90,56 @@ final class DuelLobbySceneView: SCNView {
         let steps = Int(accumulatedIdleTime * 60)
         guard steps > 0 else { return }
         accumulatedIdleTime -= Double(steps) / 60
-        idleTick = (idleTick + steps) % max(1, idle.ticks)
+        renderIdle(at: idleTick + steps)
+    }
+    /// One source sample per simulation tick; also updates sole clearance.
+    /// Keeping this deterministic makes the showroom animation testable.
+    func renderIdle(at tick: Int) {
+        guard let actor = equippedActor, let idle = equippedIdle else { return }
+        idleTick = tick % max(1, idle.ticks)
         let phase = idle.phase(at: idleTick)
+        let lift = idle.tracks.lift(phase: phase)
         actor.apply(.init(clip: idle.name, tick: idleTick, duration: idle.ticks,
-                          groundLift: idle.tracks.lift(phase: phase)))
+                          groundLift: lift))
+        actor.instance.root.position.y = -0.14 + Float(lift)
         showroomFrameCount += 1
         setNeedsDisplay()
     }
-    @objc private func rotateCharacter(_ gesture: UIPanGestureRecognizer) {
-        guard let characterRoot else { return }
-        let translation = gesture.translation(in: self)
-        gesture.setTranslation(.zero, in: self)
-        yaw += Float(translation.x) * 0.008
+    /// A vertical gesture belongs to the enclosing SwiftUI ScrollView.
+    /// Otherwise the SceneKit pan eats the swipe and hides the practice button.
+    static func acceptsHorizontalPan(_ movement: CGPoint) -> Bool {
+        abs(movement.x) > abs(movement.y) * 1.15 && abs(movement.x) > 1
+    }
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        return Self.acceptsHorizontalPan(pan.translation(in: self))
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        gestureRecognizer is UIPinchGestureRecognizer &&
+            otherGestureRecognizer is UIPanGestureRecognizer
+    }
+    func rotatePreview(by amount: Float) {
+        guard let characterRoot, amount.isFinite else { return }
+        yaw += amount
         characterRoot.eulerAngles.y = yaw
         setNeedsDisplay()
     }
-    @objc private func zoomCharacter(_ gesture: UIPinchGestureRecognizer) {
-        guard let cameraNode else { return }
-        zoom = min(1.5, max(0.7, zoom / Float(gesture.scale)))
-        gesture.scale = 1
+    func scalePreview(by factor: Float) {
+        guard let cameraNode, factor.isFinite, factor > 0 else { return }
+        zoom = min(1.5, max(0.7, zoom / factor))
         cameraNode.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
         cameraNode.look(at: showroomCenter)
         setNeedsDisplay()
+    }
+    @objc private func rotateCharacter(_ gesture: UIPanGestureRecognizer) {
+        let translation = gesture.translation(in: self)
+        gesture.setTranslation(.zero, in: self)
+        rotatePreview(by: Float(translation.x) * 0.008)
+    }
+    @objc private func zoomCharacter(_ gesture: UIPinchGestureRecognizer) {
+        scalePreview(by: Float(gesture.scale))
+        gesture.scale = 1
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -114,11 +147,14 @@ final class DuelLobbySceneView: SCNView {
     func select(_ hero: DuelGame.Hero) {
         guard selectedHero != hero, let scene else { return }
         stopIdle()
+        let previousHero = selectedHero
         selectedHero = hero; idleTick = 0; yaw = .pi; zoom = 1
         cameraNode?.position = SCNVector3(5, 1.6, 4.8)
         cameraNode?.look(at: showroomCenter)
         characterRoot?.removeFromParentNode(); characterRoot = nil; character = nil; originalCharacter = nil
         equippedActor = nil; equippedIdle = nil
+        // A retired model must not stay cached as an invisible second character.
+        if let previousHero { weaponAssets?.releaseCharacter(for: previousHero) }
         if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"), DuelWeaponAssets.catalogURL() != nil {
             do {
                 if weaponAssets == nil { weaponAssets = try DuelWeaponAssets() }

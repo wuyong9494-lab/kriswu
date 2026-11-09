@@ -298,8 +298,13 @@ final class DuelWeaponAssetTests: XCTestCase {
                 XCTAssertLessThan(simd_length(actual.columns.3 - expected.columns.3), 0.00001,
                                   "\(hero): repeated frame must keep bone translation stable")
             }
+            // SceneKit may canonicalize q to -q. Both represent the same
+            // rotation, so compare the nearer quaternion representative.
+            func rotationDistance(_ a: simd_quatf, _ b: simd_quatf) -> Float {
+                min(simd_length(a.vector - b.vector), simd_length(a.vector + b.vector))
+            }
             let firstDistances = character.model.animated.map { index in
-                simd_length(actor.instance.nodes[index].simdOrientation.vector - unblended.rotation[index].vector)
+                rotationDistance(actor.instance.nodes[index].simdOrientation, unblended.rotation[index])
             }
             XCTAssertTrue(firstDistances.contains { $0 > 0.001 }, "\(hero): first idle frame should retain recovery motion")
             for tick in 1..<6 {
@@ -308,11 +313,35 @@ final class DuelWeaponAssetTests: XCTestCase {
             let end = DuelWeaponPose(clip: idle.name, tick: 5, duration: idle.ticks, groundLift: 0)
             character.sample(end, into: &unblended)
             for index in character.model.animated {
-                let actual = actor.instance.nodes[index].simdOrientation.vector
-                XCTAssertLessThan(simd_length(actual - unblended.rotation[index].vector), 0.001,
-                                  "\(hero): blend must finish at the exact source idle pose")
+                let node = actor.instance.nodes[index]
+                XCTAssertLessThan(rotationDistance(node.simdOrientation, unblended.rotation[index]), 0.001,
+                                  "\(hero): blend must finish at the exact source idle orientation")
+                XCTAssertLessThan(simd_length(node.simdPosition - unblended.translation[index]), 0.001,
+                                  "\(hero): blend must finish at the exact source idle translation")
+                XCTAssertLessThan(simd_length(node.simdScale - unblended.scale[index]), 0.001,
+                                  "\(hero): blend must finish at the exact source idle scale")
             }
         }
+    }
+
+    func testShowroomSwitchesBetweenDistinctAssetsAndReleasesOldModel() throws {
+        let lobby = DuelLobbySceneView(hero: .ember)
+        let initialRoot = try XCTUnwrap(lobby.scene?.rootNode.childNode(
+            withName: "duel.lobby.character.ember", recursively: false))
+        let before = initialRoot.position.y
+        lobby.renderIdle(at: 1)
+        XCTAssertEqual(lobby.showroomFrameCount, 1, "One source idle sample should render")
+        XCTAssertTrue(initialRoot.position.y.isFinite)
+        XCTAssertLessThan(abs(initialRoot.position.y - before), 0.2,
+                          "Idle must update ground lift without jumping off the stage")
+        lobby.select(.liu)
+        XCTAssertNil(initialRoot.parent, "The previous 3D actor must detach on selection")
+        XCTAssertNotNil(lobby.scene?.rootNode.childNode(
+            withName: "duel.lobby.character.liu", recursively: false))
+        XCTAssertEqual(lobby.yaw, .pi)
+        XCTAssertEqual(lobby.zoom, 1)
+        lobby.shutdown()
+        XCTAssertNil(lobby.scene)
     }
 
     func testPersonalHeadFollowsBodyFacingAndSourceNeckAnimation() throws {

@@ -51,6 +51,28 @@ final class DuelLifecycleTests: XCTestCase {
         }
     }
 
+    func testShowroomRotationZoomScrollAndTeardown() {
+        let lobby = DuelLobbySceneView(hero: .ember)
+        XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
+        XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+        XCTAssertTrue(DuelLobbySceneView.acceptsHorizontalPan(CGPoint(x: 20, y: 1)))
+        XCTAssertFalse(DuelLobbySceneView.acceptsHorizontalPan(CGPoint(x: 1, y: 20)))
+        XCTAssertFalse(DuelLobbySceneView.acceptsHorizontalPan(.zero))
+        XCTAssertNotNil(lobby.gestureRecognizers?.first(where: { $0 is UIPanGestureRecognizer })?.delegate)
+        lobby.rotatePreview(by: 0.5)
+        XCTAssertEqual(lobby.yaw, .pi + 0.5, accuracy: 0.0001)
+        lobby.scalePreview(by: 2)
+        XCTAssertEqual(lobby.zoom, 0.7, accuracy: 0.0001)
+        lobby.scalePreview(by: 0.01)
+        XCTAssertEqual(lobby.zoom, 1.5, accuracy: 0.0001)
+        lobby.select(.liu)
+        XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
+        XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+        lobby.shutdown()
+        XCTAssertTrue(lobby.gestureRecognizers?.isEmpty ?? true)
+        XCTAssertNil(lobby.scene)
+    }
+
     func testTwoHeldInputsPauseAndRestartCannotLeaveAnAutomaticAction() {
         let state = session()
         state.input("right", down: true); state.input("light", down: true)

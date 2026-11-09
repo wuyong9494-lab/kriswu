@@ -21,7 +21,7 @@ struct DuelHomeView: View {
                     if match == nil {
                         VStack(spacing: 8) {
                             DuelLobbyPreview(hero: hero)
-                                .frame(height: 350).clipShape(RoundedRectangle(cornerRadius: 20))
+                                .frame(height: 280).clipShape(RoundedRectangle(cornerRadius: 20))
                                 .accessibilityIdentifier("duel.lobby.preview")
                             Text("左右拖动旋转人物 · 双指缩放查看脸部与武器")
                                 .font(.caption).foregroundStyle(.secondary)
