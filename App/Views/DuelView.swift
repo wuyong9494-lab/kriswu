@@ -11,64 +11,129 @@ struct DuelHomeView: View {
     }
     private var choices: [DuelGame.Hero] { usesOriginalWeapons ? [.ember, .liu] : DuelGame.Hero.allCases }
     private func weaponTitle(_ hero: DuelGame.Hero) -> String { hero == .ember ? "先锋 · 武士刀" : "军团 · 双锤" }
+    private var hasShowroom: Bool {
+        DuelStageAsset.bundledURL(for: .autumnLobby) != nil &&
+            (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("裂隙对决").font(.largeTitle.bold())
-                Text("读懂距离，把握出手时机。").foregroundStyle(.secondary)
-                if DuelStageAsset.bundledURL(for: .autumnLobby) != nil,
-                   (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons) {
-                    if match == nil {
-                        VStack(spacing: 8) {
-                            DuelLobbyPreview(hero: hero)
-                                .frame(height: 280).clipShape(RoundedRectangle(cornerRadius: 20))
-                                .accessibilityIdentifier("duel.lobby.preview")
-                            Text("左右拖动旋转人物 · 双指缩放查看脸部与武器")
-                                .font(.caption).foregroundStyle(.secondary)
-                                .accessibilityIdentifier("duel.lobby.gestureHelp")
+        GeometryReader { geometry in
+            let wide = geometry.size.width > geometry.size.height
+            ZStack {
+                LinearGradient(colors: [Color(red: 0.055, green: 0.075, blue: 0.13),
+                                        Color(red: 0.13, green: 0.14, blue: 0.23)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .ignoresSafeArea()
+                if wide {
+                    HStack(spacing: 18) {
+                        showroom
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        lobbyActions
+                            .frame(width: min(310, geometry.size.width * 0.36))
+                    }
+                    .padding(20)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            showroom.frame(height: min(geometry.size.height * 0.47, 380))
+                            lobbyActions
                         }
-                    } else { Color.clear.frame(height: 320) }
-                }
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    ForEach(choices, id: \.self) { choice in
-                        Button { hero = choice } label: {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Image(systemName: choice == .liu ? "person.fill" : choice == .ember ? "flame.fill" : "wind")
-                                    .font(.system(size: 42)).foregroundStyle(choice == .liu ? .white : choice == .ember ? .orange : .cyan)
-                                Text(choice.name).font(.title2.bold())
-                                Text(usesOriginalWeapons ? weaponTitle(choice) : choice.style).font(.caption)
-                                Text(hero == choice ? "已选择" : "选择角色").font(.subheadline.bold())
-                            }.frame(maxWidth: .infinity, alignment: .leading).padding(18)
-                                .background(hero == choice ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1),
-                                            in: RoundedRectangle(cornerRadius: 20))
-                        }.buttonStyle(.plain).accessibilityIdentifier("duel.hero.\(choice.rawValue)")
+                        .padding(16)
                     }
                 }
-                Picker("电脑难度", selection: $difficulty) {
-                    Text("初练").tag(DuelGame.Difficulty.learning)
-                    Text("进阶").tag(DuelGame.Difficulty.challenging)
-                }.pickerStyle(.segmented)
-                Button("开始对决 · 三局两胜") { start(.versus) }
-                    .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("duel.start")
-                HStack {
-                    Button("练习场") { start(.practice) }.accessibilityIdentifier("duel.practice")
-                    Button("操作教学") { start(.tutorial) }.accessibilityIdentifier("duel.tutorial")
-                }.buttonStyle(.bordered)
-                Text(hero.name + "的技能").font(.headline)
-                Text(usesOriginalWeapons ? (hero == .ember ? "武士刀：配合方向使用上斩、下斩、回身斩与连斩；长按攻击使出重斩。" : "双锤：配合方向使用上击、低扫、回身攻击与双锤连击；长按攻击使出重击。") : hero.skillHelp)
-                    .font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("duel.skillHelp")
-                Text(usesOriginalWeapons ? "左侧摇杆移动、跳跃与下蹲；右侧武器和踢击按钮配合方向出招，长按武器使出重击。停止操作并完成短暂收招后自动防御。" : "普攻命中后继续点击，可衔接三段连击。")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                if hero == .liu && !usesOriginalWeapons {
-                    Text("刘泉纬 · 擒拿震地：100 能量，近身抓取后锁臂压制 3 秒，再震地击退。抓取不能防御；跳跃、后撤或在前摇时快攻可以反制。不能抓取倒地、硬直或起身保护中的对手。")
-                        .font(.subheadline).accessibilityIdentifier("duel.ultimateHelp")
-                    Text(DuelCharacterAsset.bundledURL == nil ? "当前构建使用白衣动作替身。" : "已接入全身人物：移动、出拳、防御与擒拿动作随战斗切换。").font(.footnote).foregroundStyle(.secondary)
-                }
-                Text("战斗样板：人物动作与场景仍在打磨，可在练习场测试操作与判定。").font(.footnote).foregroundStyle(.secondary)
-            }.padding(24).frame(maxWidth: 650)
+            }
+            .foregroundStyle(.white)
         }
-        .navigationTitle("裂隙对决")
+        .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
+    }
+
+    private var showroom: some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color(red: 0.10, green: 0.13, blue: 0.21))
+            if hasShowroom && match == nil {
+                DuelLobbyPreview(hero: hero)
+                    .accessibilityIdentifier("duel.lobby.preview")
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("裂隙对决").font(.title.bold())
+                Text(hero.name + " · " + (usesOriginalWeapons ? weaponTitle(hero) : hero.style))
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.82))
+                Text("拖动旋转 · 双指缩放")
+                    .font(.caption).foregroundStyle(.white.opacity(0.7))
+                    .accessibilityIdentifier("duel.lobby.gestureHelp")
+            }
+            .padding(18)
+            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 14))
+            .padding(14)
+        }
+        .accessibilityIdentifier("duel.lobby.showroom")
+    }
+
+    private var lobbyActions: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Text("选择武者").font(.title3.bold())
+            HStack(spacing: 10) {
+                ForEach(choices, id: \.self) { choice in
+                    Button { hero = choice } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(choice.name).font(.headline)
+                            Text(usesOriginalWeapons ? weaponTitle(choice) : choice.style)
+                                .font(.caption).lineLimit(2)
+                            Text(hero == choice ? "已选择" : "点击切换")
+                                .font(.caption2).foregroundStyle(.white.opacity(0.8))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                        .padding(10)
+                        .background(hero == choice ? Color.orange.opacity(0.35) : Color.white.opacity(0.09),
+                                    in: RoundedRectangle(cornerRadius: 13))
+                        .overlay(RoundedRectangle(cornerRadius: 13)
+                            .stroke(hero == choice ? Color.orange : Color.white.opacity(0.18), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("duel.hero.\(choice.rawValue)")
+                }
+            }
+            Text("电脑难度").font(.subheadline.bold())
+            Picker("电脑难度", selection: $difficulty) {
+                Text("初练").tag(DuelGame.Difficulty.learning)
+                Text("进阶").tag(DuelGame.Difficulty.challenging)
+            }
+            .pickerStyle(.segmented)
+            Button { start(.versus) } label: {
+                Text("开始对决 · 三局两胜")
+                    .font(.headline.bold()).frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+            .accessibilityIdentifier("duel.start")
+            HStack {
+                Button("练习场") { start(.practice) }
+                    .accessibilityIdentifier("duel.practice")
+                Spacer()
+                Button("操作教学") { start(.tutorial) }
+                    .accessibilityIdentifier("duel.tutorial")
+            }
+            .buttonStyle(.bordered)
+            Text(usesOriginalWeapons ?
+                 "左侧摇杆移动；右侧武器与踢击配合方向出招。收招后才恢复自动防御。" :
+                 "普攻命中后继续点击，可衔接三段连击。")
+                .font(.caption).foregroundStyle(.white.opacity(0.75))
+            Text(usesOriginalWeapons ?
+                 (hero == .ember ? "武士刀：上斩、下斩、回身斩及长按重斩。" :
+                                  "双锤：上击、低扫、回身攻击及长按重击。") :
+                 hero.skillHelp)
+                .font(.caption).foregroundStyle(.white.opacity(0.7))
+                .accessibilityIdentifier("duel.skillHelp")
+            if hero == .liu && !usesOriginalWeapons {
+                Text("刘泉纬 · 擒拿震地：100 能量，近身抓取并击退。")
+                    .font(.caption).accessibilityIdentifier("duel.ultimateHelp")
+            }
+        }
+        .padding(16)
+        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 20))
     }
     private func start(_ mode: DuelGame.Mode) { match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons) }
 }
