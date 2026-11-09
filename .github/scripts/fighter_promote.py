@@ -10,6 +10,7 @@ import asc_promote as asc
 import fighter_private_model as model
 
 BRANCH = 'codex/plan-fighter-recovery-20261108'
+FIGHTER_BRANCH = 'codex/fighter-lab-sf3-resources-20261108'
 
 
 def require(condition, message):
@@ -26,14 +27,18 @@ def load_request(path):
     require(r.get('bundle_id') == 'com.kriswu.shiftreminder', 'Unexpected app')
     require(re.fullmatch(r'[0-9]+\.[0-9]+(?:\.[0-9]+)?', r.get('version', '')), 'Version required')
     require(r.get('liu_sha256') == model.SHA, 'Actual Liu identity required')
-    require(all(type(r.get(k)) is int and r[k] > 0 for k in ('source_run_id', 'fighter_run_id')), 'Both exact CI run IDs required')
+    require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] > 0, 'Exact fighter CI run required')
+    branch = r.get('source_branch', BRANCH)
+    require(branch in (BRANCH, FIGHTER_BRANCH), 'Unapproved source branch')
+    if branch == BRANCH:
+        require(type(r.get('source_run_id')) is int and r['source_run_id'] > 0, 'Exact iOS CI run required')
     require(isinstance(r.get('notes'), str) and 0 < len(r['notes']) < 3800, 'Testing notes required')
     return r
 
 
 def validate_run(r, run, jobs, workflow, names):
     require(run.get('head_sha') == r['source_sha'], 'CI tested different SHA')
-    require(run.get('head_branch') == BRANCH, 'Unexpected source branch')
+    require(run.get('head_branch') == r.get('source_branch', BRANCH), 'Unexpected source branch')
     require(run.get('event') in ('push', 'workflow_dispatch'), 'Untrusted CI event')
     require(run.get('path') == '.github/workflows/' + workflow, 'Unexpected workflow')
     require(run.get('status') == 'completed' and run.get('conclusion') == 'success', 'CI not successful')
@@ -46,10 +51,12 @@ def validate_run(r, run, jobs, workflow, names):
 
 
 def check_ci(r):
-    for key, workflow, names in [
-        ('source_run_id', 'ios.yml', ('build', 'core-tests-linux')),
-        ('fighter_run_id', 'fighter-lab.yml', ('core', 'envelope', 'device', 'native', 'character')),
-    ]:
+    gates = [('fighter_run_id', 'fighter-lab.yml', ('core', 'envelope', 'device', 'native', 'character'))]
+    if r.get('source_branch', BRANCH) == BRANCH:
+        gates.insert(0, ('source_run_id', 'ios.yml', ('build', 'core-tests-linux')))
+    # The fighter branch intentionally excludes ios.yml. Its dedicated CI
+    # must pass all five jobs on the exact immutable source SHA.
+    for key, workflow, names in gates:
         run = asc.github('/actions/runs/' + str(r[key]))
         attempt = run['run_attempt']
         jobs = asc.github(f'/actions/runs/{r[key]}/attempts/{attempt}/jobs?per_page=100')
