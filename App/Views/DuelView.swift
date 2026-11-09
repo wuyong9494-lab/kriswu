@@ -19,9 +19,14 @@ struct DuelHomeView: View {
                 if DuelStageAsset.bundledURL(for: .autumnLobby) != nil,
                    (DuelCharacterAsset.bundledURL(for: hero) != nil || usesOriginalWeapons) {
                     if match == nil {
-                        DuelLobbyPreview(hero: hero)
-                            .frame(height: 320).clipShape(RoundedRectangle(cornerRadius: 20))
-                            .accessibilityIdentifier("duel.lobby.preview")
+                        VStack(spacing: 8) {
+                            DuelLobbyPreview(hero: hero)
+                                .frame(height: 350).clipShape(RoundedRectangle(cornerRadius: 20))
+                                .accessibilityIdentifier("duel.lobby.preview")
+                            Text("左右拖动旋转人物 · 双指缩放查看脸部与武器")
+                                .font(.caption).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("duel.lobby.gestureHelp")
+                        }
                     } else { Color.clear.frame(height: 320) }
                 }
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
