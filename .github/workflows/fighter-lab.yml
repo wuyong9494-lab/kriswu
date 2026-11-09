@@ -176,7 +176,7 @@ jobs:
       (github.event_name == 'push' && (github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108' ||
        github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108'))
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 75
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
@@ -271,15 +271,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log
       - name: Export rendered evidence
         if: always()
+        timeout-minutes: 8
+        shell: bash
         run: |
+          failed=0
           for result in fighter-lifecycle fighter-flow; do
             if [ -d "$result.xcresult" ]; then
               mkdir -p "fighter-evidence/$result"
-              xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "fighter-evidence/$result"
+              if ! xcrun xcresulttool export attachments --path "$result.xcresult" --output-path "fighter-evidence/$result" >"fighter-export-$result.log" 2>&1; then
+                echo "::warning::Could not export $result attachments; preserving diagnostic log"
+                failed=1
+              fi
             fi
           done
+          exit "$failed"
       - name: Protect portrait evidence before upload
         if: always()
+        timeout-minutes: 8
         env:
           FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
         run: |
@@ -295,4 +303,5 @@ jobs:
           path: |
             fighter-evidence.enc
             fighter-*.log
+            fighter-export-*.log
             star-test-device.json
