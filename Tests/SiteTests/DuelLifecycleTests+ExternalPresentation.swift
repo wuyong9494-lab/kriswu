@@ -101,8 +101,11 @@ extension DuelLifecycleTests {
         state.renderPause = { if !$0 { starts += 1 } }
         state.inputReset = {
             resets += 1
-            XCTAssertThrowsError(try state.startAuthoritativePresentation()) {
-                XCTAssertEqual($0 as? DuelSession.PresentationFailure, .notAwaitingStart)
+            do {
+                try state.startAuthoritativePresentation()
+                XCTFail("Nested start must be rejected")
+            } catch {
+                XCTAssertEqual(error as? DuelSession.PresentationFailure, .notAwaitingStart)
             }
         }
         try state.startAuthoritativePresentation()
@@ -125,7 +128,9 @@ extension DuelLifecycleTests {
                 switch action {
                 case "pause": state.pause()
                 case "shutdown": state.shutdown()
-                default: XCTAssertNoThrow(try state.publishAuthoritativeCancellation(trustedGame: initial))
+                default:
+                    do { try state.publishAuthoritativeCancellation(trustedGame: initial) }
+                    catch { XCTFail("Cancellation during input reset unexpectedly failed: \(error)") }
                 }
             }
             XCTAssertThrowsError(try state.startAuthoritativePresentation()) {
@@ -200,8 +205,11 @@ extension DuelLifecycleTests {
         state.didSimulateStep = { game, _ in
             frames.append(game.frame)
             if game.frame == hit.frame {
-                XCTAssertThrowsError(try state.publishAuthoritativeStep(trustedGame: after, tick: 1)) {
-                    XCTAssertEqual($0 as? DuelSession.PresentationFailure, .reentrantPublication)
+                do {
+                    try state.publishAuthoritativeStep(trustedGame: after, tick: 1)
+                    XCTFail("Nested publication must be rejected")
+                } catch {
+                    XCTAssertEqual(error as? DuelSession.PresentationFailure, .reentrantPublication)
                 }
             }
         }
@@ -233,7 +241,9 @@ extension DuelLifecycleTests {
                 switch action {
                 case "pause": state.pause()
                 case "shutdown": state.shutdown()
-                default: XCTAssertNoThrow(try state.publishAuthoritativeCancellation(trustedGame: cancelled))
+                default:
+                    do { try state.publishAuthoritativeCancellation(trustedGame: cancelled) }
+                    catch { XCTFail("Cancellation during step callback unexpectedly failed: \(error)") }
                 }
             }
             try state.publishAuthoritativeStep(trustedGame: hit, tick: 0)

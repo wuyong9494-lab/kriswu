@@ -6,7 +6,10 @@ This local slice separates `DuelSession`'s physical input and presentation from
 its existing offline simulation driver. It does not wire the network selection
 UI, transport, start acknowledgements, a combat coordinator or a playable nearby
 match. Core simulation, replay/wire/barrier code, assets and release workflows
-are unchanged. No commit, push, CI run or release was made for this slice.
+are unchanged. The first native CI attempt reached test compilation but rejected
+four throwing assertion callbacks; explicit nonthrowing do/catch checks now
+preserve those assertions. Native verification is pending the corrected run.
+No release was made for this slice.
 
 ## Driver and construction
 
