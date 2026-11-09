@@ -315,6 +315,32 @@ final class DuelWeaponAssetTests: XCTestCase {
         }
     }
 
+    func testPersonalHeadFollowsBodyFacingAndSourceNeckAnimation() throws {
+        let assets = try DuelWeaponAssets()
+        for hero in [DuelGame.Hero.ember, .liu] {
+            let character = try assets.character(for: hero)
+            let actor = DuelWeaponCharacterInstance(character)
+            let headIndex = try XCTUnwrap(character.model.node(named: "head"))
+            let personalIndex = try XCTUnwrap(character.model.node(named:
+                (hero == .ember ? "Sun" : "Liu") + "_Personal_Head"))
+            let head = actor.instance.nodes[headIndex]
+            let personalHead = actor.instance.nodes[personalIndex]
+            let idle = try XCTUnwrap(character.profile.clip(role: "idle"))
+            let root = SCNNode(); root.addChildNode(actor.instance.root)
+            actor.apply(.init(clip: idle.name, tick: 0, duration: idle.ticks, groundLift: 0))
+            let initialHead = head.simdWorldPosition
+            let initialPersonal = personalHead.simdWorldPosition
+            // Rotating the whole fighter must carry both the skinned head bone
+            // and the personal face, not leave a camera-facing face behind.
+            root.simdOrientation = simd_quatf(angle: .pi, axis: SIMD3<Float>(0, 1, 0))
+            let turnedHead = head.simdWorldPosition
+            let turnedPersonal = personalHead.simdWorldPosition
+            XCTAssertLessThan(simd_length(turnedHead - simd_act(root.simdOrientation, initialHead)), 0.002)
+            XCTAssertLessThan(simd_length(turnedPersonal - simd_act(root.simdOrientation, initialPersonal)), 0.002)
+            XCTAssertTrue(personalHead.parent != nil, "\(hero): face mesh must belong to the animated hierarchy")
+        }
+    }
+
     func testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads() throws {
         let assets = try DuelWeaponAssets(), scene = SCNScene()
         let actors = try [DuelGame.Hero.ember, .liu].map { hero -> (DuelWeaponCharacterInstance, SCNNode) in
