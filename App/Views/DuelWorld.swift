@@ -37,6 +37,7 @@ final class DuelWorldView: SCNView {
     private(set) var weaponEffects: DuelWeaponEffects?
     private(set) var stageAsset: DuelStageAsset?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
+    private var trackedCameraX: Float = 5
     enum CharacterSource { case bundled, legacy, procedural }
     private var bolts: [Int: SCNNode] = [:]
     private var hurtNodes: [SCNNode] = []
@@ -217,7 +218,27 @@ final class DuelWorldView: SCNView {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
         }
         slamRing?.isHidden = true
-        pointOfView?.position = cameraBasePosition
+        // Follow the pair, not the leading fighter. Smooth changes in the
+        // center of combat without allocating animation actions each frame.
+        // The zoom-out at large separation keeps both combatants in shot.
+        if session.game.fighters.count == 2 {
+            let left = Float(session.game.fighters[0].x) / 1000
+            let right = Float(session.game.fighters[1].x) / 1000
+            let midpoint = min(7.0, max(3.0, (left + right) * 0.5))
+            trackedCameraX += (midpoint - trackedCameraX) * 0.12
+            let separation = abs(left - right)
+            if stageAsset != nil {
+                let baseFOV: CGFloat = bounds.width > bounds.height * 1.5 ? 31 : 35
+                let extra = CGFloat(max(0, separation - 4.5)) * 3
+                pointOfView?.camera?.fieldOfView = min(47, baseFOV + extra)
+            } else if bounds.width > bounds.height * 1.5 {
+                pointOfView?.camera?.orthographicScale = CGFloat(max(2.85, separation * 0.56 + 0.8))
+            }
+        }
+        var cameraPosition = cameraBasePosition
+        cameraPosition.x = trackedCameraX
+        pointOfView?.position = cameraPosition
+        pointOfView?.look(at: SCNVector3(trackedCameraX, stageAsset != nil ? 1.2 : 1.0, 0))
         if let hold = session.game.grapple {
             let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
             let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
