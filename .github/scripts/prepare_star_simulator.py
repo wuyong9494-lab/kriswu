@@ -108,14 +108,35 @@ def capture_ready(device, destination=Path("star-simulator-ready.png")):
             time.sleep(2)
 
 
-def wait_ready():
+def wait_for_boot(device, retry_cold_boot=False):
+    command = ["xcrun", "simctl", "bootstatus", device, "-b"]
+    try:
+        subprocess.run(command, check=True, timeout=240)
+    except subprocess.TimeoutExpired:
+        if not retry_cold_boot:
+            raise
+        # Cold hosted runners sometimes still initialize SpringBoard after the
+        # first bounded wait. Inspect this exact device, then allow ONE further
+        # wait instead of rebuilding every native test bundle on another runner.
+        catalog = json.loads(subprocess.check_output(
+            ["xcrun", "simctl", "list", "devices", "-j"], timeout=30))
+        matches = [item for devices in catalog.get("devices", {}).values()
+                   for item in devices if item.get("udid") == device]
+        if (len(matches) != 1 or matches[0].get("isAvailable") is not True
+                or matches[0].get("state") not in ("Booted", "Booting")):
+            raise RuntimeError("Target simulator is not still booting; native acceptance is blocked")
+        print("Target simulator is still initializing; allowing one additional 180-second boot wait", flush=True)
+        subprocess.run(command, check=True, timeout=180)
+
+
+def wait_ready(retry_cold_boot=False):
     prepared = json.loads(STATUS.read_text())
     if prepared.get("prepared") is not True:
         raise ValueError("Simulator preparation did not succeed")
     device = json.loads(Path("star-test-device.json").read_text())
     if device.get("name") != MODEL or device.get("udid") != prepared.get("udid"):
         raise ValueError("Prepared simulator identity differs from the target device")
-    subprocess.run(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], check=True, timeout=240)
+    wait_for_boot(device["udid"], retry_cold_boot=retry_cold_boot)
     capture_ready(device["udid"])
 
 
@@ -123,5 +144,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ready", action="store_true")
+    parser.add_argument("--retry-cold-boot", action="store_true",
+                        help="Allow one additional bounded wait; requires a 20-minute combined preparation budget")
     args = parser.parse_args()
-    wait_ready() if args.ready else prepare()
+    if args.retry_cold_boot and not args.ready:
+        parser.error("--retry-cold-boot requires --ready")
+    wait_ready(retry_cold_boot=args.retry_cold_boot) if args.ready else prepare()

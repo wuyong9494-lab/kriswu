@@ -1,4 +1,5 @@
 import copy
+import json
 from pathlib import Path
 import struct
 import subprocess
@@ -6,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zlib
-from prepare_star_simulator import capture_ready, selection, valid_png
+from prepare_star_simulator import capture_ready, selection, valid_png, wait_for_boot
 
 
 def png():
@@ -87,3 +88,65 @@ class SimulatorDisplayTests(unittest.TestCase):
                     capture_ready("exact-device", destination)
                 self.assertEqual(run.call_count, 3)
             self.assertFalse(destination.exists())
+
+
+class SimulatorBootTests(unittest.TestCase):
+    def catalog(self, state="Booted", available=True, udid="target"):
+        return json.dumps({"devices": {"runtime": [
+            {"udid": udid, "state": state, "isAvailable": available}]}}).encode()
+
+    @patch("prepare_star_simulator.subprocess.check_output")
+    @patch("prepare_star_simulator.subprocess.run")
+    def testSuccessfulBootDoesNotRetryOrInspect(self, run, inspect):
+        wait_for_boot("target")
+        run.assert_called_once_with(["xcrun", "simctl", "bootstatus", "target", "-b"],
+                                    check=True, timeout=240)
+        inspect.assert_not_called()
+
+    @patch("prepare_star_simulator.subprocess.check_output")
+    @patch("prepare_star_simulator.subprocess.run")
+    def testColdBootWaitsOnceMoreOnExactStillBootingDevice(self, run, inspect):
+        run.side_effect = [subprocess.TimeoutExpired("bootstatus", 240), None]
+        inspect.return_value = self.catalog()
+        wait_for_boot("target", retry_cold_boot=True)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0].args, run.call_args_list[1].args)
+        self.assertEqual(run.call_args_list[1].kwargs, {"check": True, "timeout": 180})
+
+    @patch("prepare_star_simulator.subprocess.check_output")
+    @patch("prepare_star_simulator.subprocess.run")
+    def testSecondTimeoutRemainsFailure(self, run, inspect):
+        run.side_effect = subprocess.TimeoutExpired("bootstatus", 240)
+        inspect.return_value = self.catalog()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            wait_for_boot("target", retry_cold_boot=True)
+        self.assertEqual(run.call_count, 2)
+
+    def testMissingShutdownOrUnavailableTargetCannotBeSubstituted(self):
+        for data in [self.catalog(state="Shutdown"), self.catalog(available=False),
+                     self.catalog(udid="another-device"), b'{"devices": {}}']:
+            with self.subTest(data=data), patch("prepare_star_simulator.subprocess.run",
+                    side_effect=subprocess.TimeoutExpired("bootstatus", 240)) as run, \
+                    patch("prepare_star_simulator.subprocess.check_output", return_value=data):
+                with self.assertRaises(RuntimeError):
+                    wait_for_boot("target", retry_cold_boot=True)
+                self.assertEqual(run.call_count, 1)
+
+    @patch("prepare_star_simulator.subprocess.check_output")
+    @patch("prepare_star_simulator.subprocess.run")
+    def testNonTimeoutBootFailureIsNotRetried(self, run, inspect):
+        run.side_effect = subprocess.CalledProcessError(1, "bootstatus")
+        with self.assertRaises(subprocess.CalledProcessError):
+            wait_for_boot("target", retry_cold_boot=True)
+        run.assert_called_once()
+        inspect.assert_not_called()
+
+
+    @patch("prepare_star_simulator.subprocess.check_output")
+    @patch("prepare_star_simulator.subprocess.run")
+    def testDefaultKeepsExistingSharedWorkflowBudget(self, run, inspect):
+        run.side_effect = subprocess.TimeoutExpired("bootstatus", 240)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            wait_for_boot("target")
+        run.assert_called_once()
+        inspect.assert_not_called()

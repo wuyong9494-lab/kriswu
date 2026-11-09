@@ -4,7 +4,7 @@ import UIKit
 
 /// 小游戏的种类：联机时用来分开（星了个星的房间不会和五子棋的连到一起）
 enum GameKind: String, Codable, Sendable {
-    case tiles, gomoku, arena
+    case tiles, gomoku, arena, fighter
 
     /// Game Center 配对分组用的编号
     var index: Int {
@@ -12,6 +12,7 @@ enum GameKind: String, Codable, Sendable {
         case .tiles: return 1
         case .gomoku: return 2
         case .arena: return 3
+        case .fighter: return 4
         }
     }
 
@@ -20,6 +21,7 @@ enum GameKind: String, Codable, Sendable {
         case .tiles: return "星了个星"
         case .gomoku: return "五子棋"
         case .arena: return "勇者乱斗"
+        case .fighter: return "双人格斗"
         }
     }
 }
@@ -168,7 +170,26 @@ final class GameRoom: NSObject, ObservableObject {
     /// Opt-in direct channel bound to the current transport peer, not a sender
     /// string supplied by the packet. New authoritative protocols use this.
     /// Existing game callbacks remain unchanged during incremental migration.
-    var onAuthenticatedDirect: ((Data, String) -> Void)?
+    var onAuthenticatedDirect: ((Data, String) -> Void)? {
+        didSet { authenticatedDirectOwner = nil }
+    }
+    private var authenticatedDirectOwner: UUID?
+
+    /// Direct assignment invalidates ownership synchronously, even while an old
+    /// callback is executing. A retiring consumer cannot erase its successor.
+    func installAuthenticatedDirect(owner: UUID, callback: @escaping (Data, String) -> Void) -> Bool {
+        guard onAuthenticatedDirect == nil else { return false }
+        onAuthenticatedDirect = callback
+        authenticatedDirectOwner = owner
+        return true
+    }
+
+    func ownsAuthenticatedDirect(_ owner: UUID) -> Bool { authenticatedDirectOwner == owner }
+
+    func removeAuthenticatedDirect(owner: UUID) {
+        guard authenticatedDirectOwner == owner else { return }
+        onAuthenticatedDirect = nil
+    }
     /// 有人进来、走了
     var onMembersChanged: (() -> Void)?
 

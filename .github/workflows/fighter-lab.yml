@@ -123,11 +123,11 @@ jobs:
           done
       - name: Prepare iPhone 17 Pro Max simulator
         id: simulator
-        timeout-minutes: 12
+        timeout-minutes: 20
         shell: bash -eo pipefail {0}
         run: |
           python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee fighter-simulator.log
-          python3 -u .github/scripts/prepare_star_simulator.py --ready 2>&1 | tee -a fighter-simulator.log
+          python3 -u .github/scripts/prepare_star_simulator.py --ready --retry-cold-boot 2>&1 | tee -a fighter-simulator.log
       - name: Check interruption, input and SceneKit resource lifetime
         timeout-minutes: 15
         shell: bash -eo pipefail {0}
@@ -227,11 +227,11 @@ jobs:
           done
       - name: Prepare iPhone 17 Pro Max simulator
         id: simulator
-        timeout-minutes: 12
+        timeout-minutes: 20
         shell: bash -eo pipefail {0}
         run: |
           python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee fighter-simulator.log
-          python3 -u .github/scripts/prepare_star_simulator.py --ready 2>&1 | tee -a fighter-simulator.log
+          python3 -u .github/scripts/prepare_star_simulator.py --ready --retry-cold-boot 2>&1 | tee -a fighter-simulator.log
       - name: Check interruption, input and SceneKit resource lifetime
         timeout-minutes: 15
         shell: bash -eo pipefail {0}
