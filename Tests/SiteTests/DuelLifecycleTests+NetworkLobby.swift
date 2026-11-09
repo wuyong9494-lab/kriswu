@@ -57,6 +57,13 @@ extension DuelLifecycleTests {
         XCTAssertTrue(guest.submit(.select(.sun)))
         XCTAssertEqual(host.snapshot?.players.map(\.isReady), [false, false])
         XCTAssertFalse(host.submit(.start(selectionRevision: revision)))
+        let conflict = try XCTUnwrap(host.snapshot?.selectionRevision)
+        XCTAssertFalse(host.submit(.ready(true, selectionRevision: conflict)))
+        XCTAssertTrue(guest.submit(.ready(true, selectionRevision: conflict)),
+                      "Guest submission queues intent; it is not host acceptance")
+        XCTAssertEqual(host.snapshot?.players.map(\.isReady), [false, false])
+        XCTAssertEqual(guest.snapshot?.canStart, false)
+        XCTAssertTrue(guest.submit(.select(.liu)))
         let current = try XCTUnwrap(host.snapshot?.selectionRevision)
         XCTAssertTrue(host.submit(.ready(true, selectionRevision: current)))
         XCTAssertTrue(guest.submit(.ready(true, selectionRevision: current)))

@@ -99,6 +99,8 @@ final class DuelMultiplayerReplicaTests: XCTestCase {
             var players = $0["players"] as! [[String: Any]]
             players[0]["choice"] = ["hero": "liu", "weapon": "liu_hammers"]
             players[0]["lastSequence"] = 3
+            players[0]["isReady"] = false
+            players[1]["isReady"] = false
             $0["players"] = players
         }
         XCTAssertEqual(guest.receive(data, authenticatedSenderID: "h"), .rejected(.invalidTransition))
@@ -175,10 +177,29 @@ final class DuelMultiplayerReplicaTests: XCTestCase {
         prepare(&host)
         XCTAssertEqual(guest.receive(try bytes(host), authenticatedSenderID: "h"), .applied)
         send(&host, .select(.liu), player: "h", sequence: 3)
+        send(&host, .select(.sun), player: "g", sequence: 3)
         let revision = host.snapshot.selectionRevision
         send(&host, .ready(true, selectionRevision: revision), player: "h", sequence: 4)
-        send(&host, .ready(true, selectionRevision: revision), player: "g", sequence: 3)
+        send(&host, .ready(true, selectionRevision: revision), player: "g", sequence: 4)
         XCTAssertEqual(guest.receive(try bytes(host), authenticatedSenderID: "h"), .applied)
         XCTAssertEqual(guest.snapshot, host.snapshot)
     }
+    func testConflictMayBeShownButNeverReadyOrStarted() throws {
+        var host = try host(), guest = try replica()
+        send(&host, .select(.sun), player: "h", sequence: 1)
+        send(&host, .select(.sun), player: "g", sequence: 1)
+        XCTAssertEqual(guest.receive(try bytes(host), authenticatedSenderID: "h"), .applied)
+        let before = guest
+        for phase in ["selecting", "started"] {
+            let forged = try bytes(host) {
+                $0["revision"] = 10; $0["phase"] = phase
+                var players = $0["players"] as! [[String: Any]]
+                for i in players.indices { players[i]["isReady"] = true; players[i]["lastSequence"] = 3 }
+                $0["players"] = players
+            }
+            XCTAssertEqual(guest.receive(forged, authenticatedSenderID: "h"), .rejected(.invalidState))
+            XCTAssertEqual(guest, before)
+        }
+    }
+
 }

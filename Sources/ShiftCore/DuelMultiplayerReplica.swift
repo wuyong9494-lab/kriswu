@@ -50,7 +50,7 @@ public struct DuelMultiplayerReplica: Equatable, Sendable {
             return .rejected(.invalidState)
         }
         let bothChosen = incoming.players.allSatisfy { $0.choice != nil }
-        guard !incoming.players.contains(where: { $0.isReady }) || bothChosen else { return .rejected(.invalidState) }
+        guard !incoming.players.contains(where: { $0.isReady }) || incoming.hasDistinctChoices else { return .rejected(.invalidState) }
         switch incoming.phase {
         case .selecting: break
         case .started:

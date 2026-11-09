@@ -13,8 +13,9 @@ and release workflows are unchanged.
 - Stable transport member IDs determine fixed seats: host 0, guest 1. Display
   names and member-array ordering never decide ownership.
 - Valid choices are Sun (`ember`, `sun_katana`) and Liu (`liu`, `liu_hammers`).
-  Gale and crossed weapon/hero pairs are rejected. Mirror matches are allowed;
-  no distinct-hero requirement is currently established.
+  Gale and crossed weapon/hero pairs are rejected. Duplicate hero selections may
+  be displayed, but Ready(true) and Start reject `conflictingChoices` until the
+  choices differ. The equipped engine requires two distinct profiles.
 - Each player's accepted sequence is monotonically increasing, beginning at 1.
   Duplicate/older commands are ignored. Gaps are allowed, so a newer command
   supersedes older commands; rejected commands do not consume a sequence.
@@ -89,7 +90,7 @@ an old one. The reducer does not make a dishonest host secure.
    Execute the new tests and native integration tests before displaying network
    state; the replica is not wired to GameRoom or UI in this stage.
 4. Add the two-player selection UI with authoritative previews and ready status.
-   Disable Ready until both choices are present and the current snapshot is
+   Disable Ready until both choices are present, distinct, and the current snapshot is
    known. Keep pending UI intent separate from accepted state. Include asset
    catalog/content version compatibility and loading success before final Ready.
 5. Define a separate versioned combat-start descriptor: agreed selections/seats,

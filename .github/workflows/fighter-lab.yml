@@ -171,17 +171,19 @@ jobs:
     # Use the existing repository secret; never write, print, or package the key.
     # The complete authorized encrypted resource sets are now committed on the
     # personal-fighter branch; its pushes must validate the actual assets.
+    # The exact host-integration candidate also exercises those existing sets.
+    # No other continuation branch implicitly enables private-resource staging.
     if: >-
       (github.event_name == 'workflow_dispatch' && (inputs.private_character || inputs.private_personal_fighters || inputs.private_original_fighters)) ||
       (github.event_name == 'push' && (github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108' ||
-       github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108'))
+       (github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108' || github.ref == 'refs/heads/codex/fighter-lab-host-simulation-20261109')))
     runs-on: macos-26
     timeout-minutes: 75
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
-      FIGHTER_PERSONAL_ASSETS: ${{ inputs.private_personal_fighters || (github.event_name == 'push' && github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108') }}
-      FIGHTER_ORIGINAL_ASSETS: ${{ inputs.private_original_fighters || (github.event_name == 'push' && github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108') }}
+      FIGHTER_PERSONAL_ASSETS: ${{ inputs.private_personal_fighters || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108' || github.ref == 'refs/heads/codex/fighter-lab-host-simulation-20261109')) }}
+      FIGHTER_ORIGINAL_ASSETS: ${{ inputs.private_original_fighters || (github.event_name == 'push' && (github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108' || github.ref == 'refs/heads/codex/fighter-lab-host-simulation-20261109')) }}
     steps:
       - uses: actions/checkout@v5
       - name: Stage verified private character

@@ -32,3 +32,17 @@ remain mandatory. The fighter preparation step has a 20-minute ceiling; overall
 job limits remain unchanged. Other games keep the shared helper's original
 single-wait behavior. All 12 Python simulator-helper tests pass locally; this is
 not evidence that the hosted simulator or the new native adapter tests passed.
+
+## Verified remote checkpoint
+
+The approved source tree at `e4d8bb9ac7935f50cf390d8cdf9f4bf05aadea64` passed
+[unsigned run 42636839221](https://github.com/wuyong9494-lab/kriswu/actions/runs/42636839221).
+Core: 857 tests, 16 existing skips, zero failures. Envelope and unsigned device
+build passed. Native: 48 tests, zero failures, including the 11 offline lobby
+adapter tests and six transport-identity tests. Both real-touch UI flows passed.
+The simulator log confirms the extra bounded 180-second wait was used before
+successful startup. No TestFlight distribution was triggered.
+
+The actual-private-resource job was skipped on this independent branch. These
+results do not establish actual-model visual quality, physical-device frame
+pacing, two-device transport behavior, or playable synchronized network combat.

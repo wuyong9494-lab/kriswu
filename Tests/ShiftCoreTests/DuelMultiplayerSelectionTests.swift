@@ -82,7 +82,17 @@ final class DuelMultiplayerSelectionTests: XCTestCase {
                             sender: "a-guest", sequence: 3), .rejected(.staleSelection))
         XCTAssertEqual(lobby, changed)
         XCTAssertEqual(send(.ready(true, selectionRevision: oldRevision + 1), to: &lobby,
-                            sender: "a-guest", sequence: 3), .applied)
+                            sender: "a-guest", sequence: 3), .rejected(.conflictingChoices))
+        XCTAssertEqual(lobby, changed)
+        XCTAssertEqual(send(.start(selectionRevision: oldRevision + 1), to: &lobby, sequence: 4),
+                       .rejected(.conflictingChoices))
+        XCTAssertFalse(lobby.snapshot.canStart)
+        XCTAssertEqual(send(.ready(false, selectionRevision: oldRevision + 1), to: &lobby, sequence: 4), .applied)
+        XCTAssertEqual(send(.select(.sun), to: &lobby, sender: "a-guest", sequence: 3), .applied)
+        let resolvedRevision = lobby.snapshot.selectionRevision
+        XCTAssertEqual(send(.ready(true, selectionRevision: resolvedRevision), to: &lobby, sequence: 5), .applied)
+        XCTAssertEqual(send(.ready(true, selectionRevision: resolvedRevision), to: &lobby, sender: "a-guest", sequence: 4), .applied)
+        XCTAssertTrue(lobby.snapshot.canStart)
     }
 
     func testReselectingSameChoiceDoesNotInvalidateReadiness() throws {
