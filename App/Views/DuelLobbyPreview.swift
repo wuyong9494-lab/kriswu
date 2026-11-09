@@ -120,9 +120,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             otherGestureRecognizer is UIPanGestureRecognizer
     }
     func rotatePreview(by amount: Float) {
-        guard let characterRoot, amount.isFinite else { return }
+        guard amount.isFinite else { return }
         yaw += amount
-        characterRoot.eulerAngles.y = yaw
+        characterRoot?.eulerAngles.y = yaw
         setNeedsDisplay()
     }
     func scalePreview(by factor: Float) {
