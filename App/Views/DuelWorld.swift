@@ -164,7 +164,11 @@ final class DuelWorldView: SCNView {
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         NotificationCenter.default.removeObserver(self)
-        scene = nil; pointOfView = nil; actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        // Explicitly break the renderer/scene/node graph before clearing the
+        // SCNView reference. SceneKit can defer renderer teardown until its
+        // autorelease pool drains after repeated fight entries.
+        scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
+        pointOfView = nil; scene = nil; actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }
