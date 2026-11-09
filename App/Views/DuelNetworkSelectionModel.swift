@@ -19,13 +19,33 @@ final class DuelNetworkSelectionModel: ObservableObject {
     @Published private(set) var pending: Pending?
     @Published private(set) var error: String?
     private let lobby: DuelNetworkLobby
+    private let router: DuelNetworkMessageRouter?
     private var observations = Set<AnyCancellable>()
     private var deadline: Task<Void, Never>?
     private var attemptedAttachment = false
+    private var closing = false
     private let timeoutNanoseconds: UInt64
 
-    init(lobby: DuelNetworkLobby, timeoutNanoseconds: UInt64 = 10_000_000_000) {
+    /// Keep direct lobby injection available to protocol/presentation tests.
+    convenience init(lobby: DuelNetworkLobby, timeoutNanoseconds: UInt64 = 10_000_000_000) {
+        self.init(lobby: lobby, router: nil, timeoutNanoseconds: timeoutNanoseconds)
+    }
+
+    /// The model owns the root across selection, including terminal agreement.
+    /// Construction does not claim a callback, send, or start the transport.
+    convenience init(transport: any DuelLobbyTransport, timeoutNanoseconds: UInt64 = 10_000_000_000) {
+        let router = DuelNetworkMessageRouter(transport: transport)
+        let lobby = DuelNetworkLobby(transport: router.channel(for: .selection))
+        self.init(lobby: lobby, router: router, timeoutNanoseconds: timeoutNanoseconds)
+    }
+
+    convenience init(room: GameRoom, timeoutNanoseconds: UInt64 = 10_000_000_000) {
+        self.init(transport: DuelGameRoomTransport(room: room), timeoutNanoseconds: timeoutNanoseconds)
+    }
+
+    private init(lobby: DuelNetworkLobby, router: DuelNetworkMessageRouter?, timeoutNanoseconds: UInt64) {
         self.lobby = lobby
+        self.router = router
         self.timeoutNanoseconds = timeoutNanoseconds
         lobby.$snapshot.sink { [weak self] in self?.received($0) }.store(in: &observations)
         lobby.$status.sink { [weak self] in self?.changedStatus($0) }.store(in: &observations)
@@ -58,8 +78,11 @@ final class DuelNetworkSelectionModel: ObservableObject {
         attemptedAttachment = true
         self.localID = localID
         do {
+            try router?.attach()
             try lobby.attach()
             if status == .connecting { armDeadline() }
+        } catch DuelNetworkMessageRouter.Failure.callbackBusy {
+            close(reason: "房间通道正在被使用，请离开后重新进入。")
         } catch DuelNetworkLobby.Failure.callbackBusy {
             close(reason: "房间通道正在被使用，请离开后重新进入。")
         } catch {
@@ -87,7 +110,11 @@ final class DuelNetworkSelectionModel: ObservableObject {
         deadline?.cancel(); deadline = nil
         pending = nil
         if let reason { error = reason }
+        guard !closing else { return }
+        closing = true
         lobby.shutdown()
+        router?.close()
+        closing = false
     }
 
     private func submit(_ command: Selection.Command) {
@@ -133,7 +160,11 @@ final class DuelNetworkSelectionModel: ObservableObject {
         if value == .selecting && pending == nil {
             deadline?.cancel(); deadline = nil
         } else if value == .closed {
+            attemptedAttachment = true
             finishPending(error: error ?? "选角连接已结束，请离开后重新进入房间。")
+            // Protocol-driven closure (for example a replaced host session)
+            // also retires the root. Explicit close finishes lobby teardown first.
+            if !closing { router?.close() }
         } else if value == .started {
             finishPending(error: nil)
         }

@@ -332,6 +332,78 @@ final class DuelLifecycleTests: XCTestCase {
         XCTAssertNotNil(world.firstStepDelay)
     }
 
+    func testShutdownRejectsLateLayoutAndCopiedSessionCallbacks() throws {
+        let state = session()
+        let world = DuelWorldView(session: state, characterSource: .procedural)
+        defer { world.pointOfView = nil; world.shutdown(); state.shutdown() }
+        world.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
+        let latePause = try XCTUnwrap(state.renderPause)
+        let lateReset = try XCTUnwrap(state.didReset)
+        let clocks = DuelWorldView.activeClocks
+        world.shutdown()
+        XCTAssertNil(world.scene)
+        XCTAssertNil(state.renderPause); XCTAssertNil(state.didReset); XCTAssertNil(state.didSimulateStep)
+
+        // Observe late layout independently of SceneKit's default-camera timing.
+        // A closed renderer can still expose a camera; application callbacks
+        // must not frame or move it after the fight has ended.
+        let camera = SCNNode(); camera.camera = SCNCamera()
+        camera.camera?.orthographicScale = 123
+        camera.position = SCNVector3(17, 19, 23)
+        world.pointOfView = camera
+        let transform = camera.simdTransform
+        let callbacks = world.clockCallbacks, frame = state.game.frame
+        var inputResets = 0
+        state.inputReset = { inputResets += 1 }
+        world.layoutSubviews(); world.drawState()
+        lateReset(); latePause(true); latePause(false)
+        world.didMoveToWindow()
+        world.shutdown()
+        XCTAssertEqual(camera.camera?.orthographicScale ?? -1, 123, accuracy: 0.001)
+        XCTAssertEqual(camera.simdTransform, transform)
+        XCTAssertNil(world.scene)
+        XCTAssertFalse(world.isPlaying); XCTAssertFalse(world.rendersContinuously)
+        XCTAssertEqual(world.clockCallbacks, callbacks)
+        XCTAssertEqual(state.game.frame, frame)
+        XCTAssertEqual(inputResets, 0, "A late window callback must not touch the detached session")
+        XCTAssertEqual(DuelWorldView.activeClocks, clocks)
+    }
+
+    private func awaitSceneRelease(_ probe: DuelWorldReleaseProbe, state: DuelSession, clocks: Int) async throws {
+        let started = probe.releaseStartedAt
+        let stoppedFrame = state.game.frame
+        var samples: [String] = []
+        var viewReleasedAt: Double?, sceneReleasedAt: Double?, cameraReleasedAt: Double?
+        var firstSampleAfter100ms: String?
+        var released = false
+        // SceneKit/UIKit can finish an in-flight frame after application
+        // ownership ends. Observe weak references, never keep the view in an
+        // async parameter or retain it between polls. A persistent owner still
+        // fails this deadline; no extra shutdown/flush is used to make it pass.
+        repeat {
+            let elapsed = ProcessInfo.processInfo.systemUptime - started
+            let live = autoreleasepool { probe.liveObjects() }
+            let sample = String(format: "t=%.4f view=%d scene=%d originalCamera=%d", elapsed,
+                                live.view ? 1 : 0, live.scene ? 1 : 0, live.camera ? 1 : 0)
+            samples.append(sample)
+            if !live.view, viewReleasedAt == nil { viewReleasedAt = elapsed }
+            if !live.scene, sceneReleasedAt == nil { sceneReleasedAt = elapsed }
+            if !live.camera, cameraReleasedAt == nil { cameraReleasedAt = elapsed }
+            if elapsed >= 0.1, firstSampleAfter100ms == nil { firstSampleAfter100ms = sample }
+            released = !live.view && !live.scene && !live.camera
+            if released || elapsed >= 3 { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        } while true
+        func duration(_ value: Double?) -> String { value.map { String(format: "%.4f", $0) } ?? "still retained" }
+        let summary = "hero=\(state.setup.hero.rawValue) viewReleasedSeconds=\(duration(viewReleasedAt)) sceneReleasedSeconds=\(duration(sceneReleasedAt)) originalCameraReleasedSeconds=\(duration(cameraReleasedAt)) firstSampleAtOrAfter100ms=\(firstSampleAfter100ms ?? "all released before 100 ms")"
+        print("[fighter-release] \(summary)")
+        let evidence = XCTAttachment(string: summary + "\n" + samples.joined(separator: "\n"))
+        evidence.name = "fighter-release-\(state.setup.hero.rawValue)"; evidence.lifetime = .keepAlways; add(evidence)
+        XCTAssertEqual(state.game.frame, stoppedFrame, "A detached scene must not advance during renderer drainage")
+        XCTAssertEqual(DuelWorldView.activeClocks, clocks)
+        XCTAssertTrue(released, "The view, original scene and original camera must all deallocate within 3 seconds: \(summary)")
+    }
+
     func testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries() async throws {
         XCTAssertTrue(ProcessInfo.processInfo.arguments.contains("-demo"), "Use the existing demo launch argument so first-launch permission alerts do not interrupt the host")
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -343,31 +415,84 @@ final class DuelLifecycleTests: XCTestCase {
         let baseline = DuelWorldView.activeClocks
         for hero in [DuelGame.Hero.ember, .gale, .liu] {
             let state = session(hero)
-            var world: DuelWorldView? = DuelWorldView(session: state)
-            weak var released = world
-            world?.frame = host.view.bounds; host.view.addSubview(try XCTUnwrap(world))
-            try await awaitClockProgress(state, world: XCTUnwrap(world), phase: "attach")
-            let lifecycle = XCTAttachment(string: "hero=\(hero.rawValue) app=\(UIApplication.shared.applicationState.rawValue) scene=\(scene.activationState.rawValue) window=\(world?.window != nil) paused=\(state.paused) frame=\(state.game.frame) clocks=\(DuelWorldView.activeClocks)")
-            lifecycle.name = "fighter-clock-\(hero.rawValue)"; lifecycle.lifetime = .keepAlways; add(lifecycle)
-            XCTAssertEqual(UIApplication.shared.applicationState, .active, "The host must be in the foreground during clock checks")
-            XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
-            XCTAssertGreaterThan(state.game.frame, 0)
-            state.pause()
+            defer { state.shutdown() }
+            // Let every strong setup/render temporary and async progress frame
+            // leave scope before observing deallocation, not just world = nil.
+            let entry = try await exerciseSceneEntry(state, host: host, scene: scene, baseline: baseline)
+            try await awaitSceneRelease(entry.probe, state: state, clocks: baseline)
+            // Invoking these after the wait keeps both closures and the session
+            // alive throughout observation, without a strong view reference.
+            entry.lateReset(); entry.latePause(false)
             XCTAssertEqual(DuelWorldView.activeClocks, baseline)
-            NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-            XCTAssertEqual(DuelWorldView.activeClocks, baseline, "Foregrounding must not automatically resume an interrupted fight")
-            let paused = state.game.frame
-            try await Task.sleep(nanoseconds: 100_000_000)
-            XCTAssertEqual(state.game.frame, paused)
-            state.resume()
-            XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
-            try await awaitClockProgress(state, world: XCTUnwrap(world), phase: "resume")
+        }
+    }
+
+    private func exerciseSceneEntry(_ state: DuelSession, host: UIViewController, scene: UIWindowScene,
+                                    baseline: Int) async throws
+        -> (probe: DuelWorldReleaseProbe, latePause: (Bool) -> Void, lateReset: () -> Void) {
+        let hero = state.setup.hero
+        var world: DuelWorldView? = DuelWorldView(session: state)
+        defer { world?.shutdown(); world?.removeFromSuperview() }
+        let probe = try autoreleasepool { DuelWorldReleaseProbe(try XCTUnwrap(world)) }
+        let originalObjects = probe.liveObjects()
+        XCTAssertTrue(originalObjects.view && originalObjects.scene && originalObjects.camera,
+                      "Lifetime checks must start with an actual view, scene and camera")
+        // Keep copies alive even after the session clears its own slots:
+        // stale callbacks must be weak and must not reactivate the view.
+        let latePause = try XCTUnwrap(state.renderPause)
+        let lateReset = try XCTUnwrap(state.didReset)
+        world?.frame = host.view.bounds; host.view.addSubview(try XCTUnwrap(world))
+        try await awaitClockProgress(state, world: XCTUnwrap(world), phase: "attach")
+        let lifecycle = XCTAttachment(string: "hero=\(hero.rawValue) app=\(UIApplication.shared.applicationState.rawValue) scene=\(scene.activationState.rawValue) window=\(world?.window != nil) paused=\(state.paused) frame=\(state.game.frame) clocks=\(DuelWorldView.activeClocks)")
+        lifecycle.name = "fighter-clock-\(hero.rawValue)"; lifecycle.lifetime = .keepAlways; add(lifecycle)
+        XCTAssertEqual(UIApplication.shared.applicationState, .active, "The host must be in the foreground during clock checks")
+        XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
+        XCTAssertGreaterThan(state.game.frame, 0)
+        state.pause()
+        XCTAssertEqual(DuelWorldView.activeClocks, baseline)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        XCTAssertEqual(DuelWorldView.activeClocks, baseline, "Foregrounding must not automatically resume an interrupted fight")
+        let paused = state.game.frame
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(state.game.frame, paused)
+        state.resume()
+        XCTAssertEqual(DuelWorldView.activeClocks, baseline + 1)
+        try await awaitClockProgress(state, world: XCTUnwrap(world), phase: "resume")
+        let stoppedFrame = state.game.frame, stoppedCallbacks = world?.clockCallbacks
+        autoreleasepool {
             world?.shutdown(); world?.removeFromSuperview()
             XCTAssertNil(world?.scene)
+            XCTAssertFalse(world?.isPlaying ?? true); XCTAssertFalse(world?.rendersContinuously ?? true)
+            XCTAssertNil(state.renderPause); XCTAssertNil(state.didReset); XCTAssertNil(state.didSimulateStep)
+            XCTAssertTrue(world?.originalAssets.isEmpty ?? false)
+            XCTAssertTrue(world?.weaponAssets.isEmpty ?? false)
+            XCTAssertNil(world?.characterAsset); XCTAssertNil(world?.stageAsset)
+            XCTAssertNil(world?.sourceEffects); XCTAssertNil(world?.weaponEffects)
             XCTAssertEqual(DuelWorldView.activeClocks, baseline)
+            world?.layoutSubviews(); world?.drawState()
+            lateReset(); latePause(true); latePause(false)
+            XCTAssertEqual(state.game.frame, stoppedFrame)
+            XCTAssertEqual(world?.clockCallbacks, stoppedCallbacks)
+            probe.beginReleaseObservation()
             world = nil
-            try await Task.sleep(nanoseconds: 100_000_000)
-            XCTAssertNil(released, "SceneKit view must not be retained by its display link or session")
         }
+        return (probe, latePause, lateReset)
+    }
+}
+
+@MainActor
+private final class DuelWorldReleaseProbe {
+    private weak var view: DuelWorldView?
+    private weak var scene: SCNScene?
+    private weak var camera: SCNNode?
+    private(set) var releaseStartedAt = 0.0
+    init(_ view: DuelWorldView) {
+        self.view = view; scene = view.scene; camera = view.pointOfView
+    }
+    func beginReleaseObservation() { releaseStartedAt = ProcessInfo.processInfo.systemUptime }
+    func liveObjects() -> (view: Bool, scene: Bool, camera: Bool) {
+        // Do not query pointOfView on a closed SCNView: that would inspect a
+        // fallback camera, not establish the lifetime of the original node.
+        (view != nil, scene != nil, camera != nil)
     }
 }

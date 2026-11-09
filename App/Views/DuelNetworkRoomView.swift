@@ -100,7 +100,7 @@ struct DuelNetworkRoomView: View {
 
     init(room: GameRoom) {
         self.room = room
-        _model = StateObject(wrappedValue: DuelNetworkSelectionModel(lobby: DuelNetworkLobby(room: room)))
+        _model = StateObject(wrappedValue: DuelNetworkSelectionModel(room: room))
     }
 
     var body: some View {

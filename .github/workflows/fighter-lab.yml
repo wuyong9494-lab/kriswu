@@ -54,6 +54,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p test_fighter_private_model.py
           python3 -m unittest discover -s .github/scripts -p test_fighter_sf3_assets.py
           python3 -m unittest discover -s .github/scripts -p test_fighter_sf3_distinct.py
+          python3 -m unittest discover -s scripts -p test_build_fighter_network_rules.py
   device:
     runs-on: macos-26
     timeout-minutes: 40
@@ -256,7 +257,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log
       - name: Play both characters and restore portrait app
         if: ${{ !cancelled() && steps.test_build.outcome == 'success' && steps.simulator.outcome == 'success' }}
-        timeout-minutes: 18
+        # Four real-resource UI tests took 989 seconds before finalization.
+        # Require successful test/recorder exit within a bounded larger budget.
+        timeout-minutes: 24
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")
@@ -290,22 +293,27 @@ jobs:
           done
           exit "$failed"
       - name: Protect portrait evidence before upload
+        id: protect_evidence
         if: always()
         timeout-minutes: 8
+        shell: bash -eo pipefail {0}
         env:
           FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
         run: |
+          umask 077
           if [ -d fighter-evidence ]; then
-            python3 -c "import shutil; shutil.make_archive('fighter-evidence-private', 'zip', 'fighter-evidence')"
-            python3 .github/scripts/fighter_private_model.py seal evidence fighter-evidence-private.zip fighter-evidence.enc
-            rm -f fighter-evidence-private.zip
+            PRIVATE_ARCHIVE=$(mktemp -d "$RUNNER_TEMP/fighter-evidence.XXXXXX")
+            trap 'rm -rf "$PRIVATE_ARCHIVE"' EXIT
+            python3 -u .github/scripts/fighter_evidence_archive.py fighter-evidence "$PRIVATE_ARCHIVE/evidence.zip"
+            python3 -u .github/scripts/fighter_private_model.py seal evidence "$PRIVATE_ARCHIVE/evidence.zip" fighter-evidence.enc
           fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: fighter-character-private
           path: |
-            fighter-evidence.enc
+            ${{ steps.protect_evidence.outcome == 'success' && 'fighter-evidence.enc' || '' }}
             fighter-*.log
             fighter-export-*.log
             star-test-device.json
+          compression-level: 0

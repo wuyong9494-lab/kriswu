@@ -87,6 +87,27 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
+    # Main app only. Always refresh from working-tree source before code signing;
+    # this generated resource is never committed or copied from a previous build.
+    postBuildScripts:
+      - name: Generate fighter network rules identity
+        script: |
+          set -eu
+          /usr/bin/env python3 -I -B -S "${SRCROOT}/scripts/build_fighter_network_rules.py" \
+            --xcode-build --source-root "${SRCROOT}" \
+            --output "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FighterNetworkRules.json"
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        # Scoped reads for Xcode's user-script sandbox, including newly added Swift files.
+        inputFiles:
+          - "$(SRCROOT)/scripts/build_fighter_network_rules.py"
+          - "$(SRCROOT)/project.yml"
+          - "$(SRCROOT)/App"
+          - "$(SRCROOT)/Sources/ShiftCore"
+          - "$(SRCROOT)/Shared"
+        outputFiles:
+          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FighterNetworkRules.json"
+          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/.FighterNetworkRules.json.tmp"
     scheme:
       testTargets:
         - SiteTests

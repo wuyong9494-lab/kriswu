@@ -104,9 +104,10 @@ final class DuelWorldView: SCNView {
             hurtNodes.append(hurt); attackNodes.append(attack); world.rootNode.addChildNode(hurt); world.rootNode.addChildNode(attack)
         }
         session.renderPause = { [weak self] paused in
-            self?.sourceEffects?.setPaused(paused)
-            self?.weaponEffects?.setPaused(paused)
-            if paused { self?.stopClock() } else { self?.startClock() }
+            guard let self, !self.ended else { return }
+            self.sourceEffects?.setPaused(paused)
+            self.weaponEffects?.setPaused(paused)
+            if paused { self.stopClock() } else { self.startClock() }
         }
         if session.setup.originalWeapons, let directory = session.weaponAssets?.directory {
             do {
@@ -118,7 +119,7 @@ final class DuelWorldView: SCNView {
             consumeFeedback(session.game, tick: 0)
         }
         session.didReset = { [weak self] in
-            guard let self else { return }
+            guard let self, !self.ended else { return }
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.impactShake = 0; self.impactPhase = 0
             self.trackedCameraX = 5
@@ -131,6 +132,7 @@ final class DuelWorldView: SCNView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        guard !ended else { return }
         if window == nil { stopClock(); session.clearInput() } else if !session.paused { startClock() }
     }
     override func layoutSubviews() {
@@ -140,7 +142,9 @@ final class DuelWorldView: SCNView {
     /// Use the same projection during layout and rendering. A rotation-safe
     /// layout value must not be replaced by a narrow FOV on the next frame.
     private func updateCameraFraming() {
-        guard bounds.width > 0, bounds.height > 0 else { return }
+        // UIKit can deliver layout after dismantling. Do not ask a closed
+        // SceneKit renderer for a camera (or mutate a default camera it exposes).
+        guard !ended, scene != nil, bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Double(bounds.width / bounds.height)
         let separation = session.game.fighters.count == 2
             ? Double(abs(session.game.fighters[0].x - session.game.fighters[1].x)) / 1000 : 3
@@ -153,7 +157,7 @@ final class DuelWorldView: SCNView {
             pointOfView?.camera?.orthographicScale = framing.orthographicScale
         }
     }
-    @objc private func interrupted() { session.pause() }
+    @objc private func interrupted() { guard !ended else { return }; session.pause() }
     @objc private func becameActive() {
         // A new view may be attached during the first foreground transition.
         // Start its clock when UIKit is active; an interrupted fight stays
@@ -176,20 +180,21 @@ final class DuelWorldView: SCNView {
     }
     func shutdown() {
         guard !ended else { return }
-        ended = true; stopClock(); session.clearInput(); session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
+        ended = true; stopClock()
+        session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
+        session.clearInput()
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         NotificationCenter.default.removeObserver(self)
-        // Explicitly break the renderer/scene/node graph before clearing the
-        // SCNView reference. SceneKit can defer renderer teardown until its
-        // autorelease pool drains after repeated fight entries.
-        // Flush pending SceneKit node transactions while the renderer is still
-        // attached, then disconnect its camera and scene synchronously.
+        // Break application ownership before clearing the SCNView reference.
+        // Renderer/UIKit work may still finish after this method returns.
+        // Disconnect the scene first and clear its camera last, then flush
+        // pending node detachments before dropping the asset owners.
         SCNTransaction.begin()
         SCNTransaction.disableActions = true
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-        pointOfView = nil
         scene = nil
+        pointOfView = nil
         SCNTransaction.commit()
         SCNTransaction.flush()
         actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
@@ -219,7 +224,7 @@ final class DuelWorldView: SCNView {
         }
     }
     func drawState() {
-        guard scene != nil else { return }
+        guard !ended, scene != nil else { return }
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         for i in 0..<actors.count {
             actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase)
@@ -286,7 +291,7 @@ final class DuelWorldView: SCNView {
         SCNTransaction.commit()
     }
     private func consumeFeedback(_ game: DuelGame, tick: Int) {
-        guard let fight = game.weaponFight else { return }
+        guard !ended, let fight = game.weaponFight else { return }
         let contacts = fight.contacts.map { contact in
             DuelSourceEffects.Contact(kind: contact.kind == .hit ? .hit : .block,
                 position: SCNVector3(Float(contact.position.x), Float(contact.position.y), Float(contact.position.z)),
