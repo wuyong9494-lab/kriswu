@@ -161,6 +161,46 @@ final class GLTFMaterialTests: XCTestCase {
         }
     }
 
+    func testExplicitSkinRootCorrectionPreservesAncestorJointAndRenderedMotion() throws {
+        // Reproduce the source export: both the ancestor and its child are
+        // joints, yet the declaration points only to the child. Ordinary loads
+        // must reject it; the verified caller supplies the exact correction.
+        XCTAssertThrowsError(try fixture(skinned: true, includeRootJoint: true, declaredRoot: 1))
+        let model = try fixture(pixel: [255, 0, 0, 255], skinned: true,
+            includeRootJoint: true, declaredRoot: 1,
+            skinRootCorrections: [0: .init(declared: 1, corrected: 0)])
+        let instance = model.instantiate()
+        let mesh = try XCTUnwrap(instance.nodes[2].childNodes.first { $0.skinner != nil })
+        let skinner = try XCTUnwrap(mesh.skinner)
+        XCTAssertTrue(skinner.skeleton === instance.nodes[0])
+        XCTAssertEqual(skinner.bones.count, 2)
+        XCTAssertTrue(skinner.bones[0] === instance.nodes[0])
+        XCTAssertTrue(skinner.bones[1] === instance.nodes[1])
+        XCTAssertEqual(skinner.boneInverseBindTransforms?.count, 2)
+        let reference = try fixture(pixel: [255, 0, 0, 255], skinned: true,
+            includeRootJoint: true, declaredRoot: 0).instantiate()
+        let rest = try snapshot(instance), expected = try snapshot(reference)
+        XCTAssertGreaterThan(rest.redPixelCount, 500)
+        XCTAssertEqual(rest.redCenterX, expected.redCenterX, accuracy: 1)
+        instance.nodes[1].simdPosition.x += 0.5
+        XCTAssertEqual(try snapshot(instance).redCenterX - rest.redCenterX, 16, accuracy: 3,
+                       "Correcting only the root must preserve joint weights and bone motion")
+    }
+
+    func testSkinRootCorrectionsRejectWrongDeclarationUnrelatedNodeAndMissingSkin() throws {
+        for correction in [GLTFModel.SkinRootCorrection(declared: 0, corrected: 0),
+                           .init(declared: 1, corrected: 1), .init(declared: 1, corrected: 2)] {
+            XCTAssertThrowsError(try fixture(skinned: true, includeRootJoint: true, declaredRoot: 1,
+                skinRootCorrections: [0: correction]))
+        }
+        XCTAssertThrowsError(try fixture(skinned: true, includeRootJoint: true, declaredRoot: 2,
+            skinRootCorrections: [0: .init(declared: 2, corrected: 0)]),
+            "A mesh node cannot be accepted as a source joint declaration")
+        XCTAssertThrowsError(try fixture(skinned: true, includeRootJoint: true, declaredRoot: 1,
+            skinRootCorrections: [1: .init(declared: 1, corrected: 0)]),
+            "Unused correction entries must not silently hide a caller error")
+    }
+
     func testPBRIsOptInAndRoutesPackedTextureChannels() throws {
         let packed: [String: Any] = ["metallicRoughnessTexture": ["index": 0], "roughnessFactor": 0.6, "metallicFactor": 0.2]
         let legacy = try fixture(pbrOverrides: packed).instantiate()
@@ -319,6 +359,8 @@ final class GLTFMaterialTests: XCTestCase {
                          pixel: [UInt8]? = [255, 255, 255, 255], cutoff: Double? = nil,
                          sampler: [String: Int]? = nil, uv: [Float]? = nil,
                          skinned: Bool = false, explicitRoot: Bool = false,
+                         includeRootJoint: Bool = false, declaredRoot: Int? = nil,
+                         skinRootCorrections: [Int: GLTFModel.SkinRootCorrection] = [:],
                          texturePNG: Data? = nil, embeddedTexture: Bool = false,
                          maxTexture: CGFloat = 512, physicallyBased: Bool = false,
                          pbrOverrides: [String: Any] = [:], materialOverrides: [String: Any] = [:],
@@ -352,11 +394,14 @@ final class GLTFMaterialTests: XCTestCase {
         var nodes: [[String: Any]] = [["name": "mesh", "mesh": 0]]
         var skin: [String: Any]?
         if skinned {
-            attributes["JOINTS_0"] = append(Data(repeating: 0, count: 16), component: 5121, type: "VEC4", count: 4)
+            let jointIndices: [UInt8] = (0..<4).flatMap { _ in [includeRootJoint ? 1 : 0, 0, 0, 0] }
+            attributes["JOINTS_0"] = append(Data(jointIndices), component: 5121, type: "VEC4", count: 4)
             attributes["WEIGHTS_0"] = floats([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], type: "VEC4", width: 4)
-            let bind = floats([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], type: "MAT4", width: 16)
-            skin = ["joints": [1], "inverseBindMatrices": bind]
+            let identity: [Float] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+            let bind = floats(includeRootJoint ? identity + identity : identity, type: "MAT4", width: 16)
+            skin = ["joints": includeRootJoint ? [0, 1] : [1], "inverseBindMatrices": bind]
             if explicitRoot { skin?["skeleton"] = 0 }
+            if let declaredRoot { skin?["skeleton"] = declaredRoot }
             nodes = [["name": "skeletonRoot", "translation": [0.2, 0, 0], "children": [1, 2]],
                      ["name": "joint", "translation": [0.3, 0, 0]],
                      ["name": "mesh", "mesh": 0, "skin": 0, "translation": [40, 0, 0]]]
@@ -409,6 +454,6 @@ final class GLTFMaterialTests: XCTestCase {
         let url = folder.appendingPathComponent("fixture.gltf")
         try JSONSerialization.data(withJSONObject: document).write(to: url)
         return try GLTFModel(url: url, maxTexture: maxTexture, physicallyBased: physicallyBased,
-                             sourceLocationMaterials: sourceLocationMaterials)
+                             sourceLocationMaterials: sourceLocationMaterials, skinRootCorrections: skinRootCorrections)
     }
 }

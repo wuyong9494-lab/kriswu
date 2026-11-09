@@ -126,12 +126,18 @@ final class DuelSourceEffectsTests: XCTestCase {
         XCTAssertEqual(effects?.playedSoundCategories.count, 0)
         XCTAssertTrue(scene.rootNode.childNodes.allSatisfy { $0 === camera })
         effects?.setPaused(false)
-        effects?.emit(kind: .block, position: SCNVector3Zero, direction: 1, tick: 0)
-        effects?.advance(to: 1)
-        XCTAssertEqual(effects?.activeBurstCount, 1)
-        weak var closingRoot = scene.rootNode.childNodes.first { $0.name?.hasPrefix("duel.source-effect.") == true }
-        effects?.shutdown()
-        SCNTransaction.flush()
+        weak var closingRoot: SCNNode?
+        // Drain SceneKit/Objective-C temporary references before checking
+        // ownership, while keeping the scene and effects owner alive.
+        autoreleasepool {
+            effects?.emit(kind: .block, position: SCNVector3Zero, direction: 1, tick: 0)
+            effects?.advance(to: 1)
+            XCTAssertEqual(effects?.activeBurstCount, 1)
+            closingRoot = scene.rootNode.childNodes.first { $0.name?.hasPrefix("duel.source-effect.") == true }
+            XCTAssertNotNil(closingRoot)
+            effects?.shutdown()
+            SCNTransaction.flush()
+        }
         XCTAssertNil(closingRoot, "A closed owner must release its last unrendered particle subtree")
         XCTAssertEqual(effects?.sourceTextureCount, 0)
         XCTAssertEqual(effects?.sourceAudioCount, 0)
@@ -141,6 +147,37 @@ final class DuelSourceEffectsTests: XCTestCase {
         XCTAssertTrue(scene.rootNode.childNodes.allSatisfy { $0 === camera })
         effects = nil
         XCTAssertNil(weakEffects, "Scene nodes and audio players must not retain a closed effect owner")
+    }
+
+    func testOriginalBlockSignedScalesStayVisibleInBothDirections() throws {
+        let url = try XCTUnwrap(DuelSourceEffects.manifestURL())
+        let document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let definitions = try XCTUnwrap(document["effects"] as? [String: [String: Any]])
+        let tracks = try XCTUnwrap(definitions["block"]?["tracks"] as? [[String: Any]])
+        XCTAssertEqual(tracks.count, 21)
+        for direction in [-1, 1] {
+            let root = SCNNode(), effects = try DuelSourceEffects(root: root)
+            defer { effects.shutdown() }
+            effects.emit(kind: .block, position: SCNVector3Zero, direction: direction, tick: 0)
+            effects.advance(to: 3)
+            let burst = try XCTUnwrap(root.childNodes.first)
+            XCTAssertEqual(burst.childNodes.count, tracks.count)
+            for track in tracks {
+                let name = try XCTUnwrap(track["name"] as? String)
+                let frames = try XCTUnwrap(track["frames"] as? [[Double]])
+                // At 3/60 seconds the original 240 Hz export supplies sample
+                // 12 directly; this expected value does not use the adapter.
+                XCTAssertGreaterThan(frames.count, 12)
+                let source = frames[12]
+                XCTAssertEqual(source[0], 0.05, accuracy: 0.000001)
+                XCTAssertLessThan(source[4], 0, "The actual source prefab reflects X")
+                XCTAssertGreaterThan(source[5], 0)
+                let node = try XCTUnwrap(burst.childNode(withName: name, recursively: false))
+                XCTAssertFalse(node.isHidden, "A source reflection must not hide the block particle")
+                XCTAssertEqual(node.scale.x, Float(source[4]) * 0.01 * Float(direction), accuracy: 0.00001)
+                XCTAssertEqual(node.scale.y, Float(source[5]) * 0.01, accuracy: 0.00001)
+            }
+        }
     }
 
     func testAlteredSourceManifestOrTextureCannotFallBackToBundledArtwork() throws {

@@ -234,7 +234,7 @@ final class DuelWeaponEffects {
                                   ("sourceUVMask", profile.uvMask), ("sourceParameters", profile.parameters), ("sourceTint", profile.tint)] {
                 material.setValue(NSValue(scnVector4: SCNVector4(value[0], value[1], value[2], value[3])), forKey: name)
             }
-            material.setValue(NSNumber(value: 0), forKey: "sourceTime")
+            material.setValue(NSNumber(value: 0.0), forKey: "sourceTime")
             let node = SCNNode(); node.name = profile.name; node.castsShadow = false
             node.renderingOrder = 90; root.addChildNode(node)
             return RenderLayer(profile: profile, node: node, material: material)

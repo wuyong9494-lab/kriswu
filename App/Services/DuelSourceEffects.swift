@@ -189,8 +189,11 @@ final class DuelSourceEffects {
                 }
                 var previous: Float = -1
                 for state in track.frames {
+                    // These are signed source transform scales. The verified
+                    // block prefab mirrors X on all 21 tracks; requiring a
+                    // positive width rejects that intact source manifest.
                     guard state.count == 15, state.allSatisfy(\.isFinite), state[0] > previous,
-                          state[4] >= 0, state[5] >= 0, state[4] < 1_000, state[5] < 1_000 else {
+                          abs(state[4]) < 1_000, abs(state[5]) < 1_000 else {
                         throw Failure.manifest
                     }
                     previous = state[0]
@@ -310,7 +313,9 @@ final class DuelSourceEffects {
             if time >= burst.duration { burst.root.removeFromParentNode(); continue }
             for particle in burst.particles {
                 guard let state = particle.track.sample(at: time) else { particle.node.isHidden = true; continue }
-                particle.node.isHidden = state[4] < 0.00001 || state[5] < 0.00001
+                // Preserve the source reflection in scale below. Only a
+                // collapsed axis is invisible; a negative axis is mirrored.
+                particle.node.isHidden = abs(state[4]) < 0.00001 || abs(state[5]) < 0.00001
                 let unit = manifest.worldUnitsPerSourceUnit
                 particle.node.position = SCNVector3(state[1] * unit * burst.direction, state[2] * unit, state[3] * unit)
                 particle.node.scale = SCNVector3(state[4] * unit * burst.direction, state[5] * unit, 1)

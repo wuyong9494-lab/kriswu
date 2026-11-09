@@ -79,19 +79,19 @@ final class DuelFlowTests: XCTestCase {
         XCTAssertTrue(ultimate.isHittable)
         XCTAssertTrue((ultimate.value as? String ?? "").contains("可施放"))
         approachGrappleRange(app)
-        // The legacy ultimate triggers once on Down. Keep the real finger down
-        // through its 24-tick startup and 24-tick takedown, then immediately use
-        // the real pause button. Reading the short hold label before pausing can
-        // lose the entire hold to cross-process accessibility query latency.
-        let pauseFrame = pause.frame
-        let pausePoint = app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: pauseFrame.midX, dy: pauseFrame.midY))
-        ultimate.press(forDuration: 1.0)
-        pausePoint.tap()
-        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 3))
         let status = app.staticTexts["duel.grapple"]
-        let holding = NSPredicate { _, _ in status.exists && status.label.contains("锁臂压制") }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: holding, object: nil)], timeout: 4), .completed)
+        // Trigger through the real control and observe the simulation phase,
+        // not an assumed number of ticks during a wall-clock press. A following
+        // app-coordinate tap can spend the entire three-second hold resolving
+        // accessibility snapshots (run 30 took over five seconds). Home uses a
+        // real device event without that extra app query and exercises the
+        // production background-pause path; the other flow covers the pause UI.
+        ultimate.tap()
+        let holding = NSPredicate(format: "label CONTAINS %@", "锁臂压制")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: holding, object: status)], timeout: 4), .completed)
+        XCUIDevice.shared.press(.home); app.activate()
+        XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 8))
+        XCTAssertTrue(status.label.contains("锁臂压制"), "Backgrounding must freeze the observed hold before its release impact")
         let heldStatus = status.label, heldHits = app.staticTexts["duel.hits"].label
         let heldOpponent = app.staticTexts["duel.stats.1"].value as? String
         XCTAssertTrue(heldHits.contains("命中 1 次") && heldHits.contains("伤害 100"))

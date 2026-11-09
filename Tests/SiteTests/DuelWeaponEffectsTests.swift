@@ -97,11 +97,19 @@ final class DuelWeaponEffectsTests: XCTestCase {
         XCTAssertEqual(effects?.emittedSampleCount, 0)
         XCTAssertTrue(container.childNodes.isEmpty)
         effects?.setPaused(false)
-        effects?.consumeStep(poses: [pose(tick: 0, family: .katana, active: false)], animationTick: 0)
-        effects?.consumeStep(poses: [pose(tick: 1, family: .katana)], animationTick: 1)
-        weak var finalRoot = container.childNodes.first
-        effects?.shutdown()
-        SCNTransaction.flush()
+        weak var finalRoot: SCNNode?
+        // Objective-C childNodes snapshots and SceneKit transactions can
+        // retain temporary nodes until the autorelease pool drains. Keep the
+        // effect owner and container alive while testing their final subtree.
+        autoreleasepool {
+            effects?.consumeStep(poses: [pose(tick: 0, family: .katana, active: false)], animationTick: 0)
+            effects?.consumeStep(poses: [pose(tick: 1, family: .katana)], animationTick: 1)
+            finalRoot = container.childNodes.first
+            XCTAssertNotNil(finalRoot)
+            effects?.shutdown()
+            SCNTransaction.flush()
+            XCTAssertTrue(container.childNodes.isEmpty)
+        }
         XCTAssertNil(finalRoot, "Closing must release an unrendered final trail subtree")
         XCTAssertNil(container.parent)
         XCTAssertEqual(effects?.sourceTextureCount, 0)

@@ -169,6 +169,13 @@ final class DuelWeaponAssetTests: XCTestCase {
             let asset = try assets.character(for: hero), profile = asset.profile
             let cached = try assets.character(for: hero)
             XCTAssertTrue(asset === cached, "One session must share each immutable model")
+            XCTAssertThrowsError(try GLTFModel(
+                url: assets.directory.appendingPathComponent(profile.resourceName + ".glb"),
+                maxTexture: 1024, physicallyBased: true)) { error in
+                guard case GLTFModel.LoadError.badFormat = error else {
+                    return XCTFail("Unexpected strict-load error: \(error)")
+                }
+            }
             XCTAssertEqual(profile.bodyID, body); XCTAssertEqual(profile.weaponID, weapon)
             XCTAssertEqual(profile.sha256, digest); XCTAssertEqual(profile.clips.count, clipCount)
             let evidence = try XCTUnwrap(extra.profiles.first { $0.id == profile.id })
@@ -180,6 +187,17 @@ final class DuelWeaponAssetTests: XCTestCase {
                 XCTAssertEqual(asset.model.names[binding.targetNode], binding.name)
             }
             let actor = DuelWeaponCharacterInstance(asset), untouched = asset.model.instantiate()
+            let skeletonRoot = try XCTUnwrap(asset.model.node(named: "skeleton"))
+            XCTAssertEqual(skeletonRoot, 0)
+            XCTAssertEqual(asset.model.node(named: "Armature"), 1)
+            let skinners = actor.instance.nodes.flatMap { $0.childNodes.compactMap(\.skinner) }
+            XCTAssertFalse(skinners.isEmpty)
+            for skinner in skinners {
+                XCTAssertTrue(skinner.skeleton === actor.instance.nodes[skeletonRoot],
+                              "The verified root correction must include the ancestor joint")
+                XCTAssertEqual(skinner.bones.count, boneCount)
+                XCTAssertTrue(skinner.bones[0] === actor.instance.nodes[skeletonRoot])
+            }
             let untouchedTransforms = untouched.nodes.map(\.simdTransform)
             let root = SCNNode(); root.addChildNode(actor.instance.root)
             let handsFeet = try ["hand_l", "hand_r", "foot_l", "foot_r"].map {

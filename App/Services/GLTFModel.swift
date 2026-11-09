@@ -35,6 +35,14 @@ final class GLTFModel: @unchecked Sendable {
         let outlines: [SCNNode]
     }
 
+    /// An authenticated source export may name a descendant as its skeleton
+    /// root even though its joint table also includes an ancestor. Callers must
+    /// opt in after verifying that export; ordinary glTF loading stays strict.
+    struct SkinRootCorrection {
+        let declared: Int
+        let corrected: Int
+    }
+
     private struct NodeInfo {
         var name: String
         var children: [Int]
@@ -76,7 +84,8 @@ final class GLTFModel: @unchecked Sendable {
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
     /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要
     init(url: URL, animations wanted: Set<String>? = nil, maxTexture: CGFloat = 512, smoothNormals: Bool = false,
-         physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = []) throws {
+         physicallyBased: Bool = false, sourceLocationMaterials: Set<String> = [],
+         skinRootCorrections: [Int: SkinRootCorrection] = [:]) throws {
         // SceneKit 建网格、贴图必须在主线程。放在后台建，过一会儿渲染线程会 EXC_BREAKPOINT
         guard Thread.isMainThread else { throw LoadError.offMain }
         guard let file = try? Data(contentsOf: url) else { throw LoadError.unreadable }
@@ -290,11 +299,23 @@ final class GLTFModel: @unchecked Sendable {
         parents = parentList
 
         // 骨骼
-        skins = try (json["skins"] as? [[String: Any]] ?? []).map { skin in
+        let skinDefinitions = json["skins"] as? [[String: Any]] ?? []
+        guard skinRootCorrections.keys.allSatisfy({ skinDefinitions.indices.contains($0) }) else {
+            throw LoadError.badFormat
+        }
+        skins = try skinDefinitions.enumerated().map { skinIndex, skin in
             let joints = skin["joints"] as? [Int] ?? []
             guard !joints.isEmpty, joints.allSatisfy({ infos.indices.contains($0) }),
                   let common = Self.commonAncestor(of: joints, parents: parentList) else { throw LoadError.badFormat }
-            let skeleton = skin["skeleton"] as? Int ?? common
+            let skeleton: Int
+            if let correction = skinRootCorrections[skinIndex] {
+                guard skin["skeleton"] as? Int == correction.declared,
+                      joints.contains(correction.declared), correction.corrected == common,
+                      correction.declared != correction.corrected else { throw LoadError.badFormat }
+                skeleton = correction.corrected
+            } else {
+                skeleton = skin["skeleton"] as? Int ?? common
+            }
             guard infos.indices.contains(skeleton),
                   Self.commonAncestor(of: joints + [skeleton], parents: parentList) == skeleton else { throw LoadError.badFormat }
             var inverse: [NSValue] = []

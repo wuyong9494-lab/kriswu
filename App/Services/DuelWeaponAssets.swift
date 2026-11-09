@@ -50,7 +50,19 @@ final class DuelWeaponCharacterAsset {
         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
             throw DuelWeaponAssets.AssetError.integrity
         }
-        let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true)
+        // These two byte-verified exports include node 0 ("skeleton") in the
+        // skin's joints, but declare its child node 1 ("Armature") as the root.
+        // SceneKit needs the common ancestor of every joint. Correct only that
+        // declaration in memory; preserve the original hierarchy, joint order,
+        // inverse binds, animation channels, and authenticated source bytes.
+        let correctedExports: Set<String> = [
+            "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+            "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f"
+        ]
+        let corrections: [Int: GLTFModel.SkinRootCorrection] = correctedExports.contains(profile.sha256)
+            ? [0: .init(declared: 1, corrected: 0)] : [:]
+        let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
+                                  skinRootCorrections: corrections)
         let expected = Set(profile.clips.map(\.name))
         guard model.hasSkinning, expected.isSubset(of: Set(model.clips.keys)),
               ["pelvis", "head", "hand_l", "hand_r", "foot_l", "foot_r", "weapon_l", "weapon_r"].allSatisfy({ model.node(named: $0) != nil }),
