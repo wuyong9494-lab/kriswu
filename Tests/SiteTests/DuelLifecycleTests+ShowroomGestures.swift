@@ -11,7 +11,7 @@ extension DuelLifecycleTests {
         let lobby = DuelLobbySceneView(hero: .ember)
         defer { lobby.shutdown() }
         lobby.frame = CGRect(x: 0, y: 0, width: 400, height: 280)
-        let pan = try XCTUnwrap(lobby.gestureRecognizers?.compactMap { $0 as? UIPanGestureRecognizer }.first)
+        let pan = try XCTUnwrap(lobby.gestureRecognizers?.compactMap { $0 as? UIPanGestureRecognizer }.first(where: { $0.delegate === lobby }))
         let delegate = try XCTUnwrap(pan.delegate)
         XCTAssertTrue((delegate as AnyObject) === lobby)
         XCTAssertEqual(pan.maximumNumberOfTouches, 1)
@@ -40,7 +40,7 @@ extension DuelLifecycleTests {
     @objc func testShowroomPinchStillBeginsAndShutdownRemovesGestureBindings() throws {
         let lobby = DuelLobbySceneView(hero: .liu)
         defer { lobby.shutdown() }
-        let pinch = try XCTUnwrap(lobby.gestureRecognizers?.compactMap { $0 as? UIPinchGestureRecognizer }.first)
+        let pinch = try XCTUnwrap(lobby.gestureRecognizers?.compactMap { $0 as? UIPinchGestureRecognizer }.first(where: { $0.delegate === lobby }))
         let delegate = try XCTUnwrap(pinch.delegate)
         XCTAssertTrue((delegate as AnyObject) === lobby)
         XCTAssertEqual(delegate.gestureRecognizerShouldBegin?(pinch), Optional(true),
