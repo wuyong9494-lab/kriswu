@@ -92,12 +92,45 @@ final class DuelWeaponCharacterInstance {
     let asset: DuelWeaponCharacterAsset
     let instance: GLTFModel.Instance
     private var pose: GLTFModel.Pose
+    private var previousClip: String?
+    private var idleBlendSource: GLTFModel.Pose?
+    private var idleBlendStartTick = 0
+    private static let idleBlendTicks = 6
+
     init(_ asset: DuelWeaponCharacterAsset) {
         self.asset = asset; instance = asset.model.instantiate(); pose = asset.model.restPose
         instance.root.name = "duel.equipped.\(asset.profile.id)"
     }
     func apply(_ selection: DuelWeaponPose) {
+        // Smooth recovery-to-idle only in the displayed skeleton. Source clips,
+        // combat timing and collision sampling are deliberately untouched.
+        // Simulation ticks prevent repeated display callbacks advancing a blend.
+        if selection.clip != previousClip {
+            if selection.clip == asset.profile.roles["idle"], previousClip != nil {
+                idleBlendSource = pose
+                idleBlendStartTick = selection.tick
+            } else {
+                idleBlendSource = nil
+            }
+            previousClip = selection.clip
+        }
         asset.sample(selection, into: &pose)
+        if let source = idleBlendSource {
+            let elapsed = selection.tick - idleBlendStartTick
+            if elapsed < 0 || elapsed >= Self.idleBlendTicks {
+                idleBlendSource = nil
+            } else {
+                let t = Float(elapsed + 1) / Float(Self.idleBlendTicks)
+                let eased = t * t * (3 - 2 * t)
+                for index in asset.model.animated {
+                    pose.translation[index] = simd_mix(source.translation[index], pose.translation[index],
+                                                       SIMD3<Float>(repeating: eased))
+                    pose.rotation[index] = simd_slerp(source.rotation[index], pose.rotation[index], eased)
+                    pose.scale[index] = simd_mix(source.scale[index], pose.scale[index],
+                                                 SIMD3<Float>(repeating: eased))
+                }
+            }
+        }
         for index in asset.model.animated { instance.nodes[index].simdTransform = pose.transform(index) }
     }
     func pose(_ fighter: DuelGame.Fighter, root: SCNNode) {
