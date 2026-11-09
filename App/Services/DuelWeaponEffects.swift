@@ -86,6 +86,11 @@ final class DuelWeaponEffects {
     private var sequence = 0
     private(set) var emittedSampleCount = 0
     var retainedTrailCount: Int { trails.count }
+    /// Runtime trails are added to this exact private node. A same-named
+    /// replacement under the prepared root cannot make a detached owner ready.
+    func hasLiveContainer(attachedTo root: SCNNode) -> Bool {
+        !ended && container.parent === root
+    }
     var sourceTextureCount: Int { textures.count }
     var renderedVertexCount: Int {
         trails.reduce(0) { sum, trail in

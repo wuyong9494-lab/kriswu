@@ -11,6 +11,8 @@ final class DuelWeaponAssets {
     let catalog: DuelWeaponCatalog
     let directory: URL
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
+    private(set) var belongsToVerifiedPreparation = false
+    func bindVerifiedPreparation() { belongsToVerifiedPreparation = true }
     static func catalogURL(bundle: Bundle = .main) -> URL? {
         bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json") ??
             bundle.url(forResource: "SF3_DistinctFighters", withExtension: "json", subdirectory: "FighterPrivate")
@@ -36,6 +38,9 @@ final class DuelWeaponAssets {
         let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"), profile: profile)
         characters[hero] = value; return value
     }
+    /// Cache-only access for an already verified network owner. A miss never
+    /// reopens a file or substitutes a newly loaded object.
+    func loadedCharacter(for hero: DuelGame.Hero) -> DuelWeaponCharacterAsset? { characters[hero] }
     func releaseCharacter(for hero: DuelGame.Hero) { characters.removeValue(forKey: hero) }
     func releaseCharacters() { characters.removeAll() }
     static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }

@@ -41,6 +41,8 @@ final class DuelWorldView: SCNView {
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
     private(set) var stageAsset: DuelStageAsset?
+    private(set) var verifiedEffectsRoot: SCNNode?
+    private(set) var verifiedStageRoot: SCNNode?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private var trackedCameraX: Float = 5
     private var perspectiveDistance: Float = 7.7
@@ -58,7 +60,7 @@ final class DuelWorldView: SCNView {
     }
     /// Proves this mounted SCNView prepared its scene and, for equipped matches,
     /// the effect owners' complete shader/material templates. It is not a frame-
-    /// rate promise or proof of the still-separate verified resource ownership.
+    /// rate promise. The combined owner separately checks retained identities.
     struct PreparationReceipt: Equatable {
         let owner: UUID
         let initialScenePrepared: Bool
@@ -73,6 +75,7 @@ final class DuelWorldView: SCNView {
     private var preparingScene: SCNScene?
     private var preparationMounted = false
     private var preparationFinished = false
+    private(set) var usedActualScenePreparation = false
     #if DEBUG
     typealias TestPrepare = @MainActor ([Any], @escaping @MainActor (Bool) -> Void) -> Void
     var testingPrepare: TestPrepare?
@@ -85,6 +88,24 @@ final class DuelWorldView: SCNView {
     #endif
 
     func represents(_ candidate: DuelSession) -> Bool { session === candidate }
+
+    /// Recheck actual actor instances and the same stage/effect objects, not
+    /// just hero labels, URLs, fingerprints or earlier readiness flags.
+    var hasVerifiedResourceIdentity: Bool {
+        guard !ended, session.hasLiveVerifiedResources, let prepared = session.preparedResources,
+              let scene, let stageAsset, stageAsset === prepared.stage,
+              let verifiedStageRoot, verifiedStageRoot.parent === scene.rootNode,
+              let verifiedEffectsRoot, verifiedEffectsRoot === prepared.effectsRoot,
+              verifiedEffectsRoot.parent === scene.rootNode,
+              sourceEffects === prepared.sourceEffects, weaponEffects === prepared.weaponEffects,
+              weaponEffects?.hasLiveContainer(attachedTo: verifiedEffectsRoot) == true,
+              actors.count == 2, weaponAssets.count == Set(session.game.fighters.map(\.hero)).count else { return false }
+        return session.game.fighters.enumerated().allSatisfy { index, fighter in
+            guard let character = prepared.loadedCharacter(for: fighter.hero) else { return false }
+            return weaponAssets[fighter.hero] === character && actors[index].hasAttachedWeapon(character) &&
+                actors[index].root.parent === scene.rootNode
+        }
+    }
 
     func prepareNetworkScene(owner: UUID,
                              invalidated: (@MainActor (PreparationFailure) -> Void)? = nil,
@@ -117,7 +138,8 @@ final class DuelWorldView: SCNView {
         if window != nil { preparationMounted = true }
         guard preparingScene == nil, window != nil,
               bounds.width.isFinite, bounds.height.isFinite, bounds.width > 0, bounds.height > 0 else { return }
-        guard session.awaitingNetworkPreparation, let scene, pointOfView?.camera != nil else {
+        guard session.awaitingNetworkPreparation, let scene, pointOfView?.camera != nil,
+              !session.usesVerifiedPreparedResources || hasVerifiedResourceIdentity else {
             finishNetworkPreparation(owner: owner, success: false)
             return
         }
@@ -140,6 +162,7 @@ final class DuelWorldView: SCNView {
         #endif
         // SceneKit may complete on a rendering thread. UIKit/session ownership,
         // token checks and the one-shot callback always remain on MainActor.
+        usedActualScenePreparation = true
         prepare(objects, completionHandler: { [weak self] success in
             Task { @MainActor [weak self] in
                 self?.finishNetworkPreparation(owner: owner, success: success)
@@ -150,7 +173,8 @@ final class DuelWorldView: SCNView {
     private func finishNetworkPreparation(owner: UUID, success: Bool) {
         guard !ended, preparationOwner == owner, !preparationFinished else { return }
         guard window != nil, bounds.width > 0, bounds.height > 0,
-              session.awaitingNetworkPreparation, let preparingScene, scene === preparingScene else {
+              session.awaitingNetworkPreparation, let preparingScene, scene === preparingScene,
+              !session.usesVerifiedPreparedResources || hasVerifiedResourceIdentity else {
             failNetworkPreparation(.replaced)
             return
         }
@@ -174,6 +198,14 @@ final class DuelWorldView: SCNView {
     init(session: DuelSession, characterSource: CharacterSource = .bundled) {
         self.session = session
         super.init(frame: .zero, options: nil)
+        if session.usesVerifiedPreparedResources {
+            guard characterSource == .bundled, session.claimPreparedWorld(self) else {
+                // A rejected duplicate never touches the first renderer's roots,
+                // callbacks or assets. It cannot restart or reload a closed owner.
+                ended = true
+                return
+            }
+        }
         backgroundColor = UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
         antialiasingMode = .multisampling2X; preferredFramesPerSecond = 60
         isUserInteractionEnabled = false; isAccessibilityElement = false; accessibilityElementsHidden = true
@@ -203,7 +235,15 @@ final class DuelWorldView: SCNView {
                 if session.setup.originalWeapons {
                     do {
                         guard let assets = session.weaponAssets else { throw DuelWeaponAssets.AssetError.missing }
-                        weaponAssets[hero] = try assets.character(for: hero)
+                        if session.usesVerifiedPreparedResources {
+                            guard let character = session.preparedResources?.loadedCharacter(for: hero),
+                                  assets.loadedCharacter(for: hero) === character else {
+                                throw DuelWeaponAssets.AssetError.missing
+                            }
+                            weaponAssets[hero] = character
+                        } else {
+                            weaponAssets[hero] = try assets.character(for: hero)
+                        }
                     } catch { session.characterFailed() }
                 } else if characterSource == .bundled, let identity = DuelOriginalRigAsset.identity(for: hero),
                    let url = DuelOriginalRigAsset.bundledURL(for: identity) {
@@ -232,12 +272,20 @@ final class DuelWorldView: SCNView {
             self.weaponEffects?.setPaused(paused)
             if paused { self.stopClock() } else { self.startClock() }
         }
-        if session.setup.originalWeapons, let directory = session.weaponAssets?.directory {
-            do {
-                sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory)
-                weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
+        if session.setup.originalWeapons {
+            if session.usesVerifiedPreparedResources {
+                if let prepared = session.preparedResources, let root = prepared.effectsRoot,
+                   let source = prepared.sourceEffects, let weapon = prepared.weaponEffects {
+                    verifiedEffectsRoot = root; world.rootNode.addChildNode(root)
+                    sourceEffects = source; weaponEffects = weapon
+                } else { session.characterFailed() }
+            } else if let directory = session.weaponAssets?.directory {
+                do {
+                    sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory)
+                    weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
+                }
+                catch { session.characterFailed() }
             }
-            catch { session.characterFailed() }
             session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
             consumeFeedback(session.game, tick: 0)
         }
@@ -339,6 +387,7 @@ final class DuelWorldView: SCNView {
         pointOfView = nil
         SCNTransaction.commit()
         SCNTransaction.flush()
+        verifiedEffectsRoot = nil; verifiedStageRoot = nil
         actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
         // Report the renderer's precise reason after releasing its resources,
         // before the terminal session signal can report generic invalidation.
@@ -486,17 +535,27 @@ final class DuelWorldView: SCNView {
         node.position = SCNVector3(Float(box.minX + box.maxX) / 2000, Float(box.minY + box.maxY) / 2000, 0.65)
         node.scale = SCNVector3(Float(box.maxX - box.minX) / 1000, Float(box.maxY - box.minY) / 1000, 1)
     }
+    private func installStage(_ asset: DuelStageAsset, in root: SCNNode) {
+        stageAsset = asset
+        let stageRoot = asset.makeRoot()
+        if session.usesVerifiedPreparedResources { verifiedStageRoot = stageRoot }
+        root.addChildNode(stageRoot)
+        cameraBasePosition = SCNVector3(5, 2, 7.7)
+        pointOfView?.camera?.usesOrthographicProjection = false
+        pointOfView?.camera?.projectionDirection = .vertical
+        pointOfView?.camera?.fieldOfView = 35
+        pointOfView?.camera?.zFar = 350
+        pointOfView?.position = cameraBasePosition
+        pointOfView?.look(at: SCNVector3(5, 1.2, 0))
+    }
     private func buildStage(_ root: SCNNode) {
+        if session.usesVerifiedPreparedResources {
+            guard let asset = session.preparedResources?.stage else { session.characterFailed(); return }
+            installStage(asset, in: root)
+            return
+        }
         if let url = DuelStageAsset.bundledURL, let asset = try? DuelStageAsset(url: url) {
-            stageAsset = asset
-            root.addChildNode(asset.makeRoot())
-            cameraBasePosition = SCNVector3(5, 2, 7.7)
-            pointOfView?.camera?.usesOrthographicProjection = false
-            pointOfView?.camera?.projectionDirection = .vertical
-            pointOfView?.camera?.fieldOfView = 35
-            pointOfView?.camera?.zFar = 350
-            pointOfView?.position = cameraBasePosition
-            pointOfView?.look(at: SCNVector3(5, 1.2, 0))
+            installStage(asset, in: root)
             return
         }
         if session.committedConfiguration != nil {
@@ -552,6 +611,10 @@ private final class DuelActor {
     private let character: DuelCharacterInstance?
     private let original: DuelOriginalCombatInstance?
     private let weapon: DuelWeaponCharacterInstance?
+    func hasAttachedWeapon(_ asset: DuelWeaponCharacterAsset) -> Bool {
+        guard let weapon else { return false }
+        return weapon.asset === asset && weapon.instance.root.parent === root
+    }
     init(hero: DuelGame.Hero, asset: DuelCharacterAsset?, originalAsset: DuelOriginalRigAsset? = nil, weaponAsset: DuelWeaponCharacterAsset? = nil) {
         character = asset.map { DuelCharacterInstance($0) }
         original = originalAsset.map { DuelOriginalCombatInstance($0) }

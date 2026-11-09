@@ -125,9 +125,9 @@ struct DuelNetworkContentRecord: Codable, Equatable {
     }
 }
 
-/// An opt-in prerequisite for a FUTURE network loader, never a loaded match.
-/// Does not create DuelSession, own a clock/transport, call confirmLoaded, or start
-/// combat. The renderer must later load the exact configuration independently.
+/// Independently verified installed content identity. It owns no live resources.
+/// Use prepare to retain the exact verified objects for a single network session;
+/// neither API creates a session, confirms a barrier, or starts combat.
 @MainActor
 struct DuelNetworkCompatibilityIdentity {
     static let contentRecipe = "fighter-network-content-v1"
@@ -150,6 +150,14 @@ struct DuelNetworkCompatibilityIdentity {
     /// Use only trusted installed app resources, never manifests received from a
     /// peer. No fallback to procedural/legacy assets, profile names or semver.
     static func verify(bundle: Bundle = .main) throws -> Self {
+        let prepared = try prepare(bundle: bundle)
+        defer { prepared.release() }
+        return prepared.identity
+    }
+
+    /// Synchronous MainActor preflight. Run before a future room/start deadline;
+    /// this is not an asynchronous/cancellable GLTF loader or GPU-ready receipt.
+    static func prepare(bundle: Bundle = .main) throws -> DuelNetworkPreparedResources {
         guard let rulesURL = bundle.url(forResource: DuelNetworkRulesManifest.resourceName,
                                         withExtension: "json") else { throw Failure.missingRules }
         let rulesData = try read(rulesURL, maximum: DuelNetworkRulesManifest.maximumBytes)
@@ -159,13 +167,20 @@ struct DuelNetworkCompatibilityIdentity {
         let stageURL = bundle.url(forResource: "SF3_Palace_Exterior", withExtension: "glb") ??
             bundle.url(forResource: "SF3_Palace_Exterior", withExtension: "glb", subdirectory: "FighterPrivate")
         guard let stageURL else { throw Failure.missingStage }
-        return try verify(rules: rules, directory: catalogURL.deletingLastPathComponent(), stageURL: stageURL)
+        return try prepare(rules: rules, directory: catalogURL.deletingLastPathComponent(), stageURL: stageURL)
     }
 
     /// Explicit-directory seam for native tests / already installed resources.
     /// Pins cannot be overridden. The directory is authoritative for the catalog,
     /// characters, controls and effects, matching the equipped offline renderer.
     static func verify(rules: DuelNetworkRulesManifest, directory: URL, stageURL: URL) throws -> Self {
+        let prepared = try prepare(rules: rules, directory: directory, stageURL: stageURL)
+        defer { prepared.release() }
+        return prepared.identity
+    }
+
+    static func prepare(rules: DuelNetworkRulesManifest, directory: URL,
+                        stageURL: URL) throws -> DuelNetworkPreparedResources {
         let directory = directory.resolvingSymlinksInPath().standardizedFileURL
         var records: [DuelNetworkContentRecord] = []
         var observed: [(URL, DuelNetworkContentRecord)] = []
@@ -186,15 +201,28 @@ struct DuelNetworkCompatibilityIdentity {
         _ = try record(catalogURL, path: "catalog/SF3_DistinctFighters.json", maximum: 32_000_000,
                        hash: DuelWeaponAssets.catalogSHA256)
         let assets = try DuelWeaponAssets(directory: directory)
-        defer { assets.releaseCharacters() }
+        var transferred = false
+        var retainedControls: DuelSourceControlsView?
+        var retainedSourceEffects: DuelSourceEffects?
+        var retainedWeaponEffects: DuelWeaponEffects?
+        let root = SCNNode()
+        root.name = "duel.verified-effects"
+        defer {
+            if !transferred {
+                retainedControls?.cancelAll(notify: false)
+                retainedControls?.inputEnabled = false
+                retainedSourceEffects?.shutdown(); retainedWeaponEffects?.shutdown()
+                root.removeFromParentNode()
+                assets.releaseCharacters()
+            }
+        }
         for profile in assets.catalog.profiles {
             let name = profile.resourceName + ".glb"
             _ = try record(directory.appendingPathComponent(name), path: "characters/" + name,
                            maximum: 128_000_000, bytes: profile.bytes, hash: profile.sha256)
-            // The real loader additionally verifies skin, required nodes and clip
-            // channels/timing. No model or live scene is retained by this receipt.
+            // Retain exactly the loader objects whose skin/nodes/clip timing
+            // were verified. Later network presentation may only read this cache.
             _ = try assets.character(for: profile.hero)
-            assets.releaseCharacter(for: profile.hero)
         }
 
         // Do not copy the controls' private pin table. Its authoritative loader
@@ -207,6 +235,8 @@ struct DuelNetworkCompatibilityIdentity {
             _ = try record(url, path: "controls/SF3UI_\(name).png", maximum: 131_072)
         }
         let controls = DuelSourceControlsView(assetDirectory: directory)
+        retainedControls = controls
+        controls.inputEnabled = false
         guard controls.sourceArtAvailable, controls.loadedSpriteNames == controlNames else { throw Failure.controlsUnavailable }
 
         struct EffectFiles: Decodable {
@@ -232,14 +262,13 @@ struct DuelNetworkCompatibilityIdentity {
         }
         // Existing loaders check image/audio decoding, sampled curves, material
         // references and complete effect schemas. No emit/play/step call is made.
-        let root = SCNNode()
         let sourceEffects = try DuelSourceEffects(root: root, directory: directory)
-        defer { sourceEffects.shutdown() }
+        retainedSourceEffects = sourceEffects
         let weaponEffects = try DuelWeaponEffects(root: root, directory: directory)
-        defer { weaponEffects.shutdown() }
+        retainedWeaponEffects = weaponEffects
         _ = try record(stageURL, path: "stage/SF3_Palace_Exterior.glb", maximum: 32_000_000,
                        hash: DuelStageAsset.digest)
-        _ = try DuelStageAsset(url: stageURL, kind: .palace)
+        let stage = try DuelStageAsset(url: stageURL, kind: .palace)
 
         // Detect ordinary replacement during verification. Installed signed
         // bundle immutability is the trust boundary, not an adversarial file store.
@@ -249,7 +278,14 @@ struct DuelNetworkCompatibilityIdentity {
                 throw Failure.invalidResource(entry.path)
             }
         }
-        return Self(rules: rules, catalog: assets.catalog, records: records)
+        guard records.count == 62, assets.catalog.profiles.count == 2 else {
+            throw Failure.invalidResource("complete-content")
+        }
+        let identity = Self(rules: rules, catalog: assets.catalog, records: records)
+        let prepared = DuelNetworkPreparedResources(identity: identity, assets: assets, stage: stage,
+            controls: controls, sourceEffects: sourceEffects, weaponEffects: weaponEffects, effectsRoot: root)
+        transferred = true
+        return prepared
     }
 
     private static func read(_ url: URL, maximum: Int) throws -> Data {
@@ -261,5 +297,136 @@ struct DuelNetworkCompatibilityIdentity {
         let data = try Data(contentsOf: url)
         guard data.count == count else { throw Failure.invalidResource(url.lastPathComponent) }
         return data
+    }
+}
+
+/// Only the verifier in this file can create a production owner. Its optional
+/// payload is discarded at release even when a coordinator retains this token.
+/// All access, including lifecycle reservations, is confined to MainActor.
+@MainActor
+final class DuelNetworkPreparedResources {
+    enum Failure: Error, Equatable { case released, alreadyClaimed, invalidResources }
+    private struct Payload {
+        let assets: DuelWeaponAssets
+        let characters: [DuelGame.Hero: DuelWeaponCharacterAsset]
+        let stage: DuelStageAsset
+        let controls: DuelSourceControlsView
+        let sourceEffects: DuelSourceEffects
+        let weaponEffects: DuelWeaponEffects
+        let effectsRoot: SCNNode
+    }
+    let identity: DuelNetworkCompatibilityIdentity
+    private var payload: Payload?
+    private var sessionClaim: UUID?
+    private var mountClaim: UUID?
+    private var worldClaimed = false
+    private var controlsClaimed = false
+    private weak var mountedWorld: DuelWorldView?
+    private weak var mountedControls: DuelNetworkControlsView?
+    private var sessionInvalidated: (() -> Void)?
+    private var mountInvalidated: (() -> Void)?
+
+    fileprivate init(identity: DuelNetworkCompatibilityIdentity, assets: DuelWeaponAssets,
+                     stage: DuelStageAsset, controls: DuelSourceControlsView,
+                     sourceEffects: DuelSourceEffects, weaponEffects: DuelWeaponEffects,
+                     effectsRoot: SCNNode) {
+        self.identity = identity
+        assets.bindVerifiedPreparation()
+        var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
+        for profile in identity.catalog.profiles {
+            characters[profile.hero] = assets.loadedCharacter(for: profile.hero)
+        }
+        payload = Payload(assets: assets, characters: characters, stage: stage, controls: controls,
+                          sourceEffects: sourceEffects, weaponEffects: weaponEffects, effectsRoot: effectsRoot)
+    }
+    var isReleased: Bool { payload == nil }
+    var assets: DuelWeaponAssets? { payload?.assets }
+    var stage: DuelStageAsset? { payload?.stage }
+    var controls: DuelSourceControlsView? { payload?.controls }
+    var sourceEffects: DuelSourceEffects? { payload?.sourceEffects }
+    var weaponEffects: DuelWeaponEffects? { payload?.weaponEffects }
+    var effectsRoot: SCNNode? { payload?.effectsRoot }
+    func loadedCharacter(for hero: DuelGame.Hero) -> DuelWeaponCharacterAsset? {
+        guard let payload, let character = payload.characters[hero],
+              payload.assets.loadedCharacter(for: hero) === character else { return nil }
+        return character
+    }
+    var hasExactResources: Bool {
+        guard let payload, payload.assets.catalog == identity.catalog,
+              payload.characters.count == 2, payload.stage.kind == .palace,
+              payload.controls.sourceArtAvailable,
+              !payload.sourceEffects.preparationObjects().isEmpty,
+              !payload.weaponEffects.preparationObjects().isEmpty else { return false }
+        return identity.catalog.profiles.allSatisfy { profile in
+            guard let character = loadedCharacter(for: profile.hero) else { return false }
+            return character.profile == profile
+        }
+    }
+    /// Reserve before constructing any session that could release these assets.
+    /// A rejected duplicate must never construct/shut down a second session.
+    func reserveSession() throws -> UUID {
+        guard payload != nil else { throw Failure.released }
+        guard sessionClaim == nil else { throw Failure.alreadyClaimed }
+        guard hasExactResources else { release(); throw Failure.invalidResources }
+        let token = UUID(); sessionClaim = token
+        return token
+    }
+    func bindSession(_ token: UUID, invalidated: @escaping () -> Void) -> Bool {
+        guard isLiveSession(token), sessionInvalidated == nil else { return false }
+        sessionInvalidated = invalidated
+        return true
+    }
+    func isLiveSession(_ token: UUID) -> Bool { payload != nil && sessionClaim == token }
+    func claimMount(session token: UUID, owner: UUID, invalidated: @escaping () -> Void) -> Bool {
+        guard isLiveSession(token), hasExactResources, mountClaim == nil else { return false }
+        mountClaim = owner; mountInvalidated = invalidated
+        return true
+    }
+    func isLiveMount(session token: UUID, owner: UUID) -> Bool {
+        isLiveSession(token) && mountClaim == owner && hasExactResources
+    }
+    func claimWorld(_ world: DuelWorldView, session token: UUID, owner: UUID) -> Bool {
+        guard isLiveMount(session: token, owner: owner), !worldClaimed,
+              payload?.effectsRoot.parent == nil else { return false }
+        worldClaimed = true; mountedWorld = world
+        return true
+    }
+    var canClaimControls: Bool {
+        payload != nil && mountClaim != nil && !controlsClaimed && payload?.controls.superview == nil
+    }
+    func claimControls(_ view: DuelNetworkControlsView, session token: UUID, owner: UUID) -> Bool {
+        guard isLiveMount(session: token, owner: owner), canClaimControls,
+              view.controls === payload?.controls else { return false }
+        controlsClaimed = true; mountedControls = view
+        return true
+    }
+    func owns(world: DuelWorldView, controls: DuelNetworkControlsView,
+              session token: UUID, owner: UUID) -> Bool {
+        isLiveMount(session: token, owner: owner) && mountedWorld === world && mountedControls === controls &&
+            controls.controls === payload?.controls
+    }
+    func release() {
+        guard payload != nil else { return }
+        // Invalidate every claim and detach the payload before any reentrant
+        // UIKit, observer, session or preparation teardown callback can run.
+        var old = payload
+        payload = nil
+        let world = mountedWorld, controlsView = mountedControls
+        let invalidateMount = mountInvalidated, invalidateSession = sessionInvalidated
+        mountedWorld = nil; mountedControls = nil
+        mountInvalidated = nil; sessionInvalidated = nil
+        old?.controls.onDirection = nil; old?.controls.onAction = nil
+        old?.controls.onActionCancelled = nil; old?.controls.onInputCancelled = nil
+        old?.controls.cancelAll(notify: false); old?.controls.inputEnabled = false
+        controlsView?.shutdown()
+        old?.sourceEffects.shutdown(); old?.weaponEffects.shutdown()
+        old?.effectsRoot.removeFromParentNode()
+        old?.assets.releaseCharacters()
+        old?.controls.removeFromSuperview()
+        // The world drops its own character/stage references before reporting
+        // failure. Do not keep another payload copy alive across that callback.
+        old = nil
+        world?.shutdown()
+        invalidateMount?(); invalidateSession?()
     }
 }

@@ -193,6 +193,11 @@ final class DuelSession: ObservableObject {
     private var taps: DuelGame.Buttons = []
     private var weaponInput = DuelWeaponInput()
     private(set) var weaponAssets: DuelWeaponAssets?
+    private(set) var preparedResources: DuelNetworkPreparedResources?
+    private var preparedSessionClaim: UUID?
+    /// Remains true after release so a closed full-path session cannot fall back
+    /// to a Bundle.main load when UIKit delivers a late view construction.
+    private(set) var usesVerifiedPreparedResources = false
     @Published private(set) var loadError: String?
     @Published private(set) var paused = false
     @Published var showBoxes = false
@@ -235,13 +240,16 @@ final class DuelSession: ObservableObject {
     }
 
     private init(presentation game: DuelGame, localFighterIndex: Int,
-                 assets: DuelWeaponAssets?, configuration: DuelNetworkStartBarrier.Configuration?) throws {
+                 assets: DuelWeaponAssets?, configuration: DuelNetworkStartBarrier.Configuration?,
+                 prepared: DuelNetworkPreparedResources? = nil, claim: UUID? = nil) throws {
         guard (0...1).contains(localFighterIndex) else { throw PresentationFailure.invalidLocalFighterIndex }
         guard game.fighters.count == 2 else { throw PresentationFailure.invalidRoster }
         setup = .init(hero: game.fighters[localFighterIndex].hero, difficulty: game.difficulty,
                       mode: game.mode, originalWeapons: game.weaponFight != nil)
         driver = .externalAuthoritative; self.localFighterIndex = localFighterIndex
         committedConfiguration = configuration; self.game = game; weaponAssets = assets
+        preparedResources = prepared; preparedSessionClaim = claim
+        usesVerifiedPreparedResources = prepared != nil
         paused = true
         observeInterruptions()
     }
@@ -253,6 +261,9 @@ final class DuelSession: ObservableObject {
     static func networkPresentation(committed barrier: DuelNetworkStartBarrier,
                                     verified identity: DuelNetworkCompatibilityIdentity,
                                     assets: DuelWeaponAssets) throws -> DuelSession {
+        // The old seam may not adopt the manager of a retained verifier owner.
+        // Otherwise its independent teardown could erase a live full-path match.
+        guard !assets.belongsToVerifiedPreparation else { throw PresentationFailure.invalidAssets }
         let configuration = try DuelNetworkCombatProtocol.configuration(
             from: barrier, host: barrier.localPlayerID == barrier.hostID,
             loadedCompatibility: identity.compatibility, catalog: assets.catalog)
@@ -266,6 +277,76 @@ final class DuelSession: ObservableObject {
         guard game.weaponFight != nil else { throw PresentationFailure.invalidAssets }
         return try DuelSession(presentation: game, localFighterIndex: barrier.localPlayerID == barrier.hostID ? 0 : 1,
                                assets: assets, configuration: configuration)
+    }
+
+    /// Full production path: consume a single reservation of the verifier's
+    /// live objects. There are no file loads or cache-miss reloads in this factory.
+    static func networkPresentation(committed barrier: DuelNetworkStartBarrier,
+                                    prepared: DuelNetworkPreparedResources) throws -> DuelSession {
+        // A duplicate call throws here, before constructing a session whose
+        // failure/teardown could otherwise release the first session's assets.
+        let claim = try prepared.reserveSession()
+        do {
+            guard let assets = prepared.assets else { throw PresentationFailure.invalidAssets }
+            let configuration = try DuelNetworkCombatProtocol.configuration(
+                from: barrier, host: barrier.localPlayerID == barrier.hostID,
+                loadedCompatibility: prepared.identity.compatibility, catalog: assets.catalog)
+            guard prepared.hasExactResources, prepared.identity.catalog == assets.catalog else {
+                throw PresentationFailure.invalidAssets
+            }
+            for choice in [configuration.host.choice, configuration.guest.choice] {
+                guard let character = prepared.loadedCharacter(for: choice.hero),
+                      character.profile == assets.catalog.profile(for: choice.hero),
+                      character.profile.id == choice.weapon.rawValue else { throw PresentationFailure.invalidAssets }
+            }
+            let game = DuelGame(hero: configuration.host.choice.hero, difficulty: configuration.difficulty,
+                mode: configuration.mode, seed: configuration.seed,
+                opponentHero: configuration.guest.choice.hero, weaponCatalog: assets.catalog)
+            guard game.weaponFight != nil else { throw PresentationFailure.invalidAssets }
+            let session = try DuelSession(presentation: game,
+                localFighterIndex: barrier.localPlayerID == barrier.hostID ? 0 : 1,
+                assets: assets, configuration: configuration, prepared: prepared, claim: claim)
+            guard prepared.bindSession(claim, invalidated: { [weak session] in session?.shutdown() }),
+                  session.hasLiveVerifiedResources else {
+                session.shutdown()
+                throw PresentationFailure.invalidAssets
+            }
+            return session
+        } catch {
+            prepared.release()
+            throw error
+        }
+    }
+
+    var hasLiveVerifiedResources: Bool {
+        guard !ended, let preparedResources, let preparedSessionClaim,
+              preparedResources.isLiveSession(preparedSessionClaim), preparedResources.hasExactResources,
+              let assets = weaponAssets, preparedResources.assets === assets,
+              let configuration = committedConfiguration,
+              configuration.compatibility == preparedResources.identity.compatibility,
+              assets.catalog == preparedResources.identity.catalog,
+              let fight = game.weaponFight, fight.profiles.count == 2 else { return false }
+        let choices = [configuration.host.choice, configuration.guest.choice]
+        return choices.enumerated().allSatisfy { index, choice in
+            guard let character = preparedResources.loadedCharacter(for: choice.hero) else { return false }
+            return game.fighters[index].hero == choice.hero && character.profile == fight.profiles[index] &&
+                character.profile.id == choice.weapon.rawValue
+        }
+    }
+    func claimPreparedWorld(_ world: DuelWorldView) -> Bool {
+        guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
+              let networkMountOwner else { return false }
+        return preparedResources.claimWorld(world, session: preparedSessionClaim, owner: networkMountOwner)
+    }
+    func claimPreparedControls(_ controls: DuelNetworkControlsView, owner: UUID) -> Bool {
+        guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
+              networkMountOwner == owner else { return false }
+        return preparedResources.claimControls(controls, session: preparedSessionClaim, owner: owner)
+    }
+    func ownsVerifiedMount(world: DuelWorldView, controls: DuelNetworkControlsView, owner: UUID) -> Bool {
+        guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
+              networkMountOwner == owner else { return false }
+        return preparedResources.owns(world: world, controls: controls, session: preparedSessionClaim, owner: owner)
     }
 
     #if DEBUG
@@ -302,6 +383,11 @@ final class DuelSession: ObservableObject {
     }
     func claimNetworkMount(_ owner: UUID, invalidated: @escaping () -> Void) -> Bool {
         guard awaitingNetworkPreparation, networkMountOwner == nil else { return false }
+        if usesVerifiedPreparedResources {
+            guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
+                  preparedResources.claimMount(session: preparedSessionClaim, owner: owner,
+                                                invalidated: invalidated) else { return false }
+        }
         networkMountOwner = owner
         pendingNetworkPreparation = (owner, invalidated)
         return true
@@ -544,7 +630,13 @@ final class DuelSession: ObservableObject {
         let preparationInvalidated = takePendingNetworkPreparationInvalidation()
         pause(); renderPause = nil; inputReset = nil; didSimulateStep = nil; didReset = nil
         didRequestAuthoritativeStop = nil
-        weaponAssets?.releaseCharacters()
+        if usesVerifiedPreparedResources {
+            let prepared = preparedResources
+            preparedResources = nil; preparedSessionClaim = nil
+            prepared?.release()
+        } else {
+            weaponAssets?.releaseCharacters()
+        }
         // UIKit can retain the closed SceneKit view and its session until a
         // later event. Release the resource owner at teardown, not at deinit.
         weaponAssets = nil
@@ -562,8 +654,11 @@ private final class DuelInterruptionObserver {
 /// Retained before mounting, independently of coordinator.presentation. A
 /// successful milestone is renderer/control preparation, not verified loading
 /// or permission to start. The loader must retain this owner until teardown.
+// The explicit publisher is actor-confined too. Xcode 26's Swift 6.2+
+// isolated conformance keeps its ObservableObject witness on MainActor rather
+// than exporting a non-Sendable publisher through a nonisolated requirement.
 @MainActor
-final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
+final class DuelNetworkMatchPreparation: @MainActor ObservableObject, Identifiable {
     enum Failure: Error, Equatable {
         case invalidSession, alreadyOwned, rendererFailed, controlsUnavailable, detached, replaced
     }
@@ -572,8 +667,8 @@ final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
         let initialScenePrepared: Bool
         let runtimeEffectVariantsPrepared: Bool
         let controlsPrepared: Bool
-        /// The existing world still reopens Bundle.main for the stage. Do not
-        /// forward this receipt as the coordinator's full resource-ready result.
+        /// True only for a live single-session verifier owner, exact retained
+        /// objects and attached roots after actual scene/control preparation.
         let verifiedResourceOwnershipComplete: Bool
     }
     enum State: Equatable { case waitingForMount, preparing, prepared(Receipt), failed(Failure), cancelled }
@@ -592,12 +687,29 @@ final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
     private var completing = false
     private(set) var permitsFixture = false
     private var closed = false
+    private let requiresVerifiedOwnership: Bool
 
+    init(session: DuelSession, prepared: DuelNetworkPreparedResources,
+         invalidated: (@MainActor (Failure) -> Void)? = nil,
+         completion: @escaping Completion) throws {
+        guard session.awaitingNetworkPreparation, session.preparedResources === prepared,
+              session.hasLiveVerifiedResources else { throw Failure.invalidSession }
+        self.session = session; self.completion = completion; self.invalidated = invalidated
+        requiresVerifiedOwnership = true
+        guard session.claimNetworkMount(id, invalidated: { [weak self] in self?.fail(.invalidSession) }) else {
+            throw Failure.alreadyOwned
+        }
+    }
+
+    /// Retained legacy seam. It can prepare a scene but never issue a full
+    /// verified-resource receipt. Full-path sessions require the owner overload.
     init(session: DuelSession, invalidated: (@MainActor (Failure) -> Void)? = nil,
          completion: @escaping Completion) throws {
-        guard session.awaitingNetworkPreparation, session.committedConfiguration != nil,
-              session.weaponAssets != nil, session.game.weaponFight != nil else { throw Failure.invalidSession }
+        guard session.awaitingNetworkPreparation, !session.usesVerifiedPreparedResources,
+              session.committedConfiguration != nil, session.weaponAssets != nil,
+              session.game.weaponFight != nil else { throw Failure.invalidSession }
         self.session = session; self.completion = completion; self.invalidated = invalidated
+        requiresVerifiedOwnership = false
         guard session.claimNetworkMount(id, invalidated: { [weak self] in self?.fail(.invalidSession) }) else {
             throw Failure.alreadyOwned
         }
@@ -605,8 +717,9 @@ final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
     #if DEBUG
     init(testing session: DuelSession, invalidated: (@MainActor (Failure) -> Void)? = nil,
          completion: @escaping Completion) throws {
-        guard session.awaitingNetworkPreparation else { throw Failure.invalidSession }
+        guard session.awaitingNetworkPreparation, !session.usesVerifiedPreparedResources else { throw Failure.invalidSession }
         self.session = session; self.completion = completion; self.invalidated = invalidated; permitsFixture = true
+        requiresVerifiedOwnership = false
         guard session.claimNetworkMount(id, invalidated: { [weak self] in self?.fail(.invalidSession) }) else {
             throw Failure.alreadyOwned
         }
@@ -645,6 +758,9 @@ final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
     }
     func attach(_ view: DuelNetworkControlsView) -> Bool {
         guard !closed, controls == nil, view.ownerID == id else { fail(.replaced); return false }
+        if requiresVerifiedOwnership, !session.claimPreparedControls(view, owner: id) {
+            fail(.replaced); return false
+        }
         controls = view
         return true
     }
@@ -663,6 +779,8 @@ final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
         guard controlsPrepared, let sceneReceipt, let world, let controls else { return }
         guard world.hasPreparedSceneIdentity(owner: id) else { fail(.replaced); return }
         guard world.hasUsableMountedBounds, controls.currentPreparationReady else { return }
+        let verified = verifiedOwnership(world: world, controls: controls, sceneReceipt: sceneReceipt)
+        guard !requiresVerifiedOwnership || verified else { fail(.replaced); return }
         // Reserve this completion before publishing. Observers may synchronously
         // mutate layout/scene/session or cancel; revalidate after they return.
         guard let callback = completion else { return }
@@ -670,17 +788,28 @@ final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
         defer { completing = false }
         let receipt = Receipt(owner: id, initialScenePrepared: sceneReceipt.initialScenePrepared,
             runtimeEffectVariantsPrepared: sceneReceipt.runtimeEffectVariantsPrepared,
-            controlsPrepared: true, verifiedResourceOwnershipComplete: false)
+            controlsPrepared: true, verifiedResourceOwnershipComplete: verified)
         state = .prepared(receipt); objectWillChange.send()
         guard !closed else { return }
         guard session.awaitingNetworkPreparation else { fail(.invalidSession); return }
         guard world.hasPreparedSceneIdentity(owner: id), world.hasUsableMountedBounds,
-              controls.currentPreparationReady else { fail(.replaced); return }
+              controls.currentPreparationReady,
+              !requiresVerifiedOwnership || verifiedOwnership(world: world, controls: controls,
+                                                               sceneReceipt: sceneReceipt) else {
+            fail(.replaced); return
+        }
         completion = nil
         // The completion may synchronously install the coordinator stop hook
         // and start the match. This pending-only hook must no longer own it.
         session.releaseNetworkPreparation(id)
         callback(.success(receipt))
+    }
+    private func verifiedOwnership(world: DuelWorldView, controls: DuelNetworkControlsView,
+                                   sceneReceipt: DuelWorldView.PreparationReceipt) -> Bool {
+        requiresVerifiedOwnership && !permitsFixture && sceneReceipt.initialScenePrepared &&
+            sceneReceipt.runtimeEffectVariantsPrepared && world.usedActualScenePreparation &&
+            session.ownsVerifiedMount(world: world, controls: controls, owner: id) &&
+            world.hasVerifiedResourceIdentity && controls.hasVerifiedResourceIdentity
     }
     func fail(_ failure: Failure) {
         guard !closed else { return }
@@ -943,8 +1072,18 @@ final class DuelNetworkControlsView: UIView {
     private var acceptsFixtureArt = false
 
     init(preparation: DuelNetworkMatchPreparation) {
-        ownerID = preparation.id; session = preparation.session; self.preparation = preparation
-        controls = DuelSourceControlsView(assetDirectory: preparation.session.weaponAssets?.directory)
+        let state = preparation.session
+        ownerID = preparation.id; session = state; self.preparation = preparation
+        if state.usesVerifiedPreparedResources {
+            // Never load again on a missing/claimed/released full-path owner.
+            // Empty art is a fail-closed placeholder, not a production fallback.
+            if let prepared = state.preparedResources, prepared.canClaimControls,
+               let verifiedControls = prepared.controls {
+                controls = verifiedControls
+            } else { controls = DuelSourceControlsView(images: [:]) }
+        } else {
+            controls = DuelSourceControlsView(assetDirectory: state.weaponAssets?.directory)
+        }
         super.init(frame: .zero)
         configure(preparation)
     }
@@ -993,8 +1132,12 @@ final class DuelNetworkControlsView: UIView {
         guard currentPreparationReady else { return }
         preparation.controlsDidPrepare(self)
     }
+    var hasVerifiedResourceIdentity: Bool {
+        !ended && !acceptsFixtureArt && session.hasLiveVerifiedResources &&
+            controls === session.preparedResources?.controls && controls.superview === self
+    }
     var currentPreparationReady: Bool {
-        !ended && window != nil && controls.window != nil && usableLayout &&
+        !ended && window != nil && controls.window != nil && controls.superview === self && usableLayout &&
             (controls.sourceArtAvailable || acceptsFixtureArt) &&
             controls.onDirection != nil && controls.onAction != nil &&
             controls.onActionCancelled != nil && controls.onInputCancelled != nil &&
