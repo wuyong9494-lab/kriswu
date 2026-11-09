@@ -1047,9 +1047,18 @@ final class AppStore: ObservableObject {
             guard canContinueSync(input) else { return false }
             let hadData = !schedule.isEmpty && !settings.nextSyncIsBaseline
             settings.nextSyncIsBaseline = false
-            let changes = apply(result, publishedBefore: publishedBefore,
-                                rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
+            let parsedChanges = apply(result, publishedBefore: publishedBefore,
+                                      rosterDaysBefore: Set(rosterBefore.values.flatMap(\.keys)))
             identifyMeIfNeeded()
+            // Do not announce a personal group change that contradicts the
+            // newly merged, published team roster. This is the same source of
+            // truth used by the corrected Today card.
+            let changes = parsedChanges.filter { change in
+                guard publishedDays.contains(change.day), let me = myRosterName else { return true }
+                let current = roster[me]?[change.day]
+                guard current != nil || roster.values.contains(where: { $0[change.day] != nil }) else { return true }
+                return RosterMerger.sameMeaning(change.new, current, matcher: matcher)
+            }
             // 自动认出使用者也会通过 setMe 排队新同步，由新一轮按明确的名字继续。
             guard canContinueSync(input) else { return false }
             // 预演打分、「快轮到你」都要用遥测推算：先在后台算好
