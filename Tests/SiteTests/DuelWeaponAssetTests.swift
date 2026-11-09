@@ -288,6 +288,16 @@ final class DuelWeaponAssetTests: XCTestCase {
             var unblended = character.model.restPose
             character.sample(idleStart, into: &unblended)
             actor.apply(idleStart)
+            // Re-rendering the same simulation frame must not advance the
+            // transition or accumulate a second interpolation.
+            let firstFrame = character.model.animated.map { actor.instance.nodes[$0].simdTransform }
+            actor.apply(idleStart)
+            for (offset, index) in character.model.animated.enumerated() {
+                let expected = firstFrame[offset]
+                let actual = actor.instance.nodes[index].simdTransform
+                XCTAssertLessThan(simd_length(actual.columns.3 - expected.columns.3), 0.00001,
+                                  "\(hero): repeated frame must keep bone translation stable")
+            }
             let firstDistances = character.model.animated.map { index in
                 simd_length(actor.instance.nodes[index].simdOrientation.vector - unblended.rotation[index].vector)
             }
