@@ -20,6 +20,23 @@ final class DuelSourceControlsTests: XCTestCase {
                        y: layout.joystick.midY - CGFloat(y) * 180 * layout.scale)
     }
 
+    func testProneOpponentFadesOnlyArtworkAndRestoresFullControlOpacity() throws {
+        let view = controls()
+        let original = view.layoutSnapshot
+        let button = try XCTUnwrap(view.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == "duel.control.weapon" })
+        let initialAlpha = button.alpha
+        XCTAssertGreaterThan(initialAlpha, 0)
+        view.opponentProne = true
+        XCTAssertEqual(button.alpha, initialAlpha * 0.35, accuracy: 0.0001)
+        XCTAssertEqual(view.layoutSnapshot.actions[.weapon], original.actions[.weapon])
+        XCTAssertEqual(view.layoutSnapshot.actionTouch[.weapon], original.actionTouch[.weapon])
+        XCTAssertTrue(button.isEnabled)
+        XCTAssertEqual(button.accessibilityIdentifier, "duel.control.weapon")
+        view.opponentProne = false
+        XCTAssertEqual(button.alpha, initialAlpha, accuracy: 0.0001)
+    }
+
     func testSourceLayoutKeepsItsDiamondAndSafeMarginsOnPhonesAndTablet() throws {
         let cases: [(CGSize, UIEdgeInsets)] = [
             (CGSize(width: 956, height: 440), UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)),
