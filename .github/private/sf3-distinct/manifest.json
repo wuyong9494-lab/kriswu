@@ -1,0 +1,476 @@
+{
+  "version": 1,
+  "purpose": "asset:SF3_DistinctFighters.zip",
+  "bytes": 16499513,
+  "sha256": "1b228965b08c5d1b6cc659426722705a1ea734a906e183082d6556bde3fc18a8",
+  "cipher_sha256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416",
+  "parts": [
+    {
+      "file": "distinct.pack.enc.000",
+      "bytes": 524288,
+      "sha256": "6e035b1e4440f735d09424822e89236b2341ac5bcb4b585b7d1fa8ad90ed9260"
+    },
+    {
+      "file": "distinct.pack.enc.001",
+      "bytes": 524288,
+      "sha256": "ba08c69c505d5ad0c1364bf1701d54cb5d516ab2418ad310d4e03958c0f0017d"
+    },
+    {
+      "file": "distinct.pack.enc.002",
+      "bytes": 524288,
+      "sha256": "f4eb44c05be5f841cfc11d57be4025e264612896a8dcd76d1c5b1ead64dc5da1"
+    },
+    {
+      "file": "distinct.pack.enc.003",
+      "bytes": 524288,
+      "sha256": "08fec75bf01248ee29b1330b4fb36daeb3b5d91dea3c10625d6be7eb50728697"
+    },
+    {
+      "file": "distinct.pack.enc.004",
+      "bytes": 524288,
+      "sha256": "6ca14a47e6d4c3d7064a73d988e98f33367a89bb7ad7222ec07c96eb9f32aa78"
+    },
+    {
+      "file": "distinct.pack.enc.005",
+      "bytes": 524288,
+      "sha256": "0f01d5bd9342a8a2612b584c1fdb46aea977601d8819f3a2432b3da6ccabb0f7"
+    },
+    {
+      "file": "distinct.pack.enc.006",
+      "bytes": 524288,
+      "sha256": "a4b3637a90b1f25e169449133835630401bfc6658a841d0c5076e0c3e4992a2d"
+    },
+    {
+      "file": "distinct.pack.enc.007",
+      "bytes": 524288,
+      "sha256": "811376ca22b46690382e597ee974eae3f1491bce13159cd79d74bba5b1948b44"
+    },
+    {
+      "file": "distinct.pack.enc.008",
+      "bytes": 524288,
+      "sha256": "8aaf23fd3609f48c8a1aa078770bfd28a7d21d8c2b1b386cf1f83a4a61ba3845"
+    },
+    {
+      "file": "distinct.pack.enc.009",
+      "bytes": 524288,
+      "sha256": "72b294a43b65b5a4faad5a5733623d8e0999dee8ec469a2dafe64df40d0f80ec"
+    },
+    {
+      "file": "distinct.pack.enc.010",
+      "bytes": 524288,
+      "sha256": "256508a768ba7af907385200125d58d5406bfd13dfde78fda95a9c728ddcb011"
+    },
+    {
+      "file": "distinct.pack.enc.011",
+      "bytes": 524288,
+      "sha256": "259e4a9d2303ad3075f63a0591a2d5d131ae111f9c060c7c664269560604cb17"
+    },
+    {
+      "file": "distinct.pack.enc.012",
+      "bytes": 524288,
+      "sha256": "c6ab296c43cb43ca84141fa05658ba53d1aaed92610ca436b414b3b4eb84af1b"
+    },
+    {
+      "file": "distinct.pack.enc.013",
+      "bytes": 524288,
+      "sha256": "8c481677f4503221dd5311f3ca3bb5b5cd0d1391355de34f4a56857066634246"
+    },
+    {
+      "file": "distinct.pack.enc.014",
+      "bytes": 524288,
+      "sha256": "690d3000d0a6a6d6fe1f59264dc950103a96f620298de329f9dd6b6ced1f9371"
+    },
+    {
+      "file": "distinct.pack.enc.015",
+      "bytes": 524288,
+      "sha256": "139e80864eb76a638cfd9627b1121c34ab7ca1826640dce8c62909bb076e8548"
+    },
+    {
+      "file": "distinct.pack.enc.016",
+      "bytes": 524288,
+      "sha256": "aa3a434b2a862f37c26513bd9d8a8ca915e8b6e21dd6021bf13b1182127a9ee5"
+    },
+    {
+      "file": "distinct.pack.enc.017",
+      "bytes": 524288,
+      "sha256": "fe3c6f780882fbde85a3d4d803491322e83c1ee17198a0f16d03fe06e6c9cbb2"
+    },
+    {
+      "file": "distinct.pack.enc.018",
+      "bytes": 524288,
+      "sha256": "fa787be8a30360f8432517c6018bc6f6d939b224edc0c24e1547cb4d94a664a6"
+    },
+    {
+      "file": "distinct.pack.enc.019",
+      "bytes": 524288,
+      "sha256": "9caf083d541f59f6fca76df6fb6946ba26065042c5513e24dc17c66e844bfe83"
+    },
+    {
+      "file": "distinct.pack.enc.020",
+      "bytes": 524288,
+      "sha256": "838e816cbec2d5c899cc7881c16f6c1d8bd9d417f2e8a47b3c4a81a8e34c68a1"
+    },
+    {
+      "file": "distinct.pack.enc.021",
+      "bytes": 524288,
+      "sha256": "79d7e6a8ce9961b77149981f203d7c7a370f30a3c2171fb1fec319aa660b4783"
+    },
+    {
+      "file": "distinct.pack.enc.022",
+      "bytes": 524288,
+      "sha256": "2b447b2784c0ee18e0dbc8cd54ea27dbce887421176989c96e9cff2b59ac6ef4"
+    },
+    {
+      "file": "distinct.pack.enc.023",
+      "bytes": 524288,
+      "sha256": "38299493646bb4ceb1e1ba9c4cffdf6159c931923a7bb85f2cd97c8f2098c960"
+    },
+    {
+      "file": "distinct.pack.enc.024",
+      "bytes": 524288,
+      "sha256": "ee6a345929b2b8942c66de7e7c425f5bd15d6ad265879f0e590964e77614036c"
+    },
+    {
+      "file": "distinct.pack.enc.025",
+      "bytes": 524288,
+      "sha256": "72df2f5ab80f86c65c6cd611e90633228f943c0ac6ac6c440e5ff175fbaada15"
+    },
+    {
+      "file": "distinct.pack.enc.026",
+      "bytes": 524288,
+      "sha256": "6f29cdd347bb6bc86aabf04c770be908dfe1877ff67b48d81e8bee831815c08d"
+    },
+    {
+      "file": "distinct.pack.enc.027",
+      "bytes": 524288,
+      "sha256": "e91db33c46ab3f5828ac08bab6ae88e66aea3109c394bfd9f17e574ac5b72849"
+    },
+    {
+      "file": "distinct.pack.enc.028",
+      "bytes": 524288,
+      "sha256": "79230f9d8b2939737da57d9b9909358f8dc20e06b15e89af191ed148aef1a4f0"
+    },
+    {
+      "file": "distinct.pack.enc.029",
+      "bytes": 524288,
+      "sha256": "af340b34f76dbd4b65aeca23ea31c10be8758d7e385d5451f629cd59b2917a83"
+    },
+    {
+      "file": "distinct.pack.enc.030",
+      "bytes": 524288,
+      "sha256": "08738748a728f396371153fc9cec56b19eff9da53f1a07863343e22b2d455850"
+    },
+    {
+      "file": "distinct.pack.enc.031",
+      "bytes": 246680,
+      "sha256": "1769b2050f6ac753ba1841dcec66411772944c6f648980c82b524dcffdf72023"
+    }
+  ],
+  "files": [
+    {
+      "file": "Liu_Legion_Hammers.glb",
+      "bytes": 9577896,
+      "sha256": "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f"
+    },
+    {
+      "file": "SF3FX_1692847236679218621.png",
+      "bytes": 9394,
+      "sha256": "e1dcb29a9d8faee1cf0ab7bae4c32cd8152d1e8d17cb439492c3f5aac03e2a8f"
+    },
+    {
+      "file": "SF3FX_2906228261325823643.png",
+      "bytes": 3782,
+      "sha256": "84e033daae18fbe07a2ce8eca5f48a3ddfff8265100e3b7a51bc9b57e050e03b"
+    },
+    {
+      "file": "SF3FX_6005843368368382829.png",
+      "bytes": 5441,
+      "sha256": "fd867fe0423d64a8cd4e0c08f1d69c897cbca87cd27fedd1f22965e4e1d7cbae"
+    },
+    {
+      "file": "SF3FX_9167170427115367903.png",
+      "bytes": 7383,
+      "sha256": "09df11a56e2667b7d8d39b596e40fc96cd713b698b8d122fdfe35d8f8d439785"
+    },
+    {
+      "file": "SF3FX_block_1.wav",
+      "bytes": 15202,
+      "sha256": "e71762085167314fb664b4eb1d8a8f400e12cbf3c34c398ee96343da71cf1640"
+    },
+    {
+      "file": "SF3FX_block_2.wav",
+      "bytes": 15202,
+      "sha256": "c225d11df604e8f1cdb222a2aa5a54ac85a07d5dbdc0fb7a456d407364816ada"
+    },
+    {
+      "file": "SF3FX_block_3.wav",
+      "bytes": 15202,
+      "sha256": "fdba19c09e1d7336c329c150c898cb685c45cce581a44e2513511a480c350edb"
+    },
+    {
+      "file": "SF3FX_hammerBlock_1.wav",
+      "bytes": 128388,
+      "sha256": "911314f123f54d14cb509604f06f5e03cf7eb5f840bcc03dc1a8ad322f0f7c6c"
+    },
+    {
+      "file": "SF3FX_hammerBlock_2.wav",
+      "bytes": 104056,
+      "sha256": "879b9454aa9a9cfaaa7c412416a1e8f47db08bb1dd30bbd4e49a4533322a8782"
+    },
+    {
+      "file": "SF3FX_hammerBlock_3.wav",
+      "bytes": 88360,
+      "sha256": "e7401275bca548c793319db79f1912a4f0903c41679451bcd6eaaf4d33d8a538"
+    },
+    {
+      "file": "SF3FX_hammerHit_1.wav",
+      "bytes": 133722,
+      "sha256": "13ad3a757d50a2365b7743b3a5de6c8279937ee2b0a1f9d52341b09403db8881"
+    },
+    {
+      "file": "SF3FX_hammerHit_2.wav",
+      "bytes": 124074,
+      "sha256": "e50fa8750cd77dd76ed55275bdc5f99b91f66041200a018690849884b6e2b319"
+    },
+    {
+      "file": "SF3FX_hammerHit_3.wav",
+      "bytes": 107536,
+      "sha256": "d6ae66c1956f51a90dad2922f148422e515b0004f7b37db7b9af8f9b3d8a145f"
+    },
+    {
+      "file": "SF3FX_heavyHit_1.wav",
+      "bytes": 65580,
+      "sha256": "8100872fe6b92bb1759efdc9fdcb0011260cb061d45e30023f5fd6c7e0dfebca"
+    },
+    {
+      "file": "SF3FX_heavyHit_2.wav",
+      "bytes": 65580,
+      "sha256": "48a3e86d9e7d9b876db52f3ea533bbb1ad24decab9c28b0122d8a3c49b9db3ee"
+    },
+    {
+      "file": "SF3FX_heavyHit_3.wav",
+      "bytes": 65580,
+      "sha256": "fa0148e6b404307fc8a18b692f1670170cb1399650ff32f649014aeea0bc3686"
+    },
+    {
+      "file": "SF3FX_heavyWhoosh_1.wav",
+      "bytes": 30362,
+      "sha256": "c1f7067bdc587cfde012be353a59b5bf82a2946eb67e3147cb203251f1ff6d82"
+    },
+    {
+      "file": "SF3FX_heavyWhoosh_2.wav",
+      "bytes": 30362,
+      "sha256": "b5d725fdd0f93cb87bee8dc6e91fbaad7744ca2d72b9b298b161363ff5ff8adf"
+    },
+    {
+      "file": "SF3FX_heavyWhoosh_3.wav",
+      "bytes": 30362,
+      "sha256": "1d127b8d7d105602015bfb4e71e6c4b679fe656291a6daf3a3ba127a6a678230"
+    },
+    {
+      "file": "SF3FX_hit_1.wav",
+      "bytes": 65580,
+      "sha256": "1b06056113221e45b0875d26c5065db0b9ab6ddfa608e2d0cfcee44d99aeea35"
+    },
+    {
+      "file": "SF3FX_hit_2.wav",
+      "bytes": 65580,
+      "sha256": "9a1384126fa3cecc2462936f459d3b4d7e3c0a253efa1ae2c30ba2abdb1ed196"
+    },
+    {
+      "file": "SF3FX_hit_3.wav",
+      "bytes": 30362,
+      "sha256": "bbd31673ee43f959d80e706cfab4831c9159326932b2172745c74e243d81885e"
+    },
+    {
+      "file": "SF3FX_katanaBlock_1.wav",
+      "bytes": 17270,
+      "sha256": "7ac3c401d86671aeb0de4cfd8f1edf375930136ef3462e2dc478ded1eab0a247"
+    },
+    {
+      "file": "SF3FX_katanaBlock_2.wav",
+      "bytes": 17270,
+      "sha256": "2161bec6fd389e0db6342081f66a3c44498164ef7b632b48aafe11ccd4e4532d"
+    },
+    {
+      "file": "SF3FX_katanaHit_1.wav",
+      "bytes": 17958,
+      "sha256": "1947a1234823a51060b8280f433f0519fa64b262e90f0fc51512820f3aedcac1"
+    },
+    {
+      "file": "SF3FX_katanaHit_2.wav",
+      "bytes": 22094,
+      "sha256": "21d05e605a5fb7fd51da7337069d9fce124f28fadc9d16629dc590ef085542a6"
+    },
+    {
+      "file": "SF3FX_katanaHit_3.wav",
+      "bytes": 22094,
+      "sha256": "953691d6b95deb17e90b036e5fc5e46d7fb1261b647d806adb1ab36b458a8005"
+    },
+    {
+      "file": "SF3FX_katanaWhoosh_1.wav",
+      "bytes": 10380,
+      "sha256": "94269e510caa478b99b7c47afe77c769b14be3e59de9049573fe6f6dfb51694e"
+    },
+    {
+      "file": "SF3FX_katanaWhoosh_2.wav",
+      "bytes": 14514,
+      "sha256": "b0400ae0c30a7174de773ca065094fb89b8f17aca80feb11e9a2c43a7a1be4be"
+    },
+    {
+      "file": "SF3FX_katanaWhoosh_3.wav",
+      "bytes": 17960,
+      "sha256": "8ddb1dd889d55c4a6f4805c2bf9f60bd28993bf3aa0c3f3149b5ab4e4a291bde"
+    },
+    {
+      "file": "SF3FX_manifest.json",
+      "bytes": 417325,
+      "sha256": "c4f66cb7f2805bbee6c8667ad9e4bb90f90f3e6d07c368b1dcb1da6699331e7f"
+    },
+    {
+      "file": "SF3FX_n1354882762432724247.png",
+      "bytes": 3307,
+      "sha256": "f23cf847b8201a0ba460f04c685f155d852182b3f0c66c25fd936d25def22d19"
+    },
+    {
+      "file": "SF3FX_n1718551801726471877.png",
+      "bytes": 6389,
+      "sha256": "0a6b54d4355b111e8d370cdc12b667acc14af786c48650f81190f485dd17ef94"
+    },
+    {
+      "file": "SF3FX_n3697046036923823885.png",
+      "bytes": 13149,
+      "sha256": "bd8eaf09e3f9f5a278aa8509c6dd2df92d26d13891d1d06fbcf8caec497a8753"
+    },
+    {
+      "file": "SF3FX_n8666170619262010817.png",
+      "bytes": 32764,
+      "sha256": "b3b9ff41b0a135e3fce0ea89b1ab6d0f603182fec7972e58317e53c2e9d32323"
+    },
+    {
+      "file": "SF3FX_n987967639808468488.png",
+      "bytes": 10899,
+      "sha256": "44787a46af5c5bbb0cc45d58ca7a082682a9735e3438d8b6e687ba4b520f8adc"
+    },
+    {
+      "file": "SF3FX_whoosh_1.wav",
+      "bytes": 20022,
+      "sha256": "eda76fef26efe156a4b87fd9afd9326350c4922cce99de73a1ca9294a226ea9d"
+    },
+    {
+      "file": "SF3FX_whoosh_2.wav",
+      "bytes": 21004,
+      "sha256": "0368d861e94ea51b0faa1718d3e2bb419788532893bc96a1fe40c0bb9f6cc315"
+    },
+    {
+      "file": "SF3FX_whoosh_3.wav",
+      "bytes": 19370,
+      "sha256": "fbc1bee934527fe0cba5ecd631e5a85d2655da17a2a1c4bf12a1951dca17c026"
+    },
+    {
+      "file": "SF3UI_fist.png",
+      "bytes": 13906,
+      "sha256": "be9260fe6a6568d574a52cea91b9566157d4bdb4e2910ce56b7f6aed77df08cf"
+    },
+    {
+      "file": "SF3UI_foot.png",
+      "bytes": 13968,
+      "sha256": "1629dedbbec4232ff5c1fe9d0a9274a2833620b98b5a299d3df8b1cf3ca06fba"
+    },
+    {
+      "file": "SF3UI_shadow.png",
+      "bytes": 22148,
+      "sha256": "288bccb032861cf27f368cbbe4acccc5d37c47de318c95cb067f983d67ff3895"
+    },
+    {
+      "file": "SF3UI_shuriken_button.png",
+      "bytes": 7706,
+      "sha256": "da3341281cebced8f61046f16f16901fd919341d281cdb888408488044b44750"
+    },
+    {
+      "file": "SF3UI_stick_arrow.png",
+      "bytes": 1316,
+      "sha256": "3e051a2543f650372768738aef21264fac0e1dd4567293c948d696a6c0d7888b"
+    },
+    {
+      "file": "SF3UI_stick_arrow_small.png",
+      "bytes": 188,
+      "sha256": "b2ee0fdc016545f81f40c016774fa4923a9e0aabb16203c572f385b6b0fcb5a0"
+    },
+    {
+      "file": "SF3UI_stick_circle.png",
+      "bytes": 6766,
+      "sha256": "afdeff42db49b8526a67f4264cce7e19380aff839e15317c62e9ccaed936e8d8"
+    },
+    {
+      "file": "SF3WE_1394430195881985131.png",
+      "bytes": 5290,
+      "sha256": "c8a01bc4e4574aff6e7dbf3615fbc673301364f776c1bd8483f509025f8fc386"
+    },
+    {
+      "file": "SF3WE_4153006194443883429.png",
+      "bytes": 92065,
+      "sha256": "55d858ddcff0d2a42af53533e5a7f333054a132509839cb75e24ab50f0999324"
+    },
+    {
+      "file": "SF3WE_4588180554299203298.png",
+      "bytes": 231183,
+      "sha256": "eb8fb69983f6647a8c52d4f2d3e2b5be9b5f9b860a4b70f8963cb851aae6179b"
+    },
+    {
+      "file": "SF3WE_4684984860859675029.png",
+      "bytes": 99530,
+      "sha256": "8140b298c163d5e25384bfeda81d381fa70c5afd029b8bb3a0805fd18017d620"
+    },
+    {
+      "file": "SF3WE_5380868539664110777.png",
+      "bytes": 31097,
+      "sha256": "efd2b1ee50dae3c1d2870201bec43aad63ef94c8d13340c323640d0ba0a04874"
+    },
+    {
+      "file": "SF3WE_7296303405002008897.png",
+      "bytes": 69276,
+      "sha256": "6e7113837b40d85cd843540408c4dc8fa1acf77c76ce6a1b4a9304bb31c0364c"
+    },
+    {
+      "file": "SF3WE_manifest.json",
+      "bytes": 6745,
+      "sha256": "d965d1b3e45411e88d3f99182ab312ba841c9e53a332f82ed83ee89164ac0bae"
+    },
+    {
+      "file": "SF3WE_n1248539435798039785.png",
+      "bytes": 73049,
+      "sha256": "bb33d6c130274ce3c9a92748e20960de8899a6a4aa9e5d87782d48539539571b"
+    },
+    {
+      "file": "SF3WE_n1364136893739331023.png",
+      "bytes": 49667,
+      "sha256": "f68863680b3f088137646f935f75771679272d2a28d0503c028c1f505764809b"
+    },
+    {
+      "file": "SF3WE_n3904629693119460560.png",
+      "bytes": 86,
+      "sha256": "8cce60052e08828a3bafc5a74665510101e25ccfd1544950762385a0c94ce9dc"
+    },
+    {
+      "file": "SF3WE_n465777674698922527.png",
+      "bytes": 69289,
+      "sha256": "3f25d8f78584518b508170662cbcc53d95cf019298ad2dd45cf5c89011664b24"
+    },
+    {
+      "file": "SF3WE_n5921951616421857958.png",
+      "bytes": 112837,
+      "sha256": "e68e8b1b096592ac5f150db7098c9d7f7d2b42411066f81b89f4efb87888c3db"
+    },
+    {
+      "file": "SF3_DistinctFighters.json",
+      "bytes": 13211630,
+      "sha256": "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f"
+    },
+    {
+      "file": "Sun_Herald_Katana.glb",
+      "bytes": 11147772,
+      "sha256": "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553"
+    }
+  ]
+}
