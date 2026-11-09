@@ -1,0 +1,221 @@
+name: Recover saved native evidence
+on:
+  push:
+    branches: [codex/fighter-lab-sf3-resources-20261108]
+    paths:
+      - '.github/workflows/native-evidence-recovery.yml'
+      - '.github/scripts/partition_native_evidence.py'
+      - '.github/scripts/test_partition_native_evidence.py'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: native-evidence-recovery-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: github.repository == 'wuyong9494-lab/kriswu'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Verify partition integrity with synthetic bytes
+        run: python3 -m unittest discover -s .github/scripts -p test_partition_native_evidence.py
+      - name: Verify the completed source run and saved artifact
+        id: source
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const owner = 'wuyong9494-lab', repo = 'kriswu';
+            const repository = `${owner}/${repo}`;
+            const runID = 42552805778;
+            const headSHA = 'ab68cc4653304873378f483b9fa7e53b15a9292f';
+            const artifactName = 'fighter-character-private';
+            const runURL = `https://github.com/${repository}/actions/runs/${runID}`;
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runID });
+            if (run.id !== runID || run.repository?.full_name !== repository ||
+                run.head_repository?.full_name !== repository || run.head_sha !== headSHA ||
+                run.head_branch !== 'codex/fighter-lab-sf3-resources-20261108' ||
+                run.path !== '.github/workflows/fighter-lab.yml' || run.html_url !== runURL) {
+              throw new Error('Source run identity does not match the fixed recovery scope');
+            }
+            if (run.status !== 'completed') {
+              throw new Error('Source run must finish before its evidence can be recovered');
+            }
+            const conclusions = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped',
+              'timed_out', 'action_required', 'stale', 'startup_failure']);
+            if (!conclusions.has(run.conclusion) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) {
+              throw new Error('Source run conclusion or attempt is invalid');
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
+              { owner, repo, run_id: runID, per_page: 100 });
+            const matches = artifacts.filter(item => item.name === artifactName && !item.expired);
+            if (matches.length !== 1) {
+              throw new Error('Expected exactly one unexpired source artifact with the fixed name');
+            }
+            const artifact = matches[0];
+            if (!Number.isSafeInteger(artifact.id) || artifact.id < 1 ||
+                artifact.workflow_run?.id !== runID || artifact.workflow_run?.head_sha !== headSHA ||
+                artifact.workflow_run?.repository_id !== run.repository.id ||
+                artifact.workflow_run?.head_repository_id !== run.head_repository.id ||
+                !/^sha256:[0-9a-f]{64}$/.test(artifact.digest || '')) {
+              throw new Error('Source artifact identity or digest is invalid');
+            }
+            const maximumArchiveBytes = 8 * 400 * 1024 * 1024 + 16 * 1024 * 1024;
+            if (!Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes <= 0 ||
+                artifact.size_in_bytes > maximumArchiveBytes) {
+              throw new Error('Source artifact exceeds the bounded recovery size');
+            }
+            const started = Date.parse(run.run_started_at), updated = Date.parse(run.updated_at);
+            const created = Date.parse(artifact.created_at);
+            if (![started, updated, created].every(Number.isFinite) || started > updated ||
+                created < started || created > updated) {
+              throw new Error('Source artifact timestamp does not belong to the recorded run attempt');
+            }
+            const source = {
+              repository, runID, runAttempt: run.run_attempt, headSHA,
+              runStatus: run.status, runConclusion: run.conclusion, runURL,
+              runStartedAt: run.run_started_at, runUpdatedAt: run.updated_at,
+              artifactID: artifact.id, artifactName, artifactDigest: artifact.digest,
+              artifactBytes: artifact.size_in_bytes, artifactCreatedAt: artifact.created_at,
+            };
+            fs.writeFileSync('recovery-source.json', JSON.stringify(source, null, 2) + '\n', { flag: 'wx' });
+            core.setOutput('artifact_id', String(artifact.id));
+            core.setOutput('source_conclusion', run.conclusion);
+            await core.summary
+              .addHeading(`Source native run conclusion: ${run.conclusion}`, 2)
+              .addLink(`Source run ${runID}, attempt ${run.run_attempt}`, runURL)
+              .addEOL()
+              .addRaw('This job recovers existing encrypted bytes. It executes no native tests and does not change the source run acceptance result.\n')
+              .addTable([
+                [{ data: 'Source field', header: true }, { data: 'Recorded value', header: true }],
+                ['Commit', headSHA], ['Artifact ID', String(artifact.id)],
+                ['Artifact name', artifactName], ['Artifact archive digest', artifact.digest],
+                ['Artifact archive bytes', String(artifact.size_in_bytes)],
+              ])
+              .write();
+            if (run.conclusion !== 'success') {
+              core.warning(`Source run concluded ${run.conclusion}; recovery will retain that non-success result after uploading evidence`);
+            }
+      - name: Download the verified saved artifact
+        uses: actions/download-artifact@v4
+        with:
+          repository: wuyong9494-lab/kriswu
+          run-id: 42552805778
+          artifact-ids: ${{ steps.source.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          path: recovered
+          merge-multiple: true
+      - name: Partition unchanged ciphertext and verify every part
+        id: partition
+        shell: bash -eo pipefail {0}
+        run: |
+          python3 .github/scripts/partition_native_evidence.py partition \
+            --input recovered/fighter-evidence.enc \
+            --source-metadata recovery-source.json \
+            --output native-evidence-parts
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads(Path('native-evidence-parts/manifest.json').read_text())
+          count = manifest['partCount']
+          if type(count) is not int or not 1 <= count <= 8:
+              raise ValueError('Partition count is outside the fixed upload bounds')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'part_count={count}\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('\n## Ciphertext recovery\n\n')
+              summary.write(f"Parts: {count}; complete ciphertext bytes: {manifest['ciphertext']['bytes']}.\n\n")
+              summary.write(f"Complete ciphertext SHA-256: `{manifest['ciphertext']['sha256']}`.\n\n")
+              summary.write('Each independent artifact contains one part and the identical complete manifest. Reassemble all parts before authenticated evidence decoding.\n')
+          PY
+      - name: Upload ciphertext part 001
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 1 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part001
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-001
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 002
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 2 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part002
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-002
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 003
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 3 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part003
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-003
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 004
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 4 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part004
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-004
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 005
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 5 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part005
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-005
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 006
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 6 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part006
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-006
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 007
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 7 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part007
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-007
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload ciphertext part 008
+        if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 8 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part008
+          path: |
+            native-evidence-parts/manifest.json
+            native-evidence-parts/fighter-evidence.enc.part-008
+          compression-level: 0
+          if-no-files-found: error
+      - name: Preserve a non-successful source run result
+        if: ${{ always() && steps.source.outputs.source_conclusion != '' && steps.source.outputs.source_conclusion != 'success' }}
+        env:
+          SOURCE_CONCLUSION: ${{ steps.source.outputs.source_conclusion }}
+        run: |
+          echo "::error::Source native run 42552805778 concluded ${SOURCE_CONCLUSION}. Evidence recovery does not accept that run."
+          exit 1
