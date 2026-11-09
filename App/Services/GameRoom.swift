@@ -113,6 +113,91 @@ extension UIApplication {
 
 // MARK: - 房间
 
+/// Game Center's callbacks may finish after cancellation. Keep each startup's
+/// lifetime separate, including ownership of the process-wide matchmaker.
+/// The generic result also lets lifecycle tests run without signing in.
+@MainActor
+final class GameRoomRemoteStartup {
+    private static weak var currentStartup: GameRoomRemoteStartup?
+    private static var matchmakingOwner: UUID?
+    private var generation: UUID?
+    private var task: Task<Void, Never>?
+    private let cancelMatchmaking: () -> Void
+
+    init(cancelMatchmaking: @escaping () -> Void) {
+        self.cancelMatchmaking = cancelMatchmaking
+    }
+
+    @discardableResult
+    func start<Match>(signIn: @escaping @MainActor () async -> Bool,
+                      findMatch: @escaping @MainActor () async throws -> Match,
+                      accept: @escaping @MainActor (Match) -> Void,
+                      discard: @escaping @MainActor (Match) -> Void,
+                      failed: @escaping @MainActor (Error?) -> Void) -> Task<Void, Never> {
+        // Reserve the latest startup before authentication can suspend. Retire
+        // the old search before the new one can reach the shared matchmaker.
+        Self.currentStartup?.cancel()
+        cancel()
+        let generation = UUID()
+        self.generation = generation
+        Self.currentStartup = self
+        let task = Task { [weak self] in
+            guard self?.isCurrent(generation) == true else { return }
+            let signedIn = await signIn()
+            guard self?.isCurrent(generation) == true else { return }
+            guard signedIn else {
+                self?.finish(generation)
+                failed(nil)
+                return
+            }
+            Self.matchmakingOwner = generation
+            do {
+                let match = try await findMatch()
+                let current = self?.isCurrent(generation) == true && Self.matchmakingOwner == generation
+                if Self.matchmakingOwner == generation { Self.matchmakingOwner = nil }
+                self?.finish(generation)
+                guard current else {
+                    discard(match)
+                    return
+                }
+                accept(match)
+            } catch {
+                let current = self?.isCurrent(generation) == true && Self.matchmakingOwner == generation
+                if Self.matchmakingOwner == generation { Self.matchmakingOwner = nil }
+                self?.finish(generation)
+                if current { failed(error) }
+            }
+        }
+        self.task = task
+        return task
+    }
+
+    func cancel() {
+        let retired = generation
+        generation = nil
+        task?.cancel()
+        task = nil
+        if Self.currentStartup === self { Self.currentStartup = nil }
+        // A retired room must not cancel a newer room's shared search, or a
+        // search it never started because authentication is still pending.
+        if let retired, Self.matchmakingOwner == retired {
+            Self.matchmakingOwner = nil
+            cancelMatchmaking()
+        }
+    }
+
+    private func isCurrent(_ generation: UUID) -> Bool {
+        self.generation == generation && Self.currentStartup === self && !Task.isCancelled
+    }
+
+    private func finish(_ generation: UUID) {
+        guard self.generation == generation else { return }
+        self.generation = nil
+        task = nil
+        if Self.currentStartup === self { Self.currentStartup = nil }
+    }
+}
+
 /// 一个联机房间：几台手机连在一起，谁在、谁是房主由房间管，游戏自己的消息原样送到每个人。
 /// - 面对面：身边的手机直接连（Wi-Fi、蓝牙，不用联网、不用账号）。一个人开房间，别人在附近的房间里点一下加入；
 ///   加入的人只连房主，消息先发给房主，房主转给别人。
@@ -205,6 +290,7 @@ final class GameRoom: NSObject, ObservableObject {
     private var memberOfPeer: [MCPeerID: String] = [:]
     private var directIdentities = GameRoomDirectIdentity<MCPeerID>()
     private var match: GKMatch?
+    private let remoteStartup = GameRoomRemoteStartup(cancelMatchmaking: { GKMatchmaker.shared().cancel() })
 
     private enum Envelope: Codable {
         case hello(Member)
@@ -262,19 +348,26 @@ final class GameRoom: NSObject, ObservableObject {
             phase = .browsing
         case .remote(let code):
             phase = .waiting
-            Task { await findRemote(code: code) }
+            findRemote(code: code)
         }
     }
 
     func leave() {
+        remoteStartup.cancel()
+        advertiser?.delegate = nil
         advertiser?.stopAdvertisingPeer()
+        advertiser = nil
+        browser?.delegate = nil
         browser?.stopBrowsingForPeers()
+        browser = nil
+        session?.delegate = nil
         session?.disconnect()
-        if case .remote = mode {
-            if match == nil { GKMatchmaker.shared().cancel() }
-            match?.disconnect()
-            match = nil
-        }
+        session = nil
+        match?.delegate = nil
+        match?.disconnect()
+        match = nil
+        hostPeer = nil
+        memberOfPeer.removeAll()
         onPayload = nil
         onDirect = nil
         onAuthenticatedDirect = nil
@@ -444,25 +537,26 @@ final class GameRoom: NSObject, ObservableObject {
 
     // MARK: 远程
 
-    private func findRemote(code: Int) async {
-        guard await GameCenter.shared.signIn() else {
-            phase = .closed(GameCenter.shared.problem ?? GameCenter.notSignedIn)
-            return
-        }
-        me = Member(id: GKLocalPlayer.local.gamePlayerID, name: GKLocalPlayer.local.displayName)
-        members = [me]
+    private func findRemote(code: Int) {
         let request = GKMatchRequest()
         request.minPlayers = capacity
         request.maxPlayers = capacity
         request.playerGroup = kind.index * 100_000 + code
-        do {
-            let match = try await GKMatchmaker.shared().findMatch(for: request)
+        remoteStartup.start(signIn: { await GameCenter.shared.signIn() }, findMatch: { [weak self] in
+            guard let self else { throw CancellationError() }
+            self.me = Member(id: GKLocalPlayer.local.gamePlayerID, name: GKLocalPlayer.local.displayName)
+            self.members = [self.me]
+            return try await GKMatchmaker.shared().findMatch(for: request)
+        }, accept: { [weak self] match in
+            guard let self else { match.disconnect(); return }
             self.match = match
             match.delegate = self
-            remoteChanged()
-        } catch {
-            phase = .closed(GameCenter.explain(error))
-        }
+            self.remoteChanged()
+        }, discard: { match in
+            match.disconnect()
+        }, failed: { [weak self] error in
+            self?.phase = .closed(error.map(GameCenter.explain) ?? GameCenter.shared.problem ?? GameCenter.notSignedIn)
+        })
     }
 
     private func remoteChanged() {
@@ -495,7 +589,9 @@ extension GameRoom: MCSessionDelegate {
         if let direct = GameRoom.direct(data) {
             let sessionID = ObjectIdentifier(session)
             Task { @MainActor in
+                guard let current = self.session, ObjectIdentifier(current) == sessionID else { return }
                 self.receiveAuthenticatedDirect(direct, peer: peerID, sessionID: sessionID)
+                guard self.session === current else { return }
                 self.onDirect?(direct.data, direct.from)
             }
             return
@@ -524,29 +620,35 @@ extension GameRoom: MCNearbyServiceAdvertiserDelegate {
     nonisolated func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
                                 withContext context: Data?, invitationHandler: @escaping (Bool, MCSession?) -> Void) {
         let hello = context.flatMap { try? JSONDecoder().decode(Envelope.self, from: $0) }
+        let advertiserID = ObjectIdentifier(advertiser)
         // Keep Apple's non-Sendable completion on the delegate's calling thread.
         // Only the synchronous room-state decision runs on the main actor.
         let acceptedSession: MCSession?
         if Thread.isMainThread {
             acceptedSession = MainActor.assumeIsolated {
-                self.acceptInvitation(from: peerID, hello: hello)
+                self.acceptInvitation(from: peerID, hello: hello, advertiserID: advertiserID)
             }
         } else {
             acceptedSession = DispatchQueue.main.sync {
-                self.acceptInvitation(from: peerID, hello: hello)
+                self.acceptInvitation(from: peerID, hello: hello, advertiserID: advertiserID)
             }
         }
         invitationHandler(acceptedSession != nil, acceptedSession)
     }
 
-    private func acceptInvitation(from peerID: MCPeerID, hello: Envelope?) -> MCSession? {
-        guard accepting, members.count < capacity, let session else { return nil }
+    private func acceptInvitation(from peerID: MCPeerID, hello: Envelope?, advertiserID: ObjectIdentifier) -> MCSession? {
+        guard let advertiser, ObjectIdentifier(advertiser) == advertiserID,
+              accepting, members.count < capacity, let session else { return nil }
         if case .hello(let member)? = hello { memberOfPeer[peerID] = member.id }
         return session
     }
 
     nonisolated func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
-        Task { @MainActor in self.notice = "开不了房间：在系统设置里允许「值班提醒」使用本地网络，再打开 Wi-Fi 或蓝牙" }
+        let advertiserID = ObjectIdentifier(advertiser)
+        Task { @MainActor in
+            guard let current = self.advertiser, ObjectIdentifier(current) == advertiserID else { return }
+            self.notice = "开不了房间：在系统设置里允许「值班提醒」使用本地网络，再打开 Wi-Fi 或蓝牙"
+        }
     }
 }
 
@@ -554,8 +656,10 @@ extension GameRoom: MCNearbyServiceBrowserDelegate {
     nonisolated func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
         let name = info?["name"] ?? peerID.displayName
         let game = info?["game"]
+        let browserID = ObjectIdentifier(browser)
         Task { @MainActor in
-            guard game == self.kind.rawValue else { return }
+            guard let current = self.browser, ObjectIdentifier(current) == browserID,
+                  game == self.kind.rawValue else { return }
             let room = NearbyRoom(id: "\(peerID.hash)", name: name, peer: peerID)
             self.rooms.removeAll { $0.id == room.id }
             self.rooms.append(room)
@@ -563,35 +667,57 @@ extension GameRoom: MCNearbyServiceBrowserDelegate {
     }
 
     nonisolated func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
-        Task { @MainActor in self.rooms.removeAll { $0.peer == peerID } }
+        let browserID = ObjectIdentifier(browser)
+        Task { @MainActor in
+            guard let current = self.browser, ObjectIdentifier(current) == browserID else { return }
+            self.rooms.removeAll { $0.peer == peerID }
+        }
     }
 
     nonisolated func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
-        Task { @MainActor in self.notice = "找不了房间：在系统设置里允许「值班提醒」使用本地网络，再打开 Wi-Fi 或蓝牙" }
+        let browserID = ObjectIdentifier(browser)
+        Task { @MainActor in
+            guard let current = self.browser, ObjectIdentifier(current) == browserID else { return }
+            self.notice = "找不了房间：在系统设置里允许「值班提醒」使用本地网络，再打开 Wi-Fi 或蓝牙"
+        }
     }
 }
 
 extension GameRoom: GKMatchDelegate {
     nonisolated func match(_ match: GKMatch, didReceive data: Data, fromRemotePlayer player: GKPlayer) {
+        let matchID = ObjectIdentifier(match)
         if let direct = GameRoom.direct(data) {
-            let matchID = ObjectIdentifier(match), playerID = player.gamePlayerID
+            let playerID = player.gamePlayerID
             Task { @MainActor in
+                guard let current = self.match, ObjectIdentifier(current) == matchID else { return }
                 self.receiveAuthenticatedDirect(direct, playerID: playerID, matchID: matchID)
+                guard self.match === current else { return }
                 self.onDirect?(direct.data, direct.from)
             }
             return
         }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
               case .payload(let from, let body) = envelope else { return }
-        Task { @MainActor in self.onPayload?(body, from) }
+        Task { @MainActor in
+            guard let current = self.match, ObjectIdentifier(current) == matchID else { return }
+            self.onPayload?(body, from)
+        }
     }
 
     nonisolated func match(_ match: GKMatch, player: GKPlayer, didChange state: GKPlayerConnectionState) {
-        Task { @MainActor in self.remoteChanged() }
+        let matchID = ObjectIdentifier(match)
+        Task { @MainActor in
+            guard let current = self.match, ObjectIdentifier(current) == matchID else { return }
+            self.remoteChanged()
+        }
     }
 
     nonisolated func match(_ match: GKMatch, didFailWithError error: Error?) {
         let reason = error.map { GameCenter.explain($0) } ?? "连接断了"
-        Task { @MainActor in self.phase = .closed(reason) }
+        let matchID = ObjectIdentifier(match)
+        Task { @MainActor in
+            guard let current = self.match, ObjectIdentifier(current) == matchID else { return }
+            self.phase = .closed(reason)
+        }
     }
 }

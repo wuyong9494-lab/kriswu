@@ -6,6 +6,7 @@ struct DuelHomeView: View {
     @State private var hero = DuelGame.Hero.liu
     @State private var difficulty = DuelGame.Difficulty.learning
     @State private var match: DuelSetup?
+    @State private var showingNetworkEntry = false
     private var usesOriginalWeapons: Bool {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
@@ -47,13 +48,14 @@ struct DuelHomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .modifier(ArenaLandscape())
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
+        .fullScreenCover(isPresented: $showingNetworkEntry) { DuelNetworkEntryView() }
     }
 
     private var showroom: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 22)
                 .fill(Color(red: 0.10, green: 0.13, blue: 0.21))
-            if hasShowroom && match == nil {
+            if hasShowroom && match == nil && !showingNetworkEntry {
                 DuelLobbyPreview(hero: hero)
                     .accessibilityIdentifier("duel.lobby.preview")
                     .clipShape(RoundedRectangle(cornerRadius: 22))
@@ -118,6 +120,14 @@ struct DuelHomeView: View {
                     .accessibilityIdentifier("duel.tutorial")
             }
             .buttonStyle(.bordered)
+            Button {
+                guard match == nil, !showingNetworkEntry else { return }
+                showingNetworkEntry = true
+            } label: {
+                Label("双人选角 · 联机测试", systemImage: "person.2.fill")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("duel.network.enter")
             Text(usesOriginalWeapons ?
                  "左侧摇杆移动；右侧武器与踢击配合方向出招。收招后才恢复自动防御。" :
                  "普攻命中后继续点击，可衔接三段连击。")
@@ -136,7 +146,10 @@ struct DuelHomeView: View {
         .padding(16)
         .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 20))
     }
-    private func start(_ mode: DuelGame.Mode) { match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons) }
+    private func start(_ mode: DuelGame.Mode) {
+        guard match == nil, !showingNetworkEntry else { return }
+        match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons)
+    }
 }
 
 struct DuelSetup: Identifiable {
