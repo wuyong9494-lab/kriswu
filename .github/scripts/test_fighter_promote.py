@@ -87,6 +87,19 @@ class GateTests(unittest.TestCase):
         with patch.object(f.asc, 'github', side_effect=[ios, ios_jobs, dict(ios, run_attempt=3)]):
             with self.assertRaises(ValueError): f.check_ci(r)
 
+    def test_fighter_branch_requires_exact_successful_five_job_run(self):
+        r = dict(self.r, source_branch=f.FIGHTER_BRANCH, fighter_run_id=42)
+        run = dict(self.run, head_branch=f.FIGHTER_BRANCH, run_attempt=1)
+        jobs = dict(total_count=5, jobs=self.jobs)
+        with patch.object(f.asc, 'github', side_effect=[run, jobs, run]):
+            f.check_ci(r)
+        with patch.object(f.asc, 'github', side_effect=[run, dict(total_count=5, jobs=self.jobs[:-1]), run]):
+            with self.assertRaises(ValueError):
+                f.check_ci(r)
+        with patch.object(f.asc, 'github', side_effect=[dict(run, head_branch='main'), jobs, run]):
+            with self.assertRaises(ValueError):
+                f.check_ci(r)
+
     def test_incomplete_jobs_rejected(self):
         r = dict(self.r, source_run_id=1, fighter_run_id=2)
         with patch.object(f.asc, 'github', side_effect=[dict(self.run, run_attempt=1), dict(total_count=101, jobs=[])]):
