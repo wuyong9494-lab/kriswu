@@ -454,6 +454,28 @@ extension DuelLifecycleTests {
         XCTAssertEqual(transport.releases, 1)
     }
 
+    func testCombatCoordinatorDeallocationAloneCancelsLoaderOnMainActor() async throws {
+        let transport = CombatMemoryTransport(local: "z-host")
+        let loader = CombatTestLoader(), time = CombatTestTime()
+        var coordinator: DuelNetworkCombatCoordinator? = .init(
+            testingTransport: transport, compatibility: CombatTestLoader.expectedCompatibility,
+            loader: { loader.load($0, completion: $1) },
+            cancelLoading: {
+                // This closure is both Sendable and MainActor-isolated. Its
+                // isolated loader mutation must remain valid under strict checking.
+                XCTAssertTrue(Thread.isMainThread)
+                loader.cancelled += 1
+            }, now: { time.value })
+        weak var weakCoordinator = coordinator
+        try coordinator?.attach()
+        XCTAssertEqual(loader.cancelled, 0)
+        coordinator = nil
+        XCTAssertNil(weakCoordinator)
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(loader.cancelled, 1)
+        XCTAssertEqual(transport.releases, 1)
+    }
+
     func testCombatCoordinatorGuestCannotFreeRunAndPeerWatchdogEndsSilence() throws {
         let pair = CombatPair(); defer { pair.close() }
         try pair.start()

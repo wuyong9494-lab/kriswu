@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import Combine
 
 struct DuelHomeView: View {
     @State private var hero = DuelGame.Hero.liu
@@ -185,6 +186,8 @@ final class DuelSession: ObservableObject {
     private var authoritativeCancellationPublished = false
     private var resettingPhysicalInput = false
     private var publishingAuthoritativeStep = false
+    private var networkMountOwner: UUID?
+    private var pendingNetworkPreparation: (owner: UUID, invalidated: () -> Void)?
     private(set) var game: DuelGame
     private(set) var held = Set<String>()
     private var taps: DuelGame.Buttons = []
@@ -293,6 +296,29 @@ final class DuelSession: ObservableObject {
         case .release: return "震地击退"
         }
     }
+    var awaitingNetworkPreparation: Bool {
+        driver == .externalAuthoritative && !ended && externalState == .awaitingStart &&
+            paused && loadError == nil && nextPresentationTick == 0
+    }
+    func claimNetworkMount(_ owner: UUID, invalidated: @escaping () -> Void) -> Bool {
+        guard awaitingNetworkPreparation, networkMountOwner == nil else { return false }
+        networkMountOwner = owner
+        pendingNetworkPreparation = (owner, invalidated)
+        return true
+    }
+    func releaseNetworkPreparation(_ owner: UUID) {
+        guard pendingNetworkPreparation?.owner == owner else { return }
+        pendingNetworkPreparation = nil
+    }
+    private func takePendingNetworkPreparationInvalidation() -> (() -> Void)? {
+        // Separate from the coordinator's stop callback, which is not installed
+        // until loading finishes. Consume before calling out: failure teardown
+        // can synchronously pause/shut down this session again.
+        let callback = pendingNetworkPreparation?.invalidated
+        pendingNetworkPreparation = nil
+        return callback
+    }
+
     var localFighter: DuelGame.Fighter { game.fighters[localFighterIndex] }
     var opponentFighterIndex: Int { 1 - localFighterIndex }
     var localLandedHits: Int { game.landedHits[localFighterIndex] }
@@ -346,6 +372,7 @@ final class DuelSession: ObservableObject {
         // A nested pause may run inside Published's willSet while its old
         // value is still false. Only the owner of the transition writes it.
         if shouldNotify && !paused { paused = true }
+        takePendingNetworkPreparationInvalidation()?()
         clearInput()
         pauseRender?(true)
         requestStop?()
@@ -441,6 +468,7 @@ final class DuelSession: ObservableObject {
         game = trustedGame; authoritativeCancellationPublished = true
         externalState = .stopped
         if !paused { paused = true }
+        takePendingNetworkPreparationInvalidation()?()
         clearInput()
         guard !ended else { return }
         renderPause?(true)
@@ -511,12 +539,16 @@ final class DuelSession: ObservableObject {
     func shutdown() {
         guard !ended else { return }
         ended = true
+        // Delay this pending-only notification until shutdown releases assets.
+        // Its failure callback may immediately start loading a fresh match.
+        let preparationInvalidated = takePendingNetworkPreparationInvalidation()
         pause(); renderPause = nil; inputReset = nil; didSimulateStep = nil; didReset = nil
         didRequestAuthoritativeStop = nil
         weaponAssets?.releaseCharacters()
         // UIKit can retain the closed SceneKit view and its session until a
         // later event. Release the resource owner at teardown, not at deinit.
         weaponAssets = nil
+        preparationInvalidated?()
     }
 }
 
@@ -527,15 +559,205 @@ private final class DuelInterruptionObserver {
     deinit { if let token { NotificationCenter.default.removeObserver(token) } }
 }
 
+/// Retained before mounting, independently of coordinator.presentation. A
+/// successful milestone is renderer/control preparation, not verified loading
+/// or permission to start. The loader must retain this owner until teardown.
+@MainActor
+final class DuelNetworkMatchPreparation: ObservableObject, Identifiable {
+    enum Failure: Error, Equatable {
+        case invalidSession, alreadyOwned, rendererFailed, controlsUnavailable, detached, replaced
+    }
+    struct Receipt: Equatable {
+        let owner: UUID
+        let initialScenePrepared: Bool
+        let runtimeEffectVariantsPrepared: Bool
+        let controlsPrepared: Bool
+        /// The existing world still reopens Bundle.main for the stage. Do not
+        /// forward this receipt as the coordinator's full resource-ready result.
+        let verifiedResourceOwnershipComplete: Bool
+    }
+    enum State: Equatable { case waitingForMount, preparing, prepared(Receipt), failed(Failure), cancelled }
+    typealias Completion = @MainActor (Result<Receipt, Failure>) -> Void
+    let objectWillChange = ObservableObjectPublisher()
+    let id = UUID()
+    let session: DuelSession
+    private(set) var state = State.waitingForMount
+    private var completion: Completion?
+    private var invalidated: (@MainActor (Failure) -> Void)?
+    private var exitRequested = false
+    private weak var world: DuelWorldView?
+    private weak var controls: DuelNetworkControlsView?
+    private var sceneReceipt: DuelWorldView.PreparationReceipt?
+    private var controlsPrepared = false
+    private var completing = false
+    private(set) var permitsFixture = false
+    private var closed = false
+
+    init(session: DuelSession, invalidated: (@MainActor (Failure) -> Void)? = nil,
+         completion: @escaping Completion) throws {
+        guard session.awaitingNetworkPreparation, session.committedConfiguration != nil,
+              session.weaponAssets != nil, session.game.weaponFight != nil else { throw Failure.invalidSession }
+        self.session = session; self.completion = completion; self.invalidated = invalidated
+        guard session.claimNetworkMount(id, invalidated: { [weak self] in self?.fail(.invalidSession) }) else {
+            throw Failure.alreadyOwned
+        }
+    }
+    #if DEBUG
+    init(testing session: DuelSession, invalidated: (@MainActor (Failure) -> Void)? = nil,
+         completion: @escaping Completion) throws {
+        guard session.awaitingNetworkPreparation else { throw Failure.invalidSession }
+        self.session = session; self.completion = completion; self.invalidated = invalidated; permitsFixture = true
+        guard session.claimNetworkMount(id, invalidated: { [weak self] in self?.fail(.invalidSession) }) else {
+            throw Failure.alreadyOwned
+        }
+    }
+    #endif
+
+    var loadingText: String {
+        switch state {
+        case .waitingForMount: return "正在安装联机画面与操作界面"
+        case .preparing: return "正在准备联机画面"
+        case .prepared: return "画面已准备，等待资源确认与联机开始"
+        case .failed: return "联机画面准备失败，请退出重试"
+        case .cancelled: return "联机准备已结束"
+        }
+    }
+    func attach(_ view: DuelWorldView) {
+        guard view.represents(session) else { fail(.replaced); return }
+        guard !closed, world == nil else { view.shutdown(); fail(.replaced); return }
+        world = view
+        state = .preparing; objectWillChange.send()
+        guard !closed else { view.shutdown(); return }
+        do {
+            try view.prepareNetworkScene(owner: id, invalidated: { [weak self] failure in
+                self?.fail(failure == .detached ? .detached : failure == .rendererFailed ? .rendererFailed : .replaced)
+            }, changed: { [weak self] in self?.finishIfPrepared() }) { [weak self, weak view] result in
+                guard let self, let view, !self.closed, self.world === view else { return }
+                switch result {
+                case .failure(let error): self.fail(error == .detached ? .detached : .rendererFailed)
+                case .success(let receipt):
+                    guard receipt.owner == self.id else { self.fail(.replaced); return }
+                    self.sceneReceipt = receipt
+                    self.finishIfPrepared()
+                }
+            }
+        } catch { fail(.rendererFailed) }
+    }
+    func attach(_ view: DuelNetworkControlsView) -> Bool {
+        guard !closed, controls == nil, view.ownerID == id else { fail(.replaced); return false }
+        controls = view
+        return true
+    }
+    func controlsDidPrepare(_ view: DuelNetworkControlsView) {
+        guard !closed, controls === view else { return }
+        controlsPrepared = true
+        finishIfPrepared()
+    }
+    func controlsDidFail(_ view: DuelNetworkControlsView, detached: Bool = false) {
+        guard !closed, controls === view else { return }
+        fail(detached ? .detached : .controlsUnavailable)
+    }
+    private func finishIfPrepared() {
+        guard !closed, !completing, completion != nil else { return }
+        guard session.awaitingNetworkPreparation else { fail(.invalidSession); return }
+        guard controlsPrepared, let sceneReceipt, let world, let controls else { return }
+        guard world.hasPreparedSceneIdentity(owner: id) else { fail(.replaced); return }
+        guard world.hasUsableMountedBounds, controls.currentPreparationReady else { return }
+        // Reserve this completion before publishing. Observers may synchronously
+        // mutate layout/scene/session or cancel; revalidate after they return.
+        guard let callback = completion else { return }
+        completing = true
+        defer { completing = false }
+        let receipt = Receipt(owner: id, initialScenePrepared: sceneReceipt.initialScenePrepared,
+            runtimeEffectVariantsPrepared: sceneReceipt.runtimeEffectVariantsPrepared,
+            controlsPrepared: true, verifiedResourceOwnershipComplete: false)
+        state = .prepared(receipt); objectWillChange.send()
+        guard !closed else { return }
+        guard session.awaitingNetworkPreparation else { fail(.invalidSession); return }
+        guard world.hasPreparedSceneIdentity(owner: id), world.hasUsableMountedBounds,
+              controls.currentPreparationReady else { fail(.replaced); return }
+        completion = nil
+        // The completion may synchronously install the coordinator stop hook
+        // and start the match. This pending-only hook must no longer own it.
+        session.releaseNetworkPreparation(id)
+        callback(.success(receipt))
+    }
+    func fail(_ failure: Failure) {
+        guard !closed else { return }
+        closed = true
+        let callback = completion, onInvalidated = invalidated
+        completion = nil; invalidated = nil
+        state = .failed(failure)
+        dispose()
+        objectWillChange.send()
+        if let callback { callback(.failure(failure)) }
+        else { onInvalidated?(failure) }
+    }
+    func requestExit(_ action: () -> Void) {
+        guard !exitRequested else { return }
+        exitRequested = true
+        cancel(); action()
+    }
+    func cancel() {
+        guard !closed else { return }
+        closed = true; completion = nil; invalidated = nil; state = .cancelled
+        dispose(); objectWillChange.send()
+    }
+    private func dispose() {
+        // Invalidate before any UIKit/session callbacks. These objects belong
+        // only to this mount; a new match must use a fresh session and owner.
+        let oldWorld = world, oldControls = controls
+        world = nil; controls = nil; sceneReceipt = nil
+        session.releaseNetworkPreparation(id)
+        oldControls?.shutdown(); oldWorld?.shutdown(); session.shutdown()
+    }
+}
+
 struct DuelMatchView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
+    private let setup: DuelSetup?
+    private let preparation: DuelNetworkMatchPreparation?
+    private let onExit: (() -> Void)?
+    init(setup: DuelSetup) { self.setup = setup; preparation = nil; onExit = nil }
+    init(external preparation: DuelNetworkMatchPreparation, onExit: @escaping () -> Void) {
+        setup = nil; self.preparation = preparation; self.onExit = onExit
+    }
+    @ViewBuilder var body: some View {
+        if let preparation, let onExit {
+            DuelNetworkMatchContent(preparation: preparation, onExit: onExit).id(preparation.id)
+        } else if let setup {
+            DuelOfflineMatchContent(setup: setup)
+        }
+    }
+}
+
+private struct DuelOfflineMatchContent: View {
     @StateObject private var session: DuelSession
     init(setup: DuelSetup) { _session = StateObject(wrappedValue: DuelSession(setup)) }
+    var body: some View { DuelMatchContent(session: session) }
+}
+
+private struct DuelNetworkMatchContent: View {
+    @ObservedObject var preparation: DuelNetworkMatchPreparation
+    let onExit: () -> Void
+    var body: some View {
+        DuelMatchContent(session: preparation.session, preparation: preparation,
+                         loadingText: preparation.loadingText, onExit: onExit)
+    }
+}
+
+private struct DuelMatchContent: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject var session: DuelSession
+    var preparation: DuelNetworkMatchPreparation? = nil
+    var loadingText: String? = nil
+    var onExit: (() -> Void)? = nil
     var body: some View {
         ZStack {
-            DuelWorld(session: session).ignoresSafeArea()
-            if session.setup.originalWeapons {
+            DuelWorld(session: session, preparation: preparation).ignoresSafeArea()
+            if let preparation {
+                DuelNetworkControls(preparation: preparation).ignoresSafeArea(edges: .bottom)
+            } else if session.setup.originalWeapons {
                 DuelWeaponControls(session: session).ignoresSafeArea(edges: .bottom)
             } else {
                 DuelControls(session: session, ultimateReady: session.ultimateReady).ignoresSafeArea(edges: .bottom)
@@ -556,7 +778,7 @@ struct DuelMatchView: View {
             }.padding(.horizontal, 22).padding(.top, 8).allowsHitTesting(false)
             VStack {
                 HStack {
-                    Button { session.pause() } label: { Image(systemName: "pause.fill").padding(12) }
+                    Button { if preparation != nil { exitMatch() } else { session.pause() } } label: { Image(systemName: "pause.fill").padding(12) }
                         .accessibilityLabel("暂停").accessibilityIdentifier("duel.pause")
                     Spacer()
                     Button { session.showBoxes.toggle() } label: { Image(systemName: "viewfinder").padding(12) }
@@ -564,7 +786,9 @@ struct DuelMatchView: View {
                 }.padding(.horizontal, 12)
                 Spacer()
             }
-            if session.paused { pausePanel }
+            if session.paused {
+                if preparation != nil { loadingPanel } else { pausePanel }
+            }
             if case .matchOver(let winner) = session.game.phase { resultPanel(winner) }
             if case .roundBreak(let winner, _) = session.game.phase {
                 Text(winner == nil ? "平局 · 准备重赛" : winner == session.localFighterIndex ? "回合胜利" : "回合失利")
@@ -574,8 +798,12 @@ struct DuelMatchView: View {
         }
         .foregroundStyle(.white).preferredColorScheme(.dark)
         .modifier(ArenaLandscape())
-        .onChange(of: scenePhase) { if $0 != .active { session.pause() } }
-        .onDisappear { session.shutdown() }
+        .onChange(of: scenePhase) {
+            if $0 != .active {
+                if preparation != nil { exitMatch() } else { session.pause() }
+            }
+        }
+        .onDisappear { if preparation != nil { exitMatch() } else { session.shutdown() } }
     }
     private var hud: some View {
         HStack(alignment: .top, spacing: 18) {
@@ -600,6 +828,18 @@ struct DuelMatchView: View {
                 .accessibilityValue("生命 \(f.health)，位置 \(f.x)，高度 \(f.y)")
         }.frame(maxWidth: .infinity)
     }
+    private func exitMatch() {
+        if let preparation { preparation.requestExit { onExit?() } }
+        else { session.shutdown(); dismiss() }
+    }
+    private var loadingPanel: some View {
+        panel {
+            Text(loadingText ?? "正在准备联机画面").font(.headline)
+                .accessibilityIdentifier("duel.network.preparing")
+            if let error = session.loadError { Text(error).accessibilityIdentifier("duel.resourceError") }
+            Button("退出联机") { exitMatch() }.accessibilityIdentifier("duel.network.exit")
+        }
+    }
     private var pausePanel: some View {
         panel {
             Text("已暂停").font(.title2.bold())
@@ -608,7 +848,7 @@ struct DuelMatchView: View {
                 Button("继续对决") { session.resume() }.accessibilityIdentifier("duel.resume")
                 Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.restart")
             }
-            Button("返回角色选择") { session.shutdown(); dismiss() }.accessibilityIdentifier("duel.exit")
+            Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.exit")
             Text(session.characterStatus).font(.caption).accessibilityIdentifier("duel.characterStatus")
             Text(session.report).font(.caption2.monospaced()).foregroundStyle(.secondary)
         }
@@ -620,7 +860,7 @@ struct DuelMatchView: View {
             if session.allowsLocalRestart {
                 Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.rematch")
             }
-            Button("返回角色选择") { session.shutdown(); dismiss() }.accessibilityIdentifier("duel.resultExit")
+            Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.resultExit")
         }
     }
     private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -636,6 +876,12 @@ struct DuelWeaponControls: UIViewRepresentable {
     let session: DuelSession
     func makeUIView(context: Context) -> DuelSourceControlsView {
         let view = DuelSourceControlsView(assetDirectory: session.weaponAssets?.directory)
+        bind(view)
+        if !view.sourceArtAvailable { session.characterFailed() }
+        updateUIView(view, context: context)
+        return view
+    }
+    func bind(_ view: DuelSourceControlsView) {
         view.onDirection = { [weak session] x, y in session?.weaponDirection(x: x, y: y) }
         view.onAction = { [weak session] action, down in
             guard let command = DuelWeaponInput.Action(rawValue: action.rawValue) else { return }
@@ -647,9 +893,6 @@ struct DuelWeaponControls: UIViewRepresentable {
         }
         view.onInputCancelled = { [weak session] in session?.cancelWeaponInput() }
         session.inputReset = { [weak view] in view?.cancelAll(notify: false) }
-        if !view.sourceArtAvailable { session.characterFailed() }
-        updateUIView(view, context: context)
-        return view
     }
     func updateUIView(_ view: DuelSourceControlsView, context: Context) { updateReadiness(view) }
     func updateReadiness(_ view: DuelSourceControlsView) {
@@ -670,6 +913,118 @@ struct DuelWeaponControls: UIViewRepresentable {
         }
     }
     static func dismantleUIView(_ view: DuelSourceControlsView, coordinator: ()) { view.cancelAll() }
+}
+
+struct DuelNetworkControls: UIViewRepresentable {
+    let preparation: DuelNetworkMatchPreparation
+    func makeUIView(context: Context) -> DuelNetworkControlsView {
+        #if DEBUG
+        if preparation.permitsFixture {
+            return DuelNetworkControlsView(testing: preparation, controls: DuelSourceControlsView(images: [:]),
+                                           acceptsFixtureArt: true)
+        }
+        #endif
+        return DuelNetworkControlsView(preparation: preparation)
+    }
+    func updateUIView(_ view: DuelNetworkControlsView, context: Context) { view.refreshReadiness() }
+    static func dismantleUIView(_ view: DuelNetworkControlsView, coordinator: ()) { view.detach() }
+}
+
+/// Layout/mount observation belongs to this native container, not a timer or a
+/// SwiftUI onAppear. Source controls remain physically disabled until start.
+@MainActor
+final class DuelNetworkControlsView: UIView {
+    let ownerID: UUID
+    let controls: DuelSourceControlsView
+    private let session: DuelSession
+    private weak var preparation: DuelNetworkMatchPreparation?
+    private var wasMounted = false
+    private var ended = false
+    private var acceptsFixtureArt = false
+
+    init(preparation: DuelNetworkMatchPreparation) {
+        ownerID = preparation.id; session = preparation.session; self.preparation = preparation
+        controls = DuelSourceControlsView(assetDirectory: preparation.session.weaponAssets?.directory)
+        super.init(frame: .zero)
+        configure(preparation)
+    }
+    #if DEBUG
+    init(testing preparation: DuelNetworkMatchPreparation, controls: DuelSourceControlsView,
+         acceptsFixtureArt: Bool = false) {
+        ownerID = preparation.id; session = preparation.session; self.preparation = preparation
+        self.controls = controls
+        self.acceptsFixtureArt = acceptsFixtureArt && preparation.permitsFixture
+        super.init(frame: .zero)
+        configure(preparation)
+    }
+    #endif
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    private func configure(_ owner: DuelNetworkMatchPreparation) {
+        guard owner.attach(self) else { shutdown(); return }
+        isOpaque = false; backgroundColor = .clear
+        addSubview(controls)
+        DuelWeaponControls(session: session).bind(controls)
+        refreshReadiness()
+    }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard !ended else { return }
+        if window == nil, wasMounted { detach(); return }
+        if window != nil { wasMounted = true }
+        refreshReadiness()
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !ended else { return }
+        controls.frame = bounds
+        controls.setNeedsLayout(); controls.layoutIfNeeded()
+        refreshReadiness()
+    }
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        !ended && controls.point(inside: convert(point, to: controls), with: event)
+    }
+    func refreshReadiness() {
+        guard !ended else { return }
+        DuelWeaponControls(session: session).updateReadiness(controls)
+        guard let preparation else { return }
+        guard controls.sourceArtAvailable || acceptsFixtureArt else {
+            preparation.controlsDidFail(self); return
+        }
+        guard currentPreparationReady else { return }
+        preparation.controlsDidPrepare(self)
+    }
+    var currentPreparationReady: Bool {
+        !ended && window != nil && controls.window != nil && usableLayout &&
+            (controls.sourceArtAvailable || acceptsFixtureArt) &&
+            controls.onDirection != nil && controls.onAction != nil &&
+            controls.onActionCancelled != nil && controls.onInputCancelled != nil &&
+            session.inputReset != nil && session.awaitingNetworkPreparation
+    }
+    private var usableLayout: Bool {
+        let layout = controls.layoutSnapshot
+        guard bounds.width.isFinite, bounds.height.isFinite, layout.scale.isFinite,
+              layout.scale > 0, layout.joystick.width >= 44, layout.joystick.height >= 44,
+              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.joystick) else { return false }
+        return DuelSourceControlsView.Action.allCases.allSatisfy { action in
+            guard let frame = layout.actions[action], let touch = layout.actionTouch[action] else { return false }
+            return frame.width >= 44 && frame.height >= 44 &&
+                bounds.insetBy(dx: -0.5, dy: -0.5).contains(frame) &&
+                touch.width >= 44 && touch.height >= 44
+        }
+    }
+    func detach() {
+        guard !ended else { return }
+        preparation?.controlsDidFail(self, detached: true)
+        shutdown()
+    }
+    func shutdown() {
+        guard !ended else { return }
+        ended = true; preparation = nil
+        controls.cancelAll(notify: false); controls.inputEnabled = false
+        controls.onDirection = nil; controls.onAction = nil
+        controls.onActionCancelled = nil; controls.onInputCancelled = nil
+        controls.removeFromSuperview()
+    }
 }
 
 struct DuelControls: UIViewRepresentable {

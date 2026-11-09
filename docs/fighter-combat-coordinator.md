@@ -139,7 +139,9 @@ There is no catch-up loop or frame skipping after a stall.
   second offer or publish late frames. Deallocation is a cleanup fallback;
   explicit synchronous close is the integration contract. Loader cancellation
   ownership is one-shot across explicit close and scheduled deinit cleanup, so
-  an old owner cannot cancel a newer match through a repeated cleanup hook.
+  an old owner cannot cancel a newer match through a repeated cleanup hook. The
+  cancellation closure is explicitly `@MainActor @Sendable`: nonisolated deinit
+  can transfer the immutable hook to cleanup without relaxing actor isolation.
 
 The reliable ordered transport does not expose delivery success. No uncertain
 packet is blindly retried or simulation tick regenerated. Lost/reordered startup
@@ -150,7 +152,7 @@ call host advance to recreate a lost frame.
 ## Verification and next integration requirements
 
 `Tests/SiteTests/DuelNetworkCombatCoordinatorTests.swift` extends the existing
-`DuelLifecycleTests` suite with 22 in-memory cases covering both seat/hero orders,
+`DuelLifecycleTests` suite with 23 in-memory cases covering both seat/hero orders,
 selection-before-offer, synchronous commit/ready traffic, resource and renderer
 barriers, a host renderer load longer than the running timeout, missing ready,
 compatibility failure, cancelled load/presentation completions, saved stale
@@ -159,7 +161,8 @@ frames, clock/peer watchdogs, canonical mismatch, reentrant renderer interruptio
 rate limiting and membership replacement. Additional regressions deliver a queued
 frame, expired ready/input, and late resource/renderer completions before the
 watchdog runs, and check that explicit close plus deallocation cancels the loader
-only once. Equipped movement fixtures use the real weapon-direction API. These
+only once. A separate deinit-only case checks actor-bound cancellation and root
+release. Equipped movement fixtures use the real weapon-direction API. These
 cases are written but **unrun**.
 
 Executed here:
@@ -187,3 +190,8 @@ semantics, one-shot cleanup coverage and queued-work watchdog races. Production
 detached-hash completion ordering, close-during-hash and queued interruption
 delivery still need native tests; the deterministic fixture path does not
 exercise those branches.
+
+A subsequent device build exposed a strict-concurrency warning when nonisolated
+deinit read the old non-Sendable cancellation closure. The hook and all initializer
+contracts now require `@MainActor @Sendable`; the one-shot guard is unchanged.
+This correction still needs the native strict-concurrency CI rerun.

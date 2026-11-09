@@ -6,7 +6,12 @@ import simd
 
 struct DuelWorld: UIViewRepresentable {
     let session: DuelSession
-    func makeUIView(context: Context) -> DuelWorldView { DuelWorldView(session: session) }
+    var preparation: DuelNetworkMatchPreparation? = nil
+    func makeUIView(context: Context) -> DuelWorldView {
+        let view = DuelWorldView(session: session, characterSource: preparation?.permitsFixture == true ? .procedural : .bundled)
+        preparation?.attach(view)
+        return view
+    }
     func updateUIView(_ view: DuelWorldView, context: Context) {}
     static func dismantleUIView(_ view: DuelWorldView, coordinator: ()) { view.shutdown() }
 }
@@ -47,6 +52,124 @@ final class DuelWorldView: SCNView {
     private var attackNodes: [SCNNode] = []
     private var slamRing: SCNNode?
     private var ended = false
+
+    enum PreparationFailure: Error, Equatable {
+        case invalidSession, alreadyRequested, rendererFailed, detached, replaced
+    }
+    /// Proves this mounted SCNView prepared its scene and, for equipped matches,
+    /// the effect owners' complete shader/material templates. It is not a frame-
+    /// rate promise or proof of the still-separate verified resource ownership.
+    struct PreparationReceipt: Equatable {
+        let owner: UUID
+        let initialScenePrepared: Bool
+        let runtimeEffectVariantsPrepared: Bool
+    }
+    typealias PreparationCompletion = @MainActor (Result<PreparationReceipt, PreparationFailure>) -> Void
+    private var preparationOwner: UUID?
+    private var preparationCompletion: PreparationCompletion?
+    private var preparationInvalidated: (@MainActor (PreparationFailure) -> Void)?
+    private var preparedMountChanged: (@MainActor () -> Void)?
+    private var preparedRuntimeEffects = false
+    private var preparingScene: SCNScene?
+    private var preparationMounted = false
+    private var preparationFinished = false
+    #if DEBUG
+    typealias TestPrepare = @MainActor ([Any], @escaping @MainActor (Bool) -> Void) -> Void
+    var testingPrepare: TestPrepare?
+    func installPreparationEffectFixtures() throws {
+        guard !ended, preparationOwner == nil, session.committedConfiguration == nil,
+              session.awaitingNetworkPreparation, let scene else { throw PreparationFailure.invalidSession }
+        sourceEffects = DuelSourceEffects.preparationFixture(root: scene.rootNode)
+        weaponEffects = DuelWeaponEffects.preparationFixture(root: scene.rootNode)
+    }
+    #endif
+
+    func represents(_ candidate: DuelSession) -> Bool { session === candidate }
+
+    func prepareNetworkScene(owner: UUID,
+                             invalidated: (@MainActor (PreparationFailure) -> Void)? = nil,
+                             changed: (@MainActor () -> Void)? = nil,
+                             completion: @escaping PreparationCompletion) throws {
+        guard !ended, session.awaitingNetworkPreparation else { throw PreparationFailure.invalidSession }
+        guard preparationOwner == nil else { throw PreparationFailure.alreadyRequested }
+        preparationOwner = owner; preparationCompletion = completion; preparationInvalidated = invalidated
+        preparedMountChanged = changed
+        prepareNetworkSceneIfMounted()
+    }
+
+    func hasPreparedSceneIdentity(owner: UUID) -> Bool {
+        !ended && preparationOwner == owner && preparationFinished &&
+            preparingScene != nil && scene === preparingScene
+    }
+    var hasUsableMountedBounds: Bool {
+        window != nil && bounds.width.isFinite && bounds.height.isFinite && bounds.width > 0 && bounds.height > 0
+    }
+    private func preparationMountChanged() {
+        if !ended, preparationFinished, preparingScene != nil, scene !== preparingScene {
+            failNetworkPreparation(.replaced)
+            return
+        }
+        preparedMountChanged?()
+    }
+
+    private func prepareNetworkSceneIfMounted() {
+        guard !ended, let owner = preparationOwner, !preparationFinished else { return }
+        if window != nil { preparationMounted = true }
+        guard preparingScene == nil, window != nil,
+              bounds.width.isFinite, bounds.height.isFinite, bounds.width > 0, bounds.height > 0 else { return }
+        guard session.awaitingNetworkPreparation, let scene, pointOfView?.camera != nil else {
+            finishNetworkPreparation(owner: owner, success: false)
+            return
+        }
+        var objects: [Any] = [scene]
+        if session.setup.originalWeapons || sourceEffects != nil || weaponEffects != nil {
+            guard let sourceEffects, let weaponEffects else { failNetworkPreparation(.rendererFailed); return }
+            let contacts = sourceEffects.preparationObjects(), trails = weaponEffects.preparationObjects()
+            guard !contacts.isEmpty, !trails.isEmpty else { failNetworkPreparation(.rendererFailed); return }
+            objects += contacts; objects += trails
+            preparedRuntimeEffects = true
+        }
+        preparingScene = scene
+        #if DEBUG
+        if let testingPrepare {
+            testingPrepare(objects) { [weak self] success in
+                self?.finishNetworkPreparation(owner: owner, success: success)
+            }
+            return
+        }
+        #endif
+        // SceneKit may complete on a rendering thread. UIKit/session ownership,
+        // token checks and the one-shot callback always remain on MainActor.
+        prepare(objects, completionHandler: { [weak self] success in
+            Task { @MainActor [weak self] in
+                self?.finishNetworkPreparation(owner: owner, success: success)
+            }
+        })
+    }
+
+    private func finishNetworkPreparation(owner: UUID, success: Bool) {
+        guard !ended, preparationOwner == owner, !preparationFinished else { return }
+        guard window != nil, bounds.width > 0, bounds.height > 0,
+              session.awaitingNetworkPreparation, let preparingScene, scene === preparingScene else {
+            failNetworkPreparation(.replaced)
+            return
+        }
+        guard success else { failNetworkPreparation(.rendererFailed); return }
+        preparationFinished = true
+        let completion = preparationCompletion; preparationCompletion = nil
+        // Keep the prepared scene identity until teardown. Controls may still
+        // be waiting for layout; later combined readiness must revalidate it.
+        completion?(.success(.init(owner: owner, initialScenePrepared: true,
+                                   runtimeEffectVariantsPrepared: preparedRuntimeEffects)))
+    }
+
+    private func failNetworkPreparation(_ failure: PreparationFailure) {
+        guard !ended, preparationOwner != nil else { return }
+        let completion = preparationCompletion
+        preparationCompletion = nil; preparationFinished = true
+        shutdown(preparationFailure: failure)
+        completion?(.failure(failure))
+    }
 
     init(session: DuelSession, characterSource: CharacterSource = .bundled) {
         self.session = session
@@ -133,11 +256,23 @@ final class DuelWorldView: SCNView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard !ended else { return }
-        if window == nil { stopClock(); session.clearInput() } else if !session.paused { startClock() }
+        if window == nil {
+            if preparationOwner != nil && preparationMounted {
+                failNetworkPreparation(.detached)
+                return
+            }
+            stopClock(); session.clearInput()
+        } else {
+            prepareNetworkSceneIfMounted()
+            preparationMountChanged()
+            if !session.paused { startClock() }
+        }
     }
     override func layoutSubviews() {
         super.layoutSubviews()
         updateCameraFraming()
+        prepareNetworkSceneIfMounted()
+        preparationMountChanged()
     }
     /// Use the same projection during layout and rendering. A rotation-safe
     /// layout value must not be replaced by a narrow FOV on the next frame.
@@ -178,12 +313,18 @@ final class DuelWorldView: SCNView {
         link?.invalidate(); link = nil; lastTime = nil; clock.reset()
         rendersContinuously = false; isPlaying = false
     }
-    func shutdown() {
+    func shutdown(preparationFailure: PreparationFailure = .replaced) {
         guard !ended else { return }
-        ended = true; stopClock()
+        ended = true
+        let invalidated = preparationInvalidated; preparationInvalidated = nil
+        preparationOwner = nil; preparationCompletion = nil; preparingScene = nil; preparedMountChanged = nil
+        preparationFinished = true
+        #if DEBUG
+        testingPrepare = nil
+        #endif
+        stopClock()
         session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
-        if session.driver == .externalAuthoritative { session.pause() }
-        else { session.clearInput() }
+        if session.driver == .offline { session.clearInput() }
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         NotificationCenter.default.removeObserver(self)
@@ -199,6 +340,10 @@ final class DuelWorldView: SCNView {
         SCNTransaction.commit()
         SCNTransaction.flush()
         actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
+        // Report the renderer's precise reason after releasing its resources,
+        // before the terminal session signal can report generic invalidation.
+        invalidated?(preparationFailure)
+        if session.driver == .externalAuthoritative { session.pause() }
     }
     fileprivate func tick(_ timestamp: Double) {
         guard !ended, !session.paused else { return }

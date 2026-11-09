@@ -15,6 +15,8 @@ final class DuelNetworkCombatCoordinator {
     typealias Loader = @MainActor (Configuration, @escaping Completion) -> Void
     typealias PresentationCompletion = @MainActor (Result<DuelSession, Error>) -> Void
     typealias PresentationLoader = @MainActor (Barrier, @escaping PresentationCompletion) -> Void
+    /// Transferable into deinit cleanup, but callable only on the owner actor.
+    typealias Cancellation = @MainActor @Sendable () -> Void
 
     enum State: Equatable { case idle, selecting, awaitingOffer, loading, awaitingPresentation, running, closed }
     enum Failure: Error, Equatable {
@@ -97,7 +99,7 @@ final class DuelNetworkCombatCoordinator {
     private let combatChannel: DuelNetworkMessageRouter.Channel
     private let expectedCompatibility: Barrier.Compatibility
     private let loader: Loader
-    private let cancelLoading: () -> Void
+    private let cancelLoading: Cancellation
     private let now: () -> TimeInterval
     private let automaticClock: Bool
     private let permitsFixtures: Bool
@@ -131,7 +133,7 @@ final class DuelNetworkCombatCoordinator {
     private var pulseTask: Task<Void, Never>?
 
     convenience init(transport: any DuelLobbyTransport, verified identity: DuelNetworkCompatibilityIdentity,
-                     loader: @escaping Loader, cancelLoading: @escaping () -> Void) {
+                     loader: @escaping Loader, cancelLoading: @escaping Cancellation) {
         self.init(transport: transport, compatibility: identity.compatibility, loader: loader,
                   cancelLoading: cancelLoading, now: { ProcessInfo.processInfo.systemUptime },
                   automaticClock: true, permitsFixtures: false)
@@ -139,7 +141,7 @@ final class DuelNetworkCombatCoordinator {
 
     #if DEBUG
     convenience init(testingTransport: any DuelLobbyTransport, compatibility: Barrier.Compatibility,
-                     loader: @escaping Loader, cancelLoading: @escaping () -> Void = {},
+                     loader: @escaping Loader, cancelLoading: @escaping Cancellation = {},
                      now: @escaping () -> TimeInterval) {
         self.init(transport: testingTransport, compatibility: compatibility, loader: loader,
                   cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: true)
@@ -147,7 +149,7 @@ final class DuelNetworkCombatCoordinator {
     #endif
 
     private init(transport: any DuelLobbyTransport, compatibility: Barrier.Compatibility,
-                 loader: @escaping Loader, cancelLoading: @escaping () -> Void,
+                 loader: @escaping Loader, cancelLoading: @escaping Cancellation,
                  now: @escaping () -> TimeInterval, automaticClock: Bool, permitsFixtures: Bool) {
         let router = DuelNetworkMessageRouter(transport: transport)
         self.router = router

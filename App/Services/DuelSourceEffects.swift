@@ -109,6 +109,8 @@ final class DuelSourceEffects {
     private let root: SCNNode
     private var manifest: Manifest?
     private var textures: [String: UIImage] = [:]
+    // Manifest validation bounds this to 2 effects × 64 tracks; no global cache.
+    private var preparationTemplates: [String: [SCNGeometry]] = [:]
     private var players: [String: [AVAudioPlayer]] = [:]
     private var soundCursor: [String: Int] = [:]
     private var pausedPlayers: Set<ObjectIdentifier> = []
@@ -218,6 +220,79 @@ final class DuelSourceEffects {
         manifest = definition
     }
 
+    #if DEBUG
+    /// Synthetic test data only. Does not load or authenticate any source assets,
+    /// construct audio players, or exercise the production initializer.
+    static func preparationFixture(root: SCNNode) -> DuelSourceEffects {
+        DuelSourceEffects(preparationFixtureRoot: root)
+    }
+
+    private init(preparationFixtureRoot root: SCNNode) {
+        self.root = root
+        let texture = "synthetic-preparation"
+        textures[texture] = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        var tracks: [Track] = []
+        // Three fragment bodies, both depth modes and all sampler wrap modes.
+        // Alpha includes both multiply flags to cover their equivalent handling.
+        for blend in ["alpha", "add"] {
+            for multiply in [false, true] {
+                for overlay in [false, true] {
+                    for wrapS in [0, 1] {
+                        for wrapT in [0, 1] {
+                            tracks.append(Track(name: "synthetic-track-\(tracks.count)", layer: tracks.count,
+                                texture: texture, blend: blend, wrapS: wrapS, wrapT: wrapT,
+                                multiplyTextureAlpha: multiply, overlay: overlay, sortingOrder: tracks.count,
+                                delay: 0, duration: 0.5,
+                                frames: [[0, 0, 0, 0, 10, 10, 0, 1, 1, 1, 1, 0, 0, 1, 1],
+                                         [0.5, 0, 0, 0, 20, 20, 0, 0.5, 0.5, 0.5, 0.5, 0.5, 0, 0.5, 1]]))
+                        }
+                    }
+                }
+            }
+        }
+        manifest = Manifest(version: 0, sampleRate: 240, worldUnitsPerSourceUnit: 0.01,
+            files: [], effects: ["hit": Effect(sourceName: "synthetic-hit", duration: 0.5, tracks: tracks),
+                                "block": Effect(sourceName: "synthetic-block", duration: 0.5, tracks: tracks)],
+            audio: [:], limitations: ["DEBUG synthetic preparation fixture; not authenticated source artwork or audio."])
+    }
+    #endif
+
+    /// Retained shader/material and SCNPlane-layout templates for every verified
+    /// hit/block track. This does not emit contacts, advance time or play sound.
+    /// Runtime copies isolate mutable uniforms and atlas transforms. Preparation
+    /// does not guarantee allocation-free bursts or sustained frame performance.
+    func preparationObjects() -> [Any] {
+        guard !ended else { return [] }
+        ensurePreparationTemplates()
+        return preparationTemplates.keys.sorted().flatMap { preparationTemplates[$0]! }.map { $0 as Any }
+    }
+
+    private func ensurePreparationTemplates() {
+        guard preparationTemplates.isEmpty, !ended, let manifest else { return }
+        for (kind, effect) in manifest.effects {
+            preparationTemplates[kind] = effect.tracks.map { track in
+                let material = SCNMaterial()
+                material.lightingModel = .constant
+                material.diffuse.contents = textures[track.texture]
+                material.diffuse.wrapS = track.wrapS == 0 ? .repeat : .clamp
+                material.diffuse.wrapT = track.wrapT == 0 ? .repeat : .clamp
+                material.diffuse.minificationFilter = .linear; material.diffuse.magnificationFilter = .linear
+                material.diffuse.mipFilter = .none
+                material.isDoubleSided = true; material.writesToDepthBuffer = false
+                material.readsFromDepthBuffer = !track.overlay
+                material.transparencyMode = .aOne
+                material.blendMode = track.blend == "add" ? .add : .alpha
+                material.shaderModifiers = [.fragment: Self.fragment(track)]
+                material.setValue(NSValue(scnVector4: SCNVector4(0, 0, 0, 0)), forKey: "sourceFXColor")
+                let plane = SCNPlane(width: 1, height: 1)
+                plane.materials = [material]
+                return plane
+            }
+        }
+    }
+
     /// Call once immediately after *every* simulation step, before its event
     /// queues are cleared by another step. Do not collect only the last step
     /// in a display callback: that would lose contacts at a lower render rate.
@@ -247,6 +322,8 @@ final class DuelSourceEffects {
     func emit(kind: Kind, position: SCNVector3, direction: Int, tick: Int, heavy: Bool = false,
               sound: SoundFamily = .unarmed) {
         guard !ended, !paused, tick >= 0, let effect = manifest?.effects[kind.rawValue] else { return }
+        ensurePreparationTemplates()
+        guard let templates = preparationTemplates[kind.rawValue] else { return }
         sequence += 1
         let holder = SCNNode()
         holder.name = "duel.source-effect.\(kind.rawValue).\(sequence)"
@@ -255,21 +332,11 @@ final class DuelSourceEffects {
         billboard.freeAxes = .all
         holder.constraints = [billboard]
         var particles: [Particle] = []
-        for track in effect.tracks {
-            let material = SCNMaterial()
-            material.lightingModel = .constant
-            material.diffuse.contents = textures[track.texture]
-            material.diffuse.wrapS = track.wrapS == 0 ? .repeat : .clamp
-            material.diffuse.wrapT = track.wrapT == 0 ? .repeat : .clamp
-            material.diffuse.minificationFilter = .linear; material.diffuse.magnificationFilter = .linear
-            material.diffuse.mipFilter = .none
-            material.isDoubleSided = true; material.writesToDepthBuffer = false
-            material.readsFromDepthBuffer = !track.overlay
-            material.transparencyMode = .aOne
-            material.blendMode = track.blend == "add" ? .add : .alpha
-            material.shaderModifiers = [.fragment: Self.fragment(track)]
-            material.setValue(NSValue(scnVector4: SCNVector4(0, 0, 0, 0)), forKey: "sourceFXColor")
-            let plane = SCNPlane(width: 1, height: 1)
+        for (index, track) in effect.tracks.enumerated() {
+            // Uniform color and atlas transform vary independently per particle.
+            // Copy the retained prepared template, rather than rebuilding shaders.
+            let plane = templates[index].copy() as! SCNGeometry
+            let material = templates[index].firstMaterial!.copy() as! SCNMaterial
             plane.materials = [material]
             let node = SCNNode(geometry: plane)
             node.name = track.name; node.castsShadow = false; node.isHidden = true
@@ -358,6 +425,7 @@ final class DuelSourceEffects {
     func shutdown() {
         guard !ended else { return }
         reset(); ended = true
+        preparationTemplates.removeAll()
         players.removeAll(); textures.removeAll(); manifest = nil
     }
 

@@ -75,6 +75,8 @@ final class DuelWeaponEffects {
     private let container = SCNNode()
     private var manifest: Manifest?
     private var textures: [String: UIImage] = [:]
+    // Validated profile counts bound this to five layers; no global cache.
+    private var preparationTemplates: [String: [SCNGeometry]] = [:]
     private var trails: [Trail] = []
     private var emitting: [Key: Trail] = [:]
     private var previousEndpoints: [Key: (Family, Sample)] = [:]
@@ -142,6 +144,96 @@ final class DuelWeaponEffects {
         root.addChildNode(container)
     }
 
+    #if DEBUG
+    /// Synthetic test data only. Separate from source asset loading/authentication;
+    /// no files or audio are read or created.
+    static func preparationFixture(root: SCNNode) -> DuelWeaponEffects {
+        DuelWeaponEffects(preparationFixtureRoot: root)
+    }
+
+    private init(preparationFixtureRoot root: SCNNode) {
+        let texture = "synthetic-preparation"
+        textures[texture] = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        func layer(_ shader: String, name: String) -> Layer {
+            let samplers: [String]
+            switch shader {
+            case "weapon": samplers = ["sourceMain", "sourceMask", "sourceAlpha"]
+            case "dashGlow": samplers = ["sourceMain"]
+            case "dashNoise": samplers = ["sourceMain", "sourceAux", "sourceMask"]
+            default: samplers = ["sourceMain", "sourceAux"]
+            }
+            return Layer(name: name, shader: shader, lifetime: 0.5, fixedWidth: shader == "weapon" ? 0 : 0.2,
+                colorKeys: [[0, 1, 1, 1], [1, 0.5, 0.5, 0.5]], alphaKeys: [[0, 1], [1, 0]],
+                textures: Dictionary(uniqueKeysWithValues: samplers.map { ($0, texture) }),
+                uvMain: [1, 1, 0, 0], uvAux: [1, 1, 0, 0], uvMask: [1, 1, 0, 0],
+                parameters: [1, 1, 0.1, 0.2], tint: [1, 1, 1, 1])
+        }
+        manifest = Manifest(version: 0, whiteTexture: texture, files: [], profiles: [
+            "katana": Profile(swing: [layer("weapon", name: "synthetic-katana")],
+                              shadow: [layer("dashGlow", name: "synthetic-glow"), layer("dashNoise", name: "synthetic-noise")]),
+            "dualHammers": Profile(swing: [layer("weapon", name: "synthetic-hammers")],
+                                   shadow: [layer("hammerFire", name: "synthetic-fire")])
+        ], limitations: ["DEBUG synthetic preparation fixture; not authenticated source artwork."])
+        container.name = "duel.weapon-effects"
+        root.addChildNode(container)
+    }
+    #endif
+
+    /// Every verified family/swing/shadow material, including generated curve
+    /// shader variants, with the runtime vertex/UV/UInt16 triangle layout.
+    /// Templates stay detached and never emit samples or advance the visual clock.
+    /// Live ribbons copy these materials; their changing vertex buffers still need
+    /// uploads each tick. This is shader/material preparation, not an FPS guarantee.
+    func preparationObjects() -> [Any] {
+        guard !ended else { return [] }
+        ensurePreparationTemplates()
+        return preparationTemplates.keys.sorted().flatMap { preparationTemplates[$0]! }.map { $0 as Any }
+    }
+
+    private static func templateKey(_ family: String, shadow: Bool) -> String {
+        family + (shadow ? ".shadow" : ".swing")
+    }
+
+    private func ensurePreparationTemplates() {
+        guard preparationTemplates.isEmpty, !ended, let manifest else { return }
+        for (family, profile) in manifest.profiles {
+            for shadow in [false, true] {
+                preparationTemplates[Self.templateKey(family, shadow: shadow)] = (shadow ? profile.shadow : profile.swing).map { profile in
+                    let material = SCNMaterial()
+                    material.lightingModel = .constant; material.isDoubleSided = true
+                    material.readsFromDepthBuffer = true; material.writesToDepthBuffer = false
+                    material.blendMode = .alpha; material.transparencyMode = .aOne
+                    material.diffuse.contents = textures[manifest.whiteTexture]
+                    material.diffuse.mipFilter = .none
+                    material.shaderModifiers = [.fragment: Self.fragment(profile)]
+                    // Reduce the broad katana fan without altering authenticated art or hitboxes.
+                    material.setValue(NSNumber(value: family == "katana" ? 0.48 : 1.0), forKey: "presentationOpacity")
+                    for (name, file) in profile.textures {
+                        // Every profile reference was validated before attachment.
+                        let property = SCNMaterialProperty(contents: textures[file]!)
+                        property.minificationFilter = .linear; property.magnificationFilter = .linear; property.mipFilter = .none
+                        // Preserve the source sampler roles: weapon alpha/fire
+                        // clamp, while scrolling noise maps repeat.
+                        property.wrapS = name == "sourceAlpha" || profile.shader == "hammerFire" && name == "sourceMain" ? .clamp : .repeat
+                        property.wrapT = property.wrapS
+                        material.setValue(property, forKey: name)
+                    }
+                    for (name, value) in [("sourceUVMain", profile.uvMain), ("sourceUVAux", profile.uvAux),
+                                          ("sourceUVMask", profile.uvMask), ("sourceParameters", profile.parameters), ("sourceTint", profile.tint)] {
+                        material.setValue(NSValue(scnVector4: SCNVector4(value[0], value[1], value[2], value[3])), forKey: name)
+                    }
+                    material.setValue(NSNumber(value: 0.0), forKey: "sourceTime")
+                    return Self.ribbonGeometry(
+                        vertices: [SCNVector3(0, 0, 0), SCNVector3(0, 1, 0), SCNVector3(1, 0, 0), SCNVector3(1, 1, 0)],
+                        uv: [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 0), CGPoint(x: 1, y: 1)],
+                        indices: [0, 1, 2, 1, 3, 2], material: material)
+                }
+            }
+        }
+    }
+
     /// Call after each simulation step with freshly posed world-space bone
     /// endpoints. This clock must freeze during hit-stop. Repeated rendering
     /// of one tick neither emits another segment nor scrolls shader noise.
@@ -205,38 +297,20 @@ final class DuelWeaponEffects {
     }
     func shutdown() {
         guard !ended else { return }
-        reset(); ended = true; container.removeFromParentNode(); textures.removeAll(); manifest = nil
+        reset(); ended = true; container.removeFromParentNode()
+        preparationTemplates.removeAll(); textures.removeAll(); manifest = nil
     }
 
     private func makeTrail(key: Key, pose: Pose, motion: String) -> Trail? {
         guard let manifest, let profile = manifest.profiles[pose.family.rawValue] else { return nil }
+        ensurePreparationTemplates()
+        guard let templates = preparationTemplates[Self.templateKey(pose.family.rawValue, shadow: pose.isShadow)] else { return nil }
         sequence += 1
         let root = SCNNode(); root.name = "duel.weapon-trail.\(pose.family.rawValue).\(pose.isShadow ? "shadow" : "swing").\(sequence)"
-        let layers = (pose.isShadow ? profile.shadow : profile.swing).map { profile -> RenderLayer in
-            let material = SCNMaterial()
-            material.lightingModel = .constant; material.isDoubleSided = true
-            material.readsFromDepthBuffer = true; material.writesToDepthBuffer = false
-            material.blendMode = .alpha; material.transparencyMode = .aOne
-            material.diffuse.contents = textures[manifest.whiteTexture]
-            material.diffuse.mipFilter = .none
-            material.shaderModifiers = [.fragment: Self.fragment(profile)]
-            // Reduce the broad katana fan without altering authenticated art or hitboxes.
-            material.setValue(NSNumber(value: pose.family == .katana ? 0.48 : 1.0), forKey: "presentationOpacity")
-            for (name, file) in profile.textures {
-                // Every profile reference was validated before attachment.
-                let property = SCNMaterialProperty(contents: textures[file]!)
-                property.minificationFilter = .linear; property.magnificationFilter = .linear; property.mipFilter = .none
-                // Preserve the source sampler roles: weapon alpha/fire
-                // clamp, while scrolling noise maps repeat.
-                property.wrapS = name == "sourceAlpha" || profile.shader == "hammerFire" && name == "sourceMain" ? .clamp : .repeat
-                property.wrapT = property.wrapS
-                material.setValue(property, forKey: name)
-            }
-            for (name, value) in [("sourceUVMain", profile.uvMain), ("sourceUVAux", profile.uvAux),
-                                  ("sourceUVMask", profile.uvMask), ("sourceParameters", profile.parameters), ("sourceTint", profile.tint)] {
-                material.setValue(NSValue(scnVector4: SCNVector4(value[0], value[1], value[2], value[3])), forKey: name)
-            }
-            material.setValue(NSNumber(value: 0.0), forKey: "sourceTime")
+        let layers = (pose.isShadow ? profile.shadow : profile.swing).enumerated().map { index, profile -> RenderLayer in
+            // sourceTime changes per live ribbon, so isolate its material while
+            // retaining the exact prepared shader, textures and static parameters.
+            let material = templates[index].firstMaterial!.copy() as! SCNMaterial
             let node = SCNNode(); node.name = profile.name; node.castsShadow = false
             node.renderingOrder = 90; root.addChildNode(node)
             return RenderLayer(profile: profile, node: node, material: material)
@@ -265,12 +339,17 @@ final class DuelWeaponEffects {
                 indices += [j, j + 1, j + 2, j + 1, j + 3, j + 2]
             }
         }
+        layer.node.geometry = Self.ribbonGeometry(vertices: vertices, uv: uv, indices: indices, material: layer.material)
+        layer.material.setValue(NSNumber(value: Double(tick) / Double(DuelGame.ticksPerSecond)), forKey: "sourceTime")
+    }
+
+    private static func ribbonGeometry(vertices: [SCNVector3], uv: [CGPoint], indices: [UInt16], material: SCNMaterial) -> SCNGeometry {
         let data = indices.withUnsafeBufferPointer { Data(buffer: $0) }
         let element = SCNGeometryElement(data: data, primitiveType: .triangles,
                                          primitiveCount: indices.count / 3, bytesPerIndex: MemoryLayout<UInt16>.size)
         let geometry = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices), SCNGeometrySource(textureCoordinates: uv)], elements: [element])
-        geometry.materials = [layer.material]; layer.node.geometry = geometry
-        layer.material.setValue(NSNumber(value: Double(tick) / Double(DuelGame.ticksPerSecond)), forKey: "sourceTime")
+        geometry.materials = [material]
+        return geometry
     }
 
     private func remove(_ trail: Trail) {
