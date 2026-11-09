@@ -146,54 +146,79 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
 
     func select(_ hero: DuelGame.Hero) {
         guard selectedHero != hero, let scene else { return }
-        stopIdle()
-        let previousHero = selectedHero
-        selectedHero = hero; idleTick = 0; yaw = .pi; zoom = 1
-        cameraNode?.position = SCNVector3(5, 1.6, 4.8)
-        cameraNode?.look(at: showroomCenter)
-        characterRoot?.removeFromParentNode(); characterRoot = nil; character = nil; originalCharacter = nil
-        equippedActor = nil; equippedIdle = nil
-        // A retired model must not stay cached as an invisible second character.
-        if let previousHero { weaponAssets?.releaseCharacter(for: previousHero) }
-        if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"), DuelWeaponAssets.catalogURL() != nil {
+
+        // Prepare the new, fully posed scene node before touching the visible
+        // character, its camera state or its idle driver. A missing profile,
+        // damaged model or failed decode must leave the current portrait intact.
+        var nextRoot: SCNNode?
+        var nextWeaponAssets: DuelWeaponAssets?
+        var nextEquippedActor: DuelWeaponCharacterInstance?
+        var nextEquippedIdle: DuelWeaponClip?
+        var nextOriginal: DuelOriginalRigAsset?
+        var nextCharacter: DuelCharacterAsset?
+
+        if !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls"),
+           DuelWeaponAssets.catalogURL() != nil {
             do {
-                if weaponAssets == nil { weaponAssets = try DuelWeaponAssets() }
-                guard let asset = try weaponAssets?.character(for: hero), let idle = asset.profile.clip(role: "idle") else { return }
+                let assets = try weaponAssets ?? DuelWeaponAssets()
+                let asset = try assets.character(for: hero)
+                guard let idle = asset.profile.clip(role: "idle") else { return }
                 let actor = DuelWeaponCharacterInstance(asset)
-                actor.apply(.init(clip: idle.name, tick: 0, duration: idle.ticks, groundLift: idle.tracks.lift(phase: 0)))
-                actor.instance.root.position = SCNVector3(4.7, -0.14 + Float(idle.tracks.lift(phase: 0)), -0.35)
+                let lift = idle.tracks.lift(phase: 0)
+                actor.apply(.init(clip: idle.name, tick: 0,
+                                  duration: idle.ticks, groundLift: lift))
+                actor.instance.root.position = SCNVector3(4.7, -0.14 + Float(lift), -0.35)
                 actor.instance.root.eulerAngles.y = .pi
-                actor.instance.root.name = "duel.lobby.character.\(hero.rawValue)"
-                scene.rootNode.addChildNode(actor.instance.root); characterRoot = actor.instance.root
-                equippedActor = actor; equippedIdle = idle
-                startIdle(); setNeedsDisplay()
+                nextRoot = actor.instance.root
+                nextWeaponAssets = assets
+                nextEquippedActor = actor
+                nextEquippedIdle = idle
             } catch { return }
-            return
-        }
-        if let identity = DuelOriginalRigAsset.identity(for: hero),
-           let url = DuelOriginalRigAsset.bundledURL(for: identity) {
+        } else if let identity = DuelOriginalRigAsset.identity(for: hero),
+                  let url = DuelOriginalRigAsset.bundledURL(for: identity) {
             guard let asset = try? DuelOriginalRigAsset(url: url, identity: identity) else { return }
             let actor = DuelOriginalRigInstance(asset)
             actor.apply(.init(clip: .idle, phase: 0))
             actor.instance.root.position = SCNVector3(4.7, -0.14, -0.35)
             actor.instance.root.eulerAngles.y = .pi
-            actor.instance.root.name = "duel.lobby.character.\(hero.rawValue)"
-            scene.rootNode.addChildNode(actor.instance.root)
-            originalCharacter = asset; characterRoot = actor.instance.root; setNeedsDisplay()
-            return
+            nextRoot = actor.instance.root
+            nextOriginal = asset
+        } else {
+            guard let url = DuelCharacterAsset.bundledURL(for: hero),
+                  let asset = try? DuelCharacterAsset(url: url, hero: hero) else { return }
+            let instance = asset.model.instantiate()
+            var pose = asset.model.restPose
+            if let clip = asset.model.clips["Idle"] {
+                clip.sample(at: asset.starts["Idle"] ?? 0, into: &pose)
+                for i in asset.model.animated { instance.nodes[i].simdTransform = pose.transform(i) }
+            }
+            instance.root.position = SCNVector3(4.7, -0.14, -0.35)
+            nextRoot = instance.root
+            nextCharacter = asset
         }
-        guard let url = DuelCharacterAsset.bundledURL(for: hero),
-              let asset = try? DuelCharacterAsset(url: url, hero: hero) else { return }
-        let instance = asset.model.instantiate()
-        var pose = asset.model.restPose
-        if let clip = asset.model.clips["Idle"] {
-            clip.sample(at: asset.starts["Idle"] ?? 0, into: &pose)
-            for i in asset.model.animated { instance.nodes[i].simdTransform = pose.transform(i) }
-        }
-        instance.root.position = SCNVector3(4.7, -0.14, -0.35)
-        instance.root.name = "duel.lobby.character.\(hero.rawValue)"
-        scene.rootNode.addChildNode(instance.root)
-        character = asset; characterRoot = instance.root; setNeedsDisplay()
+        guard let nextRoot else { return }
+        nextRoot.name = "duel.lobby.character.\(hero.rawValue)"
+
+        // Commit a successful switch on the main actor. Detach and release the
+        // retired model only after the replacement has passed preparation.
+        stopIdle()
+        let previousHero = selectedHero
+        let previousAssets = weaponAssets
+        characterRoot?.removeFromParentNode()
+        characterRoot = nextRoot
+        character = nextCharacter
+        originalCharacter = nextOriginal
+        equippedActor = nextEquippedActor
+        equippedIdle = nextEquippedIdle
+        weaponAssets = nextWeaponAssets
+        if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
+        selectedHero = hero
+        idleTick = 0; yaw = .pi; zoom = 1
+        cameraNode?.position = SCNVector3(5, 1.6, 4.8)
+        cameraNode?.look(at: showroomCenter)
+        scene.rootNode.addChildNode(nextRoot)
+        startIdle()
+        setNeedsDisplay()
     }
     func shutdown() {
         // Detach resource-owning nodes even if SceneKit keeps an autoreleased

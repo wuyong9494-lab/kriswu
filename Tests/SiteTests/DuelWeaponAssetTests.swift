@@ -324,6 +324,40 @@ final class DuelWeaponAssetTests: XCTestCase {
         }
     }
 
+    func testShowroomRejectsMissingProfileWithoutDiscardingCurrentPose() throws {
+        let assets = try DuelWeaponAssets()
+        XCTAssertNil(assets.catalog.profile(for: .gale),
+                     "The authenticated distinct pack only equips Sun and Liu")
+        let lobby = DuelLobbySceneView(hero: .ember)
+        defer { lobby.shutdown() }
+        let original = try XCTUnwrap(lobby.scene?.rootNode.childNode(
+            withName: "duel.lobby.character.ember", recursively: false))
+        lobby.rotatePreview(by: 0.35)
+        lobby.scalePreview(by: 1.25)
+        let savedYaw = lobby.yaw, savedZoom = lobby.zoom
+        let frameCount = lobby.showroomFrameCount
+
+        lobby.select(.gale)
+        XCTAssertEqual(lobby.selectedHero, .ember,
+                       "Unavailable resources must not change the selected hero")
+        XCTAssertTrue(original.parent === lobby.scene?.rootNode,
+                      "The working character remains in the visible scene")
+        XCTAssertEqual(lobby.yaw, savedYaw, accuracy: 0.0001)
+        XCTAssertEqual(lobby.zoom, savedZoom, accuracy: 0.0001)
+        XCTAssertEqual(lobby.showroomFrameCount, frameCount)
+        lobby.renderIdle(at: 1)
+        XCTAssertEqual(lobby.showroomFrameCount, frameCount + 1,
+                       "Rejected selection must retain the old idle sampler")
+
+        lobby.select(.liu)
+        XCTAssertEqual(lobby.selectedHero, .liu)
+        XCTAssertNil(original.parent, "A valid switch still detaches the old model")
+        XCTAssertNotNil(lobby.scene?.rootNode.childNode(
+            withName: "duel.lobby.character.liu", recursively: false))
+        XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
+        XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+    }
+
     func testShowroomSwitchesBetweenDistinctAssetsAndReleasesOldModel() throws {
         let lobby = DuelLobbySceneView(hero: .ember)
         let initialRoot = try XCTUnwrap(lobby.scene?.rootNode.childNode(
