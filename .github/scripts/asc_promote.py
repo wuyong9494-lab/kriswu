@@ -77,7 +77,12 @@ def output(name, value):
 
 
 def save_report(path, request, **values):
-    report = {key: request[key] for key in ("build_number", "version", "source_sha", "source_run_id")}
+    # Fighter promotion uses a dedicated five-job CI run instead of ios.yml.
+    # Preserve legacy source_run_id when present without requiring it.
+    report = {key: request[key] for key in ("build_number", "version", "source_sha")}
+    for key in ("source_run_id", "fighter_run_id", "source_branch"):
+        if key in request:
+            report[key] = request[key]
     report.update(values)
     Path(path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(report, ensure_ascii=False), flush=True)
