@@ -30,6 +30,7 @@ struct DuelHomeView: View {
                         showroom
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         ScrollView { lobbyActions }
+                            .accessibilityIdentifier("duel.lobby.actions")
                             .frame(width: min(310, geometry.size.width * 0.36))
                     }
                     .padding(20)
@@ -41,6 +42,7 @@ struct DuelHomeView: View {
                         }
                         .padding(16)
                     }
+                    .accessibilityIdentifier("duel.lobby.actions")
                 }
             }
             .foregroundStyle(.white)

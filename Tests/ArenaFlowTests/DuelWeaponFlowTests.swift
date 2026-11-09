@@ -39,12 +39,14 @@ final class DuelWeaponFlowTests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 30))
         entry.tap()
         XCTAssertTrue(app.buttons["duel.hero.ember"].waitForExistence(timeout: 12))
+        expectOrientation(app, landscape: true)
         XCTAssertFalse(app.buttons["duel.hero.gale"].exists,
                        "The original-asset job must not fall back to the three-character laboratory")
 
         for (hero, person, weapon) in [("ember", "孙登", "武士刀"), ("liu", "刘泉纬", "双锤")] {
-            try tapVisible(app.buttons["duel.hero.\(hero)"], app: app)
-            try tapVisible(app.buttons["duel.practice"], app: app)
+            tapLobbyButton(app.buttons["duel.hero.\(hero)"], app: app)
+            capture("original-\(hero)-landscape-lobby")
+            tapLobbyButton(app.buttons["duel.practice"], app: app)
             XCTAssertTrue(app.buttons["duel.pause"].waitForExistence(timeout: 15))
             expectOrientation(app, landscape: true)
             try requireOriginalControls(app, person: person, weapon: weapon)
@@ -64,12 +66,13 @@ final class DuelWeaponFlowTests: XCTestCase {
             XCTAssertTrue(app.buttons["duel.exit"].waitForExistence(timeout: 4))
             app.buttons["duel.exit"].tap()
             XCTAssertTrue(app.buttons["duel.hero.\(hero)"].waitForExistence(timeout: 12))
-            expectOrientation(app, landscape: false)
-            capture("original-\(hero)-returned-portrait-selection")
+            expectOrientation(app, landscape: true)
+            capture("original-\(hero)-returned-landscape-selection")
         }
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        expectOrientation(app, landscape: false)
         XCTAssertTrue(app.buttons["arena.enter"].exists)
         XCTAssertTrue(app.staticTexts["星了个星"].exists)
         XCTAssertTrue(app.staticTexts["五子棋"].exists)
@@ -324,16 +327,22 @@ final class DuelWeaponFlowTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed, message)
     }
     private func expectOrientation(_ app: XCUIApplication, landscape: Bool) {
-        wait(landscape ? "Match uses landscape" : "Selection returns to portrait", timeout: 10) {
+        wait(landscape ? "Fighter lobby and match use landscape" : "Games home returns to portrait", timeout: 10) {
             let size = app.windows.firstMatch.frame.size
             return landscape ? size.width > size.height : size.height > size.width
         }
     }
-    private func tapVisible(_ button: XCUIElement, app: XCUIApplication) throws {
+    private func tapLobbyButton(_ button: XCUIElement, app: XCUIApplication) {
         XCTAssertTrue(button.waitForExistence(timeout: 12))
-        for _ in 0..<4 where !button.isHittable { app.swipeUp() }
-        for _ in 0..<4 where !button.isHittable { app.swipeDown() }
-        XCTAssertTrue(button.isHittable)
+        let actions = app.scrollViews["duel.lobby.actions"]
+        XCTAssertTrue(actions.exists, "Lobby actions must expose their actual scroll container")
+        // The landscape showroom occupies the app's center. App-wide swipes
+        // land there, outside the right-hand actions pane, and cannot reveal
+        // practice or return to hero selection after a match.
+        for _ in 0..<4 where !button.isHittable { actions.swipeUp() }
+        for _ in 0..<4 where !button.isHittable { actions.swipeDown() }
+        XCTAssertTrue(button.isHittable,
+                      "\(button.identifier) must be reachable by real gestures in the lobby actions pane")
         button.tap()
     }
     private func capture(_ name: String) {
