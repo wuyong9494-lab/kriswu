@@ -8,7 +8,12 @@ struct DuelWorld: UIViewRepresentable {
     let session: DuelSession
     var preparation: DuelNetworkMatchPreparation? = nil
     func makeUIView(context: Context) -> DuelWorldView {
-        let view = DuelWorldView(session: session, characterSource: preparation?.permitsFixture == true ? .procedural : .bundled)
+        #if DEBUG
+        let source: DuelWorldView.CharacterSource = preparation?.permitsFixture == true ? .presentationFixture : .bundled
+        #else
+        let source: DuelWorldView.CharacterSource = .bundled
+        #endif
+        let view = DuelWorldView(session: session, characterSource: source)
         preparation?.attach(view)
         return view
     }
@@ -48,7 +53,15 @@ final class DuelWorldView: SCNView {
     private var perspectiveDistance: Float = 7.7
     private var impactShake: Float = 0
     private var impactPhase: Int = 0
-    enum CharacterSource { case bundled, legacy, procedural }
+    enum CharacterSource {
+        case bundled, legacy, procedural
+        #if DEBUG
+        /// Asset-free renderer for synthetic external presentation tests only.
+        /// Unlike procedural characters, this also bypasses source stage/effects.
+        case presentationFixture
+        #endif
+    }
+    private(set) var usesSyntheticPresentationResources = false
     private var bolts: [Int: SCNNode] = [:]
     private var hurtNodes: [SCNNode] = []
     private var attackNodes: [SCNNode] = []
@@ -77,10 +90,12 @@ final class DuelWorldView: SCNView {
     private var preparationFinished = false
     private(set) var usedActualScenePreparation = false
     #if DEBUG
+    private(set) var attemptedBundledStageLoad = false
     typealias TestPrepare = @MainActor ([Any], @escaping @MainActor (Bool) -> Void) -> Void
     var testingPrepare: TestPrepare?
     func installPreparationEffectFixtures() throws {
-        guard !ended, preparationOwner == nil, session.committedConfiguration == nil,
+        guard !ended, usesSyntheticPresentationResources, session.isPresentationFixture,
+              preparationOwner == nil, session.committedConfiguration == nil,
               session.awaitingNetworkPreparation, let scene else { throw PreparationFailure.invalidSession }
         sourceEffects = DuelSourceEffects.preparationFixture(root: scene.rootNode)
         weaponEffects = DuelWeaponEffects.preparationFixture(root: scene.rootNode)
@@ -198,6 +213,19 @@ final class DuelWorldView: SCNView {
     init(session: DuelSession, characterSource: CharacterSource = .bundled) {
         self.session = session
         super.init(frame: .zero, options: nil)
+        #if DEBUG
+        if characterSource == .presentationFixture {
+            // Never turn a real/verified match, even a closed one, into a
+            // synthetic fallback. Reject before touching callbacks or assets.
+            guard session.isPresentationFixture, session.awaitingNetworkPreparation,
+                  session.committedConfiguration == nil, session.weaponAssets == nil,
+                  session.preparedResources == nil, !session.usesVerifiedPreparedResources else {
+                ended = true
+                return
+            }
+            usesSyntheticPresentationResources = true
+        }
+        #endif
         if session.usesVerifiedPreparedResources {
             guard characterSource == .bundled, session.claimPreparedWorld(self) else {
                 // A rejected duplicate never touches the first renderer's roots,
@@ -230,7 +258,7 @@ final class DuelWorldView: SCNView {
         let ring = DuelActor.shape(SCNTorus(ringRadius: 0.65, pipeRadius: 0.028), .systemOrange)
         ring.geometry?.firstMaterial?.lightingModel = .constant
         ring.castsShadow = false; ring.isHidden = true; world.rootNode.addChildNode(ring); slamRing = ring
-        if characterSource != .procedural {
+        if characterSource != .procedural && !usesSyntheticPresentationResources {
             for hero in Set(session.game.fighters.map(\.hero)) where hero != .gale {
                 if session.setup.originalWeapons {
                     do {
@@ -272,7 +300,7 @@ final class DuelWorldView: SCNView {
             self.weaponEffects?.setPaused(paused)
             if paused { self.stopClock() } else { self.startClock() }
         }
-        if session.setup.originalWeapons {
+        if session.setup.originalWeapons && !usesSyntheticPresentationResources {
             if session.usesVerifiedPreparedResources {
                 if let prepared = session.preparedResources, let root = prepared.effectsRoot,
                    let source = prepared.sourceEffects, let weapon = prepared.weaponEffects {
@@ -549,11 +577,23 @@ final class DuelWorldView: SCNView {
         pointOfView?.look(at: SCNVector3(5, 1.2, 0))
     }
     private func buildStage(_ root: SCNNode) {
+        #if DEBUG
+        if usesSyntheticPresentationResources {
+            let fixture = SCNNode()
+            fixture.name = "duel.stage.presentation-fixture"
+            buildProceduralStage(fixture)
+            root.addChildNode(fixture)
+            return
+        }
+        #endif
         if session.usesVerifiedPreparedResources {
             guard let asset = session.preparedResources?.stage else { session.characterFailed(); return }
             installStage(asset, in: root)
             return
         }
+        #if DEBUG
+        attemptedBundledStageLoad = true
+        #endif
         if let url = DuelStageAsset.bundledURL, let asset = try? DuelStageAsset(url: url) {
             installStage(asset, in: root)
             return
@@ -564,6 +604,9 @@ final class DuelWorldView: SCNView {
             session.characterFailed()
             return
         }
+        buildProceduralStage(root)
+    }
+    private func buildProceduralStage(_ root: SCNNode) {
         let floor = DuelActor.shape(SCNBox(width: 11.5, height: 0.3, length: 3.2, chamferRadius: 0.12),
                                     UIColor(red: 0.14, green: 0.16, blue: 0.28, alpha: 1))
         floor.position = SCNVector3(5, -0.2, 0); root.addChildNode(floor)

@@ -34,10 +34,52 @@ extension DuelLifecycleTests {
         }
     }
 
+    func testNetworkPreparationFixtureNeverLoadsBundledOriginalResources() throws {
+        let state = try preparationSession()
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
+        defer { world.shutdown(); state.shutdown() }
+        // This test also runs with the approved source pack installed. The
+        // fixture must bypass lookup, not load/decode it and discard the result.
+        XCTAssertTrue(state.isPresentationFixture)
+        XCTAssertTrue(world.usesSyntheticPresentationResources)
+        XCTAssertFalse(world.attemptedBundledStageLoad)
+        XCTAssertNil(world.stageAsset); XCTAssertNil(world.verifiedStageRoot)
+        XCTAssertNil(world.characterAsset)
+        XCTAssertTrue(world.originalAssets.isEmpty); XCTAssertTrue(world.weaponAssets.isEmpty)
+        XCTAssertNil(world.sourceEffects); XCTAssertNil(world.weaponEffects)
+        XCTAssertNil(world.verifiedEffectsRoot)
+        let fixtureStage = try XCTUnwrap(world.scene?.rootNode.childNode(
+            withName: "duel.stage.presentation-fixture", recursively: false))
+        XCTAssertFalse(fixtureStage.childNodes.isEmpty)
+        XCTAssertNotNil(world.pointOfView?.camera)
+        XCTAssertTrue(world.pointOfView?.camera?.usesOrthographicProjection == true)
+        XCTAssertFalse(world.hasVerifiedResourceIdentity)
+        XCTAssertEqual(state.game.frame, 0)
+        XCTAssertTrue(state.paused)
+    }
+
+    func testNetworkPreparationFixtureRendererRejectsNonFixtureSession() {
+        let state = DuelSession(.init(hero: .ember, difficulty: .learning, mode: .practice))
+        var pauses = 0
+        state.renderPause = { _ in pauses += 1 }
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
+        defer { world.shutdown(); state.shutdown() }
+        XCTAssertFalse(state.isPresentationFixture)
+        XCTAssertFalse(world.usesSyntheticPresentationResources)
+        XCTAssertFalse(world.attemptedBundledStageLoad)
+        XCTAssertNil(world.scene)
+        XCTAssertNil(state.loadError)
+        XCTAssertFalse(state.paused)
+        world.shutdown()
+        XCTAssertNotNil(state.renderPause, "A rejected fixture renderer cannot clear the live session's callback")
+        state.pause()
+        XCTAssertEqual(pauses, 1)
+    }
+
     func testNetworkPreparationNeedsWindowAndUsableLayoutBeforeScenePrepare() throws {
         let state = try preparationSession()
         let initial = state.game, clocks = DuelWorldView.activeClocks
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         defer { world.shutdown(); state.shutdown() }
         var prepares = 0, completions = 0
         var finish: (@MainActor (Bool) -> Void)?
@@ -70,7 +112,7 @@ extension DuelLifecycleTests {
         let owner = try DuelNetworkMatchPreparation(testing: state) { result in
             if case .success(let receipt) = result { receipts.append(receipt) }
         }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         try world.installPreparationEffectFixtures()
         var finish: (@MainActor (Bool) -> Void)?, objectCount = 0
         world.testingPrepare = { objects, callback in objectCount = objects.count; finish = callback }
@@ -106,7 +148,7 @@ extension DuelLifecycleTests {
         let state = try preparationSession()
         var completed = 0
         let owner = try DuelNetworkMatchPreparation(testing: state) { _ in completed += 1 }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         world.testingPrepare = { _, callback in callback(true) }
         owner.attach(world)
         let controls = preparationControls(owner)
@@ -130,7 +172,7 @@ extension DuelLifecycleTests {
                 let owner = try DuelNetworkMatchPreparation(testing: state) { result in
                     switch result { case .success: successes += 1; case .failure(let error): failures.append(error) }
                 }
-                let world = DuelWorldView(session: state, characterSource: .procedural)
+                let world = DuelWorldView(session: state, characterSource: .presentationFixture)
                 try world.installPreparationEffectFixtures()
                 var finish: (@MainActor (Bool) -> Void)?
                 world.testingPrepare = { _, callback in finish = callback }
@@ -181,7 +223,7 @@ extension DuelLifecycleTests {
                 catch { XCTFail("A delivered preparation must allow coordinator start: \(error)") }
             }
         }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         world.testingPrepare = { _, callback in callback(true) }
         owner.attach(world)
         let controls = preparationControls(owner), window = preparationWindow()
@@ -208,7 +250,7 @@ extension DuelLifecycleTests {
         let owner = try DuelNetworkMatchPreparation(testing: state) { result in
             if case .failure(let error) = result { failures.append(error) }
         }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         owner.attach(world)
         let controls = preparationControls(owner, validSource: false)
         defer { owner.cancel() }
@@ -227,7 +269,7 @@ extension DuelLifecycleTests {
             if case .failure(let error) = result { failure = error }
             else { XCTFail("Failed SceneKit preparation cannot become ready") }
         }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         var finish: (@MainActor (Bool) -> Void)?
         world.testingPrepare = { _, callback in finish = callback }
         owner.attach(world)
@@ -249,7 +291,7 @@ extension DuelLifecycleTests {
             let owner = try DuelNetworkMatchPreparation(testing: state) { result in
                 switch result { case .success: successes += 1; case .failure: failures += 1 }
             }
-            let world = DuelWorldView(session: state, characterSource: .procedural)
+            let world = DuelWorldView(session: state, characterSource: .presentationFixture)
             var finish: (@MainActor (Bool) -> Void)?
             world.testingPrepare = { _, callback in finish = callback }
             owner.attach(world)
@@ -273,7 +315,7 @@ extension DuelLifecycleTests {
             let owner = try DuelNetworkMatchPreparation(testing: state) { result in
                 switch result { case .success: successes += 1; case .failure: failures += 1 }
             }
-            let world = DuelWorldView(session: state, characterSource: .procedural)
+            let world = DuelWorldView(session: state, characterSource: .presentationFixture)
             var finish: (@MainActor (Bool) -> Void)?
             world.testingPrepare = { _, callback in finish = callback }
             owner.attach(world)
@@ -291,7 +333,7 @@ extension DuelLifecycleTests {
         let state = try preparationSession()
         var completed = 0
         let owner = try DuelNetworkMatchPreparation(testing: state) { _ in completed += 1 }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         var finish: (@MainActor (Bool) -> Void)?
         world.testingPrepare = { _, callback in finish = callback }
         owner.attach(world)
@@ -314,7 +356,7 @@ extension DuelLifecycleTests {
             let owner = try DuelNetworkMatchPreparation(testing: state) { result in
                 switch result { case .success: successes += 1; case .failure: failures += 1 }
             }
-            let world = DuelWorldView(session: state, characterSource: .procedural)
+            let world = DuelWorldView(session: state, characterSource: .presentationFixture)
             world.testingPrepare = { _, callback in callback(true) }
             owner.attach(world)
             let controls = preparationControls(owner), window = preparationWindow()
@@ -345,7 +387,7 @@ extension DuelLifecycleTests {
             if case .failure = result { freshFailures += 1 }
         }
         defer { old.cancel(); fresh.cancel() }
-        let world = DuelWorldView(session: second, characterSource: .procedural)
+        let world = DuelWorldView(session: second, characterSource: .presentationFixture)
         fresh.attach(world)
         second.didRequestAuthoritativeStop = { freshStops += 1 }
         second.inputReset = { freshResets += 1 }
@@ -365,7 +407,7 @@ extension DuelLifecycleTests {
         let state = try preparationSession()
         var delivered = 0
         let owner = try DuelNetworkMatchPreparation(testing: state) { _ in delivered += 1 }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         world.testingPrepare = { _, callback in callback(true) }
         owner.attach(world)
         let controls = preparationControls(owner), window = preparationWindow()
@@ -386,7 +428,7 @@ extension DuelLifecycleTests {
             let owner = try DuelNetworkMatchPreparation(testing: state) { result in
                 switch result { case .success: successes += 1; case .failure(let error): failures.append(error) }
             }
-            let world = DuelWorldView(session: state, characterSource: .procedural)
+            let world = DuelWorldView(session: state, characterSource: .presentationFixture)
             world.testingPrepare = { _, callback in callback(true) }
             owner.attach(world)
             let controls = preparationControls(owner), window = preparationWindow()
@@ -416,7 +458,7 @@ extension DuelLifecycleTests {
         let owner = try DuelNetworkMatchPreparation(testing: state, invalidated: { _ in invalidations += 1 }) {
             _ in completed += 1
         }
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         world.testingPrepare = { _, callback in callback(true) }
         owner.attach(world)
         let controls = preparationControls(owner), window = preparationWindow()
@@ -433,7 +475,7 @@ extension DuelLifecycleTests {
 
     func testNetworkPreparationRealSceneKitPrepareIncludesSyntheticShaderVariants() async throws {
         let state = try preparationSession()
-        let world = DuelWorldView(session: state, characterSource: .procedural)
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
         try world.installPreparationEffectFixtures()
         let prepared = expectation(description: "Mounted SceneKit prepare completion")
         var receipt: DuelWorldView.PreparationReceipt?, failure: DuelWorldView.PreparationFailure?
@@ -446,6 +488,10 @@ extension DuelLifecycleTests {
         mountPreparation([world], in: window)
         await fulfillment(of: [prepared], timeout: 15)
         XCTAssertNil(failure)
+        XCTAssertTrue(world.usedActualScenePreparation, "The fixture still exercises the real SceneKit completion")
+        XCTAssertTrue(world.usesSyntheticPresentationResources)
+        XCTAssertFalse(world.attemptedBundledStageLoad)
+        XCTAssertNil(world.stageAsset)
         XCTAssertEqual(receipt?.initialScenePrepared, true)
         XCTAssertEqual(receipt?.runtimeEffectVariantsPrepared, true)
         XCTAssertEqual(state.game.frame, 0)
@@ -469,6 +515,9 @@ extension DuelLifecycleTests {
         let worlds = allViews(controller.view).compactMap { $0 as? DuelWorldView }
         XCTAssertEqual(worlds.count, 1)
         XCTAssertTrue(worlds.first?.represents(state) == true)
+        XCTAssertTrue(worlds.first?.usesSyntheticPresentationResources == true)
+        XCTAssertTrue(worlds.first?.attemptedBundledStageLoad == false)
+        XCTAssertNil(worlds.first?.stageAsset)
         XCTAssertTrue(state.paused)
         XCTAssertEqual(state.game.frame, 0)
     }

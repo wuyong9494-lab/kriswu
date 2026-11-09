@@ -350,10 +350,12 @@ final class DuelSession: ObservableObject {
     }
 
     #if DEBUG
+    private(set) var isPresentationFixture = false
     /// Synthetic native-test seam only. Not a network factory, asset-loader
     /// fallback, or authorization to display a playable multiplayer match.
     convenience init(presentationFixture game: DuelGame, localFighterIndex: Int) throws {
         try self.init(presentation: game, localFighterIndex: localFighterIndex, assets: nil, configuration: nil)
+        isPresentationFixture = true
     }
     #endif
 
@@ -717,7 +719,8 @@ final class DuelNetworkMatchPreparation: @MainActor ObservableObject, Identifiab
     #if DEBUG
     init(testing session: DuelSession, invalidated: (@MainActor (Failure) -> Void)? = nil,
          completion: @escaping Completion) throws {
-        guard session.awaitingNetworkPreparation, !session.usesVerifiedPreparedResources else { throw Failure.invalidSession }
+        guard session.isPresentationFixture, session.awaitingNetworkPreparation,
+              !session.usesVerifiedPreparedResources else { throw Failure.invalidSession }
         self.session = session; self.completion = completion; self.invalidated = invalidated; permitsFixture = true
         requiresVerifiedOwnership = false
         guard session.claimNetworkMount(id, invalidated: { [weak self] in self?.fail(.invalidSession) }) else {
