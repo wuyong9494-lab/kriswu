@@ -3,7 +3,7 @@ run-name: Upload verified TestFlight build
 
 on:
   push:
-    branches: [codex/plan-fighter-recovery-20261108]
+    branches: [codex/plan-fighter-recovery-20261108, codex/fighter-lab-sf3-resources-20261108]
     paths: ['.github/releases/fighter-testflight.json']
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108'
+    if: github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108' || github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108'
     outputs:
       upload_required: ${{ steps.verify.outputs.upload_required }}
       source_sha: ${{ steps.verify.outputs.source_sha }}
@@ -107,6 +107,11 @@ jobs:
         run: |
           brew install openssl@3
           python3 .github/scripts/fighter_private_model.py stage
+          # The current fighter branch uses distinct encrypted body, weapon,
+          # animation and scene assets. A signed build must stage all of them.
+          python3 .github/scripts/fighter_sf3_assets.py
+          python3 .github/scripts/fighter_sf3_assets.py --original-rig
+          python3 .github/scripts/fighter_sf3_distinct.py
           xcodegen generate
       - name: Archive the requested build with automatic signing
         working-directory: source
