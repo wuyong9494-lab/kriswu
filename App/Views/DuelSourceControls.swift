@@ -75,6 +75,15 @@ final class DuelSourceControlsView: UIView {
             refreshStickDirection()
         }
     }
+    /// A prone opponent can extend underneath the right-hand painted buttons.
+    /// Keep the original touch rectangles and accessibility active while fading
+    /// only their artwork; no gameplay or hit-testing geometry is changed.
+    var opponentProne = false {
+        didSet {
+            guard opponentProne != oldValue else { return }
+            for action in Action.allCases { refresh(action) }
+        }
+    }
     private(set) var layoutSnapshot = Layout.empty
     private(set) var sourceArtAvailable = false
     private(set) var loadedSpriteNames: Set<String> = []
@@ -436,7 +445,7 @@ final class DuelSourceControlsView: UIView {
         let state = state(for: action)
         let enabled = inputEnabled && state.enabled
         button.isEnabled = enabled
-        button.alpha = enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22
+        button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * (opponentProne ? 0.35 : 1)
         button.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
         button.accessibilityLabel = state.accessibilityLabel ?? action.label
         button.accessibilityValue = !inputEnabled ? "操作已暂停" :
