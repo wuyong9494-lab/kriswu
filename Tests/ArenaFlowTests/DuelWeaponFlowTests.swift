@@ -188,8 +188,10 @@ final class DuelWeaponFlowTests: XCTestCase {
         let dealt = try damage(app)
         XCTAssertGreaterThan(dealt, 0)
         if action == "shadow" {
-            wait("Shadow input spends the equipped character's energy", timeout: 4) {
-                (button.value as? String ?? "").contains("需要 100 能量")
+            wait("Shadow input spends energy and reports cooldown or insufficient energy", timeout: 4) {
+                let readiness = button.value as? String ?? ""
+                let energy = self.integer(after: "能量 ", in: app.staticTexts["duel.stats.0"].label)
+                return energy == 0 && (readiness.contains("冷却中") || readiness.contains("需要 100 能量"))
             }
         }
         try record(app, hero: hero, action: "\(action)-actual-hit")
@@ -198,36 +200,30 @@ final class DuelWeaponFlowTests: XCTestCase {
     }
 
     private func verifyShadowState(_ app: XCUIApplication, hero: String) throws {
-        try restart(app)
+        // These are deliberately provisional native skills. Their existing safe
+        // heavy body poses bypass the unresolved raw teleport/throw tracks.
+        // Both source controls must now be usable, not silently skipped.
+        let dealt = try performIsolatedAttack(app, hero: hero, action: "shadow")
         let shadow = app.buttons["duel.control.shadow"]
-        if hero == "ember" {
-            XCTAssertFalse(shadow.isEnabled,
-                           "The katana dash's discontinuous source coordinates require its original teleport event before enabling")
-        }
-        if shadow.isEnabled {
-            _ = try performIsolatedAttack(app, hero: hero, action: "shadow")
-            return
-        }
-        // Disabled is an explicit verified state, not a skipped action. Tap its
-        // actual glyph coordinates and ensure it cannot alias another attack.
-        try approachWeaponRange(app)
-        try assertStationary(app, context: "\(hero)-disabled-shadow")
-        let beforeHits = try hits(app), beforeEnergy = try energy(app, index: 0)
-        let beforePosition = try position(app, index: 0)
+        XCTAssertTrue(shadow.isEnabled, "The equipped provisional shadow remains an enabled control")
+        XCTAssertEqual(try hits(app), 1, "A shadow activation gets one contact opportunity")
+        XCTAssertEqual(dealt, hero == "ember" ? 170 : 195)
+        XCTAssertEqual(try energy(app, index: 0), 0, "A successful shadow spends 100 without refunding its own cost")
+
+        let beforeHits = try hits(app), beforeDamage = try damage(app)
         shadow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let acted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            self.observedHits(app) != beforeHits ||
-                self.integer(after: "能量 ", in: app.staticTexts["duel.stats.0"].label) != beforeEnergy ||
-                self.observedPosition(app, index: 0) != beforePosition
+            self.observedHits(app) != beforeHits || self.observedDamage(app) != beforeDamage ||
+                self.integer(after: "能量 ", in: app.staticTexts["duel.stats.0"].label) != 0
         }, object: nil)
         acted.isInverted = true
         XCTAssertEqual(XCTWaiter.wait(for: [acted], timeout: 2.2), .completed,
-                       "An unavailable original shadow ability cannot spend energy, move, or become a different attack")
-        XCTAssertFalse(shadow.isEnabled)
+                       "A repeated shadow press without energy cannot restart or alias another attack")
         XCTAssertEqual(try hits(app), beforeHits)
-        XCTAssertEqual(try energy(app, index: 0), beforeEnergy)
-        try record(app, hero: hero, action: "shadow-disabled-no-substitute")
-        capture("original-\(hero)-shadow-disabled-no-substitute")
+        XCTAssertEqual(try damage(app), beforeDamage)
+        XCTAssertEqual(try energy(app, index: 0), 0)
+        try record(app, hero: hero, action: "provisional-shadow-cost-and-repeat-guard")
+        capture("original-\(hero)-provisional-shadow-cost-and-repeat-guard")
     }
 
     private func approachWeaponRange(_ app: XCUIApplication) throws {

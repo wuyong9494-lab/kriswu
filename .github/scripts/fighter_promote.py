@@ -11,6 +11,7 @@ import fighter_private_model as model
 
 BRANCH = 'codex/plan-fighter-recovery-20261108'
 FIGHTER_BRANCH = 'codex/fighter-lab-sf3-resources-20261108'
+HOST_BRANCH = 'codex/fighter-lab-host-simulation-20261109'
 
 
 def require(condition, message):
@@ -29,7 +30,7 @@ def load_request(path):
     require(r.get('liu_sha256') == model.SHA, 'Actual Liu identity required')
     require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] > 0, 'Exact fighter CI run required')
     branch = r.get('source_branch', BRANCH)
-    require(branch in (BRANCH, FIGHTER_BRANCH), 'Unapproved source branch')
+    require(branch in (BRANCH, FIGHTER_BRANCH, HOST_BRANCH), 'Unapproved source branch')
     if branch == BRANCH:
         require(type(r.get('source_run_id')) is int and r['source_run_id'] > 0, 'Exact iOS CI run required')
     require(isinstance(r.get('notes'), str) and 0 < len(r['notes']) < 3800, 'Testing notes required')
@@ -54,7 +55,7 @@ def check_ci(r):
     gates = [('fighter_run_id', 'fighter-lab.yml', ('core', 'envelope', 'device', 'native', 'character'))]
     if r.get('source_branch', BRANCH) == BRANCH:
         gates.insert(0, ('source_run_id', 'ios.yml', ('build', 'core-tests-linux')))
-    # The fighter branch intentionally excludes ios.yml. Its dedicated CI
+    # These fighter branches intentionally exclude ios.yml. Their dedicated CI
     # must pass all five jobs on the exact immutable source SHA.
     for key, workflow, names in gates:
         run = asc.github('/actions/runs/' + str(r[key]))

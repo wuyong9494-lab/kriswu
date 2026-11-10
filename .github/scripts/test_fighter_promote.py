@@ -1,4 +1,5 @@
 import copy
+import json
 import tempfile
 import plistlib
 from pathlib import Path
@@ -87,18 +88,63 @@ class GateTests(unittest.TestCase):
         with patch.object(f.asc, 'github', side_effect=[ios, ios_jobs, dict(ios, run_attempt=3)]):
             with self.assertRaises(ValueError): f.check_ci(r)
 
-    def test_fighter_branch_requires_exact_successful_five_job_run(self):
-        r = dict(self.r, source_branch=f.FIGHTER_BRANCH, fighter_run_id=42)
-        run = dict(self.run, head_branch=f.FIGHTER_BRANCH, run_attempt=1)
-        jobs = dict(total_count=5, jobs=self.jobs)
-        with patch.object(f.asc, 'github', side_effect=[run, jobs, run]):
-            f.check_ci(r)
-        with patch.object(f.asc, 'github', side_effect=[run, dict(total_count=5, jobs=self.jobs[:-1]), run]):
-            with self.assertRaises(ValueError):
-                f.check_ci(r)
-        with patch.object(f.asc, 'github', side_effect=[dict(run, head_branch='main'), jobs, run]):
-            with self.assertRaises(ValueError):
-                f.check_ci(r)
+    def test_fighter_branches_require_exact_successful_five_job_run(self):
+        for branch in (f.FIGHTER_BRANCH, f.HOST_BRANCH):
+            with self.subTest(branch=branch):
+                r = dict(self.r, source_branch=branch, fighter_run_id=42)
+                run = dict(self.run, head_branch=branch, run_attempt=1)
+                jobs = dict(total_count=5, jobs=self.jobs)
+                with patch.object(f.asc, 'github', side_effect=[run, jobs, run]) as api:
+                    f.check_ci(r)
+                    self.assertEqual([c.args[0] for c in api.call_args_list], [
+                        '/actions/runs/42', '/actions/runs/42/attempts/1/jobs?per_page=100',
+                        '/actions/runs/42'])
+                for name in ('core', 'envelope', 'device', 'native', 'character'):
+                    for bad in ('missing', 'skipped', 'failure', 'wrong_sha'):
+                        with self.subTest(job=name, state=bad):
+                            changed = copy.deepcopy(self.jobs)
+                            if bad == 'missing':
+                                changed = [j for j in changed if j['name'] != name]
+                            else:
+                                job = next(j for j in changed if j['name'] == name)
+                                if bad == 'wrong_sha':
+                                    job['head_sha'] = 'b'*40
+                                else:
+                                    job['conclusion'] = bad
+                            with patch.object(f.asc, 'github', side_effect=[run, dict(total_count=len(changed), jobs=changed), run]):
+                                with self.assertRaises(ValueError):
+                                    f.check_ci(r)
+                with patch.object(f.asc, 'github', side_effect=[dict(run, head_branch=f.BRANCH), jobs, run]):
+                    with self.assertRaises(ValueError):
+                        f.check_ci(r)
+                with patch.object(f.asc, 'github', side_effect=[dict(run, head_sha='b'*40), jobs, run]):
+                    with self.assertRaises(ValueError):
+                        f.check_ci(r)
+
+    def load_manifest(self, **overrides):
+        request = dict(self.r, channel='testflight-internal', bundle_id='com.kriswu.shiftreminder',
+                       version='1.2', liu_sha256=f.model.SHA, fighter_run_id=42,
+                       notes='Internal testing only', **overrides)
+        with tempfile.TemporaryDirectory() as d:
+            manifest = Path(d) / 'fighter-testflight.json'
+            manifest.write_text(json.dumps(request))
+            return f.load_request(manifest)
+
+    def test_only_explicit_fighter_source_branches_are_allowed(self):
+        for branch in (f.FIGHTER_BRANCH, f.HOST_BRANCH):
+            with self.subTest(branch=branch):
+                self.assertEqual(self.load_manifest(source_branch=branch)['source_branch'], branch)
+        for branch in ('main', 'codex/fighter-lab-*', f.HOST_BRANCH + '-other',
+                       'codex/fighter-lab-host-simulation-20261110', 'feature/shadow-skills'):
+            with self.subTest(branch=branch), self.assertRaises(ValueError):
+                self.load_manifest(source_branch=branch)
+
+    def test_recovery_branch_still_requires_ios_run(self):
+        for fields in ({}, {'source_branch': f.BRANCH}):
+            with self.subTest(fields=fields):
+                with self.assertRaises(ValueError):
+                    self.load_manifest(**fields)
+                self.assertEqual(self.load_manifest(source_run_id=7, **fields)['source_run_id'], 7)
 
     def test_incomplete_jobs_rejected(self):
         r = dict(self.r, source_run_id=1, fighter_run_id=2)
