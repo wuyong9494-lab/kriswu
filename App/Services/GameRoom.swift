@@ -475,6 +475,15 @@ final class GameRoom: NSObject, ObservableObject {
         return session
     }
 
+    #if DEBUG
+    /// Exercise the production session/delegate without discovery, invitations,
+    /// connected peers or Game Center. Does not manufacture authenticated peers.
+    func testingMakeNearbySession() -> MCSession {
+        precondition(code == nil)
+        return makeSession()
+    }
+    #endif
+
     private func deliver(_ envelope: Envelope, to peers: [MCPeerID]) {
         guard let session, !peers.isEmpty, let data = try? JSONEncoder().encode(envelope) else { return }
         try? session.send(data, toPeers: peers, with: .reliable)

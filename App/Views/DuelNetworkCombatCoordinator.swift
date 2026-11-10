@@ -681,11 +681,24 @@ final class DuelNetworkCombatCoordinator {
     }
 
     private func startClock() {
+        guard var schedule = DuelNetworkPulseSchedule(startingAt: DispatchTime.now().uptimeNanoseconds) else {
+            close(.clockStalled); return
+        }
         pulseTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                do { try await Task.sleep(nanoseconds: 16_666_667) } catch { return }
+                guard let delay = schedule.sleepNanoseconds(at: DispatchTime.now().uptimeNanoseconds) else {
+                    self?.close(.clockStalled); return
+                }
+                do { try await Task.sleep(nanoseconds: delay) } catch { return }
                 guard !Task.isCancelled, let self, self.state != .closed else { return }
                 self.service()
+                guard self.state != .closed else { return }
+                // Service/encoding/presentation work uses this interval's budget,
+                // not an extra delay added to every tick. Skip elapsed deadlines;
+                // the watchdog still decides whether a late wake may step once.
+                guard schedule.advance(afterPulseAt: DispatchTime.now().uptimeNanoseconds) else {
+                    self.close(.clockStalled); return
+                }
             }
         }
     }
