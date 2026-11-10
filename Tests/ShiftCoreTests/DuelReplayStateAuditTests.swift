@@ -19,7 +19,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
                       "weaponFight", "random", "nextProjectile", "botHeld", "buffered", "opponentHero", "weaponModeRequested"])
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "mode", "difficulty", "actions", "queued",
-                       "loopTicks", "loopRoles", "previousX", "random"])
+                       "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
                                  "movementDirection", "weaponPose"])
@@ -37,7 +37,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         let actions = try XCTUnwrap(Mirror(reflecting: fight).children.first { $0.label == "actions" }?.value)
         let firstOptional = try XCTUnwrap(Mirror(reflecting: actions).children.first?.value)
         let action = try XCTUnwrap(Mirror(reflecting: firstOptional).children.first?.value)
-        fields(action, ["name", "role", "command", "tick", "hits", "touching", "sounded", "reaction", "comboDepth", "soundAt"])
+        fields(action, ["name", "role", "command", "tick", "hits", "touching", "sounded", "reaction", "comboDepth", "soundAt", "shadowOriginX"])
 
         fields(catalog, ["schemaVersion", "previewFramesPerSecond", "sourceFramesPerSecond", "profiles"])
         fields(catalog.profiles[0], ["id", "hero", "faction", "resourceName", "bytes", "sha256", "bodyID", "weaponID",

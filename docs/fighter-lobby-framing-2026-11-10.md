@@ -117,3 +117,52 @@ actual-pedestal mesh coverage.
 
 This is a local-only candidate. No push, release, asset upload or TestFlight action
 is part of this change.
+
+## Exact-candidate validation and bounded sweep follow-up
+
+[Run 42770485003](https://github.com/wuyong9494-lab/kriswu/actions/runs/42770485003)
+validated published candidate `60ab580e40f344d3fa933529aefbd5a89decb4a4`:
+
+- Core: 940 tests, 16 skipped, zero failures. Ordinary native: 209 tests,
+  12 skipped, zero failures; all four ordinary UI cases passed. Unsigned device
+  compilation and authenticated-envelope checks passed.
+- The actual-resource native log records 257 cases starting and 256 cases
+  passing. The new real navigated lobby/stage/rail geometry case passed, as did
+  the corrected host-offer fixture readiness case.
+- The sole failed case is
+  `testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch`.
+  It started at 07:07:15 UTC; XCTest later reported an unexpected exit, crash,
+  or test timeout and restarted the hosted process. It did not report a clipped
+  vertex or another ordinary assertion failure. The enclosing native step
+  finished with exit code 65 after 22 minutes 37 seconds, below its 25-minute
+  cap. The log does not establish the OS termination reason.
+- All five actual-resource UI cases subsequently passed, including both
+  equipped characters, real input/hit checks, background/resume, lobby returns
+  and portrait restoration. Evidence export and encryption completed. The
+  actual-resource job and overall run still failed because of the native case.
+  Current private character screenshots have not been visually reviewed here.
+
+The follow-up changes only this test and its mesh-reading helper:
+
+- Read idle timing from the already authenticated catalog instead of loading a
+  second, retained copy of each full character just to obtain clip metadata.
+  The production lobby still authenticates and loads the actual character.
+- Keep each pose, full vertex projection and all assertions inside a synchronous
+  autorelease pool, then briefly suspend between samples so the hosted app can
+  service its main run loop. No await occurs inside the pool. The off-window
+  lobby has no running idle display link, so suspension cannot advance its pose.
+- Preserve the six layout snapshots, each with its own temporary-object pool.
+  Cache source data/offsets/strides per mesh, rather than repeatedly crossing
+  Objective-C-backed data accessors per vertex component. Scoped byte pointers
+  never escape. Bone transforms are still recomputed for every pose.
+- Preserve all 72 hero/size/facing/idle combinations, every actual skin/static
+  vertex, native SceneKit projection, and all original depth/edge assertions.
+  Add sample-progress diagnostics and a final 72-sample count assertion.
+
+This addresses identifiable duplicate loading and unbounded synchronous test
+work, not a proven crash cause or a production rendering defect. It introduces
+no retries, skipped samples, weakened bounds, longer workflow budgets, resource
+changes, or production changes. Static review and `git diff --check` pass;
+Swift compilation and actual-resource native execution remain required for the
+follow-up candidate. Its verification is to be grouped with the next reviewed
+integration, not run as a competing workflow.

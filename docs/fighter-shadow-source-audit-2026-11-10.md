@@ -1,5 +1,11 @@
 # Shadow source audit and reconstruction boundary
 
+Later implementation note: the playable provisional skills are now documented in
+`fighter-provisional-shadow-2026-11-10.md`. They deliberately bypass the raw
+shadow clips, use safe existing heavy body poses and explicit native rules, and
+do not claim the original event semantics below were recovered. References
+below to disabled controls describe the earlier source-faithful gate.
+
 ## Scope
 
 This is an offline diagnostic addition based on local commit

@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import SceneKit
+import simd
 
 /// Integrity-bound catalog and separate source character assets. A corrupt or
 /// missing equipped character must never silently become the old common body.
@@ -99,6 +100,7 @@ final class DuelWeaponCharacterInstance {
     let instance: GLTFModel.Instance
     private var pose: GLTFModel.Pose
     private var previousClip: String?
+    private var detachedBoneRestore: (index: Int, transform: simd_float4x4)?
     private var idleBlendSource: GLTFModel.Pose?
     private var idleBlendStartTick = 0
     private static let idleBlendTicks = 6
@@ -107,7 +109,14 @@ final class DuelWeaponCharacterInstance {
         self.asset = asset; instance = asset.model.instantiate(); pose = asset.model.restPose
         instance.root.name = "duel.equipped.\(asset.profile.id)"
     }
+    private func restoreDetachedWeapon() {
+        if let saved = detachedBoneRestore {
+            instance.nodes[saved.index].simdTransform = saved.transform
+            detachedBoneRestore = nil
+        }
+    }
     func apply(_ selection: DuelWeaponPose) {
+        restoreDetachedWeapon()
         // Smooth recovery-to-idle only in the displayed skeleton. Source clips,
         // combat timing and collision sampling are deliberately untouched.
         // Simulation ticks prevent repeated display callbacks advancing a blend.
@@ -141,12 +150,40 @@ final class DuelWeaponCharacterInstance {
         }
         for index in asset.model.animated { instance.nodes[index].simdTransform = pose.transform(index) }
     }
-    func pose(_ fighter: DuelGame.Fighter, root: SCNNode) {
+    func pose(_ fighter: DuelGame.Fighter, root: SCNNode, shadow: DuelShadowVisual? = nil) {
+        restoreDetachedWeapon()
         guard let selection = fighter.weaponPose else { return }
         apply(selection)
         // Exported pelvis X/Z are in-place. Source pelvis Y is retained, so
         // jumping is already in the sampled pose and is not added twice here.
         root.position = SCNVector3(Float(fighter.x) / 1000, Float(selection.groundLift), 0)
         root.eulerAngles = SCNVector3(0, -Float(fighter.facing) * .pi / 2, 0)
+        guard shadow?.kind == .hammerThrow,
+              let base = shadow?.weaponBase, let tip = shadow?.weaponTip,
+              let clip = asset.profile.clip(named: selection.clip),
+              let index = asset.model.node(named: "weapon_r") else { return }
+        let tracks = clip.tracks
+        func world(_ point: DuelWeaponPoint) -> SIMD3<Float> {
+            SIMD3(Float(fighter.x) / 1000 + Float(point.x) * Float(fighter.facing),
+                  Float(point.y + selection.groundLift), Float(point.z) * Float(fighter.facing))
+        }
+        let sourceBase = world(tracks.sample(tracks.weaponBaseR, phase: selection.phase))
+        let sourceTip = world(tracks.sample(tracks.weaponTipR, phase: selection.phase))
+        let targetBase = SIMD3<Float>(Float(base.x), Float(base.y), Float(base.z))
+        let targetTip = SIMD3<Float>(Float(tip.x), Float(tip.y), Float(tip.z))
+        let sourceAxis = sourceTip - sourceBase, targetAxis = targetTip - targetBase
+        guard simd_length_squared(sourceAxis) > 0.000001,
+              simd_length_squared(targetAxis) > 0.000001 else { return }
+        // Move the original skinned right hammer, not a duplicate projectile.
+        // Preserve its scale/materials and all other joints, including the held
+        // left hammer. Reset before every pose so redraws cannot accumulate.
+        let bone = instance.nodes[index]
+        detachedBoneRestore = (index, bone.simdTransform)
+        let rotation = simd_float4x4(simd_quatf(from: simd_normalize(sourceAxis), to: simd_normalize(targetAxis)))
+        var from = matrix_identity_float4x4, to = matrix_identity_float4x4
+        from.columns.3 = SIMD4(-sourceBase.x, -sourceBase.y, -sourceBase.z, 1)
+        to.columns.3 = SIMD4(targetBase.x, targetBase.y, targetBase.z, 1)
+        let moved = to * rotation * from * bone.simdWorldTransform
+        bone.simdTransform = simd_inverse(bone.parent?.simdWorldTransform ?? matrix_identity_float4x4) * moved
     }
 }

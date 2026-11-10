@@ -446,7 +446,7 @@ final class DuelWorldView: SCNView {
         guard !ended, scene != nil else { return }
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         for i in 0..<actors.count {
-            actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase)
+            actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i))
             place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
             if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
             else { attackNodes[i].isHidden = true }
@@ -517,23 +517,35 @@ final class DuelWorldView: SCNView {
         // Called for every fixed simulation step, including all catch-up steps.
         // A display frame is not an event queue and must not drop earlier hits.
         sourceEffects?.consumeStep(contacts: contacts, swings: swings, animationTick: tick)
-        let poses: [DuelWeaponEffects.Pose] = fight.fighters.enumerated().compactMap { index, fighter in
+        weaponEffects?.consumeStep(poses: Self.weaponEffectPoses(fight, tick: tick), animationTick: tick)
+    }
+    /// Read-only adapter shared by native presentation verification.
+    static func weaponEffectPoses(_ fight: DuelWeaponFight, tick: Int) -> [DuelWeaponEffects.Pose] {
+        fight.fighters.enumerated().compactMap { index, fighter in
             guard let pose = fighter.weaponPose, let clip = fight.profiles[index].clip(named: pose.clip) else { return nil }
             let profile = fight.profiles[index], tracks = clip.tracks
             func world(_ value: DuelWeaponPoint) -> SCNVector3 {
                 SCNVector3(Float(fighter.x) / 1000 + Float(value.x) * Float(fighter.facing),
                            Float(value.y + pose.groundLift), Float(value.z) * Float(fighter.facing))
             }
+            let shadow = fight.shadowVisual(index)
             let endpoints: [DuelWeaponEffects.Endpoints] = profile.activeWeaponSides.map { side in
-                .init(slot: side == "left" ? 0 : 1,
+                if side == "right", let base = shadow?.weaponBase, let tip = shadow?.weaponTip {
+                    return .init(slot: 1,
+                                 base: SCNVector3(Float(base.x), Float(base.y), Float(base.z)),
+                                 tip: SCNVector3(Float(tip.x), Float(tip.y), Float(tip.z)))
+                }
+                return .init(slot: side == "left" ? 0 : 1,
                       base: world(tracks.sample(side == "left" ? tracks.weaponBaseL : tracks.weaponBaseR, phase: pose.phase)),
                       tip: world(tracks.sample(side == "left" ? tracks.weaponTipL : tracks.weaponTipR, phase: pose.phase)))
             }
             return .init(fighterID: index, family: profile.isKatana ? .katana : .dualHammers,
-                         motionID: fight.weaponTrailIsActive(index) ? "\(pose.clip):\(tick - pose.tick)" : nil,
+                         // Shadow body time is rescaled source time, not action time.
+                         // Keep one ribbon through outbound, apex and return.
+                         motionID: fight.weaponTrailIsActive(index)
+                            ? (shadow != nil ? "shadow:\(index):\(pose.clip)" : "\(pose.clip):\(tick - pose.tick)") : nil,
                          isShadow: fight.shadowIsActive(index), endpoints: endpoints)
         }
-        weaponEffects?.consumeStep(poses: poses, animationTick: tick)
     }
     private func debugBox(_ color: UIColor) -> SCNNode {
         let node = DuelActor.shape(SCNBox(width: 1, height: 1, length: 0.02, chamferRadius: 0), color)
@@ -735,9 +747,9 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil) {
         if let weapon {
-            weapon.pose(fighter, root: root); shield.isHidden = true
+            weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
             return
         }
         if let original {

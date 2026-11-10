@@ -23,12 +23,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let role: String
         let command: DuelWeaponCommand?
         var tick = 0
+        // One contact opportunity per entered combo stage. A whiff in an
+        // earlier stage must not become an extra hit in a later stage.
         var hits = 0
         var touching = false
         var sounded = false
         var reaction = false
         var comboDepth = 0
         var soundAt = Int.max
+        var shadowOriginX: Int? = nil
     }
     public let profiles: [DuelWeaponProfile]
     public private(set) var fighters: [DuelGame.Fighter]
@@ -50,6 +53,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private var loopRoles = ["", ""]
     private var previousX = [3500, 6500]
     private var random: UInt64
+    private var shadowCooldowns = [0, 0]
 
     public init?(fighters: [DuelGame.Fighter], mode: DuelGame.Mode, difficulty: DuelGame.Difficulty,
                  catalog: DuelWeaponCatalog, seed: UInt64) {
@@ -71,21 +75,42 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     public func supports(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard profiles.indices.contains(index), profiles[index].clip(command: command) != nil else { return false }
-        // Katana root teleports by 8.4594 m; a thrown hammer tip teleports by
-        // 7.7835 m in a half-frame. Their visibility/projectile/contact events
-        // were not recovered. Sweeping either discontinuity fabricates hits.
-        if command == .shadow { return false }
+        // The provisional interpreter uses a safe existing body clip and its
+        // own explicit dash/projectile timeline, never the raw teleport tracks.
+        if command == .shadow { return profiles[index].clip(command: .heavy) != nil }
         return true
     }
     public func canUse(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard supports(command, index: index) else { return false }
-        if command == .shadow { return fighters[index].energy >= 100 }
+        if command == .shadow { return fighters[index].energy >= 100 && shadowCooldowns[index] == 0 }
         return true
     }
+    public func shadowCooldownRemaining(_ index: Int) -> Int {
+        shadowCooldowns.indices.contains(index) ? shadowCooldowns[index] : 0
+    }
+    public func shadowVisual(_ index: Int) -> DuelShadowVisual? {
+        guard profiles.indices.contains(index), let action = actions[index], action.command == .shadow,
+              let origin = action.shadowOriginX else { return nil }
+        let katana = profiles[index].isKatana
+        var hammer = katana ? nil : DuelShadowRules.hammer(action.tick, origin: origin, direction: fighters[index].facing)
+        if let points = hammer, let clip = profiles[index].clip(named: action.name) {
+            let phase = fighters[index].weaponPose?.phase ?? 0
+            let a = clip.tracks.sample(clip.tracks.weaponBaseR, phase: phase)
+            let b = clip.tracks.sample(clip.tracks.weaponTipR, phase: phase)
+            let length = sqrt(pow(b.x - a.x, 2) + pow(b.y - a.y, 2) + pow(b.z - a.z, 2))
+            hammer = (points.0, .init(x: points.0.x, y: points.0.y + length, z: points.0.z))
+        }
+        return .init(kind: katana ? .katanaDash : .hammerThrow, tick: action.tick,
+                     duration: DuelShadowRules.duration(katana: katana),
+                     isAttacking: DuelShadowRules.active(action.tick, katana: katana),
+                     weaponBase: hammer?.0, weaponTip: hammer?.1)
+    }
     public func weaponTrailIsActive(_ index: Int) -> Bool {
+        if let shadow = shadowVisual(index) { return shadow.isAttacking || shadow.weaponTip != nil }
+
         guard let action = actions[index], let command = action.command,
               !command.rawValue.hasPrefix("kick"), let clip = profiles[index].clip(named: action.name) else { return false }
-        return active(action, clip: clip) && motionSpeed(index, clip: clip, command: command, tick: action.tick) > 0.009
+        return active(action, clip: clip, index: index) && motionSpeed(index, clip: clip, command: command, tick: action.tick) > 0.009
     }
     public func shadowIsActive(_ index: Int) -> Bool { actions[index]?.command == .shadow }
     public func hurtBox(_ index: Int) -> DuelGame.Box {
@@ -101,7 +126,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     public func attackBox(_ index: Int) -> DuelGame.Box? {
         guard let action = actions[index], let command = action.command,
-              let clip = profiles[index].clip(named: action.name), active(action, clip: clip) else { return nil }
+              let clip = profiles[index].clip(named: action.name), active(action, clip: clip, index: index) else { return nil }
+        if command == .shadow { return shadowAttackBox(index, action: action) }
         let points = endpoints(index, clip: clip, phase: clip.phase(at: action.tick), command: command)
         guard !points.isEmpty else { return nil }
         let f = fighters[index], xs = points.map { f.x + Int($0.x * 1000) * f.facing }
@@ -123,6 +149,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if hitStop > 0 {
             for i in 0..<2 where queued[i] == nil && !isAirborne(i) && actions[i]?.role != "jump" {
                 if let command = inputs[i].weaponCommand, canUse(command, index: i), actions[i]?.reaction != true {
+                    if let action = actions[i], action.command == .shadow,
+                       DuelShadowRules.duration(katana: profiles[i].isKatana) - action.tick > 24 { continue }
                     queued[i] = command
                 }
             }
@@ -130,21 +158,21 @@ public struct DuelWeaponFight: Equatable, Sendable {
         }
         if mode == .versus { remainingTicks -= 1 }
         previousX = fighters.map(\.x)
+        for i in 0..<2 { shadowCooldowns[i] = max(0, shadowCooldowns[i] - 1) }
         for i in 0..<2 { update(i, input: inputs[i]) }
         separate()
         var pending: [(Int, DuelWeaponPoint, DuelWeaponCommand)] = []
         for i in 0..<2 {
             guard var action = actions[i], let command = action.command,
                   let clip = profiles[i].clip(named: action.name), !action.reaction else { continue }
-            let isActive = active(action, clip: clip)
+            let isActive = active(action, clip: clip, index: i)
             if isActive && !action.sounded && action.tick >= action.soundAt {
                 swings.append(.init(attacker: i, heavy: command == .heavy || command == .shadow,
                                      usesWeapon: !command.rawValue.hasPrefix("kick")))
                 action.sounded = true
             }
             let point = isActive ? contact(i, action: action, clip: clip, command: command) : nil
-            let maxHits = 1 + action.comboDepth
-            if let point, !action.touching, action.hits < maxHits {
+            if let point, !action.touching, action.hits == 0 {
                 pending.append((i, point, command)); action.hits += 1
             }
             action.touching = point != nil; actions[i] = action
@@ -168,7 +196,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
                     }
                 } else if !isAirborne(i) && action.command != nil && queued[i] == nil && canUse(command, index: i) {
                     let link = profiles[i].combo(from: action.name)
-                    if (command == action.command && action.tick <= (link?.sourceFrame ?? -1) * 2) || clip.ticks - action.tick <= 24 {
+                    let duration = action.command == .shadow ? DuelShadowRules.duration(katana: profiles[i].isKatana) : clip.ticks
+                    if (command == action.command && action.command != .shadow && action.tick <= (link?.sourceFrame ?? -1) * 2) || duration - action.tick <= 24 {
                         queued[i] = command
                     }
                 }
@@ -178,7 +207,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             }
             let oldPhase = clip.phase(at: action.tick)
             action.tick += 1
-            if action.tick > clip.ticks {
+            if action.tick > (action.command == .shadow ? DuelShadowRules.duration(katana: profiles[i].isKatana) : clip.ticks) {
                 actions[i] = nil; fighters[i].attack = nil; fighters[i].stun = 0; fighters[i].knockdown = 0
                 if action.role == "knockdown", let up = profiles[i].clip(role: "getUp") {
                     begin(i, clip: up, role: "getUp", reaction: true); return
@@ -194,6 +223,19 @@ public struct DuelWeaponFight: Equatable, Sendable {
                     stance.weaponCommand = nil; stance.taps = []
                     updateReady(i, input: stance)
                 }
+                return
+            }
+            if action.command == .shadow {
+                if profiles[i].isKatana && DuelShadowRules.active(action.tick, katana: true) {
+                    // A visible bounded dash stops at the opposing body/wall.
+                    // No relocation or contact across the raw 8 m source gap.
+                    let targetLimit = fighters[1 - i].x - fighters[i].facing * DuelGame.bodyWidth
+                    let desired = clamped(fighters[i].x + fighters[i].facing * 150)
+                    fighters[i].x = fighters[i].facing > 0 ? min(desired, max(fighters[i].x, targetLimit)) :
+                        max(desired, min(fighters[i].x, targetLimit))
+                }
+                actions[i] = action; fighters[i].attack?.age = action.tick
+                setShadowPose(i, clip: clip, tick: action.tick)
                 return
             }
             let t = clip.tracks, delta = t.sample(t.root, phase: clip.phase(at: action.tick)).x - t.sample(t.root, phase: oldPhase).x
@@ -245,19 +287,30 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     private mutating func startCommand(_ i: Int, command: DuelWeaponCommand) {
         guard canUse(command, index: i) else { return }
-        guard let clip = profiles[i].clip(command: command) else { return }
-        if command == .shadow { fighters[i].energy = 0 }
+        guard let clip = profiles[i].clip(command: command == .shadow ? .heavy : command) else { return }
+        if command == .shadow {
+            fighters[i].energy -= 100; shadowCooldowns[i] = DuelShadowRules.cooldown
+        }
         begin(i, clip: clip, role: command.rawValue, command: command)
+        if command == .shadow {
+            actions[i]?.shadowOriginX = fighters[i].x
+            actions[i]?.soundAt = DuelShadowRules.startup
+            setShadowPose(i, clip: clip, tick: 0)
+        }
     }
     private mutating func consumeCombo(_ i: Int, action: Action) -> Action? {
-        guard let link = profiles[i].combo(from: action.name), action.tick == link.sourceFrame * 2,
+        guard action.command != .shadow, let link = profiles[i].combo(from: action.name), action.tick == link.sourceFrame * 2,
               let command = action.command, queued[i] == command, action.comboDepth < 2,
               let clip = profiles[i].clip(named: link.to) else { return nil }
         // The source-frame anchor also accepts a press delivered during a hit
         // stop at that exact frame. Both paths preserve the existing timeline.
         queued[i] = nil
+        // Enter one new stage at the existing source-time anchor. Preserve the
+        // contact latch across the shared pose so a held overlap cannot hit
+        // twice; give only this stage its own hit opportunity. Missed earlier
+        // stages do not bank damage for subsequent weapon re-entries.
         return Action(name: link.to, role: action.role, command: command, tick: action.tick,
-                      hits: action.hits, touching: action.touching, sounded: false, reaction: false,
+                      hits: 0, touching: action.touching, sounded: false, reaction: false,
                       comboDepth: action.comboDepth + 1, soundAt: swingTick(i, clip: clip, command: command, after: action.tick))
     }
     private mutating func begin(_ i: Int, clip: DuelWeaponClip, role: String,
@@ -279,8 +332,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
         fighters[i].weaponPose = .init(clip: clip.name, tick: tick, duration: clip.ticks,
                                       groundLift: clip.tracks.lift(phase: clip.phase(at: tick)), reaction: reaction)
     }
-    private func active(_ action: Action, clip: DuelWeaponClip) -> Bool {
+    private mutating func setShadowPose(_ i: Int, clip: DuelWeaponClip, tick: Int) {
+        let duration = DuelShadowRules.duration(katana: profiles[i].isKatana)
+        setPose(i, clip: clip, tick: min(clip.ticks, tick * clip.ticks / duration))
+    }
+    private func active(_ action: Action, clip: DuelWeaponClip, index: Int) -> Bool {
         guard action.command != nil else { return false }
+        if action.command == .shadow {
+            return DuelShadowRules.active(action.tick, katana: profiles[index].isKatana)
+        }
         let p = clip.phase(at: action.tick)
         return p >= 0.12 && p <= 0.78
     }
@@ -317,7 +377,38 @@ public struct DuelWeaponFight: Equatable, Sendable {
         // fast motion onset, not an arbitrary fraction of a long wind-up.
         return start + onset
     }
+    private func shadowAttackBox(_ i: Int, action: Action) -> DuelGame.Box? {
+        if profiles[i].isKatana {
+            let x = fighters[i].x, direction = fighters[i].facing
+            let a = x + direction * 250, b = x + direction * 1400
+            return .init(minX: min(a, b), maxX: max(a, b), minY: 850, maxY: 1250)
+        }
+        guard let visual = shadowVisual(i), let base = visual.weaponBase, let tip = visual.weaponTip else { return nil }
+        let x = Int((base.x * 1000).rounded())
+        return .init(minX: x - 180, maxX: x + 180,
+                     minY: Int((base.y * 1000).rounded()) - 180, maxY: Int((tip.y * 1000).rounded()) + 180)
+    }
+    private func shadowContact(_ i: Int, action: Action) -> DuelWeaponPoint? {
+        let target = fighters[1 - i], hurt = hurtBox(1 - i)
+        guard target.knockdown == 0, target.invulnerable == 0,
+              let box = shadowAttackBox(i, action: action) else { return nil }
+        var hit = box.overlaps(hurt)
+        if !profiles[i].isKatana, action.tick > DuelShadowRules.startup,
+           let origin = action.shadowOriginX,
+           let before = DuelShadowRules.hammer(action.tick - 1, origin: origin, direction: fighters[i].facing),
+           let now = DuelShadowRules.hammer(action.tick, origin: origin, direction: fighters[i].facing) {
+            let a = Int((before.0.x * 1000).rounded()), b = Int((now.0.x * 1000).rounded())
+            // A vertical hammer translates horizontally, so this rectangle is
+            // its actual swept volume, unlike a diagonal sword's broad AABB.
+            hit = hit || DuelGame.Box(minX: min(a, b) - 180, maxX: max(a, b) + 180,
+                                     minY: box.minY, maxY: box.maxY).overlaps(hurt)
+        }
+        guard hit else { return nil }
+        return .init(x: Double(min(hurt.maxX, max(hurt.minX, (box.minX + box.maxX) / 2))) / 1000,
+                     y: 1.05, z: 0.08)
+    }
     private func contact(_ i: Int, action: Action, clip: DuelWeaponClip, command: DuelWeaponCommand) -> DuelWeaponPoint? {
+        if command == .shadow { return shadowContact(i, action: action) }
         let target = fighters[1 - i]
         guard target.knockdown == 0, target.invulnerable == 0, action.tick > 0 else { return nil }
         let p = clip.phase(at: action.tick), before = clip.phase(at: action.tick - 1)
@@ -370,7 +461,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             command == .shadow ? (profiles[i].isKatana ? 170 : 195) : (profiles[i].isKatana ? 80 : 105)
         let damage = blocked ? max(1, base / 12) : base
         fighters[defender].health = max(0, fighters[defender].health - damage)
-        fighters[i].energy = min(100, fighters[i].energy + (blocked ? 4 : 12))
+        if command != .shadow { fighters[i].energy = min(100, fighters[i].energy + (blocked ? 4 : 12)) }
         fighters[defender].energy = min(100, fighters[defender].energy + 5)
         fighters[defender].x = clamped(fighters[defender].x + fighters[i].facing * (heavy ? 200 : 65))
         let role = blocked ? "guard" : heavy ? "knockdown" : "hit"
@@ -417,6 +508,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let a = fighters[0].health, b = fighters[1].health, winner: Int? = a == b ? nil : a > b ? 0 : 1
         if let winner { wins[winner] += 1 }
         events.append(.roundEnded(winner: winner)); cancelBufferedInputs(); hitStop = 0
+        for i in 0..<2 where actions[i]?.command == .shadow {
+            actions[i] = nil; fighters[i].attack = nil
+        }
         if let winner, wins[winner] >= 2 {
             phase = .matchOver(winner: winner)
             if let victory = profiles[winner].clip(role: "victory") { setPose(winner, clip: victory, tick: victory.ticks) }
@@ -424,7 +518,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     private mutating func resetRound() {
         fighters = profiles.enumerated().map { .init(hero: $0.element.hero, x: $0.offset == 0 ? 3500 : 6500, facing: $0.offset == 0 ? 1 : -1) }
-        actions = [nil, nil]; queued = [nil, nil]; loopTicks = [0, 0]; loopRoles = ["", ""]
+        actions = [nil, nil]; queued = [nil, nil]; shadowCooldowns = [0, 0]; loopTicks = [0, 0]; loopRoles = ["", ""]
         previousX = fighters.map(\.x); remainingTicks = 3600; hitStop = 0; phase = .fighting
         for i in 0..<2 { setPose(i, role: "idle", tick: 0) }
     }
@@ -451,6 +545,7 @@ extension DuelWeaponFight {
                 try writer.int(action.comboDepth)
                 // Int.max means no sound scheduled; nil makes the sentinel width-independent.
                 try writer.optional(action.soundAt == Int.max ? nil : action.soundAt) { try $0.int($1) }
+                try writer.optional(action.shadowOriginX) { try $0.int($1) }
             }
         }
         try writer.array(queued, limit: 2) { writer, command in
@@ -459,5 +554,6 @@ extension DuelWeaponFight {
         try writer.array(loopTicks, limit: 2) { try $0.int($1) }
         try writer.array(loopRoles, limit: 2) { try $0.string($1) }
         try writer.array(previousX, limit: 2) { try $0.int($1) }; try writer.u64(random)
+        try writer.array(shadowCooldowns, limit: 2) { try $0.int($1) }
     }
 }

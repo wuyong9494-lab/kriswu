@@ -885,9 +885,10 @@ struct DuelWeaponControls: UIViewRepresentable {
             guard let command = DuelWeaponCommand(rawValue: action.rawValue) else { continue }
             let equipped = fight.supports(command, index: index)
             let enough = command != .shadow || fighter.energy >= 100
+            let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0
             let label = action == .weapon ? profile.weaponTitle + "攻击" : nil
-            let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : !enough ? "需要 100 能量" : fighter.stun > 0 ? "受击中" : fighter.attack != nil ? "收招中" : "可施放"
-            view.setState(.init(enabled: equipped, ready: enough && fighter.attack == nil && fighter.stun == 0,
+            let readiness = !equipped ? (profile.clip(command: command) == nil ? "未装备" : "暂不可用") : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" : !enough ? "需要 100 能量" : fighter.stun > 0 ? "受击中" : fighter.attack != nil ? "收招中" : "可施放"
+            view.setState(.init(enabled: equipped, ready: fight.canUse(command, index: index) && fighter.attack == nil && fighter.stun == 0,
                                 description: readiness,
                                 accessibilityLabel: label), for: action)
         }

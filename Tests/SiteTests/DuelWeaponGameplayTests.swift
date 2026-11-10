@@ -45,27 +45,32 @@ final class DuelWeaponGameplayTests: XCTestCase {
         }
     }
 
-    func testUnresolvedShadowTeleportsCannotBecomeInvisibleDamageSweeps() throws {
+    func testProvisionalShadowUsesSafeSourceBodyAndCompletesWithoutTeleportTracks() throws {
         let assets = try DuelWeaponAssets()
         for hero in [DuelGame.Hero.ember, .liu] {
             let other: DuelGame.Hero = hero == .ember ? .liu : .ember
-            let fighters = [DuelGame.Fighter(hero: hero, x: 4400, facing: 1),
-                            DuelGame.Fighter(hero: other, x: 5600, facing: -1)]
+            let fighters = [DuelGame.Fighter(hero: hero, x: 2000, facing: 1),
+                            DuelGame.Fighter(hero: other, x: 8000, facing: -1)]
             var fight = try XCTUnwrap(DuelWeaponFight(fighters: fighters, mode: .practice,
                 difficulty: .learning, catalog: assets.catalog, seed: 7))
-            XCTAssertNotNil(fight.profiles[0].clip(role: "shadow"), "Preserve the original resource for later event reconstruction")
-            XCTAssertEqual(fight.fighters[0].energy, 100)
-            XCTAssertFalse(fight.canUse(.shadow, index: 0),
-                           "Raw teleport / weapon visibility discontinuities lack recovered source event semantics")
+            let sourceShadow = try XCTUnwrap(fight.profiles[0].clip(role: "shadow"))
+            let safeBody = try XCTUnwrap(fight.profiles[0].clip(command: .heavy))
+            XCTAssertTrue(fight.canUse(.shadow, index: 0))
             fight.step(.init(weaponCommand: .shadow), opponent: .neutral)
+            XCTAssertEqual(fight.fighters[0].weaponPose?.clip, safeBody.name)
+            XCTAssertNotEqual(fight.fighters[0].weaponPose?.clip, sourceShadow.name)
+            XCTAssertLessThan(fight.fighters[0].energy, 100)
             for _ in 0..<200 {
+                let previous = fight.fighters[0].x
                 fight.step(.neutral, opponent: .neutral)
-                XCTAssertTrue(fight.contacts.isEmpty)
-                XCTAssertNil(fight.fighters[0].attack)
+                XCTAssertLessThanOrEqual(abs(fight.fighters[0].x - previous), 150)
+                if fight.shadowVisual(0) != nil {
+                    XCTAssertEqual(fight.fighters[0].weaponPose?.clip, safeBody.name)
+                }
             }
-            XCTAssertEqual(fight.fighters.map(\.x), [4400, 5600])
-            XCTAssertEqual(fight.fighters.map(\.health), [1000, 1000])
-            XCTAssertEqual(fight.fighters[0].energy, 100, "Unavailable input must not consume energy")
+            XCTAssertNil(fight.shadowVisual(0))
+            XCTAssertGreaterThan(fight.shadowCooldownRemaining(0), 0)
+            XCTAssertFalse(fight.canUse(.shadow, index: 0))
         }
     }
 

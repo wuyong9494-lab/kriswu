@@ -7,49 +7,62 @@ import simd
 
 @MainActor
 extension DuelWeaponAssetTests {
-    func testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch() throws {
+    func testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch() async throws {
         let assets = try DuelWeaponAssets() // Missing / corrupt real assets must fail, not skip.
         let lobby = DuelLobbySceneView(hero: .ember)
         defer { lobby.shutdown() }
+        var sampleCount = 0
         for hero in [DuelGame.Hero.ember, .liu, .ember] {
-            lobby.select(hero)
+            autoreleasepool { lobby.select(hero) }
             XCTAssertEqual(lobby.selectedHero, hero)
             let root = try XCTUnwrap(lobby.scene?.rootNode.childNode(
                 withName: "duel.lobby.character.\(hero.rawValue)", recursively: false))
-            let idle = try XCTUnwrap(assets.character(for: hero).profile.clip(role: "idle"))
+            // Only timing metadata is needed here. The lobby itself authenticates
+            // and loads the real meshes; do not retain a duplicate model cache.
+            let idle = try XCTUnwrap(assets.catalog.profile(for: hero)?.clip(role: "idle"))
             for size in [CGSize(width: 956, height: 440), CGSize(width: 844, height: 390)] {
                 lobby.frame = CGRect(origin: .zero, size: size)
                 let normalized = CGRect(x: 0.3, y: 0, width: 0.4, height: 0.74)
                 lobby.setVisibleRegion(normalized)
                 lobby.layoutSubviews()
-                _ = lobby.snapshot()
+                autoreleasepool { _ = lobby.snapshot() }
                 let clear = CGRect(x: size.width * 0.3 + 2, y: 2,
                                    width: size.width * 0.4 - 4, height: size.height * 0.74 - 4)
                 for yaw in [Float.pi, 0, Float.pi / 2, -Float.pi / 2] {
                     lobby.rotatePreview(by: yaw - lobby.yaw)
                     for tick in [0, idle.ticks / 2, idle.ticks - 1] {
-                        lobby.renderIdle(at: tick)
-                        let points = try lobbyWorldVertices(root)
-                        XCTAssertGreaterThan(points.count, 100,
-                                             "The assertion must cover the actual meshes, not only bones")
-                        var bounds = CGRect.null
-                        var clippedDepth = 0
-                        for point in points {
-                            let native = lobby.projectPoint(SCNVector3(point.x, point.y, point.z))
-                            if !native.z.isFinite || native.z <= 0 || native.z >= 1 { clippedDepth += 1 }
-                            let location = CGPoint(x: CGFloat(native.x), y: CGFloat(native.y))
-                            bounds = bounds.union(CGRect(origin: location, size: CGSize(width: 0.001, height: 0.001)))
+                        // Keep one deterministic pose/assertion together, then drain
+                        // SceneKit/Foundation temporaries before the next sample.
+                        try autoreleasepool {
+                            lobby.renderIdle(at: tick)
+                            let points = try lobbyWorldVertices(root)
+                            XCTAssertGreaterThan(points.count, 100,
+                                                 "The assertion must cover the actual meshes, not only bones")
+                            var bounds = CGRect.null
+                            var clippedDepth = 0
+                            for point in points {
+                                let native = lobby.projectPoint(SCNVector3(point.x, point.y, point.z))
+                                if !native.z.isFinite || native.z <= 0 || native.z >= 1 { clippedDepth += 1 }
+                                let location = CGPoint(x: CGFloat(native.x), y: CGFloat(native.y))
+                                bounds = bounds.union(CGRect(origin: location, size: CGSize(width: 0.001, height: 0.001)))
+                            }
+                            XCTAssertEqual(clippedDepth, 0)
+                            XCTAssertGreaterThanOrEqual(bounds.minX, clear.minX, "\(hero), yaw \(yaw), tick \(tick)")
+                            XCTAssertLessThanOrEqual(bounds.maxX, clear.maxX)
+                            XCTAssertGreaterThanOrEqual(bounds.minY, clear.minY)
+                            XCTAssertLessThanOrEqual(bounds.maxY, clear.maxY,
+                                                     "Actual body, personal head, armor, soles and weapons must clear the rail")
                         }
-                        XCTAssertEqual(clippedDepth, 0)
-                        XCTAssertGreaterThanOrEqual(bounds.minX, clear.minX, "\(hero), yaw \(yaw), tick \(tick)")
-                        XCTAssertLessThanOrEqual(bounds.maxX, clear.maxX)
-                        XCTAssertGreaterThanOrEqual(bounds.minY, clear.minY)
-                        XCTAssertLessThanOrEqual(bounds.maxY, clear.maxY,
-                                                 "Actual body, personal head, armor, soles and weapons must clear the rail")
+                        sampleCount += 1
+                        print("[lobby-framing] checked sample \(sampleCount)/72 hero=\(hero.rawValue) size=\(Int(size.width))x\(Int(size.height)) yaw=\(yaw) tick=\(tick)")
+                        // This view is not in a window, so no idle display link runs.
+                        // Suspension services the hosted app without changing the pose.
+                        try await Task.sleep(nanoseconds: 1_000_000)
                     }
                 }
             }
         }
+        XCTAssertEqual(sampleCount, 72, "Every hero/size/facing/idle sample must execute")
     }
 
     func testRealNavigatedLobbyUsesExactStageCenterAndRailGeometry() async throws {
@@ -165,9 +178,14 @@ extension DuelWeaponAssetTests {
             guard let positions = geometry?.sources(for: .vertex).first else { continue }
             XCTAssertTrue(positions.usesFloatComponents)
             XCTAssertEqual(positions.bytesPerComponent, 4)
+            let positionData = positions.data
+            let positionOffset = positions.dataOffset, positionStride = positions.dataStride
+            let vertexCount = positions.vectorCount
+            points.reserveCapacity(points.count + vertexCount)
             if let skin = node.skinner {
                 let inverse = try XCTUnwrap(skin.boneInverseBindTransforms)
                 XCTAssertEqual(skin.bones.count, inverse.count)
+                // These transforms are deliberately recomputed for every pose.
                 let matrices = zip(skin.bones, inverse).map { bone, value -> simd_float4x4 in
                     let m = value.scnMatrix4Value
                     let bind = simd_float4x4(columns: (SIMD4(m.m11, m.m12, m.m13, m.m14),
@@ -175,43 +193,57 @@ extension DuelWeaponAssetTests {
                         SIMD4(m.m41, m.m42, m.m43, m.m44)))
                     return bone.simdWorldTransform * bind
                 }
-                XCTAssertEqual(skin.boneIndices.bytesPerComponent, 2)
-                XCTAssertTrue(skin.boneWeights.usesFloatComponents)
-                XCTAssertEqual(skin.boneWeights.bytesPerComponent, 4)
-                for vertex in 0..<positions.vectorCount {
-                    let local = SIMD4(lobbyFloat(positions, vertex, 0), lobbyFloat(positions, vertex, 1),
-                                      lobbyFloat(positions, vertex, 2), 1)
-                    var world = SIMD4<Float>.zero
-                    for component in 0..<skin.boneWeights.componentsPerVector {
-                        let source = skin.boneIndices
-                        let offset = source.dataOffset + vertex * source.dataStride + component * 2
-                        let index = source.data.withUnsafeBytes {
-                            Int(UInt16(littleEndian: $0.loadUnaligned(fromByteOffset: offset, as: UInt16.self)))
+                let indices = skin.boneIndices, weights = skin.boneWeights
+                XCTAssertEqual(indices.bytesPerComponent, 2)
+                XCTAssertTrue(weights.usesFloatComponents)
+                XCTAssertEqual(weights.bytesPerComponent, 4)
+                let indexData = indices.data, weightData = weights.data
+                let indexOffset = indices.dataOffset, indexStride = indices.dataStride
+                let weightOffset = weights.dataOffset, weightStride = weights.dataStride
+                let componentCount = weights.componentsPerVector
+                // Obtain each Objective-C-backed data source once per mesh, not
+                // once per vertex component. All byte pointers stay in scope.
+                positionData.withUnsafeBytes { (positionBytes: UnsafeRawBufferPointer) in
+                    indexData.withUnsafeBytes { (indexBytes: UnsafeRawBufferPointer) in
+                        weightData.withUnsafeBytes { (weightBytes: UnsafeRawBufferPointer) in
+                            for vertex in 0..<vertexCount {
+                                let offset = positionOffset + vertex * positionStride
+                                let local = SIMD4(lobbyFloat(positionBytes, offset),
+                                    lobbyFloat(positionBytes, offset + 4), lobbyFloat(positionBytes, offset + 8), 1)
+                                var world = SIMD4<Float>.zero
+                                for component in 0..<componentCount {
+                                    let index = Int(UInt16(littleEndian: indexBytes.loadUnaligned(
+                                        fromByteOffset: indexOffset + vertex * indexStride + component * 2,
+                                        as: UInt16.self)))
+                                    guard matrices.indices.contains(index) else {
+                                        XCTFail("Source joint index is outside the imported skeleton")
+                                        continue
+                                    }
+                                    let weight = lobbyFloat(weightBytes, weightOffset + vertex * weightStride + component * 4)
+                                    world += weight * (matrices[index] * local)
+                                }
+                                points.append(SIMD3(world.x, world.y, world.z))
+                            }
                         }
-                        guard matrices.indices.contains(index) else {
-                            XCTFail("Source joint index is outside the imported skeleton")
-                            continue
-                        }
-                        world += lobbyFloat(skin.boneWeights, vertex, component) * (matrices[index] * local)
                     }
-                    points.append(SIMD3(world.x, world.y, world.z))
                 }
             } else {
-                for vertex in 0..<positions.vectorCount {
-                    let world = node.simdWorldTransform * SIMD4(lobbyFloat(positions, vertex, 0),
-                        lobbyFloat(positions, vertex, 1), lobbyFloat(positions, vertex, 2), 1)
-                    points.append(SIMD3(world.x, world.y, world.z))
+                let transform = node.simdWorldTransform
+                positionData.withUnsafeBytes { (positionBytes: UnsafeRawBufferPointer) in
+                    for vertex in 0..<vertexCount {
+                        let offset = positionOffset + vertex * positionStride
+                        let world = transform * SIMD4(lobbyFloat(positionBytes, offset),
+                            lobbyFloat(positionBytes, offset + 4), lobbyFloat(positionBytes, offset + 8), 1)
+                        points.append(SIMD3(world.x, world.y, world.z))
+                    }
                 }
             }
         }
         return points
     }
 
-    private func lobbyFloat(_ source: SCNGeometrySource, _ vertex: Int, _ component: Int) -> Float {
-        let offset = source.dataOffset + vertex * source.dataStride + component * 4
-        return source.data.withUnsafeBytes {
-            Float(bitPattern: UInt32(littleEndian: $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
-        }
+    private func lobbyFloat(_ bytes: UnsafeRawBufferPointer, _ offset: Int) -> Float {
+        Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
     }
 }
 

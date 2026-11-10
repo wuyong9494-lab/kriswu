@@ -208,8 +208,12 @@ final class DuelWeaponFightTests: XCTestCase {
     }
 
     func testUnsupportedCommandsCannotPoisonTheRecoveryBuffer() throws {
+        let catalog = try Fixture.changing(Fixture.catalog()) { profiles in
+            var roles = profiles[0]["roles"] as! [String: String]
+            roles.removeValue(forKey: "shadow"); profiles[0]["roles"] = roles
+        }
         for unavailable in [DuelWeaponCommand.shadow, .ranged] {
-            var fight = try Fixture.fight(distance: 3000)
+            var fight = try Fixture.fight(catalog: catalog, distance: 3000)
             XCTAssertFalse(fight.canUse(unavailable, index: 0))
             fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
             fight.step(.init(weaponCommand: unavailable), opponent: .neutral)
@@ -229,7 +233,7 @@ final class DuelWeaponFightTests: XCTestCase {
         fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
         for _ in 0..<12 where fight.hitStop == 0 { fight.step(.neutral, opponent: .neutral) }
         XCTAssertGreaterThanOrEqual(fight.hitStop, 2)
-        fight.step(.init(weaponCommand: .shadow), opponent: .neutral)
+        fight.step(.init(weaponCommand: .ranged), opponent: .neutral)
         fight.step(.init(weaponCommand: .kick), opponent: .neutral)
         let kick = fight.profiles[0].clip(command: .kick)?.name
         var playedKick = false

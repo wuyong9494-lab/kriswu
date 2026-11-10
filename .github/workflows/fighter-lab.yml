@@ -249,7 +249,7 @@ jobs:
             PERSONAL_TESTS=("-only-testing:SiteTests/DuelPersonalAssetTests")
           fi
           if [ "$FIGHTER_ORIGINAL_ASSETS" = "true" ]; then
-            PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests" "-only-testing:SiteTests/DuelOriginalCombatTests" "-only-testing:SiteTests/DuelSourceControlsTests" "-only-testing:SiteTests/DuelSourceEffectsTests" "-only-testing:SiteTests/DuelWeaponEffectsTests" "-only-testing:SiteTests/DuelWeaponAssetTests" "-only-testing:SiteTests/DuelWeaponGameplayTests")
+            PERSONAL_TESTS+=("-only-testing:SiteTests/DuelOriginalRigAssetTests" "-only-testing:SiteTests/DuelOriginalRigAdapterTests" "-only-testing:SiteTests/DuelOriginalCombatTests" "-only-testing:SiteTests/DuelSourceControlsTests" "-only-testing:SiteTests/DuelSourceEffectsTests" "-only-testing:SiteTests/DuelWeaponEffectsTests" "-only-testing:SiteTests/DuelWeaponAssetTests" "-only-testing:SiteTests/DuelWeaponGameplayTests" "-only-testing:SiteTests/DuelShadowPresentationTests")
           fi
           xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ShiftReminder \
             -configuration Debug -destination "id=$DEVICE" -parallel-testing-enabled NO \
