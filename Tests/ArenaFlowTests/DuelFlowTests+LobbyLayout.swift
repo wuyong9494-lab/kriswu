@@ -4,6 +4,10 @@ import XCTest
 /// window and accessibility frames, not a synthetic image or a rendered mock.
 func assertFighterLandscapeLobby(_ app: XCUIApplication,
                                 file: StaticString = #filePath, line: UInt = #line) {
+    // Identifiers on a transparent ancestor stack can replace identifiers on
+    // child buttons/scroll views. Keep these presentation-only containers untagged.
+    XCTAssertFalse(app.buttons["duel.lobby.landscape"].exists, file: file, line: line)
+    XCTAssertFalse(app.buttons["duel.lobby.playRail"].exists, file: file, line: line)
     let window = app.windows.firstMatch.frame
     XCTAssertGreaterThan(window.width, window.height, file: file, line: line)
     let showroom = app.descendants(matching: .any).matching(identifier: "duel.lobby.showroom").firstMatch
@@ -36,8 +40,9 @@ extension DuelFlowTests {
         app.launch()
         let actions = app.scrollViews["duel.lobby.actions"]
         XCTAssertTrue(actions.waitForExistence(timeout: 20))
-        XCTAssertFalse(app.descendants(matching: .any)["duel.lobby.playRail"].exists,
-                       "Accessibility text must use the scrollable stacked layout")
+        XCTAssertFalse(app.scrollViews["duel.lobby.roster"].exists,
+                       "Accessibility text must use one scrollable stacked layout, not side panels")
+        XCTAssertEqual(app.scrollViews.count, 1)
         let selection = app.buttons["duel.hero.ember"]
         for _ in 0..<10 where !selection.isHittable { actions.swipeUp() }
         XCTAssertTrue(selection.isHittable)

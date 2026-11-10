@@ -124,10 +124,8 @@ struct DuelHomeView: View {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8))
             .overlay(alignment: .top) { Rectangle().fill(bronze.opacity(0.6)).frame(height: 1) }
-            .accessibilityIdentifier("duel.lobby.playRail")
         }
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 10)
-        .accessibilityIdentifier("duel.lobby.landscape")
     }
 
     private var selectedIdentity: some View {
@@ -180,6 +178,7 @@ struct DuelHomeView: View {
                 Text("进阶").tag(DuelGame.Difficulty.challenging)
             }
             .pickerStyle(.segmented)
+            .environment(\.colorScheme, .dark)
         }
     }
 

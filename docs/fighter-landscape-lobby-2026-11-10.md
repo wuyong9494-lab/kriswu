@@ -51,3 +51,26 @@ remain in place.
 - After publication, require fresh exact-commit unsigned device, native/UI and
   actual-resource UI results, then review the landscape screenshots. No release,
   TestFlight upload or physical-device acceptance is included here.
+
+## First native run and accessibility correction
+
+Combined candidate `fc2f677b`, run `42741537580`, compiled successfully for device
+and simulator. Core passed 934 cases (16 skipped), native passed 207 cases
+(12 skipped), and the largest-text UI case passed. The ordinary landscape UI
+cases failed before combat because the `duel.lobby.landscape` identifier on the
+transparent ancestor stack propagated onto both scroll views and the three play
+buttons, replacing their own identifiers. Exported accessibility trees show the
+buttons still visible with their correct labels and 44–50 point heights, but
+with the ancestor's identifier. The stage's 956 × 440 frame also confirms the
+new full-window background layout.
+
+The correction removes identifiers from the two presentation-only stacks,
+keeping the existing identifiers on actual scroll views and play buttons. The
+regression helper now explicitly rejects either ancestor identifier appearing
+on a button. The accessibility-size test asserts a single scroll view with no
+roster side panel instead of depending on an identifier that is no longer used.
+The screenshot also exposed a dark unselected segmented-control label inherited
+from the surrounding light app theme; only the difficulty picker now receives
+the dark color-scheme environment. The user's app theme setting is unchanged.
+No original assertion is weakened and no simulation/camera code changes here.
+Fresh exact-candidate native/UI acceptance remains required after this fix.
