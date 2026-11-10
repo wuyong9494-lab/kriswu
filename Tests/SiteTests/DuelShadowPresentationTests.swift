@@ -1,10 +1,86 @@
 import XCTest
 import SceneKit
+import SwiftUI
 import simd
 @testable import ShiftReminder
 
 @MainActor
 final class DuelShadowPresentationTests: XCTestCase {
+    func testHostedControlsObserveShadowCostCooldownAndRestartForBothFighters() async throws {
+        for hero in [DuelGame.Hero.ember, .liu] {
+            let session = DuelSession(.init(hero: hero, difficulty: .learning,
+                                           mode: .practice, originalWeapons: true))
+            XCTAssertNil(session.loadError)
+            let host = UIHostingController(rootView: DuelWeaponControls(session: session))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 956, height: 440))
+            window.rootViewController = host
+            host.view.frame = window.bounds
+            window.isHidden = false
+            defer {
+                session.shutdown()
+                window.isHidden = true
+                window.rootViewController = nil
+            }
+            var mounted: DuelSourceControlsView?
+            for _ in 0..<80 {
+                host.view.layoutIfNeeded()
+                mounted = controlsDescendant(in: host.view)
+                if mounted != nil { break }
+                try await Task.sleep(nanoseconds: 25_000_000)
+            }
+            let controls = try XCTUnwrap(mounted)
+            XCTAssertTrue(controls.sourceArtAvailable)
+            let shadow = try XCTUnwrap((controls.accessibilityElements as? [UIView])?
+                .first { $0.accessibilityIdentifier == "duel.control.shadow" })
+            XCTAssertEqual(shadow.accessibilityValue, "可施放")
+            XCTAssertTrue(controls.state(for: .shadow).ready)
+
+            // Use the mounted control's normal input callback and session clock.
+            // Never call updateReadiness or replace the hosted root: the session
+            // publication alone must refresh this same UIKit instance.
+            controls.onAction?(.shadow, true)
+            controls.onAction?(.shadow, false)
+            for _ in 0..<12 { session.advance() }
+            XCTAssertEqual(session.localFighter.energy, 0)
+            XCTAssertGreaterThan(try XCTUnwrap(session.game.weaponFight).shadowCooldownRemaining(0), 0)
+            try await expectShadowValue(shadow, contains: "冷却中")
+            XCTAssertFalse(controls.state(for: .shadow).ready)
+
+            session.pause()
+            try await expectShadowValue(shadow, contains: "操作已暂停")
+            session.resume()
+            try await expectShadowValue(shadow, contains: "冷却中")
+            for _ in 0..<450 { session.advance() }
+            XCTAssertEqual(try XCTUnwrap(session.game.weaponFight).shadowCooldownRemaining(0), 0)
+            XCTAssertEqual(session.localFighter.energy, 0)
+            try await expectShadowValue(shadow, contains: "需要 100 能量")
+
+            session.restart()
+            try await expectShadowValue(shadow, contains: "可施放")
+            XCTAssertTrue(controls.state(for: .shadow).ready)
+            XCTAssertTrue(controlsDescendant(in: host.view) === controls,
+                          "Readiness changes must not recreate the touch owner")
+        }
+    }
+
+    private func controlsDescendant(in view: UIView) -> DuelSourceControlsView? {
+        if let controls = view as? DuelSourceControlsView { return controls }
+        for child in view.subviews {
+            if let controls = controlsDescendant(in: child) { return controls }
+        }
+        return nil
+    }
+
+    private func expectShadowValue(_ view: UIView, contains text: String,
+                                   file: StaticString = #filePath, line: UInt = #line) async throws {
+        for _ in 0..<80 {
+            if view.accessibilityValue?.contains(text) == true { return }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        XCTFail("Expected shadow readiness '\(text)', got '\(view.accessibilityValue ?? "missing")'",
+                file: file, line: line)
+    }
+
     /// Evaluates a real source skinned vertex, not a substitute weapon node.
     private func vertex(_ index: Int, skinner: SCNSkinner) throws -> SIMD3<Float> {
         let positions = try XCTUnwrap(skinner.baseGeometry?.sources(for: .vertex).first)

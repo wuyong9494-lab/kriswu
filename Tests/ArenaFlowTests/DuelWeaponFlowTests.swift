@@ -188,11 +188,36 @@ final class DuelWeaponFlowTests: XCTestCase {
         let dealt = try damage(app)
         XCTAssertGreaterThan(dealt, 0)
         if action == "shadow" {
-            wait("Shadow input spends energy and reports cooldown or insufficient energy", timeout: 4) {
-                let readiness = button.value as? String ?? ""
-                let energy = self.integer(after: "能量 ", in: app.staticTexts["duel.stats.0"].label)
-                return energy == 0 && (readiness.contains("冷却中") || readiness.contains("需要 100 能量"))
-            }
+            var lastObservation = "no snapshot"
+            let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                // Read both operands from one accessibility snapshot, rather
+                // than two separate queries against a continuously ticking app.
+                do {
+                    var pending = [try app.snapshot()]
+                    var readiness: String?, energy: Int?
+                    var shadowCount = 0, statsCount = 0
+                    while let element = pending.popLast() {
+                        if element.identifier == "duel.control.shadow" {
+                            shadowCount += 1; readiness = element.value as? String
+                        }
+                        if element.identifier == "duel.stats.0" {
+                            statsCount += 1; energy = self.integer(after: "能量 ", in: element.label)
+                        }
+                        pending.append(contentsOf: element.children)
+                    }
+                    lastObservation = "hero=\(hero) shadowCount=\(shadowCount) readiness=\(readiness ?? "missing") " +
+                        "statsCount=\(statsCount) energy=\(energy.map { String($0) } ?? "missing")"
+                    print("[fighter-shadow-readiness] \(lastObservation)")
+                    return shadowCount == 1 && statsCount == 1 && energy == 0 &&
+                        (readiness?.contains("冷却中") == true || readiness?.contains("需要 100 能量") == true)
+                } catch {
+                    lastObservation = "hero=\(hero) snapshot unavailable"
+                    return false
+                }
+            }, object: nil)
+            let settledResult = XCTWaiter.wait(for: [settled], timeout: 4)
+            XCTAssertEqual(settledResult, .completed,
+                           "Shadow input spends energy and reports cooldown or insufficient energy: \(lastObservation)")
         }
         try record(app, hero: hero, action: "\(action)-actual-hit")
         capture("original-\(hero)-\(action)-actual-hit")

@@ -76,6 +76,24 @@ device build and actual private-resource `DuelShadowPresentationTests` plus
 visible provisional skills on the real models, including pause, return,
 interruption and restart. No TestFlight/media deployment is part of this work.
 
+### Integration follow-up
+
+The first two integrated runs compiled the skills, passed the 958 core cases
+(16 skipped), and passed all 260 actual-resource native cases. Release acceptance
+is still incomplete: run `42783685165` at `dbde04e` failed the real-touch shadow
+readiness assertion after a successful hit. The controls adapter retained a plain
+session reference instead of observing its publications, allowing the UIKit
+readiness state to stay stale while the enclosing HUD changed.
+
+The follow-up makes the controls observe the same session without changing the
+touch owner, simulation, or authority. A hosted-view regression exercises cost,
+cooldown, pause/resume and restart for both fighters without manually refreshing
+readiness. The real-touch predicate retains its energy/readiness requirements and
+now logs both operands from one accessibility snapshot. This fix still needs its
+own exact-commit native/UI validation; the prior passes do not prove this version.
+The separately authorized internal TestFlight release remains gated on all five
+validation jobs and is not activated by this source change.
+
 ### Remaining visual boundary limitation
 
 The provisional hammer path uses a fixed release/catch anchor rather than the

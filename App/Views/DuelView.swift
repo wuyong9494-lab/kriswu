@@ -853,7 +853,10 @@ private struct DuelMatchContent: View {
 }
 
 struct DuelWeaponControls: UIViewRepresentable {
-    let session: DuelSession
+    // Observe the session here as well as in the enclosing HUD. Its identity
+    // stays unchanged across ticks, so a plain reference can leave UIKit's
+    // readiness/accessibility state stale when SwiftUI skips this child.
+    @ObservedObject var session: DuelSession
     func makeUIView(context: Context) -> DuelSourceControlsView {
         let view = DuelSourceControlsView(assetDirectory: session.weaponAssets?.directory)
         bind(view)
