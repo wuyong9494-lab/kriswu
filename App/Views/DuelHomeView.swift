@@ -9,6 +9,7 @@ struct DuelHomeView: View {
     @State private var difficulty = DuelGame.Difficulty.learning
     @State private var match: DuelSetup?
     @State private var showingNetworkEntry = false
+    @State private var showroomRegion: CGRect?
     private let bronze = Color(red: 0.83, green: 0.66, blue: 0.39)
     private var usesOriginalWeapons: Bool {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
@@ -30,7 +31,9 @@ struct DuelHomeView: View {
                                startPoint: .topLeading, endPoint: .bottomTrailing)
                     .ignoresSafeArea()
                 if wide {
-                    stage.ignoresSafeArea()
+                    stage(visibleRegion: showroomRegion)
+                        .background(lobbyFrame(.stage))
+                        .ignoresSafeArea()
                     // Only the edge scrims darken the scenery. These decorative
                     // layers must never capture the showroom's pan or pinch.
                     LinearGradient(stops: [.init(color: .black.opacity(0.58), location: 0),
@@ -44,7 +47,7 @@ struct DuelHomeView: View {
                     ScrollView {
                         VStack(spacing: 16) {
                             ZStack(alignment: .bottomLeading) {
-                                stage
+                                stage()
                                 selectedIdentity.padding(16)
                                     .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
                                     .padding(12)
@@ -61,17 +64,35 @@ struct DuelHomeView: View {
             .foregroundStyle(.white)
             .tint(bronze)
         }
+        .coordinateSpace(name: "duel.lobby.layout")
+        .onPreferenceChange(DuelLobbyLayoutFrames.self) { frames in
+            // Both measurements share a coordinate space, including the scene
+            // extending under the navigation bar and home-indicator safe area.
+            guard let stage = frames[.stage], let center = frames[.center],
+                  stage.width > 0, stage.height > 0 else {
+                showroomRegion = nil
+                return
+            }
+            // The header is confined to the side columns. Its empty center
+            // continues to the top of the full-screen stage, so do not sacrifice
+            // that space and shrink the fighter merely to clear the bottom rail.
+            let clear = CGRect(x: center.minX, y: stage.minY,
+                               width: center.width, height: center.maxY - stage.minY)
+            showroomRegion = CGRect(x: (clear.minX - stage.minX) / stage.width,
+                                    y: (clear.minY - stage.minY) / stage.height,
+                                    width: clear.width / stage.width, height: clear.height / stage.height)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .modifier(ArenaLandscape())
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
         .fullScreenCover(isPresented: $showingNetworkEntry) { DuelNetworkEntryView() }
     }
 
-    private var stage: some View {
+    private func stage(visibleRegion: CGRect? = nil) -> some View {
         ZStack {
             Color(red: 0.07, green: 0.075, blue: 0.09)
             if hasShowroom && match == nil && !showingNetworkEntry {
-                DuelLobbyPreview(hero: hero)
+                DuelLobbyPreview(hero: hero, visibleRegion: visibleRegion)
                     .accessibilityIdentifier("duel.lobby.preview")
             }
         }
@@ -84,9 +105,11 @@ struct DuelHomeView: View {
         return VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text("裂隙对决").font(.title2.weight(.semibold)).tracking(3)
+                    .frame(width: sideWidth, alignment: .leading)
                 Spacer()
                 Text("武者大厅").font(.caption.weight(.semibold)).tracking(2)
                     .foregroundStyle(bronze)
+                    .frame(width: sideWidth, alignment: .trailing)
             }
             HStack(alignment: .top, spacing: 16) {
                 ScrollView {
@@ -99,7 +122,11 @@ struct DuelHomeView: View {
                 .accessibilityIdentifier("duel.lobby.roster")
                 .frame(width: sideWidth)
                 // The empty center deliberately remains hit-test transparent.
-                Spacer(minLength: 32)
+                Color.clear
+                    .frame(minWidth: 32, maxHeight: .infinity)
+                    .background(lobbyFrame(.center))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         difficultyPicker
@@ -124,8 +151,18 @@ struct DuelHomeView: View {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8))
             .overlay(alignment: .top) { Rectangle().fill(bronze.opacity(0.6)).frame(height: 1) }
+            .background(lobbyFrame(.rail))
         }
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 10)
+    }
+
+    private func lobbyFrame(_ region: DuelLobbyLayoutRegion) -> some View {
+        GeometryReader { geometry in
+            Color.clear.preference(key: DuelLobbyLayoutFrames.self,
+                                   value: [region: geometry.frame(in: .named("duel.lobby.layout"))])
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private var selectedIdentity: some View {
@@ -256,5 +293,17 @@ struct DuelHomeView: View {
     private func start(_ mode: DuelGame.Mode) {
         guard match == nil, !showingNetworkEntry else { return }
         match = DuelSetup(hero: hero, difficulty: difficulty, mode: mode, originalWeapons: usesOriginalWeapons)
+    }
+}
+
+// Internal so native integration tests can observe the real preference values
+// without adding accessibility containers or replacing the production layout.
+enum DuelLobbyLayoutRegion: Hashable, Sendable { case stage, center, rail }
+
+struct DuelLobbyLayoutFrames: PreferenceKey {
+    static let defaultValue: [DuelLobbyLayoutRegion: CGRect] = [:]
+    static func reduce(value: inout [DuelLobbyLayoutRegion: CGRect],
+                       nextValue: () -> [DuelLobbyLayoutRegion: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }

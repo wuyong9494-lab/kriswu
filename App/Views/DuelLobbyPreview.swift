@@ -5,8 +5,12 @@ import UIKit
 /// Interactive 3D character showroom; its lightweight idle clock stops offscreen.
 struct DuelLobbyPreview: UIViewRepresentable {
     let hero: DuelGame.Hero
+    var visibleRegion: CGRect? = nil
     func makeUIView(context: Context) -> DuelLobbySceneView { DuelLobbySceneView(hero: hero) }
-    func updateUIView(_ view: DuelLobbySceneView, context: Context) { view.select(hero) }
+    func updateUIView(_ view: DuelLobbySceneView, context: Context) {
+        view.setVisibleRegion(visibleRegion)
+        view.select(hero)
+    }
     static func dismantleUIView(_ view: DuelLobbySceneView, coordinator: ()) { view.shutdown() }
 }
 
@@ -28,6 +32,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private(set) var zoom: Float = 1
     private var cameraNode: SCNNode?
     private let showroomCenter = SCNVector3(4.7, 0.85, -0.35)
+    private(set) var visibleRegion: CGRect?
+    private(set) var framing: DuelLobbyFraming?
     private(set) var showroomFrameCount = 0
 
     init(hero: DuelGame.Hero) {
@@ -42,7 +48,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
             stage = asset; world.rootNode.addChildNode(asset.makeRoot())
         }
         let camera = SCNNode(); camera.camera = SCNCamera()
-        camera.camera?.projectionDirection = .vertical; camera.camera?.fieldOfView = 35
+        camera.camera?.projectionDirection = .vertical; camera.camera?.fieldOfView = CGFloat(DuelLobbyFraming.verticalFieldOfView)
         camera.camera?.zNear = 0.05; camera.camera?.zFar = 100
         camera.position = SCNVector3(5, 1.6, 4.8)
         camera.look(at: SCNVector3(4.7, 0.85, -0.35))
@@ -66,6 +72,36 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         fill.position = SCNVector3(7, 3, -1); world.rootNode.addChildNode(fill)
         select(hero)
     }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateCameraFraming()
+    }
+
+    func setVisibleRegion(_ region: CGRect?) {
+        guard visibleRegion != region else { return }
+        visibleRegion = region
+        updateCameraFraming()
+    }
+
+    private func updateCameraFraming() {
+        guard let cameraNode else { return }
+        if let region = visibleRegion {
+            let rect = CGRect(x: region.minX * bounds.width, y: region.minY * bounds.height,
+                              width: region.width * bounds.width, height: region.height * bounds.height)
+            guard let fit = DuelLobbyFraming(size: bounds.size, visibleRect: rect, zoom: Double(zoom)) else { return }
+            framing = fit
+            cameraNode.position = SCNVector3(Float(fit.position.x), Float(fit.position.y), Float(fit.position.z))
+            cameraNode.look(at: SCNVector3(Float(fit.target.x), Float(fit.target.y), Float(fit.target.z)))
+        } else {
+            // Preserve the existing stacked/accessibility preview and any other
+            // caller without measured overlay controls. Never reset gesture state.
+            framing = nil
+            cameraNode.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
+            cameraNode.look(at: showroomCenter)
+        }
+        setNeedsDisplay()
+    }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil { stopIdle() } else { startIdle() }
@@ -126,11 +162,9 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         setNeedsDisplay()
     }
     func scalePreview(by factor: Float) {
-        guard let cameraNode, factor.isFinite, factor > 0 else { return }
+        guard cameraNode != nil, factor.isFinite, factor > 0 else { return }
         zoom = min(1.5, max(0.7, zoom / factor))
-        cameraNode.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
-        cameraNode.look(at: showroomCenter)
-        setNeedsDisplay()
+        updateCameraFraming()
     }
     @objc private func rotateCharacter(_ gesture: UIPanGestureRecognizer) {
         let translation = gesture.translation(in: self)
@@ -214,8 +248,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero
         idleTick = 0; yaw = .pi; zoom = 1
-        cameraNode?.position = SCNVector3(5, 1.6, 4.8)
-        cameraNode?.look(at: showroomCenter)
+        updateCameraFraming()
         scene.rootNode.addChildNode(nextRoot)
         startIdle()
         setNeedsDisplay()
@@ -227,6 +260,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         gestureRecognizers?.forEach { removeGestureRecognizer($0) }
         scene?.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         scene = nil; pointOfView = nil; stage = nil; character = nil; originalCharacter = nil; characterRoot = nil; weaponAssets = nil; equippedActor = nil; equippedIdle = nil; cameraNode = nil
+        visibleRegion = nil; framing = nil
         rendersContinuously = false; isPlaying = false
     }
 }
