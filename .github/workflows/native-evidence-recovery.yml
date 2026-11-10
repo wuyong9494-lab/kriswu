@@ -1,7 +1,7 @@
 name: Recover saved native evidence
 on:
   push:
-    branches: [codex/fighter-lab-sf3-resources-20261108]
+    branches: [codex/fighter-lab-host-simulation-20261109]
     paths:
       - '.github/workflows/native-evidence-recovery.yml'
       - '.github/scripts/partition_native_evidence.py'
@@ -31,14 +31,17 @@ jobs:
             const fs = require('node:fs');
             const owner = 'wuyong9494-lab', repo = 'kriswu';
             const repository = `${owner}/${repo}`;
-            const runID = 42552805778;
-            const headSHA = 'ab68cc4653304873378f483b9fa7e53b15a9292f';
+            const runID = 42746304926;
+            const headSHA = '8d6fc923a105110e3e54925f201b82d8958794e3';
             const artifactName = 'fighter-character-private';
+            const attempt = 1, artifactID = 13733892592;
+            const archiveDigest = 'sha256:79cf82465969eeb0ee8f4d82eceb2978b5012c684748ceb05e90c004c1776550';
             const runURL = `https://github.com/${repository}/actions/runs/${runID}`;
-            const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runID });
+            const { data: run } = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}',
+              { owner, repo, run_id: runID, attempt_number: attempt });
             if (run.id !== runID || run.repository?.full_name !== repository ||
                 run.head_repository?.full_name !== repository || run.head_sha !== headSHA ||
-                run.head_branch !== 'codex/fighter-lab-sf3-resources-20261108' ||
+                run.head_branch !== 'codex/fighter-lab-host-simulation-20261109' ||
                 run.path !== '.github/workflows/fighter-lab.yml' || run.html_url !== runURL) {
               throw new Error('Source run identity does not match the fixed recovery scope');
             }
@@ -47,21 +50,21 @@ jobs:
             }
             const conclusions = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped',
               'timed_out', 'action_required', 'stale', 'startup_failure']);
-            if (!conclusions.has(run.conclusion) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) {
+            if (!conclusions.has(run.conclusion) || run.run_attempt !== attempt) {
               throw new Error('Source run conclusion or attempt is invalid');
             }
             const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
               { owner, repo, run_id: runID, per_page: 100 });
-            const matches = artifacts.filter(item => item.name === artifactName && !item.expired);
+            const matches = artifacts.filter(item => item.id === artifactID && item.name === artifactName && !item.expired);
             if (matches.length !== 1) {
-              throw new Error('Expected exactly one unexpired source artifact with the fixed name');
+              throw new Error('Expected the fixed unexpired source artifact ID and name');
             }
             const artifact = matches[0];
             if (!Number.isSafeInteger(artifact.id) || artifact.id < 1 ||
                 artifact.workflow_run?.id !== runID || artifact.workflow_run?.head_sha !== headSHA ||
                 artifact.workflow_run?.repository_id !== run.repository.id ||
                 artifact.workflow_run?.head_repository_id !== run.head_repository.id ||
-                !/^sha256:[0-9a-f]{64}$/.test(artifact.digest || '')) {
+                artifact.digest !== archiveDigest) {
               throw new Error('Source artifact identity or digest is invalid');
             }
             const maximumArchiveBytes = 8 * 400 * 1024 * 1024 + 16 * 1024 * 1024;
@@ -100,15 +103,24 @@ jobs:
             if (run.conclusion !== 'success') {
               core.warning(`Source run concluded ${run.conclusion}; recovery will retain that non-success result after uploading evidence`);
             }
-      - name: Download the verified saved artifact
-        uses: actions/download-artifact@v4
-        with:
-          repository: wuyong9494-lab/kriswu
-          run-id: 42552805778
-          artifact-ids: ${{ steps.source.outputs.artifact_id }}
-          github-token: ${{ github.token }}
-          path: recovered
-          merge-multiple: true
+      - name: Download and authenticate the fixed artifact archive
+        shell: bash -eo pipefail {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # curl removes Authorization on the cross-origin signed-URL redirect.
+          # Do not use --location-trusted or print the token/redirect URL.
+          umask 077
+          curl --fail --silent --show-error --location --retry 2 \
+            --max-filesize 3372220416 \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --output source-artifact.zip \
+            'https://api.github.com/repos/wuyong9494-lab/kriswu/actions/artifacts/13733892592/zip'
+          mkdir recovered
+          python3 .github/scripts/partition_native_evidence.py extract \
+            --input source-artifact.zip --source-metadata recovery-source.json \
+            --output recovered/fighter-evidence.enc
       - name: Partition unchanged ciphertext and verify every part
         id: partition
         shell: bash -eo pipefail {0}
@@ -136,86 +148,94 @@ jobs:
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 1 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part001
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part001
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-001
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 002
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 2 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part002
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part002
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-002
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 003
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 3 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part003
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part003
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-003
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 004
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 4 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part004
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part004
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-004
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 005
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 5 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part005
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part005
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-005
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 006
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 6 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part006
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part006
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-006
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 007
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 7 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part007
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part007
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-007
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Upload ciphertext part 008
         if: ${{ success() && fromJSON(steps.partition.outputs.part_count) >= 8 }}
         uses: actions/upload-artifact@v4
         with:
-          name: native-evidence-run42552805778-artifact${{ steps.source.outputs.artifact_id }}-part008
+          name: native-evidence-run42746304926-artifact${{ steps.source.outputs.artifact_id }}-part008
           path: |
             native-evidence-parts/manifest.json
             native-evidence-parts/fighter-evidence.enc.part-008
           compression-level: 0
+          retention-days: 7
           if-no-files-found: error
       - name: Preserve a non-successful source run result
         if: ${{ always() && steps.source.outputs.source_conclusion != '' && steps.source.outputs.source_conclusion != 'success' }}
         env:
           SOURCE_CONCLUSION: ${{ steps.source.outputs.source_conclusion }}
         run: |
-          echo "::error::Source native run 42552805778 concluded ${SOURCE_CONCLUSION}. Evidence recovery does not accept that run."
+          echo "::error::Source native run 42746304926 concluded ${SOURCE_CONCLUSION}. Evidence recovery does not accept that run."
           exit 1

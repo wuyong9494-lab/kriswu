@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import zipfile
+import stat
 import unittest
 
 import partition_native_evidence as evidence
@@ -22,7 +24,7 @@ class PartitionNativeEvidenceTests(unittest.TestCase):
             "headSHA": evidence.SOURCE_HEAD, "runStatus": "completed", "runConclusion": "failure",
             "runURL": f"https://github.com/{evidence.REPOSITORY}/actions/runs/{evidence.SOURCE_RUN}",
             "runStartedAt": "2026-11-09T02:46:59Z", "runUpdatedAt": "2026-11-09T03:30:00Z",
-            "artifactID": 123, "artifactName": evidence.ARTIFACT_NAME,
+            "artifactID": evidence.SOURCE_ARTIFACT, "artifactName": evidence.ARTIFACT_NAME,
             "artifactDigest": "sha256:" + "a" * 64, "artifactBytes": 4096,
             "artifactCreatedAt": "2026-11-09T03:29:00Z",
         }
@@ -88,7 +90,8 @@ class PartitionNativeEvidenceTests(unittest.TestCase):
             ("repository", "somewhere/else"), ("runID", evidence.SOURCE_RUN + 1),
             ("headSHA", "f" * 40), ("runStatus", "in_progress"), ("runConclusion", None),
             ("artifactName", "fighter-native"), ("artifactDigest", "sha256:bad"),
-            ("artifactID", 0), ("runAttempt", True), ("artifactBytes", 0),
+            ("artifactID", 0), ("artifactID", evidence.SOURCE_ARTIFACT + 1),
+            ("runAttempt", 2), ("runAttempt", True), ("artifactBytes", 0),
             ("artifactBytes", evidence.MAX_ARCHIVE_BYTES + 1),
             ("runURL", "https://example.com"),
             ("artifactCreatedAt", "2026-11-09T01:00:00Z"),
@@ -194,6 +197,45 @@ class PartitionNativeEvidenceTests(unittest.TestCase):
             with self.subTest(path=unsafe), self.assertRaises(ValueError):
                 evidence.reassemble(self.parts, unsafe)
         self.assertEqual(evidence.verify(self.parts), manifest)
+
+    def make_archive(self, names=None, payload=None):
+        archive = self.root / "archive.zip"
+        with zipfile.ZipFile(archive, "w") as container:
+            for name in names or [evidence.CIPHERTEXT_NAME]:
+                container.writestr(name, self.payload() if payload is None else payload)
+            container.writestr("../never-extract.txt", b"unrelated diagnostic")
+        metadata = {**self.metadata, "artifactBytes": archive.stat().st_size,
+                    "artifactDigest": "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest()}
+        return archive, metadata
+
+    def test_archive_digest_precedes_extraction_and_only_fixed_member_is_copied(self):
+        archive, metadata = self.make_archive()
+        evidence.extract_archive(archive, self.source, metadata)
+        self.assertEqual(self.source.read_bytes(), self.payload())
+        self.assertEqual({path.name for path in self.root.iterdir()}, {"archive.zip", evidence.CIPHERTEXT_NAME})
+
+    def test_bad_archive_digest_size_and_ciphertext_are_rejected_without_output(self):
+        archive, metadata = self.make_archive()
+        for changed in [{"artifactBytes": metadata["artifactBytes"] + 1},
+                        {"artifactDigest": "sha256:" + "0" * 64}]:
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                evidence.extract_archive(archive, self.source, {**metadata, **changed})
+            self.assertFalse(self.source.exists())
+        archive, metadata = self.make_archive(payload=b"not an evidence envelope")
+        with self.assertRaises(ValueError):
+            evidence.extract_archive(archive, self.source, metadata)
+        self.assertFalse(self.source.exists())
+        self.assertFalse(any(path.name.startswith("native-evidence-") for path in self.root.iterdir()))
+
+    def test_missing_duplicate_and_symlink_ciphertext_members_are_rejected(self):
+        symbolic = zipfile.ZipInfo(evidence.CIPHERTEXT_NAME)
+        symbolic.external_attr = (stat.S_IFLNK | 0o777) << 16
+        for names in [["other.enc"], [evidence.CIPHERTEXT_NAME] * 2, [symbolic]]:
+            with self.subTest(names=names):
+                archive, metadata = self.make_archive(names=names)
+                with self.assertRaises(ValueError):
+                    evidence.extract_archive(archive, self.source, metadata)
+                self.assertFalse(self.source.exists())
 
     def test_cli_partition_verify_and_reassemble_need_no_decryption_configuration(self):
         self.source.write_bytes(self.payload())

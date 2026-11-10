@@ -14,12 +14,16 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
+import zipfile
 import tempfile
 
 
 REPOSITORY = "wuyong9494-lab/kriswu"
-SOURCE_RUN = 42552805778
-SOURCE_HEAD = "ab68cc4653304873378f483b9fa7e53b15a9292f"
+SOURCE_RUN = 42746304926
+SOURCE_HEAD = "8d6fc923a105110e3e54925f201b82d8958794e3"
+SOURCE_ATTEMPT = 1
+SOURCE_ARTIFACT = 13733892592
 ARTIFACT_NAME = "fighter-character-private"
 CIPHERTEXT_NAME = "fighter-evidence.enc"
 PART_BYTES = 400 * 1024 * 1024
@@ -50,6 +54,7 @@ def validate_source(source):
     expected = {
         "repository": REPOSITORY, "runID": SOURCE_RUN, "headSHA": SOURCE_HEAD,
         "runStatus": "completed", "artifactName": ARTIFACT_NAME,
+        "runAttempt": SOURCE_ATTEMPT, "artifactID": SOURCE_ARTIFACT,
         "runURL": f"https://github.com/{REPOSITORY}/actions/runs/{SOURCE_RUN}",
     }
     if any(source[key] != value for key, value in expected.items()):
@@ -224,6 +229,49 @@ def partition(source, output, metadata, *, part_bytes=PART_BYTES):
                 shutil.rmtree(staging)
 
 
+def extract_archive(archive, output, metadata):
+    """Verify the exact ZIP digest before extracting only its fixed ciphertext member."""
+    metadata = validate_source(metadata)
+    archive, output = safe_path(archive, file=True), safe_path(output)
+    if output.name != CIPHERTEXT_NAME or output.exists() or not output.parent.is_dir():
+        raise ValueError("Extraction requires a new fixed-name ciphertext file")
+    if archive.stat().st_size != metadata["artifactBytes"]:
+        raise ValueError("Source artifact byte count mismatch")
+    descriptor, temporary = tempfile.mkstemp(prefix="native-evidence-", dir=output.parent)
+    try:
+        # Keep the same open descriptor for hashing and ZIP reads.
+        with archive.open("rb") as original, os.fdopen(descriptor, "wb") as target:
+            digest = hashlib.file_digest(original, "sha256").hexdigest()
+            if "sha256:" + digest != metadata["artifactDigest"]:
+                raise ValueError("Source artifact SHA-256 mismatch")
+            original.seek(0)
+            with zipfile.ZipFile(original) as container:
+                matches = [info for info in container.infolist() if info.filename == CIPHERTEXT_NAME]
+                if len(matches) != 1:
+                    raise ValueError("Source archive must contain exactly one fixed ciphertext member")
+                member = matches[0]
+                kind = stat.S_IFMT(member.external_attr >> 16)
+                if (kind not in (0, stat.S_IFREG) or member.flag_bits & 1
+                        or not MIN_BYTES <= member.file_size <= PART_BYTES * MAX_PARTS):
+                    raise ValueError("Invalid ciphertext member type, flags or size")
+                with container.open(member) as source:
+                    header = source.read(len(PREFIX) + 8)
+                    check_header(header, member.file_size)
+                    target.write(header)
+                    written = len(header)
+                    while block := source.read(BUFFER_BYTES):
+                        written += len(block)
+                        if written > member.file_size:
+                            raise ValueError("Ciphertext exceeds its declared size")
+                        target.write(block)
+                    if written != member.file_size:
+                        raise ValueError("Ciphertext byte count mismatch")
+        os.link(temporary, output)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return metadata
+
+
 def reassemble(directory, output):
     directory, manifest = load_manifest(directory)
     output = safe_path(output)
@@ -244,16 +292,21 @@ def reassemble(directory, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    split = commands.add_parser("partition")
-    split.add_argument("--input", required=True)
-    split.add_argument("--source-metadata", required=True)
-    split.add_argument("--output", required=True)
+    for name in ("partition", "extract"):
+        split = commands.add_parser(name)
+        split.add_argument("--input", required=True)
+        split.add_argument("--source-metadata", required=True)
+        split.add_argument("--output", required=True)
     for name in ("verify", "reassemble"):
         command = commands.add_parser(name)
         command.add_argument("--directory", required=True)
         if name == "reassemble":
             command.add_argument("--output", required=True)
     args = parser.parse_args()
+    if args.command == "extract":
+        metadata = extract_archive(args.input, args.output, read_json(args.source_metadata))
+        print(json.dumps({"sourceConclusion": metadata["runConclusion"], "archiveDigestVerified": True}))
+        return
     if args.command == "partition":
         manifest = partition(args.input, args.output, read_json(args.source_metadata))
     elif args.command == "verify":
@@ -267,5 +320,5 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, TypeError) as error:
+    except (OSError, ValueError, TypeError, zipfile.BadZipFile) as error:
         raise SystemExit(f"Evidence recovery rejected: {error}") from error
