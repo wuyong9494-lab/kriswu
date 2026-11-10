@@ -49,10 +49,8 @@ final class DuelWorldView: SCNView {
     private(set) var verifiedEffectsRoot: SCNNode?
     private(set) var verifiedStageRoot: SCNNode?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
-    private var trackedCameraX: Float = 5
+    private(set) var combatCamera = DuelCombatCamera()
     private var perspectiveDistance: Float = 7.7
-    private var impactShake: Float = 0
-    private var impactPhase: Int = 0
     enum CharacterSource {
         case bundled, legacy, procedural
         #if DEBUG
@@ -314,14 +312,14 @@ final class DuelWorldView: SCNView {
                 }
                 catch { session.characterFailed() }
             }
-            session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
-            consumeFeedback(session.game, tick: 0)
         }
+        session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
+        consumeFeedback(session.game, tick: 0)
         session.didReset = { [weak self] in
             guard let self, !self.ended else { return }
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
-            self.impactShake = 0; self.impactPhase = 0
-            self.trackedCameraX = 5
+            self.combatCamera = DuelCombatCamera()
+            self.consumeFeedback(self.session.game, tick: 0)
             self.drawState()
         }
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
@@ -357,9 +355,7 @@ final class DuelWorldView: SCNView {
         // SceneKit renderer for a camera (or mutate a default camera it exposes).
         guard !ended, scene != nil, bounds.width > 0, bounds.height > 0 else { return }
         let aspect = Double(bounds.width / bounds.height)
-        let separation = session.game.fighters.count == 2
-            ? Double(abs(session.game.fighters[0].x - session.game.fighters[1].x)) / 1000 : 3
-        let framing = DuelCameraFraming(aspect: aspect, separation: separation)
+        let framing = DuelCameraFraming(aspect: aspect, separation: combatCamera.separation)
         if stageAsset != nil {
             pointOfView?.camera?.fieldOfView = CGFloat(framing.verticalFieldOfView)
             perspectiveDistance = Float(framing.perspectiveDistance)
@@ -459,32 +455,18 @@ final class DuelWorldView: SCNView {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
         }
         slamRing?.isHidden = true
-        // Follow the pair, not the leading fighter. Smooth changes in the
-        // center of combat without allocating animation actions each frame.
-        // The zoom-out at large separation keeps both combatants in shot.
-        if session.game.fighters.count == 2 {
-            let left = Float(session.game.fighters[0].x) / 1000
-            let right = Float(session.game.fighters[1].x) / 1000
-            let midpoint = min(7.0, max(3.0, (left + right) * 0.5))
-            trackedCameraX += (midpoint - trackedCameraX) * 0.12
-        }
+        // Read-only sampling: repeated draws, layout, and skipped display
+        // frames cannot speed up tracking or drain a confirmed impact.
+        let trackedCameraX = Float(combatCamera.centerX)
         updateCameraFraming()
         var cameraPosition = cameraBasePosition
         cameraPosition.x = trackedCameraX
         if stageAsset != nil { cameraPosition.z = perspectiveDistance }
         pointOfView?.position = cameraPosition
         pointOfView?.look(at: SCNVector3(trackedCameraX, stageAsset != nil ? 1.2 : 1.0, 0))
-        // A short, decaying impact impulse differentiates heavy hammer blows
-        // from light katana hits. Never allocate SceneKit actions per contact.
-        if impactShake > 0.001 {
-            impactPhase &+= 1
-            if !UIAccessibility.isReduceMotionEnabled {
-                pointOfView?.position.x += sin(Float(impactPhase) * 2.4) * impactShake
-                pointOfView?.position.y += cos(Float(impactPhase) * 1.9) * impactShake * 0.55
-            }
-            impactShake *= 0.70
-        } else {
-            impactShake = 0
+        if !UIAccessibility.isReduceMotionEnabled {
+            pointOfView?.position.x += Float(combatCamera.impactOffsetX)
+            pointOfView?.position.y += Float(combatCamera.impactOffsetY)
         }
         if let hold = session.game.grapple {
             let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
@@ -514,7 +496,15 @@ final class DuelWorldView: SCNView {
         SCNTransaction.commit()
     }
     private func consumeFeedback(_ game: DuelGame, tick: Int) {
-        guard !ended, let fight = game.weaponFight else { return }
+        guard !ended, game.fighters.count == 2 else { return }
+        let impacts = game.weaponFight?.contacts.map { contact in
+            DuelCombatCamera.Impact(kind: contact.kind == .block ? .block : contact.heavy ? .heavy : .light,
+                                    direction: contact.direction)
+        } ?? []
+        combatCamera.consume(frame: game.frame, animationTick: tick,
+                             firstX: Double(game.fighters[0].x) / 1000,
+                             secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
+        guard let fight = game.weaponFight else { return }
         let contacts = fight.contacts.map { contact in
             DuelSourceEffects.Contact(kind: contact.kind == .hit ? .hit : .block,
                 position: SCNVector3(Float(contact.position.x), Float(contact.position.y), Float(contact.position.z)),
@@ -523,13 +513,6 @@ final class DuelWorldView: SCNView {
         }
         let swings = fight.swings.map {
             DuelSourceEffects.Swing(heavy: $0.heavy, sound: !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
-        }
-        // Impact intensity is driven by confirmed combat contacts, not input
-        // presses or display frames. A blocked strike is deliberately softer.
-        for contact in fight.contacts {
-            let intensity: Float = contact.kind == .hit
-                ? (contact.heavy ? 0.065 : 0.028) : 0.012
-            impactShake = min(0.10, max(impactShake, intensity))
         }
         // Called for every fixed simulation step, including all catch-up steps.
         // A display frame is not an event queue and must not drop earlier hits.

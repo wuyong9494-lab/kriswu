@@ -142,6 +142,12 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     XCTAssertGreaterThan(state.game.hitStop, 0)
                     XCTAssertGreaterThan(effects.emittedHits, 0)
                     XCTAssertGreaterThan(effects.activeParticleCount, 0)
+                    let contactCamera = view.combatCamera
+                    XCTAssertGreaterThan(abs(contactCamera.impactOffsetX), 0,
+                                         "Only the confirmed source contact should start camera recoil")
+                    for _ in 0..<12 { view.drawState() }
+                    XCTAssertEqual(view.combatCamera, contactCamera,
+                                   "Repeated contact captures must not drain or restart the impulse")
                     if role != "kick" {
                         let category = hero == .ember ? "katanaHit" : "hammerHit"
                         XCTAssertGreaterThan(effects.playedSoundCategories[category, default: 0], 0)
@@ -159,6 +165,10 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     let frozenTick = state.animationTick
                     state.advance(); view.drawState()
                     XCTAssertEqual(state.animationTick, frozenTick)
+                    XCTAssertEqual(view.combatCamera.centerX, contactCamera.centerX)
+                    XCTAssertEqual(view.combatCamera.separation, contactCamera.separation)
+                    XCTAssertLessThan(abs(view.combatCamera.impactOffsetX), abs(contactCamera.impactOffsetX),
+                                      "Contact recoil settles on consumed frames while source poses remain frozen")
                     XCTAssertEqual(particleState(bursts), nativeState, "Hit-stop must freeze the visible source burst")
                     state.weaponAction(.weapon, down: true)
                     state.weaponAction(.weapon, down: false)
@@ -172,6 +182,8 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     state.restart(); view.drawState()
                     XCTAssertFalse(state.paused)
                     XCTAssertEqual(state.animationTick, 0)
+                    XCTAssertEqual(view.combatCamera.impactOffsetX, 0)
+                    XCTAssertEqual(view.combatCamera.centerX, 5)
                     XCTAssertEqual(effects.activeBurstCount, 0)
                     XCTAssertEqual(effects.playingAudioPlayerCount, 0)
                     XCTAssertTrue(bursts.allSatisfy { $0.parent == nil })

@@ -25,6 +25,27 @@ final class DuelCameraFramingTests: XCTestCase {
         }
     }
 
+    func testSeparatedFightersKeepBodyMarginInEveryLandscapeWidth() {
+        for aspect in [1.5, 1.6, 1.78, 2.1, 2.4] {
+            for separation in [0.0, 3, 6, 9.3, 10, 13] {
+                let result = DuelCameraFraming(aspect: aspect, separation: separation)
+                let halfWidth = result.perspectiveDistance * tan(result.verticalFieldOfView * .pi / 360) * aspect
+                XCTAssertGreaterThanOrEqual(halfWidth + 0.000001, separation * 0.5 + 0.8,
+                                           "Both silhouettes need room even when landscape FOV reaches its cap")
+                XCTAssertLessThanOrEqual(result.verticalFieldOfView, 47)
+            }
+        }
+        XCTAssertGreaterThan(DuelCameraFraming(aspect: 1.5, separation: 10).perspectiveDistance, 7.7)
+    }
+
+    func testOpeningShotRetainsExistingCharacterScaleOnWidePhones() {
+        for aspect in [1.78, 2.1, 2.4] {
+            let opening = DuelCameraFraming(aspect: aspect, separation: 3)
+            XCTAssertEqual(opening.verticalFieldOfView, 31)
+            XCTAssertEqual(opening.perspectiveDistance, 7.7)
+        }
+    }
+
     func testInvalidTransientGeometryCannotPoisonProjection() {
         for aspect in [0.0, -1, Double.nan, Double.infinity] {
             let result = DuelCameraFraming(aspect: aspect, separation: .nan)
