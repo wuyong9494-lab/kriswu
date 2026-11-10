@@ -75,8 +75,9 @@ core's own version, session, epoch, sequence and tick checks. Control traffic
 includes ready, input, checkpoint and cancellation; normal terminal cancellation
 uses the existing start-barrier message so it also works before presentation.
 
-- The host samples physical controls once per tick, and the guest samples once
-  initially and once after each applied frame. Both target `nextTick + 4`.
+- The host samples physical controls once per tick. The guest samples once
+  initially, then on its local pulse only if replay advanced since its previous
+  sample. Replay callbacks never drain physical input. Both target `nextTick + 4`.
   Sequences are independent from selection/start/frame sequences.
 - Both host-local and remote-guest samples pass through `DuelNetworkInputs` with
   a trusted identity. Existing limits remain future 6 ticks, late 2 ticks,

@@ -141,6 +141,7 @@ final class DuelNetworkCombatCoordinator {
     private var presentationToken: UUID?
     private var startSequence: UInt64 = 0
     private var inputSequence: UInt64 = 0
+    private var lastGuestInputTick: UInt64?
     private var peerReady = false
     private var deadline: TimeInterval?
     private var lastPeerActivity: TimeInterval = 0
@@ -267,8 +268,11 @@ final class DuelNetworkCombatCoordinator {
         guard state == .running else { return }
         // Guest renderer readiness does not prove the host renderer is ready.
         if !isHost, replay?.nextTick == 0 { return }
-        // Guests have no simulation clock. Only validated frames advance replay.
-        guard host != nil else { return }
+        // Sample the guest's current mailbox once on its local pulse, after any
+        // already-delivered replay backlog. Historical frames must not drain a
+        // fresh edge or accelerate hold/chord timers once per queued packet.
+        // Sampling never advances guest simulation; only validated frames do.
+        guard isHost || !receivingFrame else { return }
         sampleInput()
         guard state == .running, var value = host else { return }
         do {
@@ -455,6 +459,12 @@ final class DuelNetworkCombatCoordinator {
               tick <= UInt64.max - Self.inputLead, inputSequence < UInt64.max else {
             close(.protocolViolation); return
         }
+        if !isHost {
+            // A local pulse without a new host frame cannot send another input
+            // for the same target tick or consume a pending one-shot edge.
+            if let previous = lastGuestInputTick, tick <= previous { return }
+            lastGuestInputTick = tick
+        }
         let input = presentation.consumeLocalInput()
         guard state == .running else { return }
         inputSequence += 1
@@ -532,7 +542,6 @@ final class DuelNetworkCombatCoordinator {
             makeCheckpoint(game: value.game, nextTick: value.nextTick)
             guard state == .running else { return }
             if case .matchOver = value.game.phase { close(.matchEnded, notifyPeer: false) }
-            else { sampleInput() }
         } catch { close(.protocolViolation) }
     }
 

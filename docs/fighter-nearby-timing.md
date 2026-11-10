@@ -26,13 +26,16 @@ arithmetic models cannot establish a Swift/native pass or playable multiplayer.
 
 1. UIKit source controls update the local session's physical-input mailbox.
 2. The host samples immediately before each authoritative step. The guest
-   samples initially after ready and after each accepted authoritative frame.
-   Neither display link advances external-authoritative simulation.
+   samples initially after ready, then on its local pulse only when replay has
+   advanced since its previous sample. Replay callbacks never drain the current
+   physical-input mailbox. Neither display link advances external-authoritative
+   simulation. See [the burst regression](fighter-nearby-input-bursts.md).
 3. Both sample messages target `nextTick + 4`. Host-local samples use the same
    inbox validator as guest messages. The host steps once, encodes the consumed
    inputs, publishes locally and sends one reliable frame.
 4. The guest validates exact sequence/tick continuity, applies both consumed
-   inputs, publishes the resulting state, then samples its local mailbox again.
+   inputs and publishes the resulting state. Its next eligible local pulse
+   samples against the latest replay tick, without advancing simulation.
 5. `DuelWorldView` draws the latest session state on its separate display link.
    Publication is not proof that a frame has reached the screen.
 
@@ -45,12 +48,15 @@ its scheduled consumption. These are analytical examples, not measurements:
 - Host sampling at tick n targets tick n+4. Resolved intent to host publication is
   `w + 4T`, nominally 66.7–83.3 ms with `0 <= w < T` at 60 Hz. Guest publication
   of that same action adds that authoritative frame's delivery/publication delay.
-- A guest that just applied tick n has `nextTick = n+1`, so its new sample targets
-  n+5. Sample to host consumption is approximately `5T - d[n]`. Guest intent to
-  its own authoritative publication is `w + 5T + d[n+5] - d[n]`, nominally
-  83.3–100 ms when downlink delay is stable. Do not add an RTT to this figure:
-  the fixed lead already budgets return delivery time, while downlink delay
-  reduces the guest's remaining host-relative lead.
+- A guest whose latest applied tick is n has `nextTick = n+1`, so its new sample
+  targets n+5. Let a be the time from that frame's publication to the local input
+  sample. Sample to host consumption is approximately `5T - d[n] - a`. Guest
+  intent to its own authoritative publication is
+  `w + 5T + d[n+5] - d[n] - a`. The earlier 83.3–100 ms example assumed a=0
+  because sampling happened inside every frame callback. It is not a measured
+  or guaranteed bound for independent local pulses. Do not add an RTT blindly:
+  the fixed lead already budgets return delivery, while downlink delay and local
+  sample age reduce the guest's remaining host-relative lead.
 - Late arrival changes that model. The inbox accepts at most two ticks late at
   the next consumption tick, rejects farther-late inputs, and forbids two
   accepted samples for the same scheduled tick. Reliable bursts can therefore
@@ -63,8 +69,10 @@ its scheduled consumption. These are analytical examples, not measurements:
 - These figures begin at a **resolved intent**, not every button-down. Neutral
   weapon/kick taps resolve on release; neutral weapon heavy needs 18 input
   samples; jump has one sample of chord grace. Directional/ranged/shadow actions
-  can resolve on press. Source-control hold/chord timing is sample-count based,
-  so guest packet bursts or stalls affect its wall-clock timing too.
+  can resolve on press. Source-control hold/chord timing remains sample-count
+  based. A queued guest frame burst no longer advances those timers once per
+  historical packet, but missed local pulses or lack of new frames can extend
+  their wall-clock duration. This is not a monotonic-time hold-recognition rewrite.
 
 There is no current in-app network RTT, touch-to-consume, frame-publication-age,
 input-rejection or screen-presentation telemetry. The renderer's existing

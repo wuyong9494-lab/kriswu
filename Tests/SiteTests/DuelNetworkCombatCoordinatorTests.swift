@@ -151,6 +151,38 @@ private final class CombatPair {
     var frames: [DuelNetworkCombatProtocol.Message] {
         hostTransport.packets.compactMap { try? JSONDecoder().decode(DuelNetworkCombatProtocol.Message.self, from: $0) }
     }
+    var consumedFrames: [DuelNetworkCombatProtocol.Frame] {
+        frames.flatMap { message in
+            if case .frames(let frames) = message.command { return frames }; return []
+        }
+    }
+    var guestInputs: [DuelNetworkInputs.Message] {
+        guestTransport.packets.compactMap { bytes in
+            guard let control = try? JSONDecoder().decode(DuelNetworkCombatCoordinator.Control.self, from: bytes),
+                  case .input(let message) = control.control else { return nil }
+            return message
+        }
+    }
+    /// Keep original bytes in order while both local watchdog pulses continue.
+    /// The caller delivers them explicitly; this is not a real MCSession test.
+    func bufferHostFrames(_ count: Int) -> [Data] {
+        let firstPacket = hostTransport.packets.count
+        hostTransport.drop = { data in
+            guard let message = try? JSONDecoder().decode(DuelNetworkCombatProtocol.Message.self, from: data),
+                  case .frames = message.command else { return false }
+            return true
+        }
+        tick(count)
+        hostTransport.drop = nil
+        return Array(hostTransport.packets.dropFirst(firstPacket)).filter { data in
+            guard let message = try? JSONDecoder().decode(DuelNetworkCombatProtocol.Message.self, from: data),
+                  case .frames = message.command else { return false }
+            return true
+        }
+    }
+    func deliverHostFrames(_ packets: [Data]) {
+        for bytes in packets { guestTransport.receive?(bytes, "z-host") }
+    }
     func sendControl(_ control: DuelNetworkCombatCoordinator.Control.Command, toHost: Bool = true) throws {
         let config = try XCTUnwrap(host.configuration)
         let data = try JSONEncoder().encode(DuelNetworkCombatCoordinator.Control(configuration: config, control: control))
@@ -332,6 +364,165 @@ extension DuelLifecycleTests {
         XCTAssertEqual(pair.guest.replay?.nextTick, 1)
         XCTAssertEqual(pair.guest.presentation?.nextPresentationTick, 1)
         XCTAssertEqual(pair.guestTransport.packets.count, count)
+    }
+
+    func testCombatCoordinatorGuestPulsePreservesFreshEdgeAcrossOrderedBurst() throws {
+        for choice in [DuelMultiplayerSelection.Choice.sun, .liu] {
+            for backlog in [7, 8] {
+                let pair = CombatPair(); defer { pair.close() }
+                try pair.start(hostChoice: choice)
+                pair.tick(20)
+                let guest = try XCTUnwrap(pair.guest.presentation)
+                let firstTick = try XCTUnwrap(pair.host.host?.nextTick)
+                let queued = pair.bufferHostFrames(backlog)
+                XCTAssertEqual(queued.count, backlog)
+                XCTAssertEqual(pair.guest.replay?.nextTick, firstTick)
+                XCTAssertEqual(pair.host.host?.nextTick, firstTick + UInt64(backlog))
+                XCTAssertEqual(pair.host.state, .running)
+                XCTAssertEqual(pair.guest.state, .running)
+
+                // The action did not exist while the withheld frames were made.
+                guest.weaponAction(.ranged, down: true)
+                guest.weaponAction(.ranged, down: false)
+                let beforeInput = pair.guestInputs.count
+                pair.deliverHostFrames(queued)
+                XCTAssertEqual(pair.guestInputs.count, beforeInput, "Replay cannot drain physical input")
+                XCTAssertEqual(pair.guest.replay?.nextTick, firstTick + UInt64(backlog))
+                pair.guest.service()
+                let sampled = pair.guestInputs.dropFirst(beforeInput)
+                let target = firstTick + UInt64(backlog) + DuelNetworkCombatCoordinator.inputLead
+                XCTAssertEqual(sampled.count, 1)
+                XCTAssertEqual(sampled.first?.tick, target)
+                XCTAssertEqual(sampled.first?.weaponCommand, .ranged)
+                pair.tick(8)
+                let consumed = pair.consumedFrames.filter { $0.guest.weaponCommand == .ranged }
+                XCTAssertEqual(consumed.count, 1)
+                XCTAssertEqual(consumed.first?.tick, target)
+                XCTAssertEqual(pair.host.state, .running)
+                XCTAssertEqual(pair.guest.state, .running)
+                XCTAssertEqual(pair.host.host?.game, pair.guest.replay?.game)
+            }
+        }
+    }
+
+    func testCombatCoordinatorGuestDoesNotResampleUntilReplayAdvances() throws {
+        let pair = CombatPair(); defer { pair.close() }
+        try pair.start()
+        XCTAssertEqual(pair.guestInputs.count, 1)
+        XCTAssertEqual(pair.guestInputs.first?.tick, DuelNetworkCombatCoordinator.inputLead)
+        let guest = try XCTUnwrap(pair.guest.presentation)
+        guest.weaponAction(.ranged, down: true)
+        guest.weaponAction(.ranged, down: false)
+        for _ in 0..<20 { pair.guest.service(); guest.advance() }
+        XCTAssertEqual(pair.guestInputs.count, 1)
+        XCTAssertEqual(pair.guest.replay?.nextTick, 0)
+        pair.tick()
+        XCTAssertEqual(pair.guestInputs.count, 2)
+        XCTAssertEqual(pair.guestInputs.last?.weaponCommand, .ranged)
+        guest.weaponAction(.shadow, down: true)
+        guest.weaponAction(.shadow, down: false)
+        let duplicate = try XCTUnwrap(pair.frames.last).encoded()
+        for _ in 0..<20 {
+            pair.guestTransport.receive?(duplicate, "z-host")
+            pair.guest.service()
+        }
+        XCTAssertEqual(pair.guestInputs.count, 2)
+        XCTAssertEqual(pair.guest.replay?.nextTick, 1)
+        pair.tick()
+        XCTAssertEqual(pair.guestInputs.count, 3)
+        XCTAssertEqual(pair.guestInputs.last?.weaponCommand, .shadow, "Duplicate/no-progress pulses retain a new edge")
+        pair.tick(6)
+        XCTAssertEqual(pair.consumedFrames.filter { $0.guest.weaponCommand == .ranged }.count, 1)
+        XCTAssertEqual(pair.consumedFrames.filter { $0.guest.weaponCommand == .shadow }.count, 1)
+        XCTAssertEqual(pair.host.host?.game, pair.guest.replay?.game)
+    }
+
+    func testCombatCoordinatorHistoricalBurstCannotAccelerateFreshWeaponHold() throws {
+        let pair = CombatPair(); defer { pair.close() }
+        try pair.start(); pair.tick(20)
+        let guest = try XCTUnwrap(pair.guest.presentation)
+        let queued = pair.bufferHostFrames(DuelWeaponInput.longPressTicks)
+        XCTAssertEqual(queued.count, DuelWeaponInput.longPressTicks)
+        guest.weaponAction(.weapon, down: true)
+        let beforeInput = pair.guestInputs.count
+        pair.deliverHostFrames(queued)
+        XCTAssertEqual(pair.guestInputs.count, beforeInput)
+        pair.guest.service() // Only the first actual sample of the fresh hold.
+        XCTAssertNil(pair.guestInputs.last?.weaponCommand)
+        for _ in 1..<(DuelWeaponInput.longPressTicks - 1) { pair.tick() }
+        XCTAssertEqual(pair.guestInputs.count - beforeInput, DuelWeaponInput.longPressTicks - 1)
+        XCTAssertTrue(pair.guestInputs.dropFirst(beforeInput).allSatisfy { $0.weaponCommand == nil })
+        pair.tick()
+        XCTAssertEqual(pair.guestInputs.last?.weaponCommand, .heavy)
+        guest.weaponAction(.weapon, down: false)
+        pair.tick(6)
+        XCTAssertEqual(pair.consumedFrames.filter { $0.guest.weaponCommand == .heavy }.count, 1)
+        XCTAssertEqual(pair.host.host?.game, pair.guest.replay?.game)
+    }
+
+    func testCombatCoordinatorGuestHeldMovementExpiresAndRefreshesAfterBurst() throws {
+        let pair = CombatPair(); defer { pair.close() }
+        try pair.start(); pair.tick(20)
+        let guest = try XCTUnwrap(pair.guest.presentation)
+        guest.weaponDirection(x: -1, y: 0)
+        pair.tick(6)
+        XCTAssertEqual(pair.consumedFrames.last?.guest.move, -1)
+        let queued = pair.bufferHostFrames(8)
+        XCTAssertEqual(pair.consumedFrames.last?.guest.move, 0, "The host's unchanged held lease still expires")
+        pair.deliverHostFrames(queued)
+        pair.guest.service()
+        let target = try XCTUnwrap(pair.guestInputs.last?.tick)
+        XCTAssertEqual(pair.guestInputs.last?.move, -1, "Replay must not clear the physical hold")
+        pair.tick(5)
+        XCTAssertEqual(pair.consumedFrames.first(where: { $0.tick == target })?.guest.move, -1)
+        guest.weaponDirection(x: 0, y: 0)
+        pair.tick(6)
+        XCTAssertEqual(pair.consumedFrames.last?.guest.move, 0)
+        XCTAssertEqual(pair.host.host?.game, pair.guest.replay?.game)
+    }
+
+    func testCombatCoordinatorGuestRendererCannotSampleInsideReplayCallback() throws {
+        let pair = CombatPair(); defer { pair.close() }
+        try pair.start(); pair.tick(20)
+        let guest = try XCTUnwrap(pair.guest.presentation)
+        let queued = pair.bufferHostFrames(8)
+        guest.weaponAction(.ranged, down: true)
+        guest.weaponAction(.ranged, down: false)
+        var published = 0
+        guest.didSimulateStep = { _, _ in published += 1; pair.guest.service() }
+        let beforeInput = pair.guestInputs.count
+        pair.deliverHostFrames(queued)
+        XCTAssertEqual(published, 8)
+        XCTAssertEqual(pair.guestInputs.count, beforeInput)
+        pair.guest.service()
+        XCTAssertEqual(pair.guestInputs.count, beforeInput + 1)
+        XCTAssertEqual(pair.guestInputs.last?.weaponCommand, .ranged)
+        guest.didSimulateStep = nil
+        pair.tick(5)
+        XCTAssertEqual(pair.consumedFrames.filter { $0.guest.weaponCommand == .ranged }.count, 1)
+        XCTAssertEqual(pair.host.host?.game, pair.guest.replay?.game)
+    }
+
+    func testCombatCoordinatorGuestInputCancellationWinsBeforeNextPulse() throws {
+        let pair = CombatPair(); defer { pair.close() }
+        try pair.start(); pair.tick(20)
+        let guest = try XCTUnwrap(pair.guest.presentation)
+        let queued = pair.bufferHostFrames(8)
+        guest.weaponAction(.ranged, down: true)
+        guest.weaponAction(.ranged, down: false)
+        pair.deliverHostFrames(queued)
+        guest.cancelWeaponInput()
+        pair.guest.service()
+        XCTAssertNil(pair.guestInputs.last?.weaponCommand)
+        pair.tick(5)
+        XCTAssertTrue(pair.consumedFrames.allSatisfy { $0.guest.weaponCommand == nil })
+        guest.weaponAction(.ranged, down: true)
+        pair.guest.interrupt()
+        let count = pair.guestInputs.count
+        pair.guest.service()
+        XCTAssertEqual(pair.guestInputs.count, count)
+        XCTAssertEqual(pair.guest.state, .closed)
+        XCTAssertEqual(pair.host.state, .closed)
     }
 
     func testCombatCoordinatorRejectsSkippedOrBatchedPresentationBeforeReplayMutation() throws {
