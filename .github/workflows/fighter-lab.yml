@@ -235,10 +235,12 @@ jobs:
         run: |
           python3 -u .github/scripts/prepare_star_simulator.py 2>&1 | tee fighter-simulator.log
           python3 -u .github/scripts/prepare_star_simulator.py --ready --retry-cold-boot 2>&1 | tee -a fighter-simulator.log
-      # Actual-resource tests took 705 seconds before result finalization.
-      # Keep a bounded completion budget and still require xcodebuild success.
+      # The 253-case resource suite needs launch + test + result-finalization
+      # time. Run 42746304926 completed all assertions in 1,006 seconds but
+      # exceeded 20 minutes overall; its retry reached 233 cases at the limit.
+      # Keep a bounded 25-minute budget and still require xcodebuild to exit 0.
       - name: Check interruption, input and SceneKit resource lifetime
-        timeout-minutes: 20
+        timeout-minutes: 25
         shell: bash -eo pipefail {0}
         run: |
           DEVICE=$(python3 -c "import json; print(json.load(open('star-test-device.json'))['udid'])")

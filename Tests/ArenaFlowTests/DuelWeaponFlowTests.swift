@@ -14,6 +14,42 @@ final class DuelWeaponFlowTests: XCTestCase {
         let shadowEnabled: Bool
     }
     private var observations: [Observation] = []
+    private struct StationaryObservation: Codable {
+        let context: String
+        let phase: String
+        let elapsed: TimeInterval
+        let snapshotDuration: TimeInterval
+        let statsCount: Int
+        let statsValue: String?
+        let position: Int?
+        let joystickCount: Int
+        let joystickValue: String?
+        let joystickEnabled: Bool?
+        let resumeCount: Int
+        let pauseCount: Int
+        let resourceErrorCount: Int
+        let snapshotError: String?
+
+        var ready: Bool {
+            // The stick delegates touch handling to its parent. Its snapshot's
+            // isEnabled mapping is diagnostic only; the app's value contract
+            // explicitly changes from "居中" to "操作已暂停" when input is disabled.
+            snapshotError == nil && position != nil && joystickCount == 1 &&
+                joystickValue == "居中" &&
+                resumeCount == 0 && pauseCount == 1 && resourceErrorCount == 0
+        }
+        var summary: String {
+            "context=\(context) phase=\(phase) elapsed=\(String(format: "%.3f", elapsed)) " +
+                "snapshotSeconds=\(String(format: "%.3f", snapshotDuration)) " +
+                "statsCount=\(statsCount) statsValue=\(statsValue ?? "missing") " +
+                "position=\(position.map { String($0) } ?? "missing") " +
+                "joystickCount=\(joystickCount) joystickValue=\(joystickValue ?? "missing") " +
+                "joystickEnabled=\(joystickEnabled.map { String($0) } ?? "missing") " +
+                "resumeCount=\(resumeCount) pauseCount=\(pauseCount) resourceErrorCount=\(resourceErrorCount) " +
+                "snapshotError=\(snapshotError == nil ? "none" : "present")"
+        }
+    }
+    private var stationaryObservations: [StationaryObservation] = []
 
     override func setUpWithError() throws { continueAfterFailure = false }
     override func tearDownWithError() throws {
@@ -23,6 +59,10 @@ final class DuelWeaponFlowTests: XCTestCase {
         if let data = try? JSONEncoder().encode(observations) {
             let trace = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
             trace.name = "original-weapons-observed-controls.json"; trace.lifetime = .keepAlways; add(trace)
+        }
+        if let data = try? JSONEncoder().encode(stationaryObservations) {
+            let trace = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+            trace.name = "original-weapons-stationary-observations.json"; trace.lifetime = .keepAlways; add(trace)
         }
         XCUIApplication().terminate()
         XCUIDevice.shared.orientation = .portrait
@@ -171,7 +211,7 @@ final class DuelWeaponFlowTests: XCTestCase {
         // Disabled is an explicit verified state, not a skipped action. Tap its
         // actual glyph coordinates and ensure it cannot alias another attack.
         try approachWeaponRange(app)
-        try assertStationary(app)
+        try assertStationary(app, context: "\(hero)-disabled-shadow")
         let beforeHits = try hits(app), beforeEnergy = try energy(app, index: 0)
         let beforePosition = try position(app, index: 0)
         shadow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -229,7 +269,7 @@ final class DuelWeaponFlowTests: XCTestCase {
             (self.observedPosition(app, index: 0) ?? before) > before
         }
         XCTAssertEqual(joystick(app).value as? String, "居中")
-        try assertStationary(app)
+        try assertStationary(app, context: "\(hero)-released-stick")
         try record(app, hero: hero, action: "released-stick-stationary")
         capture("original-\(hero)-released-stick")
 
@@ -254,26 +294,75 @@ final class DuelWeaponFlowTests: XCTestCase {
         XCTAssertEqual(try hits(app), pausedHits)
         capture("original-\(hero)-background-return-paused")
         resume.tap()
-        try assertStationary(app)
+        try assertStationary(app, context: "\(hero)-background-resume")
         XCTAssertEqual(try hits(app), pausedHits, "Resume must not replay a released or cancelled attack")
         capture("original-\(hero)-explicit-resume")
     }
 
-    private func assertStationary(_ app: XCUIApplication) throws {
-        var last: Int?
-        wait("Released movement settles in the HUD", timeout: 5) {
-            guard let current = self.observedPosition(app, index: 0) else { return false }
+    private func assertStationary(_ app: XCUIApplication, context: String) throws {
+        let started = ProcessInfo.processInfo.systemUptime
+        var last: StationaryObservation?
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let current = self.observeStationary(app, context: context, phase: "settling", started: started)
             defer { last = current }
-            return last == current && (self.joystick(app).value as? String) == "居中"
-        }
-        let fixed = try position(app, index: 0)
+            return last?.ready == true && current.ready && last?.position == current.position
+        }, object: nil)
+        // Preserve the original waiter timeouts. One snapshot per observation avoids
+        // mixing HUD and control trees from different UI updates, and an absent
+        // stick is recorded rather than triggering implicit element retries.
+        let result = XCTWaiter.wait(for: [settled], timeout: 5)
+        XCTAssertEqual(result, .completed,
+                       "Released movement settles in the active HUD: \(last?.summary ?? "no observation")")
+        guard result == .completed, let fixed = last?.position else { return }
         let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let current = self.observedPosition(app, index: 0) else { return true }
-            return current != fixed
+            let current = self.observeStationary(app, context: context, phase: "stationary", started: started)
+            last = current
+            // A pause, missing control or failed snapshot must not masquerade
+            // as successful stationary play after the player pressed Resume.
+            return !current.ready || current.position != fixed
         }, object: nil)
         moved.isInverted = true
-        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 1.4), .completed,
-                       "Letting go of the stick must stop movement without another input")
+        let stationaryResult = XCTWaiter.wait(for: [moved], timeout: 1.4)
+        XCTAssertEqual(stationaryResult, .completed,
+                       "Letting go of the stick must stop movement with controls active: \(last?.summary ?? "no observation")")
+    }
+
+    private func observeStationary(_ app: XCUIApplication, context: String, phase: String,
+                                   started: TimeInterval) -> StationaryObservation {
+        let snapshotStarted = ProcessInfo.processInfo.systemUptime
+        let observation: StationaryObservation
+        do {
+            var pending: [XCUIElementSnapshot] = [try app.snapshot()]
+            var matches: [String: [XCUIElementSnapshot]] = [:]
+            let identifiers: Set<String> = ["duel.stats.0", "duel.control.joystick", "duel.resume",
+                                            "duel.pause", "duel.resourceError"]
+            while let element = pending.popLast() {
+                if identifiers.contains(element.identifier) { matches[element.identifier, default: []].append(element) }
+                pending.append(contentsOf: element.children)
+            }
+            let stats = matches["duel.stats.0"] ?? [], sticks = matches["duel.control.joystick"] ?? []
+            let finished = ProcessInfo.processInfo.systemUptime
+            observation = StationaryObservation(context: context, phase: phase, elapsed: finished - started,
+                snapshotDuration: finished - snapshotStarted,
+                statsCount: stats.count, statsValue: stats.count == 1 ? stats[0].value as? String : nil,
+                position: stats.count == 1 ? integer(after: "位置 ", in: stats[0].value as? String ?? "") : nil,
+                joystickCount: sticks.count, joystickValue: sticks.count == 1 ? sticks[0].value as? String : nil,
+                joystickEnabled: sticks.count == 1 ? sticks[0].isEnabled : nil,
+                resumeCount: matches["duel.resume"]?.count ?? 0, pauseCount: matches["duel.pause"]?.count ?? 0,
+                resourceErrorCount: matches["duel.resourceError"]?.count ?? 0, snapshotError: nil)
+        } catch {
+            let finished = ProcessInfo.processInfo.systemUptime
+            observation = StationaryObservation(context: context, phase: phase, elapsed: finished - started,
+                snapshotDuration: finished - snapshotStarted, statsCount: 0, statsValue: nil,
+                position: nil, joystickCount: 0, joystickValue: nil,
+                joystickEnabled: nil, resumeCount: 0, pauseCount: 0, resourceErrorCount: 0,
+                snapshotError: String(describing: error))
+        }
+        stationaryObservations.append(observation)
+        // Only narrow gameplay observations go to the log. Full trees and
+        // screenshots continue through the existing private evidence archive.
+        print("[fighter-stationary] \(observation.summary)")
+        return observation
     }
 
     private func joystick(_ app: XCUIApplication) -> XCUIElement {
