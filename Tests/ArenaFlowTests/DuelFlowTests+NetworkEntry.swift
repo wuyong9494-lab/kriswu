@@ -10,7 +10,7 @@ extension DuelFlowTests {
         let entry = app.buttons["duel.network.enter"]
         XCTAssertTrue(entry.waitForExistence(timeout: 20))
         for iteration in 0..<3 {
-            for _ in 0..<4 where !entry.isHittable { app.scrollViews.firstMatch.swipeUp() }
+            for _ in 0..<4 where !entry.isHittable { app.scrollViews["duel.lobby.actions"].swipeUp() }
             XCTAssertTrue(entry.isHittable)
             entry.tap()
             let close = app.buttons["duel.network.entry.close"]
@@ -30,6 +30,7 @@ extension DuelFlowTests {
             }
             close.tap()
             XCTAssertTrue(entry.waitForExistence(timeout: 8))
+            assertFighterLandscapeLobby(app)
             XCTAssertFalse(app.buttons["duel.network.leave"].exists)
             XCTAssertFalse(app.buttons["duel.pause"].exists)
         }

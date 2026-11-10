@@ -135,7 +135,10 @@ final class DuelFlowTests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 20)); entry.tap()
         for hero in ["gale", "ember"] {
             let selection = app.buttons["duel.hero.\(hero)"]
-            XCTAssertTrue(selection.waitForExistence(timeout: 8)); selection.tap()
+            XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true); selection.tap()
+            assertFighterLandscapeLobby(app)
+            XCTAssertEqual(selection.value as? String, "已选择")
+            capture("fighter-\(hero)-landscape-lobby")
             app.buttons["duel.practice"].tap()
             let pause = app.buttons["duel.pause"]
             XCTAssertTrue(pause.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)

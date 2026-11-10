@@ -45,6 +45,8 @@ final class DuelWeaponFlowTests: XCTestCase {
 
         for (hero, person, weapon) in [("ember", "孙登", "武士刀"), ("liu", "刘泉纬", "双锤")] {
             tapLobbyButton(app.buttons["duel.hero.\(hero)"], app: app)
+            assertFighterLandscapeLobby(app)
+            XCTAssertEqual(app.buttons["duel.hero.\(hero)"].value as? String, "已选择")
             capture("original-\(hero)-landscape-lobby")
             tapLobbyButton(app.buttons["duel.practice"], app: app)
             XCTAssertTrue(app.buttons["duel.pause"].waitForExistence(timeout: 15))
