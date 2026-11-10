@@ -94,6 +94,22 @@ own exact-commit native/UI validation; the prior passes do not prove this versio
 The separately authorized internal TestFlight release remains gated on all five
 validation jobs and is not activated by this source change.
 
+Run `42791846500` at `b4db613` subsequently passed the new hosted readiness test
+and all five actual-resource UI tests. The Sun and Liu touch traces each observed
+zero energy and a live three-second cooldown. All 72 lobby samples passed. The
+only native failure among 261 cases was the existing hosted network-room test,
+which deliberately left the guest unmounted while using a real 15-second startup
+deadline. Its old assertion did not record the terminal reason, so this run's
+precise cancellation cause is not proven.
+
+The follow-up isolates that lifecycle test from GPU scheduling with a DEBUG-only
+controllable clock. It still requires real verified resources and actual renderer
+receipts; synthetic fixtures remain forbidden. A companion verified-resource
+test advances to the unchanged deadline, checks cancellation and resource release,
+and checks that late renderer callbacks cannot restart combat. Shipping clock,
+deadline and startup behavior remain unchanged. The follow-up requires a new
+exact-source validation before release.
+
 ### Remaining visual boundary limitation
 
 The provisional hammer path uses a fixed release/catch anchor rather than the

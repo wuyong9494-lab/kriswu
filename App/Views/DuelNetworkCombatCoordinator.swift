@@ -168,6 +168,16 @@ final class DuelNetworkCombatCoordinator {
     }
 
     #if DEBUG
+    /// Real-resource lifecycle tests control elapsed time without enabling the
+    /// synthetic resource/session path or changing shipping startup deadlines.
+    convenience init(testingVerifiedTransport transport: any DuelLobbyTransport,
+                     verified identity: DuelNetworkCompatibilityIdentity,
+                     loader: @escaping Loader, cancelLoading: @escaping Cancellation,
+                     now: @escaping () -> TimeInterval) {
+        self.init(transport: transport, compatibility: identity.compatibility, loader: loader,
+                  cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: false)
+    }
+
     convenience init(testingTransport: any DuelLobbyTransport, compatibility: Barrier.Compatibility,
                      loader: @escaping Loader, cancelLoading: @escaping Cancellation = {},
                      now: @escaping () -> TimeInterval) {

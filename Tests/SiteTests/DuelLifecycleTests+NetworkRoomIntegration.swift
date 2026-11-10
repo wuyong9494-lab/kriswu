@@ -38,6 +38,11 @@ private final class RoomIntegrationTransport: DuelLobbyTransport {
 }
 
 @MainActor
+private final class RoomIntegrationClock {
+    var time: TimeInterval = 100
+}
+
+@MainActor
 private func roomIntegrationCatalog() -> DuelWeaponCatalog {
     let profiles: [DuelWeaponProfile] = [DuelGame.Hero.ember, .liu].map { hero in
         let katana = hero == .ember, prefix = katana ? "katana" : "hammers"
@@ -263,7 +268,13 @@ extension DuelLifecycleTests {
         defer { hp.release() }
         let gp = try DuelNetworkCompatibilityIdentity.prepare()
         defer { gp.release() }
-        let hl = DuelNetworkPresentationLoader(prepared: hp), gl = DuelNetworkPresentationLoader(prepared: gp)
+        // This test intentionally leaves the guest unmounted. It tests screen
+        // ownership, not whether an overloaded simulator prepares within the
+        // production 15-second handshake deadline. Keep real verified loading
+        // and GPU receipts; only the coordinator clock is controlled.
+        let clock = RoomIntegrationClock()
+        let hl = DuelNetworkPresentationLoader(testingPrepared: hp, now: { clock.time })
+        let gl = DuelNetworkPresentationLoader(testingPrepared: gp, now: { clock.time })
         let h = RoomIntegrationTransport(local: "z-host"), g = RoomIntegrationTransport(local: "a-guest")
         h.peer = g; g.peer = h
         var leaves = 0
@@ -280,7 +291,10 @@ extension DuelLifecycleTests {
             try await Task.sleep(nanoseconds: 1_000_000)
         }
         XCTAssertEqual(host.state, .selecting); XCTAssertEqual(leaves, 0)
+        let hostCoordinator = try XCTUnwrap(host.coordinator)
+        let guestCoordinator = try XCTUnwrap(guest.coordinator)
         host.selection?.choose(.sun); guest.selection?.choose(.liu)
+        let started = ProcessInfo.processInfo.systemUptime
         host.selection?.toggleReady(); guest.selection?.toggleReady(); host.startSelection()
         let mount = try XCTUnwrap(host.pendingPreparation)
         let mounted = expectation(description: "Hosted room mounts and genuinely prepares original combat")
@@ -296,7 +310,12 @@ extension DuelLifecycleTests {
         defer { observation.cancel() }
         hosting.view.setNeedsLayout(); hosting.view.layoutIfNeeded(); observeMount()
         await fulfillment(of: [mounted], timeout: 20)
-        guard case .prepared(let receipt) = mount.state else { return XCTFail("Hosted combat must not pass with a failed/cancelled mount") }
+        guard case .prepared(let receipt) = mount.state else {
+            return XCTFail("Hosted combat must prepare: mount=\(mount.state), " +
+                "host=\(String(describing: hostCoordinator.failure)), guest=\(String(describing: guestCoordinator.failure)), " +
+                "elapsed=\(ProcessInfo.processInfo.systemUptime - started), room=\(host.error ?? "none")")
+        }
+        XCTAssertFalse(mount.permitsFixture)
         XCTAssertTrue(receipt.verifiedResourceOwnershipComplete)
         XCTAssertEqual(host.state, .mounting, "Guest has deliberately not mounted yet")
         XCTAssertTrue(host.pendingPreparation === mount)
@@ -310,6 +329,58 @@ extension DuelLifecycleTests {
         XCTAssertEqual(host.error, "Fixture disconnect remains visible")
         XCTAssertTrue(window.rootViewController === hosting)
         XCTAssertEqual(leaves, 1); XCTAssertNil(h.owner)
+    }
+
+    func testVerifiedRoomClockExpiryCancelsPendingMountAndIgnoresLateRendererCompletion() async throws {
+        guard DuelWeaponAssets.catalogURL() != nil else { throw XCTSkip("Clocked preparation requires approved fighter originals") }
+        let hp = try DuelNetworkCompatibilityIdentity.prepare()
+        defer { hp.release() }
+        let gp = try DuelNetworkCompatibilityIdentity.prepare()
+        defer { gp.release() }
+        let clock = RoomIntegrationClock()
+        let hl = DuelNetworkPresentationLoader(testingPrepared: hp, now: { clock.time })
+        let gl = DuelNetworkPresentationLoader(testingPrepared: gp, now: { clock.time })
+        let h = RoomIntegrationTransport(local: "z-host"), g = RoomIntegrationTransport(local: "a-guest")
+        h.peer = g; g.peer = h
+        let host = DuelNetworkRoomModel(testingTransport: h, leave: {}, preflight: { hl })
+        let guest = DuelNetworkRoomModel(testingTransport: g, leave: {}, preflight: { gl })
+        defer { host.close(); guest.close() }
+        host.begin(); guest.begin()
+        for _ in 0..<100 where host.state != .selecting || guest.state != .selecting { await Task.yield() }
+        XCTAssertEqual(host.state, .selecting); XCTAssertEqual(guest.state, .selecting)
+        host.selection?.choose(.sun); guest.selection?.choose(.liu)
+        host.selection?.toggleReady(); guest.selection?.toggleReady(); host.startSelection()
+        let coordinator = try XCTUnwrap(host.coordinator), mount = try XCTUnwrap(host.pendingPreparation)
+        XCTAssertFalse(mount.permitsFixture)
+        let world = DuelWorldView(session: mount.session)
+        var finish: (@MainActor (Bool) -> Void)?
+        // A delayed preparation callback is used only to prove that expiry
+        // cannot be undone. It never supplies a successful readiness receipt.
+        world.testingPrepare = { _, callback in finish = callback }
+        mount.attach(world)
+        let controls = DuelNetworkControlsView(preparation: mount)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 956, height: 440))
+        let controller = UIViewController(); window.rootViewController = controller
+        controller.view.frame = window.bounds; window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil; world.shutdown() }
+        for view in [world as UIView, controls] {
+            view.frame = window.bounds; controller.view.addSubview(view); view.setNeedsLayout(); view.layoutIfNeeded()
+        }
+        XCTAssertNotNil(finish)
+        XCTAssertEqual(coordinator.state, .awaitingPresentation)
+        clock.time += DuelNetworkCombatCoordinator.handshakeTimeout
+        coordinator.service()
+        XCTAssertEqual(coordinator.failure, .handshakeTimeout)
+        XCTAssertEqual(mount.state, .cancelled)
+        XCTAssertTrue(hp.isReleased); XCTAssertTrue(gp.isReleased)
+        finish?(true); finish?(false)
+        XCTAssertEqual(coordinator.state, .closed)
+        XCTAssertNil(coordinator.presentation)
+        XCTAssertTrue(mount.session.paused)
+        XCTAssertNil(mount.session.preparedResources)
+        XCTAssertNil(world.scene)
+        XCTAssertEqual(host.state, .closed); XCTAssertEqual(guest.state, .closed)
+        XCTAssertNil(h.owner); XCTAssertNil(g.owner)
     }
 
     func testNetworkRoomSelectionCloseReasonPublicationCannotRecurse() {

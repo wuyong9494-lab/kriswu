@@ -28,10 +28,30 @@ final class DuelNetworkPresentationLoader: DuelNetworkRoomLoading {
 
     init(prepared: DuelNetworkPreparedResources) { self.prepared = prepared }
 
+    #if DEBUG
+    private var testingNow: (() -> TimeInterval)?
+    /// Preserve the full verified loading/mount path while a lifecycle test
+    /// explicitly advances the coordinator clock instead of racing the GPU.
+    convenience init(testingPrepared prepared: DuelNetworkPreparedResources,
+                     now: @escaping () -> TimeInterval) {
+        self.init(prepared: prepared)
+        testingNow = now
+    }
+    #endif
+
     func makeCoordinator(transport: any DuelLobbyTransport) throws -> DuelNetworkCombatCoordinator {
         guard !isClosed, let prepared, prepared.hasExactResources else { throw Failure.closed }
         guard !issuedCoordinator else { throw Failure.alreadyUsed }
         issuedCoordinator = true
+        #if DEBUG
+        if let testingNow {
+            return DuelNetworkCombatCoordinator(testingVerifiedTransport: transport, verified: prepared.identity,
+                loader: { [weak self] configuration, completion in
+                    guard let self else { completion(.failure(Failure.closed)); return }
+                    self.load(configuration, completion: completion)
+                }, cancelLoading: { [weak self] in self?.cancel() }, now: testingNow)
+        }
+        #endif
         return DuelNetworkCombatCoordinator(transport: transport, verified: prepared.identity,
             loader: { [weak self] configuration, completion in
                 guard let self else { completion(.failure(Failure.closed)); return }
