@@ -25,7 +25,7 @@ extension DuelWeaponAssetTests {
                 _ = lobby.snapshot()
                 let clear = CGRect(x: size.width * 0.3 + 2, y: 2,
                                    width: size.width * 0.4 - 4, height: size.height * 0.74 - 4)
-                for yaw in [Float.pi, 0, .pi / 2, -.pi / 2] {
+                for yaw in [Float.pi, 0, Float.pi / 2, -Float.pi / 2] {
                     lobby.rotatePreview(by: yaw - lobby.yaw)
                     for tick in [0, idle.ticks / 2, idle.ticks - 1] {
                         lobby.renderIdle(at: tick)
@@ -148,7 +148,7 @@ extension DuelWeaponAssetTests {
 
     private func lobbyDescendant<T: UIView>(_ type: T.Type, in view: UIView) -> T? {
         if let found = view as? T { return found }
-        return view.subviews.lazy.compactMap { lobbyDescendant(type, in: $0) }.first
+        return view.subviews.lazy.compactMap { self.lobbyDescendant(type, in: $0) }.first
     }
 
     /// Evaluate every original skinned vertex using the imported inverse binds.
