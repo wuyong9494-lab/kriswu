@@ -108,6 +108,7 @@ final class DuelNetworkSceneView: SCNView {
             fighter.guardMeter = snapshot.guardMeter
             fighter.stun = snapshot.stun
             fighter.knockdown = snapshot.knockdown
+            fighter.weaponPose = snapshot.animation?.pose
             actors[index].pose(fighter, frame: Int(state.tick % 60_000),
                                grapple: nil, index: index, phase: .fighting)
         }
