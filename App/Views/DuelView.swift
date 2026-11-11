@@ -6,6 +6,7 @@ struct DuelHomeView: View {
     @State private var hero = DuelGame.Hero.liu
     @State private var difficulty = DuelGame.Difficulty.learning
     @State private var match: DuelSetup?
+    @State private var showingNetworkEntry = false
     private var usesOriginalWeapons: Bool {
         !ProcessInfo.processInfo.arguments.contains("-duel-legacy-controls") && DuelWeaponAssets.catalogURL() != nil
     }
@@ -46,13 +47,14 @@ struct DuelHomeView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
+        .fullScreenCover(isPresented: $showingNetworkEntry) { DuelNetworkEntryView() }
     }
 
     private var showroom: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 22)
                 .fill(Color(red: 0.10, green: 0.13, blue: 0.21))
-            if hasShowroom && match == nil {
+            if hasShowroom && match == nil && !showingNetworkEntry {
                 DuelLobbyPreview(hero: hero)
                     .accessibilityIdentifier("duel.lobby.preview")
                     .clipShape(RoundedRectangle(cornerRadius: 22))
@@ -115,6 +117,14 @@ struct DuelHomeView: View {
                 Spacer()
                 Button("操作教学") { start(.tutorial) }
                     .accessibilityIdentifier("duel.tutorial")
+            Button {
+                guard match == nil, !showingNetworkEntry else { return }
+                showingNetworkEntry = true
+            } label: {
+                Label("双人选角 · 联机测试", systemImage: "person.2.fill")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("duel.network.enter")
             }
             .buttonStyle(.bordered)
             Text(usesOriginalWeapons ?
