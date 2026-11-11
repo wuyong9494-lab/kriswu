@@ -46,7 +46,50 @@ final class DuelStageAsset {
     }
 
     func makeRoot() -> SCNNode {
-        let root = model.instantiate().root
+        let instance = model.instantiate()
+        // Only these digest-verified stage exports forced transparent surfaces
+        // double-sided. LocationShader's FORWARDBASE pass uses constant Back
+        // culling independently of its alpha blend and depth-write settings.
+        let transparentBackFaces: Set<String> = kind == .palace
+            ? ["alfa_gold", "alfa_back", "cust05", "cust04"]
+            : ["ALFA", "ALFA_BG", "Leavs_mat"]
+        // Texture filtering is a source descriptor independent of whether the
+        // recovered original mip payloads are installed. UIImage supplies host-generated levels;
+        // restoring nearest-level selection does not claim pixel equivalence.
+        let sourceMipMaterials = kind == .palace
+            ? Self.palaceSourceLocationMaterials
+            : Self.autumnSourceLocationMaterials.union(["Matcup_mat"])
+        func sourceBilinear(_ property: SCNMaterialProperty) {
+            property.minificationFilter = .linear
+            property.magnificationFilter = .linear
+            property.mipFilter = .nearest
+            property.wrapS = .repeat
+            property.wrapT = .repeat
+            property.maxAnisotropy = 1
+        }
+        for material in instance.materials {
+            if sourceMipMaterials.contains(material.name ?? "") {
+                sourceBilinear(material.diffuse)
+                if !(kind == .palace && material.name == "back") {
+                    sourceBilinear(material.multiply)
+                }
+            }
+            if transparentBackFaces.contains(material.name ?? "") {
+                material.isDoubleSided = false
+                material.cullMode = .back
+            }
+            if kind == .palace && material.name == "back" {
+                // The original background placeholder has one mip only. Do
+                // not apply the exporter-wide trilinear sampler to it.
+                material.multiply.minificationFilter = .linear
+                material.multiply.magnificationFilter = .linear
+                material.multiply.mipFilter = .none
+                material.multiply.wrapS = .repeat
+                material.multiply.wrapT = .repeat
+                material.multiply.maxAnisotropy = 1
+            }
+        }
+        let root = instance.root
         root.name = kind == .palace ? "duel.stage.palace" : "duel.stage.autumnLobby"
         // The source environment is already lit. Casting its geometry's
         // shadows again would darken the characters under the baked roof.

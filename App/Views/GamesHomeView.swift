@@ -14,6 +14,7 @@ enum GameProfile {
 struct GamesHomeView: View {
     /// 勇者乱斗的大厅是全屏横着的
     @State private var showingArena = false
+    @State private var showingDuel = false
 
     var body: some View {
         List {
@@ -33,9 +34,16 @@ struct GamesHomeView: View {
                 NavigationLink { TileGameHomeView() } label: {
                     row("星了个星", "三消储能、移动叠层；主线航程、每日星约与策略试炼", "square.stack.3d.up.fill", 6)
                 }
-                NavigationLink { DuelHomeView() } label: {
-                    row("裂隙对决 · 战斗样板", "两名角色，单机三局两胜；练习距离、防御与连击", "figure.boxing", 3)
-                }.accessibilityIdentifier("duel.enter")
+                Button { showingDuel = true } label: {
+                    HStack {
+                        row("裂隙对决 · 战斗样板", "两名角色，单机三局两胜；练习距离、防御与连击", "figure.boxing", 3)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("duel.enter")
                 NavigationLink { GomokuHomeView() } label: {
                     row("五子棋", "和电脑下、两个人一台手机下、面对面、远程，或者轮流下（不用同时在线）", "circle.grid.3x3.fill", 0)
                 }
@@ -45,6 +53,10 @@ struct GamesHomeView: View {
         }
         .appList()
         .navigationTitle("小游戏")
+        // RootView owns a custom safe-area tab bar, not a SwiftUI TabView.
+        // A navigation push cannot hide it. Keep the entire fighter flow in
+        // its own presentation above the app shell, including the lobby.
+        .fullScreenCover(isPresented: $showingDuel) { DuelHomeView() }
         .fullScreenCover(isPresented: $showingArena) {
             ArenaHomeView(threeHeroSample: ProcessInfo.processInfo.arguments.contains("-demo") &&
                           UserDefaults.standard.bool(forKey: "arena.captureFlow"))

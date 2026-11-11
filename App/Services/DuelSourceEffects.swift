@@ -4,6 +4,19 @@ import UIKit
 import AVFoundation
 import CryptoKit
 
+@MainActor
+protocol DuelEffectPlayback: AnyObject {
+    var duration: TimeInterval { get }
+    var currentTime: TimeInterval { get set }
+    var isPlaying: Bool { get }
+    func prepareToPlay() -> Bool
+    func play() -> Bool
+    func pause()
+    func stop()
+}
+
+extension AVAudioPlayer: DuelEffectPlayback {}
+
 /// Source hit/block artwork and sound, driven by the application's simulation clock.
 ///
 /// The private manifest contains sampled source ParticleSystem curves, not executable
@@ -11,12 +24,12 @@ import CryptoKit
 /// space are not claimed to be identical to the original game. No wall-clock action
 /// or autonomous SceneKit particle system can advance an interrupted fight.
 @MainActor
-final class DuelSourceEffects {
+final class DuelSourceEffects: NSObject {
     enum Kind: String { case hit, block }
     /// Weapon-family labels are verified source audio directories. They do
     /// not claim recovered original event IDs or heavy/light selection rules.
     enum SoundFamily { case unarmed, katana, dualHammers }
-    enum Failure: Error { case missing, manifest, resource(String) }
+    enum Failure: Error { case missing, manifest, resource(String), audioPreparation(String) }
 
     struct Contact {
         let kind: Kind
@@ -111,7 +124,19 @@ final class DuelSourceEffects {
     private var textures: [String: UIImage] = [:]
     // Manifest validation bounds this to 2 effects × 64 tracks; no global cache.
     private var preparationTemplates: [String: [SCNGeometry]] = [:]
-    private var players: [String: [AVAudioPlayer]] = [:]
+    private var players: [String: [DuelEffectPlayback]] = [:]
+    // Owned copies of authenticated bytes, never URLs that can change after load.
+    private var audioBytes: [String: [Data]] = [:]
+    private let center: NotificationCenter
+    private let makePlayer: (Data) throws -> DuelEffectPlayback
+    private var mediaServicesAvailable = true
+    private var audioInterrupted = false
+    private var requiresUserAudioResume = false
+    private var hasConsumedSoundEvent = false
+    private var pendingUserAudioResume = false
+    enum AudioStatus: Equatable { case ready, lost, needsRebuild, failed, stopped }
+    private(set) var audioStatus: AudioStatus = .ready
+    private(set) var audioFailure: String?
     private var soundCursor: [String: Int] = [:]
     private var pausedPlayers: Set<ObjectIdentifier> = []
     private var bursts: [Burst] = []
@@ -127,7 +152,9 @@ final class DuelSourceEffects {
     var activeBurstCount: Int { bursts.count }
     var activeParticleCount: Int { bursts.reduce(0) { $0 + $1.particles.filter { !$0.node.isHidden }.count } }
     var sourceTextureCount: Int { textures.count }
-    var sourceAudioCount: Int { players.values.reduce(0) { $0 + $1.count } }
+    /// Verified retained resources, independent of media-server player lifetime.
+    var sourceAudioCount: Int { audioBytes.values.reduce(0) { $0 + $1.count } }
+    var allocatedAudioPlayerCount: Int { players.values.reduce(0) { $0 + $1.count } }
     var playingAudioPlayerCount: Int { players.values.reduce(0) { $0 + $1.filter(\.isPlaying).count } }
     var pausedAudioPlayerCount: Int { pausedPlayers.count }
     var limitations: [String] { manifest?.limitations ?? [] }
@@ -142,8 +169,11 @@ final class DuelSourceEffects {
             .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    init(root: SCNNode, directory: URL? = nil, bundle: Bundle = .main) throws {
-        self.root = root
+    init(root: SCNNode, directory: URL? = nil, bundle: Bundle = .main,
+         center: NotificationCenter = .default,
+         makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) throws {
+        self.root = root; self.center = center; self.makePlayer = makePlayer
+        super.init()
         guard let url = Self.manifestURL(directory: directory, bundle: bundle) else { throw Failure.missing }
         let manifestData = try Data(contentsOf: url, options: .mappedIfSafe)
         guard manifestData.count <= 2_000_000,
@@ -208,16 +238,129 @@ final class DuelSourceEffects {
                            "hammerHit": 3, "hammerBlock": 3]
         for (category, filenames) in definition.audio {
             guard let expectedCount = audioCounts[category], filenames.count == expectedCount else { throw Failure.manifest }
-            players[category] = try filenames.map { name in
+            audioBytes[category] = try filenames.map { name in
                 guard name.hasSuffix(".wav"), let bytes = resources[name] else { throw Failure.resource(name) }
-                let player = try AVAudioPlayer(data: bytes)
-                guard player.duration > 0, player.duration < 2 else { throw Failure.resource(name) }
-                player.prepareToPlay()
+                // File-size validation above already requires at least one byte.
+                // Keep the owned-copy boundary independently nonempty as well.
+                return try bytes.withUnsafeBytes { buffer in
+                    guard !buffer.isEmpty, let address = buffer.baseAddress else {
+                        throw Failure.resource(name)
+                    }
+                    return Data(bytes: address, count: buffer.count)
+                }
+            }
+        }
+        guard textures.count == 9, audioBytes.count == 10,
+              audioBytes.values.reduce(0, { $0 + $1.count }) == 29 else { throw Failure.manifest }
+        players = try buildPlayers(requirePreparation: false)
+        manifest = definition
+        observeMediaServices()
+    }
+
+    deinit { center.removeObserver(self) }
+
+    private func buildPlayers(requirePreparation: Bool = true) throws -> [String: [DuelEffectPlayback]] {
+        var rebuilt: [String: [DuelEffectPlayback]] = [:]
+        // Stable construction order also makes failure/recovery diagnostics repeatable.
+        for category in audioBytes.keys.sorted() {
+            rebuilt[category] = try audioBytes[category]!.map { bytes in
+                let player = try makePlayer(bytes)
+                guard player.duration > 0, player.duration < 2 else { throw Failure.resource(category) }
+                if !player.prepareToPlay() {
+                    // Initial loading historically accepts a decoded, verified
+                    // clip even when the shared audio service cannot prepare it
+                    // now. Do not turn a transient audio failure into a missing
+                    // character/resource failure that blocks gameplay.
+                    if requirePreparation { throw Failure.audioPreparation(category) }
+                    audioStatus = .failed
+                    audioFailure = "Initial effect preparation failed: \(category)"
+                }
                 return player
             }
         }
-        guard textures.count == 9, players.count == 10, sourceAudioCount == 29 else { throw Failure.manifest }
-        manifest = definition
+        return rebuilt
+    }
+
+    private func observeMediaServices() {
+        center.addObserver(self, selector: #selector(audioInterruption(_:)),
+                           name: AVAudioSession.interruptionNotification, object: nil)
+        center.addObserver(self, selector: #selector(audioRouteChanged(_:)),
+                           name: AVAudioSession.routeChangeNotification, object: nil)
+        center.addObserver(self, selector: #selector(mediaServicesLost),
+                           name: AVAudioSession.mediaServicesWereLostNotification, object: nil)
+        center.addObserver(self, selector: #selector(mediaServicesReset),
+                           name: AVAudioSession.mediaServicesWereResetNotification, object: nil)
+    }
+
+    @objc private nonisolated func audioInterruption(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        let began = type == .began
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.ended else { return }
+            self.audioInterrupted = began
+            if began {
+                self.pendingUserAudioResume = false
+                if self.hasConsumedSoundEvent { self.suspendAudioForUserResume() }
+            } else if self.pendingUserAudioResume {
+                self.pendingUserAudioResume = false
+                if !self.paused, self.mediaServicesAvailable {
+                    self.requiresUserAudioResume = false
+                }
+            }
+            // Ending an interruption never replays a previous attack, even if
+            // the OS allows soundtrack resumption. The match owns user consent.
+        }
+    }
+    @objc private nonisolated func audioRouteChanged(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.hasConsumedSoundEvent else { return }
+            self.suspendAudioForUserResume()
+        }
+    }
+
+    /// Also invoked by the current session: neither observer registration order
+    /// nor deferred SwiftUI pause publication may retain an old effect tail.
+    func suspendAudioForUserResume() {
+        guard !ended else { return }
+        requiresUserAudioResume = true
+        pendingUserAudioResume = false
+        for group in players.values { for player in group { player.stop(); player.currentTime = 0 } }
+        pausedPlayers.removeAll()
+    }
+    func resumeAudioAfterUserAction(sessionInterruptionEnded: Bool = false) {
+        guard !ended, !paused, mediaServicesAvailable else { return }
+        if audioInterrupted {
+            // The session may already have consumed ended while this owner's
+            // ended callback is still queued. Preserve that successful user
+            // action, but never bypass the local interruption availability gate.
+            // Only the session may supply this evidence; direct early resume
+            // keeps its previous rejection behavior.
+            if sessionInterruptionEnded { pendingUserAudioResume = true }
+            return
+        }
+        pendingUserAudioResume = false
+        requiresUserAudioResume = false
+        // Do not play here. Only a subsequent live combat event may make sound.
+    }
+
+    @objc private nonisolated func mediaServicesLost() { enqueueMediaAvailability(false) }
+    @objc private nonisolated func mediaServicesReset() { enqueueMediaAvailability(true) }
+    private nonisolated func enqueueMediaAvailability(_ available: Bool) {
+        // All posts, including main-thread posts, use the same FIFO queue.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.ended else { return }
+            self.mediaServicesAvailable = available
+            self.pendingUserAudioResume = false
+            if available { self.audioInterrupted = false }
+            for group in self.players.values { for player in group { player.stop() } }
+            self.players.removeAll(); self.pausedPlayers.removeAll()
+            self.audioStatus = available ? .needsRebuild : .lost
+            // No reconstruction or playback here: only a future new event can
+            // request sound. Paused/retained network resources stay dormant.
+        }
     }
 
     #if DEBUG
@@ -228,7 +371,9 @@ final class DuelSourceEffects {
     }
 
     private init(preparationFixtureRoot root: SCNNode) {
-        self.root = root
+        self.root = root; center = .default
+        makePlayer = { try AVAudioPlayer(data: $0) }
+        super.init()
         let texture = "synthetic-preparation"
         textures[texture] = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
             UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
@@ -403,11 +548,15 @@ final class DuelSourceEffects {
     func setPaused(_ value: Bool) {
         guard !ended, value != paused else { return }
         paused = value
+        if value { pendingUserAudioResume = false }
         for group in players.values {
             for player in group {
                 let identity = ObjectIdentifier(player)
                 if value, player.isPlaying { pausedPlayers.insert(identity); player.pause() }
-                else if !value, pausedPlayers.contains(identity) { player.play() }
+                else if !value, !audioInterrupted, !requiresUserAudioResume, mediaServicesAvailable,
+                        pausedPlayers.contains(identity), !player.play() {
+                    audioStatus = .failed; audioFailure = "Effect resume failed"
+                }
             }
         }
         if !value { pausedPlayers.removeAll() }
@@ -424,20 +573,44 @@ final class DuelSourceEffects {
 
     func shutdown() {
         guard !ended else { return }
-        reset(); ended = true
+        reset(); ended = true; center.removeObserver(self)
+        audioStatus = .stopped
         preparationTemplates.removeAll()
-        players.removeAll(); textures.removeAll(); manifest = nil
+        players.removeAll(); audioBytes.removeAll(); textures.removeAll(); manifest = nil
     }
 
     private func play(_ category: String) {
-        guard let group = players[category], !group.isEmpty else { return }
+        guard !ended, !paused, let bytes = audioBytes[category], !bytes.isEmpty else { return }
+        // Verified preparation can precede any session. An unused pool must not
+        // carry an unrelated prior match's consent into a future network start.
+        // Once used, keep this ownership history across round resets.
+        hasConsumedSoundEvent = true
         let cursor = soundCursor[category, default: 0]
-        soundCursor[category] = (cursor + 1) % group.count
+        // Consume each live event once, even during service loss/failure. Recovery
+        // must not shift category rotation or queue an attack for later replay.
+        soundCursor[category] = (cursor + 1) % bytes.count
+        guard mediaServicesAvailable, !audioInterrupted, !requiresUserAudioResume else { return }
+        if players.isEmpty {
+            do {
+                players = try buildPlayers()
+                audioStatus = .ready; audioFailure = nil
+            } catch {
+                audioStatus = .failed; audioFailure = "Effect reconstruction failed: \(error)"
+                return
+            }
+        }
+        guard let group = players[category], group.count == bytes.count else {
+            audioStatus = .failed; audioFailure = "Missing effect category: \(category)"
+            return
+        }
         let player = group[cursor % group.count]
         player.stop(); player.currentTime = 0
         if player.play() {
+            audioStatus = .ready; audioFailure = nil
             playedSounds += 1
             playedSoundCategories[category, default: 0] += 1
+        } else {
+            audioStatus = .failed; audioFailure = "Effect playback failed: \(category)"
         }
     }
 

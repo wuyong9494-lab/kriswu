@@ -99,6 +99,8 @@ final class DuelWeaponCharacterInstance {
     let asset: DuelWeaponCharacterAsset
     let instance: GLTFModel.Instance
     private var pose: GLTFModel.Pose
+    private(set) var displayedBounds: DuelDisplayedSkinBounds?
+    private(set) var displayedBoundsFailure: DuelDisplayedSkinBounds.Failure?
     private var previousClip: String?
     private var detachedBoneRestore: (index: Int, transform: simd_float4x4)?
     private var idleBlendSource: GLTFModel.Pose?
@@ -108,6 +110,70 @@ final class DuelWeaponCharacterInstance {
     init(_ asset: DuelWeaponCharacterAsset) {
         self.asset = asset; instance = asset.model.instantiate(); pose = asset.model.restPose
         instance.root.name = "duel.equipped.\(asset.profile.id)"
+        // These exact exports forced every imported material double-sided.
+        // The original prefab-linked armor and solid weapon base materials use
+        // _Cull = 2 (Back), bound by Nekki/CharacterShader's culling state.
+        // Restore proven raster/texture state, not an assumed shader match.
+        // Supplied personal heads/neck and independent trail materials retain
+        // their own settings. GLTFModel already repairs exported winding.
+        let sourceExports: Set<String> = [
+            "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+            "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f"
+        ]
+        let sourceBackCulled: Set<String> = [
+            "mat_arm__prc_02_base", "mat_arm__str_03_base",
+            "mat_wpn__katana_01_01_base", "mat_wpn__hammers_01_01_base"
+        ]
+        if sourceExports.contains(asset.profile.sha256) {
+            restorePersonalBindSpace()
+            for material in instance.materials where sourceBackCulled.contains(material.name ?? "") {
+                material.isDoubleSided = false
+                material.cullMode = .back
+                // The same verified source base textures have exactly one mip
+                // level and bilinear/repeat sampling. Export omitted filtering,
+                // so the generic glTF default introduced trilinear mip sampling.
+                // Restore only these four solid base-texture descriptors.
+                material.diffuse.minificationFilter = .linear
+                material.diffuse.magnificationFilter = .linear
+                material.diffuse.mipFilter = .none
+                material.diffuse.wrapS = .repeat
+                material.diffuse.wrapT = .repeat
+                material.diffuse.maxAnisotropy = 1
+            }
+        }
+        // Capture the actual corrected skinners, not the uncorrected asset template.
+        do { displayedBounds = try DuelDisplayedSkinBounds(root: instance.root) }
+        catch { displayedBoundsFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry }
+    }
+    /// The accepted personal heads/neck were exported in the previous rig's
+    /// world bind space, including its actor rotation and uniform scale. The
+    /// equipped exporter copied those vertex arrays but replaced their inverse
+    /// binds with actor-local body binds. Undo that extra outer transform only
+    /// in each personal mesh's skin, without changing its geometry or identity.
+    /// Called once per instance and only after the exact export hash gate above.
+    private func restorePersonalBindSpace() {
+        guard let outer = asset.model.node(named: "SF3_Actor_Meters") else { return }
+        let inverseOuter = simd_inverse(asset.model.restPose.transform(outer))
+        let identity = asset.profile.hero == .ember ? "Sun" : "Liu"
+        for name in [identity + "_Personal_Head", identity + "_Neck_Bridge"] {
+            guard let index = asset.model.node(named: name) else { continue }
+            for holder in instance.nodes[index].childNodes {
+                guard let original = holder.skinner,
+                      let inverseBinds = original.boneInverseBindTransforms else { continue }
+                let corrected = inverseBinds.map { value -> NSValue in
+                    let bind = SCNMatrix4ToMat4(value.scnMatrix4Value)
+                    return NSValue(scnMatrix4: SCNMatrix4FromMat4(bind * inverseOuter))
+                }
+                let skin = SCNSkinner(baseGeometry: original.baseGeometry,
+                                     bones: original.bones,
+                                     boneInverseBindTransforms: corrected,
+                                     boneWeights: original.boneWeights,
+                                     boneIndices: original.boneIndices)
+                skin.skeleton = original.skeleton
+                skin.baseGeometryBindTransform = original.baseGeometryBindTransform
+                holder.skinner = skin
+            }
+        }
     }
     private func restoreDetachedWeapon() {
         if let saved = detachedBoneRestore {

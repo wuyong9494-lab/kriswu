@@ -48,6 +48,7 @@ final class DuelWorldView: SCNView {
     private(set) var stageAsset: DuelStageAsset?
     private(set) var verifiedEffectsRoot: SCNNode?
     private(set) var verifiedStageRoot: SCNNode?
+    private(set) var opticalFramingFailure: DuelDisplayedSkinBounds.Failure?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private(set) var combatCamera = DuelCombatCamera()
     private var perspectiveDistance: Float = 7.7
@@ -65,6 +66,70 @@ final class DuelWorldView: SCNView {
     private var attackNodes: [SCNNode] = []
     private var slamRing: SCNNode?
     private var ended = false
+    private var sceneAssemblyFinished = false
+    private var musicPreparingScene: SCNScene?
+    private var musicPreparationID: UUID?
+    private var musicPreparationFinished = false
+    private var musicPreparedScene: SCNScene?
+    private weak var musicStageRoot: SCNNode?
+
+    private var hasSourceMusicResources: Bool {
+        guard !ended, sceneAssemblyFinished, session.loadError == nil,
+              stageAsset?.kind == .palace, let scene, pointOfView?.camera != nil,
+              musicStageRoot?.parent === scene.rootNode, actors.count == session.game.fighters.count,
+              actors.allSatisfy({ $0.root.parent === scene.rootNode }) else { return false }
+        if session.setup.originalWeapons {
+            return sourceEffects != nil && weaponEffects != nil &&
+                session.game.fighters.enumerated().allSatisfy { index, fighter in
+                    guard let character = weaponAssets[fighter.hero] else { return false }
+                    return actors[index].hasAttachedWeapon(character)
+                }
+        }
+        return session.game.fighters.allSatisfy {
+            characterAssets[$0.hero] != nil || originalAssets[$0.hero] != nil
+        }
+    }
+    var hasPreparedSourceMusicScene: Bool {
+        guard hasSourceMusicResources, hasUsableMountedBounds, let scene else { return false }
+        if session.driver == .externalAuthoritative {
+            // Reuse the coordinator's real preparation receipt. A synthetic or
+            // awaiting/failed mount must never acquire source battle music.
+            return session.hasLiveVerifiedResources && hasVerifiedResourceIdentity &&
+                preparationFinished && preparedRuntimeEffects && preparingScene === scene
+        }
+        return musicPreparedScene === scene
+    }
+    private func prepareSourceMusicIfMounted() {
+        guard session.driver == .offline, hasSourceMusicResources, hasUsableMountedBounds,
+              let scene, musicPreparingScene == nil, musicPreparedScene !== scene else { return }
+        musicPreparingScene = scene
+        let request = UUID(); musicPreparationID = request
+        #if DEBUG
+        if let testingMusicPrepare {
+            testingMusicPrepare([scene]) { [weak self] success in
+                self?.finishSourceMusicPreparation(request: request, success: success)
+            }
+            return
+        }
+        #endif
+        // Only a Sendable request ID crosses the renderer callback. The exact
+        // scene identity is retained and checked on the main actor.
+        prepare([scene], completionHandler: { [weak self] success in
+            Task { @MainActor [weak self] in
+                self?.finishSourceMusicPreparation(request: request, success: success)
+            }
+        })
+    }
+    private func finishSourceMusicPreparation(request: UUID, success: Bool) {
+        guard !ended, musicPreparationID == request, !musicPreparationFinished else { return }
+        musicPreparationFinished = true
+        guard let prepared = musicPreparingScene, scene === prepared else { return }
+        // Keep the attempted identity on failure: later layouts must not spin
+        // up preparation retries. Detachment keeps readiness false even if the
+        // retained scene completes successfully while offscreen.
+        if success && hasSourceMusicResources { musicPreparedScene = prepared }
+        session.refreshSourceMusicReadiness(from: self)
+    }
 
     enum PreparationFailure: Error, Equatable {
         case invalidSession, alreadyRequested, rendererFailed, detached, replaced
@@ -91,6 +156,7 @@ final class DuelWorldView: SCNView {
     private(set) var attemptedBundledStageLoad = false
     typealias TestPrepare = @MainActor ([Any], @escaping @MainActor (Bool) -> Void) -> Void
     var testingPrepare: TestPrepare?
+    var testingMusicPrepare: TestPrepare?
     func installPreparationEffectFixtures() throws {
         guard !ended, usesSyntheticPresentationResources, session.isPresentationFixture,
               preparationOwner == nil, session.committedConfiguration == nil,
@@ -198,6 +264,7 @@ final class DuelWorldView: SCNView {
         // be waiting for layout; later combined readiness must revalidate it.
         completion?(.success(.init(owner: owner, initialScenePrepared: true,
                                    runtimeEffectVariantsPrepared: preparedRuntimeEffects)))
+        session.refreshSourceMusicReadiness(from: self)
     }
 
     private func failNetworkPreparation(_ failure: PreparationFailure) {
@@ -231,6 +298,10 @@ final class DuelWorldView: SCNView {
                 ended = true
                 return
             }
+        }
+        if session.driver == .offline, !session.claimOfflineWorld(self) {
+            ended = true
+            return
         }
         backgroundColor = UIColor(red: 0.045, green: 0.055, blue: 0.13, alpha: 1)
         antialiasingMode = .multisampling2X; preferredFramesPerSecond = 60
@@ -325,6 +396,7 @@ final class DuelWorldView: SCNView {
         NotificationCenter.default.addObserver(self, selector: #selector(interrupted), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         drawState()
+        sceneAssemblyFinished = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func didMoveToWindow() {
@@ -341,11 +413,15 @@ final class DuelWorldView: SCNView {
             preparationMountChanged()
             if !session.paused { startClock() }
         }
+        prepareSourceMusicIfMounted()
+        session.refreshSourceMusicReadiness(from: self)
     }
     override func layoutSubviews() {
         super.layoutSubviews()
         updateCameraFraming()
         prepareNetworkSceneIfMounted()
+        prepareSourceMusicIfMounted()
+        session.refreshSourceMusicReadiness(from: self)
         preparationMountChanged()
     }
     /// Use the same projection during layout and rendering. A rotation-safe
@@ -353,17 +429,54 @@ final class DuelWorldView: SCNView {
     private func updateCameraFraming() {
         // UIKit can deliver layout after dismantling. Do not ask a closed
         // SceneKit renderer for a camera (or mutate a default camera it exposes).
-        guard !ended, scene != nil, bounds.width > 0, bounds.height > 0 else { return }
+        guard !ended, scene != nil, bounds.width.isFinite, bounds.height.isFinite,
+              bounds.width > 0, bounds.height > 0, let eye = pointOfView,
+              let camera = eye.camera else { return }
         let aspect = Double(bounds.width / bounds.height)
+        guard aspect.isFinite, aspect > 0 else { opticalFramingFailure = .invalidTransform; return }
         let framing = DuelCameraFraming(aspect: aspect, separation: combatCamera.separation)
+        let trackedX = Float(combatCamera.centerX)
+        var position = cameraBasePosition
+        position.x = trackedX
         if stageAsset != nil {
-            pointOfView?.camera?.fieldOfView = CGFloat(framing.verticalFieldOfView)
             perspectiveDistance = Float(framing.perspectiveDistance)
-            pointOfView?.position.z = perspectiveDistance
+            position.z = perspectiveDistance
+        }
+        eye.position = position
+        eye.look(at: SCNVector3(trackedX, stageAsset != nil ? 1.2 : 1.0, 0))
+        if !UIAccessibility.isReduceMotionEnabled {
+            eye.position.x += Float(combatCamera.impactOffsetX)
+            eye.position.y += Float(combatCamera.impactOffsetY)
+            if let hold = session.game.grapple {
+                let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
+                let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
+                if (0..<18).contains(elapsed) {
+                    eye.position.y += sin(Float(elapsed) * 1.8) * 0.035 * (1 - Float(elapsed) / 18)
+                }
+            }
+        }
+        opticalFramingFailure = nil
+        if stageAsset != nil {
+            camera.fieldOfView = CGFloat(framing.verticalFieldOfView)
+            if session.setup.originalWeapons {
+                do {
+                    let points = try actors.flatMap { try $0.displayedCameraPoints(camera: eye) }
+                    // Reserve eight UIKit points on the shorter viewport axis,
+                    // conservatively at least that much on the longer axis.
+                    let shortSide = Double(min(bounds.width, bounds.height))
+                    let inset = 1 - 2 * min(8, shortSide * 0.1) / shortSide
+                    camera.fieldOfView = CGFloat(try DuelDisplayedSkinBounds.verticalFOV(
+                        points: points, aspect: aspect, minimum: framing.verticalFieldOfView,
+                        near: camera.zNear, inset: inset))
+                } catch {
+                    opticalFramingFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry
+                }
+            }
         } else {
-            pointOfView?.camera?.orthographicScale = framing.orthographicScale
+            camera.orthographicScale = framing.orthographicScale
         }
     }
+
     @objc private func interrupted() { guard !ended else { return }; session.pause() }
     @objc private func becameActive() {
         // A new view may be attached during the first foreground transition.
@@ -388,15 +501,20 @@ final class DuelWorldView: SCNView {
     func shutdown(preparationFailure: PreparationFailure = .replaced) {
         guard !ended else { return }
         ended = true
+        musicPreparationID = nil; musicPreparationFinished = true
+        musicPreparingScene = nil; musicPreparedScene = nil; musicStageRoot = nil
         let invalidated = preparationInvalidated; preparationInvalidated = nil
         preparationOwner = nil; preparationCompletion = nil; preparingScene = nil; preparedMountChanged = nil
         preparationFinished = true
         #if DEBUG
-        testingPrepare = nil
+        testingPrepare = nil; testingMusicPrepare = nil
         #endif
         stopClock()
         session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
-        if session.driver == .offline { session.clearInput() }
+        if session.driver == .offline {
+            session.releaseOfflineWorld(self)
+            session.clearInput()
+        }
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
         NotificationCenter.default.removeObserver(self)
@@ -415,6 +533,7 @@ final class DuelWorldView: SCNView {
         actors.removeAll(); characterAsset = nil; characterAssets.removeAll(); originalAssets.removeAll(); weaponAssets.removeAll(); stageAsset = nil; bolts.removeAll(); hurtNodes.removeAll(); attackNodes.removeAll(); slamRing = nil
         // Report the renderer's precise reason after releasing its resources,
         // before the terminal session signal can report generic invalidation.
+        session.releaseSourceMusicWorld(self)
         invalidated?(preparationFailure)
         if session.driver == .externalAuthoritative { session.pause() }
     }
@@ -457,17 +576,6 @@ final class DuelWorldView: SCNView {
         slamRing?.isHidden = true
         // Read-only sampling: repeated draws, layout, and skipped display
         // frames cannot speed up tracking or drain a confirmed impact.
-        let trackedCameraX = Float(combatCamera.centerX)
-        updateCameraFraming()
-        var cameraPosition = cameraBasePosition
-        cameraPosition.x = trackedCameraX
-        if stageAsset != nil { cameraPosition.z = perspectiveDistance }
-        pointOfView?.position = cameraPosition
-        pointOfView?.look(at: SCNVector3(trackedCameraX, stageAsset != nil ? 1.2 : 1.0, 0))
-        if !UIAccessibility.isReduceMotionEnabled {
-            pointOfView?.position.x += Float(combatCamera.impactOffsetX)
-            pointOfView?.position.y += Float(combatCamera.impactOffsetY)
-        }
         if let hold = session.game.grapple {
             let release = DuelGame.Grapple.takedownTicks + DuelGame.Grapple.holdTicks
             let elapsed = hold.age >= release ? hold.age - release : hold.age - DuelGame.Grapple.takedownTicks
@@ -476,11 +584,9 @@ final class DuelWorldView: SCNView {
                 ring.isHidden = false; ring.opacity = CGFloat(1 - t)
                 ring.position = SCNVector3(Float(session.game.fighters[1 - hold.attacker].x) / 1000, 0.025, 0)
                 ring.scale = SCNVector3(scale, 1, scale)
-                if !UIAccessibility.isReduceMotionEnabled {
-                    pointOfView?.position.y += sin(Float(elapsed) * 1.8) * 0.035 * (1 - t)
-                }
             }
         }
+        updateCameraFraming()
         let alive = Set(session.game.projectiles.map(\.id))
         for id in Array(bolts.keys) where !alive.contains(id) { bolts.removeValue(forKey: id)?.removeFromParentNode() }
         for projectile in session.game.projectiles {
@@ -561,6 +667,7 @@ final class DuelWorldView: SCNView {
     private func installStage(_ asset: DuelStageAsset, in root: SCNNode) {
         stageAsset = asset
         let stageRoot = asset.makeRoot()
+        musicStageRoot = stageRoot
         if session.usesVerifiedPreparedResources { verifiedStageRoot = stageRoot }
         root.addChildNode(stageRoot)
         cameraBasePosition = SCNVector3(5, 2, 7.7)
@@ -706,6 +813,13 @@ private final class DuelActor {
             for child in root.childNodes where child !== shield { child.isHidden = true }
             root.addChildNode(presentedRoot)
         }
+    }
+    func displayedCameraPoints(camera: SCNNode) throws -> [SIMD3<Float>] {
+        guard !root.isHidden else { return [] }
+        guard let weapon else { throw DuelDisplayedSkinBounds.Failure.unsupportedGeometry }
+        if let failure = weapon.displayedBoundsFailure { throw failure }
+        guard let bounds = weapon.displayedBounds else { throw DuelDisplayedSkinBounds.Failure.unsupportedGeometry }
+        return try bounds.cameraPoints(camera: camera)
     }
     private func bone(_ name: String) -> SCNNode? { original?.bone(name) ?? character?.bone(name) }
     private func reach(suffix: String, target: SIMD3<Float>, weight: Float) {

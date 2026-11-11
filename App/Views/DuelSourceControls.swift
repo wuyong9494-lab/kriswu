@@ -67,8 +67,12 @@ final class DuelSourceControlsView: UIView {
     var onActionCancelled: ((Action) -> Void)?
     /// Clears chord grace periods as well as buttons on pause/orientation/window loss.
     var onInputCancelled: (() -> Void)?
+    /// Terminal renderer ownership release, distinct from temporary touch loss.
+    var onShutdown: (() -> Void)?
+    private(set) var isShutdown = false
     var inputEnabled = true {
         didSet {
+            if isShutdown { inputEnabled = false }
             guard inputEnabled != oldValue else { return }
             if !inputEnabled { cancelAll() }
             for action in Action.allCases { refresh(action) }
@@ -279,7 +283,7 @@ final class DuelSourceControlsView: UIView {
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        guard inputEnabled else { return false }
+        guard inputEnabled, !isShutdown else { return false }
         return layoutSnapshot.joystickTouch.contains(point) ||
             layoutSnapshot.actionTouch.values.contains { $0.contains(point) }
     }
@@ -289,7 +293,7 @@ final class DuelSourceControlsView: UIView {
     }
 
     func beginPointers(_ pointers: [Pointer]) {
-        guard inputEnabled, !cancellingInput else { return }
+        guard inputEnabled, !cancellingInput, !isShutdown else { return }
         let epoch = inputEpoch
         // Resolve the direction first when an action and joystick arrive in one event.
         if joystickOwner == nil,
@@ -316,7 +320,7 @@ final class DuelSourceControlsView: UIView {
     }
 
     func movePointers(_ pointers: [Pointer]) {
-        guard inputEnabled, !cancellingInput else { return }
+        guard inputEnabled, !cancellingInput, !isShutdown else { return }
         for pointer in pointers where pointer.id == joystickOwner {
             moveJoystick(to: pointer.location)
         }
@@ -368,8 +372,21 @@ final class DuelSourceControlsView: UIView {
         }
     }
 
+    /// A replaced/dismantled control must never cancel the current view's
+    /// mailbox. Disconnect consumers before dropping its physical contacts.
+    func shutdown() {
+        guard !isShutdown else { return }
+        isShutdown = true
+        let released = onShutdown; onShutdown = nil
+        onDirection = nil; onAction = nil
+        onActionCancelled = nil; onInputCancelled = nil
+        cancelAll(notify: false)
+        inputEnabled = false
+        released?()
+    }
+
     private func activateAction(_ action: Action) -> Bool {
-        guard inputEnabled, !cancellingInput, state(for: action).enabled, !isHeld(action),
+        guard inputEnabled, !cancellingInput, !isShutdown, state(for: action).enabled, !isHeld(action),
               let frame = layoutSnapshot.actions[action], frame.width > 0, frame.height > 0 else { return false }
         let id = UUID()
         // Accessibility activation uses the same ownership and cancellation path.

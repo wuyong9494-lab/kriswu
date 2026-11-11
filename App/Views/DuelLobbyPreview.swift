@@ -35,6 +35,22 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private(set) var visibleRegion: CGRect?
     private(set) var framing: DuelLobbyFraming?
     private(set) var showroomFrameCount = 0
+    /// Host showroom placement only. The verified pedestal's highest point is
+    /// -0.1182284; corrected equipped idle soles reach -0.0038394 relative to
+    /// their root after the unchanged source lift. This baseline clears both.
+    private static let equippedPedestalBaselineY: Float = -0.113
+
+    private func showroomBaseline(for actor: DuelWeaponCharacterInstance) -> Float {
+        // Do not apply an asset-specific support correction to a missing stage,
+        // legacy character, or a future export with different geometry.
+        guard let stage, case .autumnLobby = stage.kind else { return -0.14 }
+        switch actor.asset.profile.sha256 {
+        case "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+             "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f":
+            return Self.equippedPedestalBaselineY
+        default: return -0.14
+        }
+    }
 
     init(hero: DuelGame.Hero) {
         super.init(frame: .zero, options: nil)
@@ -84,21 +100,29 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     }
 
     private func updateCameraFraming() {
-        guard let cameraNode else { return }
-        if let region = visibleRegion {
-            let rect = CGRect(x: region.minX * bounds.width, y: region.minY * bounds.height,
-                              width: region.width * bounds.width, height: region.height * bounds.height)
-            guard let fit = DuelLobbyFraming(size: bounds.size, visibleRect: rect, zoom: Double(zoom)) else { return }
-            framing = fit
-            cameraNode.position = SCNVector3(Float(fit.position.x), Float(fit.position.y), Float(fit.position.z))
-            cameraNode.look(at: SCNVector3(Float(fit.target.x), Float(fit.target.y), Float(fit.target.z)))
-        } else {
-            // Preserve the existing stacked/accessibility preview and any other
-            // caller without measured overlay controls. Never reset gesture state.
-            framing = nil
-            cameraNode.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
-            cameraNode.look(at: showroomCenter)
-        }
+        guard let cameraNode, let camera = cameraNode.camera else { return }
+        let region = visibleRegion ?? CGRect(x: 0, y: 0, width: 1, height: 1)
+        let rect = CGRect(x: region.minX * bounds.width, y: region.minY * bounds.height,
+                          width: region.width * bounds.width, height: region.height * bounds.height)
+        guard let fit = DuelLobbyFraming(size: bounds.size, visibleRect: rect, zoom: Double(zoom)) else { return }
+        framing = fit
+        cameraNode.position = SCNVector3(Float(fit.position.x), Float(fit.position.y), Float(fit.position.z))
+        cameraNode.look(at: showroomCenter)
+        camera.fieldOfView = CGFloat(fit.verticalFieldOfViewDegrees)
+        // A perspective lens shift changes composition, not the physical eye.
+        // Both landscape fitting and stacked-preview zoom must remain in front
+        // of the verified lobby's opaque foreground rail.
+        let near: Float = 0.05, far: Float = 100
+        var projection = SCNMatrix4Identity
+        projection.m11 = Float(1 / (fit.verticalTangent * Double(bounds.width / bounds.height)))
+        projection.m22 = Float(1 / fit.verticalTangent)
+        projection.m31 = -Float(fit.projectionOffset.x)
+        projection.m32 = -Float(fit.projectionOffset.y)
+        projection.m33 = -(far + near) / (far - near)
+        projection.m34 = -1
+        projection.m43 = -(2 * far * near) / (far - near)
+        projection.m44 = 0
+        camera.projectionTransform = projection
         setNeedsDisplay()
     }
 
@@ -137,7 +161,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         let lift = idle.tracks.lift(phase: phase)
         actor.apply(.init(clip: idle.name, tick: idleTick, duration: idle.ticks,
                           groundLift: lift))
-        actor.instance.root.position.y = -0.14 + Float(lift)
+        actor.instance.root.position.y = showroomBaseline(for: actor) + Float(lift)
         showroomFrameCount += 1
         setNeedsDisplay()
     }
@@ -201,7 +225,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 let lift = idle.tracks.lift(phase: 0)
                 actor.apply(.init(clip: idle.name, tick: 0,
                                   duration: idle.ticks, groundLift: lift))
-                actor.instance.root.position = SCNVector3(4.7, -0.14 + Float(lift), -0.35)
+                actor.instance.root.position = SCNVector3(4.7, showroomBaseline(for: actor) + Float(lift), -0.35)
                 actor.instance.root.eulerAngles.y = .pi
                 nextRoot = actor.instance.root
                 nextWeaponAssets = assets

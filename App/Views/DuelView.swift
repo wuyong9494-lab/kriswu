@@ -33,6 +33,14 @@ final class DuelSession: ObservableObject {
     private(set) var nextPresentationTick: UInt64 = 0
     private var authoritativeCancellationPublished = false
     private var resettingPhysicalInput = false
+    private var offlinePauseEpoch: UInt64 = 0
+    private var audioInterrupted = false
+    private var requiresUserAudioResume = false
+    private var performingUserAudioResume = false
+    private var pausingOffline = false
+    private var resumingOffline = false
+    private var restartingOffline = false
+    private var stoppingOfflineRenderer = false
     private var publishingAuthoritativeStep = false
     private var networkMountOwner: UUID?
     private var pendingNetworkPreparation: (owner: UUID, invalidated: () -> Void)?
@@ -56,6 +64,78 @@ final class DuelSession: ObservableObject {
     var inputReset: (() -> Void)?
     var didSimulateStep: ((DuelGame, Int) -> Void)?
     var didReset: (() -> Void)?
+    private weak var offlineWorld: DuelWorldView?
+    private weak var musicWorld: DuelWorldView?
+    private var publishedSourceMusicReadiness = false
+
+    /// A paused flag is not proof that the intended stage actually loaded.
+    /// Read the current renderer every time; stale Published callbacks cannot
+    /// preserve readiness after replacement, load failure or session closure.
+    var sourceMusicReady: Bool {
+        !ended && loadError == nil && musicWorld?.hasPreparedSourceMusicScene == true
+    }
+    func refreshSourceMusicReadiness(from world: DuelWorldView) {
+        guard musicWorld === world else { return }
+        publishSourceMusicReadinessIfChanged()
+    }
+    private func publishSourceMusicReadinessIfChanged() {
+        let ready = sourceMusicReady
+        guard publishedSourceMusicReadiness != ready else { return }
+        publishedSourceMusicReadiness = ready
+        objectWillChange.send()
+    }
+    func releaseSourceMusicWorld(_ world: DuelWorldView) {
+        guard musicWorld === world else { return }
+        musicWorld = nil
+        publishSourceMusicReadinessIfChanged()
+    }
+    private weak var offlineControls: DuelSourceControlsView?
+
+    /// UIKit may mount the replacement controls before dismantling the old
+    /// ones. Only the live owner may write or clear the shared input mailbox.
+    func claimOfflineControls(_ controls: DuelSourceControlsView) -> Bool {
+        guard driver == .offline, !ended, !controls.isShutdown else { return false }
+        if offlineControls === controls { return true }
+        let previous = offlineControls
+        offlineControls = controls
+        previous?.shutdown()
+        guard acceptsWeaponControls(controls) else { return false }
+        clearInput()
+        // Reset callbacks can synchronously close the session or claim a newer
+        // view. A superseded bind must not overwrite that owner's callbacks.
+        return acceptsWeaponControls(controls)
+    }
+
+    func acceptsWeaponControls(_ controls: DuelSourceControlsView) -> Bool {
+        !ended && !controls.isShutdown && (driver != .offline || offlineControls === controls)
+    }
+
+    func releaseOfflineControls(_ controls: DuelSourceControlsView) {
+        guard offlineControls === controls else { return }
+        offlineControls = nil
+        inputReset = nil
+        clearInput()
+    }
+
+    /// SwiftUI may construct the replacement before dismantling the old view.
+    /// Retire its clock and callbacks before installing the new renderer's hooks.
+    /// Verified network renderers have their own preparation ownership contract.
+    func claimOfflineWorld(_ world: DuelWorldView) -> Bool {
+        guard driver == .offline, !ended else { return false }
+        if offlineWorld === world { return true }
+        let previous = offlineWorld
+        offlineWorld = world
+        musicWorld = world
+        previous?.shutdown()
+        // Clearing physical input during shutdown can synchronously close this
+        // session or construct another renderer. Do not overwrite that owner.
+        if !ended && offlineWorld === world { refreshSourceMusicReadiness(from: world) }
+        return !ended && offlineWorld === world
+    }
+
+    func releaseOfflineWorld(_ world: DuelWorldView) {
+        if offlineWorld === world { offlineWorld = nil }
+    }
     /// A local interruption requests coordinator teardown. It is not permission
     /// to modify authoritative buffers or to resume this protocol-1 match.
     var didRequestAuthoritativeStop: (() -> Void)?
@@ -184,7 +264,9 @@ final class DuelSession: ObservableObject {
     func claimPreparedWorld(_ world: DuelWorldView) -> Bool {
         guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
               let networkMountOwner else { return false }
-        return preparedResources.claimWorld(world, session: preparedSessionClaim, owner: networkMountOwner)
+        guard preparedResources.claimWorld(world, session: preparedSessionClaim, owner: networkMountOwner) else { return false }
+        musicWorld = world
+        return true
     }
     func claimPreparedControls(_ controls: DuelNetworkControlsView, owner: UUID) -> Bool {
         guard hasLiveVerifiedResources, let preparedResources, let preparedSessionClaim,
@@ -207,11 +289,40 @@ final class DuelSession: ObservableObject {
     }
     #endif
 
+    private enum AudioEvent: Sendable { case began, ended, routeRemoved, servicesReset }
+    private func receiveAudioEvent(_ event: AudioEvent) {
+        guard !ended else { return }
+        switch event {
+        case .ended, .servicesReset:
+            audioInterrupted = false
+        case .began, .routeRemoved:
+            if case .began = event { audioInterrupted = true }
+            requiresUserAudioResume = true
+            musicWorld?.sourceEffects?.suspendAudioForUserResume()
+            // Includes retained, verified effects before a world has mounted.
+            preparedResources?.sourceEffects?.suspendAudioForUserResume()
+            pause() // Authoritative sessions retain their terminal stop semantics.
+        }
+    }
     private func observeInterruptions() {
-        interruptions.token = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification,
-            object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.pause() }
-            }
+        let center = NotificationCenter.default
+        interruptions.tokens.append(center.addObserver(forName: AVAudioSession.interruptionNotification,
+            object: nil, queue: nil) { [weak self] notification in
+                guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+                let event: AudioEvent = type == .began ? .began : .ended
+                DispatchQueue.main.async { [weak self] in self?.receiveAudioEvent(event) }
+            })
+        interruptions.tokens.append(center.addObserver(forName: AVAudioSession.routeChangeNotification,
+            object: nil, queue: nil) { [weak self] notification in
+                guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                      AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
+                DispatchQueue.main.async { [weak self] in self?.receiveAudioEvent(.routeRemoved) }
+            })
+        interruptions.tokens.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil, queue: nil) { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in self?.receiveAudioEvent(.servicesReset) }
+            })
     }
     var tutorial: String {
         if setup.originalWeapons {
@@ -261,8 +372,11 @@ final class DuelSession: ObservableObject {
     var localDamageDealt: Int { game.damageDealt[localFighterIndex] }
     var allowsLocalRestart: Bool { driver == .offline }
     var ultimateReady: Bool { localFighter.energy == 100 && game.grapple == nil }
+    private var acceptsPhysicalInput: Bool {
+        !ended && !paused && (driver != .offline || (!pausingOffline && !resumingOffline && !restartingOffline))
+    }
     func input(_ name: String, down: Bool) {
-        guard !paused else { return }
+        guard acceptsPhysicalInput else { return }
         if down {
             guard held.insert(name).inserted else { return }
             switch name {
@@ -276,8 +390,8 @@ final class DuelSession: ObservableObject {
             }
         } else { held.remove(name) }
     }
-    func weaponDirection(x: Int, y: Int) { guard !paused else { return }; weaponInput.direction(x: x, y: y) }
-    func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) { guard !paused else { return }; weaponInput.action(action, down: down) }
+    func weaponDirection(x: Int, y: Int) { guard acceptsPhysicalInput else { return }; weaponInput.direction(x: x, y: y) }
+    func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) { guard acceptsPhysicalInput else { return }; weaponInput.action(action, down: down) }
     func cancelWeaponAction(_ action: DuelWeaponInput.Action) { weaponInput.cancel(action: action) }
     func cancelWeaponInput() {
         weaponInput.cancelAll()
@@ -296,7 +410,15 @@ final class DuelSession: ObservableObject {
     }
     func pause() {
         guard driver == .externalAuthoritative else {
-            clearInput(); paused = true; renderPause?(true)
+            // Reserve before callbacks, including when paused's willSet still
+            // exposes its old value. Any stop invalidates an outer resume.
+            offlinePauseEpoch &+= 1
+            guard !pausingOffline else { stopOfflineRenderer(); return }
+            pausingOffline = true
+            defer { pausingOffline = false }
+            clearInput()
+            if !paused { paused = true }
+            stopOfflineRenderer()
             return
         }
         // Reserve the terminal transition before invoking ANY callback. Capture
@@ -313,25 +435,84 @@ final class DuelSession: ObservableObject {
         pauseRender?(true)
         requestStop?()
     }
+    private func stopOfflineRenderer() {
+        // Nested shutdown must still stop the renderer before clearing its
+        // callback, but a stop callback that pauses again must not recurse.
+        guard !stoppingOfflineRenderer else { return }
+        stoppingOfflineRenderer = true
+        defer { stoppingOfflineRenderer = false }
+        renderPause?(true)
+    }
     func resume() {
-        guard driver == .offline, !ended, loadError == nil else { return }
-        clearInput(); paused = false; renderPause?(false)
+        guard !restartingOffline else { return }
+        resumeOffline()
+    }
+    /// Audio consent must follow a successful explicit UI action, not an
+    /// automatic readiness change or an interrupted/reentrant resume attempt.
+    func performUserResume(restarting: Bool = false) -> Bool {
+        guard driver == .offline, !ended, loadError == nil,
+              !pausingOffline, !resumingOffline, !restartingOffline, !audioInterrupted,
+              (!requiresUserAudioResume || UIApplication.shared.applicationState == .active) else { return false }
+        performingUserAudioResume = true
+        defer { performingUserAudioResume = false }
+        let epoch = offlinePauseEpoch
+        if restarting { restart() } else { resume() }
+        guard canCompleteOfflineTransition(epoch), !paused,
+              !pausingOffline, !resumingOffline, !restartingOffline else { return false }
+        requiresUserAudioResume = false
+        musicWorld?.sourceEffects?.resumeAudioAfterUserAction(sessionInterruptionEnded: !audioInterrupted)
+        return true
+    }
+    private func resumeOffline() {
+        guard driver == .offline, !ended, loadError == nil, !pausingOffline, !resumingOffline else { return }
+        resumingOffline = true
+        defer { resumingOffline = false }
+        let epoch = offlinePauseEpoch
+        clearInput()
+        guard canCompleteOfflineTransition(epoch) else { return }
+        if paused { paused = false }
+        // Published notifies synchronously before assigning false. A nested
+        // pause/shutdown can otherwise be overwritten by that stale assignment.
+        guard canCompleteOfflineTransition(epoch) else { pause(); return }
+        renderPause?(false)
+    }
+    private func canCompleteOfflineTransition(_ epoch: UInt64) -> Bool {
+        !ended && loadError == nil && offlinePauseEpoch == epoch && !audioInterrupted &&
+            (!requiresUserAudioResume || performingUserAudioResume)
     }
     func restart() {
-        guard allowsLocalRestart, !ended else { return }
-        clearInput(); game = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
+        guard allowsLocalRestart, !ended, !pausingOffline, !resumingOffline, !restartingOffline else { return }
+        restartingOffline = true
+        defer { restartingOffline = false }
+        let epoch = offlinePauseEpoch
+        clearInput()
+        guard canCompleteOfflineTransition(epoch) else { return }
+        let restartedGame = DuelGame(hero: setup.hero, difficulty: setup.difficulty, mode: setup.mode,
                         opponentHero: setup.hero == .liu ? .ember : setup.hero == .ember ? .liu : nil,
                         weaponCatalog: weaponAssets?.catalog)
-        feedback = "保持距离，观察出手"; tutorialStep = 0; serial = 0; animationTick = 0; feedbackUntil = 75
-        practicedJump = false; practicedSkills.removeAll(); didReset?(); resume()
-        didSimulateStep?(game, 0); objectWillChange.send()
+        feedback = "保持距离，观察出手"
+        guard canCompleteOfflineTransition(epoch) else { return }
+        tutorialStep = 0
+        guard canCompleteOfflineTransition(epoch) else { return }
+        // Install game and animation bookkeeping together, after the HUD's
+        // reentrant publications. An interrupted HUD update must not leave a
+        // fresh game paired with the previous round's animation/effect state.
+        game = restartedGame
+        serial = 0; animationTick = 0; feedbackUntil = 75
+        practicedJump = false; practicedSkills.removeAll(); didReset?()
+        guard canCompleteOfflineTransition(epoch) else { return }
+        resumeOffline()
+        guard canCompleteOfflineTransition(epoch), !paused else { return }
+        didSimulateStep?(game, 0)
+        guard canCompleteOfflineTransition(epoch), !paused else { return }
+        objectWillChange.send()
     }
 
     /// One physical-input sample, in world coordinates, resolved against the
     /// local seat's current authoritative facing and airborne state. Consumes
     /// edges exactly once but never advances the simulation or clears its buffers.
     func consumeLocalInput() -> DuelGame.Input {
-        guard !ended, !paused else { return .neutral }
+        guard acceptsPhysicalInput else { return .neutral }
         let input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
                     airborne: game.weaponFight?.isAirborne(localFighterIndex) ?? false) :
             DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0),
@@ -343,7 +524,7 @@ final class DuelSession: ObservableObject {
     /// Existing display-link entry point. External presentation has no local
     /// clock authority, AI fallback or input drain while waiting for host frames.
     func advance() {
-        guard driver == .offline, !ended, !paused else { return }
+        guard driver == .offline, acceptsPhysicalInput else { return }
         if case .matchOver = game.phase { return }
         let input = consumeLocalInput()
         let frozen = game.hitStop > 0 && game.grapple == nil
@@ -475,6 +656,9 @@ final class DuelSession: ObservableObject {
     func shutdown() {
         guard !ended else { return }
         ended = true
+        musicWorld = nil
+        let controls = offlineControls; offlineControls = nil
+        controls?.shutdown()
         // Delay this pending-only notification until shutdown releases assets.
         // Its failure callback may immediately start loading a fresh match.
         let preparationInvalidated = takePendingNetworkPreparationInvalidation()
@@ -497,8 +681,8 @@ final class DuelSession: ObservableObject {
 // Own the non-Sendable observer in a nonisolated object, so its destruction does
 // not read actor-isolated session state under Swift's complete concurrency checks.
 private final class DuelInterruptionObserver {
-    var token: NSObjectProtocol?
-    deinit { if let token { NotificationCenter.default.removeObserver(token) } }
+    var tokens: [NSObjectProtocol] = []
+    deinit { for token in tokens { NotificationCenter.default.removeObserver(token) } }
 }
 
 /// Retained before mounting, independently of coordinator.presentation. A
@@ -726,6 +910,8 @@ private struct DuelNetworkMatchContent: View {
 }
 
 private struct DuelMatchContent: View {
+    @StateObject private var music = DuelMusicLease(scene: .battle)
+    @State private var musicVisible = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var session: DuelSession
@@ -778,12 +964,21 @@ private struct DuelMatchContent: View {
         }
         .foregroundStyle(.white).preferredColorScheme(.dark)
         .modifier(ArenaLandscape())
+        .onAppear {
+            musicVisible = true
+            updateMusic()
+        }
+        .onChange(of: session.paused) { _ in updateMusic() }
+        .onChange(of: session.sourceMusicReady) { _ in updateMusic() }
         .onChange(of: scenePhase) {
             if $0 != .active {
                 if preparation != nil { exitMatch() } else { session.pause() }
             }
         }
-        .onDisappear { if preparation != nil { exitMatch() } else { session.shutdown() } }
+        .onDisappear {
+            musicVisible = false; music.close()
+            if preparation != nil { exitMatch() } else { session.shutdown() }
+        }
     }
     private var hud: some View {
         HStack(alignment: .top, spacing: 18) {
@@ -808,7 +1003,24 @@ private struct DuelMatchContent: View {
                 .accessibilityValue("生命 \(f.health)，位置 \(f.x)，高度 \(f.y)")
         }.frame(maxWidth: .infinity)
     }
+    private func updateMusic() {
+        // Keep the visible battle's claim even while loading, so an underlying
+        // lobby cannot take over. Do not construct/play audio before readiness.
+        music.update(visible: musicVisible, paused: session.paused || !session.sourceMusicReady) { [weak session] in
+            guard let session else { return false }
+            return !session.paused && session.sourceMusicReady
+        }
+    }
+    private func resumeMatch(restarting: Bool = false) {
+        let resumed = session.performUserResume(restarting: restarting)
+        updateMusic()
+        // A callback may have closed/paused/failed the session during the
+        // attempt. Only the still-ready successful user action clears safety.
+        guard resumed, !session.paused, session.sourceMusicReady else { return }
+        music.resumeAfterUserAction(sessionInterruptionEnded: true)
+    }
     private func exitMatch() {
+        musicVisible = false; music.close()
         if let preparation { preparation.requestExit { onExit?() } }
         else { session.shutdown(); dismiss() }
     }
@@ -825,8 +1037,8 @@ private struct DuelMatchContent: View {
             Text("已暂停").font(.title2.bold())
             if let error = session.loadError { Text(error).accessibilityIdentifier("duel.resourceError") }
             else if session.allowsLocalRestart {
-                Button("继续对决") { session.resume() }.accessibilityIdentifier("duel.resume")
-                Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.restart")
+                Button("继续对决") { resumeMatch() }.accessibilityIdentifier("duel.resume")
+                Button("重新挑战") { resumeMatch(restarting: true) }.accessibilityIdentifier("duel.restart")
             }
             Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.exit")
             Text(session.characterStatus).font(.caption).accessibilityIdentifier("duel.characterStatus")
@@ -838,7 +1050,7 @@ private struct DuelMatchContent: View {
             Text(winner == session.localFighterIndex ? "对决胜利" : "这次惜败").font(.largeTitle.bold())
             Text("\(session.game.wins[0]) : \(session.game.wins[1]) · 命中 \(session.localLandedHits) 次")
             if session.allowsLocalRestart {
-                Button("重新挑战") { session.restart() }.accessibilityIdentifier("duel.rematch")
+                Button("重新挑战") { resumeMatch(restarting: true) }.accessibilityIdentifier("duel.rematch")
             }
             Button("返回角色选择") { exitMatch() }.accessibilityIdentifier("duel.resultExit")
         }
@@ -859,26 +1071,51 @@ struct DuelWeaponControls: UIViewRepresentable {
     @ObservedObject var session: DuelSession
     func makeUIView(context: Context) -> DuelSourceControlsView {
         let view = DuelSourceControlsView(assetDirectory: session.weaponAssets?.directory)
-        bind(view)
+        guard bind(view) else { return view }
         if !view.sourceArtAvailable { session.characterFailed() }
         updateUIView(view, context: context)
         return view
     }
-    func bind(_ view: DuelSourceControlsView) {
-        view.onDirection = { [weak session] x, y in session?.weaponDirection(x: x, y: y) }
-        view.onAction = { [weak session] action, down in
-            guard let command = DuelWeaponInput.Action(rawValue: action.rawValue) else { return }
-            session?.weaponAction(command, down: down)
+    @discardableResult
+    func bind(_ view: DuelSourceControlsView) -> Bool {
+        if session.driver == .offline, !session.claimOfflineControls(view) {
+            view.shutdown()
+            return false
         }
-        view.onActionCancelled = { [weak session] action in
-            guard let command = DuelWeaponInput.Action(rawValue: action.rawValue) else { return }
-            session?.cancelWeaponAction(command)
+        guard session.acceptsWeaponControls(view) else { view.shutdown(); return false }
+        view.onDirection = { [weak session, weak view] x, y in
+            guard let session, let view, session.acceptsWeaponControls(view) else { return }
+            session.weaponDirection(x: x, y: y)
         }
-        view.onInputCancelled = { [weak session] in session?.cancelWeaponInput() }
-        session.inputReset = { [weak view] in view?.cancelAll(notify: false) }
+        view.onAction = { [weak session, weak view] action, down in
+            guard let session, let view, session.acceptsWeaponControls(view),
+                  let command = DuelWeaponInput.Action(rawValue: action.rawValue) else { return }
+            session.weaponAction(command, down: down)
+        }
+        view.onActionCancelled = { [weak session, weak view] action in
+            guard let session, let view, session.acceptsWeaponControls(view),
+                  let command = DuelWeaponInput.Action(rawValue: action.rawValue) else { return }
+            session.cancelWeaponAction(command)
+        }
+        view.onInputCancelled = { [weak session, weak view] in
+            guard let session, let view, session.acceptsWeaponControls(view) else { return }
+            session.cancelWeaponInput()
+        }
+        if session.driver == .offline {
+            view.onShutdown = { [weak session, weak view] in
+                guard let view else { return }
+                session?.releaseOfflineControls(view)
+            }
+        }
+        session.inputReset = { [weak session, weak view] in
+            guard let session, let view, session.acceptsWeaponControls(view) else { return }
+            view.cancelAll(notify: false)
+        }
+        return true
     }
     func updateUIView(_ view: DuelSourceControlsView, context: Context) { updateReadiness(view) }
     func updateReadiness(_ view: DuelSourceControlsView) {
+        guard session.acceptsWeaponControls(view) else { view.inputEnabled = false; return }
         view.inputEnabled = !session.paused && session.loadError == nil
         view.opponentProne = session.game.fighters[session.opponentFighterIndex].knockdown > 0
         guard let fight = session.game.weaponFight else { view.inputEnabled = false; return }
@@ -896,7 +1133,7 @@ struct DuelWeaponControls: UIViewRepresentable {
                                 accessibilityLabel: label), for: action)
         }
     }
-    static func dismantleUIView(_ view: DuelSourceControlsView, coordinator: ()) { view.cancelAll() }
+    static func dismantleUIView(_ view: DuelSourceControlsView, coordinator: ()) { view.shutdown() }
 }
 
 struct DuelNetworkControls: UIViewRepresentable {

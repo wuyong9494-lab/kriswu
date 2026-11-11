@@ -466,6 +466,7 @@ private struct QuickActions: View {
                      color: store.automationLooksMissing ? DS.Palette.warning : nil) { AutomationGuideView() }
                 tile("工作量", "chart.bar") { WorkloadView() }
                 tile("小游戏", "gamecontroller") { GamesHomeView() }
+                    .accessibilityIdentifier("games.enter")
                 tile("全部功能", "square.grid.2x2") { AllFeaturesView() }
             }
         }

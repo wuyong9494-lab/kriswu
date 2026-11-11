@@ -1,7 +1,8 @@
 import Foundation
 
-/// Perspective-only composition for the local showroom. The scene still covers
-/// the entire view; only its camera moves to reserve space for measured controls.
+/// Perspective-only composition for the local showroom. The camera stays on
+/// the known clear side of the foreground scenery. Lens shift and optical zoom
+/// fit the measured controls without moving the eye through opaque geometry.
 public struct DuelLobbyFraming: Equatable, Sendable {
     public struct Point: Equatable, Sendable {
         public let x, y, z: Double
@@ -14,6 +15,7 @@ public struct DuelLobbyFraming: Equatable, Sendable {
 
     public static let verticalFieldOfView = 35.0
     public static let center = Point(4.7, 0.85, -0.35)
+    /// Earlier app showroom pose, not a recovered original-game camera pose.
     public static let originalPosition = Point(5, 1.6, 4.8)
     private static let originalDistance = sqrt(0.3 * 0.3 + 0.75 * 0.75 + 5.15 * 5.15)
     private static let back = Point(0.3, 0.75, 5.15) * (1 / originalDistance)
@@ -40,6 +42,10 @@ public struct DuelLobbyFraming: Equatable, Sendable {
     public let position: Point
     public let target: Point
     public let distance: Double
+    public let verticalTangent: Double
+    public let verticalFieldOfViewDegrees: Double
+    /// Additive normalized-device-coordinate lens shift, with positive Y up.
+    public let projectionOffset: CGPoint
     /// Normalized, top-left-origin region after the point-space safety margin.
     public let visibleRegion: CGRect
 
@@ -57,38 +63,40 @@ public struct DuelLobbyFraming: Equatable, Sendable {
                                width: safe.width / size.width, height: safe.height / size.height)
         let left = Double(visibleRegion.minX) * 2 - 1, right = Double(visibleRegion.maxX) * 2 - 1
         let bottom = 1 - Double(visibleRegion.maxY) * 2, top = 1 - Double(visibleRegion.minY) * 2
-        let tangentY = tan(Self.verticalFieldOfView * .pi / 360)
-        let tangentX = tangentY * Double(size.width / size.height)
+        guard right > left, top > bottom else { return nil }
+        let aspect = Double(size.width / size.height)
+        guard aspect.isFinite, aspect > 0 else { return nil }
         let points = Self.envelope.map { point -> Point in
-            let relative = point - Self.center
-            return .init(relative.dot(Self.right), relative.dot(Self.cameraUp), relative.dot(Self.back))
+            let relative = point - Self.originalPosition
+            let depth = -relative.dot(Self.back)
+            return .init(relative.dot(Self.right) / depth, relative.dot(Self.cameraUp) / depth, depth)
         }
-        let xLower = points.map { $0.x / tangentX + right * $0.z }.max()!
-        let xUpper = points.map { $0.x / tangentX + left * $0.z }.min()!
-        let yLower = points.map { $0.y / tangentY + top * $0.z }.max()!
-        let yUpper = points.map { $0.y / tangentY + bottom * $0.z }.min()!
-        // Intersect every point's allowed camera-translation interval. The first
-        // distance where all intervals overlap is the closest safe perspective
-        // view. Solve translation too: fixing the old look-at in the opening's
-        // center would unnecessarily shrink the featured character.
-        let fittedDistance = max(Self.originalDistance,
-                                 (xLower - xUpper) / (right - left),
-                                 (yLower - yUpper) / (top - bottom))
+        guard points.allSatisfy({ $0.z > 0 && $0.x.isFinite && $0.y.isFinite }) else { return nil }
+        let xMinimum = points.map(\.x).min()!, xMaximum = points.map(\.x).max()!
+        let yMinimum = points.map(\.y).min()!, yMaximum = points.map(\.y).max()!
+        // A point's angular coordinate is fixed for this eye position. Solve
+        // the smallest perspective lens that fits both angular spans, then
+        // shift their center into the actual opening. Do not move or hide the
+        // stage or fighter. The 701 distance solver crossed the Bort_011 rail.
+        let fittedTangent = max(tan(Self.verticalFieldOfView * .pi / 360),
+                                (xMaximum - xMinimum) / (aspect * (right - left)),
+                                (yMaximum - yMinimum) / (top - bottom))
         let zoom = zoom.isFinite ? min(1.5, max(0.7, zoom)) : 1
-        distance = fittedDistance * zoom
-        let offsetX = tangentX * (xLower + xUpper - (left + right) * distance) / 2
-        let offsetY = tangentY * (yLower + yUpper - (bottom + top) * distance) / 2
-        // Translate the camera and its target together, preserving the original
-        // perspective orientation, rather than tilting toward a new look-at.
-        let shift = Self.right * offsetX + Self.cameraUp * offsetY
-        target = Self.center + shift
-        position = target + Self.back * distance
+        verticalTangent = fittedTangent * zoom
+        verticalFieldOfViewDegrees = atan(verticalTangent) * 360 / .pi
+        projectionOffset = CGPoint(x: (left + right) / 2 - (xMinimum + xMaximum) / (2 * verticalTangent * aspect),
+                                   y: (bottom + top) / 2 - (yMinimum + yMaximum) / (2 * verticalTangent))
+        distance = Self.originalDistance
+        target = Self.center
+        position = Self.originalPosition
         // Finite inputs can still overflow, or lose the opening's entire span
         // when normalized against an extreme finite viewport. SceneKit consumes
         // Float coordinates, so reject values that would overflow that conversion
         // too. The caller retains the last valid camera on failure.
-        guard [distance, target.x, target.y, target.z, position.x, position.y, position.z]
-            .allSatisfy({ $0.isFinite && abs($0) <= Double(Float.greatestFiniteMagnitude) }) else { return nil }
+        guard [verticalTangent, verticalFieldOfViewDegrees, Double(projectionOffset.x), Double(projectionOffset.y)]
+            .allSatisfy({ $0.isFinite && abs($0) <= Double(Float.greatestFiniteMagnitude) }),
+              verticalTangent > 0, Float(verticalFieldOfViewDegrees) < 180,
+              Float(1 / verticalTangent) > 0, Float(1 / (verticalTangent * aspect)) > 0 else { return nil }
     }
 
     /// The same top-left convention as UIKit. Native tests also call SceneKit's
@@ -96,8 +104,9 @@ public struct DuelLobbyFraming: Equatable, Sendable {
     public func project(_ point: Point, size: CGSize) -> CGPoint {
         let relative = point - position
         let depth = -relative.dot(Self.back)
-        let tangentY = tan(Self.verticalFieldOfView * .pi / 360)
-        return CGPoint(x: (1 + relative.dot(Self.right) / (depth * tangentY * Double(size.width / size.height))) * Double(size.width) / 2,
-                       y: (1 - relative.dot(Self.cameraUp) / (depth * tangentY)) * Double(size.height) / 2)
+        return CGPoint(x: (1 + relative.dot(Self.right) / (depth * verticalTangent * Double(size.width / size.height))
+                           + Double(projectionOffset.x)) * Double(size.width) / 2,
+                       y: (1 - relative.dot(Self.cameraUp) / (depth * verticalTangent)
+                           - Double(projectionOffset.y)) * Double(size.height) / 2)
     }
 }

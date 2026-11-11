@@ -4,7 +4,10 @@ import SwiftUI
 /// actions outside every scroll view. Enlarged accessibility text uses the
 /// stacked, scrollable layout instead of clipping the side panels.
 struct DuelHomeView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @StateObject private var music = DuelMusicLease(scene: .lobby)
+    @State private var musicVisible = false
     @State private var hero = DuelGame.Hero.liu
     @State private var difficulty = DuelGame.Difficulty.learning
     @State private var match: DuelSetup?
@@ -46,6 +49,7 @@ struct DuelHomeView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {
+                            HStack { closeButton; Spacer() }
                             ZStack(alignment: .bottomLeading) {
                                 stage()
                                 selectedIdentity.padding(16)
@@ -83,7 +87,19 @@ struct DuelHomeView: View {
                                     width: clear.width / stage.width, height: clear.height / stage.height)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .modifier(ArenaLandscape())
+        .onAppear {
+            musicVisible = true
+            music.update(visible: match == nil && !showingNetworkEntry)
+        }
+        .onDisappear { musicVisible = false; music.update(visible: false) }
+        .onChange(of: match?.id) { _ in
+            music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
+        }
+        .onChange(of: showingNetworkEntry) { _ in
+            music.update(visible: musicVisible && match == nil && !showingNetworkEntry)
+        }
         .fullScreenCover(item: $match) { DuelMatchView(setup: $0) }
         .fullScreenCover(isPresented: $showingNetworkEntry) { DuelNetworkEntryView() }
     }
@@ -104,7 +120,11 @@ struct DuelHomeView: View {
         let sideWidth = min(218, max(164, width * 0.235))
         return VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("裂隙对决").font(.title2.weight(.semibold)).tracking(3)
+                HStack(spacing: 8) {
+                    closeButton
+                    Text("裂隙对决").font(.title3.weight(.semibold)).tracking(2)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
                     .frame(width: sideWidth, alignment: .leading)
                 Spacer()
                 Text("武者大厅").font(.caption.weight(.semibold)).tracking(2)
@@ -154,6 +174,18 @@ struct DuelHomeView: View {
             .background(lobbyFrame(.rail))
         }
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 10)
+    }
+
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Image(systemName: "chevron.backward")
+                .font(.headline.weight(.semibold))
+                .frame(minWidth: 44, minHeight: 44)
+                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("返回小游戏")
+        .accessibilityIdentifier("duel.lobby.close")
     }
 
     private func lobbyFrame(_ region: DuelLobbyLayoutRegion) -> some View {
