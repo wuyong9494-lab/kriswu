@@ -97,6 +97,8 @@ struct DuelNetworkRoomView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var didStart = false
     @State private var didLeave = false
+    @State private var combat: DuelNetworkCombatSession?
+    @State private var combatError: String?
 
     init(room: GameRoom) {
         self.room = room
@@ -135,14 +137,28 @@ struct DuelNetworkRoomView: View {
         }
         .onChange(of: room.phase) { _ in attachIfReady() }
         .onChange(of: room.members) { _ in attachIfReady() }
-        .onChange(of: model.status) { if $0 == .closed { leaveTransport() } }
+        .onChange(of: model.status) { value in
+            if value == .started { enterCombat() }
+            else if value == .closed && combat == nil { leaveTransport() }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { combat != nil },
+            set: { if !$0 { finishCombat() } }
+        )) {
+            if let combat {
+                DuelNetworkCombatView(combat: combat, onExit: finishCombat)
+            }
+        }
         .onChange(of: scenePhase) {
             if $0 == .background {
-                model.close(reason: "应用已进入后台，选角已结束。请离开后重新进入房间。")
+                combat?.stop()
+                model.close(reason: "应用已进入后台，联机对战已结束。请重新进入房间。")
                 leaveTransport()
             }
         }
-        .onDisappear { model.close(); leaveTransport() }
+        .onDisappear {
+            if combat == nil { model.close(); leaveTransport() }
+        }
     }
 
     private var header: some View {
@@ -210,6 +226,7 @@ struct DuelNetworkRoomView: View {
             Text("选角与准备同步测试；联机战斗尚未接入。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
                 .accessibilityIdentifier("duel.network.scope")
+            if let combatError { message(combatError, warning: true) }
             if let notice = room.notice { message(notice, warning: true) }
             if let error = model.error {
                 message(error, warning: true).accessibilityIdentifier("duel.network.error")
@@ -308,6 +325,31 @@ struct DuelNetworkRoomView: View {
     private func message(_ text: String, warning: Bool) -> some View {
         Label(text, systemImage: warning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
             .font(.callout).foregroundStyle(warning ? Color.orange : Color.green)
+    }
+
+    private func enterCombat() {
+        guard combat == nil, !didLeave, let snapshot = model.snapshot,
+              snapshot.phase == .started else { return }
+        // The selection coordinator must release its direct-channel lease before
+        // combat claims it; otherwise both protocols would consume the same bytes.
+        model.close()
+        do {
+            let catalog = try? DuelWeaponAssets().catalog
+            let next = try DuelNetworkCombatSession(room: room, started: snapshot,
+                                                    catalog: catalog, seed: UInt64.random(in: 1...UInt64.max))
+            try next.start()
+            combat = next
+        } catch {
+            combatError = "无法进入联机战斗：角色资源或房间通道尚未准备好。"
+            leaveTransport()
+        }
+    }
+
+    private func finishCombat() {
+        combat?.stop()
+        combat = nil
+        leaveTransport()
+        dismiss()
     }
 
     private func attachIfReady() {
