@@ -19,6 +19,7 @@ final class DuelNetworkCombatSession: ObservableObject {
     private var guest: DuelNetworkCombatGuest?
     private var clock: Task<Void, Never>?
     private var sequence: UInt64 = 0
+    private var lastSentTick: UInt64?
     private var roomObservation: AnyCancellable?
 
     init(room: GameRoom, started selection: DuelMultiplayerSelection.Snapshot,
@@ -86,11 +87,15 @@ final class DuelNetworkCombatSession: ObservableObject {
             tick = state.tick + (state.tick < UInt64.max ? 1 : 0)
             epoch = state.epoch
         } else { return }
-        sequence += 1
+        let scheduledTick = max(tick, lastSentTick.map { $0 < UInt64.max ? $0 + 1 : $0 } ?? tick)
+        guard scheduledTick >= tick, scheduledTick - tick <= DuelNetworkInputs.futureWindow else { return }
+        let nextSequence = sequence + 1
         let message = DuelNetworkInputs.Message(sessionID: sessionID, epoch: epoch,
-            sequence: sequence, tick: tick, move: move, vertical: vertical,
+            sequence: nextSequence, tick: scheduledTick, move: move, vertical: vertical,
             guardHeld: guardHeld, tapBits: tapBits, weaponCommand: weaponCommand)
         guard let bytes = DuelNetworkCombatWire.encode(.input(message)) else { return }
+        sequence = nextSequence
+        lastSentTick = scheduledTick
         if var host {
             _ = host.receive(bytes, authenticatedSenderID: hostID)
             self.host = host
