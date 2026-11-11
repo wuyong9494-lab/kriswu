@@ -5,6 +5,9 @@ import SwiftUI
 struct DuelNetworkCombatView: View {
     @ObservedObject var combat: DuelNetworkCombatSession
     let onExit: () -> Void
+    @State private var heldMove = 0
+    @State private var heldGuard = false
+    @State private var inputTask: Task<Void, Never>?
 
     var body: some View {
         GeometryReader { geometry in
@@ -35,9 +38,9 @@ struct DuelNetworkCombatView: View {
                             .buttonStyle(.borderedProminent)
                     } else {
                         HStack(spacing: 14) {
-                            Button("后退") { combat.sendInput(move: -1) }
-                            Button("前进") { combat.sendInput(move: 1) }
-                            Button("格挡") { combat.sendInput(guardHeld: true) }
+                            heldButton("后退", move: -1)
+                            heldButton("前进", move: 1)
+                            heldButton("格挡", guardHeld: true)
                             Button("轻击") { combat.sendInput(tapBits: DuelGame.Buttons.light.rawValue) }
                             Button("重击") { combat.sendInput(tapBits: DuelGame.Buttons.heavy.rawValue) }
                             Button("技能") { combat.sendInput(tapBits: DuelGame.Buttons.skill1.rawValue) }
@@ -63,6 +66,44 @@ struct DuelNetworkCombatView: View {
         }
         .modifier(ArenaLandscape())
         .interactiveDismissDisabled()
+        .onAppear { beginInputClock() }
+        .onDisappear { inputTask?.cancel(); inputTask = nil; releaseHeld() }
+    }
+
+    private func heldButton(_ title: String, move: Int = 0, guardHeld: Bool = false) -> some View {
+        Text(title)
+            .font(.callout.bold())
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background((heldMove == move && move != 0) || (guardHeld && heldGuard)
+                        ? Color.orange : Color.white.opacity(0.18),
+                        in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if move != 0 { heldMove = move; heldGuard = false }
+                    else if guardHeld { heldMove = 0; heldGuard = true }
+                }
+                .onEnded { _ in releaseHeld() })
+            .accessibilityIdentifier("duel.combat.hold")
+    }
+
+    private func releaseHeld() {
+        heldMove = 0
+        heldGuard = false
+        combat.sendInput()
+    }
+
+    private func beginInputClock() {
+        guard inputTask == nil else { return }
+        inputTask = Task { @MainActor in
+            while !Task.isCancelled {
+                if combat.status == .running && (heldMove != 0 || heldGuard) {
+                    combat.sendInput(move: heldMove, guardHeld: heldGuard)
+                }
+                do { try await Task.sleep(nanoseconds: 50_000_000) }
+                catch { break }
+            }
+        }
     }
 
     private func fighter(_ fighter: DuelNetworkCombatState.Fighter, seat: Int) -> some View {
