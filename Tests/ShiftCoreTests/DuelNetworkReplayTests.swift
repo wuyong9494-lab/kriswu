@@ -403,7 +403,7 @@ final class DuelNetworkReplayTests: XCTestCase {
                 let samples = 2 * (walk["frames"] as! Int) - 1
                 var tracks = walk["tracks"] as! [String: Any]
                 tracks["root"] = (0..<samples).map { sample in
-                    ["x": 0.64 * Double(sample) / Double(samples - 1), "y": 0.0, "z": 0.0]
+                    [0.64 * Double(sample) / Double(samples - 1), 0.0, 0.0]
                 }
                 walk["tracks"] = tracks
                 clips.append(walk)

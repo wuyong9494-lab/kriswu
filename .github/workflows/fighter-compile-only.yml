@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         persist-credentials: false
-        fetch-depth: 2
+        fetch-depth: 3
         lfs: false
         submodules: false
     - name: Verify fixture-only change and pinned successful device step
@@ -36,21 +36,29 @@ jobs:
         python3 - <<'PYCODE'
         import hashlib,json,os,subprocess,urllib.request
         from pathlib import Path
-        BASE='178265eb0ebc7d836d426699598a068c4b4f98c9'
-        TREE='3124de2b83397827e55587ea85978578b3e938d2'
+        BASE='9cac56cc014d028434efcf98c5ad42c87ccce778'
+        DEVICE_SOURCE='178265eb0ebc7d836d426699598a068c4b4f98c9'
+        TREE='204ff7d1b661469a84748b637d43115e4cd8812f'
         RUN=42967036238
         JOB=130346522552
         SOURCE='Tests/ShiftCoreTests/DuelNetworkReplayTests.swift'
-        BEFORE='60cad52f7c9bdba1c8ecdd255c04215392969dde00e499431ab430e0f257b439'
-        FILES={'Tests/SiteTests/DuelLifecycleTests+ControlsOwnership.swift': 'c9488181d4d749e72c5543a3957afc6cceb4b94278d90592be632e2229956b53', 'Tests/SiteTests/DuelLifecycleTests+OfflineTransitions.swift': 'ccd046461c6b8815c94384c59187e211737f430b0a7842f2189babe6c05cd860', 'Tests/SiteTests/DuelLifecycleTests+RendererOwnership.swift': '94ceff0f71f034cdc5812af15ba10cdc6833925e347f2e07f8e0d81f209a2e25', 'Tests/SiteTests/DuelLifecycleTests+MusicReadiness.swift': 'e9d0503ce9eff3e15841cf3d409e4ba5772e00a877685e8365aba309d7c1c1ef', 'Tests/SiteTests/DuelMusicTests.swift': 'e6162323841f2cbb31e3843ec8ae72ee9e811b35c799710a96cb263616024298', 'Tests/ShiftCoreTests/DuelNetworkReplayTests.swift': '1de5fbd4811fdf2de8b6dcd3179c4c856f76187148f650a28665245780ba9821', 'Tests/ShiftCoreTests/DuelNetworkCombatWireTests.swift': '0ba905be3e713dfe424cebaac82db63ee2a63fc240612cf65949e6f2a0815d33'}
+        BEFORE='1de5fbd4811fdf2de8b6dcd3179c4c856f76187148f650a28665245780ba9821'
+        FILES={'Tests/SiteTests/DuelLifecycleTests+ControlsOwnership.swift': 'c9488181d4d749e72c5543a3957afc6cceb4b94278d90592be632e2229956b53', 'Tests/SiteTests/DuelLifecycleTests+OfflineTransitions.swift': 'ccd046461c6b8815c94384c59187e211737f430b0a7842f2189babe6c05cd860', 'Tests/SiteTests/DuelLifecycleTests+RendererOwnership.swift': '94ceff0f71f034cdc5812af15ba10cdc6833925e347f2e07f8e0d81f209a2e25', 'Tests/SiteTests/DuelLifecycleTests+MusicReadiness.swift': 'e9d0503ce9eff3e15841cf3d409e4ba5772e00a877685e8365aba309d7c1c1ef', 'Tests/SiteTests/DuelMusicTests.swift': 'e6162323841f2cbb31e3843ec8ae72ee9e811b35c799710a96cb263616024298', 'Tests/ShiftCoreTests/DuelNetworkReplayTests.swift': '4720aea667d389ef99fd159f0cd5b174d40a54eb918d12c90bbfcb3b12247e38', 'Tests/ShiftCoreTests/DuelNetworkCombatWireTests.swift': '0ba905be3e713dfe424cebaac82db63ee2a63fc240612cf65949e6f2a0815d33'}
         def git(*args): return subprocess.check_output(['git',*args],text=True).strip()
         def blob(ref,path): return subprocess.check_output(['git','show',ref+':'+path])
         assert os.environ['GITHUB_RUN_ATTEMPT']=='1', 'Only one approved attempt; do not rerun'
         assert git('rev-parse','HEAD')==os.environ['GITHUB_SHA']
         assert git('rev-list','--parents','-n','1','HEAD').split()[1:]==[BASE], 'Unexpected parent/merge'
         assert git('rev-parse',BASE+'^{tree}')==TREE, 'Unexpected baseline tree'
+        assert git('rev-list','--parents','-n','1',BASE).split()[1:]==[DEVICE_SOURCE], 'Device source is not the pinned grandparent'
+        assert set(git('diff','--name-only',DEVICE_SOURCE,'HEAD').splitlines())=={SOURCE,'.github/workflows/fighter-compile-only.yml'}, 'Production changed since verified device compile'
         assert set(git('diff','--name-only',BASE,'HEAD').splitlines())=={SOURCE,'.github/workflows/fighter-compile-only.yml'}, 'Only terminal fixture test and workflow may change'
         assert hashlib.sha256(blob(BASE,SOURCE)).hexdigest()==BEFORE, 'Unexpected original test'
+        old_literal=b'["x": 0.64 * Double(sample) / Double(samples - 1), "y": 0.0, "z": 0.0]'
+        new_literal=b'[0.64 * Double(sample) / Double(samples - 1), 0.0, 0.0]'
+        before=blob(BASE,SOURCE)
+        assert before.count(old_literal)==1, 'Expected exactly one original coordinate literal'
+        assert Path(SOURCE).read_bytes()==before.replace(old_literal,new_literal,1), 'Only the approved coordinate literal may change'
         for p,digest in FILES.items():
          current=Path(p).read_bytes()
          assert not Path(p).is_symlink() and hashlib.sha256(current).hexdigest()==digest,p
@@ -63,7 +71,7 @@ jobs:
           headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
          with urllib.request.urlopen(request,timeout=30) as response:return json.load(response)
         run=api('actions/runs/'+str(RUN))
-        assert run['head_sha']==BASE and run['status']=='completed'
+        assert run['head_sha']==DEVICE_SOURCE and run['status']=='completed'
         assert run['path']=='.github/workflows/fighter-compile-only.yml'
         jobs=api('actions/runs/'+str(RUN)+'/jobs?filter=latest&per_page=100')
         assert jobs['total_count']<=100 and len(jobs['jobs'])==jobs['total_count'], 'Incomplete job listing'
@@ -74,10 +82,10 @@ jobs:
         compile_steps=[s for s in job['steps'] if s['name']=='Compile current-source App and widget without signing']
         assert len(compile_steps)==1 and compile_steps[0]['status']=='completed' and compile_steps[0]['conclusion']=='success', 'Pinned actual-source device step did not pass'
         # The overall job/run failed in later fixture tests. Never relabel them as success.
-        print('Reusing only successful device-compile STEP from run',RUN,'job',JOB,'head',BASE)
+        print('Reusing only successful device-compile STEP from run',RUN,'job',JOB,'head',DEVICE_SOURCE)
         print('Historical overall run/job conclusions:',run['conclusion'],job['conclusion'])
         print('All production files unchanged; approved test-only regression commit:',os.environ['GITHUB_SHA'])
-        (Path(os.environ['RUNNER_TEMP'])/'fighter-device-step-proof').write_text(BASE+' run '+str(RUN)+' job '+str(JOB)+' device step passed; overall run '+str(run['conclusion']))
+        (Path(os.environ['RUNNER_TEMP'])/'fighter-device-step-proof').write_text(DEVICE_SOURCE+' run '+str(RUN)+' job '+str(JOB)+' device step passed; overall run '+str(run['conclusion']))
         PYCODE
     - name: Select Xcode and prepare isolated validation inputs
       timeout-minutes: 8
