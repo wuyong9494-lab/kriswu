@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// Perspective-only composition for the local showroom. The camera stays on
 /// the known clear side of the foreground scenery. Lens shift and optical zoom
