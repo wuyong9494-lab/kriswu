@@ -1,0 +1,61 @@
+name: Fighter app compile only (unsigned, no private resources)
+on:
+  push:
+    branches: ['codex/fighter-lab-compile-only-20261111']
+    paths:
+      - 'App/**'
+      - 'Sources/**'
+      - 'Shared/**'
+      - 'Widget/**'
+      - 'project.yml'
+      - 'scripts/build_fighter_network_rules.py'
+      - '.github/scripts/build_identity.py'
+      - '.github/workflows/fighter-lab.yml'
+      - '.github/workflows/fighter-compile-only.yml'
+permissions:
+  contents: read
+concurrency:
+  group: fighter-compile-only-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  compile:
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Confirm compile-only input boundary
+        shell: bash -eo pipefail {0}
+        run: |
+          test ! -d App/Resources/FighterPrivate
+          test ! -f App/Resources/arena-original-resources.arenapack
+          test -d /Applications/Xcode_26.6.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+          brew install xcodegen
+          python3 .github/scripts/build_identity.py
+          xcodegen generate
+      - name: Compile app and widget without signing
+        shell: bash -eo pipefail {0}
+        run: |
+          xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/fighter-compile-only" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee "$RUNNER_TEMP/fighter-compile-only.log"
+          if grep -E 'warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)' "$RUNNER_TEMP/fighter-compile-only.log"; then
+            echo '::error::Concurrency warnings must be resolved.'
+            exit 1
+          fi
+      - name: State validation scope
+        if: success()
+        run: |
+          echo 'Unsigned Release app compile passed. No private assets were staged; no tests, simulator, physical devices, signing, IPA, artifacts, Release or TestFlight actions were run.' >> "$GITHUB_STEP_SUMMARY"
