@@ -161,8 +161,8 @@ final class DuelWeaponCharacterInstance {
                 guard let original = holder.skinner,
                       let inverseBinds = original.boneInverseBindTransforms else { continue }
                 let corrected = inverseBinds.map { value -> NSValue in
-                    let bind = SCNMatrix4ToMat4(value.scnMatrix4Value)
-                    return NSValue(scnMatrix4: SCNMatrix4FromMat4(bind * inverseOuter))
+                    let bind = simd_float4x4(value.scnMatrix4Value)
+                    return NSValue(scnMatrix4: SCNMatrix4(bind * inverseOuter))
                 }
                 let skin = SCNSkinner(baseGeometry: original.baseGeometry,
                                      bones: original.bones,

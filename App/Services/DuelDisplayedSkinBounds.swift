@@ -51,7 +51,7 @@ final class DuelDisplayedSkinBounds {
                         + source.componentsPerVector * source.bytesPerComponent <= source.data.count
                 else { throw Failure.unsupportedGeometry }
             }
-            let matrices = binds.map { SCNMatrix4ToMat4($0.scnMatrix4Value) }
+            let matrices = binds.map { simd_float4x4($0.scnMatrix4Value) }
             guard matrices.allSatisfy(Self.affine) else { throw Failure.invalidTransform }
             var boxes = [Box](repeating: Box(), count: binds.count)
             var used = Set<Int>(), low: Float = 1, high: Float = 1
