@@ -1,13 +1,14 @@
-name: Fighter CoreGraphics revalidation (unsigned, no private resources)
+name: Fighter terminal-fixture regression (unsigned, no private resources)
 'on':
   push:
     branches:
     - codex/fighter-lab-compile-only-20261111
     paths:
-    - Sources/ShiftCore/DuelLobbyFraming.swift
+    - Tests/ShiftCoreTests/DuelNetworkReplayTests.swift
     - .github/workflows/fighter-compile-only.yml
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: fighter-compile-only-${{ github.ref }}
   cancel-in-progress: false
@@ -15,7 +16,7 @@ jobs:
   regression:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
     runs-on: macos-26
-    timeout-minutes: 110
+    timeout-minutes: 90
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
@@ -26,42 +27,57 @@ jobs:
         fetch-depth: 2
         lfs: false
         submodules: false
-    - name: Verify exact approved CoreGraphics header and unchanged tests
+    - name: Verify fixture-only change and pinned successful device step
       timeout-minutes: 3
       shell: bash -eo pipefail {0}
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         python3 - <<'PYCODE'
-        import hashlib,os,subprocess
+        import hashlib,json,os,subprocess,urllib.request
         from pathlib import Path
-        BASE='43edd44630ab824ca7281844c9482405d6afae81'
-        TREE='1597629005f9e056ddab0658596ca04462d2f5e2'
-        SOURCE='Sources/ShiftCore/DuelLobbyFraming.swift'
-        BEFORE='45e1be7799b0dbacb5a017f699c1ce543b85d6c51f78a4c9cf1624a79f0e7cb5'
-        AFTER='3ba621a67544a66a0045afcf010259c7621353c4e99aff719b3fba1c76bc406c'
-        FILES={'Tests/SiteTests/DuelLifecycleTests+ControlsOwnership.swift': 'c9488181d4d749e72c5543a3957afc6cceb4b94278d90592be632e2229956b53', 'Tests/SiteTests/DuelLifecycleTests+OfflineTransitions.swift': 'ccd046461c6b8815c94384c59187e211737f430b0a7842f2189babe6c05cd860', 'Tests/SiteTests/DuelLifecycleTests+RendererOwnership.swift': '94ceff0f71f034cdc5812af15ba10cdc6833925e347f2e07f8e0d81f209a2e25', 'Tests/SiteTests/DuelLifecycleTests+MusicReadiness.swift': 'e9d0503ce9eff3e15841cf3d409e4ba5772e00a877685e8365aba309d7c1c1ef', 'Tests/SiteTests/DuelMusicTests.swift': 'e6162323841f2cbb31e3843ec8ae72ee9e811b35c799710a96cb263616024298', 'Tests/ShiftCoreTests/DuelNetworkReplayTests.swift': '60cad52f7c9bdba1c8ecdd255c04215392969dde00e499431ab430e0f257b439', 'Tests/ShiftCoreTests/DuelNetworkCombatWireTests.swift': '0ba905be3e713dfe424cebaac82db63ee2a63fc240612cf65949e6f2a0815d33'}
+        BASE='178265eb0ebc7d836d426699598a068c4b4f98c9'
+        TREE='3124de2b83397827e55587ea85978578b3e938d2'
+        RUN=42967036238
+        JOB=130346522552
+        SOURCE='Tests/ShiftCoreTests/DuelNetworkReplayTests.swift'
+        BEFORE='60cad52f7c9bdba1c8ecdd255c04215392969dde00e499431ab430e0f257b439'
+        FILES={'Tests/SiteTests/DuelLifecycleTests+ControlsOwnership.swift': 'c9488181d4d749e72c5543a3957afc6cceb4b94278d90592be632e2229956b53', 'Tests/SiteTests/DuelLifecycleTests+OfflineTransitions.swift': 'ccd046461c6b8815c94384c59187e211737f430b0a7842f2189babe6c05cd860', 'Tests/SiteTests/DuelLifecycleTests+RendererOwnership.swift': '94ceff0f71f034cdc5812af15ba10cdc6833925e347f2e07f8e0d81f209a2e25', 'Tests/SiteTests/DuelLifecycleTests+MusicReadiness.swift': 'e9d0503ce9eff3e15841cf3d409e4ba5772e00a877685e8365aba309d7c1c1ef', 'Tests/SiteTests/DuelMusicTests.swift': 'e6162323841f2cbb31e3843ec8ae72ee9e811b35c799710a96cb263616024298', 'Tests/ShiftCoreTests/DuelNetworkReplayTests.swift': '1de5fbd4811fdf2de8b6dcd3179c4c856f76187148f650a28665245780ba9821', 'Tests/ShiftCoreTests/DuelNetworkCombatWireTests.swift': '0ba905be3e713dfe424cebaac82db63ee2a63fc240612cf65949e6f2a0815d33'}
         def git(*args): return subprocess.check_output(['git',*args],text=True).strip()
         def blob(ref,path): return subprocess.check_output(['git','show',ref+':'+path])
         assert os.environ['GITHUB_RUN_ATTEMPT']=='1', 'Only one approved attempt; do not rerun'
         assert git('rev-parse','HEAD')==os.environ['GITHUB_SHA']
         assert git('rev-list','--parents','-n','1','HEAD').split()[1:]==[BASE], 'Unexpected parent/merge'
         assert git('rev-parse',BASE+'^{tree}')==TREE, 'Unexpected baseline tree'
-        assert set(git('diff','--name-only',BASE,'HEAD').splitlines())=={SOURCE,'.github/workflows/fighter-compile-only.yml'}, 'Only source header and workflow may change'
-        before=blob(BASE,SOURCE);after=Path(SOURCE).read_bytes()
-        assert not Path(SOURCE).is_symlink()
-        assert hashlib.sha256(before).hexdigest()==BEFORE and hashlib.sha256(after).hexdigest()==AFTER
-        needle=b'import Foundation\n'
-        assert before.startswith(needle) and before.count(needle)==1
-        assert after==needle+b'#if canImport(CoreGraphics)\nimport CoreGraphics\n#endif\n'+before[len(needle):], 'Change is not the approved header-only addition'
+        assert set(git('diff','--name-only',BASE,'HEAD').splitlines())=={SOURCE,'.github/workflows/fighter-compile-only.yml'}, 'Only terminal fixture test and workflow may change'
+        assert hashlib.sha256(blob(BASE,SOURCE)).hexdigest()==BEFORE, 'Unexpected original test'
         for p,digest in FILES.items():
          current=Path(p).read_bytes()
          assert not Path(p).is_symlink() and hashlib.sha256(current).hexdigest()==digest,p
-         assert current==blob(BASE,p), 'Test source changed: '+p
+         if p!=SOURCE: assert current==blob(BASE,p), 'Another test source changed: '+p
         for p in ['App/Resources/FighterPrivate','App/Resources/arena-original-resources.arenapack']:
          assert not Path(p).exists(), 'Private resource unexpectedly present'
         assert '!codex/fighter-lab-compile-only-20261111' in Path('.github/workflows/fighter-lab.yml').read_text()
-        print('Exact approved header-only source transformation and unchanged seven test files verified.')
-        print('Actual revalidation source:',os.environ['GITHUB_SHA'])
-        print('Previous 7dd device pass is historical only; this source requires the next device compile.')
+        def api(path):
+         request=urllib.request.Request('https://api.github.com/repos/wuyong9494-lab/kriswu/'+path,
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+         with urllib.request.urlopen(request,timeout=30) as response:return json.load(response)
+        run=api('actions/runs/'+str(RUN))
+        assert run['head_sha']==BASE and run['status']=='completed'
+        assert run['path']=='.github/workflows/fighter-compile-only.yml'
+        jobs=api('actions/runs/'+str(RUN)+'/jobs?filter=latest&per_page=100')
+        assert jobs['total_count']<=100 and len(jobs['jobs'])==jobs['total_count'], 'Incomplete job listing'
+        matches=[j for j in jobs['jobs'] if j['id']==JOB]
+        assert len(matches)==1, 'Pinned job missing or duplicated in referenced run'
+        job=matches[0]
+        assert job['id']==JOB and job['run_id']==RUN and job['status']=='completed'
+        compile_steps=[s for s in job['steps'] if s['name']=='Compile current-source App and widget without signing']
+        assert len(compile_steps)==1 and compile_steps[0]['status']=='completed' and compile_steps[0]['conclusion']=='success', 'Pinned actual-source device step did not pass'
+        # The overall job/run failed in later fixture tests. Never relabel them as success.
+        print('Reusing only successful device-compile STEP from run',RUN,'job',JOB,'head',BASE)
+        print('Historical overall run/job conclusions:',run['conclusion'],job['conclusion'])
+        print('All production files unchanged; approved test-only regression commit:',os.environ['GITHUB_SHA'])
+        (Path(os.environ['RUNNER_TEMP'])/'fighter-device-step-proof').write_text(BASE+' run '+str(RUN)+' job '+str(JOB)+' device step passed; overall run '+str(run['conclusion']))
         PYCODE
     - name: Select Xcode and prepare isolated validation inputs
       timeout-minutes: 8
@@ -81,22 +97,6 @@ jobs:
         core=json.loads((p/'core.json').read_text());sim=json.loads((p/'sim.json').read_text())
         assert len(core)==len(set(core))==18 and len(sim)==len(set(sim))==42, 'Invalid selector inventory'
         PYCODE
-    - name: Compile current-source App and widget without signing
-      timeout-minutes: 25
-      shell: bash -eo pipefail {0}
-      run: |
-        python3 .github/scripts/build_identity.py
-        xcodegen generate
-        xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-         -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
-         -derivedDataPath "$RUNNER_TEMP/fighter-regression/device" \
-         CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-         2>&1 | tee "$RUNNER_TEMP/fighter-regression/device.log"
-        if grep -E 'warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)' "$RUNNER_TEMP/fighter-regression/device.log"; then
-         echo '::error::Concurrency warnings must be resolved.'
-         exit 1
-        fi
-        printf 'Unsigned Release App+Widget compile passed for %s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/fighter-regression/device-ok"
     - name: Run and verify terminal replay and wire XCTest cases
       timeout-minutes: 20
       shell: bash -eo pipefail {0}
@@ -268,14 +268,15 @@ jobs:
         python3 - <<'PYCODE'
         import os
         from pathlib import Path
-        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression'
-        lines=['Fighter CoreGraphics revalidation: '+os.environ['GITHUB_SHA'], 'Previous 7dd device pass is historical only, not proof for this source.']
-        for label,marker in [('Current-source unsigned Release App+Widget','device-ok'),('Core XCTest','core-ok'),('Simulator XCTest','sim-ok')]:
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression';proof=Path(os.environ['RUNNER_TEMP'])/'fighter-device-step-proof'
+        lines=['Fighter terminal-fixture regression: '+os.environ['GITHUB_SHA']]
+        lines.append('Unchanged-production device evidence: '+(proof.read_text() if proof.exists() else 'NOT VERIFIED; inspect preflight failure.'))
+        for label,marker in [('Core XCTest','core-ok'),('Simulator XCTest','sim-ok')]:
          lines.append(label+': '+((p/marker).read_text().strip() if (p/marker).exists() else 'NOT VERIFIED; inspect failed/blocked stage.'))
         if (p/'created-simulator.json').exists():lines.append('Simulator: '+(p/'created-simulator.json').read_text())
         xcode=Path(os.environ['RUNNER_TEMP'])/'fighter-xcode-version.txt'
         if xcode.exists():lines.append(xcode.read_text().strip())
-        lines.append('No private resources staged; no signing, app/result/screenshot uploads, Release or TestFlight. Synthetic regression is not two-iPhone or original-resource acceptance.')
+        lines.append('No repeat device compile; no private resources, signing, app/result/screenshot uploads, Release or TestFlight. Synthetic regression is not two-iPhone or original-resource acceptance.')
         with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n\n'.join(lines)+'\n')
         print('\n'.join(lines))
         PYCODE

@@ -25,7 +25,8 @@ final class DuelNetworkReplayTests: XCTestCase {
     }
 
     private func barriers(swapped: Bool = false, commit: Bool = true, seed: UInt64 = 73,
-                          startID: String = "start-1") throws -> (Barrier, Barrier) {
+                          startID: String = "start-1",
+                          catalog: DuelWeaponCatalog = DuelWeaponTestFixtures.catalog()) throws -> (Barrier, Barrier) {
         let snapshot = try started(swapped: swapped)
         var host = try Barrier(started: snapshot, sessionID: sessionID, hostID: hostID, guestID: guestID,
                                localPlayerID: hostID, compatibility: compatibility)
@@ -35,9 +36,9 @@ final class DuelNetworkReplayTests: XCTestCase {
         XCTAssertEqual(guest.receive(try offer.encoded(), authenticatedSenderID: hostID), .applied)
         let configuration = try XCTUnwrap(host.offeredConfiguration)
         let hostLoaded = try host.confirmLoaded(configuration: configuration, loadedCompatibility: compatibility,
-                                                catalog: DuelWeaponTestFixtures.catalog(), sequence: 2)
+                                                catalog: catalog, sequence: 2)
         let guestLoaded = try guest.confirmLoaded(configuration: configuration, loadedCompatibility: compatibility,
-                                                  catalog: DuelWeaponTestFixtures.catalog(), sequence: 1)
+                                                  catalog: catalog, sequence: 1)
         XCTAssertEqual(host.receive(try guestLoaded.encoded(), authenticatedSenderID: guestID), .applied)
         XCTAssertEqual(guest.receive(try hostLoaded.encoded(), authenticatedSenderID: hostID), .applied)
         if commit {
@@ -47,12 +48,13 @@ final class DuelNetworkReplayTests: XCTestCase {
         return (host, guest)
     }
 
-    private func endpoints(swapped: Bool = false) throws -> (DuelNetworkCombatHost, DuelNetworkReplay) {
-        let (host, guest) = try barriers(swapped: swapped)
+    private func endpoints(swapped: Bool = false,
+                           catalog: DuelWeaponCatalog = DuelWeaponTestFixtures.catalog()) throws
+        -> (DuelNetworkCombatHost, DuelNetworkReplay) {
+        let (host, guest) = try barriers(swapped: swapped, catalog: catalog)
         return (try DuelNetworkCombatHost(committed: host, started: started(swapped: swapped),
-                                          loadedCompatibility: compatibility, catalog: DuelWeaponTestFixtures.catalog()),
-                try DuelNetworkReplay(committed: guest, loadedCompatibility: compatibility,
-                                      catalog: DuelWeaponTestFixtures.catalog()))
+                                          loadedCompatibility: compatibility, catalog: catalog),
+                try DuelNetworkReplay(committed: guest, loadedCompatibility: compatibility, catalog: catalog))
     }
 
     /// Deliberately bypasses safe outbound validation to exercise hostile bytes.
@@ -386,25 +388,81 @@ final class DuelNetworkReplayTests: XCTestCase {
         XCTAssertNotEqual(initial, otherInitial, "Same game state does not identify the same committed start")
     }
 
+    /// Local to terminal tests: shared fixtures intentionally have zero root motion.
+    /// Clone idle as a forward walk with 0.64 units per 16-tick cycle. Idle,
+    /// weapon geometry, damage, timing and production rules remain unchanged.
+    private func terminalCatalog() throws -> DuelWeaponCatalog {
+        let catalog = try DuelWeaponTestFixtures.changing(DuelWeaponTestFixtures.catalog()) { profiles in
+            for index in profiles.indices {
+                var roles = profiles[index]["roles"] as! [String: String]
+                var clips = profiles[index]["clips"] as! [[String: Any]]
+                let idleName = roles["idle"]!
+                var walk = clips.first { $0["name"] as? String == idleName }!
+                let walkName = idleName + "_terminal_walk"
+                walk["name"] = walkName
+                let samples = 2 * (walk["frames"] as! Int) - 1
+                var tracks = walk["tracks"] as! [String: Any]
+                tracks["root"] = (0..<samples).map { sample in
+                    ["x": 0.64 * Double(sample) / Double(samples - 1), "y": 0.0, "z": 0.0]
+                }
+                walk["tracks"] = tracks
+                clips.append(walk)
+                roles["walkForward"] = walkName
+                profiles[index]["clips"] = clips
+                profiles[index]["roles"] = roles
+            }
+        }
+        try catalog.validate()
+        return catalog
+    }
+
     /// Exercise the real host and consumed-input wire, without injecting game state.
     /// Return the guest BEFORE the terminal batch so rejection can be checked atomically.
     private func terminalEndpoints(swapped: Bool = false) throws
         -> (DuelNetworkCombatHost, DuelNetworkReplay, Wire.Message) {
-        var (host, guest) = try endpoints(swapped: swapped)
+        let catalog = try terminalCatalog()
+        var (host, guest) = try endpoints(swapped: swapped, catalog: catalog)
+        let initialGap = abs(host.game.fighters[1].x - host.game.fighters[0].x)
+        var approached = false
+        var landedDamage = false
+        func diagnostic(_ reason: String) -> NSError {
+            NSError(domain: "DuelNetworkReplayTests.terminalFixture", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey:
+                        "\(reason); swapped=\(swapped), tick=\(host.nextTick), phase=\(host.game.phase), " +
+                        "x=\(host.game.fighters.map(\.x)), health=\(host.game.fighters.map(\.health)), " +
+                        "wins=\(host.game.wins), hits=\(host.game.landedHits), damage=\(host.game.damageDealt)"])
+        }
         for _ in 0..<12_000 {
             let tick = host.nextTick
+            let gap = abs(host.game.fighters[1].x - host.game.fighters[0].x)
             let direction = host.game.fighters[0].x < host.game.fighters[1].x ? 1 : -1
+            // Approach first. The unchanged synthetic strike can intersect a
+            // torso within one unit; a 3-unit opening swing cannot land.
+            let attack = gap <= 1_000 && tick % 30 == 0
             XCTAssertEqual(host.receive(.init(sessionID: sessionID, sequence: tick + 1, tick: tick,
                                                move: direction,
-                                               weaponCommand: tick % 30 == 0 ? .weapon : nil),
+                                               weaponCommand: attack ? .weapon : nil),
                                         authenticatedSenderID: hostID), .applied)
             let message = try host.advance()
-            if case .matchOver = host.game.phase { return (host, guest, message) }
+            approached = approached || abs(host.game.fighters[1].x - host.game.fighters[0].x) < initialGap
+            landedDamage = landedDamage || (host.game.landedHits[0] > 0 && host.game.damageDealt[0] > 0)
+            if host.nextTick == 120 {
+                XCTAssertTrue(approached, diagnostic("No actual forward approach by tick 120").localizedDescription)
+                guard approached else { throw diagnostic("Approach fixture failed") }
+            }
+            if host.nextTick == 300 {
+                XCTAssertTrue(landedDamage, diagnostic("No landed damage by tick 300").localizedDescription)
+                guard landedDamage else { throw diagnostic("Contact fixture failed") }
+            }
+            if case .matchOver = host.game.phase {
+                XCTAssertTrue(approached, "Terminal setup must include actual movement")
+                XCTAssertTrue(landedDamage, "Terminal setup must include actual damaging contact")
+                return (host, guest, message)
+            }
             XCTAssertNil(message.terminalState, "Ordinary frames must not carry a terminal projection")
             XCTAssertEqual(guest.receive(try message.encoded(), authenticatedSenderID: hostID), .applied)
         }
-        throw NSError(domain: "DuelNetworkReplayTests.terminalFixture", code: 1,
-                      userInfo: [NSLocalizedDescriptionKey: "Host did not finish within the bounded fixture"])
+        throw diagnostic("Host did not finish within the bounded 12000-tick fixture")
     }
 
     private func changingTerminalState(_ state: DuelNetworkCombatState,
