@@ -24,7 +24,10 @@ struct DuelNetworkCombatView: View {
                         fighter(state.fighters[1], seat: 1)
                     }
                     .frame(maxWidth: .infinity)
-                    Spacer()
+                    DuelNetworkScene(state: state)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityIdentifier("duel.combat.scene")
                     if state.phase == .matchOver {
                         Text(state.winner.map { $0 == 0 ? "1P 获胜" : "2P 获胜" } ?? "对战结束")
                             .font(.title.bold()).accessibilityIdentifier("duel.combat.result")
