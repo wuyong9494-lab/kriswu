@@ -5,7 +5,6 @@ import SwiftUI
 struct DuelNetworkCombatView: View {
     @ObservedObject var combat: DuelNetworkCombatSession
     let onExit: () -> Void
-    @State private var movement = 0
 
     var body: some View {
         GeometryReader { geometry in
