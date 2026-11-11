@@ -43,7 +43,10 @@ struct DuelNetworkCombatView: View {
                             heldButton("格挡", guardHeld: true)
                             Button("轻击") { combat.sendInput(tapBits: DuelGame.Buttons.light.rawValue) }
                             Button("重击") { combat.sendInput(tapBits: DuelGame.Buttons.heavy.rawValue) }
-                            Button("技能") { combat.sendInput(tapBits: DuelGame.Buttons.skill1.rawValue) }
+                            Button("技能一") { combat.sendInput(tapBits: DuelGame.Buttons.skill1.rawValue) }
+                            Button("技能二") { combat.sendInput(tapBits: DuelGame.Buttons.skill2.rawValue) }
+                            Button("跳跃") { combat.sendInput(tapBits: DuelGame.Buttons.jump.rawValue) }
+                            Button("大招") { combat.sendInput(tapBits: DuelGame.Buttons.ultimate.rawValue) }
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(geometry.size.width < 700 ? .small : .regular)
