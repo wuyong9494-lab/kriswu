@@ -67,8 +67,12 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
         public fileprivate(set) var phase: Phase
         /// Always host first, guest second, independent of member-list ordering.
         public fileprivate(set) var players: [Player]
+        public var hasDistinctChoices: Bool {
+            players.count == 2 && players.allSatisfy({ $0.choice?.isValid == true })
+                && players[0].choice?.hero != players[1].choice?.hero
+        }
         public var canStart: Bool {
-            phase == .selecting && players.count == 2 && players.allSatisfy {
+            phase == .selecting && hasDistinctChoices && players.allSatisfy {
                 $0.choice?.isValid == true && $0.isReady
             }
         }
@@ -77,7 +81,7 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
     public enum Failure: Error, Equatable, Sendable {
         case invalidRoster, invalidSession, notHost, unsupportedVersion, wrongSession
         case unknownPlayer, invalidSequence, invalidChoice, staleSelection, missingSelection
-        case notReady, closed, revisionExhausted
+        case notReady, conflictingChoices, closed, revisionExhausted
     }
     public enum Outcome: Equatable, Sendable {
         case applied
@@ -137,10 +141,14 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
             guard snapshot.players.allSatisfy({ $0.choice != nil }) else {
                 return .rejected(.missingSelection)
             }
+            guard !ready || snapshot.hasDistinctChoices else { return .rejected(.conflictingChoices) }
             snapshot.players[index].isReady = ready
         case .start(let revision):
             guard authenticatedSenderID == hostID else { return .rejected(.notHost) }
             guard revision == snapshot.selectionRevision else { return .rejected(.staleSelection) }
+            if snapshot.players.allSatisfy({ $0.choice != nil }) && !snapshot.hasDistinctChoices {
+                return .rejected(.conflictingChoices)
+            }
             guard snapshot.canStart else { return .rejected(.notReady) }
             snapshot.phase = .started
         }
