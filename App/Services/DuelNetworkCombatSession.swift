@@ -77,7 +77,13 @@ final class DuelNetworkCombatSession: ObservableObject {
     /// Called by the local touch adapter. Inputs are never synthesized as AI.
     func sendInput(move: Int = 0, vertical: Int = 0, guardHeld: Bool = false,
                    tapBits: Int = 0, weaponCommand: DuelWeaponCommand? = nil) {
-        guard status == .running, sequence < UInt64.max else { return }
+        guard status == .running, sequence < UInt64.max,
+              (-1...1).contains(move), (-1...1).contains(vertical),
+              (0...63).contains(tapBits) else { return }
+        let attacks = tapBits & 62
+        guard attacks == 0 || (attacks & (attacks - 1)) == 0 else { return }
+        guard weaponCommand == nil || tapBits == 0 else { return }
+        guard !guardHeld || (tapBits == 0 && weaponCommand == nil) else { return }
         let tick: UInt64
         let epoch: UInt64
         if let host {
