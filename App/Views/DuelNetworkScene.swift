@@ -23,6 +23,8 @@ final class DuelNetworkSceneView: SCNView {
     private var actors: [DuelActor] = []
     private var heroes: [DuelGame.Hero] = []
     private var lastTick: UInt64?
+    private var previousHealth: [Int] = []
+    private var impactNodes: [SCNNode] = []
     private var weaponAssets: DuelWeaponAssets?
     private var stageAsset: DuelStageAsset?
     private let cameraNode = SCNNode()
@@ -86,6 +88,9 @@ final class DuelNetworkSceneView: SCNView {
         if incoming != heroes {
             actors.forEach { $0.root.removeFromParentNode() }
             actors.removeAll()
+            impactNodes.forEach { $0.removeFromParentNode() }
+            impactNodes.removeAll()
+            previousHealth.removeAll()
             heroes = incoming
             for hero in incoming {
                 let asset = try? weaponAssets?.character(for: hero)
@@ -93,11 +98,18 @@ final class DuelNetworkSceneView: SCNView {
                 actor.root.name = "duel.network.actor.\(actors.count)"
                 actors.append(actor)
                 scene?.rootNode.addChildNode(actor.root)
+                let impact = DuelActor.shape(SCNSphere(radius: 0.16), .systemOrange)
+                impact.geometry?.firstMaterial?.lightingModel = .constant
+                impact.castsShadow = false
+                impact.isHidden = true
+                impactNodes.append(impact)
+                scene?.rootNode.addChildNode(impact)
             }
             lastTick = nil
         }
         guard lastTick != state.tick else { return }
         lastTick = state.tick
+        let hadPrevious = previousHealth.count == state.fighters.count
         SCNTransaction.begin()
         SCNTransaction.disableActions = true
         for (index, snapshot) in state.fighters.enumerated() {
@@ -109,9 +121,18 @@ final class DuelNetworkSceneView: SCNView {
             fighter.stun = snapshot.stun
             fighter.knockdown = snapshot.knockdown
             fighter.weaponPose = snapshot.animation?.pose
+            let impact = impactNodes[index]
+            let damaged = hadPrevious && snapshot.health < previousHealth[index]
+            impact.isHidden = !damaged
+            if damaged {
+                impact.position = SCNVector3(Float(snapshot.x) / 1000,
+                                             Float(snapshot.y) / 1000 + 1.15, 0.4)
+                impact.scale = SCNVector3(1.6, 1.6, 1.6)
+            }
             actors[index].pose(fighter, frame: Int(state.tick % 60_000),
                                grapple: nil, index: index, phase: .fighting)
         }
+        previousHealth = state.fighters.map(\.health)
         let left = Float(state.fighters[0].x) / 1000
         let right = Float(state.fighters[1].x) / 1000
         center += (min(7, max(3, (left + right) * 0.5)) - center) * 0.12
@@ -138,6 +159,8 @@ final class DuelNetworkSceneView: SCNView {
     func shutdown() {
         actors.forEach { $0.root.removeFromParentNode() }
         actors.removeAll()
+        impactNodes.removeAll()
+        previousHealth.removeAll()
         weaponAssets?.releaseCharacters()
         weaponAssets = nil
         stageAsset = nil
