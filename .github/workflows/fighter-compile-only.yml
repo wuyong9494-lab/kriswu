@@ -1,61 +1,272 @@
-name: Fighter app compile only (unsigned, no private resources)
-on:
+name: Fighter code regression (unsigned, no private resources)
+'on':
   push:
-    branches: ['codex/fighter-lab-compile-only-20261111']
+    branches:
+    - codex/fighter-lab-compile-only-20261111
     paths:
-      - 'App/**'
-      - 'Sources/**'
-      - 'Shared/**'
-      - 'Widget/**'
-      - 'project.yml'
-      - 'scripts/build_fighter_network_rules.py'
-      - '.github/scripts/build_identity.py'
-      - '.github/workflows/fighter-lab.yml'
-      - '.github/workflows/fighter-compile-only.yml'
+    - Tests/ShiftCoreTests/**
+    - Tests/SiteTests/**
+    - .github/workflows/fighter-compile-only.yml
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: fighter-compile-only-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  compile:
+  regression:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 90
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-          lfs: false
-          submodules: false
-      - name: Confirm compile-only input boundary
-        shell: bash -eo pipefail {0}
-        run: |
-          test ! -d App/Resources/FighterPrivate
-          test ! -f App/Resources/arena-original-resources.arenapack
-          test -d /Applications/Xcode_26.6.app
-          sudo xcode-select -s /Applications/Xcode_26.6.app
-          xcodebuild -version
-          brew install xcodegen
-          python3 .github/scripts/build_identity.py
-          xcodegen generate
-      - name: Compile app and widget without signing
-        shell: bash -eo pipefail {0}
-        run: |
-          xcodebuild build -project ShiftReminder.xcodeproj -scheme ShiftReminder \
-            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/fighter-compile-only" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            2>&1 | tee "$RUNNER_TEMP/fighter-compile-only.log"
-          if grep -E 'warning:.*(Sendable|concurrency|actor-isolated|nonisolated|data race|global actor|isolated|isolation)' "$RUNNER_TEMP/fighter-compile-only.log"; then
-            echo '::error::Concurrency warnings must be resolved.'
-            exit 1
-          fi
-      - name: State validation scope
-        if: success()
-        run: |
-          echo 'Unsigned Release app compile passed. No private assets were staged; no tests, simulator, physical devices, signing, IPA, artifacts, Release or TestFlight actions were run.' >> "$GITHUB_STEP_SUMMARY"
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+        fetch-depth: 2
+        lfs: false
+        submodules: false
+    - name: Verify pinned device pass and exact approved source boundary
+      timeout-minutes: 3
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import hashlib,json,os,subprocess,urllib.request
+        from pathlib import Path
+        BASE='7dd7c05242c486a2d8edd0a9d6e0ce9088de34e4'
+        RUN=42959271789
+        FILES={'Tests/SiteTests/DuelLifecycleTests+ControlsOwnership.swift': 'c9488181d4d749e72c5543a3957afc6cceb4b94278d90592be632e2229956b53', 'Tests/SiteTests/DuelLifecycleTests+OfflineTransitions.swift': 'ccd046461c6b8815c94384c59187e211737f430b0a7842f2189babe6c05cd860', 'Tests/SiteTests/DuelLifecycleTests+RendererOwnership.swift': '94ceff0f71f034cdc5812af15ba10cdc6833925e347f2e07f8e0d81f209a2e25', 'Tests/SiteTests/DuelLifecycleTests+MusicReadiness.swift': 'e9d0503ce9eff3e15841cf3d409e4ba5772e00a877685e8365aba309d7c1c1ef', 'Tests/SiteTests/DuelMusicTests.swift': 'e6162323841f2cbb31e3843ec8ae72ee9e811b35c799710a96cb263616024298', 'Tests/ShiftCoreTests/DuelNetworkReplayTests.swift': '60cad52f7c9bdba1c8ecdd255c04215392969dde00e499431ab430e0f257b439', 'Tests/ShiftCoreTests/DuelNetworkCombatWireTests.swift': '0ba905be3e713dfe424cebaac82db63ee2a63fc240612cf65949e6f2a0815d33'}
+        def git(*args): return subprocess.check_output(['git',*args],text=True).strip()
+        assert os.environ['GITHUB_RUN_ATTEMPT']=='1', 'Only one approved attempt; do not rerun'
+        assert git('rev-parse','HEAD')==os.environ['GITHUB_SHA']
+        assert git('rev-list','--parents','-n','1','HEAD').split()[1:]==[BASE], 'Unexpected parent/merge'
+        expected=set(FILES)|{'.github/workflows/fighter-compile-only.yml'}
+        assert set(git('diff','--name-only',BASE,'HEAD').splitlines())==expected, 'Unexpected source boundary'
+        for p,digest in FILES.items():
+         assert not Path(p).is_symlink() and hashlib.sha256(Path(p).read_bytes()).hexdigest()==digest, p
+        for p in ['App/Resources/FighterPrivate','App/Resources/arena-original-resources.arenapack']:
+         assert not Path(p).exists(), 'Private resource unexpectedly present'
+        assert '!codex/fighter-lab-compile-only-20261111' in Path('.github/workflows/fighter-lab.yml').read_text()
+        def api(path):
+         request=urllib.request.Request('https://api.github.com/repos/wuyong9494-lab/kriswu/'+path,
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+         with urllib.request.urlopen(request,timeout=30) as response: return json.load(response)
+        run=api('actions/runs/'+str(RUN))
+        assert run['head_sha']==BASE and run['status']=='completed' and run['conclusion']=='success'
+        assert run['path']=='.github/workflows/fighter-compile-only.yml'
+        jobs=api('actions/runs/'+str(RUN)+'/jobs?filter=latest&per_page=100')
+        assert jobs['total_count']==1 and len(jobs['jobs'])==1
+        job=jobs['jobs'][0]
+        assert job['name']=='compile' and job['status']=='completed' and job['conclusion']=='success'
+        assert any(s['name']=='Compile app and widget without signing' and s['conclusion']=='success' for s in job['steps'])
+        print('Pinned device compilation verified:',BASE,RUN)
+        print('Approved regression commit:',os.environ['GITHUB_SHA'])
+        (Path(os.environ['RUNNER_TEMP'])/'fighter-device-preflight-ok').write_text(BASE)
+        PYCODE
+      env:
+        GH_TOKEN: ${{ github.token }}
+    - name: Select Xcode and prepare isolated validation inputs
+      timeout-minutes: 8
+      shell: bash -eo pipefail {0}
+      run: |
+        test -d /Applications/Xcode_26.6.app
+         sudo xcode-select -s /Applications/Xcode_26.6.app
+         xcodebuild -version | tee "$RUNNER_TEMP/fighter-xcode-version.txt"
+         grep -Fx 'Xcode 26.6' "$RUNNER_TEMP/fighter-xcode-version.txt"
+         brew install xcodegen
+         python3 - <<'PYCODE'
+        import json,os
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression';p.mkdir(exist_ok=False)
+        (p/'core.json').write_text(json.dumps(['DuelNetworkReplayTests/testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI', 'DuelNetworkReplayTests/testWireContainsConsumedLeaseAndLateInputNotOriginalRequests', 'DuelNetworkReplayTests/testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead', 'DuelNetworkReplayTests/testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct', 'DuelNetworkReplayTests/testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic', 'DuelNetworkReplayTests/testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch', 'DuelNetworkReplayTests/testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault', 'DuelNetworkReplayTests/testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic', 'DuelNetworkReplayTests/testByteBatchAndCounterBounds', 'DuelNetworkReplayTests/testCancellationDisconnectAndInterruptionAreTerminal', 'DuelNetworkReplayTests/testEpochChangeFailsClosedOnlyForPinnedHostAndStart', 'DuelNetworkReplayTests/testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame', 'DuelNetworkReplayTests/testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent', 'DuelNetworkReplayTests/testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry', 'DuelNetworkReplayTests/testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic', 'DuelNetworkCombatWireTests/testGuestInputWireRoundTripAndNamespace', 'DuelNetworkCombatWireTests/testGuestCannotAcceptUntrustedHostState', 'DuelNetworkCombatWireTests/testHostRejectsPeerStateAndUnknownSession']))
+        (p/'sim.json').write_text(json.dumps(['SiteTests/DuelLifecycleTests/testOfflineControlReplacementRetiresOldViewAndPreservesCurrentReset', 'SiteTests/DuelLifecycleTests/testOfflineControlBindCannotOverwriteAReentrantReplacement', 'SiteTests/DuelLifecycleTests/testShutdownDuringControlClaimRejectsLateBindingAndInputHooks', 'SiteTests/DuelLifecycleTests/testOldControlShutdownCannotLetStaleClaimClearNewerInput', 'SiteTests/DuelLifecycleTests/testCurrentControlDismantleClearsInputAndCannotBeRebound', 'SiteTests/DuelLifecycleTests/testOfflinePauseDoesNotRecursivelyPublishOrDispatchRendererStop', 'SiteTests/DuelLifecycleTests/testOfflineResumeCannotOverwritePauseOrShutdownDuringInputReset', 'SiteTests/DuelLifecycleTests/testOfflineResumeRepairsStalePublishedFalseAfterPauseOrShutdown', 'SiteTests/DuelLifecycleTests/testShutdownInsidePausePublicationStillStopsRendererBeforeRemovingHook', 'SiteTests/DuelLifecycleTests/testOfflineResumeAllowsOnlyOneReentrantStartAndStopsOnRendererInterruption', 'SiteTests/DuelLifecycleTests/testOfflineRestartStopsAfterInterruptionAtEveryCallbackBoundary', 'SiteTests/DuelLifecycleTests/testOfflineRestartRejectsNestedRestartResumeAndInputWithoutLosingItsOneReset', 'SiteTests/DuelLifecycleTests/testOfflineReplacementRetiresOldRendererBeforeInstallingCallbacks', 'SiteTests/DuelLifecycleTests/testOfflineReplacementCannotOverwriteReentrantRendererClaim', 'SiteTests/DuelLifecycleTests/testClosedOfflineSessionRejectsLateRendererConstruction', 'SiteTests/DuelLifecycleTests/testProceduralActorsCannotAuthorizeOriginalPalaceMusic', 'SiteTests/DuelLifecycleTests/testOnlyCompletedUserResumeCanAuthorizeAudioSafetyRelease', 'SiteTests/DuelLifecycleTests/testAudioInterruptionRejectsEarlyResumeAndRouteRemovalPausesCurrentSession', 'SiteTests/DuelLifecycleTests/testRouteRemovalTerminatesAuthoritativeSessionRatherThanOfferingResume', 'SiteTests/DuelMusicTests/testOffMainCallbacksPreserveOrderAndLateCallbacksCannotRestart', 'SiteTests/DuelMusicTests/testMissingSourceNeverConstructsPlayerOrActivatesSession', 'SiteTests/DuelMusicTests/testScenePauseBackgroundAndTerminalShutdown', 'SiteTests/DuelMusicTests/testDecoderFailureIsExplicitAndInterruptionWithoutPermissionStaysPaused', 'SiteTests/DuelMusicTests/testInterruptionCannotResumeMutedMusicAndRouteRemovalRequiresResume', 'SiteTests/DuelMusicTests/testSafetySuspensionSurvivesAutomaticScenePauseAndMuteChanges', 'SiteTests/DuelMusicTests/testMediaServiceLossAndResetRequireExplicitResumeAndRecreatePlayer', 'SiteTests/DuelMusicTests/testPausedLoadingAndFailedActivationNeverPlayOrReactivateImplicitly', 'SiteTests/DuelMusicTests/testUnownedSharedSessionEventsDoNotBlockALaterNewMatch', 'SiteTests/DuelMusicTests/testSuccessfulSessionConsentWaitsForMusicEndedWithoutEarlyPlayback', 'SiteTests/DuelMusicTests/testNewSuspensionOrInvalidPermissionCancelsDeferredMusicConsent', 'SiteTests/DuelLifecycleTests/testReleasedGaleTapSurvivesDelayedSimulationAndHitsExactlyOnce', 'SiteTests/DuelLifecycleTests/testTwoHeldInputsPauseAndRestartCannotLeaveAnAutomaticAction', 'SiteTests/DuelLifecycleTests/testPauseDiscardsTheComboTapBufferedDuringHitStop', 'SiteTests/DuelLifecycleTests/testGrapplePauseResumeAndRestartClearPendingInputAndTheCapture', 'SiteTests/DuelLifecycleTests/testShutdownRejectsLateLayoutAndCopiedSessionCallbacks', 'SiteTests/DuelLifecycleTests/testSceneClockStopsOnPauseAndResourcesReleaseAcrossRepeatedEntries', 'SiteTests/DuelLifecycleTests/testMessageRouterChannelOwnershipIsIndependentAndRetiredOwnersCannotReleaseSuccessor', 'SiteTests/DuelLifecycleTests/testMessageRouterKeepsRootLeaseWhenStartedLobbyAndCombatChannelsCoexist', 'SiteTests/DuelLifecycleTests/testMessageRouterCloseCannotRemoveReplacementRootCallback', 'SiteTests/DuelLifecycleTests/testNetworkRoomBorrowedSelectionDoesNotAttachOrOwnSharedRoot', 'SiteTests/DuelLifecycleTests/testNetworkRoomMembershipReplacementAndInterruptAreTerminal', 'SiteTests/DuelLifecycleTests/testNetworkRoomLateOldCallbacksCannotClaimNewOwner']))
+        core=json.loads((p/'core.json').read_text());sim=json.loads((p/'sim.json').read_text())
+        assert len(core)==len(set(core))==18 and len(sim)==len(set(sim))==42, 'Invalid selector inventory'
+        PYCODE
+    - name: Run and verify terminal replay and wire XCTest cases
+      timeout-minutes: 20
+      shell: bash -eo pipefail {0}
+      run: |
+        swift test --jobs 2 --filter 'DuelNetworkReplayTests|DuelNetworkCombatWireTests' 2>&1 | tee "$RUNNER_TEMP/fighter-regression/core.log"
+         python3 - <<'PYCODE'
+        import collections,json,os,re
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression'
+        expected=json.loads((p/'core.json').read_text());seen=[];started=[]
+        for raw,status in re.findall(r"Test [Cc]ase '([^']+)' (started|passed|failed|skipped)", (p/'core.log').read_text()):
+         match=re.fullmatch(r'-\[(?:\w+\.)?(\w+) (test\w+)\]',raw) or re.fullmatch(r'(?:\w+\.)?(\w+)\.(test\w+)',raw)
+         assert match, 'Unknown XCTest identifier: '+raw
+         name='/'.join(match.groups())
+         assert name in expected, 'Unexpected test: '+name
+         if status=='started': started.append(name)
+         else:
+          assert status=='passed', name+' '+status
+          seen.append(name)
+        assert collections.Counter(seen)==collections.Counter(expected), 'Core results missing or duplicate'
+        assert collections.Counter(started)==collections.Counter(expected), 'Core starts missing or duplicate'
+        print('Core XCTest: exactly 18 passed, 0 failed, 0 skipped; all 3 terminal regressions included')
+        (p/'core-ok').write_text('18 passed; 0 failed; 0 skipped\n')
+        PYCODE
+    - name: Generate demo host and build simulator test bundle
+      timeout-minutes: 25
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        from pathlib import Path
+        import xml.etree.ElementTree as ET
+        p=Path('project.yml');s=p.read_text();needle='    scheme:\n      testTargets:\n        - SiteTests'
+        assert s.count(needle)==1
+        p.write_text(s.replace(needle,needle+'\n      commandLineArguments:\n        "-demo": true'))
+        PYCODE
+
+        python3 .github/scripts/build_identity.py
+        xcodegen generate
+        python3 - <<'PYCODE'
+        from pathlib import Path
+        import xml.etree.ElementTree as ET
+        files=list(Path('ShiftReminder.xcodeproj').rglob('ShiftReminder.xcscheme'));assert len(files)==1
+        root=ET.parse(files[0]).getroot();test=root.find('TestAction');assert test is not None
+        args=test.find('CommandLineArguments')
+        if args is None and test.get('shouldUseLaunchSchemeArgsEnv')=='YES':
+         args=root.find('LaunchAction/CommandLineArguments')
+        assert args is not None and any(a.get('argument')=='-demo' and a.get('isEnabled')=='YES' for a in args), 'Demo missing from generated test scheme'
+        print('Generated test scheme uses -demo')
+        PYCODE
+
+        xcodebuild build-for-testing -project ShiftReminder.xcodeproj -scheme ShiftReminder  -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'  -derivedDataPath "$RUNNER_TEMP/fighter-regression/derived"  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""  2>&1 | tee "$RUNNER_TEMP/fighter-regression/build.log"
+    - name: Verify actual test-host arguments and discover installed simulator
+      timeout-minutes: 12
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import os,plistlib
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression'
+        files=list((p/'derived/Build/Products').glob('*.xctestrun'));assert len(files)==1, 'Ambiguous xctestrun'
+        data=plistlib.loads(files[0].read_bytes());targets=[]
+        if 'TestConfigurations' in data:
+         for configuration in data['TestConfigurations']: targets.extend(configuration.get('TestTargets',[]))
+        else:
+         targets=[dict(v,BlueprintName=k) for k,v in data.items() if isinstance(v,dict) and k!='__xctestrun_metadata__']
+        assert len(targets)==1 and targets[0].get('BlueprintName')=='SiteTests', 'Unexpected test target'
+        target=targets[0]
+        assert '-demo' in target.get('CommandLineArguments',[]), 'Demo missing from actual xctestrun host arguments'
+        assert not target.get('IsUITestBundle',False)
+        assert not target.get('SkipTestIdentifiers'), 'Unexpected skipped tests'
+        print('Verified SiteTests xctestrun launches demo host; no UI runner')
+        (p/'xctestrun-path').write_text(str(files[0]))
+        PYCODE
+        python3 - <<'PYCODE'
+        import json,os,plistlib,re,subprocess
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression'
+        def call(*args): return subprocess.check_output(args,text=True,timeout=60)
+        catalog=json.loads(call('xcrun','simctl','list','-j'))
+        def version(v): return tuple(map(int,re.findall(r'\d+',v)))
+        runtimes={r['identifier']:r for r in catalog['runtimes'] if r.get('isAvailable') and '.iOS-' in r['identifier'] and version(r['version'])>=(16,2)}
+        candidates=[]
+        for runtime,devices in catalog['devices'].items():
+         if runtime not in runtimes: continue
+         for device in devices:
+          dtype=device.get('deviceTypeIdentifier','')
+          if device.get('isAvailable') and '.iPhone-' in dtype:
+           candidates.append((version(runtimes[runtime]['version']),runtime,dtype))
+        assert candidates, 'No installed available iPhone/iOS runtime pair; no runtime download authorized'
+        _,runtime,dtype=sorted(candidates)[-1]
+        name='Fighter regression '+os.environ['GITHUB_RUN_ID']
+        udid=call('xcrun','simctl','create',name,dtype,runtime).strip()
+        assert re.fullmatch(r'[0-9A-Fa-f-]{36}',udid), 'Unexpected simulator UDID'
+        (p/'created-simulator.json').write_text(json.dumps({'udid':udid,'name':name,'runtime':runtime,'type':dtype}))
+        print('Created isolated simulator:',udid,runtime,dtype)
+        subprocess.run(['xcrun','simctl','boot',udid],check=True,timeout=120)
+        subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=480)
+        PYCODE
+    - name: Run and verify the 42 selected simulator XCTest methods
+      timeout-minutes: 20
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import json,os,subprocess
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression';device=json.loads((p/'created-simulator.json').read_text())
+        selectors=json.loads((p/'sim.json').read_text())
+        command=['xcodebuild','test-without-building','-xctestrun',(p/'xctestrun-path').read_text(),'-destination','id='+device['udid'],
+         '-parallel-testing-enabled','NO','-test-iterations','1','-resultBundlePath',str(p/'selected.xcresult')]
+        command.extend('-only-testing:'+x for x in selectors)
+        # No retry-tests-on-failure / run-tests-until-failure flags; one iteration.
+        with (p/'simulator.log').open('w') as output:
+         process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+         for line in process.stdout: print(line,end='',flush=True);output.write(line)
+         code=process.wait()
+        assert code==0, 'xcodebuild failed with status '+str(code)
+        for kind in ['summary','tests']:
+         with (p/(kind+'.json')).open('w') as output:
+          subprocess.run(['xcrun','xcresulttool','get','test-results',kind,'--path',str(p/'selected.xcresult')],stdout=output,check=True,timeout=90)
+        PYCODE
+        python3 - <<'PYCODE'
+        import collections,json,os,re
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression'
+        expected=json.loads((p/'sim.json').read_text());summary=json.loads((p/'summary.json').read_text())
+        # Modern xcresulttool output; unknown/incomplete schemas fail closed.
+        for key,value in [('totalTestCount',42),('passedTests',42),('failedTests',0),('skippedTests',0)]:
+         assert type(summary.get(key)) is int and summary[key]==value, 'Unexpected summary '+key+': '+str(summary.get(key))
+        assert summary.get('result')=='Passed', 'XCResult overall result not Passed'
+        data=json.loads((p/'tests.json').read_text());assert isinstance(data.get('testNodes'),list)
+        seen=[]
+        def walk(nodes):
+         for node in nodes:
+          assert isinstance(node,dict)
+          if node.get('nodeType')=='Test Case':
+           raw=node.get('nodeIdentifier');assert isinstance(raw,str), 'Missing test identifier'
+           normalized=raw.removesuffix('()')
+           matches=[s for s in expected if normalized==s or normalized=='/'.join(s.split('/')[1:])]
+           assert len(matches)==1, 'Unknown or ambiguous XCTest identifier: '+raw
+           assert node.get('result')=='Passed', raw+': '+str(node.get('result'))
+           seen.append(matches[0])
+          else:
+           children=node.get('children',[]);assert isinstance(children,list);walk(children)
+        walk(data['testNodes'])
+        assert collections.Counter(seen)==collections.Counter(expected), 'Simulator method set missing or duplicated'
+        print('Simulator XCTest: exactly 42 passed, 0 failed, 0 skipped')
+        (p/'sim-ok').write_text('42 passed; 0 failed; 0 skipped\n')
+        PYCODE
+    - name: Stop only this run simulator
+      timeout-minutes: 3
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import json,os,subprocess
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression/created-simulator.json'
+        if p.exists():
+         device=json.loads(p.read_text());catalog=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','-j'],text=True,timeout=30))
+         matches=[d for devices in catalog['devices'].values() for d in devices if d['udid']==device['udid']]
+         assert len(matches)==1 and matches[0]['name']==device['name'], 'Cleanup ownership mismatch'
+         if matches[0]['state']!='Shutdown': subprocess.run(['xcrun','simctl','shutdown',device['udid']],check=True,timeout=90)
+         print('Stopped only the created regression simulator:',device['udid'])
+        PYCODE
+      if: always()
+    - name: Report reached stages and exact validation scope
+      timeout-minutes: 1
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import json,os
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-regression'
+        lines=['Fighter code-only regression: '+os.environ['GITHUB_SHA']]
+        verified=Path(os.environ['RUNNER_TEMP'])/'fighter-device-preflight-ok'
+        lines.append('Pinned device compilation: '+('7dd7c05242c486a2d8edd0a9d6e0ce9088de34e4, run 42959271789 (not rebuilt).' if verified.exists() else 'PRECHECK NOT VERIFIED; inspect preflight failure.'))
+        for label,marker in [('Core XCTest','core-ok'),('Simulator XCTest','sim-ok')]:
+         lines.append(label+': '+((p/marker).read_text().strip() if (p/marker).exists() else 'NOT VERIFIED; inspect failed/blocked stage.'))
+        if (p/'created-simulator.json').exists():lines.append('Simulator: '+(p/'created-simulator.json').read_text())
+        xcode=Path(os.environ['RUNNER_TEMP'])/'fighter-xcode-version.txt'
+        if xcode.exists():lines.append(xcode.read_text().strip())
+        lines.append('No private resources staged; no signing, app/result/screenshot uploads, Release or TestFlight. Synthetic regression is not two-iPhone or original-resource acceptance.')
+        with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n\n'.join(lines)+'\n')
+        print('\n'.join(lines))
+        PYCODE
+      if: always()

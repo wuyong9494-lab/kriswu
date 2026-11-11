@@ -385,4 +385,141 @@ final class DuelNetworkReplayTests: XCTestCase {
         XCTAssertEqual(initial.gameBytes, otherInitial.gameBytes)
         XCTAssertNotEqual(initial, otherInitial, "Same game state does not identify the same committed start")
     }
+
+    /// Exercise the real host and consumed-input wire, without injecting game state.
+    /// Return the guest BEFORE the terminal batch so rejection can be checked atomically.
+    private func terminalEndpoints(swapped: Bool = false) throws
+        -> (DuelNetworkCombatHost, DuelNetworkReplay, Wire.Message) {
+        var (host, guest) = try endpoints(swapped: swapped)
+        for _ in 0..<12_000 {
+            let tick = host.nextTick
+            let direction = host.game.fighters[0].x < host.game.fighters[1].x ? 1 : -1
+            XCTAssertEqual(host.receive(.init(sessionID: sessionID, sequence: tick + 1, tick: tick,
+                                               move: direction,
+                                               weaponCommand: tick % 30 == 0 ? .weapon : nil),
+                                        authenticatedSenderID: hostID), .applied)
+            let message = try host.advance()
+            if case .matchOver = host.game.phase { return (host, guest, message) }
+            XCTAssertNil(message.terminalState, "Ordinary frames must not carry a terminal projection")
+            XCTAssertEqual(guest.receive(try message.encoded(), authenticatedSenderID: hostID), .applied)
+        }
+        throw NSError(domain: "DuelNetworkReplayTests.terminalFixture", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "Host did not finish within the bounded fixture"])
+    }
+
+    private func changingTerminalState(_ state: DuelNetworkCombatState,
+                                       _ change: (inout [String: Any]) -> Void) throws -> DuelNetworkCombatState {
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state))
+                                  as? [String: Any])
+        change(&object)
+        return try JSONDecoder().decode(DuelNetworkCombatState.self,
+                                        from: JSONSerialization.data(withJSONObject: object))
+    }
+
+    private func replacingTerminalState(_ message: Wire.Message,
+                                        with state: DuelNetworkCombatState?) -> Wire.Message {
+        .init(sessionID: message.sessionID, startID: message.startID, epoch: message.epoch,
+              sequence: message.sequence, command: message.command,
+              version: message.version, namespace: message.namespace, terminalState: state)
+    }
+
+    func testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent() throws {
+        for swapped in [false, true] {
+            let (host, before, message) = try terminalEndpoints(swapped: swapped)
+            var guest = before
+            let state = try XCTUnwrap(message.terminalState)
+            XCTAssertEqual(state, DuelNetworkCombatState(game: host.game, sessionID: sessionID,
+                                                         tick: host.nextTick, epoch: host.epoch))
+            XCTAssertEqual(state.phase, .matchOver)
+            XCTAssertEqual(state.winner, 0, "Winner is the host seat, not lexical player-ID or hero order")
+            XCTAssertEqual(state.fighters.map(\.hero), swapped ? [.liu, .ember] : [.ember, .liu])
+            XCTAssertEqual(state.wins, host.game.wins)
+            XCTAssertEqual(state.tick, guest.nextTick + 1)
+            XCTAssertTrue(state.isPlausible)
+            let bytes = try message.encoded()
+            XCTAssertEqual(try JSONDecoder().decode(Wire.Message.self, from: bytes), message)
+            XCTAssertEqual(guest.receive(bytes, authenticatedSenderID: hostID), .applied)
+            XCTAssertEqual(guest.game, host.game)
+            XCTAssertEqual(try guest.verificationState(), try host.verificationState())
+            let finished = guest
+            XCTAssertEqual(guest.receive(bytes, authenticatedSenderID: hostID), .ignoredDuplicate)
+            XCTAssertEqual(guest, finished, "Retry must not step or overwrite the final state")
+        }
+    }
+
+    func testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry() throws {
+        let (host, before, message) = try terminalEndpoints()
+        let state = try XCTUnwrap(message.terminalState)
+        let tampered = try changingTerminalState(state) { object in
+            var fighters = object["fighters"] as! [[String: Any]]
+            fighters[0]["health"] = 999
+            object["fighters"] = fighters
+        }
+        XCTAssertTrue(tampered.isPlausible)
+        XCTAssertNotEqual(tampered, state)
+        var guest = before
+        let mismatch = replacingTerminalState(message, with: tampered)
+        XCTAssertEqual(guest.receive(try mismatch.encoded(), authenticatedSenderID: hostID),
+                       .rejected(.terminalStateMismatch))
+        XCTAssertEqual(guest, before, "Game, tick, sequence and duplicate cache must all remain unchanged")
+        let changedScore = try changingTerminalState(state) { object in
+            var wins = object["wins"] as! [Int]
+            wins[0] += 1
+            object["wins"] = wins
+        }
+        XCTAssertEqual(guest.receive(try replacingTerminalState(message, with: changedScore).encoded(),
+                                     authenticatedSenderID: hostID), .rejected(.terminalStateMismatch))
+        XCTAssertEqual(guest, before, "A score-only mismatch must not change game, counters or duplicate cache")
+        let missingScore = try changingTerminalState(state) { $0.removeValue(forKey: "wins") }
+        XCTAssertNil(missingScore.wins, "The standalone legacy DTO still decodes without a score")
+        XCTAssertEqual(guest.receive(try replacingTerminalState(message, with: missingScore).encoded(),
+                                     authenticatedSenderID: hostID), .rejected(.terminalStateMismatch))
+        XCTAssertEqual(guest, before, "Embedded terminal snapshots must include the complete score")
+        XCTAssertEqual(guest.receive(try message.encoded(), authenticatedSenderID: hostID), .applied)
+        XCTAssertEqual(guest.game, host.game)
+        let finished = guest
+        XCTAssertEqual(guest.receive(try mismatch.encoded(), authenticatedSenderID: hostID),
+                       .rejected(.conflictingDuplicate))
+        XCTAssertEqual(guest, finished)
+    }
+
+    func testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic() throws {
+        let (host, before, message) = try terminalEndpoints()
+        let state = try XCTUnwrap(message.terminalState)
+        let mutations: [(inout [String: Any]) -> Void] = [
+            { $0["sessionID"] = "other-session" },
+            { $0["epoch"] = state.epoch + 1 },
+            { $0["tick"] = state.tick + 1 },
+            { $0["phase"] = "fighting"; $0.removeValue(forKey: "winner") },
+            { $0["version"] = 99 },
+            { $0["fighters"] = [] as [Any] }
+        ]
+        var guest = before
+        for change in mutations {
+            let invalid = replacingTerminalState(message, with: try changingTerminalState(state, change))
+            XCTAssertThrowsError(try invalid.encoded()) {
+                XCTAssertEqual($0 as? Wire.Failure, .invalidTerminalState)
+            }
+            XCTAssertEqual(guest.receive(try raw(invalid), authenticatedSenderID: hostID),
+                           .rejected(.invalidTerminalState))
+            XCTAssertEqual(guest, before)
+        }
+        let cancellation = Wire.Message(sessionID: message.sessionID, startID: message.startID,
+                                        epoch: message.epoch, sequence: message.sequence,
+                                        command: .cancel, terminalState: state)
+        XCTAssertEqual(guest.receive(try raw(cancellation), authenticatedSenderID: hostID),
+                       .rejected(.invalidTerminalState))
+        XCTAssertEqual(guest, before)
+
+        // Older senders omit the optional field completely, including on their final batch.
+        let legacy = replacingTerminalState(message, with: nil)
+        let bytes = try legacy.encoded()
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertNil(object["terminalState"])
+        XCTAssertNil(try JSONDecoder().decode(Wire.Message.self, from: bytes).terminalState)
+        XCTAssertEqual(guest.receive(bytes, authenticatedSenderID: hostID), .applied)
+        XCTAssertEqual(guest.game, host.game)
+        XCTAssertEqual(try guest.verificationState(), try host.verificationState())
+    }
+
 }
