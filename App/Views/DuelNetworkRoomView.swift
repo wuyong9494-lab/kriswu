@@ -99,6 +99,7 @@ struct DuelNetworkRoomView: View {
     @State private var didLeave = false
     @State private var combat: DuelNetworkCombatSession?
     @State private var combatError: String?
+    @State private var handingOff = false
 
     init(room: GameRoom) {
         self.room = room
@@ -139,7 +140,7 @@ struct DuelNetworkRoomView: View {
         .onChange(of: room.members) { _ in attachIfReady() }
         .onChange(of: model.status) { value in
             if value == .started { enterCombat() }
-            else if value == .closed && combat == nil { leaveTransport() }
+            else if value == .closed && combat == nil && !handingOff { leaveTransport() }
         }
         .fullScreenCover(isPresented: Binding(
             get: { combat != nil },
@@ -332,6 +333,7 @@ struct DuelNetworkRoomView: View {
               snapshot.phase == .started else { return }
         // The selection coordinator must release its direct-channel lease before
         // combat claims it; otherwise both protocols would consume the same bytes.
+        handingOff = true
         model.close()
         do {
             let catalog = try? DuelWeaponAssets().catalog
@@ -339,7 +341,9 @@ struct DuelNetworkRoomView: View {
                                                     catalog: catalog, seed: UInt64.random(in: 1...UInt64.max))
             try next.start()
             combat = next
+            handingOff = false
         } catch {
+            handingOff = false
             combatError = "无法进入联机战斗：角色资源或房间通道尚未准备好。"
             leaveTransport()
         }
