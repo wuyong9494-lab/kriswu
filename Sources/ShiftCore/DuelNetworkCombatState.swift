@@ -16,18 +16,42 @@ public struct DuelNetworkCombatState: Codable, Equatable, Sendable {
         public let energy: Int
         public let stun: Int
         public let knockdown: Int
+        /// Host-selected source animation; clients may render but never decide hits.
+        public let animation: Animation?
+        public struct Animation: Codable, Equatable, Sendable {
+            public let clip: String
+            public let tick: Int
+            public let duration: Int
+            public let groundLift: Double
+            public let reaction: Bool
+            public init(_ pose: DuelWeaponPose) {
+                clip = pose.clip; tick = pose.tick; duration = pose.duration
+                groundLift = pose.groundLift; reaction = pose.reaction
+            }
+            public var isPlausible: Bool {
+                !clip.isEmpty && clip.utf8.count <= 128 && (0...100_000).contains(tick)
+                && (1...100_000).contains(duration) && tick <= duration
+                && groundLift.isFinite && (-3...6).contains(groundLift)
+            }
+            public var pose: DuelWeaponPose {
+                DuelWeaponPose(clip: clip, tick: tick, duration: duration,
+                               groundLift: groundLift, reaction: reaction)
+            }
+        }
 
         public init(_ fighter: DuelGame.Fighter) {
             hero = fighter.hero; x = fighter.x; y = fighter.y
             facing = fighter.facing; health = fighter.health
             guardMeter = fighter.guardMeter; energy = fighter.energy
             stun = fighter.stun; knockdown = fighter.knockdown
+            animation = fighter.weaponPose.map(Animation.init)
         }
         public var isPlausible: Bool {
             (-2_000...12_000).contains(x) && (-1_000...10_000).contains(y)
             && (facing == -1 || facing == 1) && (0...1_000).contains(health)
             && (0...1_000).contains(guardMeter) && (0...100).contains(energy)
             && (0...10_000).contains(stun) && (0...10_000).contains(knockdown)
+            && (animation?.isPlausible ?? true)
         }
     }
 
