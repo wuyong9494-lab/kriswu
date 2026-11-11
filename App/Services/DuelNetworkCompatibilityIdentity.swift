@@ -24,6 +24,8 @@ struct DuelNetworkRulesManifest {
         "Sources/ShiftCore/DuelNetworkStartBarrier.swift",
         "Sources/ShiftCore/DuelNetworkInputs.swift",
         "Sources/ShiftCore/DuelNetworkCombatProtocol.swift",
+        "Sources/ShiftCore/DuelNetworkCombatState.swift",
+        "Sources/ShiftCore/DuelNetworkCombatWire.swift",
         "Sources/ShiftCore/DuelNetworkHostSimulation.swift",
         "Sources/ShiftCore/DuelNetworkReplay.swift",
         "Sources/ShiftCore/DuelReplayState.swift",

@@ -59,8 +59,12 @@ public struct DuelNetworkCombatHost: Equatable, Sendable {
         for _ in 0..<frameCount {
             frames.append(.init(consumed: try next.step(localPlayerID: configuration.host.id)))
         }
+        let terminalState: DuelNetworkCombatState?
+        if case .matchOver = next.game.phase { terminalState = .init(simulation: next) }
+        else { terminalState = nil }
         let message = Wire.Message(sessionID: configuration.sessionID, startID: configuration.startID,
-                                   epoch: epoch, sequence: lastSequence + 1, command: .frames(frames))
+                                   epoch: epoch, sequence: lastSequence + 1, command: .frames(frames),
+                                   terminalState: terminalState)
         _ = try message.encoded()
         simulation = next; lastSequence = message.sequence
         return message
@@ -166,8 +170,22 @@ public struct DuelNetworkReplay: Equatable, Sendable {
             guard frames[0].tick == nextTick else { return .rejected(.tickGap) }
             // validate() proved nonempty, bounded, valid inputs, contiguous ticks,
             // and representable nextTick. Both seats are ALWAYS explicit.
-            for frame in frames { game.step(frame.host.gameInput, opponent: frame.guest.gameInput) }
-            nextTick = frames[frames.count - 1].tick + 1
+            let candidateTick = frames[frames.count - 1].tick + 1
+            if let terminalState = message.terminalState {
+                // Only final snapshot-bearing batches need a transactional copy.
+                // Keep ordinary 60 Hz replay on the existing in-place path.
+                var candidate = game
+                for frame in frames { candidate.step(frame.host.gameInput, opponent: frame.guest.gameInput) }
+                let expected = DuelNetworkCombatState(game: candidate, sessionID: configuration.sessionID,
+                                                       tick: candidateTick, epoch: epoch)
+                guard terminalState == expected else { return .rejected(.terminalStateMismatch) }
+                game = candidate
+            } else {
+                // Missing snapshots remain decodable for legacy protocol-1 fixtures.
+                // Production peers still pass the exact source fingerprint gate.
+                for frame in frames { game.step(frame.host.gameInput, opponent: frame.guest.gameInput) }
+            }
+            nextTick = candidateTick
         }
         lastSequence = message.sequence; lastMessage = message
         return .applied
