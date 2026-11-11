@@ -116,8 +116,11 @@ final class DuelNetworkCombatSession: ObservableObject {
             let bytes = try host.step()
             self.host = host
             state = .init(simulation: host.simulation)
-            room.sendDirect(bytes, delivery: .unreliable)
-            if state?.phase == .matchOver { stop() }
+            let terminal = state?.phase == .matchOver
+            // Final results must be reliable; otherwise a lost last UDP-like
+            // update leaves the guest waiting forever after the host stops.
+            room.sendDirect(bytes, delivery: terminal ? .reliable : .unreliable)
+            if terminal { stop() }
         } catch {
             failure = "战斗模拟已停止。"
             status = .failed
