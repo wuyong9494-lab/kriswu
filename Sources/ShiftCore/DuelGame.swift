@@ -86,6 +86,13 @@ public struct DuelGame: Equatable, Sendable {
         public var walking = false
         public var movementDirection = 0
         public var weaponPose: DuelWeaponPose?
+        /// A presentation-only fighter may be reconstructed from trusted network
+        /// state without starting an independent simulation or AI opponent.
+        public init(hero: Hero, x: Int, facing: Int) {
+            self.hero = hero
+            self.x = x
+            self.facing = facing
+        }
     }
     public struct Projectile: Equatable, Sendable {
         public let id: Int
