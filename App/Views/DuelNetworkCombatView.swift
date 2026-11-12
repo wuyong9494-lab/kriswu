@@ -92,7 +92,20 @@ struct DuelNetworkCombatView: View {
         .modifier(ArenaLandscape())
         .interactiveDismissDisabled()
         .onAppear { beginInputClock() }
-        .onDisappear { inputTask?.cancel(); inputTask = nil; releaseHeld() }
+        .onChange(of: combat.status) { status in
+            if status != .running {
+                inputTask?.cancel()
+                inputTask = nil
+                heldMove = 0
+                heldGuard = false
+            }
+        }
+        .onDisappear {
+            inputTask?.cancel()
+            inputTask = nil
+            heldMove = 0
+            heldGuard = false
+        }
     }
 
     private func heldButton(_ title: String, move: Int = 0, guardHeld: Bool = false) -> some View {
