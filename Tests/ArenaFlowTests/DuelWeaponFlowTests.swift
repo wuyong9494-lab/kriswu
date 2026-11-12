@@ -22,6 +22,9 @@ final class DuelWeaponFlowTests: XCTestCase {
         let statsCount: Int
         let statsValue: String?
         let position: Int?
+        let opponentPosition: Int?
+        let hitCount: Int?
+        let totalDamage: Int?
         let joystickCount: Int
         let joystickValue: String?
         let joystickEnabled: Bool?
@@ -43,6 +46,7 @@ final class DuelWeaponFlowTests: XCTestCase {
                 "snapshotSeconds=\(String(format: "%.3f", snapshotDuration)) " +
                 "statsCount=\(statsCount) statsValue=\(statsValue ?? "missing") " +
                 "position=\(position.map { String($0) } ?? "missing") " +
+                "opponent=\(opponentPosition.map { String($0) } ?? "missing") hits=\(hitCount.map { String($0) } ?? "missing") damage=\(totalDamage.map { String($0) } ?? "missing") " +
                 "joystickCount=\(joystickCount) joystickValue=\(joystickValue ?? "missing") " +
                 "joystickEnabled=\(joystickEnabled.map { String($0) } ?? "missing") " +
                 "resumeCount=\(resumeCount) pauseCount=\(pauseCount) resourceErrorCount=\(resourceErrorCount) " +
@@ -290,10 +294,18 @@ final class DuelWeaponFlowTests: XCTestCase {
         let restart = app.buttons["duel.restart"]
         XCTAssertTrue(restart.waitForExistence(timeout: 5), "A resource error cannot be skipped as a playable match")
         restart.tap()
-        wait("Restart resets observed hit and position state", timeout: 5) {
-            self.observedHits(app) == 0 && self.observedDamage(app) == 0 &&
-                self.observedPosition(app, index: 0) == 3500 && self.observedPosition(app, index: 1) == 6500
-        }
+        // Preserve every reset requirement and the five-second limit, but
+        // observe one consistent tree instead of four independent AX queries.
+        let started = ProcessInfo.processInfo.systemUptime
+        var last: StationaryObservation?
+        let reset = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let current = self.observeStationary(app, context: "restart", phase: "reset", started: started)
+            last = current
+            return current.ready && current.hitCount == 0 && current.totalDamage == 0 &&
+                current.position == 3500 && current.opponentPosition == 6500
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [reset], timeout: 5), .completed,
+                       "Restart resets observed hit and position state: \(last?.summary ?? "no observation")")
         XCTAssertFalse(app.staticTexts["duel.resourceError"].exists)
         XCTAssertEqual(try hits(app), 0)
         XCTAssertEqual(joystick(app).value as? String, "居中")
@@ -372,17 +384,21 @@ final class DuelWeaponFlowTests: XCTestCase {
             var pending: [XCUIElementSnapshot] = [try app.snapshot()]
             var matches: [String: [XCUIElementSnapshot]] = [:]
             let identifiers: Set<String> = ["duel.stats.0", "duel.control.joystick", "duel.resume",
-                                            "duel.pause", "duel.resourceError"]
+                                            "duel.pause", "duel.resourceError", "duel.stats.1", "duel.hits"]
             while let element = pending.popLast() {
                 if identifiers.contains(element.identifier) { matches[element.identifier, default: []].append(element) }
                 pending.append(contentsOf: element.children)
             }
             let stats = matches["duel.stats.0"] ?? [], sticks = matches["duel.control.joystick"] ?? []
+            let opponent = matches["duel.stats.1"] ?? [], hits = matches["duel.hits"] ?? []
             let finished = ProcessInfo.processInfo.systemUptime
             observation = StationaryObservation(context: context, phase: phase, elapsed: finished - started,
                 snapshotDuration: finished - snapshotStarted,
                 statsCount: stats.count, statsValue: stats.count == 1 ? stats[0].value as? String : nil,
                 position: stats.count == 1 ? integer(after: "位置 ", in: stats[0].value as? String ?? "") : nil,
+                opponentPosition: opponent.count == 1 ? integer(after: "位置 ", in: opponent[0].value as? String ?? "") : nil,
+                hitCount: hits.count == 1 ? integer(after: "累计命中 ", in: hits[0].label) : nil,
+                totalDamage: hits.count == 1 ? integer(after: "伤害 ", in: hits[0].label) : nil,
                 joystickCount: sticks.count, joystickValue: sticks.count == 1 ? sticks[0].value as? String : nil,
                 joystickEnabled: sticks.count == 1 ? sticks[0].isEnabled : nil,
                 resumeCount: matches["duel.resume"]?.count ?? 0, pauseCount: matches["duel.pause"]?.count ?? 0,
@@ -391,7 +407,7 @@ final class DuelWeaponFlowTests: XCTestCase {
             let finished = ProcessInfo.processInfo.systemUptime
             observation = StationaryObservation(context: context, phase: phase, elapsed: finished - started,
                 snapshotDuration: finished - snapshotStarted, statsCount: 0, statsValue: nil,
-                position: nil, joystickCount: 0, joystickValue: nil,
+                position: nil, opponentPosition: nil, hitCount: nil, totalDamage: nil, joystickCount: 0, joystickValue: nil,
                 joystickEnabled: nil, resumeCount: 0, pauseCount: 0, resourceErrorCount: 0,
                 snapshotError: String(describing: error))
         }

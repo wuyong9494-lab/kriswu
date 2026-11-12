@@ -13,10 +13,10 @@ concurrency:
 jobs:
   real_resources:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
-      && github.event_name == 'push' && github.event.before == 'f1bce0e9d96a2e62b0311a1317721c7f742a3bd8' && github.event.head_commit.message
-      == 'Verify approved mount-boundary fix and live-input diagnostics'
+      && github.event_name == 'push' && github.event.before == '7812b86d16fe5a3e1e730f9c79df8781c3e6576e' && github.event.head_commit.message
+      == 'Verify callback contract and atomic restart observations'
     runs-on: macos-26
-    timeout-minutes: 100
+    timeout-minutes: 140
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       FIGHTER_PERSONAL_ASSETS: 'true'
@@ -125,7 +125,7 @@ jobs:
 
         ) > fighter-evidence/phase-8.log 2>&1'
     - name: Check interruption, input and SceneKit resource lifetime
-      timeout-minutes: 25
+      timeout-minutes: 30
       shell: bash -eo pipefail {0}
       run: "(\nDEVICE=$(python3 -c \"import json; print(json.load(open('star-test-device.json'))['udid'])\")\nPERSONAL_TESTS=()\n\
         if [ \"$FIGHTER_PERSONAL_ASSETS\" = \"true\" ]; then\n  PERSONAL_TESTS=(\"-only-testing:SiteTests/DuelPersonalAssetTests\"\
@@ -133,23 +133,28 @@ jobs:
         \ \"-only-testing:SiteTests/DuelOriginalRigAdapterTests\" \"-only-testing:SiteTests/DuelOriginalCombatTests\" \"-only-testing:SiteTests/DuelSourceControlsTests\"\
         \ \"-only-testing:SiteTests/DuelSourceEffectsTests\" \"-only-testing:SiteTests/DuelWeaponEffectsTests\" \"-only-testing:SiteTests/DuelWeaponAssetTests\"\
         \ \"-only-testing:SiteTests/DuelWeaponGameplayTests\" \"-only-testing:SiteTests/DuelShadowPresentationTests\")\nfi\n\
-        xcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ShiftReminder \\\n  -configuration Debug\
-        \ -destination \"id=$DEVICE\" -parallel-testing-enabled NO \\\n  -only-testing:SiteTests/GLTFMaterialTests -only-testing:SiteTests/DuelLifecycleTests\
+        set +e\nxcodebuild test-without-building -project ShiftReminder.xcodeproj -scheme ShiftReminder \\\n  -configuration\
+        \ Debug -destination \"id=$DEVICE\" -parallel-testing-enabled NO \\\n  -only-testing:SiteTests/GLTFMaterialTests -only-testing:SiteTests/DuelLifecycleTests\
         \ -only-testing:SiteTests/DuelCharacterTests \\\n  \"${PERSONAL_TESTS[@]}\" \\\n  -derivedDataPath fighter-native\
-        \ -resultBundlePath fighter-lifecycle.xcresult \\\n  CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log\n\n\
-        ) > fighter-evidence/phase-9.log 2>&1"
+        \ -resultBundlePath fighter-lifecycle.xcresult \\\n  CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-lifecycle.log\nstatus=${PIPESTATUS[0]}\n\
+        set -e\nif [ -f fighter-lifecycle.xcresult/Info.plist ]; then\n  echo \"Result bundle finalized: fighter-lifecycle.xcresult;\
+        \ xcodebuild exit=$status\"\nelse\n  echo \"::error::Result bundle missing Info.plist: fighter-lifecycle.xcresult;\
+        \ xcodebuild exit=$status\"\n  if [ \"$status\" -eq 0 ]; then status=1; fi\nfi\nexit \"$status\"\n\n) > fighter-evidence/phase-9.log\
+        \ 2>&1"
     - name: Play both characters and restore portrait app
       if: ${{ !cancelled() && steps.test_build.outcome == 'success' && steps.simulator.outcome == 'success' }}
-      timeout-minutes: 24
+      timeout-minutes: 30
       shell: bash -eo pipefail {0}
       run: "(\nDEVICE=$(python3 -c \"import json; print(json.load(open('star-test-device.json'))['udid'])\")\nFLOW_TESTS=(\"\
         -only-testing:ArenaFlowTests/DuelFlowTests\")\nif [ \"$FIGHTER_ORIGINAL_ASSETS\" = \"true\" ]; then\n  FLOW_TESTS+=(\"\
-        -only-testing:ArenaFlowTests/DuelWeaponFlowTests\")\nfi\n# One recording covers both the explicit legacy regression\
-        \ and the\n# new source-controls/equipped-character UI flow.\n# The complete native-motion directory is sealed with\
-        \ the portrait evidence below.\nbash .github/scripts/fighter_native_video.sh \"$DEVICE\" -- \\\n  xcodebuild test-without-building\
-        \ -project ShiftReminder.xcodeproj -scheme ArenaFlow \\\n  -configuration Debug -destination \"id=$DEVICE\" -parallel-testing-enabled\
-        \ NO \\\n  \"${FLOW_TESTS[@]}\" \\\n  -derivedDataPath fighter-native -resultBundlePath fighter-flow.xcresult \\\n\
-        \  CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log\n\n) > fighter-evidence/phase-10.log 2>&1"
+        -only-testing:ArenaFlowTests/DuelWeaponFlowTests\")\nfi\n# This approval collects bounded screenshots and failure\
+        \ summaries, not video.\n# Avoid a continuous simulator recorder competing with the actual UI tests.\nset +e\nxcodebuild\
+        \ test-without-building -project ShiftReminder.xcodeproj -scheme ArenaFlow \\\n  -configuration Debug -destination\
+        \ \"id=$DEVICE\" -parallel-testing-enabled NO \\\n  \"${FLOW_TESTS[@]}\" \\\n  -derivedDataPath fighter-native -resultBundlePath\
+        \ fighter-flow.xcresult \\\n  CODE_SIGNING_ALLOWED=NO 2>&1 | tee fighter-flow.log\nstatus=${PIPESTATUS[0]}\nset -e\n\
+        if [ -f fighter-flow.xcresult/Info.plist ]; then\n  echo \"Result bundle finalized: fighter-flow.xcresult; xcodebuild\
+        \ exit=$status\"\nelse\n  echo \"::error::Result bundle missing Info.plist: fighter-flow.xcresult; xcodebuild exit=$status\"\
+        \n  if [ \"$status\" -eq 0 ]; then status=1; fi\nfi\nexit \"$status\"\n\n) > fighter-evidence/phase-10.log 2>&1"
     - name: Export rendered evidence
       if: always()
       timeout-minutes: 8

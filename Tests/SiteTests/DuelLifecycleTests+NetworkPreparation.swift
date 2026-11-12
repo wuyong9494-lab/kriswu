@@ -82,20 +82,35 @@ extension DuelLifecycleTests {
     func testDeferredUIKitAttachmentDoesNotReviveShutdownWorldOrCancelledMount() async throws {
         for shutWorld in [false, true] {
             let state = try preparationSession()
-            var delivered = 0
-            let owner = try DuelNetworkMatchPreparation(testing: state) { _ in delivered += 1 }
+            var successes = 0
+            var failures: [DuelNetworkMatchPreparation.Failure] = []
+            let owner = try DuelNetworkMatchPreparation(testing: state) { result in
+                switch result {
+                case .success: successes += 1
+                case .failure(let error): failures.append(error)
+                }
+            }
             let world = DuelWorldView(session: state, characterSource: .presentationFixture)
             world.testingPrepare = { _, callback in XCTFail("Stale attachment must not prepare") }
             let window = preparationWindow()
             world.schedulePreparationAttachment(owner)
             if shutWorld { world.shutdown() } else { owner.cancel() }
+            // Shutting down an externally driven renderer invalidates its
+            // pending session synchronously, even before the UI attach runs.
+            // Explicit owner cancellation instead withdraws its completion.
+            let expectedFailures: [DuelNetworkMatchPreparation.Failure] = shutWorld ? [.invalidSession] : []
+            let expectedState: DuelNetworkMatchPreparation.State = shutWorld ? .failed(.invalidSession) : .cancelled
+            XCTAssertEqual(successes, 0)
+            XCTAssertEqual(failures, expectedFailures, "Terminal invalidation must not wait for a queued UI attach")
+            XCTAssertEqual(owner.state, expectedState)
             mountPreparation([world], in: window)
             let drained = expectation(description: "Stale deferred attachment drained")
             DispatchQueue.main.async { drained.fulfill() }
             await fulfillment(of: [drained], timeout: 2)
-            XCTAssertEqual(delivered, 0)
+            XCTAssertEqual(successes, 0, "No stale queued attachment may become prepared")
+            XCTAssertEqual(failures, expectedFailures, "Draining the queue must not duplicate terminal notification")
+            XCTAssertEqual(owner.state, expectedState)
             XCTAssertNil(world.scene)
-            if !shutWorld { XCTAssertEqual(owner.state, .cancelled) }
             owner.cancel(); world.shutdown(); window.isHidden = true
         }
     }
@@ -702,4 +717,5 @@ extension DuelLifecycleTests {
     }
 }
 #endif
+
 
