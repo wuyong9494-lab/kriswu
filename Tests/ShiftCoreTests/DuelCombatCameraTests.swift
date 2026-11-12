@@ -62,16 +62,37 @@ final class DuelCombatCameraTests: XCTestCase {
         XCTAssertEqual(camera.impactOffsetX, -0.028, accuracy: 0.000001)
     }
 
+    func testOpeningShotCentersPairAtEitherStageEdge() {
+        var right = DuelCombatCamera()
+        right.consume(frame: 0, animationTick: 0, firstX: 8, secondX: 9.65)
+        XCTAssertEqual(right.centerX, 8.5, accuracy: 0.000001)
+        XCTAssertGreaterThanOrEqual(right.separation * 0.5, 9.65 - right.centerX)
+
+        var left = DuelCombatCamera()
+        left.consume(frame: 0, animationTick: 0, firstX: 0.35, secondX: 2)
+        XCTAssertEqual(left.centerX, 1.5, accuracy: 0.000001)
+        XCTAssertGreaterThanOrEqual(left.separation * 0.5, left.centerX - 0.35)
+
+        // Re-rendering an identical simulation frame must not re-snap or drift.
+        let unchanged = right
+        right.consume(frame: 0, animationTick: 0, firstX: 0, secondX: 1)
+        XCTAssertEqual(right, unchanged)
+    }
+
     func testTrackingLagIsIncludedAndZoomReturnsGradually() {
         var camera = DuelCombatCamera()
-        camera.consume(frame: 1, animationTick: 1, firstX: 8, secondX: 9.65)
-        XCTAssertLessThan(camera.centerX, 7)
+        camera.consume(frame: 1, animationTick: 1, firstX: 6, secondX: 8)
+        XCTAssertEqual(camera.centerX, 7, accuracy: 0.000001)
+        camera.consume(frame: 2, animationTick: 2, firstX: 8, secondX: 9.65)
+        XCTAssertGreaterThan(camera.centerX, 7)
+        XCTAssertLessThan(camera.centerX, 8.5)
         XCTAssertGreaterThanOrEqual(camera.separation * 0.5, 9.65 - camera.centerX)
         let expanded = camera.separation
-        camera.consume(frame: 2, animationTick: 2, firstX: 4, secondX: 6)
+        camera.consume(frame: 3, animationTick: 3, firstX: 7.25, secondX: 8.25)
         XCTAssertLessThan(camera.separation, expanded)
-        XCTAssertGreaterThan(camera.separation, 2 * max(abs(4 - camera.centerX), abs(6 - camera.centerX)))
-        camera.consume(frame: 3, animationTick: 3, firstX: 0.35, secondX: 9.65)
+        XCTAssertGreaterThan(camera.separation,
+                             2 * max(abs(7.25 - camera.centerX), abs(8.25 - camera.centerX)))
+        camera.consume(frame: 4, animationTick: 4, firstX: 0.35, secondX: 9.65)
         XCTAssertGreaterThanOrEqual(camera.separation * 0.5,
                                    max(abs(0.35 - camera.centerX), abs(9.65 - camera.centerX)))
     }
