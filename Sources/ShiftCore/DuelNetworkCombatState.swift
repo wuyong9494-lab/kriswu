@@ -3,7 +3,7 @@ import Foundation
 /// Bounded, host-authored combat projection. Never decode a DuelGame from the
 /// network: the host alone advances hit detection, damage and match results.
 public struct DuelNetworkCombatState: Codable, Equatable, Sendable {
-    public static let version = 1
+    public static let version = 2
     public static let maximumBytes = 8_192
 
     public struct Fighter: Codable, Equatable, Sendable {
