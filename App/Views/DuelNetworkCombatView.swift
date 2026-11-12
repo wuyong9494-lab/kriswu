@@ -11,7 +11,7 @@ struct DuelNetworkCombatView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 12) {
+            VStack(spacing: 6) {
                 HStack {
                     Button("返回大厅") { combat.stop(); onExit() }
                         .accessibilityIdentifier("duel.combat.exit")
@@ -21,9 +21,9 @@ struct DuelNetworkCombatView: View {
                     Text(combat.status == .running ? "对战中" : "已结束")
                 }
                 if let state = combat.state {
-                    HStack(spacing: 16) {
+                    HStack(spacing: 10) {
                         fighter(state.fighters[0], seat: 0)
-                        Text("VS").font(.title.bold()).foregroundStyle(.orange)
+                        Text("VS").font(.caption.bold()).foregroundStyle(.orange)
                         fighter(state.fighters[1], seat: 1)
                     }
                     .frame(maxWidth: .infinity)
@@ -47,7 +47,7 @@ struct DuelNetworkCombatView: View {
                         Button("结束对战") { combat.stop(); onExit() }
                             .buttonStyle(.borderedProminent)
                     } else if combat.status == .running && state.phase == .fighting {
-                        HStack(spacing: 14) {
+                        HStack(spacing: 8) {
                             heldButton("后退", move: -1)
                             heldButton("前进", move: 1)
                             heldButton("格挡", guardHeld: true)
@@ -84,7 +84,8 @@ struct DuelNetworkCombatView: View {
                         .accessibilityIdentifier("duel.combat.failure")
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .foregroundStyle(.white)
             .background(Color(red: 0.07, green: 0.08, blue: 0.14))
@@ -146,14 +147,12 @@ struct DuelNetworkCombatView: View {
     }
 
     private func fighter(_ fighter: DuelNetworkCombatState.Fighter, seat: Int) -> some View {
-        VStack(spacing: 8) {
-            Text(fighter.hero.name + (seat == 0 ? " · 1P" : " · 2P")).font(.headline)
+        VStack(spacing: 3) {
+            Text(fighter.hero.name + (seat == 0 ? " · 1P" : " · 2P")).font(.caption.bold())
             ProgressView(value: Double(fighter.health), total: 1000)
                 .tint(fighter.health < 250 ? .red : .green)
             Text("生命 \(fighter.health) / 1000 · 能量 \(fighter.energy)")
                 .font(.caption).monospacedDigit()
-            Text("位置 \(fighter.x) · 朝向 \(fighter.facing)")
-                .font(.caption2).foregroundStyle(.white.opacity(0.65))
         }
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier("duel.combat.fighter.\(seat)")
