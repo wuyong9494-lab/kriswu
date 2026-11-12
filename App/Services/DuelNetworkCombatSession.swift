@@ -20,6 +20,7 @@ final class DuelNetworkCombatSession: ObservableObject {
     private var clock: Task<Void, Never>?
     private var sequence: UInt64 = 0
     private var lastSentTick: UInt64?
+    private var lastSentEpoch: UInt64?
     private var roomObservation: AnyCancellable?
     private var lastHostStateAt: Date?
     private var watchdog: Task<Void, Never>?
@@ -126,6 +127,12 @@ final class DuelNetworkCombatSession: ObservableObject {
             tick = state.tick + lead
             epoch = state.epoch
         } else { return }
+        // A resumed host uses a new epoch: its scheduling window must not
+        // inherit the previous epoch's tick reservation.
+        if lastSentEpoch != epoch {
+            lastSentTick = nil
+            lastSentEpoch = epoch
+        }
         let scheduledTick = max(tick, lastSentTick.map { $0 < UInt64.max ? $0 + 1 : $0 } ?? tick)
         guard scheduledTick >= tick, scheduledTick - tick <= DuelNetworkInputs.futureWindow else { return }
         let nextSequence = sequence + 1
