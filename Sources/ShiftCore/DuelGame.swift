@@ -67,6 +67,11 @@ public struct DuelGame: Equatable, Sendable {
         public var connected = false
         public var spawned = false
         public var comboQueued = false
+        /// Presentation-only reconstruction for an authenticated host snapshot.
+        public init(move: Move, age: Int) {
+            self.move = move
+            self.age = age
+        }
     }
     public struct Fighter: Equatable, Sendable {
         public let hero: Hero
