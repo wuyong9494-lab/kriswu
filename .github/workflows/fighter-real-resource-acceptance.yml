@@ -6,6 +6,11 @@ name: Private fighter real-resource acceptance (unsigned only)
         description: Exact reviewed commit containing this workflow and helpers; must equal run SHA
         required: true
         type: string
+  push:
+    branches:
+    - codex/fighter-lab-compile-only-20261111
+    paths:
+    - .github/workflows/fighter-real-resource-acceptance.yml
 permissions:
   contents: read
 concurrency:
@@ -13,8 +18,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   real_resources:
-    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111' && inputs.tooling_sha
-      == github.sha
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111' && ((github.event_name
+      == 'workflow_dispatch' && inputs.tooling_sha == github.sha) || (github.event_name == 'push' && github.event.before == '6607870bcffa0f615c0cef35f7e693d0c7c47878'
+      && github.event.head_commit.message == 'Run one approved real-resource acceptance with protected evidence'))
     runs-on: macos-26
     timeout-minutes: 100
     env:
@@ -24,7 +30,7 @@ jobs:
     steps:
     - uses: actions/checkout@v5
       with:
-        ref: ${{ inputs.tooling_sha }}
+        ref: ${{ github.sha }}
         path: tooling
         persist-credentials: false
         lfs: false
@@ -219,3 +225,4 @@ jobs:
       run:
         working-directory: source
         shell: bash -eo pipefail {0}
+
