@@ -46,15 +46,16 @@ public struct DuelCombatCamera: Equatable, Sendable {
         lastFrame = frame; lastAnimationTick = animationTick
 
         let a = min(10, max(0, firstX)), b = min(10, max(0, secondX))
-        // A simultaneous, same-direction move of both fighters by >= 2.5 m
-        // indicates a round reset / authoritative reposition, not an ordinary
-        // walk, solitary dash or knockback. Do not pan for seconds across an
-        // empty stage when a new exchange has already started elsewhere.
+        // A simultaneous, same-direction jump of both fighters across adjacent
+        // simulation samples indicates an authoritative round reposition.
+        // Across skipped frames even normal walking can accumulate 2.5 m; do
+        // not falsely snap the camera when presentation resumes after a gap.
+        let adjacentSamples = elapsed <= 2 && animationElapsed <= 2
         var pairRepositioned = false
         if let previousA = lastFirstX, let previousB = lastSecondX {
             let firstDelta = a - previousA, secondDelta = b - previousB
-            pairRepositioned = abs(firstDelta) >= 2.5 && abs(secondDelta) >= 2.5
-                && firstDelta * secondDelta > 0
+            pairRepositioned = adjacentSamples && abs(firstDelta) >= 2.5
+                && abs(secondDelta) >= 2.5 && firstDelta * secondDelta > 0
         }
         lastFirstX = a; lastSecondX = b
         // A bounded stage-edge opening must start on the fighters, not at the
