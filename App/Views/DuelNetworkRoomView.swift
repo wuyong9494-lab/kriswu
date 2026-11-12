@@ -19,7 +19,7 @@ struct DuelNetworkEntryView: View {
                     VStack(spacing: 20) { nearby; remote }
                 }
                 .padding(20)
-                Text("当前仅测试双人选角与准备同步，尚不能联机战斗。人到齐后不会自动开打。")
+                Text("双方选角并准备后由房主启动联机战斗；需要两台设备使用相同版本。")
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
                     .padding([.horizontal, .bottom], 20)
                     .accessibilityIdentifier("duel.network.scope")
@@ -176,7 +176,7 @@ struct DuelNetworkRoomView: View {
                     .font(.caption).foregroundStyle(.white.opacity(0.65))
             }
             Spacer()
-            Text("选角测试").font(.caption.bold()).foregroundStyle(.orange)
+            Text("双人联机").font(.caption.bold()).foregroundStyle(.orange)
         }
     }
 
@@ -224,7 +224,7 @@ struct DuelNetworkRoomView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("选角与准备同步测试；联机战斗尚未接入。")
+            Text("双方准备后，房主锁定选角并进入联网战斗。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
                 .accessibilityIdentifier("duel.network.scope")
             if let combatError { message(combatError, warning: true) }
@@ -235,7 +235,7 @@ struct DuelNetworkRoomView: View {
             if case .closed(let reason) = room.phase {
                 message(reason, warning: true).accessibilityIdentifier("duel.network.disconnected")
             } else if model.status == .started {
-                message("双方选角已确认。本阶段到此结束，尚未启动联机战斗；请离开房间。", warning: false)
+                message("双方选角已确认，正在移交战斗连接…", warning: false)
                     .accessibilityIdentifier("duel.network.selectionComplete")
             } else if model.status == .selecting {
                 selectionControls
