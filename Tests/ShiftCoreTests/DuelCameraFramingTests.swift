@@ -65,6 +65,38 @@ final class DuelCameraFramingTests: XCTestCase {
         }
     }
 
+
+    func testUnexpectedFiniteSeparationCannotOverflowCameraDistance() {
+        // Gameplay tracks two clamped stage positions, but a malformed
+        // presentation sample must not turn the SceneKit camera z into infinity.
+        for aspect in [0.1, 0.46, 1.0, 1.5, 2.1, 3.0] {
+            let bounded = DuelCameraFraming(aspect: aspect, separation: 20)
+            for sample in [20.0, 1_000.0, 1.0e40, Double.greatestFiniteMagnitude] {
+                let framing = DuelCameraFraming(aspect: aspect, separation: sample)
+                XCTAssertEqual(framing, bounded, "Oversized pair extent must be clamped")
+                XCTAssertTrue(framing.perspectiveDistance.isFinite)
+                XCTAssertTrue(framing.verticalFieldOfView.isFinite)
+                XCTAssertTrue(framing.orthographicScale.isFinite)
+            }
+        }
+    }
+
+    func testContinuousCameraEnvelopeKeepsBothFightersVisible() {
+        // Sweep rather than checking only a few predefined dashes and gaps.
+        // This uses the ten-unit stage's conservative two-sided 0.8 m margin;
+        // actual skeleton and weapon projection remains a native acceptance gate.
+        for aspect in [0.46, 1.0, 1.5, 1.78, 2.1, 2.4] {
+            for quarterStep in 0...80 {
+                let separation = Double(quarterStep) * 0.25
+                let framing = DuelCameraFraming(aspect: aspect, separation: separation)
+                let halfWidth = framing.perspectiveDistance
+                    * tan(framing.verticalFieldOfView * .pi / 360) * aspect
+                XCTAssertGreaterThanOrEqual(halfWidth + 0.000001, separation * 0.5 + 0.8)
+                XCTAssertTrue(framing.perspectiveDistance.isFinite)
+            }
+        }
+    }
+
     func testInvalidTransientGeometryCannotPoisonProjection() {
         for aspect in [0.0, -1, Double.nan, Double.infinity] {
             let result = DuelCameraFraming(aspect: aspect, separation: .nan)
