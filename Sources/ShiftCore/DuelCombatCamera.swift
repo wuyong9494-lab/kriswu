@@ -20,6 +20,8 @@ public struct DuelCombatCamera: Equatable, Sendable {
     public private(set) var separation: Double = 3
     private var lastFrame: Int?
     private var lastAnimationTick: Int?
+    private var lastFirstX: Double?
+    private var lastSecondX: Double?
     private var impactStrength: Double = 0
     private var impactDirection: Double = 1
     private var impactAge: Double = 18
@@ -44,10 +46,21 @@ public struct DuelCombatCamera: Equatable, Sendable {
         lastFrame = frame; lastAnimationTick = animationTick
 
         let a = min(10, max(0, firstX)), b = min(10, max(0, secondX))
+        // A simultaneous, same-direction move of both fighters by >= 2.5 m
+        // indicates a round reset / authoritative reposition, not an ordinary
+        // walk, solitary dash or knockback. Do not pan for seconds across an
+        // empty stage when a new exchange has already started elsewhere.
+        var pairRepositioned = false
+        if let previousA = lastFirstX, let previousB = lastSecondX {
+            let firstDelta = a - previousA, secondDelta = b - previousB
+            pairRepositioned = abs(firstDelta) >= 2.5 && abs(secondDelta) >= 2.5
+                && firstDelta * secondDelta > 0
+        }
+        lastFirstX = a; lastSecondX = b
         // A bounded stage-edge opening must start on the fighters, not at the
-        // default world center. Preserve smooth tracking after the first pose.
+        // default world center. Continue smooth tracking for ordinary motion.
         let target = min(8.5, max(1.5, (a + b) * 0.5))
-        if isFirstPose { centerX = target }
+        if isFirstPose || pairRepositioned { centerX = target }
         else { centerX += (target - centerX) * (1 - pow(0.88, animationElapsed)) }
         let required = 2 * max(abs(a - centerX), abs(b - centerX))
         // Expand immediately to protect the silhouettes. Ease back in over
