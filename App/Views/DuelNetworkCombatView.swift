@@ -31,7 +31,13 @@ struct DuelNetworkCombatView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .accessibilityIdentifier("duel.combat.scene")
-                    if state.phase == .matchOver {
+                    if combat.status == .failed {
+                        Text(combat.failure ?? "联机连接已中断")
+                            .font(.headline).foregroundStyle(.orange)
+                        Button("退出并返回大厅") { onExit() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("duel.combat.disconnect.exit")
+                    } else if state.phase == .matchOver {
                         Text(state.winner.map { $0 == 0 ? "1P 获胜" : "2P 获胜" } ?? "对战结束")
                             .font(.title.bold()).accessibilityIdentifier("duel.combat.result")
                         Button("结束对战") { combat.stop(); onExit() }
@@ -56,6 +62,14 @@ struct DuelNetworkCombatView: View {
                             .font(.headline)
                             .accessibilityIdentifier("duel.combat.roundBreak")
                     }
+                } else if combat.status == .failed || combat.status == .ended {
+                    Spacer()
+                    Text(combat.failure ?? "联机对战已结束")
+                        .font(.headline).foregroundStyle(.orange)
+                    Button("返回大厅") { onExit() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("duel.combat.noState.exit")
+                    Spacer()
                 } else {
                     Spacer()
                     ProgressView("等待房主同步战斗状态…")
