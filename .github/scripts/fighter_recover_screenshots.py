@@ -23,7 +23,7 @@ def select(z):
                     for v in x:walk(v)
             walk(data)
     chosen=[]
-    for term in ['returned-landscape','lobby','selection','original-ember','original-liu','failed','portrait']:
+    for term in ['original-weapons-final', 'failed', 'returned-landscape', 'lobby', 'selection', 'original-ember', 'original-liu', 'portrait']:
         matches=[i for i in images if term in labels[i.filename].lower() and i not in chosen]
         if matches:
             chosen.append(matches[0])

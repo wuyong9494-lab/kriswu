@@ -14,7 +14,7 @@ struct DuelWorld: UIViewRepresentable {
         let source: DuelWorldView.CharacterSource = .bundled
         #endif
         let view = DuelWorldView(session: session, characterSource: source)
-        preparation?.attach(view)
+        if let preparation { view.schedulePreparationAttachment(preparation) }
         return view
     }
     func updateUIView(_ view: DuelWorldView, context: Context) {}
@@ -147,6 +147,38 @@ final class DuelWorldView: SCNView {
     private var preparationCompletion: PreparationCompletion?
     private var preparationInvalidated: (@MainActor (PreparationFailure) -> Void)?
     private var preparedMountChanged: (@MainActor () -> Void)?
+    // Only the SwiftUI/UIKit boundary is deferred. Direct preparation APIs keep
+    // their synchronous observer/revalidation contract for owners and tests.
+    private weak var pendingUIAttachment: DuelNetworkMatchPreparation?
+    private var uiAttachmentQueued = false
+    private var defersMountUpdates = false
+    func schedulePreparationAttachment(_ owner: DuelNetworkMatchPreparation) {
+        guard !ended else { return }
+        pendingUIAttachment = owner
+        defersMountUpdates = true
+        retryPreparationAttachment()
+    }
+    private func retryPreparationAttachment() {
+        guard !ended, !uiAttachmentQueued, let owner = pendingUIAttachment else { return }
+        uiAttachmentQueued = true
+        DispatchQueue.main.async { [weak self, weak owner] in
+            guard let self else { return }
+            self.uiAttachmentQueued = false
+            guard !self.ended, let owner, self.pendingUIAttachment === owner else { return }
+            // The first update can precede mounting. Keep the pending owner;
+            // didMoveToWindow/layout will retry rather than losing first attach.
+            guard self.hasUsableMountedBounds else { return }
+            self.pendingUIAttachment = nil
+            owner.attach(self)
+        }
+    }
+    #if DEBUG
+    var preparationPhaseDescription: String {
+        "requested=\(preparationOwner != nil), started=\(preparingScene != nil), finished=\(preparationFinished), " +
+        "actual=\(usedActualScenePreparation), variants=\(preparedRuntimeEffects), " +
+        "window=\(window != nil), bounds=\(bounds.size), queued=\(uiAttachmentQueued), pending=\(pendingUIAttachment != nil)"
+    }
+    #endif
     private var preparedRuntimeEffects = false
     private var preparingScene: SCNScene?
     private var preparationMounted = false
@@ -209,7 +241,14 @@ final class DuelWorldView: SCNView {
             failNetworkPreparation(.replaced)
             return
         }
-        preparedMountChanged?()
+        // Layout/window callbacks run inside SwiftUI updates. Observe the settled
+        // mount on the next main-queue turn, but retain synchronous invalidation above.
+        guard defersMountUpdates else { preparedMountChanged?(); return }
+        let owner = preparationOwner
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.ended, self.preparationOwner == owner else { return }
+            self.preparedMountChanged?()
+        }
     }
 
     private func prepareNetworkSceneIfMounted() {
@@ -402,6 +441,7 @@ final class DuelWorldView: SCNView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard !ended else { return }
+        retryPreparationAttachment()
         if window == nil {
             if preparationOwner != nil && preparationMounted {
                 failNetworkPreparation(.detached)
@@ -419,6 +459,7 @@ final class DuelWorldView: SCNView {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
+        retryPreparationAttachment()
         updateCameraFraming()
         prepareNetworkSceneIfMounted()
         prepareSourceMusicIfMounted()
@@ -515,6 +556,7 @@ final class DuelWorldView: SCNView {
     func shutdown(preparationFailure: PreparationFailure = .replaced) {
         guard !ended else { return }
         ended = true
+        pendingUIAttachment = nil; uiAttachmentQueued = false
         musicPreparationID = nil; musicPreparationFinished = true
         musicPreparingScene = nil; musicPreparedScene = nil; musicStageRoot = nil
         let invalidated = preparationInvalidated; preparationInvalidated = nil
@@ -955,4 +997,5 @@ private final class DuelActor {
         body.geometry?.firstMaterial?.emission.contents = fighter.flash > 0 ? UIColor(red: 0.22, green: 0.10, blue: 0.02, alpha: 1) : UIColor.black
     }
 }
+
 

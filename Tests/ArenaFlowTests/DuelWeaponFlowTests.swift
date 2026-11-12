@@ -262,10 +262,23 @@ final class DuelWeaponFlowTests: XCTestCase {
             let gap = abs(opponent - player)
             if gap <= 800 { return }
             stickCoordinate(app, x: opponent > player ? 1 : -1, y: 0).press(forDuration: gap > 1500 ? 1.0 : 0.4)
-            wait("Joystick movement reaches the live HUD", timeout: 3) {
-                guard let now = self.observedPosition(app, index: 0) else { return false }
-                return now != player
-            }
+            // Read the HUD and control state from the same snapshot. An element
+            // query retries internally when SwiftUI replaces its accessibility
+            // node, hiding whether this was lost input or an unavailable HUD.
+            // Keep the original three-second requirement and require live input,
+            // not merely any changed coordinate from a paused/missing scene.
+            let started = ProcessInfo.processInfo.systemUptime
+            var last: StationaryObservation?
+            let movement = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let current = self.observeStationary(app, context: "approach-from-\(player)-toward-\(opponent)",
+                                                     phase: "movement", started: started)
+                last = current
+                return current.ready && current.position != player
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [movement], timeout: 3)
+            XCTAssertEqual(result, .completed,
+                           "Joystick movement reaches the live HUD: \(last?.summary ?? "no observation")")
+            guard result == .completed else { return }
         }
         let player = try position(app, index: 0), opponent = try position(app, index: 1)
         XCTAssertLessThanOrEqual(abs(opponent - player), 800,

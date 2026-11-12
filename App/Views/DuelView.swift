@@ -780,6 +780,13 @@ final class DuelNetworkMatchPreparation: @MainActor ObservableObject, Identifiab
     }
     #endif
 
+    #if DEBUG
+    var preparationPhaseDescription: String {
+        "state=\(state), closed=\(closed), sceneReceipt=\(sceneReceipt != nil), controlsPrepared=\(controlsPrepared), " +
+        "world=[\(world?.preparationPhaseDescription ?? "not attached")], " +
+        "controls=[\(controls?.preparationPhaseDescription ?? "not attached")]"
+    }
+    #endif
     var loadingText: String {
         switch state {
         case .waitingForMount: return "正在安装联机画面与操作界面"
@@ -1162,12 +1169,12 @@ struct DuelNetworkControls: UIViewRepresentable {
         #if DEBUG
         if preparation.permitsFixture {
             return DuelNetworkControlsView(testing: preparation, controls: DuelSourceControlsView(images: [:]),
-                                           acceptsFixtureArt: true)
+                                           acceptsFixtureArt: true, deferReadinessUpdates: true)
         }
         #endif
-        return DuelNetworkControlsView(preparation: preparation)
+        return DuelNetworkControlsView(preparation: preparation, deferReadinessUpdates: true)
     }
-    func updateUIView(_ view: DuelNetworkControlsView, context: Context) { view.refreshReadiness() }
+    func updateUIView(_ view: DuelNetworkControlsView, context: Context) { view.scheduleReadinessRefresh() }
     static func dismantleUIView(_ view: DuelNetworkControlsView, coordinator: ()) { view.detach() }
 }
 
@@ -1182,8 +1189,10 @@ final class DuelNetworkControlsView: UIView {
     private var wasMounted = false
     private var ended = false
     private var acceptsFixtureArt = false
+    private let deferReadinessUpdates: Bool
 
-    init(preparation: DuelNetworkMatchPreparation) {
+    init(preparation: DuelNetworkMatchPreparation, deferReadinessUpdates: Bool = false) {
+        self.deferReadinessUpdates = deferReadinessUpdates
         let state = preparation.session
         ownerID = preparation.id; session = state; self.preparation = preparation
         if state.usesVerifiedPreparedResources {
@@ -1201,7 +1210,8 @@ final class DuelNetworkControlsView: UIView {
     }
     #if DEBUG
     init(testing preparation: DuelNetworkMatchPreparation, controls: DuelSourceControlsView,
-         acceptsFixtureArt: Bool = false) {
+         acceptsFixtureArt: Bool = false, deferReadinessUpdates: Bool = false) {
+        self.deferReadinessUpdates = deferReadinessUpdates
         ownerID = preparation.id; session = preparation.session; self.preparation = preparation
         self.controls = controls
         self.acceptsFixtureArt = acceptsFixtureArt && preparation.permitsFixture
@@ -1215,25 +1225,48 @@ final class DuelNetworkControlsView: UIView {
         isOpaque = false; backgroundColor = .clear
         addSubview(controls)
         DuelWeaponControls(session: session).bind(controls)
-        refreshReadiness()
+        updateReadinessAtViewBoundary()
     }
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard !ended else { return }
         if window == nil, wasMounted { detach(); return }
         if window != nil { wasMounted = true }
-        refreshReadiness()
+        updateReadinessAtViewBoundary()
     }
     override func layoutSubviews() {
         super.layoutSubviews()
         guard !ended else { return }
         controls.frame = bounds
         controls.setNeedsLayout(); controls.layoutIfNeeded()
-        refreshReadiness()
+        updateReadinessAtViewBoundary()
     }
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         !ended && controls.point(inside: convert(point, to: controls), with: event)
     }
+    private func updateReadinessAtViewBoundary() {
+        if deferReadinessUpdates { scheduleReadinessRefresh() }
+        else { refreshReadiness() }
+    }
+    private var readinessQueued = false
+    func scheduleReadinessRefresh() {
+        guard !ended, !readinessQueued else { return }
+        readinessQueued = true
+        let expectedOwner = ownerID
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.readinessQueued = false
+            guard !self.ended, self.ownerID == expectedOwner,
+                  self.preparation?.id == expectedOwner else { return }
+            self.refreshReadiness()
+        }
+    }
+    #if DEBUG
+    var preparationPhaseDescription: String {
+        "window=\(window != nil), childWindow=\(controls.window != nil), layout=\(usableLayout), " +
+        "ready=\(currentPreparationReady), art=\(controls.sourceArtAvailable), queued=\(readinessQueued)"
+    }
+    #endif
     func refreshReadiness() {
         guard !ended else { return }
         DuelWeaponControls(session: session).updateReadiness(controls)
@@ -1367,4 +1400,5 @@ final class DuelInputView: UIView {
         if notify { for name in names { session?.input(name, down: false) } }
     }
 }
+
 

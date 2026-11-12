@@ -34,6 +34,133 @@ extension DuelLifecycleTests {
         }
     }
 
+    func testSwiftUIAttachmentRetriesInitialUnmountedViewWithoutPublishingInsideLayout() async throws {
+        let state = try preparationSession()
+        let completed = expectation(description: "Deferred UIKit boundary still reaches prepared receipt")
+        var successes = 0, inViewUpdate = false, publishedInsideUpdate = false
+        let owner = try DuelNetworkMatchPreparation(testing: state) { result in
+            if case .success = result { successes += 1 }
+            completed.fulfill()
+        }
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
+        world.testingPrepare = { _, callback in callback(true) }
+        let subscription = owner.objectWillChange.sink {
+            if inViewUpdate { publishedInsideUpdate = true }
+        }
+        let controls = DuelNetworkControlsView(testing: owner,
+            controls: DuelSourceControlsView(images: [:]), acceptsFixtureArt: true,
+            deferReadinessUpdates: true)
+        let window = preparationWindow()
+        defer { subscription.cancel(); owner.cancel(); window.isHidden = true }
+        inViewUpdate = true
+        world.schedulePreparationAttachment(owner)
+        inViewUpdate = false
+        let drained = expectation(description: "Initial unmounted attachment attempt")
+        DispatchQueue.main.async { drained.fulfill() }
+        await fulfillment(of: [drained], timeout: 2)
+        XCTAssertEqual(owner.state, .waitingForMount)
+        XCTAssertEqual(successes, 0)
+        inViewUpdate = true
+        mountPreparation([world, controls], in: window)
+        world.removeFromSuperview() // Detach before the first queued attach can run.
+        inViewUpdate = false
+        let detachedDrain = expectation(description: "Unmounted queued world remains pending")
+        DispatchQueue.main.async { detachedDrain.fulfill() }
+        await fulfillment(of: [detachedDrain], timeout: 2)
+        XCTAssertEqual(owner.state, .waitingForMount)
+        XCTAssertEqual(successes, 0)
+        inViewUpdate = true
+        mountPreparation([world], in: window)
+        inViewUpdate = false
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual(successes, 1)
+        XCTAssertFalse(publishedInsideUpdate)
+        XCTAssertTrue(world.usedActualScenePreparation == false,
+                      "This test covers scheduling only; the separate hosted test retains actual GPU preparation")
+    }
+
+    func testDeferredUIKitAttachmentDoesNotReviveShutdownWorldOrCancelledMount() async throws {
+        for shutWorld in [false, true] {
+            let state = try preparationSession()
+            var delivered = 0
+            let owner = try DuelNetworkMatchPreparation(testing: state) { _ in delivered += 1 }
+            let world = DuelWorldView(session: state, characterSource: .presentationFixture)
+            world.testingPrepare = { _, callback in XCTFail("Stale attachment must not prepare") }
+            let window = preparationWindow()
+            world.schedulePreparationAttachment(owner)
+            if shutWorld { world.shutdown() } else { owner.cancel() }
+            mountPreparation([world], in: window)
+            let drained = expectation(description: "Stale deferred attachment drained")
+            DispatchQueue.main.async { drained.fulfill() }
+            await fulfillment(of: [drained], timeout: 2)
+            XCTAssertEqual(delivered, 0)
+            XCTAssertNil(world.scene)
+            if !shutWorld { XCTAssertEqual(owner.state, .cancelled) }
+            owner.cancel(); world.shutdown(); window.isHidden = true
+        }
+    }
+
+    func testQueuedControlsRepeatedLayoutPreparesOnceAndReplacementCancelsSynchronously() async throws {
+        for replace in [false, true] {
+            let state = try preparationSession()
+            var successes = 0, failures = 0
+            let settled = expectation(description: "Repeated or replaced deferred controls settle")
+            let owner = try DuelNetworkMatchPreparation(testing: state) { result in
+                switch result { case .success: successes += 1; case .failure: failures += 1 }
+                settled.fulfill()
+            }
+            let world = DuelWorldView(session: state, characterSource: .presentationFixture)
+            world.testingPrepare = { _, callback in callback(true) }
+            let controls = DuelNetworkControlsView(testing: owner,
+                controls: DuelSourceControlsView(images: [:]), acceptsFixtureArt: true,
+                deferReadinessUpdates: true)
+            let window = preparationWindow()
+            world.schedulePreparationAttachment(owner)
+            mountPreparation([world, controls], in: window)
+            for _ in 0..<8 { controls.layoutSubviews(); controls.scheduleReadinessRefresh() }
+            if replace {
+                let replacement = DuelNetworkControlsView(testing: owner,
+                    controls: DuelSourceControlsView(images: [:]), acceptsFixtureArt: true,
+                    deferReadinessUpdates: true)
+                XCTAssertEqual(owner.state, .failed(.replaced), "Conflicting ownership must fail synchronously")
+                replacement.shutdown()
+            }
+            await fulfillment(of: [settled], timeout: 2)
+            let drained = expectation(description: "Duplicate readiness callbacks drained")
+            DispatchQueue.main.async { drained.fulfill() }
+            await fulfillment(of: [drained], timeout: 2)
+            XCTAssertEqual(successes, replace ? 0 : 1)
+            XCTAssertEqual(failures, replace ? 1 : 0)
+            if replace { XCTAssertNil(world.scene) }
+            owner.cancel(); world.shutdown(); window.isHidden = true
+        }
+    }
+
+    func testQueuedControlsDetachedBeforeReadinessCannotPrepareAfterRemoval() async throws {
+        let state = try preparationSession()
+        var successes = 0, failures = 0
+        let owner = try DuelNetworkMatchPreparation(testing: state) { result in
+            switch result { case .success: successes += 1; case .failure: failures += 1 }
+        }
+        let world = DuelWorldView(session: state, characterSource: .presentationFixture)
+        world.testingPrepare = { _, callback in callback(true) }
+        let controls = DuelNetworkControlsView(testing: owner,
+            controls: DuelSourceControlsView(images: [:]), acceptsFixtureArt: true,
+            deferReadinessUpdates: true)
+        let window = preparationWindow()
+        defer { owner.cancel(); world.shutdown(); window.isHidden = true }
+        world.schedulePreparationAttachment(owner)
+        mountPreparation([world, controls], in: window)
+        controls.removeFromSuperview()
+        XCTAssertEqual(owner.state, .failed(.detached))
+        XCTAssertEqual(failures, 1, "Detach invalidation remains synchronous")
+        let drained = expectation(description: "Detached queued controls drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        await fulfillment(of: [drained], timeout: 2)
+        XCTAssertEqual(successes, 0); XCTAssertEqual(failures, 1)
+        XCTAssertNil(world.scene)
+    }
+
     func testNetworkPreparationFixtureNeverLoadsBundledOriginalResources() throws {
         let state = try preparationSession()
         let world = DuelWorldView(session: state, characterSource: .presentationFixture)
@@ -575,3 +702,4 @@ extension DuelLifecycleTests {
     }
 }
 #endif
+

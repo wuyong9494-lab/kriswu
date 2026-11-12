@@ -313,7 +313,8 @@ extension DuelLifecycleTests {
         guard case .prepared(let receipt) = mount.state else {
             return XCTFail("Hosted combat must prepare: mount=\(mount.state), " +
                 "host=\(String(describing: hostCoordinator.failure)), guest=\(String(describing: guestCoordinator.failure)), " +
-                "elapsed=\(ProcessInfo.processInfo.systemUptime - started), room=\(host.error ?? "none")")
+                "elapsed=\(ProcessInfo.processInfo.systemUptime - started), room=\(host.error ?? "none"), " +
+                "phases=\(mount.preparationPhaseDescription)")
         }
         XCTAssertFalse(mount.permitsFixture)
         XCTAssertTrue(receipt.verifiedResourceOwnershipComplete)
@@ -625,3 +626,4 @@ extension DuelLifecycleTests {
     }
 }
 #endif
+

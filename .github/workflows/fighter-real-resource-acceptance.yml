@@ -13,8 +13,8 @@ concurrency:
 jobs:
   real_resources:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
-      && github.event_name == 'push' && github.event.before == 'c48894d624a825cf0d0984a4e9bd2bbeffb7e74d' && github.event.head_commit.message
-      == 'Retry approved grouped acceptance after bounded simulator startup fix'
+      && github.event_name == 'push' && github.event.before == 'f1bce0e9d96a2e62b0311a1317721c7f742a3bd8' && github.event.head_commit.message
+      == 'Verify approved mount-boundary fix and live-input diagnostics'
     runs-on: macos-26
     timeout-minutes: 100
     env:
@@ -207,4 +207,3 @@ jobs:
       run:
         working-directory: source
         shell: bash -eo pipefail {0}
-
