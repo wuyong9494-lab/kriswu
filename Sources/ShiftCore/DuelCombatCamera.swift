@@ -38,13 +38,17 @@ public struct DuelCombatCamera: Equatable, Sendable {
         if let lastFrame, frame < lastFrame { self = .init() }
         if let lastAnimationTick, animationTick < lastAnimationTick { self = .init() }
         guard lastFrame != frame else { return }
+        let isFirstPose = lastAnimationTick == nil
         let elapsed = min(60, max(0, Double(frame) - Double(lastFrame ?? 0)))
         let animationElapsed = min(60, max(0, Double(animationTick) - Double(lastAnimationTick ?? 0)))
         lastFrame = frame; lastAnimationTick = animationTick
 
         let a = min(10, max(0, firstX)), b = min(10, max(0, secondX))
-        let target = min(7, max(3, (a + b) * 0.5))
-        centerX += (target - centerX) * (1 - pow(0.88, animationElapsed))
+        // A bounded stage-edge opening must start on the fighters, not at the
+        // default world center. Preserve smooth tracking after the first pose.
+        let target = min(8.5, max(1.5, (a + b) * 0.5))
+        if isFirstPose { centerX = target }
+        else { centerX += (target - centerX) * (1 - pow(0.88, animationElapsed)) }
         let required = 2 * max(abs(a - centerX), abs(b - centerX))
         // Expand immediately to protect the silhouettes. Ease back in over
         // animation ticks so a dash/knockback does not produce zoom pumping.
