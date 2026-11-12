@@ -99,7 +99,12 @@ final class DuelNetworkCombatSession: ObservableObject {
             tick = host.simulation.inputs.nextTick
             epoch = host.simulation.inputs.epoch
         } else if let state {
-            tick = state.tick + (state.tick < UInt64.max ? 1 : 0)
+            // Guest snapshots describe a past host tick. Schedule a few ticks
+            // ahead to absorb transit latency rather than submitting input
+            // that is already late by the time it reaches the host.
+            let lead: UInt64 = 3
+            guard state.tick <= UInt64.max - lead else { return }
+            tick = state.tick + lead
             epoch = state.epoch
         } else { return }
         let scheduledTick = max(tick, lastSentTick.map { $0 < UInt64.max ? $0 + 1 : $0 } ?? tick)
