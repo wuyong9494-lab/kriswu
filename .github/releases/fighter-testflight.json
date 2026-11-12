@@ -1,11 +1,12 @@
 {
   "channel": "testflight-internal",
-  "source_sha": "e0afb06a4259980753c36bfd6eb7238b47a7b4f5",
-  "fighter_run_id": 42801652047,
-  "build_number": "701",
+  "source_sha": "93de03a4fcc1a56189a808a3e8960f057b63a33a",
+  "fighter_run_id": 43238606975,
+  "build_number": "702",
   "version": "1.2",
   "bundle_id": "com.kriswu.shiftreminder",
   "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
-  "notes": "内部测试：孙登武士刀、刘泉纬双锤连招按出招阶段判定命中；加入暂定的武士刀暗影冲刺和双锤暗影投掷，并修复能量不足及冷却时按钮状态更新。大厅人物完整显示、横竖屏切换及联机房间生命周期已加入回归验证。暗影技能为可玩暂定实现，尚未核对原作技能参数。请重点测试两名角色连招、暗影命中与冷却、低能量禁用和真机流畅度。来源 e0afb06；自动化通过不代表真机视觉和性能已验收。",
-  "source_branch": "codex/fighter-lab-host-simulation-20261109"
+  "notes": "内部测试：接入 Game Center 远程战斗，保留实际人物、原动作资源、音乐和全屏控件；加强身份绑定、断线、发送失败、房间移交及退出释放保护。固定来源 93de03a，真实资源模拟器原生 298 项与界面 5 项通过。尚未通过两台 iPhone 实战，不代表原版比例、技能打击感或真机性能已验收。请重点测试两台已登录 Game Center 的 iPhone 邀请、选角、连续移动攻击、结算同步、断线与重新进入。",
+  "source_branch": "codex/fighter-lab-compile-only-20261111",
+  "music_source_sha": "36878beef5d9c8d86193b7eea04e5e381042691d"
 }

@@ -3,7 +3,7 @@ run-name: Upload verified TestFlight build
 
 on:
   push:
-    branches: [codex/plan-fighter-recovery-20261108, codex/fighter-lab-sf3-resources-20261108, codex/fighter-lab-host-simulation-20261109]
+    branches: [codex/fighter-lab-compile-only-20261111]
     paths: ['.github/releases/fighter-testflight.json']
 
 permissions:
@@ -25,13 +25,16 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.ref == 'refs/heads/codex/plan-fighter-recovery-20261108' || github.ref == 'refs/heads/codex/fighter-lab-sf3-resources-20261108' || github.ref == 'refs/heads/codex/fighter-lab-host-simulation-20261109'
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111' && github.event_name == 'push' && github.event.before == '93de03a4fcc1a56189a808a3e8960f057b63a33a' && github.event.head_commit.message == 'Promote verified fighter 1.2 (702) to internal TestFlight'
+    environment: fighter-private-assets
     outputs:
       upload_required: ${{ steps.verify.outputs.upload_required }}
       source_sha: ${{ steps.verify.outputs.source_sha }}
       build_number: ${{ steps.verify.outputs.build_number }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Prepare Apple API access
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
@@ -64,8 +67,9 @@ jobs:
   testflight:
     needs: verify
     if: needs.verify.outputs.upload_required == 'true'
+    environment: fighter-private-assets
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 60
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}
     env:
@@ -74,10 +78,20 @@ jobs:
       TARGET_BUILD: ${{ needs.verify.outputs.build_number }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ needs.verify.outputs.source_sha }}
           path: source
+      - uses: actions/checkout@v5
+        with:
+          ref: 36878beef5d9c8d86193b7eea04e5e381042691d
+          path: music-cipher
+          persist-credentials: false
+          lfs: false
+          submodules: false
       - name: Prepare existing signing credentials
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
@@ -113,6 +127,13 @@ jobs:
           python3 .github/scripts/fighter_sf3_assets.py --original-rig
           python3 .github/scripts/fighter_sf3_distinct.py
           xcodegen generate
+      - name: Stage pinned independently encrypted music and provenance
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_MUSIC_PACKAGE_KEY }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fighter_acceptance_music.py" "$GITHUB_WORKSPACE/music-cipher" "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP"
+          cd source
+          xcodegen generate
       - name: Archive the requested build with automatic signing
         working-directory: source
         shell: bash -eo pipefail {0}
@@ -131,12 +152,24 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEFAULT_SITE_URL="$SITE_URL" \
             CURRENT_PROJECT_VERSION="$TARGET_BUILD" 2>&1 | tail -80
-      - name: Verify signed app, extension, version, source and actual Liu asset
+      - name: Verify signed app, extension, version, source and all private assets
         env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           codesign --verify --deep --strict source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
-          python3 .github/scripts/fighter_promote.py archive .github/releases/fighter-testflight.json --path source/build/ShiftReminder.xcarchive
+          APP=source/build/ShiftReminder.xcarchive/Products/Applications/ShiftReminder.app
+          codesign -d --entitlements :- "$APP" > "$RUNNER_TEMP/fighter-signed-entitlements.plist" 2>/dev/null
+          python3 - <<'PYCODE'
+          import os, plistlib
+          from pathlib import Path
+          e=plistlib.loads((Path(os.environ['RUNNER_TEMP'])/'fighter-signed-entitlements.plist').read_bytes())
+          team=os.environ['APPLE_TEAM_ID']
+          assert e.get('com.apple.developer.team-identifier') == team, 'Signed team mismatch'
+          assert e.get('application-identifier') == team+'.com.kriswu.shiftreminder', 'Signed application mismatch'
+          assert e.get('com.apple.developer.game-center') is True, 'Signed Game Center entitlement missing'
+          PYCODE
+          python3 .github/scripts/fighter_promote.py archive .github/releases/fighter-testflight.json --path source/build/ShiftReminder.xcarchive --source source
           python3 .github/scripts/fighter_promote.py guard .github/releases/fighter-testflight.json
       - name: Persist upload intent before any Apple upload
         uses: actions/upload-artifact@v4
@@ -178,6 +211,7 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           rm -rf source/App/Resources/FighterPrivate source/build
+          rm -f "$RUNNER_TEMP/music-clear.musicpack" "$RUNNER_TEMP/fighter-signed-entitlements.plist"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -191,11 +225,14 @@ jobs:
       always() && needs.verify.result == 'success' &&
       needs.testflight.result == 'success' && needs.testflight.outputs.uploaded == 'true'
     runs-on: ubuntu-latest
+    environment: fighter-private-assets
     timeout-minutes: 35
     env:
       UPLOADED_THIS_RUN: ${{ needs.testflight.outputs.uploaded }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Check Apple processing and save verified testing notes
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}

@@ -170,4 +170,115 @@ class GateTests(unittest.TestCase):
                 verify.assert_called_once_with(app)
 
 
+class CandidateTests(unittest.TestCase):
+    def setUp(self):
+        self.r = dict(channel='testflight-internal', source_branch=f.CANDIDATE_BRANCH,
+                      source_sha=f.CANDIDATE_SHA, fighter_run_id=f.CANDIDATE_RUN,
+                      music_source_sha=f.MUSIC_SHA, build_number='702', version='1.2',
+                      bundle_id='com.kriswu.shiftreminder', liu_sha256=f.model.SHA, notes='Internal only')
+        self.run = dict(id=f.CANDIDATE_RUN, head_sha=f.CANDIDATE_SHA, head_branch=f.CANDIDATE_BRANCH,
+                        event='push', path='.github/workflows/fighter-real-resource-acceptance.yml',
+                        run_attempt=1, status='completed', conclusion='success')
+        self.job = dict(name='real_resources', head_sha=f.CANDIDATE_SHA, run_id=f.CANDIDATE_RUN,
+                        run_attempt=1, status='completed', conclusion='success',
+                        steps=[dict(name=n, status='completed', conclusion='success') for n in f.ACCEPTANCE_STEPS])
+
+    def check(self, run=None, job=None, latest=None, count=1):
+        run = self.run if run is None else run
+        job = self.job if job is None else job
+        latest = run if latest is None else latest
+        with patch.object(f.asc, 'github', side_effect=[run, dict(total_count=count, jobs=[job]), latest]):
+            f.check_ci(self.r)
+
+    def test_exact_candidate_manifest(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / 'fighter-testflight.json'
+            p.write_text(json.dumps(self.r))
+            self.assertEqual(f.load_request(p), self.r)
+            for key, value in [('source_sha', 'a'*40), ('fighter_run_id', f.CANDIDATE_RUN+1),
+                               ('music_source_sha', 'b'*40), ('build_number', '703'), ('version', '1.3')]:
+                with self.subTest(key=key):
+                    p.write_text(json.dumps(dict(self.r, **{key:value})))
+                    with self.assertRaises(ValueError): f.load_request(p)
+
+    def test_complete_acceptance(self):
+        self.check()
+
+    def test_every_required_step_must_complete_successfully_once(self):
+        for name in f.ACCEPTANCE_STEPS:
+            for fault in ('missing', 'duplicate', 'failure', 'skipped', 'in_progress'):
+                with self.subTest(name=name, fault=fault):
+                    job = copy.deepcopy(self.job)
+                    step = next(s for s in job['steps'] if s['name'] == name)
+                    if fault == 'missing': job['steps'].remove(step)
+                    elif fault == 'duplicate': job['steps'].append(copy.deepcopy(step))
+                    elif fault == 'in_progress': step['status'] = fault
+                    else: step['conclusion'] = fault
+                    with self.assertRaises(ValueError): self.check(job=job)
+
+    def test_job_identity_attempt_and_pagination(self):
+        for key, value in [('run_id', 1), ('run_attempt', 2), ('head_sha', 'a'*40),
+                           ('status', 'queued'), ('name', 'native'), ('conclusion', 'skipped')]:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.check(job=dict(self.job, **{key:value}))
+        with self.assertRaises(ValueError): self.check(count=101)
+        with self.assertRaises(ValueError): self.check(count=2)
+
+    def test_gate_recheck_rejects_races_and_wrong_source(self):
+        for key, value in [('id', 1), ('run_attempt', 2), ('head_sha', 'a'*40),
+                           ('head_branch', 'main'), ('status', 'in_progress'),
+                           ('conclusion', 'failure'), ('event', 'pull_request'),
+                           ('path', '.github/workflows/fighter-lab.yml')]:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.check(latest=dict(self.run, **{key:value}))
+
+    def test_resource_exact_bytes_duplicate_missing_and_symlink(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d) / 'ShiftReminder.app'; app.mkdir()
+            p = app / 'test.wav'; p.write_bytes(b'abc')
+            sha = hashlib.sha256(b'abc').hexdigest()
+            f.verify_resource(app, p.name, 3, sha)
+            with self.assertRaises(ValueError): f.verify_resource(app, p.name, 3, '0'*64)
+            with self.assertRaises(ValueError): f.verify_resource(app, p.name, 4, sha)
+            (app / 'nested').mkdir(); (app / 'nested/test.wav').write_bytes(b'abc')
+            with self.assertRaises(ValueError): f.verify_resource(app, p.name, 3, sha)
+            (app / 'nested/test.wav').unlink(); p.unlink()
+            with self.assertRaises(ValueError): f.verify_resource(app, p.name, 3, sha)
+            (app / 'real').write_bytes(b'abc'); p.symlink_to('real')
+            with self.assertRaises(OSError): f.verify_resource(app, p.name, 3, sha)
+
+    def test_candidate_archive_requires_all_resource_validation_before_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            app = root / 'Products/Applications/ShiftReminder.app'
+            widget = app / 'PlugIns/Widget.appex/Info.plist'; widget.parent.mkdir(parents=True)
+            info = dict(CFBundleIdentifier=self.r['bundle_id'], CFBundleShortVersionString='1.2',
+                        CFBundleVersion='702', ArenaCommitSHA=f.CANDIDATE_SHA)
+            (app / 'Info.plist').write_bytes(plistlib.dumps(info))
+            widget.write_bytes(plistlib.dumps(dict(info, CFBundleIdentifier=self.r['bundle_id']+'.widget')))
+            with patch.object(f.model, 'verify_app') as model, \
+                 patch.object(f, 'verify_candidate_resources') as resources, \
+                 patch.object(f.asc, 'save_report') as report:
+                f.archive(self.r, root, Path('source'))
+                model.assert_called_once_with(app)
+                resources.assert_called_once_with(app, Path('source'))
+                report.assert_called_once()
+                report.reset_mock(); resources.side_effect = ValueError('corrupt music')
+                with self.assertRaises(ValueError): f.archive(self.r, root, Path('source'))
+                report.assert_not_called()
+
+    def test_all_source_groups_and_three_music_files_are_checked(self):
+        with patch.object(f.assets, 'verified_assets', side_effect=[{'sun':b'a'}, {'rig':b'b'}]) as a, \
+             patch.object(f.distinct, 'verified_assets', return_value={'body':b'c'}) as b, \
+             patch.object(f, 'verify_resource') as verify:
+            f.verify_candidate_resources(Path('app'), Path('source'))
+            self.assertEqual(a.call_count, 2); b.assert_called_once()
+            self.assertEqual([c.args[1] for c in verify.call_args_list],
+                             ['sun', 'rig', 'body'] + [row[0] for row in f.music.FILES])
+        with self.assertRaises(ValueError): f.verify_candidate_resources(Path('app'), None)
+        with patch.object(f.assets, 'verified_assets', side_effect=ValueError('corrupt')):
+            with self.assertRaises(ValueError): f.verify_candidate_resources(Path('app'), Path('source'))
+
+
 if __name__ == '__main__': unittest.main()
