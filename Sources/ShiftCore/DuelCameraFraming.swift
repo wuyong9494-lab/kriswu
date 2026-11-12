@@ -12,7 +12,10 @@ public struct DuelCameraFraming: Equatable, Sendable {
         let aspect = aspect.isFinite ? max(0.1, aspect) : 1
         let separation = separation.isFinite ? max(0, separation) : 3
         let wide = aspect >= 1.5
-        let closeUpFOV = min(47, 31 + max(0, separation - 4.5) * 3)
+        // A nominal 2 m silhouette occupies about half the 7.7 m eye's
+        // projected height on a wide phone. Actual mesh/screenshot validation
+        // remains necessary; the model and animation dimensions are unchanged.
+        let closeUpFOV = min(47, 29 + max(0, separation - 4.5) * 3)
         // Separation already includes any lag from tracking the pair. Reserve
         // room for their silhouettes rather than fitting only the root points.
         let requiredHalfWidth = max(wide ? 0 : 5.8, separation * 0.5 + 0.8)
