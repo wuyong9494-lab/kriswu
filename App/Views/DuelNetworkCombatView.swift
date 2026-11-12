@@ -36,7 +36,7 @@ struct DuelNetworkCombatView: View {
                             .font(.title.bold()).accessibilityIdentifier("duel.combat.result")
                         Button("结束对战") { combat.stop(); onExit() }
                             .buttonStyle(.borderedProminent)
-                    } else {
+                    } else if combat.status == .running && state.phase == .fighting {
                         HStack(spacing: 14) {
                             heldButton("后退", move: -1)
                             heldButton("前进", move: 1)
@@ -51,6 +51,10 @@ struct DuelNetworkCombatView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(geometry.size.width < 700 ? .small : .regular)
                         .accessibilityIdentifier("duel.combat.controls")
+                    } else if state.phase == .roundBreak {
+                        Text("回合结束 · 等待下一回合")
+                            .font(.headline)
+                            .accessibilityIdentifier("duel.combat.roundBreak")
                     }
                 } else {
                     Spacer()
@@ -100,7 +104,8 @@ struct DuelNetworkCombatView: View {
         guard inputTask == nil else { return }
         inputTask = Task { @MainActor in
             while !Task.isCancelled {
-                if combat.status == .running && (heldMove != 0 || heldGuard) {
+                if combat.status == .running && combat.state?.phase == .fighting
+                    && (heldMove != 0 || heldGuard) {
                     combat.sendInput(move: heldMove, guardHeld: heldGuard)
                 }
                 do { try await Task.sleep(nanoseconds: 50_000_000) }
