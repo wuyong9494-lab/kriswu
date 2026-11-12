@@ -21,6 +21,8 @@ final class DuelNetworkCombatSession: ObservableObject {
     private var sequence: UInt64 = 0
     private var lastSentTick: UInt64?
     private var roomObservation: AnyCancellable?
+    private var lastHostStateAt: Date?
+    private var watchdog: Task<Void, Never>?
 
     init(room: GameRoom, started selection: DuelMultiplayerSelection.Snapshot,
          catalog: DuelWeaponCatalog?, seed: UInt64) throws {
@@ -71,6 +73,23 @@ final class DuelNetworkCombatSession: ObservableObject {
             .dropFirst().sink { [weak self] _ in
                 Task { @MainActor [weak self] in self?.verifyRoom() }
             }
+        if guest != nil {
+            lastHostStateAt = Date()
+            watchdog = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(nanoseconds: 1_000_000_000) }
+                    catch { return }
+                    guard let self, self.status == .running else { return }
+                    if let last = self.lastHostStateAt,
+                       Date().timeIntervalSince(last) > 5 {
+                        self.failure = "超过 5 秒未收到房主战斗状态，请检查网络连接。"
+                        self.status = .failed
+                        self.stop()
+                        return
+                    }
+                }
+            }
+        }
         if host != nil {
             clock = Task { @MainActor [weak self] in
                 // The host alone advances 60 fixed steps per second.
@@ -153,6 +172,7 @@ final class DuelNetworkCombatSession: ObservableObject {
         } else if var guest {
             guard sender == hostID else { return }
             if guest.receive(bytes, authenticatedSenderID: sender) == .applied {
+                lastHostStateAt = Date()
                 state = guest.replica.latest
                 if state?.phase == .matchOver { stop() }
             }
@@ -173,6 +193,7 @@ final class DuelNetworkCombatSession: ObservableObject {
 
     func stop() {
         clock?.cancel(); clock = nil
+        watchdog?.cancel(); watchdog = nil
         roomObservation?.cancel(); roomObservation = nil
         if let owner { room.removeAuthenticatedDirect(owner: owner) }
         owner = nil
