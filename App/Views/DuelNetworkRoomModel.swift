@@ -8,10 +8,11 @@ import AVFoundation
 @MainActor
 final class DuelNetworkRoomModel: @MainActor ObservableObject {
     enum State: Equatable {
-        case idle, preparing, connecting, selecting, awaitingStart, mounting, running, selectionComplete, closed
+        case idle, preparing, connecting, selecting, awaitingStart, mounting, running, closed
     }
     typealias Preflight = @MainActor () throws -> any DuelNetworkRoomLoading
     let objectWillChange = ObservableObjectPublisher()
+    /// Transport mode for labels only; both modes use the same verified combat path.
     let nearbyCombat: Bool
     private(set) var state = State.idle
     private(set) var error: String?
@@ -83,7 +84,7 @@ final class DuelNetworkRoomModel: @MainActor ObservableObject {
         guard state == .idle, isForeground() else { return }
         let token = UUID(); generation = token
         observeInterruptions(token: token)
-        state = nearbyCombat ? .preparing : .connecting
+        state = .preparing
         objectWillChange.send()
         guard generation == token, state != .closed else { return }
         startup = Task { @MainActor [weak self] in
@@ -99,38 +100,25 @@ final class DuelNetworkRoomModel: @MainActor ObservableObject {
     private func finishStartup(token: UUID) {
         guard generation == token, state != .closed else { return }
         do {
-            if nearbyCombat {
-                let resources = try preflight() // Deliberately synchronous, before transport and deadlines.
-                guard generation == token, state != .closed, isForeground() else {
-                    resources.cancel(); close(reason: "准备期间应用已中断，请重新进入房间。")
-                    return
-                }
-                loading = resources
-                resources.didChange = { [weak self] in
-                    guard let self, self.generation == token else { return }
-                    self.loadingChanged()
-                }
-                let combat = try resources.makeCoordinator(transport: transport)
-                coordinator = combat
-                combat.didChange = { [weak self] in
-                    guard let self, self.generation == token else { return }
-                    self.coordinatorChanged()
-                }
-                selection = DuelNetworkSelectionModel(borrowing: combat.lobby,
-                    localID: transport.state.localID, timeoutNanoseconds: selectionTimeout,
-                    requestClose: { [weak self] reason in self?.close(reason: reason) })
-            } else {
-                // Game Center remains explicitly selection-only. No combat
-                // verifier, session, readiness claim or fallback runs here.
-                let model = DuelNetworkSelectionModel(transport: transport, timeoutNanoseconds: selectionTimeout)
-                selection = model
-                model.$status.sink { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        guard let self, self.generation == token else { return }
-                        self.remoteSelectionChanged()
-                    }
-                }.store(in: &observations)
+            let resources = try preflight() // Deliberately synchronous, before transport and deadlines.
+            guard generation == token, state != .closed, isForeground() else {
+                resources.cancel(); close(reason: "准备期间应用已中断，请重新进入房间。")
+                return
             }
+            loading = resources
+            resources.didChange = { [weak self] in
+                guard let self, self.generation == token else { return }
+                self.loadingChanged()
+            }
+            let combat = try resources.makeCoordinator(transport: transport)
+            coordinator = combat
+            combat.didChange = { [weak self] in
+                guard let self, self.generation == token else { return }
+                self.coordinatorChanged()
+            }
+            selection = DuelNetworkSelectionModel(borrowing: combat.lobby,
+                localID: transport.state.localID, timeoutNanoseconds: selectionTimeout,
+                requestClose: { [weak self] reason in self?.close(reason: reason) })
             guard generation == token, state != .closed, isForeground() else {
                 close(reason: "应用已中断，请重新进入房间。"); return
             }
@@ -159,8 +147,14 @@ final class DuelNetworkRoomModel: @MainActor ObservableObject {
         guard transport.state.ready else { return }
         attached = true
         do {
-            if let coordinator { try coordinator.attach(); coordinatorChanged() }
-            else { selection?.attach(localID: transport.state.localID); remoteSelectionChanged() }
+            guard let coordinator, let selection,
+                  selection.bindBorrowedIdentityBeforeAttachment(transport.state.localID) else {
+                close(reason: "无法确认本机联机身份，请重新进入房间。"); return
+            }
+            // Game Center authentication may replace the provisional UUID during start().
+            // Bind the settled room identity before the coordinator publishes any snapshot.
+            guard generation != nil, state != .closed else { return }
+            try coordinator.attach(); coordinatorChanged()
         } catch { close(reason: "无法建立双人连接，请离开后重新进入。") }
     }
 
@@ -174,7 +168,7 @@ final class DuelNetworkRoomModel: @MainActor ObservableObject {
         if let coordinator {
             do { try coordinator.offer(startID: UUID().uuidString, seed: UInt64.random(in: 0...UInt64.max)) }
             catch { close(reason: "联机开始未能确认，请离开后重新进入。") }
-        } else { remoteSelectionChanged() }
+        }
     }
 
     func interrupt() {
@@ -240,17 +234,6 @@ final class DuelNetworkRoomModel: @MainActor ObservableObject {
             return "双方资源或画面未能通过确认，请检查完整资源后重新进入房间。"
         default: return "联机同步未能通过校验，对战已停止。请重新进入房间。"
         }
-    }
-
-    private func remoteSelectionChanged() {
-        guard state != .closed, let selection else { return }
-        switch selection.status {
-        case .closed: close(reason: selection.error); return
-        case .started: state = .selectionComplete
-        case .selecting: state = .selecting
-        default: state = .connecting
-        }
-        objectWillChange.send()
     }
 
     private func observeInterruptions(token: UUID) {

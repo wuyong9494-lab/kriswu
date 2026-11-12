@@ -105,6 +105,17 @@ final class DuelNetworkSelectionModel: ObservableObject {
         }
     }
 
+    /// A borrowed lobby has not attached yet. Authentication may have replaced
+    /// the provisional transport identity; freeze the final ID before publication.
+    @discardableResult
+    func bindBorrowedIdentityBeforeAttachment(_ localID: String) -> Bool {
+        guard borrowed, !closing, !attemptedAttachment, lobby.status == .idle,
+              snapshot == nil, !localID.isEmpty else { return false }
+        attemptedAttachment = true
+        self.localID = localID
+        return !closing
+    }
+
     func choose(_ choice: Selection.Choice) {
         guard canChoose, choice.isValid, localPlayer?.choice != choice else { return }
         submit(.select(choice))

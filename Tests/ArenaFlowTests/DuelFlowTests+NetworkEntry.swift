@@ -17,6 +17,8 @@ extension DuelFlowTests {
             XCTAssertTrue(close.waitForExistence(timeout: 8))
             XCTAssertTrue(app.staticTexts["duel.network.scope"].exists)
             let remote = app.buttons["duel.network.remote"]
+            XCTAssertEqual(remote.label, "进入远程对战")
+            XCTAssertFalse(app.staticTexts["远程 · 仅选角测试"].exists)
             XCTAssertFalse(remote.isEnabled)
             XCTAssertFalse(app.buttons["duel.pause"].exists, "Opening network entry must not launch single-player")
             if iteration == 0 {

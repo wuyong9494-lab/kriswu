@@ -504,25 +504,86 @@ extension DuelLifecycleTests {
         combat.didChange = nil
     }
 
-    func testNetworkRoomRemotePathRemainsSelectionOnlyAndSkipsPreflight() async {
-        let h = RoomIntegrationTransport(local: "z-host"), g = RoomIntegrationTransport(local: "a-guest")
+    func testNetworkRoomRemotePreflightFailureNeverStartsTransport() async {
+        enum Broken: Error { case resources }
+        let transport = RoomIntegrationTransport(local: "provisional")
+        var starts = 0, leaves = 0
+        let owner = DuelNetworkRoomModel(testingTransport: transport, nearbyCombat: false,
+            start: { starts += 1 }, leave: { leaves += 1 }, preflight: { throw Broken.resources })
+        owner.begin()
+        XCTAssertEqual(owner.state, .preparing)
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(owner.state, .closed)
+        XCTAssertEqual(starts, 0); XCTAssertEqual(leaves, 1); XCTAssertEqual(transport.claims, 0)
+        XCTAssertNil(owner.coordinator); XCTAssertNil(owner.pendingPreparation)
+    }
+
+    func testNetworkRoomRemoteCancelledAuthenticationCannotAttachLater() async {
+        let transport = RoomIntegrationTransport(local: "provisional"), loader = RoomIntegrationLoader()
+        transport.state = .init(isFighter: true, capacity: 2, ready: false, localID: "provisional",
+            hostID: "z-host", members: [])
+        var starts = 0, leaves = 0
+        let owner = DuelNetworkRoomModel(testingTransport: transport, nearbyCombat: false,
+            start: { starts += 1 }, leave: { leaves += 1 }, preflight: { loader })
+        owner.begin()
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(owner.state, .connecting); XCTAssertEqual(starts, 1)
+        owner.close(); owner.close()
+        transport.state = .init(isFighter: true, capacity: 2, ready: true, localID: "z-host",
+            hostID: "z-host", members: ["z-host", "a-guest"])
+        owner.roomChanged(); owner.begin()
+        XCTAssertEqual(owner.state, .closed); XCTAssertEqual(leaves, 1)
+        XCTAssertEqual(transport.claims, 0); XCTAssertEqual(loader.cancellations, 1)
+        XCTAssertNil(owner.selection); XCTAssertNil(owner.pendingPreparation)
+    }
+
+    func testNetworkRoomRemoteFinalIdentityAndBothPresentationBarriers() async throws {
+        let h = RoomIntegrationTransport(local: "provisional-host")
+        let g = RoomIntegrationTransport(local: "provisional-guest")
         h.peer = g; g.peer = h
+        let hl = RoomIntegrationLoader(), gl = RoomIntegrationLoader()
         var preflights = 0
-        let host = DuelNetworkRoomModel(testingTransport: h, nearbyCombat: false, leave: {},
-            preflight: { preflights += 1; return RoomIntegrationLoader() })
-        let guest = DuelNetworkRoomModel(testingTransport: g, nearbyCombat: false, leave: {},
-            preflight: { preflights += 1; return RoomIntegrationLoader() })
+        // Simulate Game Center sign-in replacing the initial UUID during start.
+        let host = DuelNetworkRoomModel(testingTransport: h, nearbyCombat: false,
+            start: {
+                XCTAssertGreaterThan(preflights, 0)
+                h.state = .init(isFighter: true, capacity: 2, ready: true, localID: "z-host",
+                    hostID: "z-host", members: ["z-host", "a-guest"])
+            }, leave: {}, preflight: { preflights += 1; return hl })
+        let guest = DuelNetworkRoomModel(testingTransport: g, nearbyCombat: false,
+            start: {
+                g.state = .init(isFighter: true, capacity: 2, ready: true, localID: "a-guest",
+                    hostID: "z-host", members: ["z-host", "a-guest"])
+            }, leave: {}, preflight: { preflights += 1; return gl })
         defer { host.close(); guest.close() }
         guest.begin(); host.begin()
         for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(preflights, 2)
+        XCTAssertEqual(host.selection?.localID, "z-host")
+        XCTAssertEqual(guest.selection?.localID, "a-guest")
+        XCTAssertEqual(host.selection?.isHost, true)
+        XCTAssertEqual(host.selection?.canChoose, true); XCTAssertEqual(guest.selection?.canChoose, true)
         host.selection?.choose(.sun); guest.selection?.choose(.liu)
         host.selection?.toggleReady(); guest.selection?.toggleReady(); host.startSelection()
-        for _ in 0..<30 { await Task.yield() }
-        XCTAssertEqual(host.state, .selectionComplete); XCTAssertEqual(guest.state, .selectionComplete)
-        XCTAssertEqual(preflights, 0); XCTAssertNil(host.coordinator); XCTAssertNil(guest.pendingPreparation)
+        let hc = try XCTUnwrap(host.coordinator), gc = try XCTUnwrap(guest.coordinator)
+        let hm = try XCTUnwrap(host.pendingPreparation), gm = try XCTUnwrap(guest.pendingPreparation)
+        XCTAssertEqual(host.state, .mounting); XCTAssertEqual(guest.state, .mounting)
+        XCTAssertTrue(hm.session.paused); XCTAssertTrue(gm.session.paused)
+        XCTAssertNil(hc.presentation); XCTAssertNil(gc.presentation)
+        hl.finish()
+        XCTAssertNotEqual(hc.state, .running); XCTAssertNotEqual(gc.state, .running)
+        gl.finish()
+        XCTAssertEqual(host.state, .running); XCTAssertEqual(guest.state, .running)
+        XCTAssertTrue(hc.presentation === hm.session); XCTAssertTrue(gc.presentation === gm.session)
+        XCTAssertEqual(h.claims, 1); XCTAssertEqual(g.claims, 1)
+        XCTAssertEqual(host.selection?.bindBorrowedIdentityBeforeAttachment("replacement"), false)
+        XCTAssertEqual(host.selection?.localID, "z-host")
+        host.close(); guest.close()
+        XCTAssertEqual(hl.cancellations, 1); XCTAssertEqual(gl.cancellations, 1)
+        XCTAssertNil(h.owner); XCTAssertNil(g.owner)
     }
 
-    func testNetworkRoomProductionLoaderMountsExactOriginalsBeforeCoordinatorReadiness() async throws {
+    func testNetworkRoomRemoteProductionLoaderMountsExactOriginalsBeforeCoordinatorReadiness() async throws {
         guard DuelWeaponAssets.catalogURL() != nil else { throw XCTSkip("Approved fighter originals are not installed") }
         // Both expensive synchronous preflights finish before either transport or
         // handshake deadline starts. This path never supplies testingPrepare.
@@ -533,8 +594,8 @@ extension DuelLifecycleTests {
         let hl = DuelNetworkPresentationLoader(prepared: hp), gl = DuelNetworkPresentationLoader(prepared: gp)
         let h = RoomIntegrationTransport(local: "z-host"), g = RoomIntegrationTransport(local: "a-guest")
         h.peer = g; g.peer = h
-        let host = DuelNetworkRoomModel(testingTransport: h, leave: {}, preflight: { hl })
-        let guest = DuelNetworkRoomModel(testingTransport: g, leave: {}, preflight: { gl })
+        let host = DuelNetworkRoomModel(testingTransport: h, nearbyCombat: false, leave: {}, preflight: { hl })
+        let guest = DuelNetworkRoomModel(testingTransport: g, nearbyCombat: false, leave: {}, preflight: { gl })
         defer { host.close(); guest.close() }
         guest.begin(); host.begin()
         for _ in 0..<30 { await Task.yield() }

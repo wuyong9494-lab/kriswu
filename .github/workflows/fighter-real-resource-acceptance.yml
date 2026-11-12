@@ -13,8 +13,8 @@ concurrency:
 jobs:
   real_resources:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
-      && github.event_name == 'push' && github.event.before == '7812b86d16fe5a3e1e730f9c79df8781c3e6576e' && github.event.head_commit.message
-      == 'Verify callback contract and atomic restart observations'
+      && github.event_name == 'push' && github.event.before == 'a7e4f25571ea3ed80a68195b490b221943b273ca' && github.event.head_commit.message
+      == 'Integrate guarded remote fighter combat and validate real resources'
     runs-on: macos-26
     timeout-minutes: 140
     env:

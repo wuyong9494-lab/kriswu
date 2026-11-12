@@ -290,6 +290,7 @@ final class GameRoom: NSObject, ObservableObject {
     private var memberOfPeer: [MCPeerID: String] = [:]
     private var directIdentities = GameRoomDirectIdentity<MCPeerID>()
     private var match: GKMatch?
+    private var fighterRemoteTerminal = false
     private let remoteStartup = GameRoomRemoteStartup(cancelMatchmaking: { GKMatchmaker.shared().cancel() })
 
     private enum Envelope: Codable {
@@ -353,6 +354,7 @@ final class GameRoom: NSObject, ObservableObject {
     }
 
     func leave() {
+        if kind == .fighter, case .remote = mode { fighterRemoteTerminal = true }
         remoteStartup.cancel()
         advertiser?.delegate = nil
         advertiser?.stopAdvertisingPeer()
@@ -403,6 +405,10 @@ final class GameRoom: NSObject, ObservableObject {
 
     /// 不转发的消息：房主发给所有人，别人只发给房主。unreliable 的快、丢了不补（每秒几十次的摇杆、画面用）
     func sendDirect(_ data: Data, delivery: Delivery = .reliable) {
+        if kind == .fighter, case .remote = mode {
+            guard !fighterRemoteTerminal else { return }
+            if case .closed = phase { return }
+        }
         var packet = Data([Self.directMarker, UInt8(clamping: me.id.utf8.count)])
         packet.append(contentsOf: Array(me.id.utf8))
         packet.append(data)
@@ -416,7 +422,14 @@ final class GameRoom: NSObject, ObservableObject {
             guard let match else { return }
             let players = isHost ? match.players : match.players.filter { $0.gamePlayerID == hostID }
             guard !players.isEmpty else { return }
-            try? match.send(packet, to: players, dataMode: delivery == .reliable ? .reliable : .unreliable)
+            do {
+                try match.send(packet, to: players, dataMode: delivery == .reliable ? .reliable : .unreliable)
+            } catch {
+                // Complete replay cannot silently drop a reliable input/frame.
+                // Preserve legacy games' behavior; only the trusted fighter
+                // channel treats a failed send as terminal.
+                if delivery == .reliable { fighterRemoteSendFailed() }
+            }
         }
     }
 
@@ -546,6 +559,32 @@ final class GameRoom: NSObject, ObservableObject {
 
     // MARK: 远程
 
+    private func fighterRemoteDisconnected(playerID: String) {
+        guard kind == .fighter, case .remote = mode, !fighterRemoteTerminal, phase == .ready,
+              playerID != me.id, members.contains(where: { $0.id == playerID }) else { return }
+        fighterRemoteTerminal = true // Reserve terminal state before @Published willSet reentry.
+        phase = .closed("对方断开了，联机对战已停止，请重新进入房间。")
+        onMembersChanged?()
+    }
+
+    private func fighterRemoteSendFailed() {
+        guard kind == .fighter, case .remote = mode, !fighterRemoteTerminal, phase == .ready,
+              authenticatedDirectOwner != nil else { return }
+        fighterRemoteTerminal = true
+        phase = .closed("可靠联机消息发送失败，对战已停止，请重新进入房间。")
+        onMembersChanged?()
+    }
+
+    #if DEBUG
+    // Offline policy seam only: never fabricates a GKMatch or delivers packets.
+    func testingRemoteMembers(_ players: [Member], expectedPlayerCount: Int) {
+        precondition(code != nil)
+        applyRemoteMembers(players, expectedPlayerCount: expectedPlayerCount)
+    }
+    func testingRemoteDisconnected(playerID: String) { fighterRemoteDisconnected(playerID: playerID) }
+    func testingRemoteReliableSendFailure() { fighterRemoteSendFailed() }
+    #endif
+
     private func findRemote(code: Int) {
         let request = GKMatchRequest()
         request.minPlayers = capacity
@@ -570,11 +609,37 @@ final class GameRoom: NSObject, ObservableObject {
 
     private func remoteChanged() {
         guard let match else { return }
-        members = [me] + match.players.map { Member(id: $0.gamePlayerID, name: $0.displayName) }
+        applyRemoteMembers(match.players.map { Member(id: $0.gamePlayerID, name: $0.displayName) },
+                           expectedPlayerCount: match.expectedPlayerCount)
+    }
+
+    private func applyRemoteMembers(_ players: [Member], expectedPlayerCount: Int) {
+        // A late connected notification must never resurrect a failed fighter
+        // room or elect a replacement host after combat started.
+        if kind == .fighter {
+            guard !fighterRemoteTerminal else { return }
+            if case .closed = phase { return }
+        }
+        members = [me] + players
+        if kind == .fighter {
+            guard !fighterRemoteTerminal else { return }
+            if case .closed = phase { return }
+        }
         hostID = members.map(\.id).min()
-        if members.count >= 2, match.expectedPlayerCount == 0 {
+        if kind == .fighter {
+            guard !fighterRemoteTerminal else { return }
+            if case .closed = phase { return }
+        }
+        if members.count >= 2, expectedPlayerCount == 0 {
             phase = .ready
+            // A ready willSet observer may synchronously leave. The outer
+            // assignment must not leave a terminated room looking usable.
+            if kind == .fighter, fighterRemoteTerminal {
+                phase = .closed("房间已离开，请重新进入。")
+                return
+            }
         } else if phase == .ready, members.count < 2 {
+            if kind == .fighter { fighterRemoteTerminal = true }
             phase = .closed("对方断开了")
         }
         onMembersChanged?()
@@ -715,8 +780,11 @@ extension GameRoom: GKMatchDelegate {
 
     nonisolated func match(_ match: GKMatch, player: GKPlayer, didChange state: GKPlayerConnectionState) {
         let matchID = ObjectIdentifier(match)
+        let playerID = player.gamePlayerID
+        let disconnected = state == .disconnected
         Task { @MainActor in
             guard let current = self.match, ObjectIdentifier(current) == matchID else { return }
+            if disconnected { self.fighterRemoteDisconnected(playerID: playerID) }
             self.remoteChanged()
         }
     }
@@ -726,6 +794,10 @@ extension GameRoom: GKMatchDelegate {
         let matchID = ObjectIdentifier(match)
         Task { @MainActor in
             guard let current = self.match, ObjectIdentifier(current) == matchID else { return }
+            if self.kind == .fighter {
+                guard !self.fighterRemoteTerminal else { return }
+                self.fighterRemoteTerminal = true
+            }
             self.phase = .closed(reason)
         }
     }

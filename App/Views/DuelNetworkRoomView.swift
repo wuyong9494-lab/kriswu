@@ -19,7 +19,7 @@ struct DuelNetworkEntryView: View {
                     VStack(spacing: 20) { nearby; remote }
                 }
                 .padding(20)
-                Text("面对面可进入双人格斗测试：先校验本机完整资源，再连接、选角与准备。远程当前仍仅测试选角。")
+                Text("面对面与远程均可进入双人格斗测试：先校验本机完整资源，再连接、选角并确认双方画面与操作界面就绪。")
                     .font(.callout).foregroundStyle(.white.opacity(0.8))
                     .padding([.horizontal, .bottom], 20)
                     .accessibilityIdentifier("duel.network.scope")
@@ -61,7 +61,7 @@ struct DuelNetworkEntryView: View {
 
     private var remote: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("远程 · 仅选角测试", systemImage: "globe.asia.australia").font(.title3.bold())
+            Label("远程 · Game Center 对战", systemImage: "globe.asia.australia").font(.title3.bold())
             HStack {
                 TextField("2 开头的 4 位房间号", text: $code)
                     .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
@@ -70,14 +70,14 @@ struct DuelNetworkEntryView: View {
                 Button("随机") { code = String(RoomCode.make(players: 2)) }
                     .buttonStyle(.bordered)
             }
-            Button("进入远程选角测试") {
+            Button("进入远程对战") {
                 guard let parsed = DuelNetworkSelectionModel.roomCode(code) else { return }
                 open(.remote(code: parsed))
             }
             .buttonStyle(.borderedProminent).tint(.orange)
             .disabled(DuelNetworkSelectionModel.roomCode(code) == nil)
             .accessibilityIdentifier("duel.network.remote")
-            Text("双方输入同一个房间号。需要各自的 Game Center；此入口不启动联机战斗。")
+            Text("请先在系统设置登录各自的 Game Center，再输入相同房间号。完整资源校验通过后才连接；若首次系统登录中断房间，登录完成后重新进入。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
         }
         .duelNetworkPanel()
@@ -125,9 +125,9 @@ struct DuelNetworkRoomView: View {
                         Text(owner.error ?? "房间已关闭，请重新进入。").multilineTextAlignment(.center)
                             .accessibilityIdentifier("duel.network.closed")
                     } else {
-                        ProgressView(owner.nearbyCombat ? "正在校验并准备本机联机资源…" : "正在打开远程选角测试…").tint(.orange)
+                        ProgressView(owner.state == .preparing ? "正在校验并准备本机联机资源…" : "正在连接双人房间…").tint(.orange)
                             .accessibilityIdentifier("duel.network.preflight")
-                        Text(owner.nearbyCombat ? "此步骤会在本机同步解码原始资源，完成前不会连接房间。" : "此入口只同步选角，不会启动联机战斗。")
+                        Text("此步骤会在本机同步解码原始资源，完成前不会连接房间。")
                             .font(.caption).foregroundStyle(.white.opacity(0.7))
                     }
                     Button("离开") { owner.close(); dismiss() }.buttonStyle(.bordered)
@@ -186,12 +186,12 @@ private struct DuelNetworkLobbyContent: View {
             .accessibilityIdentifier("duel.network.leave")
             Spacer()
             VStack(spacing: 2) {
-                Text(owner.nearbyCombat ? "裂隙对决 · 面对面对战" : "裂隙对决 · 远程选角").font(.headline)
+                Text(owner.nearbyCombat ? "裂隙对决 · 面对面对战" : "裂隙对决 · 远程对战").font(.headline)
                 Text(room.code.map { "远程房间 \($0)" } ?? "面对面房间")
                     .font(.caption).foregroundStyle(.white.opacity(0.65))
             }
             Spacer()
-            Text(owner.nearbyCombat ? "联机测试" : "仅选角").font(.caption.bold()).foregroundStyle(.orange)
+            Text("联机测试").font(.caption.bold()).foregroundStyle(.orange)
         }
     }
 
@@ -239,7 +239,7 @@ private struct DuelNetworkLobbyContent: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(owner.nearbyCombat ? "双方选角、准备后由房主开始；画面与操作界面确认就绪后进入对战。" : "远程仅选角与准备同步测试，不启动联机战斗。")
+            Text("双方选角、准备后由房主开始；画面与操作界面确认就绪后进入对战。")
                 .font(.caption).foregroundStyle(.white.opacity(0.7))
                 .accessibilityIdentifier("duel.network.scope")
             if let notice = room.notice { message(notice, warning: true) }
@@ -249,13 +249,8 @@ private struct DuelNetworkLobbyContent: View {
             if case .closed(let reason) = room.phase {
                 message(reason, warning: true).accessibilityIdentifier("duel.network.disconnected")
             } else if model.status == .started {
-                if owner.nearbyCombat {
-                    ProgressView("双方选角已确认，正在确认联机画面与操作界面…").tint(.orange)
-                        .accessibilityIdentifier("duel.network.starting")
-                } else {
-                    message("远程选角已确认；此入口不启动联机战斗，请离开房间。", warning: false)
-                        .accessibilityIdentifier("duel.network.selectionComplete")
-                }
+                ProgressView("双方选角已确认，正在确认联机画面与操作界面…").tint(.orange)
+                    .accessibilityIdentifier("duel.network.starting")
             } else if model.status == .selecting {
                 selectionControls
             } else if model.status == .connecting {
@@ -288,7 +283,7 @@ private struct DuelNetworkLobbyContent: View {
                 .disabled(!model.canReady)
                 .accessibilityIdentifier("duel.network.ready")
             if model.isHost {
-                Button(owner.nearbyCombat ? "开始面对面对战" : "锁定双方选角") { owner.startSelection() }
+                Button(owner.nearbyCombat ? "开始面对面对战" : "开始远程对战") { owner.startSelection() }
                     .buttonStyle(.bordered).disabled(!model.canStart)
                     .accessibilityIdentifier("duel.network.start")
             } else {
