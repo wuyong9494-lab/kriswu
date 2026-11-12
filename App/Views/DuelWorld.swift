@@ -230,7 +230,7 @@ final class DuelWorldView: SCNView {
         if session.game.fighters.count == 2 {
             let left = Float(session.game.fighters[0].x) / 1000
             let right = Float(session.game.fighters[1].x) / 1000
-            let midpoint = min(7.0, max(3.0, (left + right) * 0.5))
+            let midpoint = min(8.5, max(1.5, (left + right) * 0.5))
             trackedCameraX += (midpoint - trackedCameraX) * 0.12
             // Shared projection prevents the render tick from undoing rotation-safe framing.
             applyCameraFraming()
