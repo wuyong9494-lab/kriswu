@@ -27,10 +27,14 @@ struct DuelNetworkCombatView: View {
                         fighter(state.fighters[1], seat: 1)
                     }
                     .frame(maxWidth: .infinity)
-                    DuelNetworkScene(state: state)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .accessibilityIdentifier("duel.combat.scene")
+                    if combat.status == .running {
+                        DuelNetworkScene(state: state)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .accessibilityIdentifier("duel.combat.scene")
+                    } else {
+                        Spacer(minLength: 0)
+                    }
                     if combat.status == .failed {
                         Text(combat.failure ?? "联机连接已中断")
                             .font(.headline).foregroundStyle(.orange)
