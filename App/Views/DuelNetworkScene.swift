@@ -31,6 +31,7 @@ final class DuelNetworkSceneView: SCNView {
     private var stageAsset: DuelStageAsset?
     private let cameraNode = SCNNode()
     private var center: Float = 5
+    private var hasCameraFrame = false
 
     override init(frame: CGRect, options: [String: Any]? = nil) {
         super.init(frame: frame, options: options)
@@ -96,6 +97,7 @@ final class DuelNetworkSceneView: SCNView {
             displayedX.removeAll()
             displayedY.removeAll()
             heroes = incoming
+            hasCameraFrame = false
             for hero in incoming {
                 let asset = try? weaponAssets?.character(for: hero)
                 let actor = DuelActor(hero: hero, asset: nil, weaponAsset: asset)
@@ -158,7 +160,16 @@ final class DuelNetworkSceneView: SCNView {
         previousHealth = state.fighters.map(\.health)
         let left = Float(state.fighters[0].x) / 1000
         let right = Float(state.fighters[1].x) / 1000
-        center += (min(8.5, max(1.5, (left + right) * 0.5)) - center) * 0.12
+        let midpoint = min(8.5, max(1.5, (left + right) * 0.5))
+        // Snap on the first authoritative frame so a newly joined guest never
+        // starts with both fighters stranded to one side of the viewport.
+        // Only subsequent corrections use damping to avoid camera jitter.
+        if !hasCameraFrame {
+            center = midpoint
+            hasCameraFrame = true
+        } else {
+            center += (midpoint - center) * 0.12
+        }
         lastSeparation = Double(abs(left - right))
         updateCamera(separation: lastSeparation)
         SCNTransaction.commit()
@@ -186,6 +197,7 @@ final class DuelNetworkSceneView: SCNView {
         previousHealth.removeAll()
         displayedX.removeAll()
         displayedY.removeAll()
+        hasCameraFrame = false
         weaponAssets?.releaseCharacters()
         weaponAssets = nil
         stageAsset = nil
