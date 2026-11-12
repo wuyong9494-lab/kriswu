@@ -213,8 +213,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         weaponAssets = nextWeaponAssets
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero
-        idleTick = 0; yaw = .pi; zoom = 1
-        cameraNode?.position = SCNVector3(5, 1.6, 4.8)
+        idleTick = 0; yaw = .pi; zoom = 0.84
+        cameraNode?.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
         cameraNode?.look(at: showroomCenter)
         scene.rootNode.addChildNode(nextRoot)
         startIdle()
