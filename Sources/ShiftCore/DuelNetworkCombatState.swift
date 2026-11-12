@@ -16,6 +16,10 @@ public struct DuelNetworkCombatState: Codable, Equatable, Sendable {
         public let energy: Int
         public let stun: Int
         public let knockdown: Int
+        public let guarding: Bool
+        public let walking: Bool
+        public let attack: DuelGame.Move?
+        public let attackAge: Int?
         /// Host-selected source animation; clients may render but never decide hits.
         public let animation: Animation?
         public struct Animation: Codable, Equatable, Sendable {
@@ -44,6 +48,8 @@ public struct DuelNetworkCombatState: Codable, Equatable, Sendable {
             facing = fighter.facing; health = fighter.health
             guardMeter = fighter.guardMeter; energy = fighter.energy
             stun = fighter.stun; knockdown = fighter.knockdown
+            guarding = fighter.guarding; walking = fighter.walking
+            attack = fighter.attack?.move; attackAge = fighter.attack?.age
             animation = fighter.weaponPose.map(Animation.init)
         }
         public var isPlausible: Bool {
@@ -52,6 +58,8 @@ public struct DuelNetworkCombatState: Codable, Equatable, Sendable {
             && (0...1_000).contains(guardMeter) && (0...100).contains(energy)
             && (0...10_000).contains(stun) && (0...10_000).contains(knockdown)
             && (animation?.isPlausible ?? true)
+            && (attack == nil) == (attackAge == nil)
+            && (attackAge.map { (0...10_000).contains($0) } ?? true)
         }
     }
 
