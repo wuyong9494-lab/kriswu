@@ -158,7 +158,7 @@ final class DuelNetworkSceneView: SCNView {
         previousHealth = state.fighters.map(\.health)
         let left = Float(state.fighters[0].x) / 1000
         let right = Float(state.fighters[1].x) / 1000
-        center += (min(7, max(3, (left + right) * 0.5)) - center) * 0.12
+        center += (min(8.5, max(1.5, (left + right) * 0.5)) - center) * 0.12
         lastSeparation = Double(abs(left - right))
         updateCamera(separation: lastSeparation)
         SCNTransaction.commit()
