@@ -25,6 +25,7 @@ final class DuelNetworkCombatSession: ObservableObject {
     private var roomObservation: AnyCancellable?
     private var lastHostStateAt: Date?
     private var watchdog: Task<Void, Never>?
+    private var didStop = false
 
     init(room: GameRoom, started selection: DuelMultiplayerSelection.Snapshot,
          catalog: DuelWeaponCatalog?, seed: UInt64) throws {
@@ -213,6 +214,18 @@ final class DuelNetworkCombatSession: ObservableObject {
     }
 
     func stop() {
+        guard !didStop else { return }
+        didStop = true
+        // Notify the host before relinquishing the authenticated callback.
+        // The host must not keep simulating an absent guest.
+        if guest != nil, owner != nil, status == .running,
+           let bytes = DuelNetworkCombatWire.encode(.leave) {
+            room.sendDirect(bytes, delivery: .reliable)
+        }
+        if var host {
+            _ = host.simulation.cancel(localPlayerID: hostID)
+            self.host = host
+        }
         clock?.cancel(); clock = nil
         watchdog?.cancel(); watchdog = nil
         roomObservation?.cancel(); roomObservation = nil
@@ -224,5 +237,9 @@ final class DuelNetworkCombatSession: ObservableObject {
         if status == .running { status = .ended }
     }
 
-    deinit { clock?.cancel() }
+    deinit {
+        clock?.cancel()
+        watchdog?.cancel()
+        roomObservation?.cancel()
+    }
 }
