@@ -13,8 +13,8 @@ concurrency:
 jobs:
   real_resources:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111'
-      && github.event_name == 'push' && github.event.before == '3a2651a054cd8b54b96fcb92c6495185b5a956e6' && github.event.head_commit.message
-      == 'Run approved grouped fighter visual and lifecycle acceptance'
+      && github.event_name == 'push' && github.event.before == 'c48894d624a825cf0d0984a4e9bd2bbeffb7e74d' && github.event.head_commit.message
+      == 'Retry approved grouped acceptance after bounded simulator startup fix'
     runs-on: macos-26
     timeout-minutes: 100
     env:
@@ -114,7 +114,7 @@ jobs:
         \ all three pinned music resources in compiled native app')\nPYCODE\n"
     - name: Prepare iPhone 17 Pro Max simulator
       id: simulator
-      timeout-minutes: 20
+      timeout-minutes: 25
       shell: bash -eo pipefail {0}
       run: '(
 
@@ -207,3 +207,4 @@ jobs:
       run:
         working-directory: source
         shell: bash -eo pipefail {0}
+

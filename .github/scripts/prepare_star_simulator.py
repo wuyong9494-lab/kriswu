@@ -111,22 +111,31 @@ def capture_ready(device, destination=Path("star-simulator-ready.png")):
 def wait_for_boot(device, retry_cold_boot=False):
     command = ["xcrun", "simctl", "bootstatus", device, "-b"]
     try:
-        subprocess.run(command, check=True, timeout=240)
+        subprocess.run(command, check=True, timeout=360)
     except subprocess.TimeoutExpired:
         if not retry_cold_boot:
             raise
         # Cold hosted runners sometimes still initialize SpringBoard after the
         # first bounded wait. Inspect this exact device, then allow ONE further
         # wait instead of rebuilding every native test bundle on another runner.
-        catalog = json.loads(subprocess.check_output(
-            ["xcrun", "simctl", "list", "devices", "-j"], timeout=30))
-        matches = [item for devices in catalog.get("devices", {}).values()
-                   for item in devices if item.get("udid") == device]
-        if (len(matches) != 1 or matches[0].get("isAvailable") is not True
-                or matches[0].get("state") not in ("Booted", "Booting")):
-            raise RuntimeError("Target simulator is not still booting; native acceptance is blocked")
-        print("Target simulator is still initializing; allowing one additional 180-second boot wait", flush=True)
-        subprocess.run(command, check=True, timeout=180)
+        try:
+            catalog = json.loads(subprocess.check_output(
+                ["xcrun", "simctl", "list", "devices", "-j"], timeout=30))
+        except subprocess.TimeoutExpired:
+            # The catalog and bootstatus use the same busy CoreSimulator service.
+            # A timed-out diagnostic query is not evidence of a missing device.
+            # Reuse ONLY the exact UUID just created; bootstatus must still
+            # succeed, followed by the unchanged complete-PNG readiness check.
+            print("Simulator catalog is busy; retaining the exact prepared UUID for one final boot wait", flush=True)
+        else:
+            matches = [item for devices in catalog.get("devices", {}).values()
+                       for item in devices if item.get("udid") == device]
+            if (len(matches) != 1 or matches[0].get("isAvailable") is not True
+                    or matches[0].get("state") not in ("Booted", "Booting")):
+                raise RuntimeError("Target simulator is not still booting; native acceptance is blocked")
+        print("Allowing one final 300-second boot wait for the exact prepared simulator", flush=True)
+        subprocess.run(command, check=True, timeout=300)
+
 
 
 def wait_ready(retry_cold_boot=False):
@@ -136,8 +145,14 @@ def wait_ready(retry_cold_boot=False):
     device = json.loads(Path("star-test-device.json").read_text())
     if device.get("name") != MODEL or device.get("udid") != prepared.get("udid"):
         raise ValueError("Prepared simulator identity differs from the target device")
-    wait_for_boot(device["udid"], retry_cold_boot=retry_cold_boot)
-    capture_ready(device["udid"])
+    try:
+        wait_for_boot(device["udid"], retry_cold_boot=retry_cold_boot)
+        capture_ready(device["udid"])
+    except Exception as error:
+        write_json(STATUS, {"prepared": True, "ready": False, "udid": device["udid"], "error": str(error)})
+        raise
+    write_json(STATUS, {"prepared": True, "ready": True, "udid": device["udid"]})
+
 
 
 if __name__ == "__main__":
@@ -145,8 +160,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ready", action="store_true")
     parser.add_argument("--retry-cold-boot", action="store_true",
-                        help="Allow one additional bounded wait; requires a 20-minute combined preparation budget")
+                        help="Allow one additional bounded wait; requires a 25-minute combined preparation budget")
     args = parser.parse_args()
     if args.retry_cold_boot and not args.ready:
         parser.error("--retry-cold-boot requires --ready")
     wait_ready(retry_cold_boot=args.retry_cold_boot) if args.ready else prepare()
+
