@@ -47,19 +47,25 @@ struct DuelNetworkCombatView: View {
                         Button("结束对战") { combat.stop(); onExit() }
                             .buttonStyle(.borderedProminent)
                     } else if combat.status == .running && state.phase == .fighting {
-                        HStack(spacing: 8) {
-                            heldButton("后退", move: -1)
-                            heldButton("前进", move: 1)
-                            heldButton("格挡", guardHeld: true)
-                            Button("轻击") { combat.sendInput(tapBits: DuelGame.Buttons.light.rawValue) }
-                            Button("重击") { combat.sendInput(tapBits: DuelGame.Buttons.heavy.rawValue) }
-                            Button("技能一") { combat.sendInput(tapBits: DuelGame.Buttons.skill1.rawValue) }
-                            Button("技能二") { combat.sendInput(tapBits: DuelGame.Buttons.skill2.rawValue) }
-                            Button("跳跃") { combat.sendInput(tapBits: DuelGame.Buttons.jump.rawValue) }
-                            Button("大招") { combat.sendInput(tapBits: DuelGame.Buttons.ultimate.rawValue) }
+                        HStack(alignment: .bottom, spacing: 12) {
+                            HStack(spacing: 6) {
+                                heldButton("后退", move: -1)
+                                heldButton("前进", move: 1)
+                                heldButton("格挡", guardHeld: true)
+                            }
+                            Spacer(minLength: 4)
+                            HStack(spacing: 6) {
+                                Button("轻击") { combat.sendInput(tapBits: DuelGame.Buttons.light.rawValue) }
+                                Button("重击") { combat.sendInput(tapBits: DuelGame.Buttons.heavy.rawValue) }
+                                Button("技能一") { combat.sendInput(tapBits: DuelGame.Buttons.skill1.rawValue) }
+                                Button("技能二") { combat.sendInput(tapBits: DuelGame.Buttons.skill2.rawValue) }
+                                Button("跳跃") { combat.sendInput(tapBits: DuelGame.Buttons.jump.rawValue) }
+                                Button("大招") { combat.sendInput(tapBits: DuelGame.Buttons.ultimate.rawValue) }
+                                    .tint(.purple)
+                            }
                         }
                         .buttonStyle(.borderedProminent)
-                        .controlSize(geometry.size.width < 700 ? .small : .regular)
+                        .controlSize(geometry.size.width < 700 ? .mini : .small)
                         .accessibilityIdentifier("duel.combat.controls")
                     } else if state.phase == .roundBreak {
                         Text("回合结束 · 等待下一回合")
