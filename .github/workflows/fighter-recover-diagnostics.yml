@@ -1,0 +1,46 @@
+name: Recover encrypted existing fighter diagnostics only
+'on':
+  push:
+    branches: [codex/fighter-lab-compile-only-20261111]
+    paths: [.github/workflows/fighter-recover-diagnostics.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: fighter-private-diagnostic-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.event.before == 'c8e7017a306fad38568b181f9c0ba62b8e50bf2d' && github.event.head_commit.message == 'Recover approved existing encrypted acceptance diagnostics only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: fighter-private-assets
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+        lfs: false
+        submodules: false
+    - uses: actions/download-artifact@v5
+      with:
+        artifact-ids: '13923982443'
+        run-id: '43170811422'
+        github-token: ${{ github.token }}
+        path: encrypted-input
+        merge-multiple: true
+    - name: Authenticate existing evidence and encrypt small diagnosis
+      env:
+        FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_MUSIC_PACKAGE_KEY }}
+      shell: bash -eo pipefail {0}
+      run: |
+        umask 077
+        echo '925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79  .github/scripts/fighter_private_model.py' | sha256sum -c - >/dev/null
+        python3 .github/scripts/fighter_recover_diagnostics.py "$GITHUB_WORKSPACE/encrypted-input" "$RUNNER_TEMP/private-diagnostics"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: fighter-small-diagnostics-encrypted
+        path: |
+          ${{ runner.temp }}/private-diagnostics/diagnostics.enc
+          ${{ runner.temp }}/private-diagnostics/diagnostics.enc.sha256
+        retention-days: 3
+        if-no-files-found: error
