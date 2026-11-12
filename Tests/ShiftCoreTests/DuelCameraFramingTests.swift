@@ -5,7 +5,7 @@ final class DuelCameraFramingTests: XCTestCase {
     func testWideCloseUpAndSeparatedFighters() {
         let close = DuelCameraFraming(aspect: 2.1, separation: 3)
         let apart = DuelCameraFraming(aspect: 2.1, separation: 10)
-        XCTAssertEqual(close.verticalFieldOfView, 31)
+        XCTAssertEqual(close.verticalFieldOfView, 29)
         XCTAssertEqual(close.orthographicScale, 2.85)
         XCTAssertGreaterThan(apart.verticalFieldOfView, close.verticalFieldOfView)
         XCTAssertGreaterThan(apart.orthographicScale, close.orthographicScale)
@@ -50,6 +50,18 @@ final class DuelCameraFramingTests: XCTestCase {
             let nominalFraction = 2.0 / visibleHeight
             XCTAssertGreaterThanOrEqual(nominalFraction, 0.48)
             XCTAssertLessThanOrEqual(nominalFraction, 0.55)
+        }
+    }
+
+    func testLandscapeThresholdHasNoHardLensJump() {
+        // The pre-fix 1.5 aspect boundary changed the perspective FOV and
+        // orthographic size in one layout callback with no fighter movement.
+        for separation in [0.0, 3, 6, 10, 13] {
+            let before = DuelCameraFraming(aspect: 1.4999, separation: separation)
+            let after = DuelCameraFraming(aspect: 1.5001, separation: separation)
+            XCTAssertLessThan(abs(before.verticalFieldOfView - after.verticalFieldOfView), 0.1)
+            XCTAssertLessThan(abs(before.perspectiveDistance - after.perspectiveDistance), 0.1)
+            XCTAssertLessThan(abs(before.orthographicScale - after.orthographicScale), 0.1)
         }
     }
 
