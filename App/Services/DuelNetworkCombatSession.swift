@@ -58,6 +58,15 @@ final class DuelNetworkCombatSession: ObservableObject {
         }) else { throw Failure.callbackBusy }
         owner = token
         status = .running
+        if let host {
+            // The guest must receive a trustworthy first frame before it can
+            // schedule inputs. Send this keyframe reliably at combat startup.
+            let initial = DuelNetworkCombatState(simulation: host.simulation)
+            state = initial
+            if let bytes = DuelNetworkCombatWire.encode(.state(initial)) {
+                room.sendDirect(bytes, delivery: .reliable)
+            }
+        }
         roomObservation = Publishers.CombineLatest3(room.$phase, room.$members, room.$hostID)
             .dropFirst().sink { [weak self] _ in
                 Task { @MainActor [weak self] in self?.verifyRoom() }
@@ -119,7 +128,9 @@ final class DuelNetworkCombatSession: ObservableObject {
             let terminal = state?.phase == .matchOver
             // Final results must be reliable; otherwise a lost last UDP-like
             // update leaves the guest waiting forever after the host stops.
-            room.sendDirect(bytes, delivery: terminal ? .reliable : .unreliable)
+            // Periodic reliable keyframes repair lost unreliable updates.
+            let keyframe = terminal || host.simulation.inputs.nextTick % 30 == 0
+            room.sendDirect(bytes, delivery: keyframe ? .reliable : .unreliable)
             if terminal { stop() }
         } catch {
             failure = "战斗模拟已停止。"
