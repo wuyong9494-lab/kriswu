@@ -21,6 +21,7 @@ final class DuelNetworkCombatSession: ObservableObject {
     private var sequence: UInt64 = 0
     private var lastSentTick: UInt64?
     private var lastSentEpoch: UInt64?
+    private var pendingAttack: (tapBits: Int, weaponCommand: DuelWeaponCommand?)?
     private var roomObservation: AnyCancellable?
     private var lastHostStateAt: Date?
     private var watchdog: Task<Void, Never>?
@@ -134,7 +135,14 @@ final class DuelNetworkCombatSession: ObservableObject {
             lastSentEpoch = epoch
         }
         let scheduledTick = max(tick, lastSentTick.map { $0 < UInt64.max ? $0 + 1 : $0 } ?? tick)
-        guard scheduledTick >= tick, scheduledTick - tick <= DuelNetworkInputs.futureWindow else { return }
+        guard scheduledTick >= tick, scheduledTick - tick <= DuelNetworkInputs.futureWindow else {
+            // The guest has already reserved every available future tick.
+            // Retain the latest discrete attack until the host clock advances.
+            if tapBits != 0 || weaponCommand != nil {
+                pendingAttack = (tapBits, weaponCommand)
+            }
+            return
+        }
         let nextSequence = sequence + 1
         let message = DuelNetworkInputs.Message(sessionID: sessionID, epoch: epoch,
             sequence: nextSequence, tick: scheduledTick, move: move, vertical: vertical,
@@ -142,6 +150,7 @@ final class DuelNetworkCombatSession: ObservableObject {
         guard let bytes = DuelNetworkCombatWire.encode(.input(message)) else { return }
         sequence = nextSequence
         lastSentTick = scheduledTick
+        if tapBits != 0 || weaponCommand != nil { pendingAttack = nil }
         if var host {
             _ = host.receive(bytes, authenticatedSenderID: hostID)
             self.host = host
@@ -181,6 +190,11 @@ final class DuelNetworkCombatSession: ObservableObject {
             if guest.receive(bytes, authenticatedSenderID: sender) == .applied {
                 lastHostStateAt = Date()
                 state = guest.replica.latest
+                if let pending = pendingAttack {
+                    // Retry only after a new authoritative tick frees room in
+                    // the bounded scheduling window; never fabricate extra taps.
+                    sendInput(tapBits: pending.tapBits, weaponCommand: pending.weaponCommand)
+                }
                 if state?.phase == .matchOver { stop() }
             }
             self.guest = guest
@@ -204,6 +218,9 @@ final class DuelNetworkCombatSession: ObservableObject {
         roomObservation?.cancel(); roomObservation = nil
         if let owner { room.removeAuthenticatedDirect(owner: owner) }
         owner = nil
+        pendingAttack = nil
+        lastSentTick = nil
+        lastSentEpoch = nil
         if status == .running { status = .ended }
     }
 
