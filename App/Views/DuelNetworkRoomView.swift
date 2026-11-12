@@ -153,8 +153,10 @@ struct DuelNetworkRoomView: View {
         .onChange(of: scenePhase) {
             if $0 == .background {
                 combat?.stop()
+                combat = nil
                 model.close(reason: "应用已进入后台，联机对战已结束。请重新进入房间。")
                 leaveTransport()
+                dismiss()
             }
         }
         .onDisappear {
