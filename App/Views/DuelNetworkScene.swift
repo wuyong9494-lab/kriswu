@@ -24,6 +24,8 @@ final class DuelNetworkSceneView: SCNView {
     private var heroes: [DuelGame.Hero] = []
     private var lastTick: UInt64?
     private var previousHealth: [Int] = []
+    private var displayedX: [Float] = []
+    private var displayedY: [Float] = []
     private var impactNodes: [SCNNode] = []
     private var weaponAssets: DuelWeaponAssets?
     private var stageAsset: DuelStageAsset?
@@ -91,6 +93,8 @@ final class DuelNetworkSceneView: SCNView {
             impactNodes.forEach { $0.removeFromParentNode() }
             impactNodes.removeAll()
             previousHealth.removeAll()
+            displayedX.removeAll()
+            displayedY.removeAll()
             heroes = incoming
             for hero in incoming {
                 let asset = try? weaponAssets?.character(for: hero)
@@ -113,8 +117,22 @@ final class DuelNetworkSceneView: SCNView {
         SCNTransaction.begin()
         SCNTransaction.disableActions = true
         for (index, snapshot) in state.fighters.enumerated() {
-            var fighter = DuelGame.Fighter(hero: snapshot.hero, x: snapshot.x, facing: snapshot.facing)
-            fighter.y = snapshot.y
+            // Smooth network corrections visually only. Never feed the blended
+            // position back into hit detection or the host simulation.
+            let targetX = Float(snapshot.x)
+            let targetY = Float(snapshot.y)
+            if displayedX.count <= index {
+                displayedX.append(targetX)
+                displayedY.append(targetY)
+            } else {
+                let gap = abs(targetX - displayedX[index])
+                displayedX[index] = gap > 1_500 ? targetX :
+                    displayedX[index] + (targetX - displayedX[index]) * 0.4
+                displayedY[index] += (targetY - displayedY[index]) * 0.4
+            }
+            var fighter = DuelGame.Fighter(hero: snapshot.hero,
+                x: Int(displayedX[index].rounded()), facing: snapshot.facing)
+            fighter.y = Int(displayedY[index].rounded())
             fighter.health = snapshot.health
             fighter.energy = snapshot.energy
             fighter.guardMeter = snapshot.guardMeter
@@ -166,6 +184,8 @@ final class DuelNetworkSceneView: SCNView {
         actors.removeAll()
         impactNodes.removeAll()
         previousHealth.removeAll()
+        displayedX.removeAll()
+        displayedY.removeAll()
         weaponAssets?.releaseCharacters()
         weaponAssets = nil
         stageAsset = nil
