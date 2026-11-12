@@ -19,8 +19,8 @@ concurrency:
 jobs:
   real_resources:
     if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111' && ((github.event_name
-      == 'workflow_dispatch' && inputs.tooling_sha == github.sha) || (github.event_name == 'push' && github.event.before == '6607870bcffa0f615c0cef35f7e693d0c7c47878'
-      && github.event.head_commit.message == 'Run one approved real-resource acceptance with protected evidence'))
+      == 'workflow_dispatch' && inputs.tooling_sha == github.sha) || (github.event_name == 'push' && github.event.before == '4eea524ae132cc20d30ce490e6ebe3a3a4f622d6'
+      && github.event.head_commit.message == 'Retry approved real-resource acceptance with absolute music paths'))
     runs-on: macos-26
     timeout-minutes: 100
     env:
@@ -73,7 +73,8 @@ jobs:
     - name: Authenticate and stage independently encrypted music
       env:
         FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_MUSIC_PACKAGE_KEY }}
-      run: python3 ../tooling/.github/scripts/fighter_acceptance_music.py ../music-cipher . "$RUNNER_TEMP"
+      run: python3 "$GITHUB_WORKSPACE/tooling/.github/scripts/fighter_acceptance_music.py" "$GITHUB_WORKSPACE/music-cipher" "$GITHUB_WORKSPACE/source"
+        "$RUNNER_TEMP"
     - name: Select Xcode and generate existing app
       run: |-
         (
@@ -225,4 +226,3 @@ jobs:
       run:
         working-directory: source
         shell: bash -eo pipefail {0}
-

@@ -1,4 +1,4 @@
-"""Mock-only adapter tests, prepared but NOT RUN. No real encryption or keys."""
+"""Adapter and safe-path regression tests. No real encryption or keys."""
 from pathlib import Path
 import tempfile
 import unittest
@@ -86,6 +86,17 @@ class SourcePinTests(unittest.TestCase):
         with patch.object(adapter, 'read_file', return_value=b'raise RuntimeError()'):
             with self.assertRaises(ValueError):
                 adapter.load_envelope('synthetic-source')
+
+
+class InvocationPathTests(unittest.TestCase):
+    def test_absolute_cipher_path_reads_and_parent_traversal_stays_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td).resolve()
+            cipher=root/'cipher'
+            cipher.write_bytes(b'public synthetic cipher')
+            self.assertEqual(adapter.read_file(cipher,23), b'public synthetic cipher')
+            with self.assertRaisesRegex(ValueError, 'Parent traversal'):
+                adapter.read_file(root/'source'/'..'/'cipher',23)
 
 
 if __name__ == '__main__':
