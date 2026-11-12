@@ -37,3 +37,43 @@ public struct DuelCameraFraming: Equatable, Sendable {
                                 max(3.2, 5.8 / aspect) * (1 - landscapeBlend))
     }
 }
+
+    
+/// Keeps the real skin/weapon projection safe while avoiding an abrupt zoom-in
+/// every time an animated blade returns to its idle silhouette. This filter is
+/// presentation-only: required FOV can always expand immediately.
+public struct DuelCameraOpticalFOV: Equatable, Sendable {
+    private var lastFrame: Int?
+    private var lastAspect: Double?
+    private var lastValue: Double?
+
+    public init() {}
+    public mutating func reset() { self = Self() }
+
+    /// Consuming the same simulation frame more than once may widen the view,
+    /// but never narrow it. Layout passes must not speed up the transition.
+    public mutating func consume(required: Double, frame: Int, aspect: Double) -> Double {
+        guard required.isFinite, required > 0, required < 180,
+              frame >= 0, aspect.isFinite, aspect > 0 else {
+            return lastValue ?? 47
+        }
+        if let previous = lastFrame, let oldAspect = lastAspect,
+           frame >= previous, abs(aspect - oldAspect) <= 0.005,
+           let current = lastValue {
+            if frame == previous {
+                lastValue = max(current, required)
+            } else if required >= current {
+                lastValue = required
+            } else {
+                let elapsed = min(60, Double(frame - previous))
+                lastValue = required + (current - required) * pow(0.92, elapsed)
+            }
+        } else {
+            // A new bout, rewind, or orientation change has no previous lens.
+            lastValue = required
+        }
+        lastFrame = frame
+        lastAspect = aspect
+        return lastValue!
+    }
+}

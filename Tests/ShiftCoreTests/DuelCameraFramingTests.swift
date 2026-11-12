@@ -107,4 +107,43 @@ final class DuelCameraFramingTests: XCTestCase {
             XCTAssertLessThanOrEqual(result.verticalFieldOfView, 100)
         }
     }
+
+    func testOpticalFOVExpandsImmediatelyButReturnsSmoothly() {
+        var lens = DuelCameraOpticalFOV()
+        XCTAssertEqual(lens.consume(required: 29, frame: 1, aspect: 2.1), 29)
+        XCTAssertEqual(lens.consume(required: 45, frame: 2, aspect: 2.1), 45)
+        let contracting = lens.consume(required: 29, frame: 3, aspect: 2.1)
+        XCTAssertGreaterThan(contracting, 29)
+        XCTAssertLessThan(contracting, 45)
+        let later = lens.consume(required: 29, frame: 33, aspect: 2.1)
+        XCTAssertLessThan(later, contracting)
+        XCTAssertGreaterThanOrEqual(later, 29)
+    }
+
+    func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+        var lens = DuelCameraOpticalFOV()
+        lens.consume(required: 50, frame: 1, aspect: 2.1)
+        let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+        for _ in 0..<100 {
+            XCTAssertEqual(lens.consume(required: 29, frame: 2, aspect: 2.1), first)
+        }
+        XCTAssertEqual(lens.consume(required: 55, frame: 2, aspect: 2.1), 55)
+        XCTAssertEqual(lens.consume(required: 29, frame: 2, aspect: 2.1), 55)
+        XCTAssertGreaterThan(lens.consume(required: 29, frame: 3, aspect: 2.1), 29)
+    }
+
+    func testOpticalFOVResetsOnRewindAndRotation() {
+        var lens = DuelCameraOpticalFOV()
+        lens.consume(required: 52, frame: 10, aspect: 2.1)
+        XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+                       accuracy: 0.000001)
+        XCTAssertEqual(lens.consume(required: 31, frame: 11, aspect: 1.0), 31,
+                       "Changing device orientation must recompute the optical fit immediately")
+        XCTAssertEqual(lens.consume(required: 29, frame: 0, aspect: 1.0), 29,
+                       "A new match or rewound simulation must not inherit the old lens")
+        XCTAssertEqual(lens.consume(required: .nan, frame: 1, aspect: 1.0), 29)
+        lens.reset()
+        XCTAssertEqual(lens.consume(required: 33, frame: 1, aspect: 2.1), 33)
+    }
+
 }

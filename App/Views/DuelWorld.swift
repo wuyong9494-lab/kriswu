@@ -51,6 +51,7 @@ final class DuelWorldView: SCNView {
     private(set) var opticalFramingFailure: DuelDisplayedSkinBounds.Failure?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private(set) var combatCamera = DuelCombatCamera()
+    private var opticalFOV = DuelCameraOpticalFOV()
     private var perspectiveDistance: Float = 7.7
     enum CharacterSource {
         case bundled, legacy, procedural
@@ -514,20 +515,29 @@ final class DuelWorldView: SCNView {
                     // conservatively at least that much on the longer axis.
                     let shortSide = Double(min(bounds.width, bounds.height))
                     let inset = 1 - 2 * min(8, shortSide * 0.1) / shortSide
-                    camera.fieldOfView = CGFloat(try DuelDisplayedSkinBounds.verticalFOV(
+                    let requiredFOV = try DuelDisplayedSkinBounds.verticalFOV(
                         points: points, aspect: aspect, minimum: framing.verticalFieldOfView,
-                        near: camera.zNear, inset: inset))
+                        near: camera.zNear, inset: inset)
+                    // Fit the entire measured pose immediately. Contract only
+                    // once per simulation frame, so weapon swings do not cause
+                    // abrupt lens pumping or shrink on repeated layout calls.
+                    camera.fieldOfView = CGFloat(opticalFOV.consume(
+                        required: requiredFOV, frame: session.game.frame, aspect: aspect))
                     // Reuse the same conservative points and the final installed FOV.
                     // This does not change the camera, actor scale or touch geometry.
                     let rectangles = DuelDisplayedSkinBounds.artworkRectangles(
                         points: points, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
                     session.updateCharacterOcclusion(rectangles, from: self)
                 } catch {
+                    opticalFOV.reset()
                     opticalFramingFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry
                     session.updateCharacterOcclusion([], from: self)
                 }
+            } else {
+                opticalFOV.reset()
             }
         } else {
+            opticalFOV.reset()
             camera.orthographicScale = framing.orthographicScale
         }
     }
