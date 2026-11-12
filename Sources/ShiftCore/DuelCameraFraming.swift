@@ -15,7 +15,10 @@ public struct DuelCameraFraming: Equatable, Sendable {
 
     public init(aspect: Double, separation: Double) {
         let aspect = aspect.isFinite ? max(0.1, aspect) : 1
-        let separation = separation.isFinite ? max(0, separation) : 3
+        // Fighters are clamped to the ten-unit stage before tracking. Limit
+        // unexpected finite input to the largest representable pair envelope
+        // instead of letting an overflow create an infinite SceneKit distance.
+        let separation = separation.isFinite ? min(20, max(0, separation)) : 3
         // Blend out the full-stage safety overview as the viewport becomes
         // landscape. A hard 1.5 aspect cut made rotation change the lens
         // abruptly, even when the fighters had not moved.
