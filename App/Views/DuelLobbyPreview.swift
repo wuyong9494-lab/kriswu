@@ -25,7 +25,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private var lastIdleTime: CFTimeInterval?
     private var accumulatedIdleTime: CFTimeInterval = 0
     private(set) var yaw: Float = .pi
-    private(set) var zoom: Float = 1
+    private(set) var zoom: Float = 0.84
     private var cameraNode: SCNNode?
     private let showroomCenter = SCNVector3(4.7, 0.85, -0.35)
     private(set) var showroomFrameCount = 0
@@ -44,7 +44,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         let camera = SCNNode(); camera.camera = SCNCamera()
         camera.camera?.projectionDirection = .vertical; camera.camera?.fieldOfView = 35
         camera.camera?.zNear = 0.05; camera.camera?.zFar = 100
-        camera.position = SCNVector3(5, 1.6, 4.8)
+        camera.position = SCNVector3(5, 1.6, -0.35 + 5.15 * zoom)
         camera.look(at: SCNVector3(4.7, 0.85, -0.35))
         world.rootNode.addChildNode(camera); pointOfView = camera; cameraNode = camera
         let rotate = UIPanGestureRecognizer(target: self, action: #selector(rotateCharacter(_:)))
