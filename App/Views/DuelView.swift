@@ -237,6 +237,7 @@ final class DuelSession: ObservableObject {
             }
         } else { held.remove(name) }
     }
+    func weaponGuard(_ held: Bool) { guard !paused else { return }; weaponInput.setGuardHeld(held) }
     func weaponDirection(x: Int, y: Int) { guard !paused else { return }; weaponInput.direction(x: x, y: y) }
     func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) { guard !paused else { return }; weaponInput.action(action, down: down) }
     func cancelWeaponAction(_ action: DuelWeaponInput.Action) { weaponInput.cancel(action: action) }
@@ -327,6 +328,19 @@ struct DuelMatchView: View {
             DuelWorld(session: session).ignoresSafeArea()
             if session.setup.originalWeapons {
                 DuelWeaponControls(session: session).ignoresSafeArea(edges: .bottom)
+                VStack {
+                    Spacer()
+                    Text("按住防御")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                        .background(.black.opacity(0.65), in: Capsule())
+                        .contentShape(Capsule())
+                        .gesture(DragGesture(minimumDistance: 0)
+                            .onChanged { _ in session.weaponGuard(true) }
+                            .onEnded { _ in session.weaponGuard(false) })
+                        .accessibilityIdentifier("duel.manualGuard")
+                        .padding(.bottom, 24)
+                }
             } else {
                 DuelControls(session: session, ultimateReady: session.ultimateReady).ignoresSafeArea(edges: .bottom)
             }
