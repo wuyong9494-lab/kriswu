@@ -185,7 +185,13 @@ final class DuelNetworkCombatSession: ObservableObject {
         if var host {
             guard sender == guestID else { return }
             _ = host.receive(bytes, authenticatedSenderID: sender)
+            let disconnected = host.simulation.inputs.phase == .closed
             self.host = host
+            if disconnected {
+                failure = "对方已退出战斗。"
+                status = .failed
+                stop()
+            }
         } else if var guest {
             guard sender == hostID else { return }
             if guest.receive(bytes, authenticatedSenderID: sender) == .applied {
