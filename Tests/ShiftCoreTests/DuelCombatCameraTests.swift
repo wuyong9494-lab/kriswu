@@ -119,6 +119,28 @@ final class DuelCombatCameraTests: XCTestCase {
                                    max(abs(4 - dash.centerX), abs(8 - dash.centerX)))
     }
 
+    func testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition() {
+        var camera = DuelCombatCamera()
+        camera.consume(frame: 1, animationTick: 1, firstX: 1, secondX: 3)
+        XCTAssertEqual(camera.centerX, 2, accuracy: 0.000001)
+
+        // Two fighters walking together for 20 simulation ticks can each move
+        // 3 m. A resumed display must ease toward them, not treat the jump
+        // between observed samples as an authoritative round teleport.
+        camera.consume(frame: 21, animationTick: 21, firstX: 4, secondX: 6)
+        XCTAssertGreaterThan(camera.centerX, 4.5)
+        XCTAssertLessThan(camera.centerX, 5)
+        XCTAssertGreaterThanOrEqual(camera.separation * 0.5, 6 - camera.centerX)
+
+        // A long presentation gap during hit-stop must not snap either;
+        // immediate width expansion continues to protect both silhouettes.
+        var frozen = DuelCombatCamera()
+        frozen.consume(frame: 1, animationTick: 1, firstX: 1, secondX: 3)
+        frozen.consume(frame: 21, animationTick: 1, firstX: 4, secondX: 6)
+        XCTAssertEqual(frozen.centerX, 2, accuracy: 0.000001)
+        XCTAssertGreaterThanOrEqual(frozen.separation * 0.5, 6 - frozen.centerX)
+    }
+
     func testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples() {
         var camera = DuelCombatCamera()
         camera.consume(frame: 1, animationTick: 1, firstX: 7.5, secondX: 9)
