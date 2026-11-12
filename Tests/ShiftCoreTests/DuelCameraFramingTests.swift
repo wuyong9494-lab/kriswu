@@ -38,11 +38,18 @@ final class DuelCameraFramingTests: XCTestCase {
         XCTAssertGreaterThan(DuelCameraFraming(aspect: 1.5, separation: 10).perspectiveDistance, 7.7)
     }
 
-    func testOpeningShotRetainsExistingCharacterScaleOnWidePhones() {
+    func testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones() {
+        // An optical estimate, not proof of the actual source character's
+        // on-screen bounds. The screenshot and bone-extents gate is separate.
         for aspect in [1.78, 2.1, 2.4] {
             let opening = DuelCameraFraming(aspect: aspect, separation: 3)
-            XCTAssertEqual(opening.verticalFieldOfView, 31)
+            XCTAssertEqual(opening.verticalFieldOfView, 29)
             XCTAssertEqual(opening.perspectiveDistance, 7.7)
+            let visibleHeight = 2 * opening.perspectiveDistance
+                * tan(opening.verticalFieldOfView * .pi / 360)
+            let nominalFraction = 2.0 / visibleHeight
+            XCTAssertGreaterThanOrEqual(nominalFraction, 0.48)
+            XCTAssertLessThanOrEqual(nominalFraction, 0.55)
         }
     }
 
