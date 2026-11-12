@@ -120,6 +120,11 @@ final class DuelNetworkSceneView: SCNView {
             fighter.guardMeter = snapshot.guardMeter
             fighter.stun = snapshot.stun
             fighter.knockdown = snapshot.knockdown
+            fighter.guarding = snapshot.guarding
+            fighter.walking = snapshot.walking
+            if let move = snapshot.attack, let age = snapshot.attackAge {
+                fighter.attack = DuelGame.Attack(move: move, age: age)
+            }
             fighter.weaponPose = snapshot.animation?.pose
             let impact = impactNodes[index]
             let damaged = hadPrevious && snapshot.health < previousHealth[index]
