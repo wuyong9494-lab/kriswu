@@ -97,6 +97,40 @@ final class DuelCombatCameraTests: XCTestCase {
                                    max(abs(0.35 - camera.centerX), abs(9.65 - camera.centerX)))
     }
 
+    func testRoundRepositionSnapsCameraToTheNewPairCenter() {
+        var camera = DuelCombatCamera()
+        camera.consume(frame: 10, animationTick: 10, firstX: 7.5, secondX: 9.2)
+        XCTAssertEqual(camera.centerX, 8.35, accuracy: 0.000001)
+
+        // Both fighters were placed back in their opening positions together.
+        // Stale eased tracking should not leave the new round off center.
+        camera.consume(frame: 11, animationTick: 11, firstX: 3.5, secondX: 6.5)
+        XCTAssertEqual(camera.centerX, 5, accuracy: 0.000001)
+        XCTAssertGreaterThanOrEqual(camera.separation * 0.5,
+                                   max(abs(3.5 - camera.centerX), abs(6.5 - camera.centerX)))
+
+        // An isolated dash / knockback is not a round reset.
+        var dash = DuelCombatCamera()
+        dash.consume(frame: 10, animationTick: 10, firstX: 7, secondX: 8)
+        dash.consume(frame: 11, animationTick: 11, firstX: 4, secondX: 8)
+        XCTAssertGreaterThan(dash.centerX, 6)
+        XCTAssertLessThan(dash.centerX, 7.5)
+        XCTAssertGreaterThanOrEqual(dash.separation * 0.5,
+                                   max(abs(4 - dash.centerX), abs(8 - dash.centerX)))
+    }
+
+    func testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples() {
+        var camera = DuelCombatCamera()
+        camera.consume(frame: 1, animationTick: 1, firstX: 7.5, secondX: 9)
+        let before = camera
+        camera.consume(frame: 2, animationTick: 2, firstX: .nan, secondX: 6)
+        XCTAssertEqual(camera, before)
+        camera.consume(frame: 0, animationTick: 0, firstX: 3.5, secondX: 6.5)
+        var fresh = DuelCombatCamera()
+        fresh.consume(frame: 0, animationTick: 0, firstX: 3.5, secondX: 6.5)
+        XCTAssertEqual(camera, fresh)
+    }
+
     func testSkippedSamplesUseElapsedTicksInsteadOfOneDrawWorthOfMovement() {
         var everyTick = DuelCombatCamera(), batched = DuelCombatCamera()
         for tick in 1...30 {
