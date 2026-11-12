@@ -16,7 +16,9 @@ final class DuelDisplayedSkinBounds {
                 i & 2 == 0 ? low.y : high.y, i & 4 == 0 ? low.z : high.z) }
         }
     }
-    private struct Influence { let bone: SCNNode; let box: Box }
+    // The bind-space box never changes after instance construction. Cache its
+    // eight corners once rather than allocating them for every display callback.
+    private struct Influence { let bone: SCNNode; let corners: [SIMD3<Float>] }
     private struct Part {
         let holder: SCNNode
         let skin: SCNSkinner
@@ -89,14 +91,16 @@ final class DuelDisplayedSkinBounds {
             // float sums. Raw skinning is sumWeights * the normalized convex
             // combination, including each bone's world translation.
             return Part(holder: holder, skin: skin,
-                influences: used.sorted().map { Influence(bone: skin.bones[$0], box: boxes[$0]) },
+                influences: used.sorted().map { Influence(bone: skin.bones[$0], corners: boxes[$0].corners) },
                 sumLow: low, sumHigh: high)
         }
     }
 
     private static func affine(_ m: simd_float4x4) -> Bool {
-        let columns = [m.columns.0, m.columns.1, m.columns.2, m.columns.3]
-        return columns.allSatisfy { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite && $0.w.isFinite }
+        func finite(_ c: SIMD4<Float>) -> Bool {
+            c.x.isFinite && c.y.isFinite && c.z.isFinite && c.w.isFinite
+        }
+        return finite(m.columns.0) && finite(m.columns.1) && finite(m.columns.2) && finite(m.columns.3)
             && abs(m.columns.0.w) < 0.000001 && abs(m.columns.1.w) < 0.000001
             && abs(m.columns.2.w) < 0.000001 && abs(m.columns.3.w - 1) < 0.000001
     }
@@ -112,14 +116,18 @@ final class DuelDisplayedSkinBounds {
         let view = simd_inverse(camera.simdWorldTransform)
         guard Self.affine(view) else { throw Failure.invalidTransform }
         var points: [SIMD3<Float>] = []
+        // Preserve both raw-weight extrema and every conservative corner.
+        // Reserving capacity avoids repeated growth without dropping samples.
+        points.reserveCapacity(parts.reduce(0) { $0 + $1.influences.count * 16 })
         for part in parts where visible(part.holder) {
             guard part.holder.skinner === part.skin else { throw Failure.invalidSkin }
             for influence in part.influences {
                 let world = influence.bone.simdWorldTransform
                 guard Self.affine(world) else { throw Failure.invalidTransform }
-                for corner in influence.box.corners {
+                for corner in influence.corners {
                     let p = world * SIMD4(corner.x, corner.y, corner.z, 1)
-                    for sum in [part.sumLow, part.sumHigh] {
+                    for endpoint in 0..<2 {
+                        let sum = endpoint == 0 ? part.sumLow : part.sumHigh
                         let q = view * SIMD4(p.x * sum, p.y * sum, p.z * sum, 1)
                         guard q.x.isFinite, q.y.isFinite, q.z.isFinite else { throw Failure.invalidTransform }
                         points.append(SIMD3(q.x, q.y, q.z))
@@ -128,6 +136,36 @@ final class DuelDisplayedSkinBounds {
             }
         }
         return points
+    }
+
+    /// Artwork-only overlap regions: preserve each influence box separately so
+    /// a long weapon and the torso do not dim controls in the empty space between.
+    /// cameraPoints emits 8 corners x 2 weight extrema per influence, in order.
+    /// These regions are NOT a silhouette/visibility acceptance assertion.
+    static func artworkRectangles(points: [SIMD3<Float>], size: CGSize,
+                                  verticalFieldOfView: Double) -> [CGRect] {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
+              verticalFieldOfView.isFinite, verticalFieldOfView > 0, verticalFieldOfView < 180,
+              points.count.isMultiple(of: 16) else { return [] }
+        let tangent = tan(verticalFieldOfView * .pi / 360)
+        let aspect = Double(size.width / size.height)
+        var rectangles: [CGRect] = []
+        rectangles.reserveCapacity(points.count / 16)
+        for start in stride(from: 0, to: points.count, by: 16) {
+            var minX = Double.infinity, minY = Double.infinity
+            var maxX = -Double.infinity, maxY = -Double.infinity
+            for index in start..<(start + 16) {
+                let p = points[index], depth = -Double(points[index].z)
+                guard p.x.isFinite, p.y.isFinite, p.z.isFinite, depth > 0 else { return [] }
+                let x = Double(size.width) * (0.5 + Double(p.x) / (depth * tangent * aspect) / 2)
+                let y = Double(size.height) * (0.5 - Double(p.y) / (depth * tangent) / 2)
+                guard x.isFinite, y.isFinite else { return [] }
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+            rectangles.append(CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY))
+        }
+        return rectangles
     }
 
     static func verticalFOV(points: [SIMD3<Float>], aspect: Double, minimum: Double,
@@ -154,3 +192,4 @@ final class DuelDisplayedSkinBounds {
         return fov
     }
 }
+

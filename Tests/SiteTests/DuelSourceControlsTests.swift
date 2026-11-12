@@ -20,6 +20,67 @@ final class DuelSourceControlsTests: XCTestCase {
                        y: layout.joystick.midY - CGFloat(y) * 180 * layout.scale)
     }
 
+    func testProjectedOverlapOnlyFadesIntersectingArtworkWithoutChangingTouch() throws {
+        let view = controls()
+        let original = view.layoutSnapshot
+        let frame = try XCTUnwrap(original.actions[.weapon])
+        let button = try XCTUnwrap(view.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == "duel.control.weapon" })
+        let kick = try XCTUnwrap(view.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == "duel.control.kick" })
+        let alpha = button.alpha, kickAlpha = kick.alpha
+        var events: [String] = []
+        view.onAction = { events.append("\($0.rawValue):\($1)") }
+        view.setCharacterOcclusion([frame])
+        XCTAssertEqual(view.obscuredActions, [.weapon])
+        XCTAssertEqual(button.alpha, alpha * 0.45, accuracy: 0.0001)
+        XCTAssertEqual(kick.alpha, kickAlpha)
+        XCTAssertEqual(view.layoutSnapshot.actions[.weapon], original.actions[.weapon])
+        XCTAssertEqual(view.layoutSnapshot.actionTouch[.weapon], original.actionTouch[.weapon])
+        XCTAssertTrue(button.isEnabled)
+        view.beginPointers([.init(id: "held", location: center(frame))])
+        XCTAssertEqual(events, ["weapon:true"])
+        XCTAssertEqual(button.alpha, alpha * 0.7843137 * 0.75, accuracy: 0.0001)
+        view.setCharacterOcclusion([])
+        XCTAssertEqual(events, ["weapon:true"], "Artwork changes must not release a held contact")
+        view.endPointers(["held"])
+        XCTAssertEqual(events, ["weapon:true", "weapon:false"])
+        XCTAssertEqual(button.alpha, alpha, accuracy: 0.0001)
+    }
+
+    func testOcclusionHysteresisProneRestoreAndInvalidCoordinates() throws {
+        let view = controls()
+        let frame = try XCTUnwrap(view.layoutSnapshot.actions[.weapon])
+        let button = try XCTUnwrap(view.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == "duel.control.weapon" })
+        let alpha = button.alpha
+        func strip(_ fraction: CGFloat) -> CGRect {
+            CGRect(x: frame.maxX - frame.width * fraction, y: frame.minY,
+                   width: frame.width * fraction, height: frame.height)
+        }
+        view.setCharacterOcclusion([strip(0.06)])
+        XCTAssertFalse(view.obscuredActions.contains(.weapon))
+        view.setCharacterOcclusion([strip(0.10)])
+        XCTAssertTrue(view.obscuredActions.contains(.weapon))
+        view.setCharacterOcclusion([strip(0.06)])
+        XCTAssertTrue(view.obscuredActions.contains(.weapon))
+        view.opponentProne = true
+        XCTAssertEqual(button.alpha, alpha * 0.35, accuracy: 0.0001, "Do not compound the two fades")
+        view.opponentProne = false
+        XCTAssertEqual(button.alpha, alpha * 0.45, accuracy: 0.0001)
+        view.setCharacterOcclusion([strip(0.02)])
+        XCTAssertFalse(view.obscuredActions.contains(.weapon))
+        XCTAssertEqual(button.alpha, alpha, accuracy: 0.0001)
+        view.setCharacterOcclusion([frame])
+        view.setCharacterOcclusion([.null, .infinite])
+        XCTAssertTrue(view.obscuredActions.isEmpty)
+        XCTAssertEqual(button.alpha, alpha, accuracy: 0.0001)
+        view.setCharacterOcclusion([frame])
+        view.frame.size = CGSize(width: 844, height: 390)
+        view.setNeedsLayout(); view.layoutIfNeeded()
+        XCTAssertTrue(view.obscuredActions.isEmpty, "Rotation must discard old screen coordinates")
+    }
+
     func testProneOpponentFadesOnlyArtworkAndRestoresFullControlOpacity() throws {
         let view = controls()
         let original = view.layoutSnapshot
@@ -356,3 +417,4 @@ final class DuelSourceControlsTests: XCTestCase {
         return try XCTUnwrap(candidates.first { FileManager.default.fileExists(atPath: $0.path) }, name)
     }
 }
+

@@ -7,6 +7,89 @@ import simd
 
 @MainActor
 extension DuelWeaponAssetTests {
+    func testArtworkProjectionKeepsSeparateInfluenceBoxesAndRejectsInvalidInput() {
+        func box(_ x: Float) -> [SIMD3<Float>] {
+            (0..<16).map { i in
+                SIMD3(x + (i & 1 == 0 ? -0.05 : 0.05),
+                      i & 2 == 0 ? -0.1 : 0.1, i & 4 == 0 ? -10 : -9.9)
+            }
+        }
+        let size = CGSize(width: 956, height: 440)
+        let points = box(-2) + box(2)
+        let rectangles = DuelDisplayedSkinBounds.artworkRectangles(
+            points: points, size: size, verticalFieldOfView: 35)
+        XCTAssertEqual(rectangles.count, 2)
+        XCTAssertTrue(DuelDisplayedSkinBounds.artworkRectangles(
+            points: [SIMD3<Float>](repeating: SIMD3(0, 0, -.infinity), count: 16),
+            size: size, verticalFieldOfView: 35).isEmpty)
+        let gap = CGRect(x: 470, y: 210, width: 16, height: 20)
+        XCTAssertTrue(rectangles.allSatisfy { !$0.intersects(gap) },
+                      "A weapon/torso gap must not be merged into one obscuring rectangle")
+        XCTAssertTrue(DuelDisplayedSkinBounds.artworkRectangles(
+            points: Array(points.dropLast()), size: size, verticalFieldOfView: 35).isEmpty)
+        XCTAssertTrue(DuelDisplayedSkinBounds.artworkRectangles(
+            points: [SIMD3<Float>](repeating: SIMD3(0, 0, 1), count: 16),
+            size: size, verticalFieldOfView: 35).isEmpty)
+    }
+
+    func testArtworkCoordinatesConvertBetweenMountedViewsAndClearWhenWorldDetaches() throws {
+        let session = DuelSession(.init(hero: .ember, difficulty: .learning, mode: .practice))
+        let world = DuelWorldView(session: session, characterSource: .procedural)
+        let controls = DuelSourceControlsView(images: [:])
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1024, height: 500))
+        window.rootViewController = host
+        window.isHidden = false
+        defer {
+            controls.shutdown(); world.shutdown(); session.shutdown()
+            window.isHidden = true; window.rootViewController = nil
+        }
+        world.frame = CGRect(x: 20, y: 10, width: 956, height: 440)
+        controls.frame = CGRect(x: 50, y: 30, width: 956, height: 440)
+        host.view.addSubview(world); host.view.addSubview(controls)
+        controls.setNeedsLayout(); controls.layoutIfNeeded()
+        XCTAssertTrue(session.claimOfflineControls(controls))
+        session.bindArtworkControls(controls)
+        let target = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
+        session.updateCharacterOcclusion([controls.convert(target, to: world)], from: world)
+        XCTAssertEqual(controls.obscuredActions, [.weapon])
+        world.removeFromSuperview()
+        XCTAssertNotNil(controls.window)
+        XCTAssertTrue(controls.obscuredActions.isEmpty,
+                      "Stopping only the renderer must not leave stale dimmed controls")
+        session.updateCharacterOcclusion([target], from: world)
+        XCTAssertTrue(controls.obscuredActions.isEmpty, "Detached renderer cannot restore stale overlap")
+    }
+
+    func testCachedInfluenceCornersStillFollowCurrentWorldAndCameraTransforms() throws {
+        _ = try DuelWeaponAssets() // Real assets are mandatory; do not skip.
+        let lobby = DuelLobbySceneView(hero: .ember)
+        defer { lobby.shutdown() }
+        let root = try XCTUnwrap(lobby.scene?.rootNode.childNode(
+            withName: "duel.lobby.character.ember", recursively: false))
+        let bounds = try DuelDisplayedSkinBounds(root: root)
+        let camera = SCNNode()
+        camera.position = SCNVector3(0, 0, 10)
+        let initial = try bounds.cameraPoints(camera: camera)
+        XCTAssertFalse(initial.isEmpty)
+        root.position.x += 1
+        let moved = try bounds.cameraPoints(camera: camera)
+        XCTAssertEqual(moved.count, initial.count)
+        for (before, after) in zip(initial, moved) {
+            XCTAssertEqual(after.x, before.x + 1, accuracy: 0.0001)
+            XCTAssertEqual(after.y, before.y, accuracy: 0.0001)
+            XCTAssertEqual(after.z, before.z, accuracy: 0.0001)
+        }
+        camera.position.x += 2
+        let cameraMoved = try bounds.cameraPoints(camera: camera)
+        XCTAssertEqual(cameraMoved.count, initial.count)
+        for (before, after) in zip(initial, cameraMoved) {
+            XCTAssertEqual(after.x, before.x - 1, accuracy: 0.0001)
+        }
+        root.isHidden = true
+        XCTAssertTrue(try bounds.cameraPoints(camera: camera).isEmpty)
+    }
+
     func testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch() async throws {
         let assets = try DuelWeaponAssets() // Missing / corrupt real assets must fail, not skip.
         let lobby = DuelLobbySceneView(hero: .ember)
@@ -70,7 +153,8 @@ extension DuelWeaponAssetTests {
         XCTAssertNotNil(DuelStageAsset.bundledURL(for: .autumnLobby))
         let observed = LobbyFramingObservation()
         // Start at a pushed destination, as the games screen does. This includes
-        // real navigation chrome and its safe-area adjustment, not a bare lobby.
+        // the actual pushed destination and its safe-area adjustment. The
+        // production lobby uses duel.lobby.close, not a system navigation bar.
         let host = UIHostingController(rootView: NavigatedLobbyFramingFixture(observed: observed))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 956, height: 440))
         window.rootViewController = host
@@ -92,9 +176,8 @@ extension DuelWeaponAssetTests {
                observed.frames[.rail] != nil { break }
             try await Task.sleep(nanoseconds: 25_000_000)
         }
-        let navigation = try XCTUnwrap(lobbyDescendant(UINavigationBar.self, in: host.view))
-        XCTAssertFalse(navigation.isHidden)
-        XCTAssertGreaterThan(navigation.bounds.height, 0)
+        // The dedicated close button is exercised by both UI flow tests.
+        // Do not require a deliberately hidden system navigation bar here.
         let view = try XCTUnwrap(preview)
         defer { view.shutdown() }
         let stage = try XCTUnwrap(observed.frames[.stage])
@@ -271,3 +354,4 @@ private struct NavigatedLobbyFramingFixture: View {
         }
     }
 }
+

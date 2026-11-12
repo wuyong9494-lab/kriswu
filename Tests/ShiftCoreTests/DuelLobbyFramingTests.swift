@@ -15,14 +15,16 @@ final class DuelLobbyFramingTests: XCTestCase {
         }
     }
 
-    func testOriginalScreenshotOpeningMovesCompositionUpWithoutExcessivePullback() throws {
+    func testShowroomOpeningUsesOpticalShiftWithoutMovingEye() throws {
         let size = CGSize(width: 956, height: 440)
         let fit = try XCTUnwrap(DuelLobbyFraming(size: size,
             visibleRect: CGRect(x: 285, y: 0, width: 386, height: 326)))
         // Full empty central height is available above the title. Restricting
         // the opening to the side panels' height needlessly halves body scale.
         XCTAssertLessThan(fit.distance, 6.7)
-        XCTAssertLessThan(fit.target.y, DuelLobbyFraming.center.y - 0.4)
+        XCTAssertEqual(fit.target, DuelLobbyFraming.center)
+        XCTAssertEqual(fit.position, DuelLobbyFraming.originalPosition)
+        XCTAssertGreaterThan(fit.projectionOffset.y, 0)
         XCTAssertEqual(DuelLobbyFraming.verticalFieldOfView, 35)
     }
 
@@ -32,18 +34,21 @@ final class DuelLobbyFramingTests: XCTestCase {
         let reduced = CGRect(x: 264, y: 0, width: 316, height: 225)
         let full = try XCTUnwrap(DuelLobbyFraming(size: size, visibleRect: opening))
         let small = try XCTUnwrap(DuelLobbyFraming(size: size, visibleRect: reduced))
-        XCTAssertGreaterThanOrEqual(small.distance, full.distance)
+        XCTAssertEqual(small.distance, full.distance, accuracy: 0.000001)
+        XCTAssertGreaterThanOrEqual(small.verticalTangent, full.verticalTangent)
         for rect in [opening, reduced] {
             let base = try XCTUnwrap(DuelLobbyFraming(size: size, visibleRect: rect))
             for zoom in [0.7, 0.9, 1.0, 1.5] {
                 let result = try XCTUnwrap(DuelLobbyFraming(size: size, visibleRect: rect, zoom: zoom))
-                XCTAssertEqual(result.distance, base.distance * zoom, accuracy: 0.000001)
+                XCTAssertEqual(result.distance, base.distance, accuracy: 0.000001)
+                XCTAssertEqual(result.position, DuelLobbyFraming.originalPosition)
+                XCTAssertEqual(result.verticalTangent, base.verticalTangent * zoom, accuracy: 0.000001)
                 XCTAssertEqual(result, DuelLobbyFraming(size: size, visibleRect: rect, zoom: zoom))
             }
         }
     }
 
-    func testOffCenterRegionUsesHorizontalTranslationRatherThanExtraDistance() throws {
+    func testOffCenterRegionUsesLensShiftRatherThanExtraDistance() throws {
         let size = CGSize(width: 956, height: 440)
         let left = CGRect(x: 210, y: 0, width: 386, height: 326)
         let fit = try XCTUnwrap(DuelLobbyFraming(size: size, visibleRect: left))
@@ -100,3 +105,4 @@ final class DuelLobbyFramingTests: XCTestCase {
          (CGSize(width: 1194, height: 834), CGRect(x: 274, y: 0, width: 646, height: 702))]
     }
 }
+

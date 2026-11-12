@@ -88,6 +88,32 @@ final class DuelSourceControlsView: UIView {
             for action in Action.allCases { refresh(action) }
         }
     }
+    private(set) var obscuredActions: Set<Action> = []
+
+    /// Renderer-projected conservative character bounds in this view's coordinates.
+    /// Change artwork only: no touch rectangle, ownership, readiness or a11y changes.
+    /// A small hysteresis band prevents flicker along a moving silhouette edge.
+    func setCharacterOcclusion(_ rectangles: [CGRect]) {
+        guard !isShutdown else { return }
+        var next: Set<Action> = []
+        for action in Action.allCases {
+            guard let frame = layoutSnapshot.actions[action], frame.width > 0, frame.height > 0 else { continue }
+            var fraction: CGFloat = 0
+            for rect in rectangles {
+                guard !rect.isNull, !rect.isInfinite, rect.minX.isFinite, rect.minY.isFinite,
+                      rect.width.isFinite, rect.height.isFinite, rect.width > 0, rect.height > 0 else { continue }
+                let overlap = frame.intersection(rect)
+                if !overlap.isNull {
+                    fraction = max(fraction, overlap.width * overlap.height / (frame.width * frame.height))
+                }
+            }
+            if fraction >= (obscuredActions.contains(action) ? 0.04 : 0.08) { next.insert(action) }
+        }
+        let changed = obscuredActions.symmetricDifference(next)
+        obscuredActions = next
+        for action in changed { refresh(action) }
+    }
+
     private(set) var layoutSnapshot = Layout.empty
     private(set) var sourceArtAvailable = false
     private(set) var loadedSpriteNames: Set<String> = []
@@ -204,6 +230,7 @@ final class DuelSourceControlsView: UIView {
         if bounds != lastLayoutBounds || safeAreaInsets != lastSafeArea {
             // Orientation and safe-area changes cannot leave a finger attached to an old zone.
             cancelAll()
+            setCharacterOcclusion([]) // Old coordinates are invalid after rotation.
             lastLayoutBounds = bounds
             lastSafeArea = safeAreaInsets
         }
@@ -339,7 +366,10 @@ final class DuelSourceControlsView: UIView {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         cancelPointers(touches.map { AnyHashable(ObjectIdentifier($0)) })
     }
-    override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { cancelAll() } }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { cancelAll(); setCharacterOcclusion([]) }
+    }
 
     func endPointers(_ ids: [AnyHashable]) { ids.forEach { release($0, cancelled: false) } }
 
@@ -462,7 +492,11 @@ final class DuelSourceControlsView: UIView {
         let state = state(for: action)
         let enabled = inputEnabled && state.enabled
         button.isEnabled = enabled
-        button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * (opponentProne ? 0.35 : 1)
+        // Keep the existing prone treatment, but never multiply two fades.
+        // A held overlapping button remains legible as immediate touch feedback.
+        let overlapFade: CGFloat = obscuredActions.contains(action) ? (isHeld(action) ? 0.75 : 0.45) : 1
+        let artworkFade: CGFloat = opponentProne ? 0.35 : overlapFade
+        button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * artworkFade
         button.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
         button.accessibilityLabel = state.accessibilityLabel ?? action.label
         button.accessibilityValue = !inputEnabled ? "操作已暂停" :
@@ -543,3 +577,4 @@ private final class DuelSourceActionButton: UIButton {
     var activate: (() -> Bool)?
     override func accessibilityActivate() -> Bool { activate?() ?? false }
 }
+

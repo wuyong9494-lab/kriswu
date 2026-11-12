@@ -170,7 +170,10 @@ final class DuelFlowTests: XCTestCase {
             pause.tap(); app.buttons["duel.exit"].tap()
             XCTAssertTrue(selection.waitForExistence(timeout: 8)); expectOrientation(app, landscape: true)
         }
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let close = app.buttons["duel.lobby.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue(close.isHittable)
+        close.tap()
         XCTAssertTrue(entry.waitForExistence(timeout: 8))
         expectOrientation(app, landscape: false)
         XCTAssertTrue(app.buttons["arena.enter"].exists)
@@ -178,3 +181,4 @@ final class DuelFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["五子棋"].exists)
     }
 }
+

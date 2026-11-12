@@ -86,10 +86,29 @@ final class DuelSession: ObservableObject {
     }
     func releaseSourceMusicWorld(_ world: DuelWorldView) {
         guard musicWorld === world else { return }
+        artworkControls?.setCharacterOcclusion([])
         musicWorld = nil
         publishSourceMusicReadinessIfChanged()
     }
     private weak var offlineControls: DuelSourceControlsView?
+    private weak var artworkControls: DuelSourceControlsView?
+
+    func bindArtworkControls(_ controls: DuelSourceControlsView) {
+        guard acceptsWeaponControls(controls) else { return }
+        artworkControls?.setCharacterOcclusion([])
+        artworkControls = controls
+    }
+
+    func updateCharacterOcclusion(_ rectangles: [CGRect], from world: DuelWorldView) {
+        guard !ended, musicWorld === world, let controls = artworkControls,
+              acceptsWeaponControls(controls) else { return }
+        guard let window = world.window, controls.window === window else {
+            controls.setCharacterOcclusion([])
+            return
+        }
+        controls.setCharacterOcclusion(rectangles.map { world.convert($0, to: controls) })
+    }
+
 
     /// UIKit may mount the replacement controls before dismantling the old
     /// ones. Only the live owner may write or clear the shared input mailbox.
@@ -1083,6 +1102,7 @@ struct DuelWeaponControls: UIViewRepresentable {
             return false
         }
         guard session.acceptsWeaponControls(view) else { view.shutdown(); return false }
+        session.bindArtworkControls(view)
         view.onDirection = { [weak session, weak view] x, y in
             guard let session, let view, session.acceptsWeaponControls(view) else { return }
             session.weaponDirection(x: x, y: y)
@@ -1347,3 +1367,4 @@ final class DuelInputView: UIView {
         if notify { for name in names { session?.input(name, down: false) } }
     }
 }
+

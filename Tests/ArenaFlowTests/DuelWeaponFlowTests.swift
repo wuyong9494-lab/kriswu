@@ -112,7 +112,10 @@ final class DuelWeaponFlowTests: XCTestCase {
             capture("original-\(hero)-returned-landscape-selection")
         }
 
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let close = app.buttons["duel.lobby.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue(close.isHittable)
+        close.tap()
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
         expectOrientation(app, landscape: false)
         XCTAssertTrue(app.buttons["arena.enter"].exists)
@@ -462,3 +465,4 @@ final class DuelWeaponFlowTests: XCTestCase {
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }
 }
+

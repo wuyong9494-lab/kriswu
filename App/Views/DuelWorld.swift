@@ -408,6 +408,7 @@ final class DuelWorldView: SCNView {
                 return
             }
             stopClock(); session.clearInput()
+            session.updateCharacterOcclusion([], from: self)
         } else {
             prepareNetworkSceneIfMounted()
             preparationMountChanged()
@@ -431,9 +432,16 @@ final class DuelWorldView: SCNView {
         // SceneKit renderer for a camera (or mutate a default camera it exposes).
         guard !ended, scene != nil, bounds.width.isFinite, bounds.height.isFinite,
               bounds.width > 0, bounds.height > 0, let eye = pointOfView,
-              let camera = eye.camera else { return }
+              let camera = eye.camera else {
+            session.updateCharacterOcclusion([], from: self)
+            return
+        }
         let aspect = Double(bounds.width / bounds.height)
-        guard aspect.isFinite, aspect > 0 else { opticalFramingFailure = .invalidTransform; return }
+        guard aspect.isFinite, aspect > 0 else {
+            opticalFramingFailure = .invalidTransform
+            session.updateCharacterOcclusion([], from: self)
+            return
+        }
         let framing = DuelCameraFraming(aspect: aspect, separation: combatCamera.separation)
         let trackedX = Float(combatCamera.centerX)
         var position = cameraBasePosition
@@ -468,8 +476,14 @@ final class DuelWorldView: SCNView {
                     camera.fieldOfView = CGFloat(try DuelDisplayedSkinBounds.verticalFOV(
                         points: points, aspect: aspect, minimum: framing.verticalFieldOfView,
                         near: camera.zNear, inset: inset))
+                    // Reuse the same conservative points and the final installed FOV.
+                    // This does not change the camera, actor scale or touch geometry.
+                    let rectangles = DuelDisplayedSkinBounds.artworkRectangles(
+                        points: points, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
+                    session.updateCharacterOcclusion(rectangles, from: self)
                 } catch {
                     opticalFramingFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry
+                    session.updateCharacterOcclusion([], from: self)
                 }
             }
         } else {
@@ -941,3 +955,4 @@ private final class DuelActor {
         body.geometry?.firstMaterial?.emission.contents = fighter.flash > 0 ? UIColor(red: 0.22, green: 0.10, blue: 0.02, alpha: 1) : UIColor.black
     }
 }
+

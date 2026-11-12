@@ -17,7 +17,9 @@ extension DuelLifecycleTests {
             _ = lobby.snapshot() // Resolve SceneKit's viewport, not an assumed projection matrix.
             let fit = try XCTUnwrap(lobby.framing)
             XCTAssertFalse(try XCTUnwrap(lobby.pointOfView?.camera).usesOrthographicProjection)
-            XCTAssertEqual(lobby.pointOfView?.camera?.fieldOfView, 35)
+            XCTAssertEqual(Double(try XCTUnwrap(lobby.pointOfView?.camera).fieldOfView),
+                           fit.verticalFieldOfViewDegrees, accuracy: 0.0001)
+            XCTAssertEqual(fit.position, DuelLobbyFraming.originalPosition)
             XCTAssertEqual(lobby.bounds.size, size, "The stage must remain full-size behind controls")
             let safe = CGRect(x: opening.minX * size.width + 7.9, y: 7.9,
                               width: opening.width * size.width - 15.8,
@@ -70,8 +72,13 @@ extension DuelLifecycleTests {
         XCTAssertNotNil(lobby.framing)
         // Stacked / largest-text callers have no overlaid side columns or rail.
         lobby.setVisibleRegion(nil)
-        XCTAssertNil(lobby.framing)
-        XCTAssertEqual(camera.position.z, -0.35 + 5.15 * zoom, accuracy: 0.0001)
+        let fullFit = try XCTUnwrap(lobby.framing)
+        let expectedFull = try XCTUnwrap(DuelLobbyFraming(size: lobby.bounds.size,
+            visibleRect: lobby.bounds, zoom: Double(zoom)))
+        XCTAssertEqual(fullFit, expectedFull)
+        XCTAssertEqual(Double(camera.position.z), DuelLobbyFraming.originalPosition.z, accuracy: 0.0001)
+        XCTAssertEqual(Double(try XCTUnwrap(camera.camera).fieldOfView),
+                       expectedFull.verticalFieldOfViewDegrees, accuracy: 0.0001)
         lobby.shutdown()
         XCTAssertNil(lobby.scene)
         XCTAssertNil(lobby.pointOfView)
@@ -81,3 +88,4 @@ extension DuelLifecycleTests {
         XCTAssertNil(lobby.scene, "Late layout must not recreate a closed showroom")
     }
 }
+
