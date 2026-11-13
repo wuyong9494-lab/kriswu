@@ -14,6 +14,7 @@ final class DuelNetworkCombatSession: ObservableObject {
     private let sessionID: String
     private let hostID: String
     private let guestID: String
+    var localSeat: Int { room.me.id == hostID ? 0 : 1 }
     private var owner: UUID?
     private var host: DuelNetworkCombatHost?
     private var guest: DuelNetworkCombatGuest?
