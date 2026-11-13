@@ -9,6 +9,7 @@ final class DuelShadowVoice {
     static let assetName = "liu_shadow_callout"
     private var player: AVAudioPlayer?
     private var lastCueID: String?
+    private var isPaused = false
 
     private static func bundledURL(bundle: Bundle = .main) -> URL? {
         bundle.url(forResource: assetName, withExtension: "caf")
@@ -20,7 +21,7 @@ final class DuelShadowVoice {
     /// placeholder or mark an unplayed cue as delivered.
     @discardableResult
     func playLiuTransformation(cueID: String) -> Bool {
-        guard !cueID.isEmpty, cueID != lastCueID,
+        guard !isPaused, !cueID.isEmpty, cueID != lastCueID,
               let url = Self.bundledURL() else { return false }
         do {
             let prepared = try AVAudioPlayer(contentsOf: url)
@@ -35,9 +36,15 @@ final class DuelShadowVoice {
         }
     }
 
+    func setPaused(_ paused: Bool) {
+        isPaused = paused
+        if paused { player?.pause() } else { player?.play() }
+    }
+
     func reset() {
         player?.stop()
         player = nil
         lastCueID = nil
+        isPaused = false
     }
 }
