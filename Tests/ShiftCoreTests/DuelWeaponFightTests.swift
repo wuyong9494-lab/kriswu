@@ -128,7 +128,7 @@ final class DuelWeaponFightTests: XCTestCase {
         XCTAssertGreaterThan(guarded.fighters[1].health, walking.fighters[1].health)
     }
 
-    func testAutomaticGuardReturnsOnTheFirstReadyTickForBothWeapons() throws {
+    func testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons() throws {
         let catalog = Fixture.catalog()
         for hero in [DuelGame.Hero.ember, .liu] {
             let other: DuelGame.Hero = hero == .ember ? .liu : .ember
@@ -167,7 +167,7 @@ final class DuelWeaponFightTests: XCTestCase {
         }
     }
 
-    func testBufferedFollowUpStillTakesPriorityOverAutomaticGuardAtRecovery() throws {
+    func testBufferedFollowUpStillTakesPriorityOverHeldGuardAtRecovery() throws {
         var fight = try Fixture.fight(distance: 3000)
         fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
         fight.step(.init(weaponCommand: .kick), opponent: .neutral)
@@ -188,7 +188,7 @@ final class DuelWeaponFightTests: XCTestCase {
         XCTAssertEqual(fight.fighters[0].weaponPose?.clip, fight.profiles[0].roles["kickJump"])
     }
 
-    func testHitReactionRecoveryImmediatelyRestoresNeutralDefense() throws {
+    func testHitReactionRecoveryImmediatelyRestoresHeldDefense() throws {
         var fight = try Fixture.fight()
         fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
         for _ in 0..<12 where fight.hitStop == 0 { fight.step(.neutral, opponent: .neutral) }

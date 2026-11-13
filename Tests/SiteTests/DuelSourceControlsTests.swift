@@ -125,6 +125,13 @@ final class DuelSourceControlsTests: XCTestCase {
             XCTAssertEqual(punch.width / layout.joystick.width, 205.0 / 500.0, accuracy: 0.00001,
                            "Keep the measured source control proportions")
             XCTAssertLessThan(layout.joystick.maxX, shadow.minX)
+            XCTAssertGreaterThanOrEqual(layout.manualGuard.width, 44)
+            XCTAssertGreaterThanOrEqual(layout.manualGuard.height, 44)
+            XCTAssertTrue(safe.contains(layout.manualGuard))
+            XCTAssertFalse(layout.manualGuard.intersects(layout.joystickTouch))
+            for zone in layout.actionTouch.values {
+                XCTAssertFalse(layout.manualGuard.intersects(zone), "Manual defense cannot steal a source action")
+            }
         }
     }
 
@@ -351,15 +358,87 @@ final class DuelSourceControlsTests: XCTestCase {
         XCTAssertTrue(pending.isEmpty)
     }
 
-    func testFallbackCannotClaimSourceArtworkAndAccessibilityUsesFourActions() {
+    func testFallbackCannotClaimSourceArtworkAndAccessibilityIncludesManualDefense() {
         let view = controls()
         XCTAssertFalse(view.sourceArtAvailable)
         XCTAssertTrue(view.loadedSpriteNames.isEmpty)
         let identifiers = Set(view.subviews.compactMap(\.accessibilityIdentifier))
         XCTAssertEqual(identifiers, Set(["duel.control.joystick", "duel.control.weapon", "duel.control.kick",
-                                         "duel.control.ranged", "duel.control.shadow"]))
+                                         "duel.control.ranged", "duel.control.shadow", "duel.control.guard"]))
         XCTAssertFalse(view.point(inside: CGPoint(x: 478, y: 220), with: nil),
                        "The middle of the fight must remain available to the scene")
+    }
+
+    func testManualGuardRequiresLastFingerReleaseAndDragOutCancels() throws {
+        let view = controls()
+        let button = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" } as? UIButton)
+        let point = center(view.layoutSnapshot.manualGuard)
+        var edges: [Bool] = []
+        view.onGuard = { edges.append($0) }
+        XCTAssertEqual(button.accessibilityValue, "未按住")
+        view.beginPointers([.init(id: 1, location: point), .init(id: 2, location: point)])
+        XCTAssertEqual(edges, [true])
+        XCTAssertEqual(button.accessibilityValue, "已按住")
+        view.cancelPointers([1])
+        XCTAssertEqual(edges, [true], "A second physical finger still owns defense")
+        view.endPointers([2])
+        XCTAssertEqual(edges, [true, false])
+        XCTAssertEqual(button.accessibilityValue, "未按住")
+        view.beginPointers([.init(id: 3, location: point)])
+        view.movePointers([.init(id: 3, location: center(try XCTUnwrap(view.layoutSnapshot.actions[.weapon])))])
+        view.endPointers([3])
+        XCTAssertEqual(edges, [true, false, true, false], "A dragged-out finger cannot retarget or rearm defense")
+    }
+
+    func testManualGuardCancellationClearsTouchAndAccessibilityIntent() throws {
+        let view = controls()
+        let button = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" } as? UIButton)
+        var edges: [Bool] = []
+        view.onGuard = { edges.append($0) }
+        XCTAssertTrue(button.accessibilityActivate())
+        XCTAssertEqual(button.accessibilityValue, "已按住")
+        XCTAssertTrue(button.accessibilityActivate())
+        XCTAssertEqual(edges, [true, false])
+        XCTAssertTrue(button.accessibilityActivate())
+        view.inputEnabled = false
+        XCTAssertEqual(edges, [true, false, true, false])
+        XCTAssertEqual(button.accessibilityValue, "操作已暂停")
+        XCTAssertFalse(button.accessibilityActivate())
+        view.inputEnabled = true
+        XCTAssertEqual(button.accessibilityValue, "未按住")
+        for operation in ["reset", "rotation", "window"] {
+            view.beginPointers([.init(id: operation, location: center(view.layoutSnapshot.manualGuard))])
+            switch operation {
+            case "reset": view.cancelAll()
+            case "rotation":
+                view.frame.size = CGSize(width: 812, height: 375)
+                view.setNeedsLayout(); view.layoutIfNeeded()
+            default: view.didMoveToWindow()
+            }
+            view.endPointers([operation])
+            XCTAssertEqual(button.accessibilityValue, "未按住", operation)
+            XCTAssertEqual(Array(edges.suffix(2)), [true, false], operation)
+        }
+        view.shutdown()
+        XCTAssertNil(view.onGuard)
+        XCTAssertFalse(button.accessibilityActivate())
+    }
+
+    func testManualGuardReentrantCancellationCannotRearmRemainingPointers() throws {
+        let view = controls()
+        let button = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" } as? UIButton)
+        let point = center(view.layoutSnapshot.manualGuard)
+        var edges: [Bool] = []
+        view.onGuard = { held in
+            edges.append(held)
+            if held { view.cancelAll() }
+        }
+        view.beginPointers([.init(id: 1, location: point), .init(id: 2, location: point)])
+        view.endPointers([1, 2])
+        XCTAssertEqual(edges, [true, false])
+        XCTAssertEqual(button.accessibilityValue, "未按住")
+        XCTAssertFalse(button.accessibilityActivate())
+        XCTAssertEqual(edges, [true, false, true, false])
     }
 
     func testActualSourceSpritesLoadRenderAndRejectDecodableTampering() throws {
@@ -376,7 +455,7 @@ final class DuelSourceControlsTests: XCTestCase {
         }
         XCTAssertGreaterThan(image.pngData()?.count ?? 0, 5000)
         let attachment = XCTAttachment(image: image)
-        attachment.name = "source-native-controls-four-actions-eight-directions"
+        attachment.name = "source-native-controls-four-actions-manual-defense-eight-directions"
         attachment.lifetime = .keepAlways; add(attachment)
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("SourceControls-\(UUID().uuidString)")

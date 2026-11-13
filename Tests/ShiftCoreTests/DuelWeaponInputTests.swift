@@ -158,6 +158,7 @@ final class DuelWeaponInputTests: XCTestCase {
     func testFullCancellationClearsButtonsDirectionMailboxAndJumpBeforeLateRelease() {
         for queued in [false, true] {
             var input = DuelWeaponInput()
+            input.setGuardHeld(true)
             input.press(.weapon)
             if queued { input.release(.weapon) }
             input.direction(x: 1, y: 1)
@@ -171,7 +172,7 @@ final class DuelWeaponInputTests: XCTestCase {
                 XCTAssertEqual(result.move, 0)
                 XCTAssertEqual(result.vertical, 0)
                 XCTAssertFalse(result.taps.contains(.jump))
-                XCTAssertTrue(result.guardHeld)
+                XCTAssertFalse(result.guardHeld)
             }
         }
     }
@@ -218,8 +219,10 @@ final class DuelWeaponInputTests: XCTestCase {
         }
     }
 
-    func testStandingGuardRequiresNeutralGroundedInputWithNoHeldActionOrPendingTap() {
+    func testManualGuardRequiresPlayerHoldAndNeutralGroundedInput() {
         var input = DuelWeaponInput()
+        XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
+        input.setGuardHeld(true)
         XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
         XCTAssertFalse(input.consume(facing: 1, airborne: true).guardHeld)
         input.direction(x: 1, y: 0)
@@ -231,7 +234,7 @@ final class DuelWeaponInputTests: XCTestCase {
         XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
         for _ in 0..<DuelWeaponInput.guardRecoveryTicks - 1 {
             XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld,
-                           "Automatic guard must not interrupt attack recovery")
+                           "Held guard must not interrupt attack recovery")
         }
         XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
         input.direction(x: 0, y: 1)
@@ -239,7 +242,7 @@ final class DuelWeaponInputTests: XCTestCase {
         XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
     }
 
-    func testAttackReleaseDoesNotImmediatelyRaiseAutomaticGuard() {
+    func testAttackReleaseNeverAutomaticallyRaisesGuard() {
         var input = DuelWeaponInput()
         input.press(.weapon)
         input.release(.weapon)
@@ -247,9 +250,11 @@ final class DuelWeaponInputTests: XCTestCase {
         for _ in 1..<DuelWeaponInput.guardRecoveryTicks {
             XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
         }
+        XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
+        input.setGuardHeld(true)
         XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
         input.reset()
-        XCTAssertTrue(input.consume(facing: 1, airborne: false).guardHeld)
+        XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)
     }
 
     func testAxesAreClampedAndAirborneNeutralActionsStayGeneric() {

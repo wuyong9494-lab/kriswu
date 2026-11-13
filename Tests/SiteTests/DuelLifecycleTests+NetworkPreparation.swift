@@ -483,6 +483,11 @@ extension DuelLifecycleTests {
         defer { owner.cancel(); window.isHidden = true }
         mountPreparation([controls, world], in: window)
         XCTAssertTrue(controls.currentPreparationReady)
+        let guardInput = controls.controls.onGuard
+        controls.controls.onGuard = nil
+        XCTAssertFalse(controls.currentPreparationReady, "A visible defense button without an input route is not ready")
+        controls.controls.onGuard = guardInput
+        XCTAssertTrue(controls.currentPreparationReady)
         controls.frame = CGRect(x: 0, y: 0, width: 10, height: 10)
         controls.setNeedsLayout(); controls.layoutIfNeeded()
         finish?(true)

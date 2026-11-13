@@ -345,7 +345,7 @@ final class DuelSession: ObservableObject {
     }
     var tutorial: String {
         if setup.originalWeapons {
-            return ["推动左侧摇杆靠近对手", "点击右侧武器按钮，观察刀或锤的攻击距离", "向上推动摇杆跳跃，站定时自动防御", "配合方向攻击，并尝试踢击与长按武器重击", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
+            return ["推动左侧摇杆靠近对手", "点击右侧武器按钮，观察刀或锤的攻击距离", "向上推动摇杆跳跃，落地站定后按住防御", "配合方向攻击，并尝试踢击与长按武器重击", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
         }
         return ["按住左侧方向，靠近对手", "方向与普攻可同时按：命中后再点普攻", "先点击跳跃，落地后再按住防御", "分别使出两种技能，注意能量消耗", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
     }
@@ -411,6 +411,12 @@ final class DuelSession: ObservableObject {
     }
     func weaponDirection(x: Int, y: Int) { guard acceptsPhysicalInput else { return }; weaponInput.direction(x: x, y: y) }
     func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) { guard acceptsPhysicalInput else { return }; weaponInput.action(action, down: down) }
+    func weaponGuard(_ held: Bool) {
+        // Releases remain safe during a transition; only new holds require a
+        // live local input owner. Host/guest routing still consumes this mailbox.
+        guard !held || acceptsPhysicalInput else { return }
+        weaponInput.setGuardHeld(held)
+    }
     func cancelWeaponAction(_ action: DuelWeaponInput.Action) { weaponInput.cancel(action: action) }
     func cancelWeaponInput() {
         weaponInput.cancelAll()
@@ -1124,6 +1130,10 @@ struct DuelWeaponControls: UIViewRepresentable {
                   let command = DuelWeaponInput.Action(rawValue: action.rawValue) else { return }
             session.cancelWeaponAction(command)
         }
+        view.onGuard = { [weak session, weak view] held in
+            guard let session, let view, session.acceptsWeaponControls(view) else { return }
+            session.weaponGuard(held)
+        }
         view.onInputCancelled = { [weak session, weak view] in
             guard let session, let view, session.acceptsWeaponControls(view) else { return }
             session.cancelWeaponInput()
@@ -1284,7 +1294,7 @@ final class DuelNetworkControlsView: UIView {
     var currentPreparationReady: Bool {
         !ended && window != nil && controls.window != nil && controls.superview === self && usableLayout &&
             (controls.sourceArtAvailable || acceptsFixtureArt) &&
-            controls.onDirection != nil && controls.onAction != nil &&
+            controls.onDirection != nil && controls.onAction != nil && controls.onGuard != nil &&
             controls.onActionCancelled != nil && controls.onInputCancelled != nil &&
             session.inputReset != nil && session.awaitingNetworkPreparation
     }
@@ -1292,7 +1302,9 @@ final class DuelNetworkControlsView: UIView {
         let layout = controls.layoutSnapshot
         guard bounds.width.isFinite, bounds.height.isFinite, layout.scale.isFinite,
               layout.scale > 0, layout.joystick.width >= 44, layout.joystick.height >= 44,
-              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.joystick) else { return false }
+              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.joystick),
+              layout.manualGuard.width >= 44, layout.manualGuard.height >= 44,
+              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.manualGuard) else { return false }
         return DuelSourceControlsView.Action.allCases.allSatisfy { action in
             guard let frame = layout.actions[action], let touch = layout.actionTouch[action] else { return false }
             return frame.width >= 44 && frame.height >= 44 &&
@@ -1309,7 +1321,7 @@ final class DuelNetworkControlsView: UIView {
         guard !ended else { return }
         ended = true; preparation = nil
         controls.cancelAll(notify: false); controls.inputEnabled = false
-        controls.onDirection = nil; controls.onAction = nil
+        controls.onDirection = nil; controls.onAction = nil; controls.onGuard = nil
         controls.onActionCancelled = nil; controls.onInputCancelled = nil
         controls.removeFromSuperview()
     }

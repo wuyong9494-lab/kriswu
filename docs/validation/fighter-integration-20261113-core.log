@@ -1,0 +1,1369 @@
+Started UTC: 2026-11-13T03:15:41.686508+00:00
+Repository HEAD: 54ff0d78fabf3bcd7247b38cb8e09e749dc9ced8
+Swift version 6.0.3 (swift-6.0.3-RELEASE)
+Target: x86_64-unknown-linux-gnu
+
+Selected classes: DuelWeaponInputTests, DuelCameraFramingTests, DuelCombatCameraTests, DuelWeaponSweepContinuityTests, DuelWeaponFightTests, DuelWeaponComboTests, DuelWeaponShadowTests, DuelNetworkReplayTests, DuelManualGuardTests
+Command: ["/workspace/scratch/f425b9d69678/swift-toolchain/usr/bin/swift", "test", "--jobs", "2", "--filter", "(DuelWeaponInputTests|DuelCameraFramingTests|DuelCombatCameraTests|DuelWeaponSweepContinuityTests|DuelWeaponFightTests|DuelWeaponComboTests|DuelWeaponShadowTests|DuelNetworkReplayTests|DuelManualGuardTests)"]
+Source manifest before SHA256: b0c8f8595cc5de97f564147c945eda14c8fd723c2f40e624f69d729c7a0758d0
+
+Building for debugging...
+[0/29] Write sources
+[6/29] Write swift-version--650BC371111A5670.txt
+[8/55] Emitting module ShiftCore
+[9/80] Compiling ShiftCore ArenaSourceLocalization.swift
+[10/80] Compiling ShiftCore ArenaSourceRuleCatalog.swift
+[11/80] Compiling ShiftCore ArenaSourceRuntime.swift
+[12/80] Compiling ShiftCore ArenaStageMetrics.swift
+[13/80] Compiling ShiftCore ArenaStory.swift
+[14/80] Compiling ShiftCore ArenaTerrain.swift
+[15/80] Compiling ShiftCore ArenaTerrainState.swift
+[16/80] Compiling ShiftCore ArenaVoiceBudget.swift
+[17/80] Compiling ShiftCore BackupArchive.swift
+[18/80] Compiling ShiftCore BoneSampler.swift
+[19/80] Compiling ShiftCore CalendarEventOwnership.swift
+[20/80] Compiling ShiftCore CardOrder.swift
+[21/80] Compiling ShiftCore DateTokenParser.swift
+[22/80] Compiling ShiftCore DayKey.swift
+[23/80] Compiling ShiftCore DayRules.swift
+[24/80] Compiling ShiftCore DirectoryMigration.swift
+[25/80] Compiling ShiftCore DocDownload.swift
+[26/80] Compiling ShiftCore DuelCameraFraming.swift
+[27/80] Compiling ShiftCore DuelCharacterAnimation.swift
+[28/80] Compiling ShiftCore DuelCombatCamera.swift
+[29/80] Compiling ShiftCore DuelGame.swift
+[30/80] Compiling ShiftCore DuelLobbyFraming.swift
+[31/80] Compiling ShiftCore DuelMultiplayerReplica.swift
+[32/80] Compiling ShiftCore DuelMultiplayerSelection.swift
+[33/80] Compiling ShiftCore DuelNetworkCombatProtocol.swift
+[34/104] Compiling ShiftCore DuelNetworkCombatState.swift
+[35/104] Compiling ShiftCore DuelNetworkCombatWire.swift
+[36/104] Compiling ShiftCore DuelNetworkHostSimulation.swift
+[37/104] Compiling ShiftCore DuelNetworkInputs.swift
+[38/104] Compiling ShiftCore DuelNetworkPulseSchedule.swift
+[39/104] Compiling ShiftCore DuelNetworkReplay.swift
+[40/104] Compiling ShiftCore DuelNetworkStartBarrier.swift
+[41/104] Compiling ShiftCore DuelOriginalCombatAnimation.swift
+[42/104] Compiling ShiftCore DuelOriginalRigReview.swift
+[43/104] Compiling ShiftCore DuelReplayState.swift
+[44/104] Compiling ShiftCore DuelWeaponFight.swift
+[45/104] Compiling ShiftCore DuelWeaponInput.swift
+[46/104] Compiling ShiftCore DuelWeaponMotion.swift
+[47/104] Compiling ShiftCore DuelWeaponShadow.swift
+[48/104] Compiling ShiftCore DuelWeaponSweepContinuity.swift
+[49/104] Compiling ShiftCore Fairness.swift
+[50/104] Compiling ShiftCore Forecast.swift
+[51/104] Compiling ShiftCore Gomoku.swift
+[52/104] Compiling ShiftCore HTMLText.swift
+[53/104] Compiling ShiftCore Holidays.swift
+[54/104] Compiling ShiftCore ICSExport.swift
+[55/104] Compiling ShiftCore Locked.swift
+[56/104] Compiling ShiftCore Meeting.swift
+[57/104] Compiling ShiftCore MeetingInsights.swift
+[58/128] Compiling ShiftCore APIDiscovery.swift
+[59/128] Compiling ShiftCore APIFields.swift
+[60/128] Compiling ShiftCore Arena.swift
+[61/128] Compiling ShiftCore ArenaAudioState.swift
+[62/128] Compiling ShiftCore ArenaBot.swift
+[63/128] Compiling ShiftCore ArenaCombatText.swift
+[64/128] Compiling ShiftCore ArenaFrameMetrics.swift
+[65/128] Compiling ShiftCore ArenaImportedMap.swift
+[66/128] Compiling ShiftCore ArenaImportedMatchRules.swift
+[67/128] Compiling ShiftCore ArenaImportedObjectives.swift
+[68/128] Compiling ShiftCore ArenaImportedRuntime.swift
+[69/128] Compiling ShiftCore ArenaInputTiming.swift
+[70/128] Compiling ShiftCore ArenaMapSelection.swift
+[71/128] Compiling ShiftCore ArenaMaps.swift
+[72/128] Compiling ShiftCore ArenaModes.swift
+[73/128] Compiling ShiftCore ArenaNet.swift
+[74/128] Compiling ShiftCore ArenaPower.swift
+[75/128] Compiling ShiftCore ArenaProgress.swift
+[76/128] Compiling ShiftCore ArenaQualitySample.swift
+[77/128] Compiling ShiftCore ArenaResourcePack.swift
+[78/128] Compiling ShiftCore ArenaSampleMap.swift
+[79/128] Compiling ShiftCore ArenaSeason.swift
+[80/128] Compiling ShiftCore ArenaSkills.swift
+[81/128] Compiling ShiftCore ArenaSourceAreaState.swift
+[82/128] Compiling ShiftCore ArenaSourceCombat.swift
+[83/152] Compiling ShiftCore StarRailAudioPCM.swift
+[84/152] Compiling ShiftCore StarRailCatalog.swift
+[85/152] Compiling ShiftCore StarRailChain.swift
+[86/152] Compiling ShiftCore StarRailCollection.swift
+[87/152] Compiling ShiftCore StarRailGame.swift
+[88/152] Compiling ShiftCore StarRailLearning.swift
+[89/152] Compiling ShiftCore StarRailPlanning.swift
+[90/152] Compiling ShiftCore StarRailSave.swift
+[91/152] Compiling ShiftCore StarRailSolver.swift
+[92/152] Compiling ShiftCore StarRailStages.swift
+[93/152] Compiling ShiftCore StarRailTrials.swift
+[94/152] Compiling ShiftCore Swaps.swift
+[95/152] Compiling ShiftCore SyncHealth.swift
+[96/152] Compiling ShiftCore SyncInputIdentity.swift
+[97/152] Compiling ShiftCore TextNormalize.swift
+[98/152] Compiling ShiftCore TileDailyAttempts.swift
+[99/152] Compiling ShiftCore TileGame.swift
+[100/152] Compiling ShiftCore TileJourney.swift
+[101/152] Compiling ShiftCore TileMaster.swift
+[102/152] Compiling ShiftCore TilePlanning.swift
+[103/152] Compiling ShiftCore TileReplay.swift
+[104/152] Compiling ShiftCore WeChatReminderGate.swift
+[105/152] Compiling ShiftCore Workload.swift
+[106/152] Compiling ShiftCore YearArchive.swift
+[107/152] Compiling ShiftCore MeetingTable.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[108/152] Compiling ShiftCore MeetingWriteback.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[109/152] Compiling ShiftCore NotificationPlanner.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[110/152] Compiling ShiftCore PassPlan.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[111/152] Compiling ShiftCore PassPlanDelivery.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[112/152] Compiling ShiftCore PassPlanEntryState.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[113/152] Compiling ShiftCore Patterns.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[114/152] Compiling ShiftCore Planning.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[115/152] Compiling ShiftCore Policies.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[116/152] Compiling ShiftCore Profiles.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[117/152] Compiling ShiftCore Provenance.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[118/152] Compiling ShiftCore RestBalance.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[119/152] Compiling ShiftCore Roster.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[120/152] Compiling ShiftCore RotationExport.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[121/152] Compiling ShiftCore RuleBook.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[122/152] Compiling ShiftCore ScheduleDiff.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[123/152] Compiling ShiftCore ScheduleParser.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[124/152] Compiling ShiftCore ScriptScanner.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[125/152] Compiling ShiftCore ShareCompletionGate.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[126/152] Compiling ShiftCore ShiftType.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[127/152] Compiling ShiftCore SiteAPI.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[128/152] Compiling ShiftCore StarExpedition.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[129/152] Compiling ShiftCore StarJourney.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[130/152] Compiling ShiftCore StarJourneySave.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:410:20: warning: result of call to 'parse()' is unused
+408 |             let parser = XMLParser(data: data)
+409 |             parser.delegate = d
+410 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+411 |             return d.strings
+412 |         }
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Sources/ShiftCore/MeetingTable.swift:446:20: warning: result of call to 'parse()' is unused
+444 |             let parser = XMLParser(data: data)
+445 |             parser.delegate = s
+446 |             parser.parse()
+    |                    `- warning: result of call to 'parse()' is unused
+447 |             guard let last = s.cells.keys.max() else { return [] }
+448 |             return (0...last).map { r in
+[132/157] Emitting module StarRailAudit
+[133/157] Compiling StarRailAudit main.swift
+[135/158] Emitting module TileDailyAudit
+[136/158] Compiling TileDailyAudit main.swift
+[138/163] Emitting module StarExpeditionAudit
+[139/163] Compiling StarExpeditionAudit main.swift
+[141/164] Compiling StarJourneyAudit main.swift
+[142/164] Emitting module StarJourneyAudit
+[143/189] Wrapping AST for TileDailyAudit for debugging
+[144/189] Wrapping AST for StarRailAudit for debugging
+[145/189] Wrapping AST for StarJourneyAudit for debugging
+[146/189] Wrapping AST for StarExpeditionAudit for debugging
+[147/189] Wrapping AST for ShiftCore for debugging
+[148/189] Write Objects.LinkFileList
+[151/189] Emitting module ShiftCoreTests
+[151/212] Linking TileDailyAudit
+[152/212] Linking StarRailAudit
+[153/212] Write Objects.LinkFileList
+[155/212] Linking StarJourneyAudit
+[156/212] Linking StarExpeditionAudit
+[158/212] Compiling ShiftCoreTests ArenaTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[159/212] Compiling ShiftCoreTests ArenaVoiceBudgetTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[160/212] Compiling ShiftCoreTests BackupArchiveTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[161/212] Compiling ShiftCoreTests BoneSamplerTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[162/212] Compiling ShiftCoreTests CalendarEventOwnershipTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[163/212] Compiling ShiftCoreTests DayKeyParsingTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[164/212] Compiling ShiftCoreTests DirectoryMigrationTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[165/212] Compiling ShiftCoreTests DuelCameraFramingTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[166/212] Compiling ShiftCoreTests DuelCharacterAnimationTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[167/212] Compiling ShiftCoreTests DuelCombatCameraTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[168/212] Compiling ShiftCoreTests DuelGameTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[169/212] Compiling ShiftCoreTests DuelGrappleTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[170/212] Compiling ShiftCoreTests DuelLobbyFramingTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[171/212] Compiling ShiftCoreTests DuelManualGuardTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[172/212] Compiling ShiftCoreTests DuelMultiplayerReplicaTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[173/212] Compiling ShiftCoreTests DuelMultiplayerSelectionTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[174/212] Compiling ShiftCoreTests DuelNetworkCombatWireTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[175/212] Compiling ShiftCoreTests DuelNetworkHostSimulationTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[176/212] Compiling ShiftCoreTests DuelNetworkInputsTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[177/212] Compiling ShiftCoreTests DuelNetworkPulseScheduleTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[178/212] Compiling ShiftCoreTests DuelNetworkReplayTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[179/212] Compiling ShiftCoreTests DuelNetworkStartBarrierTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[180/212] Compiling ShiftCoreTests DuelOriginalCombatAnimationTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[181/235] Compiling ShiftCoreTests DuelOriginalRigReviewTests.swift
+[182/235] Compiling ShiftCoreTests DuelReplayStateAuditTests.swift
+[183/235] Compiling ShiftCoreTests DuelReplayStateTests.swift
+[184/235] Compiling ShiftCoreTests DuelWeaponComboTests.swift
+[185/235] Compiling ShiftCoreTests DuelWeaponFightTests.swift
+[186/235] Compiling ShiftCoreTests DuelWeaponInputTests.swift
+[187/235] Compiling ShiftCoreTests DuelWeaponMotionTests.swift
+[188/235] Compiling ShiftCoreTests DuelWeaponShadowTests.swift
+[189/235] Compiling ShiftCoreTests DuelWeaponSweepContinuityTests.swift
+[190/235] Compiling ShiftCoreTests GomokuTests.swift
+[191/235] Compiling ShiftCoreTests NotificationMemoTests.swift
+[192/235] Compiling ShiftCoreTests PassPlanCrossPageIdentityTests.swift
+[193/235] Compiling ShiftCoreTests PassPlanDeliveryFormatTests.swift
+[194/235] Compiling ShiftCoreTests PassPlanDeliveryRulesTests.swift
+[195/235] Compiling ShiftCoreTests PassPlanEndTimeRereadTests.swift
+[196/235] Compiling ShiftCoreTests PassPlanEntryStateTests.swift
+[197/235] Compiling ShiftCoreTests PassPlanFieldMergeTests.swift
+[198/235] Compiling ShiftCoreTests PassPlanHeaderRecognitionTests.swift
+[199/235] Compiling ShiftCoreTests PassPlanIdentifierPreservationTests.swift
+[200/235] Compiling ShiftCoreTests PassPlanIdentifierReviewTests.swift
+[201/235] Compiling ShiftCoreTests PassPlanPassLayoutTests.swift
+[202/235] Compiling ShiftCoreTests PassPlanPhotoReviewTests.swift
+[203/235] Compiling ShiftCoreTests PassPlanPhotoTableAdoptionTests.swift
+[204/257] Compiling ShiftCoreTests ArenaAudioStateTests.swift
+[205/257] Compiling ShiftCoreTests ArenaCombatTextTests.swift
+[206/257] Compiling ShiftCoreTests ArenaFrameMetricsTests.swift
+[207/257] Compiling ShiftCoreTests ArenaImportedMapTests.swift
+[208/257] Compiling ShiftCoreTests ArenaImportedObjectiveTests.swift
+[209/257] Compiling ShiftCoreTests ArenaImportedRuntimeTests.swift
+[210/257] Compiling ShiftCoreTests ArenaInputTimingTests.swift
+[211/257] Compiling ShiftCoreTests ArenaMapSelectionTests.swift
+[212/257] Compiling ShiftCoreTests ArenaModesTests.swift
+[213/257] Compiling ShiftCoreTests ArenaMovementPredictionTests.swift
+[214/257] Compiling ShiftCoreTests ArenaNewBrawlerTests.swift
+[215/257] Compiling ShiftCoreTests ArenaPowerTests.swift
+[216/257] Compiling ShiftCoreTests ArenaProgressTests.swift
+[217/257] Compiling ShiftCoreTests ArenaResourcePackManifestTests.swift
+[218/257] Compiling ShiftCoreTests ArenaSampleMapTests.swift
+[219/257] Compiling ShiftCoreTests ArenaSeasonTests.swift
+[220/257] Compiling ShiftCoreTests ArenaSkillsTests.swift
+[221/257] Compiling ShiftCoreTests ArenaSourceCombatTests.swift
+[222/257] Compiling ShiftCoreTests ArenaSourceLocalizationTests.swift
+[223/257] Compiling ShiftCoreTests ArenaSourceRuleCatalogTests.swift
+[224/257] Compiling ShiftCoreTests ArenaStageMetricsTests.swift
+[225/257] Compiling ShiftCoreTests ArenaStoryTests.swift
+[226/257] Compiling ShiftCoreTests ArenaTerrainStateTests.swift
+[227/257] Compiling ShiftCoreTests PassPlanRecognitionTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[228/257] Compiling ShiftCoreTests PassPlanRequiredFieldsTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[229/257] Compiling ShiftCoreTests PassPlanStatusRereadTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[230/257] Compiling ShiftCoreTests PlanReminderDateTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[231/257] Compiling ShiftCoreTests ShareCompletionGateTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[232/257] Compiling ShiftCoreTests ShiftCoreTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[233/257] Compiling ShiftCoreTests StarJourneyTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[234/257] Compiling ShiftCoreTests StarPulseTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[235/257] Compiling ShiftCoreTests StarRailChainTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[236/257] Compiling ShiftCoreTests StarRailDepthTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[237/257] Compiling ShiftCoreTests StarRailExpansionTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[238/257] Compiling ShiftCoreTests StarRailTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[239/257] Compiling ShiftCoreTests StarRailTrialTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[240/257] Compiling ShiftCoreTests SyncInputIdentityTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[241/257] Compiling ShiftCoreTests TileDailyAttemptsTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[242/257] Compiling ShiftCoreTests TileDepthTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[243/257] Compiling ShiftCoreTests TileGameTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[244/257] Compiling ShiftCoreTests TileJourneyTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[245/257] Compiling ShiftCoreTests TileMasterTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[246/257] Compiling ShiftCoreTests TilePlanningTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[247/257] Compiling ShiftCoreTests TileReplayTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[248/257] Compiling ShiftCoreTests WeChatReminderGateTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/ShiftCoreTests.swift:2594:9: warning: code after 'throw' will never be executed
+2592 |         throw XCTSkip("Linux 上没有苹果的解压库，读 Excel 只在苹果系统上测")
+2593 |         #endif
+2594 |         let data = try XCTUnwrap(Data(base64Encoded: "UEsDBBQAAAAIAHtGWl3HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAe0ZaXZUW95k6AQAAuwEAABQAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbG2Ry07CQBSG9z5FM3sZYGEMacvOJ9AHaGCEJvSSmQlxqVEqUSSyUExKYlDxktgaIyAUDA9jpy0rXsFparyguznn+8/85yLmd7SKUEWYqIYugUwqDQSkF4yiqpcksLW5sboO8rJICBW4UCcSKFNq5iAkhTLSFJIyTKRzsm1gTaE8xCVITIyUIikjRLUKzKbTa1BTVB3wb1RZpDKrW+HkQIRUFmGcSbLz7ji03aB+zl57/luHWTXmjpdFzG0E9dNoZrPns/fdvfjh3S6Lov5l1L/2Pe+PRdsJm0/Bfo1Zg2UWDI6D5t0/fQWdR9a6n7fd+dXFb4ZjnEmxm4fQm7HWUeR8toITFm8sR0ylgCTAV0IQriIgr2R5xaE/Gfqjk2j48lXxw3IxbSSDLqZ2VuBDRt2GP3K+3SG/h/wBUEsDBBQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sXZHRTcMwEIZXsfxOLwlQKuS4AgoLAANYqdtYxHZkn1JWYAvG4IFxYA+uBYVL3nz/99v+ZKv1q+/EYFN2MdSyXBRS2NDErQv7Wj4/PZyt5FqrQ0wvubUWBdVDrmWL2F8D5Ka13uRF7G0gsovJG6Qx7SH3yZrtaZPvoCqKJXjjgtTqlG0MGq1SPIhE11LaHBc3pRRYy0zzoAsFg1bQ/LFbzsopu+OsmrINZ+dTds/ZxciAvEa5apSrWPlyJsfZcibH2dVM7pe50LlgHzFRx2WtUH9/vn99vClAKh+Tf2V+2mqmDOxtYfw0/QNQSwECFAMUAAAACAB7RlpdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAHtGWl2VFveZOgEAALsBAAAUAAAAAAAAAAAAAACAATsAAAB4bC9zaGFyZWRTdHJpbmdzLnhtbFBLAQIUAxQAAAAIAHtGWl2MVppH6QAAAOYBAAAYAAAAAAAAAAAAAACAAacBAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAMAAwDJAAAAxgIAAAAA"))
+     |         `- warning: code after 'throw' will never be executed
+2595 |         let rows = try XCTUnwrap(XLSXReader.rows(data))
+2596 |         XCTAssertEqual(rows.first, ["分组", "项目或工作内容", "完成进展、进度", "负责人", "闭环情况"])
+[249/258] /workspace/scratch/f425b9d69678/kriswu-integration/.build/x86_64-unknown-linux-gnu/debug/ShiftCorePackageDiscoveredTests.derived/all-discovered-tests.swift
+[250/258] Write sources
+[251/258] Wrapping AST for ShiftCoreTests for debugging
+[253/260] Compiling ShiftCorePackageDiscoveredTests ShiftCoreTests.swift
+[254/260] Emitting module ShiftCorePackageDiscoveredTests
+[255/261] Compiling ShiftCorePackageDiscoveredTests all-discovered-tests.swift
+[256/262] /workspace/scratch/f425b9d69678/kriswu-integration/.build/x86_64-unknown-linux-gnu/debug/ShiftCorePackageTests.derived/runner.swift
+[257/262] Write sources
+[258/262] Wrapping AST for ShiftCorePackageDiscoveredTests for debugging
+[260/264] Emitting module ShiftCorePackageTests
+[261/264] Compiling ShiftCorePackageTests runner.swift
+[262/265] Wrapping AST for ShiftCorePackageTests for debugging
+[263/265] Write Objects.LinkFileList
+[264/265] Linking ShiftCorePackageTests.xctest
+Build complete! (174.27s)
+Test Suite 'Selected tests' started at 2026-11-12 19:18:38.261
+Test Suite 'DuelCameraFramingTests' started at 2026-11-12 19:18:38.270
+Test Case 'DuelCameraFramingTests.testContinuousCameraEnvelopeKeepsBothFightersVisible' started at 2026-11-12 19:18:38.270
+Test Case 'DuelCameraFramingTests.testContinuousCameraEnvelopeKeepsBothFightersVisible' passed (0.001 seconds)
+Test Case 'DuelCameraFramingTests.testExplicitBoutRestartClearsOpticalFOVEvenOnIdenticalFrame' started at 2026-11-12 19:18:38.271
+Test Case 'DuelCameraFramingTests.testExplicitBoutRestartClearsOpticalFOVEvenOnIdenticalFrame' passed (0.1 seconds)
+Test Case 'DuelCameraFramingTests.testInvalidTransientGeometryCannotPoisonProjection' started at 2026-11-12 19:18:38.372
+Test Case 'DuelCameraFramingTests.testInvalidTransientGeometryCannotPoisonProjection' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testLandscapeThresholdHasNoHardLensJump' started at 2026-11-12 19:18:38.372
+Test Case 'DuelCameraFramingTests.testLandscapeThresholdHasNoHardLensJump' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones' started at 2026-11-12 19:18:38.372
+Test Case 'DuelCameraFramingTests.testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testOpticalFOVExpandsImmediatelyButReturnsSmoothly' started at 2026-11-12 19:18:38.372
+Test Case 'DuelCameraFramingTests.testOpticalFOVExpandsImmediatelyButReturnsSmoothly' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testOpticalFOVResetsOnRewindAndRotation' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testOpticalFOVResetsOnRewindAndRotation' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testPortraitRetainsOverviewAtEverySeparation' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testPortraitRetainsOverviewAtEverySeparation' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testSeparatedFightersKeepBodyMarginInEveryLandscapeWidth' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testSeparatedFightersKeepBodyMarginInEveryLandscapeWidth' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testUnexpectedFiniteSeparationCannotOverflowCameraDistance' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testUnexpectedFiniteSeparationCannotOverflowCameraDistance' passed (0.0 seconds)
+Test Case 'DuelCameraFramingTests.testWideCloseUpAndSeparatedFighters' started at 2026-11-12 19:18:38.373
+Test Case 'DuelCameraFramingTests.testWideCloseUpAndSeparatedFighters' passed (0.0 seconds)
+Test Suite 'DuelCameraFramingTests' passed at 2026-11-12 19:18:38.374
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'DuelCombatCameraTests' started at 2026-11-12 19:18:38.374
+Test Case 'DuelCombatCameraTests.testAuthoritativePairRepositionDropsStaleWideZoom' started at 2026-11-12 19:18:38.374
+Test Case 'DuelCombatCameraTests.testAuthoritativePairRepositionDropsStaleWideZoom' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testConfirmedImpactStrengthAndDirectionRemainDistinct' started at 2026-11-12 19:18:38.374
+Test Case 'DuelCombatCameraTests.testConfirmedImpactStrengthAndDirectionRemainDistinct' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testHitStopFreezesFramingWhileContactRecoilSettles' started at 2026-11-12 19:18:38.374
+Test Case 'DuelCombatCameraTests.testHitStopFreezesFramingWhileContactRecoilSettles' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testNewContactCanRestartSettledImpulseAndWeakBlockCannotEraseHeavyHit' started at 2026-11-12 19:18:38.374
+Test Case 'DuelCombatCameraTests.testNewContactCanRestartSettledImpulseAndWeakBlockCannotEraseHeavyHit' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testOpeningShotCentersPairAtEitherStageEdge' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testOpeningShotCentersPairAtEitherStageEdge' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testRepeatedPresentationDoesNotMoveCameraOrReplayContact' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testRepeatedPresentationDoesNotMoveCameraOrReplayContact' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testRewindResetsAndInvalidGeometryCannotPoisonPresentation' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testRewindResetsAndInvalidGeometryCannotPoisonPresentation' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testRoundRepositionSnapsCameraToTheNewPairCenter' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testRoundRepositionSnapsCameraToTheNewPairCenter' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testSkippedSamplesUseElapsedTicksInsteadOfOneDrawWorthOfMovement' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testSkippedSamplesUseElapsedTicksInsteadOfOneDrawWorthOfMovement' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition' passed (0.0 seconds)
+Test Case 'DuelCombatCameraTests.testTrackingLagIsIncludedAndZoomReturnsGradually' started at 2026-11-12 19:18:38.375
+Test Case 'DuelCombatCameraTests.testTrackingLagIsIncludedAndZoomReturnsGradually' passed (0.0 seconds)
+Test Suite 'DuelCombatCameraTests' passed at 2026-11-12 19:18:38.375
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'DuelManualGuardTests' started at 2026-11-12 19:18:38.375
+Test Case 'DuelManualGuardTests.testExplicitGuardRequiresHoldAndResetsOnCancel' started at 2026-11-12 19:18:38.375
+Test Case 'DuelManualGuardTests.testExplicitGuardRequiresHoldAndResetsOnCancel' passed (0.0 seconds)
+Test Case 'DuelManualGuardTests.testManualGuardSurvivesWireEncodingAsExplicitInputOnly' started at 2026-11-12 19:18:38.376
+Test Case 'DuelManualGuardTests.testManualGuardSurvivesWireEncodingAsExplicitInputOnly' passed (0.001 seconds)
+Test Case 'DuelManualGuardTests.testNeutralDoesNotAutomaticallyGuard' started at 2026-11-12 19:18:38.377
+Test Case 'DuelManualGuardTests.testNeutralDoesNotAutomaticallyGuard' passed (0.0 seconds)
+Test Case 'DuelManualGuardTests.testNoGuardWhileMovingOrAirborneAndRecoveryStillApplies' started at 2026-11-12 19:18:38.377
+Test Case 'DuelManualGuardTests.testNoGuardWhileMovingOrAirborneAndRecoveryStillApplies' passed (0.0 seconds)
+Test Suite 'DuelManualGuardTests' passed at 2026-11-12 19:18:38.378
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'DuelNetworkReplayTests' started at 2026-11-12 19:18:38.378
+Test Case 'DuelNetworkReplayTests.testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI' started at 2026-11-12 19:18:38.378
+Test Case 'DuelNetworkReplayTests.testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI' passed (7.987 seconds)
+Test Case 'DuelNetworkReplayTests.testByteBatchAndCounterBounds' started at 2026-11-12 19:18:46.364
+Test Case 'DuelNetworkReplayTests.testByteBatchAndCounterBounds' passed (0.011 seconds)
+Test Case 'DuelNetworkReplayTests.testCancellationDisconnectAndInterruptionAreTerminal' started at 2026-11-12 19:18:46.376
+Test Case 'DuelNetworkReplayTests.testCancellationDisconnectAndInterruptionAreTerminal' passed (0.156 seconds)
+Test Case 'DuelNetworkReplayTests.testEpochChangeFailsClosedOnlyForPinnedHostAndStart' started at 2026-11-12 19:18:46.532
+Test Case 'DuelNetworkReplayTests.testEpochChangeFailsClosedOnlyForPinnedHostAndStart' passed (0.009 seconds)
+Test Case 'DuelNetworkReplayTests.testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent' started at 2026-11-12 19:18:46.541
+Test Case 'DuelNetworkReplayTests.testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent' passed (0.623 seconds)
+Test Case 'DuelNetworkReplayTests.testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic' started at 2026-11-12 19:18:47.164
+Test Case 'DuelNetworkReplayTests.testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic' passed (0.005 seconds)
+Test Case 'DuelNetworkReplayTests.testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead' started at 2026-11-12 19:18:47.169
+Test Case 'DuelNetworkReplayTests.testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead' passed (0.005 seconds)
+Test Case 'DuelNetworkReplayTests.testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct' started at 2026-11-12 19:18:47.174
+Test Case 'DuelNetworkReplayTests.testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct' passed (0.031 seconds)
+Test Case 'DuelNetworkReplayTests.testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry' started at 2026-11-12 19:18:47.206
+Test Case 'DuelNetworkReplayTests.testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry' passed (0.23 seconds)
+Test Case 'DuelNetworkReplayTests.testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic' started at 2026-11-12 19:18:47.436
+Test Case 'DuelNetworkReplayTests.testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic' passed (0.005 seconds)
+Test Case 'DuelNetworkReplayTests.testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault' started at 2026-11-12 19:18:47.441
+Test Case 'DuelNetworkReplayTests.testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault' passed (0.007 seconds)
+Test Case 'DuelNetworkReplayTests.testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic' started at 2026-11-12 19:18:47.447
+Test Case 'DuelNetworkReplayTests.testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic' passed (0.335 seconds)
+Test Case 'DuelNetworkReplayTests.testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch' started at 2026-11-12 19:18:47.783
+Test Case 'DuelNetworkReplayTests.testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch' passed (0.006 seconds)
+Test Case 'DuelNetworkReplayTests.testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame' started at 2026-11-12 19:18:47.789
+Test Case 'DuelNetworkReplayTests.testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame' passed (0.075 seconds)
+Test Case 'DuelNetworkReplayTests.testWireContainsConsumedLeaseAndLateInputNotOriginalRequests' started at 2026-11-12 19:18:47.864
+Test Case 'DuelNetworkReplayTests.testWireContainsConsumedLeaseAndLateInputNotOriginalRequests' passed (0.027 seconds)
+Test Suite 'DuelNetworkReplayTests' passed at 2026-11-12 19:18:47.891
+	 Executed 15 tests, with 0 failures (0 unexpected) in 9.513 (9.513) seconds
+Test Suite 'DuelWeaponComboTests' started at 2026-11-12 19:18:47.891
+Test Case 'DuelWeaponComboTests.testChainedStageBudgetsReplayIdenticallyThroughWhiffsBlocksAndHitStop' started at 2026-11-12 19:18:47.891
+Test Case 'DuelWeaponComboTests.testChainedStageBudgetsReplayIdenticallyThroughWhiffsBlocksAndHitStop' passed (25.552 seconds)
+Test Case 'DuelWeaponComboTests.testGuardConsumesTheStageOpportunityWithoutExtraChipOrEnergy' started at 2026-11-12 19:19:13.443
+Test Case 'DuelWeaponComboTests.testGuardConsumesTheStageOpportunityWithoutExtraChipOrEnergy' passed (0.008 seconds)
+Test Case 'DuelWeaponComboTests.testHitStopAtTheAnchorAcceptsOneFollowUpWithoutReplayingTheContact' started at 2026-11-12 19:19:13.452
+Test Case 'DuelWeaponComboTests.testHitStopAtTheAnchorAcceptsOneFollowUpWithoutReplayingTheContact' passed (0.011 seconds)
+Test Case 'DuelWeaponComboTests.testMissedOpeningStrikeCannotBankAnExtraHitForTheSecondStage' started at 2026-11-12 19:19:13.462
+Test Case 'DuelWeaponComboTests.testMissedOpeningStrikeCannotBankAnExtraHitForTheSecondStage' passed (0.015 seconds)
+Test Case 'DuelWeaponComboTests.testPauseCancellationAtTheAnchorCannotReviveTheQueuedStage' started at 2026-11-12 19:19:13.477
+Test Case 'DuelWeaponComboTests.testPauseCancellationAtTheAnchorCannotReviveTheQueuedStage' passed (0.039 seconds)
+Test Case 'DuelWeaponComboTests.testSuccessfulOpeningStrikeStillAllowsOneDistinctContinuationHit' started at 2026-11-12 19:19:13.517
+Test Case 'DuelWeaponComboTests.testSuccessfulOpeningStrikeStillAllowsOneDistinctContinuationHit' passed (0.011 seconds)
+Test Case 'DuelWeaponComboTests.testTwoMissedStagesCannotBankExtraHitsForTheThirdStage' started at 2026-11-12 19:19:13.527
+Test Case 'DuelWeaponComboTests.testTwoMissedStagesCannotBankExtraHitsForTheThirdStage' passed (0.011 seconds)
+Test Suite 'DuelWeaponComboTests' passed at 2026-11-12 19:19:13.538
+	 Executed 7 tests, with 0 failures (0 unexpected) in 25.647 (25.647) seconds
+Test Suite 'DuelWeaponFightTests' started at 2026-11-12 19:19:13.538
+Test Case 'DuelWeaponFightTests.testAerialKickConsumesLaterAirborneButtonsWithoutReplayingOnLanding' started at 2026-11-12 19:19:13.538
+Test Case 'DuelWeaponFightTests.testAerialKickConsumesLaterAirborneButtonsWithoutReplayingOnLanding' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testBufferedFollowUpStillTakesPriorityOverHeldGuardAtRecovery' started at 2026-11-12 19:19:13.539
+Test Case 'DuelWeaponFightTests.testBufferedFollowUpStillTakesPriorityOverHeldGuardAtRecovery' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testComboAnchorContinuesSourceTimeWithoutReplayingTheSharedStrikePrefix' started at 2026-11-12 19:19:13.541
+Test Case 'DuelWeaponFightTests.testComboAnchorContinuesSourceTimeWithoutReplayingTheSharedStrikePrefix' passed (0.045 seconds)
+Test Case 'DuelWeaponFightTests.testDirectionalAerialKickDoesNotRequireAGroundDirectionalClip' started at 2026-11-12 19:19:13.586
+Test Case 'DuelWeaponFightTests.testDirectionalAerialKickDoesNotRequireAGroundDirectionalClip' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testEmptyCornerOfDiagonalWeaponAABBCannotDamageTheTorso' started at 2026-11-12 19:19:13.587
+Test Case 'DuelWeaponFightTests.testEmptyCornerOfDiagonalWeaponAABBCannotDamageTheTorso' passed (0.002 seconds)
+Test Case 'DuelWeaponFightTests.testFightCannotStartWithAnInvalidSameEquipmentCatalog' started at 2026-11-12 19:19:13.588
+Test Case 'DuelWeaponFightTests.testFightCannotStartWithAnInvalidSameEquipmentCatalog' passed (0.04 seconds)
+Test Case 'DuelWeaponFightTests.testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges' started at 2026-11-12 19:19:13.629
+Test Case 'DuelWeaponFightTests.testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons' started at 2026-11-12 19:19:13.630
+Test Case 'DuelWeaponFightTests.testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons' passed (0.002 seconds)
+Test Case 'DuelWeaponFightTests.testHitReactionRecoveryImmediatelyRestoresHeldDefense' started at 2026-11-12 19:19:13.632
+Test Case 'DuelWeaponFightTests.testHitReactionRecoveryImmediatelyRestoresHeldDefense' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testHitStopFreezesPoseAndTimerAndItsBufferedButtonCanBeCancelled' started at 2026-11-12 19:19:13.633
+Test Case 'DuelWeaponFightTests.testHitStopFreezesPoseAndTimerAndItsBufferedButtonCanBeCancelled' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testJumpAnimationAloneNeverBecomesAnAttack' started at 2026-11-12 19:19:13.635
+Test Case 'DuelWeaponFightTests.testJumpAnimationAloneNeverBecomesAnAttack' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testMovingWeaponSegmentMakesOneContactAndUpdatesDamage' started at 2026-11-12 19:19:13.635
+Test Case 'DuelWeaponFightTests.testMovingWeaponSegmentMakesOneContactAndUpdatesDamage' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testPauseCancellationDropsARecoveryQueueWithoutUndoingTheCurrentAttack' started at 2026-11-12 19:19:13.637
+Test Case 'DuelWeaponFightTests.testPauseCancellationDropsARecoveryQueueWithoutUndoingTheCurrentAttack' passed (0.002 seconds)
+Test Case 'DuelWeaponFightTests.testRecoveryBoundaryAppliesMovementAndCrouchWithoutAnIdleTick' started at 2026-11-12 19:19:13.639
+Test Case 'DuelWeaponFightTests.testRecoveryBoundaryAppliesMovementAndCrouchWithoutAnIdleTick' passed (0.002 seconds)
+Test Case 'DuelWeaponFightTests.testRoundBreakClearsPendingMovesAndResetsBothIndependentProfiles' started at 2026-11-12 19:19:13.641
+Test Case 'DuelWeaponFightTests.testRoundBreakClearsPendingMovesAndResetsBothIndependentProfiles' passed (0.001 seconds)
+Test Case 'DuelWeaponFightTests.testStationaryGuardBlocksButGuardAndWalkingDoesNotCreateAFreeBlock' started at 2026-11-12 19:19:13.643
+Test Case 'DuelWeaponFightTests.testStationaryGuardBlocksButGuardAndWalkingDoesNotCreateAFreeBlock' passed (0.102 seconds)
+Test Case 'DuelWeaponFightTests.testUnavailableAerialAttackIsConsumedInsteadOfSavedUntilLanding' started at 2026-11-12 19:19:13.745
+Test Case 'DuelWeaponFightTests.testUnavailableAerialAttackIsConsumedInsteadOfSavedUntilLanding' passed (0.002 seconds)
+Test Case 'DuelWeaponFightTests.testUnsupportedCommandsCannotPoisonTheRecoveryBuffer' started at 2026-11-12 19:19:13.747
+Test Case 'DuelWeaponFightTests.testUnsupportedCommandsCannotPoisonTheRecoveryBuffer' passed (0.041 seconds)
+Test Case 'DuelWeaponFightTests.testUnsupportedHitStopPressLeavesRoomForAValidFollowUp' started at 2026-11-12 19:19:13.788
+Test Case 'DuelWeaponFightTests.testUnsupportedHitStopPressLeavesRoomForAValidFollowUp' passed (0.002 seconds)
+Test Suite 'DuelWeaponFightTests' passed at 2026-11-12 19:19:13.790
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.251 (0.251) seconds
+Test Suite 'DuelWeaponInputTests' started at 2026-11-12 19:19:13.790
+Test Case 'DuelWeaponInputTests.testAlreadyQueuedTapCannotBeOverwrittenByMaturingHeavyHold' started at 2026-11-12 19:19:13.790
+Test Case 'DuelWeaponInputTests.testAlreadyQueuedTapCannotBeOverwrittenByMaturingHeavyHold' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testAttackReleaseNeverAutomaticallyRaisesGuard' started at 2026-11-12 19:19:13.790
+Test Case 'DuelWeaponInputTests.testAttackReleaseNeverAutomaticallyRaisesGuard' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testAxesAreClampedAndAirborneNeutralActionsStayGeneric' started at 2026-11-12 19:19:13.791
+Test Case 'DuelWeaponInputTests.testAxesAreClampedAndAirborneNeutralActionsStayGeneric' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testButtonFirstChordUsesTheLiveDirectionBeforeHeavyThreshold' started at 2026-11-12 19:19:13.791
+Test Case 'DuelWeaponInputTests.testButtonFirstChordUsesTheLiveDirectionBeforeHeavyThreshold' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testCancellingOneButtonDoesNotCompleteATapOrEraseACommittedCommand' started at 2026-11-12 19:19:13.791
+Test Case 'DuelWeaponInputTests.testCancellingOneButtonDoesNotCompleteATapOrEraseACommittedCommand' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testChordRemainsCapturedWhenBothFingersReleaseBeforeTheNextTick' started at 2026-11-12 19:19:13.791
+Test Case 'DuelWeaponInputTests.testChordRemainsCapturedWhenBothFingersReleaseBeforeTheNextTick' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testDirectionChangesCannotRepeatAnAlreadyResolvedHeldAttack' started at 2026-11-12 19:19:13.792
+Test Case 'DuelWeaponInputTests.testDirectionChangesCannotRepeatAnAlreadyResolvedHeldAttack' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testDirectionsResolveRelativeToFacingAndVerticalChordsDoNotJump' started at 2026-11-12 19:19:13.792
+Test Case 'DuelWeaponInputTests.testDirectionsResolveRelativeToFacingAndVerticalChordsDoNotJump' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testDuplicateButtonEdgesDoNotResetHoldOrRepeatRelease' started at 2026-11-12 19:19:13.793
+Test Case 'DuelWeaponInputTests.testDuplicateButtonEdgesDoNotResetHoldOrRepeatRelease' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testFirstResolvedCommandWinsWithoutReplayingTheOtherFinger' started at 2026-11-12 19:19:13.793
+Test Case 'DuelWeaponInputTests.testFirstResolvedCommandWinsWithoutReplayingTheOtherFinger' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testFullCancellationClearsButtonsDirectionMailboxAndJumpBeforeLateRelease' started at 2026-11-12 19:19:13.793
+Test Case 'DuelWeaponInputTests.testFullCancellationClearsButtonsDirectionMailboxAndJumpBeforeLateRelease' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testManualGuardRequiresPlayerHoldAndNeutralGroundedInput' started at 2026-11-12 19:19:13.794
+Test Case 'DuelWeaponInputTests.testManualGuardRequiresPlayerHoldAndNeutralGroundedInput' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testNeutralKickHasNoInventedHeavyMappingAndSpecialsKeepTheirIdentity' started at 2026-11-12 19:19:13.794
+Test Case 'DuelWeaponInputTests.testNeutralKickHasNoInventedHeavyMappingAndSpecialsKeepTheirIdentity' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testNeutralTapAndHeavyHoldAreExclusiveAndNeverRepeatWhileHeld' started at 2026-11-12 19:19:13.794
+Test Case 'DuelWeaponInputTests.testNeutralTapAndHeavyHoldAreExclusiveAndNeverRepeatWhileHeld' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testPendingButtonsResolveInPressOrderWhenDirectionArrives' started at 2026-11-12 19:19:13.794
+Test Case 'DuelWeaponInputTests.testPendingButtonsResolveInPressOrderWhenDirectionArrives' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testQuickUpReleaseSurvivesTheGracePeriodButAirborneUpCannotJumpAgain' started at 2026-11-12 19:19:13.795
+Test Case 'DuelWeaponInputTests.testQuickUpReleaseSurvivesTheGracePeriodButAirborneUpCannotJumpAgain' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testStandaloneUpIsEdgeTriggeredAndDoesNotBounceOnLanding' started at 2026-11-12 19:19:13.795
+Test Case 'DuelWeaponInputTests.testStandaloneUpIsEdgeTriggeredAndDoesNotBounceOnLanding' passed (0.0 seconds)
+Test Case 'DuelWeaponInputTests.testUpAllowsOneSimulationTickForASecondFingerChord' started at 2026-11-12 19:19:13.795
+Test Case 'DuelWeaponInputTests.testUpAllowsOneSimulationTickForASecondFingerChord' passed (0.0 seconds)
+Test Suite 'DuelWeaponInputTests' passed at 2026-11-12 19:19:13.795
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'DuelWeaponShadowTests' started at 2026-11-12 19:19:13.795
+Test Case 'DuelWeaponShadowTests.testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections' started at 2026-11-12 19:19:13.795
+Test Case 'DuelWeaponShadowTests.testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections' passed (0.013 seconds)
+Test Case 'DuelWeaponShadowTests.testCooldownExpiresOnlyOnUnpausedSimulationTicks' started at 2026-11-12 19:19:13.808
+Test Case 'DuelWeaponShadowTests.testCooldownExpiresOnlyOnUnpausedSimulationTicks' passed (0.004 seconds)
+Test Case 'DuelWeaponShadowTests.testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow' started at 2026-11-12 19:19:13.812
+Test Case 'DuelWeaponShadowTests.testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow' passed (0.106 seconds)
+Test Case 'DuelWeaponShadowTests.testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown' started at 2026-11-12 19:19:13.917
+Test Case 'DuelWeaponShadowTests.testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown' passed (0.003 seconds)
+Test Case 'DuelWeaponShadowTests.testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing' started at 2026-11-12 19:19:13.920
+Test Case 'DuelWeaponShadowTests.testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing' passed (0.003 seconds)
+Test Case 'DuelWeaponShadowTests.testHitInterruptsWindupWithoutRefundOrDelayedProjectile' started at 2026-11-12 19:19:13.923
+Test Case 'DuelWeaponShadowTests.testHitInterruptsWindupWithoutRefundOrDelayedProjectile' passed (0.004 seconds)
+Test Case 'DuelWeaponShadowTests.testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn' started at 2026-11-12 19:19:13.927
+Test Case 'DuelWeaponShadowTests.testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn' passed (0.041 seconds)
+Test Case 'DuelWeaponShadowTests.testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath' started at 2026-11-12 19:19:13.968
+Test Case 'DuelWeaponShadowTests.testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath' passed (0.051 seconds)
+Test Case 'DuelWeaponShadowTests.testRoundEndAndResetRemoveProjectileAndResetCooldown' started at 2026-11-12 19:19:14.019
+Test Case 'DuelWeaponShadowTests.testRoundEndAndResetRemoveProjectileAndResetCooldown' passed (0.002 seconds)
+Test Case 'DuelWeaponShadowTests.testShadowCannotRestartOrOccupyBufferWithoutEnergy' started at 2026-11-12 19:19:14.021
+Test Case 'DuelWeaponShadowTests.testShadowCannotRestartOrOccupyBufferWithoutEnergy' passed (0.003 seconds)
+Test Case 'DuelWeaponShadowTests.testShadowReplayIncludesHiddenOriginCooldownAndCancellation' started at 2026-11-12 19:19:14.024
+Test Case 'DuelWeaponShadowTests.testShadowReplayIncludesHiddenOriginCooldownAndCancellation' passed (43.781 seconds)
+Test Suite 'DuelWeaponShadowTests' passed at 2026-11-12 19:19:57.804
+	 Executed 11 tests, with 0 failures (0 unexpected) in 44.009 (44.009) seconds
+Test Suite 'DuelWeaponSweepContinuityTests' started at 2026-11-12 19:19:57.805
+Test Case 'DuelWeaponSweepContinuityTests.testAdjacentCeilingIsInclusiveForBothWeaponsWithoutPhantomHits' started at 2026-11-12 19:19:57.805
+Test Case 'DuelWeaponSweepContinuityTests.testAdjacentCeilingIsInclusiveForBothWeaponsWithoutPhantomHits' passed (0.367 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testBadPeakDoesNotSilenceLaterValidStroke' started at 2026-11-12 19:19:58.172
+Test Case 'DuelWeaponSweepContinuityTests.testBadPeakDoesNotSilenceLaterValidStroke' passed (0.044 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testDepthDiscontinuityCountsEvenWhenProjectedMovementLooksSmall' started at 2026-11-12 19:19:58.216
+Test Case 'DuelWeaponSweepContinuityTests.testDepthDiscontinuityCountsEvenWhenProjectedMovementLooksSmall' passed (0.049 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testInvalidBaseCannotCreateAFalseShaftHitFromAContinuousTip' started at 2026-11-12 19:19:58.265
+Test Case 'DuelWeaponSweepContinuityTests.testInvalidBaseCannotCreateAFalseShaftHitFromAContinuousTip' passed (0.161 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testInvalidDistancesCannotBeAcceptedAsContinuity' started at 2026-11-12 19:19:58.426
+Test Case 'DuelWeaponSweepContinuityTests.testInvalidDistancesCannotBeAcceptedAsContinuity' passed (0.0 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testOneDiscontinuousHammerDoesNotSuppressTheOtherHammer' started at 2026-11-12 19:19:58.427
+Test Case 'DuelWeaponSweepContinuityTests.testOneDiscontinuousHammerDoesNotSuppressTheOtherHammer' passed (0.08 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testOutOfPlanePreviousSampleCannotSweepBackIntoTorso' started at 2026-11-12 19:19:58.506
+Test Case 'DuelWeaponSweepContinuityTests.testOutOfPlanePreviousSampleCannotSweepBackIntoTorso' passed (0.038 seconds)
+Test Case 'DuelWeaponSweepContinuityTests.testTeleportedWeaponCannotCreateDamageAudioOrAnActiveTrail' started at 2026-11-12 19:19:58.544
+Test Case 'DuelWeaponSweepContinuityTests.testTeleportedWeaponCannotCreateDamageAudioOrAnActiveTrail' passed (0.038 seconds)
+Test Suite 'DuelWeaponSweepContinuityTests' passed at 2026-11-12 19:19:58.583
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.778 (0.778) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 19:19:58.583
+	 Executed 107 tests, with 0 failures (0 unexpected) in 80.309 (80.309) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.0.3 (18c42c19cac3faf)
+✔ Test run with 0 tests passed after 0.001 seconds.
+
+VALIDATION_RUN_METADATA {"started": "2026-11-13T03:15:41.686508+00:00", "ended": "2026-11-13T03:19:58.689445+00:00", "elapsedSeconds": 256.47099083100056, "exitCode": 0, "sourceFileCount": 214, "sourceManifestSha256": "b0c8f8595cc5de97f564147c945eda14c8fd723c2f40e624f69d729c7a0758d0", "sourcesUnchangedDuringRun": true, "repositoryHead": "54ff0d78fabf3bcd7247b38cb8e09e749dc9ced8", "classes": ["DuelWeaponInputTests", "DuelCameraFramingTests", "DuelCombatCameraTests", "DuelWeaponSweepContinuityTests", "DuelWeaponFightTests", "DuelWeaponComboTests", "DuelWeaponShadowTests", "DuelNetworkReplayTests", "DuelManualGuardTests"]}

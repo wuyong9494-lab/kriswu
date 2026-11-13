@@ -1,0 +1,39 @@
+{
+  "started": "2026-11-13T03:15:41.686508+00:00",
+  "ended": "2026-11-13T03:19:58.689445+00:00",
+  "elapsedSeconds": 256.47099083100056,
+  "exitCode": 0,
+  "sourceFileCount": 214,
+  "sourceManifestSha256": "b0c8f8595cc5de97f564147c945eda14c8fd723c2f40e624f69d729c7a0758d0",
+  "sourcesUnchangedDuringRun": true,
+  "repositoryHead": "54ff0d78fabf3bcd7247b38cb8e09e749dc9ced8",
+  "classes": [
+    "DuelWeaponInputTests",
+    "DuelCameraFramingTests",
+    "DuelCombatCameraTests",
+    "DuelWeaponSweepContinuityTests",
+    "DuelWeaponFightTests",
+    "DuelWeaponComboTests",
+    "DuelWeaponShadowTests",
+    "DuelNetworkReplayTests",
+    "DuelManualGuardTests"
+  ],
+  "actualMethods": 107,
+  "passed": 107,
+  "failed": 0,
+  "skipped": 0,
+  "byClass": {
+    "DuelCameraFramingTests": 13,
+    "DuelCombatCameraTests": 12,
+    "DuelManualGuardTests": 4,
+    "DuelNetworkReplayTests": 15,
+    "DuelWeaponComboTests": 7,
+    "DuelWeaponFightTests": 19,
+    "DuelWeaponInputTests": 18,
+    "DuelWeaponShadowTests": 11,
+    "DuelWeaponSweepContinuityTests": 8
+  },
+  "buildSeconds": 174.27,
+  "testSeconds": 80.309,
+  "logSha256": "a96dfdf46594761a5afaf02d741e5dd686eee830700e1af971b9989f426a569b"
+}

@@ -1,0 +1,65 @@
+{
+  "head": "54ff0d78fabf3bcd7247b38cb8e09e749dc9ced8",
+  "publicSourceCount": 300,
+  "sourceOnlyFingerprint": "5c16d906d6d362b944a742bcdb60f56f1b5ed564fc0e61a046befa578945de92",
+  "mode": "source-only",
+  "coverage": [
+    {
+      "path": "Sources/ShiftCore/DuelWeaponSweepContinuity.swift",
+      "bytes": 1056,
+      "sha256": "51c2842f6278ad20ef5749c7f8fd31d141b05fe3e6676aa8faa809b487849ea1"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelWeaponInput.swift",
+      "bytes": 6892,
+      "sha256": "b00ba6e4f22c8b0f44abb456c03bf70993d5d9ee34b0cc4bd6951b6a0bdd2091"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelWeaponFight.swift",
+      "bytes": 34960,
+      "sha256": "a80d00e2d417e8631fd2313ebc6ea62a3e94a4829e37929a44fcb6d4622eddd6"
+    },
+    {
+      "path": "App/Views/DuelSourceControls.swift",
+      "bytes": 32130,
+      "sha256": "8d4354f9803b989c9f3a7c5bdbb79410370eb64e41c99c3361939b5b7a654114"
+    },
+    {
+      "path": "App/Views/DuelView.swift",
+      "bytes": 76493,
+      "sha256": "1599188d860f4df56680a275cf908551f7e43cf451dd27b7915fb21d814a2547"
+    },
+    {
+      "path": "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "bytes": 23775,
+      "sha256": "ee683027ee8de7e817ab8b856e15ae7f85a1f275fc0aec2d0196127ff9646ce9"
+    }
+  ],
+  "existingCheck": "python3 -B -m unittest discover -s scripts -p test_build_fighter_network_rules.py -v",
+  "checkExitCode": 0,
+  "elapsedSeconds": 0.3,
+  "scratchOnly": true,
+  "repositoryFilesModified": false,
+  "generator": "scripts/build_fighter_network_rules.py",
+  "regression": "scripts/test_build_fighter_network_rules.py",
+  "buildHook": "project.yml postBuildScripts Generate fighter network rules identity",
+  "coveragePatterns": [
+    "Sources/ShiftCore/**/*.swift",
+    "App/**/*.swift",
+    "Shared/**/*.swift"
+  ],
+  "runtimeCompatibility": "DuelNetworkRulesManifest accepts all well-formed Swift paths in Sources/ShiftCore, App and Shared; new file need not be in requiredPaths to be bound.",
+  "result": "No integration defect found; generator and requiredPaths need no change.",
+  "testsPassed": 16,
+  "testDurationSeconds": 0.16,
+  "limits": [
+    "Source-only inspection manifest is intentionally not a valid shipping Xcode manifest; production hook adds allowlisted Xcode build settings.",
+    "No native runtime, simulator, private assets, full workflow or Swift suite executed by this check.",
+    "Manifest is self-consistent source/build metadata, not a code-signing or compiler-output attestation."
+  ],
+  "compatibilityConsequence": "New integrated source bytes must produce a different rules identity from Build 702; existing strict compatibility gates reject differing source/build identities. Do not reuse the old manifest or bypass the gate.",
+  "gateSources": [
+    "Sources/ShiftCore/DuelNetworkStartBarrier.swift:markLoaded/receive offer compatibility equality",
+    "Sources/ShiftCore/DuelNetworkCombatProtocol.swift:configuration loadedCompatibility equality"
+  ]
+}

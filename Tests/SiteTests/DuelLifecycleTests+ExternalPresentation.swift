@@ -292,6 +292,45 @@ extension DuelLifecycleTests {
         host.weaponAction(.weapon, down: true); guest.weaponAction(.weapon, down: true)
         XCTAssertNil(host.consumeLocalInput().weaponCommand, "Grounded neutral press waits for release/hold")
         XCTAssertEqual(guest.consumeLocalInput().weaponCommand, .weapon, "Airborne local press resolves immediately")
+        host.clearInput(); guest.clearInput()
+        host.weaponGuard(true); guest.weaponGuard(true)
+        XCTAssertTrue(host.consumeLocalInput().guardHeld)
+        XCTAssertFalse(guest.consumeLocalInput().guardHeld, "Guest defense uses the guest's airborne state")
+    }
+
+    func testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState() throws {
+        for hero in [DuelGame.Hero.ember, .liu] {
+            for seat in [0, 1] {
+                let initial = presentationGame(host: hero, equipped: true)
+                let state = try DuelSession(presentationFixture: initial, localFighterIndex: seat)
+                let view = DuelSourceControlsView(images: [:])
+                defer { view.shutdown(); state.shutdown() }
+                view.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
+                view.setNeedsLayout(); view.layoutIfNeeded()
+                let binding = DuelWeaponControls(session: state)
+                XCTAssertTrue(binding.bind(view))
+                state.weaponGuard(true)
+                XCTAssertFalse(state.consumeLocalInput().guardHeld, "A preparing session must reject new holds")
+                try state.startAuthoritativePresentation()
+                binding.updateReadiness(view)
+                XCTAssertFalse(state.consumeLocalInput().guardHeld)
+                let point = CGPoint(x: view.layoutSnapshot.manualGuard.midX, y: view.layoutSnapshot.manualGuard.midY)
+                view.beginPointers([.init(id: "guard", location: point)])
+                XCTAssertTrue(state.consumeLocalInput().guardHeld)
+                XCTAssertEqual(state.game, initial, "Local UI may not simulate or mutate authoritative state")
+                view.endPointers(["guard"])
+                XCTAssertFalse(state.consumeLocalInput().guardHeld)
+                view.beginPointers([.init(id: "guard2", location: point)])
+                state.clearInput()
+                XCTAssertFalse(state.consumeLocalInput().guardHeld)
+                view.endPointers(["guard2"])
+                state.weaponGuard(true)
+                state.pause()
+                state.weaponGuard(true) // A delayed callback cannot raise defense after stop.
+                XCTAssertFalse(state.consumeLocalInput().guardHeld)
+                XCTAssertEqual(state.game, initial)
+            }
+        }
     }
 
     func testExternalPhysicalClearPauseAndShutdownPreserveCanonicalBuffers() throws {
@@ -299,7 +338,7 @@ extension DuelLifecycleTests {
         for operation in ["clear", "cancel", "pause", "shutdown"] {
             let state = try DuelSession(presentationFixture: buffered, localFighterIndex: 1)
             try state.startAuthoritativePresentation()
-            state.input("right", down: true); state.weaponAction(.weapon, down: true)
+            state.input("right", down: true); state.weaponAction(.weapon, down: true); state.weaponGuard(true)
             var stops = 0
             state.didRequestAuthoritativeStop = { stops += 1 }
             switch operation {
@@ -311,6 +350,7 @@ extension DuelLifecycleTests {
             XCTAssertEqual(state.game, buffered, operation)
             XCTAssertEqual(try DuelReplayStateEncoding.encode(state.game), try DuelReplayStateEncoding.encode(buffered))
             XCTAssertTrue(state.held.isEmpty)
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
             XCTAssertEqual(stops, operation == "pause" || operation == "shutdown" ? 1 : 0)
             state.shutdown()
         }

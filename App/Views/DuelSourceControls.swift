@@ -49,9 +49,11 @@ final class DuelSourceControlsView: UIView {
         let joystickTouch: CGRect
         let actions: [Action: CGRect]
         let actionTouch: [Action: CGRect]
+        /// Supplemental manual defense control; not an extra recovered source sprite.
+        let manualGuard: CGRect
 
         static let empty = Layout(scale: 0, joystick: .zero, joystickTouch: .zero,
-                                  actions: [:], actionTouch: [:])
+                                  actions: [:], actionTouch: [:], manualGuard: .zero)
     }
 
     /// Shared input representation for UIKit touch callbacks and native router tests.
@@ -63,6 +65,7 @@ final class DuelSourceControlsView: UIView {
     /// Direction uses screen-independent axes: x right is +1, y up is +1.
     var onDirection: ((Int, Int) -> Void)?
     var onAction: ((Action, Bool) -> Void)?
+    var onGuard: ((Bool) -> Void)?
     /// Cancellation precedes a matching release so a pending tap is discarded.
     var onActionCancelled: ((Action) -> Void)?
     /// Clears chord grace periods as well as buttons on pause/orientation/window loss.
@@ -76,6 +79,7 @@ final class DuelSourceControlsView: UIView {
             guard inputEnabled != oldValue else { return }
             if !inputEnabled { cancelAll() }
             for action in Action.allCases { refresh(action) }
+            refreshManualGuard()
             refreshStickDirection()
         }
     }
@@ -118,7 +122,7 @@ final class DuelSourceControlsView: UIView {
     private(set) var sourceArtAvailable = false
     private(set) var loadedSpriteNames: Set<String> = []
 
-    private enum Contact { case joystick, action(Action) }
+    private enum Contact { case joystick, action(Action), manualGuard }
     private var contacts: [AnyHashable: Contact] = [:]
     private var joystickOwner: AnyHashable?
     private var direction = (x: 0, y: 0)
@@ -127,6 +131,8 @@ final class DuelSourceControlsView: UIView {
     private var cancellingInput = false
     private var inputEpoch: UInt64 = 0
     private var buttons: [Action: DuelSourceActionButton] = [:]
+    private let guardButton = DuelSourceActionButton(type: .custom)
+    private var accessibilityGuardHeld = false
     private let stick = UIView()
     private let stickBackground = UIView()
     private let stickKnob = UIImageView()
@@ -208,7 +214,22 @@ final class DuelSourceControlsView: UIView {
             addSubview(button)
             refresh(action)
         }
-        var elements: [Any] = [stick]
+        // Defense is an explicit app control. Keep all four verified source
+        // actions, their artwork and their measured touch zones unchanged.
+        guardButton.isUserInteractionEnabled = false
+        guardButton.isAccessibilityElement = true
+        guardButton.accessibilityIdentifier = "duel.control.guard"
+        guardButton.accessibilityLabel = "手动防御"
+        guardButton.accessibilityHint = "触摸时按住防御，松开解除。双击可切换防御。移动、跳跃或攻击时不能防御。"
+        guardButton.setTitle("按住防御", for: .normal)
+        guardButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        guardButton.layer.borderWidth = 1
+        guardButton.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
+        guardButton.layer.cornerRadius = 12
+        guardButton.activate = { [weak self] in self?.activateManualGuard() ?? false }
+        addSubview(guardButton)
+        refreshManualGuard()
+        var elements: [Any] = [stick, guardButton]
         elements.append(contentsOf: Action.allCases.compactMap { buttons[$0] })
         accessibilityElements = elements
     }
@@ -235,6 +256,7 @@ final class DuelSourceControlsView: UIView {
             lastSafeArea = safeAreaInsets
         }
         layoutSnapshot = Self.makeLayout(in: bounds, safeArea: safeAreaInsets)
+        guardButton.frame = layoutSnapshot.manualGuard
         let s = layoutSnapshot.scale
         stick.frame = layoutSnapshot.joystick
         stickBackground.frame = stick.bounds
@@ -292,9 +314,14 @@ final class DuelSourceControlsView: UIView {
             .ranged: rect(center: offset(2, 249.7), width: 460, height: 277),
             .shadow: rect(center: offset(-152.75, 48.75), width: 315.5, height: 297.5)
         ]
+        let guardWidth = min(safe.width, max(88, 260 * s))
+        let guardHeight = min(safe.height, max(44, 135 * s))
+        let guardFrame = CGRect(x: safe.midX - guardWidth / 2,
+                                y: max(safe.minY, safe.maxY - max(12, 44 * s) - guardHeight),
+                                width: guardWidth, height: guardHeight)
         return Layout(scale: s, joystick: rect(center: left, width: 500, height: 500),
                       joystickTouch: rect(center: left, width: 700, height: 700),
-                      actions: frames, actionTouch: zones)
+                      actions: frames, actionTouch: zones, manualGuard: guardFrame)
     }
 
     /// Uses the prefab's 65-unit neutral radius and 60/30-degree cardinal/diagonal
@@ -312,6 +339,7 @@ final class DuelSourceControlsView: UIView {
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         guard inputEnabled, !isShutdown else { return false }
         return layoutSnapshot.joystickTouch.contains(point) ||
+            layoutSnapshot.manualGuard.contains(point) ||
             layoutSnapshot.actionTouch.values.contains { $0.contains(point) }
     }
 
@@ -333,6 +361,14 @@ final class DuelSourceControlsView: UIView {
         }
         for pointer in pointers {
             guard inputEnabled, !cancellingInput, inputEpoch == epoch else { break }
+            guard contacts[pointer.id] == nil else { continue }
+            if layoutSnapshot.manualGuard.contains(pointer.location) {
+                let wasHeld = isGuardHeld
+                contacts[pointer.id] = .manualGuard
+                refreshManualGuard()
+                if !wasHeld { onGuard?(true) }
+                continue
+            }
             guard contacts[pointer.id] == nil, let action = action(at: pointer.location),
                   state(for: action).enabled else { continue }
             let wasHeld = isHeld(action)
@@ -352,8 +388,15 @@ final class DuelSourceControlsView: UIView {
             moveJoystick(to: pointer.location)
         }
         for pointer in pointers {
-            guard let contact = contacts[pointer.id], case .action(let action) = contact,
-                  let zone = layoutSnapshot.actionTouch[action] else { continue }
+            guard let contact = contacts[pointer.id] else { continue }
+            let zone: CGRect
+            switch contact {
+            case .joystick: continue
+            case .manualGuard: zone = layoutSnapshot.manualGuard
+            case .action(let action):
+                guard let frame = layoutSnapshot.actionTouch[action] else { continue }
+                zone = frame
+            }
             if !zone.insetBy(dx: -12, dy: -12).contains(pointer.location) {
                 release(pointer.id, cancelled: true)
             }
@@ -388,17 +431,21 @@ final class DuelSourceControlsView: UIView {
         inputEpoch &+= 1
         defer { cancellingInput = false }
         let held = Action.allCases.filter(isHeld)
+        let guardWasHeld = isGuardHeld
         contacts.removeAll()
+        accessibilityGuardHeld = false
         joystickOwner = nil
         let changed = direction.x != 0 || direction.y != 0
         direction = (0, 0)
         resetStickVisuals()
         for action in Action.allCases { refresh(action) }
+        refreshManualGuard()
         if notify {
             onInputCancelled?()
             held.forEach { onActionCancelled?($0) }
             if changed { onDirection?(0, 0) }
             for action in held { onAction?(action, false) }
+            if guardWasHeld { onGuard?(false) }
         }
     }
 
@@ -408,7 +455,7 @@ final class DuelSourceControlsView: UIView {
         guard !isShutdown else { return }
         isShutdown = true
         let released = onShutdown; onShutdown = nil
-        onDirection = nil; onAction = nil
+        onDirection = nil; onAction = nil; onGuard = nil
         onActionCancelled = nil; onInputCancelled = nil
         cancelAll(notify: false)
         inputEnabled = false
@@ -435,6 +482,37 @@ final class DuelSourceControlsView: UIView {
                 guard let a = layoutSnapshot.actions[first], let b = layoutSnapshot.actions[second] else { return false }
                 return hypot(point.x - a.midX, point.y - a.midY) < hypot(point.x - b.midX, point.y - b.midY)
             }
+    }
+
+    private var hasGuardTouch: Bool {
+        contacts.values.contains { if case .manualGuard = $0 { return true }; return false }
+    }
+
+    private var isGuardHeld: Bool { accessibilityGuardHeld || hasGuardTouch }
+
+    private func activateManualGuard() -> Bool {
+        guard inputEnabled, !cancellingInput, !isShutdown, !hasGuardTouch,
+              layoutSnapshot.manualGuard.width >= 44, layoutSnapshot.manualGuard.height >= 44 else { return false }
+        // VoiceOver cannot sustain an ordinary pointer. A deliberate activation
+        // toggles the same held intent; every lifecycle cancellation releases it.
+        let epoch = inputEpoch
+        let next = !accessibilityGuardHeld
+        accessibilityGuardHeld = next
+        refreshManualGuard()
+        onGuard?(next)
+        return inputEnabled && !isShutdown && inputEpoch == epoch && accessibilityGuardHeld == next
+    }
+
+    private func refreshManualGuard() {
+        let enabled = inputEnabled && !isShutdown
+        guardButton.isEnabled = enabled
+        guardButton.alpha = enabled ? 0.85 : 0.3
+        guardButton.backgroundColor = UIColor.white.withAlphaComponent(isGuardHeld ? 0.35 : 0.08)
+        guardButton.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
+        if isGuardHeld { guardButton.accessibilityTraits.insert(.selected) }
+        // This reports explicit input intent, never claims the fighter can block
+        // while airborne, moving, attacking or recovering.
+        guardButton.accessibilityValue = !enabled ? "操作已暂停" : isGuardHeld ? "已按住" : "未按住"
     }
 
     private func moveJoystick(to point: CGPoint) {
@@ -469,6 +547,9 @@ final class DuelSourceControlsView: UIView {
                 onAction?(action, false)
             }
             refresh(action)
+        case .manualGuard:
+            refreshManualGuard()
+            if !isGuardHeld { onGuard?(false) }
         }
     }
 

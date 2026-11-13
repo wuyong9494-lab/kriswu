@@ -20,7 +20,7 @@ extension DuelLifecycleTests {
         XCTAssertTrue(binding.bind(current))
         XCTAssertTrue(old.isShutdown)
         XCTAssertFalse(old.inputEnabled)
-        XCTAssertNil(old.onDirection); XCTAssertNil(old.onAction)
+        XCTAssertNil(old.onDirection); XCTAssertNil(old.onAction); XCTAssertNil(old.onGuard)
         XCTAssertNil(old.onActionCancelled); XCTAssertNil(old.onInputCancelled)
         XCTAssertTrue(state.acceptsWeaponControls(current))
 
@@ -73,7 +73,7 @@ extension DuelLifecycleTests {
         XCTAssertNil(state.inputReset)
         XCTAssertFalse(binding.bind(late))
         XCTAssertTrue(late.isShutdown)
-        XCTAssertNil(late.onDirection); XCTAssertNil(late.onAction)
+        XCTAssertNil(late.onDirection); XCTAssertNil(late.onAction); XCTAssertNil(late.onGuard)
         XCTAssertNil(state.inputReset)
     }
 

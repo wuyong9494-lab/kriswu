@@ -190,6 +190,7 @@ extension DuelLifecycleTests {
         XCTAssertNil(world.scene); XCTAssertNil(world.stageAsset); XCTAssertNil(world.verifiedEffectsRoot)
         XCTAssertNil(state.weaponAssets); XCTAssertNil(state.preparedResources)
         XCTAssertNil(controls.controls.onAction)
+        XCTAssertNil(controls.controls.onGuard)
         XCTAssertTrue(state.paused)
         let lateWorld = DuelWorldView(session: state)
         XCTAssertNil(lateWorld.scene, "Released session must not reopen Bundle.main")

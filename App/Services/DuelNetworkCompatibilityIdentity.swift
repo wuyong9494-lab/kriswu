@@ -417,7 +417,7 @@ final class DuelNetworkPreparedResources {
         let invalidateMount = mountInvalidated, invalidateSession = sessionInvalidated
         mountedWorld = nil; mountedControls = nil
         mountInvalidated = nil; sessionInvalidated = nil
-        old?.controls.onDirection = nil; old?.controls.onAction = nil
+        old?.controls.onDirection = nil; old?.controls.onAction = nil; old?.controls.onGuard = nil
         old?.controls.onActionCancelled = nil; old?.controls.onInputCancelled = nil
         old?.controls.cancelAll(notify: false); old?.controls.inputEnabled = false
         controlsView?.shutdown()

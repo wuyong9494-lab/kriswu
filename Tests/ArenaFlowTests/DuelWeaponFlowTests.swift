@@ -131,11 +131,11 @@ final class DuelWeaponFlowTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["duel.resourceError"].exists, "Missing or corrupt source assets must fail this suite")
         XCTAssertEqual(app.staticTexts["duel.name.0"].label, "\(person) · \(weapon)")
         let expected = Set(["duel.control.joystick", "duel.control.weapon", "duel.control.kick",
-                            "duel.control.ranged", "duel.control.shadow"])
+                            "duel.control.ranged", "duel.control.shadow", "duel.control.guard"])
         let controls = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "duel.control.")).allElementsBoundByIndex
         XCTAssertEqual(Set(controls.map(\.identifier)), expected,
-                       "Source mode has four actions and one stick; no separate jump, guard, skill, or heavy key")
+                       "Preserve four source actions and one stick, with a separate explicit manual-defense control")
         let stick = joystick(app)
         XCTAssertTrue(stick.exists)
         XCTAssertEqual(stick.label, "八方向摇杆")
@@ -146,10 +146,52 @@ final class DuelWeaponFlowTests: XCTestCase {
             XCTAssertTrue(app.buttons["duel.control.\(action)"].isHittable)
         }
         XCTAssertTrue(app.buttons["duel.control.shadow"].exists)
+        XCTAssertTrue(app.buttons["duel.control.guard"].isHittable)
+        XCTAssertEqual(app.buttons["duel.control.guard"].value as? String, "未按住")
         XCTAssertFalse(app.buttons["duel.control.ranged"].isEnabled)
         XCTAssertTrue((app.buttons["duel.control.ranged"].value as? String ?? "").contains("未装备"))
         XCTAssertEqual(try hits(app), 0)
         XCTAssertEqual(try damage(app), 0)
+    }
+
+    func testOriginalManualDefenseIsReachableAndReleasesAcrossPauseAndSelection() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "game"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let entry = app.buttons["duel.enter"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30))
+        entry.tap()
+        XCTAssertTrue(app.buttons["duel.hero.ember"].waitForExistence(timeout: 12))
+        for hero in ["ember", "liu"] {
+            tapLobbyButton(app.buttons["duel.hero.\(hero)"], app: app)
+            tapLobbyButton(app.buttons["duel.practice"], app: app)
+            XCTAssertTrue(app.buttons["duel.pause"].waitForExistence(timeout: 15))
+            XCTAssertFalse(app.staticTexts["duel.resourceError"].exists)
+            let defense = app.buttons["duel.control.guard"]
+            XCTAssertTrue(defense.waitForExistence(timeout: 5))
+            XCTAssertTrue(defense.isHittable)
+            XCTAssertGreaterThanOrEqual(defense.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(defense.frame.height, 44)
+            XCTAssertEqual(defense.label, "手动防御")
+            XCTAssertEqual(defense.value as? String, "未按住")
+            defense.press(forDuration: 0.5)
+            XCTAssertEqual(defense.value as? String, "未按住", "A completed physical hold must release defense")
+            defense.press(forDuration: 0.2, thenDragTo: app.buttons["duel.pause"])
+            XCTAssertEqual(defense.value as? String, "未按住", "Dragging out cancels without retargeting")
+            app.buttons["duel.pause"].tap()
+            XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 5))
+            app.buttons["duel.resume"].tap()
+            XCTAssertTrue(app.buttons["duel.pause"].waitForExistence(timeout: 5))
+            XCTAssertEqual(defense.value as? String, "未按住")
+            try restart(app)
+            XCTAssertEqual(defense.value as? String, "未按住")
+            capture("original-\(hero)-manual-defense-release")
+            app.buttons["duel.pause"].tap()
+            XCTAssertTrue(app.buttons["duel.exit"].waitForExistence(timeout: 5))
+            app.buttons["duel.exit"].tap()
+            XCTAssertTrue(app.buttons["duel.hero.\(hero)"].waitForExistence(timeout: 12))
+        }
     }
 
     private func exerciseEightDirections(_ app: XCUIApplication, hero: String) throws {

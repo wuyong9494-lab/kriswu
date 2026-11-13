@@ -110,7 +110,9 @@ public struct DuelWeaponFight: Equatable, Sendable {
 
         guard let action = actions[index], let command = action.command,
               !command.rawValue.hasPrefix("kick"), let clip = profiles[index].clip(named: action.name) else { return false }
-        return active(action, clip: clip, index: index) && motionSpeed(index, clip: clip, command: command, tick: action.tick) > 0.009
+        let speed = motionSpeed(index, clip: clip, command: command, tick: action.tick)
+        return active(action, clip: clip, index: index) && speed > 0.009 &&
+            DuelWeaponSweepContinuity.accepts(distance: speed)
     }
     public func shadowIsActive(_ index: Int) -> Bool { actions[index]?.command == .shadow }
     public func hurtBox(_ index: Int) -> DuelGame.Box {
@@ -356,21 +358,27 @@ public struct DuelWeaponFight: Equatable, Sendable {
         guard tick > 0 else { return 0 }
         let a = endpoints(i, clip: clip, phase: clip.phase(at: tick - 1), command: command)
         let b = endpoints(i, clip: clip, phase: clip.phase(at: tick), command: command)
-        var fastestSquared: Double = 0
+        var fastest: Double = 0
         for (p, q) in zip(a, b) {
-            let dx = q.x - p.x
-            let dy = q.y - p.y
-            let dz = q.z - p.z
-            let squared = dx * dx + dy * dy + dz * dz
-            fastestSquared = max(fastestSquared, squared)
+            let distance = DuelWeaponSweepContinuity.distance(from: p, to: q)
+            // Each hammer owns its samples. One discontinuous endpoint must
+            // not suppress the other hammer's valid swing or active ribbon.
+            if DuelWeaponSweepContinuity.accepts(distance: distance) {
+                fastest = max(fastest, distance)
+            }
         }
-        return sqrt(fastestSquared)
+        return fastest
     }
     private func swingTick(_ i: Int, clip: DuelWeaponClip, command: DuelWeaponCommand, after: Int) -> Int {
         let start = max(after + 1, Int(ceil(Double(clip.ticks) * 0.12)))
         let end = Int(Double(clip.ticks) * 0.78)
         guard start <= end else { return Int.max }
-        let speeds = (start...end).map { motionSpeed(i, clip: clip, command: command, tick: $0) }
+        // A teleport must neither trigger a swing nor dominate the peak and
+        // suppress a later valid stroke. Keep the bounded shadow timeline above.
+        let speeds = (start...end).map { tick -> Double in
+            let speed = motionSpeed(i, clip: clip, command: command, tick: tick)
+            return DuelWeaponSweepContinuity.accepts(distance: speed) ? speed : 0
+        }
         guard let peak = speeds.max(), peak > 0.005,
               let onset = speeds.firstIndex(where: { $0 >= peak * 0.65 }) else { return Int.max }
         // An explicit native adaptation: start audio at the source geometry's
@@ -421,13 +429,19 @@ public struct DuelWeaponFight: Equatable, Sendable {
         }
         for n in now.indices where old.indices.contains(n) {
             let a = world(old[n], previous: true), b = world(now[n], previous: false)
-            let localSpeed = hypot(now[n].x - old[n].x, now[n].y - old[n].y)
-            guard localSpeed > 0.005, abs(now[n].z) < 0.8 else { continue }
+            let localSpeed = DuelWeaponSweepContinuity.distance(from: old[n], to: now[n])
+            // Reject source discontinuities in all three axes, including an
+            // out-of-plane return that used to fabricate a swept torso hit.
+            guard localSpeed > 0.005, DuelWeaponSweepContinuity.accepts(distance: localSpeed),
+                  abs(now[n].z) < 0.8, abs(old[n].z) < 0.8 else { continue }
             if Self.segment(a, b, intersects: box, radius: radius) {
                 return .init(x: min(Double(box.maxX) / 1000, max(Double(box.minX) / 1000, b.x)),
                              y: min(Double(box.maxY) / 1000, max(Double(box.minY) / 1000, b.y)), z: 0.08)
             }
             if !command.rawValue.hasPrefix("kick"), n % 2 == 1 {
+                let baseSpeed = DuelWeaponSweepContinuity.distance(from: old[n - 1], to: now[n - 1])
+                guard DuelWeaponSweepContinuity.accepts(distance: baseSpeed),
+                      abs(now[n - 1].z) < 0.8, abs(old[n - 1].z) < 0.8 else { continue }
                 let base = world(now[n - 1], previous: false)
                 if Self.segment(base, b, intersects: box, radius: radius) {
                     return .init(x: Double(target.x) / 1000, y: min(1.6, max(0.2, (base.y + b.y) * 0.5)), z: 0.08)

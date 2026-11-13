@@ -267,12 +267,11 @@ final class DuelWeaponEffects {
                 guard let motion = pose.motionID, !motion.isEmpty, motion.count <= 200 else { continue }
                 guard present.insert(key).inserted else { continue }
                 var trail = emitting[key]
-                let discontinuity = trail?.samples.last.map { simd_distance($0.tip, tip) > 2.5 || simd_distance($0.base, base) > 2.5 } ?? false
+                let discontinuity = trail?.samples.last.map { !Self.canJoin($0, current) } ?? false
                 if trail == nil || trail?.motionID != motion || trail?.family != pose.family || trail?.shadow != pose.isShadow || discontinuity {
                     trail = makeTrail(key: key, pose: pose, motion: motion)
                     emitting[key] = trail
-                    if let preceding, preceding.0 == pose.family, preceding.1.tick == animationTick - 1,
-                       simd_distance(preceding.1.tip, tip) <= 2.5, simd_distance(preceding.1.base, base) <= 2.5 {
+                    if let preceding, preceding.0 == pose.family, Self.canJoin(preceding.1, current) {
                         trail?.samples.append(preceding.1)
                     }
                 }
@@ -304,6 +303,14 @@ final class DuelWeaponEffects {
         guard !ended else { return }
         reset(); ended = true; container.removeFromParentNode()
         preparationTemplates.removeAll(); textures.removeAll(); manifest = nil
+    }
+
+    private static func canJoin(_ preceding: Sample, _ current: Sample) -> Bool {
+        // Missing ticks and teleported endpoints start a new strip. Preserving
+        // the old strip's lifetime must not draw a bridge through that gap.
+        preceding.tick == current.tick - 1 &&
+            DuelWeaponSweepContinuity.acceptsRendered(distance: simd_distance(preceding.tip, current.tip)) &&
+            DuelWeaponSweepContinuity.acceptsRendered(distance: simd_distance(preceding.base, current.base))
     }
 
     private func makeTrail(key: Key, pose: Pose, motion: String) -> Trail? {

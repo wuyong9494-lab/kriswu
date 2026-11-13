@@ -3,7 +3,7 @@ name: iOS
 on:
   push:
     # Journey validation uses its own unsigned workflow, with no TestFlight job.
-    branches-ignore: ['codex/star-journey-native-*', 'codex/fighter-lab-*']
+    branches-ignore: ['codex/star-journey-native-*', 'codex/fighter-lab-*', 'codex/fighter-integrated-controls-20261113-1100']
     # A promotion signs an already checked source commit without creating another app build number.
     paths-ignore:
       - '.github/workflows/arena-evidence-recovery.yml'

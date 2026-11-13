@@ -10,7 +10,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public enum Action: String, CaseIterable, Sendable { case weapon, kick, ranged, shadow }
     public static let longPressTicks = 18
     public static let jumpChordGraceTicks = 1
-    // Neutral defense must not engage on the same tick as an attack release.
+    // Explicit defense must not engage on the same tick as an attack release.
     public static let guardRecoveryTicks = 8
     public private(set) var x = 0
     public private(set) var y = 0
@@ -31,8 +31,12 @@ public struct DuelWeaponInput: Equatable, Sendable {
     private var queued: Intent?
     private var pendingJumpTicks: Int?
     private var guardRecovery = 0
+    private var manualGuardHeld = false
 
     public init() {}
+
+    /// Defense requires explicit player intent; a neutral stick never raises it.
+    public mutating func setGuardHeld(_ held: Bool) { manualGuardHeld = held }
 
     /// x points right; y points up. Facing is applied only when consuming the
     /// command, so the UI never needs to decide which equipped move is forward.
@@ -104,7 +108,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
         let command = queued.map { Self.command(for: $0, facing: facing) }
         let result = DuelGame.Input(
             move: x,
-            guardHeld: !recoveringGuard && !airborne && x == 0 && y == 0 && presses.isEmpty && command == nil &&
+            guardHeld: manualGuardHeld && !recoveringGuard && !airborne && x == 0 && y == 0 && presses.isEmpty && command == nil &&
                 !jump && pendingJumpTicks == nil,
             taps: jump ? .jump : [], vertical: y, weaponCommand: command)
         queued = nil
@@ -116,7 +120,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public mutating func cancelAll() {
         x = 0; y = 0
         presses.removeAll(); nextPressOrder = 0
-        queued = nil; pendingJumpTicks = nil; guardRecovery = 0
+        queued = nil; pendingJumpTicks = nil; guardRecovery = 0; manualGuardHeld = false
     }
 
     public mutating func reset() { cancelAll() }

@@ -10,6 +10,56 @@ import simd
 /// damage constants, recovered event timing, or the undocumented source FPS.
 @MainActor
 final class DuelWeaponGameplayTests: XCTestCase {
+    func testOriginalManualGuardReleasesAcrossPauseRestartAndControlReplacement() throws {
+        for hero in [DuelGame.Hero.ember, .liu] {
+            let state = DuelSession(.init(hero: hero, difficulty: .learning,
+                                          mode: .practice, originalWeapons: true))
+            defer { state.shutdown() }
+            XCTAssertNil(state.loadError, "This selected test requires the verified original character pack")
+            XCTAssertNotNil(state.game.weaponFight)
+            let binding = DuelWeaponControls(session: state)
+            let old = DuelSourceControlsView(images: [:]), current = DuelSourceControlsView(images: [:])
+            defer { old.shutdown(); current.shutdown() }
+            for view in [old, current] {
+                view.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
+                view.setNeedsLayout(); view.layoutIfNeeded()
+            }
+            func hold(_ view: DuelSourceControlsView, _ id: String) {
+                let frame = view.layoutSnapshot.manualGuard
+                view.beginPointers([.init(id: id, location: CGPoint(x: frame.midX, y: frame.midY))])
+            }
+            XCTAssertTrue(binding.bind(old))
+            let staleGuard = old.onGuard
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
+            hold(old, "old")
+            XCTAssertTrue(state.consumeLocalInput().guardHeld)
+            XCTAssertTrue(binding.bind(current))
+            XCTAssertNil(old.onGuard)
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
+            hold(current, "current")
+            staleGuard?(false)
+            old.didMoveToWindow()
+            XCTAssertTrue(state.consumeLocalInput().guardHeld, "Retired controls must not clear the current owner's defense")
+            state.pause()
+            staleGuard?(true)
+            state.weaponGuard(true)
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
+            state.resume()
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
+            hold(current, "restart")
+            XCTAssertTrue(state.consumeLocalInput().guardHeld)
+            state.restart()
+            XCTAssertEqual(state.localFighter.hero, hero)
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
+            current.endPointers(["current", "restart"])
+            XCTAssertFalse(state.consumeLocalInput().guardHeld)
+            let guardButton = try XCTUnwrap(current.subviews.first {
+                $0.accessibilityIdentifier == "duel.control.guard"
+            } as? UIButton)
+            XCTAssertEqual(guardButton.accessibilityValue, "未按住")
+        }
+    }
+
     func testActualSourceWeaponHeavyAndKickHitInBothDirectionsWithoutCrossingBodies() throws {
         let assets = try DuelWeaponAssets()
         for hero in [DuelGame.Hero.ember, .liu] {
