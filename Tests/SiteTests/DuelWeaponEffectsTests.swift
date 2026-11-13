@@ -402,13 +402,17 @@ final class DuelWeaponEffectsTests: XCTestCase {
                 }
                 for alpha in [0.25, 0.5] {
                     let partial = try coverage(alpha)
-                    let errors = interior.flatMap { offset in
-                        (0..<3).map { channel in
-                            abs(linear(partial[offset + channel]) -
-                                (linear(full[offset + channel]) * alpha + linear(zero[offset + channel]) * (1 - alpha)))
+                    var maximumError: Double = 0
+                    for offset in interior {
+                        for channel in 0..<3 {
+                            let sample = offset + channel
+                            let observed = linear(partial[sample])
+                            let foreground = linear(full[sample]) * alpha
+                            let background = linear(zero[sample]) * (1 - alpha)
+                            maximumError = max(maximumError, abs(observed - foreground - background))
                         }
                     }
-                    XCTAssertLessThan(errors.max() ?? 1, 0.035,
+                    XCTAssertLessThan(maximumError, 0.035,
                                       "Partial coverage must blend with the background once, without opaque white or double attenuation")
                 }
             }
