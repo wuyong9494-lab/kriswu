@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-13T10:23:24.501Z",
+  "head": "ddeebb648d67459006fde20369e530c1c2850c74",
+  "run": {
+    "id": 43406195007,
+    "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43406195007",
+    "path": ".github/workflows/fighter-testflight.yml",
+    "head_sha": "ddeebb648d67459006fde20369e530c1c2850c74",
+    "head_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1,
+    "created_at": "2026-11-13T10:03:44Z",
+    "updated_at": "2026-11-13T10:20:59Z"
+  },
+  "jobs": [
+    {
+      "id": 131821016025,
+      "name": "verify",
+      "head_sha": "ddeebb648d67459006fde20369e530c1c2850c74",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-13T10:04:25Z",
+      "completed_at": "2026-11-13T10:04:40Z",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43406195007/job/131821016025",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:26Z",
+          "completed_at": "2026-11-13T10:04:27Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:27Z",
+          "completed_at": "2026-11-13T10:04:33Z"
+        },
+        {
+          "name": "Prepare Apple API access",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:33Z",
+          "completed_at": "2026-11-13T10:04:35Z"
+        },
+        {
+          "name": "Check source CI and prevent duplicate upload",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:35Z",
+          "completed_at": "2026-11-13T10:04:37Z"
+        },
+        {
+          "name": "Remove local Apple key",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:37Z",
+          "completed_at": "2026-11-13T10:04:37Z"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:37Z",
+          "completed_at": "2026-11-13T10:04:38Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:38Z",
+          "completed_at": "2026-11-13T10:04:39Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:04:39Z",
+          "completed_at": "2026-11-13T10:04:39Z"
+        }
+      ]
+    },
+    {
+      "id": 131821417826,
+      "name": "testflight",
+      "head_sha": "ddeebb648d67459006fde20369e530c1c2850c74",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-13T10:05:09Z",
+      "completed_at": "2026-11-13T10:18:14Z",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43406195007/job/131821417826",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:09Z",
+          "completed_at": "2026-11-13T10:05:10Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:10Z",
+          "completed_at": "2026-11-13T10:05:20Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:20Z",
+          "completed_at": "2026-11-13T10:05:27Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:27Z",
+          "completed_at": "2026-11-13T10:05:31Z"
+        },
+        {
+          "name": "Prepare existing signing credentials",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:31Z",
+          "completed_at": "2026-11-13T10:05:33Z"
+        },
+        {
+          "name": "Select validated Xcode 26.6",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:33Z",
+          "completed_at": "2026-11-13T10:05:34Z"
+        },
+        {
+          "name": "Generate project with the verified source identity",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:34Z",
+          "completed_at": "2026-11-13T10:05:40Z"
+        },
+        {
+          "name": "Stage the validated actual Liu model (never a public artifact)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:40Z",
+          "completed_at": "2026-11-13T10:05:42Z"
+        },
+        {
+          "name": "Authenticate and stage the tested presentation and source skin resources",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:42Z",
+          "completed_at": "2026-11-13T10:05:43Z"
+        },
+        {
+          "name": "Stage pinned independently encrypted music and provenance",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:43Z",
+          "completed_at": "2026-11-13T10:05:44Z"
+        },
+        {
+          "name": "Archive the requested build with automatic signing",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:05:44Z",
+          "completed_at": "2026-11-13T10:16:16Z"
+        },
+        {
+          "name": "Verify signed app, extension, version, source and all private assets",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:16:16Z",
+          "completed_at": "2026-11-13T10:16:23Z"
+        },
+        {
+          "name": "Persist upload intent before any Apple upload",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:16:23Z",
+          "completed_at": "2026-11-13T10:16:25Z"
+        },
+        {
+          "name": "Upload exactly this build to TestFlight",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:16:25Z",
+          "completed_at": "2026-11-13T10:18:05Z"
+        },
+        {
+          "name": "Remove local signing and model material",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:18:05Z",
+          "completed_at": "2026-11-13T10:18:05Z"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:18:05Z",
+          "completed_at": "2026-11-13T10:18:07Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:18:07Z",
+          "completed_at": "2026-11-13T10:18:08Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:18:08Z",
+          "completed_at": "2026-11-13T10:18:09Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:18:09Z",
+          "completed_at": "2026-11-13T10:18:09Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:18:09Z",
+          "completed_at": "2026-11-13T10:18:11Z"
+        }
+      ]
+    },
+    {
+      "id": 131827444997,
+      "name": "apple-status",
+      "head_sha": "ddeebb648d67459006fde20369e530c1c2850c74",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-11-13T10:19:13Z",
+      "completed_at": "2026-11-13T10:20:59Z",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43406195007/job/131827444997",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:19:14Z",
+          "completed_at": "2026-11-13T10:19:14Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:19:14Z",
+          "completed_at": "2026-11-13T10:19:20Z"
+        },
+        {
+          "name": "Check Apple processing and save verified testing notes",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:19:20Z",
+          "completed_at": "2026-11-13T10:20:56Z"
+        },
+        {
+          "name": "Remove local Apple key",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:20:56Z",
+          "completed_at": "2026-11-13T10:20:56Z"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:20:56Z",
+          "completed_at": "2026-11-13T10:20:57Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:20:57Z",
+          "completed_at": "2026-11-13T10:20:57Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-13T10:20:57Z",
+          "completed_at": "2026-11-13T10:20:57Z"
+        }
+      ]
+    }
+  ],
+  "preflight": {
+    "build_number": "703",
+    "version": "1.2",
+    "source_sha": "1c2cfa70a36974592fdb14811f6b7a7d2b6239e7",
+    "fighter_run_id": 43402771798,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9"
+  },
+  "archive": {
+    "build_number": "703",
+    "version": "1.2",
+    "source_sha": "1c2cfa70a36974592fdb14811f6b7a7d2b6239e7",
+    "fighter_run_id": 43402771798,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
+    "app_and_extension_build_verified": true,
+    "additional_resources_verified": [
+      "Fidelity_mask_0.png",
+      "Fidelity_mask_1.png",
+      "Fidelity_mask_2.png",
+      "Fidelity_mask_3.png",
+      "Fidelity_matcap_autumn.png",
+      "Fidelity_matcap_palace.png",
+      "Fidelity_presentation.json",
+      "SF3_SourceTrails.json",
+      "liu_shadow_callout.wav"
+    ]
+  },
+  "apple": {
+    "build_number": "703",
+    "version": "1.2",
+    "source_sha": "1c2cfa70a36974592fdb14811f6b7a7d2b6239e7",
+    "fighter_run_id": 43402771798,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "build_id": "91538b17-4e14-41dc-815e-323301aca5d0",
+    "processing_state": "VALID",
+    "uploaded_this_run": true,
+    "notes_written": true,
+    "source_identity_verified_this_run": true,
+    "internal_build_state": "IN_BETA_TESTING",
+    "external_build_state": "NOT_APPLICABLE"
+  },
+  "artifacts": [
+    {
+      "id": 14028092120,
+      "name": "testflight-archive-identity",
+      "size_in_bytes": 503,
+      "digest": "sha256:12cd05344f609d4b0cbc24bbbe0bd04d91d391b9d8ceadd3ddf6f78685cae988",
+      "expired": false,
+      "created_at": "2026-11-13T10:18:07Z",
+      "expires_at": "2027-02-11T10:03:44Z"
+    },
+    {
+      "id": 14028012704,
+      "name": "fighter-upload-attempt-703",
+      "size_in_bytes": 503,
+      "digest": "sha256:12cd05344f609d4b0cbc24bbbe0bd04d91d391b9d8ceadd3ddf6f78685cae988",
+      "expired": false,
+      "created_at": "2026-11-13T10:16:25Z",
+      "expires_at": "2027-02-11T10:03:44Z"
+    },
+    {
+      "id": 14027913779,
+      "name": "testflight-apple-status",
+      "size_in_bytes": 458,
+      "digest": "sha256:6b968ae766c6ebf4fe7faae00b6b57b90908e1ce9b8a7f11758ecb47b071d644",
+      "expired": false,
+      "created_at": "2026-11-13T10:20:57Z",
+      "expires_at": "2027-02-11T10:03:44Z"
+    },
+    {
+      "id": 14027711175,
+      "name": "testflight-preflight",
+      "size_in_bytes": 367,
+      "digest": "sha256:17944d357f265e83a748c1e40e36cc87a712ae4d7e3fa34adc5e93c7afcb5ac9",
+      "expired": false,
+      "created_at": "2026-11-13T10:04:38Z",
+      "expires_at": "2027-02-11T10:03:44Z"
+    }
+  ],
+  "validation": {
+    "promotionScriptTestsPassed": 38,
+    "nativeSourceSha": "1c2cfa70a36974592fdb14811f6b7a7d2b6239e7",
+    "nativeRunId": 43402771798,
+    "nativeMethodsPassed": 2,
+    "nativeMethodsFailed": 0,
+    "reviewedImages": 12,
+    "stagedAndCompiledResourceIdentities": 73,
+    "previousSuccessfulBroadSuitesRerun": false
+  },
+  "limitations": [
+    "Internal TestFlight only; external build state is NOT_APPLICABLE",
+    "Original dynamic color, shader fidelity and complete skill timing remain unaccepted",
+    "No dual-physical-device, sustained-60fps or television latency acceptance"
+  ],
+  "evidenceMethod": "Completed GitHub job reports and Apple API states from the dedicated promotion workflow; no raw logs or signing credentials published"
+}
