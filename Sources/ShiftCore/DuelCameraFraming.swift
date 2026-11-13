@@ -52,6 +52,18 @@ public struct DuelCameraOpticalFOV: Equatable, Sendable {
     public init() {}
     public mutating func reset() { self = Self() }
 
+    /// When measured source geometry fails, never replace the last proven
+    /// wide projection with the narrower pair-only estimate. This is a
+    /// presentation fallback, NOT proof that the unknown pose fits the screen.
+    /// Do not advance the optical clock during a failed measurement: a later
+    /// valid pose can still widen immediately or resume normal contraction.
+    public func retainedAfterFailedFit(minimum: Double) -> Double {
+        guard minimum.isFinite, minimum > 0, minimum < 180 else {
+            return lastValue ?? 47
+        }
+        return max(minimum, lastValue ?? minimum)
+    }
+
     /// Consuming the same simulation frame more than once may widen the view,
     /// but never narrow it. Layout passes must not speed up the transition.
     public mutating func consume(required: Double, frame: Int, aspect: Double) -> Double {
