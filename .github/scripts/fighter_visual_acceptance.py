@@ -216,6 +216,13 @@ SCOPES = {
     },
 }
 
+SCOPES["impact-pool-lifecycle"] = {
+    "selected": [SCOPES["impact-pool"]["selected"][1]], "methodCount": 1,
+    "imageLabels": [], "dataLabels": [],
+    "commitPrefix": "Verify fighter impact pool lifecycle",
+    "workflow": ".github/workflows/fighter-impact-pool-lifecycle.yml",
+    "additionalSources": ["App/Services/DuelSourceEffects.swift"],
+}
 
 def scope_settings(name):
     if name not in SCOPES:
@@ -230,10 +237,10 @@ SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTE
 EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
 IMAGE_LABELS = SCOPE["imageLabels"]
 DATA_LABELS = SCOPE["dataLabels"]
-EXPECTED_ATTACHMENTS = (IMPACT_POOL_ATTACHMENTS if SCOPE_NAME == "impact-pool" else PLAYABILITY_ATTACHMENTS if SCOPE_NAME == "playability-followup" else SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
+EXPECTED_ATTACHMENTS = ({} if SCOPE_NAME == "impact-pool-lifecycle" else IMPACT_POOL_ATTACHMENTS if SCOPE_NAME == "impact-pool" else PLAYABILITY_ATTACHMENTS if SCOPE_NAME == "playability-followup" else SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
                         PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS)
 USES_SOURCE_SKINS = SCOPE_NAME in ("source-skins-followup", "playability-followup")
-USES_PRESENTATION = SCOPE_NAME in ("impact-pool", "presentation-followup", "coverage-followup", "source-skins-followup", "playability-followup")
+USES_PRESENTATION = SCOPE_NAME in ("impact-pool-lifecycle", "impact-pool", "presentation-followup", "coverage-followup", "source-skins-followup", "playability-followup")
 if USES_SOURCE_SKINS:
     MANIFESTS.append(".github/private/fighter-source-trails/manifest.json")
 if USES_PRESENTATION:

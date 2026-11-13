@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "runId": "43439132546",
+  "sourceSha": "d1593c1ca1b4c751940627ec6f03722e54bdba3f",
+  "attempt": 1,
+  "verifiedAt": "2026-11-13T14:20:14.692895+00:00",
+  "scope": "impact-pool",
+  "nativePassed": 3,
+  "nativeFailed": 1,
+  "nativeSkipped": 0,
+  "imageCount": 3,
+  "dataCount": 0,
+  "stagedResourceIdentities": 72,
+  "compiledResourceIdentities": 72,
+  "selectedSourceFileCount": 12,
+  "selectedSourceSHA256": {
+    "Tests/SiteTests/DuelSourceEffectsTests.swift": "72a37f393849f4b574ed353a2b614be33f748b0cc6c577f16c4f2b4e2f715965",
+    "Tests/SiteTests/DuelLifecycleTests+NetworkPreparation.swift": "b1ee89bf65fb42656c2d61f9e3cbf30c951aa50cbd187b5e54d70b17c9388f79",
+    ".github/private/sf3/manifest.json": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+    ".github/private/sf3-distinct/manifest.json": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+    ".github/private/fighter-presentation/manifest.json": "0595cdd5b06068a1c2ea8e1a304195ac1b7d404d5051935e19cc4188c0d3cad5",
+    "project.yml": "3ab100cb92c89782a4d007d6aeca9118c313091dcd7cdab7107a8faeea98468a",
+    ".github/scripts/fighter_visual_acceptance.py": "1a4e02e0e80fb96f4dc60193d449ff04f18bc0fdaa3e1ec90e2e3af4a66d1b7d",
+    ".github/scripts/fighter_private_model.py": "925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79",
+    ".github/scripts/fighter_sf3_assets.py": "fb8cd750f4ff134fd27f1040e47691a3932c062660d7ba7b4e9508e4d6151d11",
+    ".github/scripts/fighter_sf3_distinct.py": "9f27051a445c96e038881cf67793a7968f46efd94b2866dfbe9ce4971f1e619c",
+    ".github/workflows/fighter-impact-pool.yml": "b0c1a0a16842fab0e0aa15fa51ffa8afa221ace3e61dd03e65bb789596bb952e",
+    "App/Services/DuelSourceEffects.swift": "fe5cc12627ac30bb2efc4752c69361ddcf909b99c5c7a6810437dc496cd2b432"
+  },
+  "methods": [
+    {
+      "selector": "SiteTests/DuelLifecycleTests/testNetworkEffectPreparationHasStableTemplatesAndNoRuntimeSideEffects",
+      "result": "Passed",
+      "durationSeconds": 0.2234710454940796
+    },
+    {
+      "selector": "SiteTests/DuelLifecycleTests/testNetworkEffectRuntimeCopiesKeepPreparedMaterialUniformsIndependent",
+      "result": "Passed",
+      "durationSeconds": 0.07442903518676758
+    },
+    {
+      "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+      "result": "Passed",
+      "durationSeconds": 4.350962996482849
+    },
+    {
+      "selector": "SiteTests/DuelSourceEffectsTests/testPrewarmedImpactPoolReusesObjectsAndClearsRetiredState",
+      "result": "Failed",
+      "durationSeconds": 1.3164899349212646
+    }
+  ],
+  "images": [
+    {
+      "file": "7C8F9E14-4690-4084-A46D-13E9E3972748.png",
+      "bytes": 7049,
+      "sha256": "1ff9100128fc3552a36a3eb7befb165bc833a5f65959c248cdae12b50411e7b2",
+      "label": "source-block-original-nine-layers",
+      "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+      "kind": "image"
+    },
+    {
+      "file": "E6A2FB83-44C8-4298-827E-86DEF5BFABF6.png",
+      "bytes": 13094,
+      "sha256": "c0a2901f7bd49a041ba331bc6367a33697fa612d51dfd1d0156b1ee14f637adf",
+      "label": "source-hit-original-six-layers",
+      "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+      "kind": "image"
+    },
+    {
+      "file": "7E283681-E490-4604-AB21-AE358AAEB376.png",
+      "bytes": 4417,
+      "sha256": "60fd614030226248f5adacc25bf5e943fb3f1da20c449b5590becab26a45f4fd",
+      "label": "source-hit-first-simulation-step",
+      "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+      "kind": "image"
+    }
+  ],
+  "archiveSHA256": "e13b9324cb28dbd35158c11e1de7e93ecacde2f58ca28b76ce16c089c48aa973",
+  "timings": {
+    "stage-scenery": {
+      "durationSeconds": 0.545,
+      "exitCode": 0
+    },
+    "stage-distinct": {
+      "durationSeconds": 0.401,
+      "exitCode": 0
+    },
+    "stage-presentation": {
+      "durationSeconds": 0.129,
+      "exitCode": 0
+    },
+    "build-identity": {
+      "durationSeconds": 0.03,
+      "exitCode": 0
+    },
+    "project-generation": {
+      "durationSeconds": 0.14,
+      "exitCode": 0
+    },
+    "native-build": {
+      "durationSeconds": 394.648,
+      "exitCode": 0
+    },
+    "simulator-boot": {
+      "durationSeconds": 3.162,
+      "exitCode": 0
+    },
+    "simulator-ready": {
+      "durationSeconds": 241.194,
+      "exitCode": 0
+    },
+    "simulator-total": {
+      "durationSeconds": 248.501,
+      "exitCode": 0
+    },
+    "selected-native": {
+      "durationSeconds": 200.882,
+      "exitCode": 65
+    },
+    "export-attachments": {
+      "durationSeconds": 0.248,
+      "exitCode": 0
+    }
+  },
+  "visualAcceptance": "Reviewed all three: visible first-step spark, expanded hit, and block burst. Fixed synthetic camera, not full combat fidelity.",
+  "limitations": [
+    "Simulator evidence only; no physical-device, stable-60fps or dual-device acceptance",
+    "Pool ownership and real hit/block effects checked; no measured frame-time improvement yet",
+    "Only impact object lifetime changed; no 1:1 fidelity claim",
+    "This unsigned native run does not upload TestFlight"
+  ],
+  "failureAnalysis": "Stress-loop childNodes inspection arrays were created outside the drained autorelease pool. Correct test scope and retain nil-release assertion; runtime unchanged pending targeted rerun."
+}
