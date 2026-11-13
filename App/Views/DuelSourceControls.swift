@@ -125,6 +125,7 @@ final class DuelSourceControlsView: UIView {
     private var joystickOwner: AnyHashable?
     private var direction = (x: 0, y: 0)
     private var knobOffset = CGPoint.zero
+    private let shadowStatus = UILabel()
     private var actionStates: [Action: ActionState] = [:]
     private var cancellingInput = false
     private var inputEpoch: UInt64 = 0
@@ -211,6 +212,15 @@ final class DuelSourceControlsView: UIView {
             addSubview(button)
             refresh(action)
         }
+        shadowStatus.font = .systemFont(ofSize: 11, weight: .semibold)
+        shadowStatus.textColor = .white
+        shadowStatus.textAlignment = .center
+        shadowStatus.adjustsFontSizeToFitWidth = true
+        shadowStatus.minimumScaleFactor = 0.7
+        shadowStatus.backgroundColor = UIColor.black.withAlphaComponent(0.7)
+        shadowStatus.isUserInteractionEnabled = false
+        shadowStatus.isAccessibilityElement = false
+        addSubview(shadowStatus)
         // VoiceOver retains deliberate defense without a separate on-screen
         // control. Ordinary touch uses the facing-relative Back direction.
         stick.accessibilityCustomActions = [UIAccessibilityCustomAction(
@@ -261,6 +271,9 @@ final class DuelSourceControlsView: UIView {
         for action in Action.allCases {
             guard let button = buttons[action], let frame = layoutSnapshot.actions[action] else { continue }
             button.frame = frame
+            if action == .shadow {
+                shadowStatus.frame = CGRect(x: frame.midX - 60, y: frame.maxY + 2, width: 120, height: 18)
+            }
             button.layer.cornerRadius = frame.width / 2
             if action == .ranged {
                 // The source missile's 210-square button contains a 134 x 140 glyph.
@@ -526,6 +539,9 @@ final class DuelSourceControlsView: UIView {
         let overlapFade: CGFloat = obscuredActions.contains(action) ? (isHeld(action) ? 0.75 : 0.45) : 1
         let artworkFade: CGFloat = opponentProne ? 0.35 : overlapFade
         button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * artworkFade
+        if action == .shadow {
+            shadowStatus.text = !inputEnabled ? "操作已暂停" : state.description
+        }
         button.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
         button.accessibilityLabel = state.accessibilityLabel ?? action.label
         button.accessibilityValue = !inputEnabled ? "操作已暂停" :

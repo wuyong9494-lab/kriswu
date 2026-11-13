@@ -1,0 +1,13 @@
+{
+  "issue": "User reports dim shadow control or insufficient energy in 704",
+  "change": "Passive energy +1 each six active simulation frames after cooldown; visible energy/cooldown label; replay rules 5",
+  "verification": {
+    "shadowTests": 17,
+    "replayStateTests": 14,
+    "failures": 0,
+    "swiftUIParse": true,
+    "nativeVerified": false,
+    "uploaded": false
+  },
+  "limitation": "Does not establish the exact cause on the user's device; requires native and physical-device acceptance."
+}

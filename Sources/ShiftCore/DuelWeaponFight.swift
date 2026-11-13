@@ -153,7 +153,14 @@ public struct DuelWeaponFight: Equatable, Sendable {
         }
         if mode == .versus { remainingTicks -= 1 }
         previousX = fighters.map(\.x)
-        for i in 0..<2 { shadowCooldowns[i] = max(0, shadowCooldowns[i] - 1) }
+        for i in 0..<2 {
+            shadowCooldowns[i] = max(0, shadowCooldowns[i] - 1)
+            // A missed shadow must not leave its owner dependent on landing hits.
+            // Regenerate after cooldown; hit-stop and round breaks remain frozen.
+            if shadowCooldowns[i] == 0 && frame % 6 == 0 && actions[i]?.command != .shadow {
+                fighters[i].energy = min(100, fighters[i].energy + 1)
+            }
+        }
         for i in 0..<2 { update(i, input: inputs[i]) }
         separate()
         // A caster can be pushed by body separation during startup. Anchor

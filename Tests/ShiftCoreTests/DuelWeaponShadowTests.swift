@@ -15,6 +15,21 @@ final class DuelWeaponShadowTests: XCTestCase {
                                              difficulty: .learning, catalog: catalog, seed: 47))
     }
 
+    func testMissedShadowRefillsWithoutAnyHitsAndCanCastAgain() throws {
+        for hero in [DuelGame.Hero.ember, .liu] {
+            var game = try fight(hero, distance: 6000)
+            game.step(.init(weaponCommand: .shadow), opponent: .neutral)
+            XCTAssertEqual(game.fighters[0].energy, 0)
+            for _ in 0..<1000 { game.step(.neutral, opponent: .neutral) }
+            XCTAssertEqual(game.landedHits, [0, 0])
+            XCTAssertEqual(game.fighters[0].health, 1000)
+            XCTAssertEqual(game.fighters[0].energy, 100)
+            game.step(.init(weaponCommand: .shadow), opponent: .neutral)
+            XCTAssertNotNil(game.shadowVisual(0))
+            XCTAssertEqual(game.fighters[0].energy, 0)
+        }
+    }
+
     func testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections() throws {
         for hero in [DuelGame.Hero.ember, .liu] {
             for direction in [1, -1] {
