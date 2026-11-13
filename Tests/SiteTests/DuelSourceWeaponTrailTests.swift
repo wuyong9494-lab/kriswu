@@ -25,6 +25,8 @@ final class DuelSourceWeaponTrailTests: XCTestCase {
                 XCTAssertEqual(skin.baseGeometry?.sources(for: .vertex).first?.vectorCount, mesh.positions.count / 3)
                 XCTAssertEqual(skin.baseGeometry?.elements.first?.primitiveCount, mesh.indices.count / 3)
                 XCTAssertEqual(skin.boneInverseBindTransforms?.count, 4)
+                XCTAssertEqual(holder.geometry?.firstMaterial?.isDoubleSided, hero == .ember,
+                               "Only the source katana is a single-surface strip")
                 for (bone, name) in zip(skin.bones, mesh.bones) {
                     let index = try XCTUnwrap(asset.model.node(named: name))
                     XCTAssertTrue(bone === actor.instance.nodes[index], "Bind the existing animated skeleton, not a clone")
@@ -58,7 +60,8 @@ final class DuelSourceWeaponTrailTests: XCTestCase {
                     binding.root.isHidden = true
                     let withoutSkin = try capture(renderer)
                     binding.root.isHidden = false
-                    XCTAssertGreaterThan(changedPixels(withSkin, withoutSkin), 20, "The original GPU skin must contribute pixels in both facings")
+                    XCTAssertGreaterThan(changedPixels(withSkin, withoutSkin), 20,
+                                         "\(hero.rawValue)/\(role)/\(facing): the original GPU skin must contribute pixels")
                     actor.pose(fighter, root: root)
                     XCTAssertEqual(binding.holders.flatMap { $0.skinner?.bones ?? [] }.map(\.simdWorldTransform), frozen)
                     binding.update(clip: clip.name, active: false)

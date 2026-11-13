@@ -128,7 +128,14 @@ final class DuelSourceWeaponTrails {
             let geometry = SCNGeometry(sources: [vertices, normals, uv], elements: [element])
             let material = SCNMaterial(); material.name = "duel.source-trail-alpha.\(mesh.side)"
             material.lightingModel = .constant; material.diffuse.contents = UIColor.white
-            material.blendMode = .alpha; material.isDoubleSided = false; material.cullMode = .back
+            material.blendMode = .alpha
+            // Katana is a single surface: all 12 source triangles turn away
+            // from the camera in one of our actor's yaw facings. Hammers have
+            // opposing faces. Keep the thin katana surface visible from either
+            // side without changing its mesh or duplicating the hammer surface.
+            // This is a SceneKit facing adapter, not recovered Unity cull events.
+            material.isDoubleSided = profile.id == "sun_katana"
+            material.cullMode = .back
             material.readsFromDepthBuffer = true; material.writesToDepthBuffer = false
             let texture = SCNMaterialProperty(contents: alpha)
             texture.wrapS = .clamp; texture.wrapT = .clamp

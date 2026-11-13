@@ -83,7 +83,7 @@ jobs:
       - name: Run only the two targeted native methods without rebuilding
         timeout-minutes: 20
         run: python3 .github/scripts/fighter_visual_acceptance.py test
-      - name: Export exactly seven images with exact method ownership
+      - name: Export exactly twelve images with exact method ownership
         if: always() && steps.prepare.outcome == 'success'
         timeout-minutes: 5
         run: python3 .github/scripts/fighter_visual_acceptance.py export
