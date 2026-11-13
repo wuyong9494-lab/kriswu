@@ -35,6 +35,8 @@ final class DuelWorldView: SCNView {
     private(set) var weaponAssets: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
+    private let shadowVoice = DuelShadowVoice()
+    private var wasLiuShadowActive = false
     private(set) var stageAsset: DuelStageAsset?
     private var cameraBasePosition = SCNVector3(5, 3.6, 14)
     private var trackedCameraX: Float = 5
@@ -116,6 +118,7 @@ final class DuelWorldView: SCNView {
             session.didSimulateStep = { [weak self] game, tick in self?.consumeFeedback(game, tick: tick) }
             session.didReset = { [weak self] in
                 self?.sourceEffects?.reset(); self?.weaponEffects?.reset()
+                self?.shadowVoice.reset(); self?.wasLiuShadowActive = false
             }
             consumeFeedback(session.game, tick: 0)
         }
@@ -172,6 +175,7 @@ final class DuelWorldView: SCNView {
         ended = true; stopClock(); session.clearInput(); session.renderPause = nil; session.didSimulateStep = nil; session.didReset = nil
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
+        shadowVoice.reset(); wasLiuShadowActive = false
         NotificationCenter.default.removeObserver(self)
         // Explicitly break the renderer/scene/node graph before clearing the
         // SCNView reference. SceneKit can defer renderer teardown until its
@@ -280,6 +284,14 @@ final class DuelWorldView: SCNView {
     }
     private func consumeFeedback(_ game: DuelGame, tick: Int) {
         guard let fight = game.weaponFight else { return }
+        // Speak only when Liu actually enters an authoritative shadow action,
+        // never merely because a player tapped a disabled ability button.
+        let liuShadow = fight.fighters.indices.contains(0) && fight.fighters[0].hero == .liu &&
+            fight.shadowIsActive(0)
+        if liuShadow && !wasLiuShadowActive {
+            shadowVoice.playLiuTransformation(cueID: "liu-shadow-\(tick)")
+        }
+        wasLiuShadowActive = liuShadow
         let contacts = fight.contacts.map { contact in
             DuelSourceEffects.Contact(kind: contact.kind == .hit ? .hit : .block,
                 position: SCNVector3(Float(contact.position.x), Float(contact.position.y), Float(contact.position.z)),
