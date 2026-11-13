@@ -1,4 +1,4 @@
-name: Fighter TestFlight promotion (internal only)
+name: Fighter TestFlight promotion (external eligible)
 run-name: Upload verified TestFlight build
 
 on:
@@ -25,7 +25,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' && github.event_name == 'push' && github.event.before == 'acb0b110badedf112476927d9f7a8620acab18c4' && github.event.head_commit.message == 'Promote verified fighter 1.2 (703) to internal TestFlight'
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' && github.event_name == 'push' && github.event.before == 'c3bc88954aaffa79c26445ca9714cf164af112e5' && github.event.head_commit.message == 'Promote verified fighter 1.2 (704) to external TestFlight'
     environment: fighter-private-assets
     outputs:
       upload_required: ${{ steps.verify.outputs.upload_required }}
@@ -53,6 +53,7 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_asc_promote.py' -v
           python3 -m unittest discover -s .github/scripts -p 'test_fighter_promote.py' -v
+          python3 -m unittest discover -s .github/scripts -p 'test_fighter_external_testflight.py' -v
           python3 .github/scripts/fighter_promote.py preflight .github/releases/fighter-testflight.json
       - name: Remove local Apple key
         if: always()
@@ -61,7 +62,9 @@ jobs:
         if: always()
         with:
           name: testflight-preflight
-          path: promotion-preflight.json
+          path: |
+            promotion-preflight.json
+            promotion-external-preflight.json
           if-no-files-found: warn
 
   testflight:
@@ -201,7 +204,7 @@ jobs:
             <key>signingStyle</key><string>automatic</string>
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
-            <key>testFlightInternalTestingOnly</key><true/>
+            <key>testFlightInternalTestingOnly</key><false/>
           </dict></plist>
           PLIST
           xcodebuild -exportArchive \
@@ -241,7 +244,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Check Apple processing and save verified testing notes
+      - name: Check Apple processing, submit external review and enable tester notifications
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
@@ -260,5 +263,8 @@ jobs:
         if: always()
         with:
           name: testflight-apple-status
-          path: promotion-status.json
+          path: |
+            promotion-status.json
+            promotion-external-preflight.json
+            promotion-external-status.json
           if-no-files-found: warn

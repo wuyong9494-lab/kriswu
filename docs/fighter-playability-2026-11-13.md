@@ -37,3 +37,9 @@ Run 43411346089 built the native app and verified all 73 resource identities. Se
 Reproduction with the exact authenticated catalog (`c4ee840d…139ed5f`) and unchanged ShiftCore observed health 600, energy 100 and cooldown 0 at tick 836; the early press was ignored. At tick 837 the reaction had ended and the same press started the second shadow, spending energy and starting cooldown 360. The native test now checks the displayed reaction has ended and hit stop is clear before pressing. The 2,400-tick bound, health > 400, active-shadow, spent-energy and restarted-cooldown assertions are unchanged. No application runtime or resource files changed for this test correction; the native recheck remains required.
 
 All six authenticated screenshots were reviewed: both fighters are visibly larger with complete heads, weapons and feet; the navigated lobby does not overlap the menus; the separate center defense control is absent. Original lighting/material equivalence and physical-device acceptance remain open.
+
+## Final native result and external release candidate
+
+Run 43414470552 at source 454a45731fe24ee555e46d79f4ca901e62f1f1ef completed successfully: 8 passed, 0 failed, 0 skipped; exactly 6 images and all 73 staged/bundled resource identities authenticated. The corrected second-shadow test passed with all original release assertions retained. Five final images are byte-identical to the reviewed first run; the final navigated lobby image was reviewed separately.
+
+Read-only Apple readiness run 43414982698 found one existing active external group; descriptions, review contacts and review account requirements are complete. Candidate 1.2 (704) enables external distribution and automatic tester notification after approval. Upload and Beta review state must be checked from the ensuing promotion run; these native/readiness results do not themselves prove an upload.

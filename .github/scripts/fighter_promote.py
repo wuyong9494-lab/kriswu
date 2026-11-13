@@ -24,6 +24,8 @@ MUSIC_SHA = '36878beef5d9c8d86193b7eea04e5e381042691d'
 SOURCE_SKIN_BRANCH = 'codex/fighter-visual-acceptance-20261113-1200'
 SOURCE_SKIN_SHA = '1c2cfa70a36974592fdb14811f6b7a7d2b6239e7'
 SOURCE_SKIN_RUN = 43402771798
+PLAYABILITY_SHA = '454a45731fe24ee555e46d79f4ca901e62f1f1ef'
+PLAYABILITY_RUN = 43414470552
 SOURCE_SKIN_STEPS = (
     'Pin source, two exact methods and twelve attachment labels',
     'Select installed native tools',
@@ -36,6 +38,11 @@ SOURCE_SKIN_STEPS = (
     'Run actions/upload-artifact@v4',
     'Report exact source, counts and completed phase timings',
 )
+PLAYABILITY_STEPS = tuple(name.replace('two exact methods and twelve attachment labels',
+                                      'eight exact methods and six attachment labels')
+                         .replace('the two targeted native methods', 'the eight targeted native methods')
+                         .replace('exactly twelve images', 'exactly six images')
+                         for name in SOURCE_SKIN_STEPS)
 SOURCE_SKIN_MANIFESTS = (
     ('.github/private/fighter-presentation/manifest.json',
      '0595cdd5b06068a1c2ea8e1a304195ac1b7d404d5051935e19cc4188c0d3cad5', 8),
@@ -62,7 +69,22 @@ def candidate(r):
 
 
 def source_skin_candidate(r):
-    return r.get('source_branch') == SOURCE_SKIN_BRANCH
+    return r.get('source_branch') == SOURCE_SKIN_BRANCH and r.get('build_number') == '703'
+
+
+def playability_candidate(r):
+    return r.get('source_branch') == SOURCE_SKIN_BRANCH and r.get('build_number') == '704'
+
+
+def validate_playability_candidate(r):
+    require(r.get('channel') == 'testflight-external', '704 must permit external TestFlight')
+    require(r.get('source_sha') == PLAYABILITY_SHA, 'Exact verified playability source required')
+    require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] == PLAYABILITY_RUN,
+            'Exact completed playability run required')
+    require(r.get('music_source_sha') == MUSIC_SHA, 'Pinned music source required')
+    require(r.get('build_number') == '704' and r.get('version') == '1.2', 'Only approved 1.2 (704)')
+    require(r.get('external_group_policy') == 'existing-active-external', 'Existing external groups required')
+    require(r.get('notify_external_testers') is True, 'Notify the existing external test audience')
 
 
 def validate_source_skin_candidate(r):
@@ -89,7 +111,7 @@ def require(condition, message):
 def load_request(path):
     require(Path(path).name == 'fighter-testflight.json', 'Dedicated fighter manifest required')
     r = json.loads(Path(path).read_text())
-    require(r.get('channel') == 'testflight-internal', 'Internal TestFlight only')
+    require(r.get('channel') == 'testflight-internal' or playability_candidate(r), 'Unapproved TestFlight channel')
     require(re.fullmatch('[0-9a-f]{40}', r.get('source_sha', '')), 'Full source SHA required')
     require(re.fullmatch('[1-9][0-9]*', r.get('build_number', '')), 'Explicit build number required')
     require(r.get('bundle_id') == 'com.kriswu.shiftreminder', 'Unexpected app')
@@ -101,7 +123,10 @@ def load_request(path):
     if candidate(r):
         validate_candidate(r)
     if source_skin_candidate(r):
+        require(r.get('channel') == 'testflight-internal', '703 remains internal only')
         validate_source_skin_candidate(r)
+    elif branch == SOURCE_SKIN_BRANCH:
+        validate_playability_candidate(r)
     if branch == BRANCH:
         require(type(r.get('source_run_id')) is int and r['source_run_id'] > 0, 'Exact iOS CI run required')
     require(isinstance(r.get('notes'), str) and 0 < len(r['notes']) < 3800, 'Testing notes required')
@@ -133,6 +158,10 @@ def check_ci(r):
         validate_source_skin_candidate(r)
         gates = [('fighter_run_id', 'fighter-source-skins-followup.yml', ('visual',))]
         pinned_run, required_steps = SOURCE_SKIN_RUN, SOURCE_SKIN_STEPS
+    if playability_candidate(r):
+        validate_playability_candidate(r)
+        gates = [('fighter_run_id', 'fighter-playability-followup.yml', ('visual',))]
+        pinned_run, required_steps = PLAYABILITY_RUN, PLAYABILITY_STEPS
     if r.get('source_branch', BRANCH) == BRANCH:
         gates.insert(0, ('source_run_id', 'ios.yml', ('build', 'core-tests-linux')))
     # These fighter branches intentionally exclude ios.yml. Their dedicated CI
@@ -239,8 +268,9 @@ def archive(r, path, source=None):
     if candidate(r):
         validate_candidate(r)
         verify_candidate_resources(app, source)
-    if source_skin_candidate(r):
-        validate_source_skin_candidate(r)
+    if source_skin_candidate(r) or playability_candidate(r):
+        if playability_candidate(r): validate_playability_candidate(r)
+        else: validate_source_skin_candidate(r)
         verify_candidate_resources(app, source)
         additional = verify_source_skin_resources(app, source)
     asc.save_report('promotion-archive.json', r, liu_sha256=model.SHA,
@@ -259,6 +289,9 @@ def main():
     if a.command == 'preflight':
         check_ci(r)
         guard(r)
+        if playability_candidate(r):
+            from fighter_external_testflight import inspect
+            inspect(r)
         for key in ('source_sha', 'build_number'):
             asc.output(key, r[key])
         asc.output('upload_required', 'true')
@@ -273,6 +306,9 @@ def main():
     else:
         require(a.uploaded, 'Finish requires confirmed upload in this run; uncertain uploads need read-only reconciliation')
         asc.finish(r, True)
+        if playability_candidate(r):
+            from fighter_external_testflight import submit
+            submit(r)
 
 
 if __name__ == '__main__':
