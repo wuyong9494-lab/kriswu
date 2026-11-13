@@ -86,14 +86,17 @@ public struct DuelWeaponFight: Equatable, Sendable {
         public let weaponDiscontinuities: Int
         public let maximumRootStep: Double
         public let maximumWeaponStep: Double
+        /// Simulation ticks where an adjacent sample exceeds the safe sweep threshold.
+        public let rootDiscontinuityTicks: [Int]
+        public let weaponDiscontinuityTicks: [Int]
     }
 
     public func shadowMotionAudit(index: Int) -> ShadowMotionAudit? {
         guard profiles.indices.contains(index),
               let clip = profiles[index].clip(command: .shadow) else { return nil }
         let tracks = clip.tracks
-        var rootJumps = 0
-        var weaponJumps = 0
+        var rootJumpTicks: [Int] = []
+        var weaponJumpTicks: [Int] = []
         var maxRoot = 0.0
         var maxWeapon = 0.0
         let count = max(0, clip.ticks - 1)
@@ -107,12 +110,13 @@ public struct DuelWeaponFight: Equatable, Sendable {
             let weaponStep = motionSpeed(index, clip: clip, command: .shadow, tick: tick)
             maxRoot = max(maxRoot, rootStep)
             maxWeapon = max(maxWeapon, weaponStep)
-            if !rootStep.isFinite || rootStep > 0.75 { rootJumps += 1 }
-            if !weaponStep.isFinite || weaponStep > 0.75 { weaponJumps += 1 }
+            if !rootStep.isFinite || rootStep > 0.75 { rootJumpTicks.append(tick) }
+            if !weaponStep.isFinite || weaponStep > 0.75 { weaponJumpTicks.append(tick) }
         }
-        return .init(sampledTransitions: count, rootDiscontinuities: rootJumps,
-                     weaponDiscontinuities: weaponJumps,
-                     maximumRootStep: maxRoot, maximumWeaponStep: maxWeapon)
+        return .init(sampledTransitions: count, rootDiscontinuities: rootJumpTicks.count,
+                     weaponDiscontinuities: weaponJumpTicks.count,
+                     maximumRootStep: maxRoot, maximumWeaponStep: maxWeapon,
+                     rootDiscontinuityTicks: rootJumpTicks, weaponDiscontinuityTicks: weaponJumpTicks)
     }
 
     public func canUse(_ command: DuelWeaponCommand, index: Int) -> Bool {
