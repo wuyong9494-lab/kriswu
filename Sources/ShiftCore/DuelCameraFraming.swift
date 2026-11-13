@@ -44,7 +44,9 @@ public struct DuelCameraFraming: Equatable, Sendable {
 /// presentation-only: required FOV can always expand immediately.
 public struct DuelCameraOpticalFOV: Equatable, Sendable {
     private var lastFrame: Int?
-    private var lastAspect: Double?
+    // Anchor minor UIKit layout variation; do not mistake a gradual device
+    // rotation for harmless jitter by comparing only consecutive callbacks.
+    private var aspectAnchor: Double?
     private var lastValue: Double?
 
     public init() {}
@@ -57,8 +59,8 @@ public struct DuelCameraOpticalFOV: Equatable, Sendable {
               frame >= 0, aspect.isFinite, aspect > 0 else {
             return lastValue ?? 47
         }
-        if let previous = lastFrame, let oldAspect = lastAspect,
-           frame >= previous, abs(aspect - oldAspect) <= 0.005,
+        if let previous = lastFrame, let anchor = aspectAnchor,
+           frame >= previous, abs(aspect - anchor) <= 0.04,
            let current = lastValue {
             if frame == previous {
                 lastValue = max(current, required)
@@ -69,11 +71,12 @@ public struct DuelCameraOpticalFOV: Equatable, Sendable {
                 lastValue = required + (current - required) * pow(0.92, elapsed)
             }
         } else {
-            // A new bout, rewind, or orientation change has no previous lens.
+            // A new bout, rewind or material orientation change starts from
+            // the actual safe fit, not the previous animation's wide pose.
             lastValue = required
+            aspectAnchor = aspect
         }
         lastFrame = frame
-        lastAspect = aspect
         return lastValue!
     }
 }

@@ -160,4 +160,24 @@ final class DuelCameraFramingTests: XCTestCase {
         XCTAssertEqual(lens.consume(required: 33, frame: 1, aspect: 2.1), 33)
     }
 
+
+    func testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit() {
+        var lens = DuelCameraOpticalFOV()
+        XCTAssertEqual(lens.consume(required: 52, frame: 10, aspect: 2.10), 52)
+        let eased = lens.consume(required: 29, frame: 11, aspect: 2.115)
+        XCTAssertEqual(eased, 29 + (52 - 29) * 0.92, accuracy: 0.000001,
+                       "Minor UIKit viewport changes must not abruptly shrink the lens")
+
+        // A newly extended weapon must still fit, including multiple layouts
+        // during the SAME simulation frame.
+        XCTAssertEqual(lens.consume(required: 55, frame: 11, aspect: 2.119), 55)
+        XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.12), 55)
+        XCTAssertGreaterThan(lens.consume(required: 29, frame: 12, aspect: 2.135), 29)
+
+        // Compare against the initial anchor, not the previous layout: a
+        // true orientation transition must not carry an obsolete wide shot.
+        XCTAssertEqual(lens.consume(required: 29, frame: 13, aspect: 2.15), 29)
+        XCTAssertEqual(lens.consume(required: 54, frame: 14, aspect: 2.15), 54)
+        XCTAssertEqual(lens.consume(required: 30, frame: 15, aspect: 1.0), 30)
+    }
 }
