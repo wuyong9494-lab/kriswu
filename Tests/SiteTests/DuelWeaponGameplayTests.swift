@@ -124,6 +124,101 @@ final class DuelWeaponGameplayTests: XCTestCase {
         }
     }
 
+    func testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers() throws {
+        let state = DuelSession(.init(hero: .ember, difficulty: .learning,
+                                      mode: .practice, originalWeapons: true))
+        let view = DuelWorldView(session: state)
+        defer { view.shutdown(); state.shutdown() }
+        state.pause() // Mounted layout must not advance the real source pose.
+        XCTAssertNil(state.loadError, "The verified source characters and stage are required")
+        XCTAssertNotNil(state.game.weaponFight)
+        XCTAssertNotNil(view.stageAsset)
+        XCTAssertFalse(view.usesSyntheticPresentationResources)
+        XCTAssertEqual(Set(view.weaponAssets.keys), Set([DuelGame.Hero.ember, .liu]))
+        let assets = try XCTUnwrap(state.weaponAssets)
+        let scene = try XCTUnwrap(view.scene)
+        let camera = try XCTUnwrap(view.pointOfView?.camera)
+        XCTAssertFalse(camera.usesOrthographicProjection)
+        let controls = DuelSourceControlsView(assetDirectory: assets.directory)
+        XCTAssertTrue(controls.sourceArtAvailable)
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 956, height: 440))
+        window.rootViewController = host
+        window.isHidden = false
+        defer {
+            controls.shutdown()
+            window.isHidden = true; window.rootViewController = nil
+        }
+        host.view.addSubview(view); host.view.addSubview(controls)
+        XCTAssertTrue(DuelWeaponControls(session: state).bind(controls))
+        XCTAssertTrue(view.window === window && controls.window === window)
+        func viewport(_ size: CGSize) {
+            window.frame = CGRect(origin: .zero, size: size)
+            host.view.frame = window.bounds
+            view.frame = host.view.bounds; controls.frame = host.view.bounds
+            controls.setNeedsLayout(); controls.layoutIfNeeded()
+        }
+        let landscape = CGSize(width: 956, height: 440)
+        viewport(landscape); view.layoutSubviews()
+        XCTAssertNil(view.opticalFramingFailure)
+        let landscapeFOV = camera.fieldOfView
+        let frame = state.game.frame, tracking = view.combatCamera
+        for (index, fighter) in state.game.fighters.enumerated() {
+            let asset = try XCTUnwrap(view.weaponAssets[fighter.hero])
+            let actor = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.actor.\(index)", recursively: false))
+            let equipped = try XCTUnwrap(actor.childNode(
+                withName: "duel.equipped.\(asset.profile.id)", recursively: false))
+            var visibleMesh: SCNNode?
+            equipped.enumerateChildNodes { node, stop in
+                guard node.geometry != nil, node.skinner != nil else { return }
+                var ancestor: SCNNode? = node
+                while let current = ancestor {
+                    if current.isHidden || current.opacity == 0 { return }
+                    ancestor = current.parent
+                }
+                visibleMesh = node; stop.pointee = true
+            }
+            let holder = try XCTUnwrap(visibleMesh, "Inject failure in an actually displayed source mesh")
+            let skin = try XCTUnwrap(holder.skinner)
+            defer { holder.skinner = skin }
+
+            // Obtain a wider SUCCESSFUL projection from the same real pose.
+            // Rotation changes only the viewport, not geometry or private camera state.
+            viewport(CGSize(width: 390, height: 844)); view.layoutSubviews()
+            XCTAssertNil(view.opticalFramingFailure)
+            let portraitFOV = camera.fieldOfView
+            XCTAssertGreaterThan(portraitFOV, landscapeFOV + 1)
+            holder.skinner = nil // The bounds cache still owns this exact source skinner.
+            viewport(landscape)
+            let target = try XCTUnwrap(controls.layoutSnapshot.actions[.weapon])
+            state.updateCharacterOcclusion([controls.convert(target, to: view)], from: view)
+            XCTAssertEqual(controls.obscuredActions, [.weapon], "Start with observable stale artwork overlap")
+            for _ in 0..<3 {
+                view.layoutSubviews()
+                XCTAssertEqual(view.opticalFramingFailure, .invalidSkin)
+                XCTAssertEqual(camera.fieldOfView, portraitFOV, accuracy: 0.0001,
+                               "Unknown source geometry must retain the last successful wider lens")
+                XCTAssertTrue(controls.obscuredActions.isEmpty,
+                              "Failed fitting must clear previously projected artwork overlap")
+            }
+            let failedFOV = camera.fieldOfView
+            holder.skinner = skin
+            view.layoutSubviews()
+            XCTAssertTrue(holder.skinner === skin)
+            XCTAssertNil(view.opticalFramingFailure, "Restoring the same real skinner must recover fitting")
+            XCTAssertEqual(camera.fieldOfView, landscapeFOV, accuracy: 0.0001)
+            XCTAssertEqual(state.game.frame, frame)
+            XCTAssertEqual(view.combatCamera, tracking)
+            let evidence = XCTAttachment(string:
+                "evidenceClass=real-source-resource-with-injected-skin-failure hero=\(fighter.hero.rawValue) " +
+                "profileSHA256=\(asset.profile.sha256) frame=\(frame) " +
+                "landscapeFOV=\(landscapeFOV) portraitFOV=\(portraitFOV) " +
+                "failedFOV=\(failedFOV) restoredFOV=\(camera.fieldOfView)")
+            evidence.name = "real-optical-fit-failure-recovery-\(fighter.hero.rawValue)"
+            evidence.lifetime = .keepAlways; add(evidence)
+        }
+    }
+
     func testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes() throws {
         let baselineClocks = DuelWorldView.activeClocks
         for hero in [DuelGame.Hero.ember, .liu] {
@@ -155,6 +250,7 @@ final class DuelWeaponGameplayTests: XCTestCase {
                 XCTAssertEqual(effects.sourceTextureCount, 9)
                 XCTAssertEqual(effects.sourceAudioCount, 29)
                 view.frame = CGRect(x: 0, y: 0, width: 956, height: 440); view.layoutIfNeeded()
+                XCTAssertNil(view.opticalFramingFailure, "Initial source pose must have a measured camera fit")
                 view.pointOfView?.camera?.wantsHDR = false
                 view.pointOfView?.camera?.wantsExposureAdaptation = false
                 let renderer = SCNRenderer(device: try XCTUnwrap(MTLCreateSystemDefaultDevice()), options: nil)
@@ -211,6 +307,8 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     let bursts = scene.rootNode.childNodes.filter { $0.name?.hasPrefix("duel.source-effect.hit.") == true }
                     XCTAssertFalse(bursts.isEmpty)
                     let nativeState = particleState(bursts)
+                    XCTAssertNil(view.opticalFramingFailure,
+                                 "\(hero)/\(role): a fallback lens is not a successful source-contact fit")
                     let withEffect = try capture(renderer, name: "equipped-\(hero.rawValue)-\(role)-source-contact")
                     bursts.forEach { $0.isHidden = true }
                     let withoutEffect = try capture(renderer)

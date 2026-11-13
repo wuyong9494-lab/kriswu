@@ -533,7 +533,12 @@ final class DuelWorldView: SCNView {
                         points: points, size: bounds.size, verticalFieldOfView: Double(camera.fieldOfView))
                     session.updateCharacterOcclusion(rectangles, from: self)
                 } catch {
-                    opticalFOV.reset()
+                    // A missing/invalid skin envelope is NOT a successful fit.
+                    // Retain the last wider lens rather than snapping to the
+                    // narrow pair-only FOV; preserve the explicit failure and
+                    // clear stale control occlusion until valid bounds return.
+                    camera.fieldOfView = CGFloat(opticalFOV.retainedAfterFailedFit(
+                        minimum: framing.verticalFieldOfView))
                     opticalFramingFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry
                     session.updateCharacterOcclusion([], from: self)
                 }

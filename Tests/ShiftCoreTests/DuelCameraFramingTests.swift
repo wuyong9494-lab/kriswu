@@ -161,6 +161,30 @@ final class DuelCameraFramingTests: XCTestCase {
     }
 
 
+    func testFailedSkinGeometryRetainsWiderLensWithoutTreatingItAsSuccess() {
+        var lens = DuelCameraOpticalFOV()
+        XCTAssertEqual(lens.retainedAfterFailedFit(minimum: 29), 29)
+        XCTAssertEqual(lens.consume(required: 54, frame: 10, aspect: 2.1), 54)
+
+        // A transient missing bone or invalid skinner bounds must not replace
+        // the previously wide blade fit with the smaller pair-only framing.
+        for _ in 0..<5 {
+            XCTAssertEqual(lens.retainedAfterFailedFit(minimum: 29), 54)
+        }
+        XCTAssertEqual(lens.retainedAfterFailedFit(minimum: 60), 60,
+                       "A newly wider stage estimate remains the safe minimum")
+        XCTAssertEqual(lens.retainedAfterFailedFit(minimum: .nan), 54)
+        XCTAssertEqual(lens.consume(required: 29, frame: 10, aspect: 2.1), 54,
+                       "Failed same-frame layout must not advance the optical clock")
+
+        let recovered = lens.consume(required: 29, frame: 11, aspect: 2.1)
+        XCTAssertEqual(recovered, 29 + (54 - 29) * 0.92, accuracy: 0.000001)
+        XCTAssertEqual(lens.retainedAfterFailedFit(minimum: 29), recovered)
+        lens.reset()
+        XCTAssertEqual(lens.retainedAfterFailedFit(minimum: 29), 29,
+                       "A new match cannot inherit an old failed-fit fallback")
+    }
+
     func testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit() {
         var lens = DuelCameraOpticalFOV()
         XCTAssertEqual(lens.consume(required: 52, frame: 10, aspect: 2.10), 52)
