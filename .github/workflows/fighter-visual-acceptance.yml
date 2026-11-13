@@ -30,7 +30,6 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
-      FIGHTER_VISUAL_WORK: ${{ runner.temp }}/fighter-visual-acceptance
     defaults:
       run:
         shell: bash -eo pipefail {0}
@@ -45,7 +44,10 @@ jobs:
       - name: Pin source, ten methods, asset references and screenshot labels
         id: prepare
         timeout-minutes: 2
-        run: python3 .github/scripts/fighter_visual_acceptance.py prepare
+        run: |
+          export FIGHTER_VISUAL_WORK="$RUNNER_TEMP/fighter-visual-acceptance"
+          printf 'FIGHTER_VISUAL_WORK=%s\n' "$FIGHTER_VISUAL_WORK" >> "$GITHUB_ENV"
+          python3 .github/scripts/fighter_visual_acceptance.py prepare
       - name: Select installed native tools
         timeout-minutes: 8
         run: |
