@@ -78,8 +78,8 @@ def submit(request):
         asc.call('PATCH', f"/buildBetaDetails/{detail['id']}", {'data': {
             'type': 'buildBetaDetails', 'id': detail['id'], 'attributes': {'autoNotifyEnabled': True}}})
     # Attach only missing relationships. This does not invite or create people.
-    linked = listing(f'/builds/{build_id}/betaGroups?limit=200')
-    linked_ids = {group['id'] for group in linked}
+    linked_ids = {group['id'] for group in groups if any(
+        row['id'] == build_id for row in listing(f"/betaGroups/{group['id']}/relationships/builds?limit=200"))}
     missing = [{'type': 'betaGroups', 'id': group['id']} for group in groups if group['id'] not in linked_ids]
     if missing:
         asc.call('POST', f'/builds/{build_id}/relationships/betaGroups', {'data': missing})
@@ -93,7 +93,8 @@ def submit(request):
             'type': 'betaAppReviewSubmissions',
             'relationships': {'build': {'data': {'type': 'builds', 'id': build_id}}}}})
         submitted = True
-    actual = {group['id'] for group in listing(f'/builds/{build_id}/betaGroups?limit=200')}
+    actual = {group['id'] for group in groups if any(
+        row['id'] == build_id for row in listing(f"/betaGroups/{group['id']}/relationships/builds?limit=200"))}
     require(all(group['id'] in actual for group in groups), 'External group association did not persist')
     detail = asc.call('GET', path)['data']['attributes']
     require(detail.get('autoNotifyEnabled') is True, 'Automatic external notifications were not enabled')
