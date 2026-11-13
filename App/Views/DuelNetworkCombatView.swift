@@ -62,6 +62,9 @@ struct DuelNetworkCombatView: View {
                                 Button("跳跃") { combat.sendInput(tapBits: DuelGame.Buttons.jump.rawValue) }
                                 Button("大招") { combat.sendInput(tapBits: DuelGame.Buttons.ultimate.rawValue) }
                                     .tint(.purple)
+                                    .disabled(!ultimateReady(in: state))
+                                    .accessibilityIdentifier("duel.combat.ultimate")
+                                    .accessibilityValue(ultimateReady(in: state) ? "能量已满，可以释放" : "能量不足")
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -113,6 +116,14 @@ struct DuelNetworkCombatView: View {
             heldMove = 0
             heldGuard = false
         }
+    }
+
+    /// Generic ultimate readiness only; shadow-specific animation is not implemented here.
+    private func ultimateReady(in state: DuelNetworkCombatState) -> Bool {
+        guard combat.status == .running, state.phase == .fighting else { return false }
+        let seat = combat.localSeat
+        guard state.fighters.indices.contains(seat) else { return false }
+        return state.fighters[seat].energy >= 100
     }
 
     private func heldButton(_ title: String, move: Int = 0, guardHeld: Bool = false) -> some View {
