@@ -1,14 +1,18 @@
 # 连续投锤、镜头后继与真实资源验收交接
 
-本轮继续分支：`codex/fighter-visual-acceptance-20261113-1200`；当前游戏代码整合点为
-`5462aad48b6d3add4b19125f507f7ffa0a476e38`。后续文档提交不另外计作代码测试。
-拖尾验收假设修正为 `5835db9ec66bb48611987eec7500505e14f685dd`，仅 DEBUG 诊断与测试，
-运行时游戏效果保持；该新修正尚待两个指定 native 方法复验。
+本轮继续分支：`codex/fighter-visual-acceptance-20261113-1200`；游戏代码先由
+`5462aad48b6d3add4b19125f507f7ffa0a476e38` 整合，当前普通拖尾修正为
+`da689f81d6138cac8657f88193d185b97ad60a16`。后续文档提交不另外计作代码测试。
+拖尾验收假设修正 `5835db9ec66bb48611987eec7500505e14f685dd` 的 DEBUG 诊断与测试保留；
+da689 进一步分离普通条带 UV、真实年龄和装备 atlas 的职责，未修改 shadow / 命中规则。
+新的 [四方法 / 七图定向复验](fighter-trail-followup-2026-11-13.md) 绑定触发源码 `bf3e677f461d2b868f0adc93278d298f2dc9987f`，
+[run 43377027433](https://github.com/wuyong9494-lab/kriswu/actions/runs/43377027433) 当前等待新的 environment review，尚未开始 native。
+本次只执行四个受影响方法，下面的旧 11 方法与 26 图结果保留原归属。
 不要从默认 `main` 或旧资源分支重新开始。
 
 **连续投锤规则修复已有 33 项定向核心 / 回放通过证据；本次真实资源原生执行为 10 通过、1 失败、0 跳过，26 张原图和 3 个数据附件已核验。真机与五项视觉品质仍未通过。**
 用户已添加确切分支规则，并明确授权代点本次 required review；原环境保护保持。
-当前 [run 43369559706](https://github.com/wuyong9494-lab/kriswu/actions/runs/43369559706)
+已完成的 [run 43369559706](https://github.com/wuyong9494-lab/kriswu/actions/runs/43369559706)
 绑定 `2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc`，不再处于环境拒绝状态。
 失败集中于影技拖尾总保留数断言，不能将当前结果写成全通过或资源加载失败。
 实际审图、耗时、安全边界和最小继续方案见 [本次验收报告](fighter-visual-review-43369559706.md)。
@@ -27,8 +31,11 @@
 | `5462aad48b6d3add4b19125f507f7ffa0a476e38` | 双父为 02d4e83 与 201a203；精确保留 201a 两文件，增加第十一项定向 native selector。214 文件核心闭包不变。 |
 | `2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc` | f742 文档交接之后仅增加 workflow 触发注释，游戏实现保持 5462；本次获准执行的确切源码。 |
 | `5835db9ec66bb48611987eec7500505e14f685dd` | 修正 retained 总量与当前发射者混淆的验收假设；三文件 DEBUG 诊断及严格生命周期测试，`[skip ci]`，Apple native 复验待执行。 |
+| `da689f81d6138cac8657f88193d185b97ad60a16` | 普通条带不再错误采样装备 atlas；年龄与展开 UV 分离，新增隔离材质 / 生产接触专项及闭集 followup 工作流，`[skip ci]`。 |
+| `bf3e677f461d2b868f0adc93278d298f2dc9987f` | 仅新 followup 工作流注释；唯一新 run 43377027433，4 方法 / 7 图，等待 required review。不是已经通过的新原生结果。 |
 
-最新整合源码与上述受测源码的关系以 [来源绑定记录](validation/fighter-visual-20261113-source-binding.json) 为准。
+最新普通条带修改与受测源码的关系见 [本轮来源绑定](validation/fighter-trail-followup-source-validation-20261113.json)；
+此前整合关系保留在 [历史来源绑定](validation/fighter-visual-20261113-source-binding.json)。
 201a 的空 check/status 集合不能解释成构建运行中。复用历史证据必须保留原 SHA、运行环境与测试范围；不重跑完整工作流，不把旧 107/22 迁移成当前全部通过。
 
 ## 本轮实际修复

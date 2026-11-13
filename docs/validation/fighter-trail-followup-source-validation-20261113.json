@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUTC": "2026-11-13T06:16:08.287466+00:00",
+  "repository": "wuyong9494-lab/kriswu",
+  "branch": "codex/fighter-visual-acceptance-20261113-1200",
+  "sourceCommit": "da689f81d6138cac8657f88193d185b97ad60a16",
+  "sourceParent": "121d738b9a41337b1019b39143e92c469192f657",
+  "sourceTree": "d2f5b9759b7fddcaa3155fc5e2e56e48b3931024",
+  "sourceCommitAtUTC": "2026-11-13T06:10:52Z",
+  "triggerCommit": "bf3e677f461d2b868f0adc93278d298f2dc9987f",
+  "triggerTree": "cb9b49450de8a9337bf4799050cc73781f1d875b",
+  "triggerCommitAtUTC": "2026-11-13T06:11:54Z",
+  "triggerChange": "One comment in the new followup workflow; runtime/tests/helper equal sourceCommit",
+  "filesAtTrigger": [
+    {
+      "path": "App/Services/DuelWeaponEffects.swift",
+      "bytes": 30558,
+      "sha256": "d5c7285941e5e6542301df4dc796c445137d08b82395e8281fad3705f95449d9"
+    },
+    {
+      "path": "Tests/SiteTests/DuelWeaponEffectsTests.swift",
+      "bytes": 25936,
+      "sha256": "79427db7b87f0e730c858010be7a3bc194ee53a1e79da128bb39cf94ed75e328"
+    },
+    {
+      "path": "Tests/SiteTests/DuelWeaponGameplayTests.swift",
+      "bytes": 32661,
+      "sha256": "25d5d9ae0514e7f0c3946f7905008e190e200606e6797bf198f2680560755653"
+    },
+    {
+      "path": ".github/scripts/fighter_visual_acceptance.py",
+      "bytes": 38207,
+      "sha256": "6b397d84717ec70c7b7b364c9a33fdde22390049ab4a2c25e1693709d4e42c3a"
+    },
+    {
+      "path": ".github/scripts/test_fighter_visual_followup.py",
+      "bytes": 9037,
+      "sha256": "cc7005d47e75bf1a2a7afc94e673ef85d2d2069d3155b800a0ed3f4c179c19e1"
+    },
+    {
+      "path": ".github/workflows/fighter-visual-followup.yml",
+      "bytes": 5028,
+      "sha256": "236ce7a5fc0fb652166eb0170c46a94ff4e8c5cf9fe4ad0f3c244fb2ed6be2f6"
+    }
+  ],
+  "validation": {
+    "swiftSyntax": {
+      "compiler": "Swift 6.0.3, Linux x86_64",
+      "command": "swift -frontend -parse -D DEBUG",
+      "paths": [
+        "App/Services/DuelWeaponEffects.swift",
+        "Tests/SiteTests/DuelWeaponEffectsTests.swift",
+        "Tests/SiteTests/DuelWeaponGameplayTests.swift"
+      ],
+      "exitCodes": [
+        0,
+        0,
+        0
+      ],
+      "evidence": "Executed by implementing/review agents on these final file hashes; syntax only, no Apple SDK typecheck"
+    },
+    "diffCheckExitCode": 0,
+    "independentSourceReview": "No remaining blocking issue after source-age GPU negative-control and sampler restoration review; not native execution",
+    "helperBoundaryTests": {
+      "passed": 12,
+      "failed": 0,
+      "report": "fighter-trail-followup-helper-validation-20261113.json",
+      "reportSHA256": "87aef9e2dec99e4ccbe8ac58db8de9b8e04b7da1b9037fac6cd3b1798141529a"
+    },
+    "coreClosure": {
+      "filesMatched": 214,
+      "recordedTestSource": "02d4e83e6bcd7e1018225c4fd66037c97f72b6cc",
+      "manifest": "hammer-anchor-final-core-replay.sha256",
+      "manifestSHA256": "1705315a2dcab2fcc2d9b568104d84f50df5fecede1d309ef17f4fbcc0a06c92",
+      "coreRerun": false
+    },
+    "appleSDKTypecheckExecuted": false,
+    "nativeExecuted": false,
+    "newImagesGenerated": 0,
+    "visualAccepted": false,
+    "physicalDeviceAccepted": false,
+    "stable60fpsAccepted": false,
+    "triggerWorkflowParsedStructureUnchanged": true
+  },
+  "plannedRun": {
+    "runId": "43377027433",
+    "jobId": "131725794894",
+    "createdAtUTC": "2026-11-13T06:11:57Z",
+    "observedStatus": "waiting",
+    "environment": "fighter-private-assets",
+    "scope": "trail-followup",
+    "expectedMethods": 4,
+    "expectedPNG": 7,
+    "expectedData": 0,
+    "approved": false,
+    "actualMethods": 0,
+    "actualPNG": 0,
+    "buildDurationSeconds": null,
+    "jobDurationSeconds": null,
+    "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43377027433",
+    "observedAtUTC": "2026-11-13T06:17:16.878543+00:00",
+    "observedSteps": [],
+    "runnerId": null,
+    "runnerName": null,
+    "platformStartedAtUTC": "2026-11-13T06:11:57Z",
+    "platformStartedAtMeaning": "GitHub waiting-job timestamp, not native/build execution start"
+  },
+  "preserved": {
+    "historicalRun": "43369559706",
+    "historicalSource": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+    "historicalPassed": 10,
+    "historicalFailed": 1,
+    "historicalSkipped": 0,
+    "historicalImages": 26,
+    "historicalData": 3,
+    "sourceResourcesUploaded": false,
+    "keysChanged": false,
+    "environmentProtectionChanged": false,
+    "productionLightingChanged": false,
+    "gameRulesChanged": false,
+    "build702Changed": false,
+    "testFlightUploaded": false,
+    "gameReleased": false
+  },
+  "limitations": [
+    "No original source skinned trail mesh or UV recovered; endpoint-ribbon adapter correction only.",
+    "Old 26 images remain pre-repair evidence for 2206.",
+    "The 12 helper tests and 214-file source comparison are not new gameplay/native test executions.",
+    "Waiting for a protected environment review is not a build duration."
+  ]
+}

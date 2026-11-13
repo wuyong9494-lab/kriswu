@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUTC": "2026-11-13T06:09:16.036424+00:00",
+  "scope": "trail-followup",
+  "plannedNativeMethods": 4,
+  "plannedImages": 7,
+  "plannedDataAttachments": 0,
+  "nativeExecuted": false,
+  "workflowDispatched": false,
+  "offlineHelperTests": {
+    "count": 12,
+    "passed": 12,
+    "failed": 0,
+    "exitCode": 0,
+    "durationSeconds": 0.315
+  },
+  "legacyPreservation": {
+    "originalWorkflowBytesUnchanged": true,
+    "selectedMethodsUnchanged": true,
+    "imageAndDataLabelsUnchanged": true,
+    "recipientSPKIUnchanged": true,
+    "resourceManifestsUnchanged": true
+  },
+  "workflowBoundary": {
+    "sameRequiredEnvironment": "fighter-private-assets",
+    "sameConcurrency": true,
+    "contentsPermission": "read",
+    "skipUnrelatedCommitPrefixes": true,
+    "sourcePinnedAtCheckout": true,
+    "onlyNewEncryptedEvidenceUpload": true
+  },
+  "selectedMethodSourceFiles": {
+    "SiteTests/DuelShadowPresentationTests/testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+    "SiteTests/DuelWeaponTrailContinuityTests/testActiveTeleportStartsAnUnbridgedStripAndNextValidStepResumes": "Tests/SiteTests/DuelWeaponTrailContinuityTests.swift",
+    "SiteTests/DuelWeaponEffectsTests/testOrdinaryRibbonsUseSourceAlphaWithoutMeshAtlasAndPreserveAge": "Tests/SiteTests/DuelWeaponEffectsTests.swift",
+    "SiteTests/DuelWeaponGameplayTests/testOrdinaryRibbonAdapterContributesToRealSourceContacts": "Tests/SiteTests/DuelWeaponGameplayTests.swift"
+  },
+  "actualManifestCompatibility": {
+    "sourceRunId": "43369559706",
+    "sourceSha": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+    "manifestSHA256": "0942a2873e80072b9ed520d933b7c7dc215889ac8e93b14b08a285de0160c284",
+    "allExistingMetadataRowsChecked": 29,
+    "actualPriorPayloadsUsed": 7,
+    "exactHumanLabelSuffixFormat": true,
+    "exactMethodIdentifiers": true,
+    "actualDeviceIdAndNameMatched": true,
+    "originalFilesUnchanged": true,
+    "meaning": "Offline parser compatibility against existing authenticated evidence; not a new native execution or seven new screenshots"
+  },
+  "files": {
+    ".github/scripts/fighter_visual_acceptance.py": "6b397d84717ec70c7b7b364c9a33fdde22390049ab4a2c25e1693709d4e42c3a",
+    ".github/scripts/test_fighter_visual_followup.py": "cc7005d47e75bf1a2a7afc94e673ef85d2d2069d3155b800a0ed3f4c179c19e1",
+    ".github/workflows/fighter-visual-followup.yml": "eba523b1234fb6858d139d3f6459dfeb73df922f4d11891d247a021321d87c09"
+  },
+  "limitations": [
+    "These 12 checks validate helper boundaries only, not gameplay or Apple SDK compilation.",
+    "The 4-method/7-image native scope has not run.",
+    "No source resources, secrets, raw model data or test screenshots were uploaded."
+  ]
+}
