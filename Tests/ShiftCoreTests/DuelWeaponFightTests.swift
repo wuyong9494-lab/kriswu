@@ -13,6 +13,12 @@ final class DuelWeaponFightTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(audit.sampledTransitions, 0)
                 XCTAssertTrue((0...audit.sampledTransitions).contains(audit.rootDiscontinuities))
                 XCTAssertTrue((0...audit.sampledTransitions).contains(audit.weaponDiscontinuities))
+                XCTAssertEqual(audit.rootDiscontinuityTicks.count, audit.rootDiscontinuities)
+                XCTAssertEqual(audit.weaponDiscontinuityTicks.count, audit.weaponDiscontinuities)
+                XCTAssertEqual(audit.rootDiscontinuityTicks, audit.rootDiscontinuityTicks.sorted())
+                XCTAssertEqual(audit.weaponDiscontinuityTicks, audit.weaponDiscontinuityTicks.sorted())
+                XCTAssertTrue(audit.rootDiscontinuityTicks.allSatisfy { (1...max(1, audit.sampledTransitions)).contains($0) })
+                XCTAssertTrue(audit.weaponDiscontinuityTicks.allSatisfy { (1...max(1, audit.sampledTransitions)).contains($0) })
             }
             XCTAssertFalse(fight.supports(.shadow, index: seat))
         }
