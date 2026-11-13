@@ -172,6 +172,12 @@ final class DuelDisplayedSkinBounds {
                             near: Double, inset: Double = 1) throws -> Double {
         guard aspect.isFinite, aspect > 0, minimum.isFinite, minimum > 0, minimum < 180, near.isFinite, near > 0,
               inset > 0, inset <= 1 else { throw Failure.invalidTransform }
+        // cameraPoints emits one 16-point skin-influence envelope at a time.
+        // No visible skin (or a truncated envelope) is an unknown fit, not a
+        // successful 29-degree close-up that could crop returning geometry.
+        guard !points.isEmpty, points.count.isMultiple(of: 16) else {
+            throw Failure.unsupportedGeometry
+        }
         var tangent = tan(minimum * .pi / 360)
         for p in points {
             guard p.x.isFinite, p.y.isFinite, p.z.isFinite else { throw Failure.invalidTransform }
