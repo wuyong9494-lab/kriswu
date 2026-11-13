@@ -1,0 +1,44 @@
+name: Read existing external TestFlight readiness (704)
+on:
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths: ['.github/workflows/fighter-external-readiness.yml']
+permissions:
+  contents: read
+jobs:
+  readiness:
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.event.head_commit.message == 'Inspect existing external TestFlight readiness for 704'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: fighter-private-assets
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Read existing groups and review readiness without changing Apple state
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          export ASC_KEY_PATH="$KEY"
+          python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography
+          PYTHONPATH=.github/scripts python3 - <<'PY'
+          from fighter_external_testflight import inspect
+          inspect(dict(channel='testflight-external', external_group_policy='existing-active-external',
+                       bundle_id='com.kriswu.shiftreminder', build_number='704', version='1.2',
+                       source_sha='454a45731fe24ee555e46d79f4ca901e62f1f1ef'))
+          PY
+      - name: Remove local Apple key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: external-readiness-704
+          path: promotion-external-preflight.json
+          if-no-files-found: warn
