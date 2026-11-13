@@ -30,7 +30,7 @@ BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
 RECIPIENT = ROOT / ".github/public/fighter-visual-20261113.public.pem"
 RECIPIENT_SPKI_SHA256 = "508ef86dfe26664669bcf566b5502fe0d3273961160f1c9388f8cd2e715dc22a"
 MANIFESTS = [".github/private/sf3/manifest.json", ".github/private/sf3-distinct/manifest.json"]
-SELECTED = [
+BASELINE_SELECTED = [
     ("DuelWeaponAssetTests", "testPersonalHeadFollowsBodyFacingAndSourceNeckAnimation", "actual-model hierarchy assertions"),
     ("DuelWeaponAssetTests", "testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads", "actual models; fixed neutral orthographic test scene"),
     ("DuelSourceEffectsTests", "testActualHitAndBlockRenderFreezePauseAndRelease", "authenticated textures; synthetic contact events and test camera"),
@@ -43,9 +43,7 @@ SELECTED = [
     ("DuelShadowPresentationTests", "testRealShadowReleaseAndCatchBoundariesRenderForBothFacings", "actual source models and authoritative shadow ticks; fixed test renderer"),
     ("DuelWeaponAssetTests", "testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit", "native optical-fit validation; synthetic empty/partial/complete skin envelopes; no image"),
 ]
-SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTED]
-EXPECTED_NATIVE_COUNT = 11
-IMAGE_LABELS = (
+BASELINE_IMAGE_LABELS = (
     ["distinct-source-render-" + role for role in ("idle", "weapon1", "heavy", "kick")]
     + ["source-hit-first-simulation-step", "source-hit-original-six-layers", "source-block-original-nine-layers"]
     + ["source-katana-first-active-step", "source-katana-original-material", "source-double-hammer-original-material",
@@ -53,7 +51,61 @@ IMAGE_LABELS = (
     + [f"equipped-{hero}-{role}-source-contact" for hero in ("ember", "liu") for role in ("weapon1", "heavy", "kick")]
     + [f"shadow-boundary-liu-facing-{facing}-tick-{tick}" for facing in ("positive", "negative") for tick in (23, 24, 71, 72)]
 )
-DATA_LABELS = ["shadow-boundary-liu-world-evidence", "real-optical-fit-failure-recovery-ember", "real-optical-fit-failure-recovery-liu"]
+BASELINE_DATA_LABELS = ["shadow-boundary-liu-world-evidence", "real-optical-fit-failure-recovery-ember", "real-optical-fit-failure-recovery-liu"]
+
+# Closed, source-controlled scopes. No caller-provided XCTest selectors or
+# attachment names are accepted, and the original eleven-method capture remains
+# distinct from a targeted follow-up of the material/lifecycle repairs.
+FOLLOWUP_SELECTED = [
+    ("DuelShadowPresentationTests", "testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails", "actual source textures; per-slot current owner and retired-strip lifetime assertions"),
+    ("DuelWeaponTrailContinuityTests", "testActiveTeleportStartsAnUnbridgedStripAndNextValidStepResumes", "synthetic endpoint discontinuity; exact source-lifetime expiry; no image"),
+    ("DuelWeaponEffectsTests", "testOrdinaryRibbonsUseSourceAlphaWithoutMeshAtlasAndPreserveAge", "authenticated source alpha; endpoint-ribbon adapter and age/UV assertions; not original skinned trail mesh"),
+    ("DuelWeaponGameplayTests", "testOrdinaryRibbonAdapterContributesToRealSourceContacts", "actual source fighters and production world/camera; ordinary weapon/heavy contacts; ribbon-only pixel contribution"),
+]
+FOLLOWUP_ATTACHMENTS = {
+    label: {"selector": "SiteTests/DuelWeaponEffectsTests/testOrdinaryRibbonsUseSourceAlphaWithoutMeshAtlasAndPreserveAge", "kind": "image"}
+    for label in ("ribbon-katana-first-active-step", "ribbon-katana-source-alpha", "ribbon-double-hammer-source-alpha")
+}
+FOLLOWUP_ATTACHMENTS.update({
+    f"ribbon-equipped-{hero}-{role}-source-contact": {
+        "selector": "SiteTests/DuelWeaponGameplayTests/testOrdinaryRibbonAdapterContributesToRealSourceContacts", "kind": "image"
+    }
+    for hero in ("ember", "liu") for role in ("weapon1", "heavy")
+})
+SCOPES = {
+    "baseline-11": {
+        "selected": BASELINE_SELECTED, "methodCount": 11,
+        "imageLabels": BASELINE_IMAGE_LABELS, "dataLabels": BASELINE_DATA_LABELS,
+        "commitPrefix": "Capture current fighter visual acceptance",
+        "workflow": ".github/workflows/fighter-visual-acceptance.yml", "additionalSources": [],
+    },
+    "trail-followup": {
+        "selected": FOLLOWUP_SELECTED, "methodCount": 4,
+        "imageLabels": [label for label, row in FOLLOWUP_ATTACHMENTS.items() if row["kind"] == "image"],
+        "dataLabels": [label for label, row in FOLLOWUP_ATTACHMENTS.items() if row["kind"] == "data"],
+        "commitPrefix": "Capture targeted fighter trail followup",
+        "workflow": ".github/workflows/fighter-visual-followup.yml",
+        "additionalSources": ["App/Services/DuelWeaponEffects.swift", "App/Services/DuelWeaponAssets.swift",
+                              "App/Services/DuelSourceEffects.swift", "App/Services/GLTFModel.swift",
+                              "App/Services/DuelDisplayedSkinBounds.swift", "App/Services/DuelStage.swift",
+                              "App/Views/DuelWorld.swift", "App/Views/DuelView.swift"],
+    },
+}
+
+
+def scope_settings(name):
+    if name not in SCOPES:
+        raise ValueError("Unknown bounded visual scope")
+    return SCOPES[name]
+
+
+SCOPE_NAME = os.environ.get("FIGHTER_VISUAL_SCOPE", "baseline-11")
+SCOPE = scope_settings(SCOPE_NAME)
+SELECTED = SCOPE["selected"]
+SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTED]
+EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
+IMAGE_LABELS = SCOPE["imageLabels"]
+DATA_LABELS = SCOPE["dataLabels"]
 
 
 def work():
@@ -145,16 +197,22 @@ def prepare():
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     assert actual == expected, "Checkout/source SHA mismatch"
     event = read_json(Path(os.environ["GITHUB_EVENT_PATH"]))
-    assert event["head_commit"]["message"].startswith("Capture current fighter visual acceptance")
-    assert len(SELECTORS) == len(set(SELECTORS)) == EXPECTED_NATIVE_COUNT and len(IMAGE_LABELS) == 26
+    assert event["head_commit"]["message"].startswith(SCOPE["commitPrefix"])
+    assert len(SELECTORS) == len(set(SELECTORS)) == EXPECTED_NATIVE_COUNT
+    assert len(IMAGE_LABELS + DATA_LABELS) == len(set(IMAGE_LABELS + DATA_LABELS))
+    if SCOPE_NAME == "trail-followup":
+        assert os.environ["GITHUB_WORKFLOW_REF"] == "wuyong9494-lab/kriswu/" + SCOPE["workflow"] + "@" + BRANCH
+        assert set(FOLLOWUP_ATTACHMENTS) == set(IMAGE_LABELS + DATA_LABELS)
+        assert all(row["selector"] in SELECTORS for row in FOLLOWUP_ATTACHMENTS.values())
     assert recipient_digest(RECIPIENT.read_bytes()) == RECIPIENT_SPKI_SHA256
     hashes, method_sources = selected_source_inventory()
     for path in MANIFESTS + ["project.yml", ".github/scripts/fighter_visual_acceptance.py",
                              ".github/scripts/fighter_private_model.py", ".github/scripts/fighter_sf3_assets.py",
-                             ".github/scripts/fighter_sf3_distinct.py", ".github/workflows/fighter-visual-acceptance.yml"]:
+                             ".github/scripts/fighter_sf3_distinct.py", SCOPE["workflow"]] + SCOPE["additionalSources"]:
         hashes[path] = digest(ROOT / path)
     work().mkdir(mode=0o700, exist_ok=False)
     identity = {"sourceSha": actual, "ref": BRANCH, "beforeSha": event.get("before"),
+                "scope": SCOPE_NAME, "workflowSource": SCOPE["workflow"],
                 "runId": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
                 "preparedAtUTC": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "selectedSourceSHA256": hashes, "resourceManifestReferences": MANIFESTS,
@@ -162,6 +220,7 @@ def prepare():
                 "selectors": [{"identifier": selector, "scenarioType": row[2], "sourceFile": method_sources[selector]}
                               for selector, row in zip(SELECTORS, SELECTED)],
                 "expectedImageLabels": IMAGE_LABELS, "expectedDataLabels": DATA_LABELS,
+                "expectedAttachments": FOLLOWUP_ATTACHMENTS if SCOPE_NAME == "trail-followup" else None,
                 "recipientSPKISHA256": RECIPIENT_SPKI_SHA256,
                 "wrappedKeyEncoding": "raw-32", "wrappedKeyEntropyBytes": 32,
                 "keyWrapping": "RSA-OAEP-SHA256; same new envelope password to both recipients",
@@ -170,7 +229,8 @@ def prepare():
                                 "No SwiftPM/core107, old synthetic22, full resource suite or UI flow is rerun",
                                 "Build702/TestFlight/Release state is unchanged; no app or source resource is uploaded"]}
     write_json(work() / "identity.json", identity)
-    print(f"Pinned source {actual}; {EXPECTED_NATIVE_COUNT} native methods; 26 image labels and 3 data labels; unsigned simulator only.")
+    print(f"Pinned source {actual}; scope {SCOPE_NAME}; {EXPECTED_NATIVE_COUNT} native methods; "
+          f"{len(IMAGE_LABELS)} image labels and {len(DATA_LABELS)} data labels; unsigned simulator only.")
 
 
 def resource_records():
@@ -280,6 +340,14 @@ def export_result(kind):
         raise ValueError("Result export incomplete")
 
 
+def verify_scope_identity(identity):
+    """A lost scope environment must not silently fall back to eleven tests."""
+    assert identity.get("scope", "baseline-11") == SCOPE_NAME, "Prepared visual scope mismatch"
+    assert identity["expectedNativeMethods"] == EXPECTED_NATIVE_COUNT
+    assert [row["identifier"] for row in identity["selectors"]] == SELECTORS
+    assert identity["expectedImageLabels"] == IMAGE_LABELS and identity["expectedDataLabels"] == DATA_LABELS
+
+
 def verify_results(summary, data):
     for key, value in [("totalTestCount", EXPECTED_NATIVE_COUNT), ("passedTests", EXPECTED_NATIVE_COUNT), ("failedTests", 0), ("skippedTests", 0)]:
         assert type(summary.get(key)) is int and summary[key] == value, "Unexpected summary count"
@@ -300,6 +368,7 @@ def verify_results(summary, data):
 
 def test():
     assert "FIGHTER_LIU_MODEL_KEY" not in os.environ
+    verify_scope_identity(read_json(work() / "identity.json"))
     device = read_json(work() / "simulator.json")
     command = ["xcodebuild", "test-without-building", "-xctestrun", (work() / "xctestrun-path.txt").read_text(),
                "-destination", "id=" + device["udid"], "-parallel-testing-enabled", "NO",
@@ -310,7 +379,8 @@ def test():
         run_logged(command, "selected-native", 990)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         code = error.returncode if isinstance(error, subprocess.CalledProcessError) else 124
-    write_json(work() / "native-process.json", {"exitCode": code, "selectedCount": EXPECTED_NATIVE_COUNT, "iterations": 1})
+    write_json(work() / "native-process.json", {"exitCode": code, "scope": SCOPE_NAME,
+                                               "selectedCount": EXPECTED_NATIVE_COUNT, "iterations": 1})
     if (work() / "selected.xcresult/Info.plist").is_file():
         export_result("summary")
         export_result("tests")
@@ -321,7 +391,73 @@ def test():
     print(f"Native results: {EXPECTED_NATIVE_COUNT} passed; 0 failed; 0 skipped; exact method inventory; no retries.")
 
 
+def followup_attachment_inventory(root, expected_device=None):
+    """Exact manifest ownership for the follow-up, never substring matching.
+
+    The xcresult export manifest records both the XCTest method and generated
+    filename. Only the seven named PNG payloads may satisfy this scope; a label
+    mentioned in another JSON/log, an extra image or a repeated label fails.
+    The encrypted partial archive is still available when this gate fails.
+    """
+    paths = sorted(root.rglob("*"))
+    assert all(not path.is_symlink() for path in paths), "Symlink in exported evidence"
+    files = [path for path in paths if path.is_file()]
+    assert len(files) <= 160, "Attachment count exceeds bounded probe"
+    for path in files:
+        regular(path, 12 * 1024**2)
+    manifest_path = root / "manifest.json"
+    assert manifest_path in files, "Missing xcresult attachment manifest"
+    manifest = read_json(manifest_path)
+    assert isinstance(manifest, list), "Unexpected xcresult attachment manifest"
+    seen_methods, seen_files, seen_labels, entries = set(), set(), set(), []
+    image_matches = {label: [] for label in IMAGE_LABELS}
+    data_matches = {label: [] for label in DATA_LABELS}
+    for group in manifest:
+        assert isinstance(group, dict) and isinstance(group.get("attachments"), list)
+        identifier = group.get("testIdentifier", "").removesuffix("()")
+        selectors = [selector for selector in SELECTORS if identifier in (selector, "/".join(selector.split("/")[1:]))]
+        assert len(selectors) == 1 and selectors[0] not in seen_methods, "Unexpected or repeated attachment method"
+        selector = selectors[0]
+        seen_methods.add(selector)
+        for attachment in group["attachments"]:
+            name = attachment.get("exportedFileName", "")
+            assert name and Path(name).name == name and "\\" not in name and ".." not in name, "Unsafe exported filename"
+            path = root / name
+            assert path in files and name not in seen_files, "Missing or repeated attachment file"
+            seen_files.add(name)
+            human = attachment.get("suggestedHumanReadableName", "")
+            suffix = path.suffix.lower()
+            matches = [label for label in FOLLOWUP_ATTACHMENTS
+                       if re.fullmatch(re.escape(label) + r"_[0-9]+_[0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}" + re.escape(suffix), human)]
+            assert len(matches) == 1 and matches[0] not in seen_labels, "Unexpected or repeated exact attachment label"
+            label = matches[0]
+            seen_labels.add(label)
+            expected = FOLLOWUP_ATTACHMENTS[label]
+            assert expected["selector"] == selector, "Attachment belongs to the wrong selected method"
+            if expected_device:
+                assert attachment.get("deviceId") == expected_device["udid"] and attachment.get("deviceName") == expected_device["name"], "Attachment simulator identity mismatch"
+            if expected["kind"] == "image":
+                assert suffix == ".png", "Expected PNG evidence"
+                with path.open("rb") as image:
+                    assert image.read(8) == b"\x89PNG\r\n\x1a\n", "Invalid PNG attachment"
+                image_matches[label].append(name)
+            else:
+                assert suffix in (".json", ".txt"), "Expected data evidence"
+                data_matches[label].append(name)
+            entries.append({"file": name, "bytes": path.stat().st_size, "sha256": digest(path),
+                            "label": label, "selector": selector, "kind": expected["kind"]})
+    assert seen_labels == set(FOLLOWUP_ATTACHMENTS), "Missing expected evidence labels"
+    assert seen_files | {"manifest.json"} == {str(path.relative_to(root)) for path in files}, "Extra unreferenced attachment payload"
+    entries.append({"file": "manifest.json", "bytes": manifest_path.stat().st_size,
+                    "sha256": digest(manifest_path), "label": "xcresult attachment manifest", "kind": "manifest"})
+    return {"scope": SCOPE_NAME, "imageCount": len(IMAGE_LABELS), "fileCount": len(files),
+            "completeExpectedLabels": True, "exactMethodOwnership": True,
+            "imageLabels": image_matches, "dataLabels": data_matches, "files": entries}
+
+
 def attachment_inventory(root):
+    if SCOPE_NAME == "trail-followup":
+        return followup_attachment_inventory(root)
     files = sorted(p for p in root.rglob("*") if p.is_file() or p.is_symlink())
     assert len(files) <= 160, "Attachment count exceeds bounded probe"
     for path in files:
@@ -360,16 +496,18 @@ def attachment_inventory(root):
 
 
 def export():
+    verify_scope_identity(read_json(work() / "identity.json"))
     bundle = work() / "selected.xcresult"
     assert (bundle / "Info.plist").is_file(), "No finalized native results to export"
     attachments = work() / "attachments"
     attachments.mkdir(mode=0o700, exist_ok=False)
     run_logged(["xcrun", "xcresulttool", "export", "attachments", "--path", str(bundle), "--output-path", str(attachments)],
                "export-attachments", 240)
-    result = attachment_inventory(attachments)
+    result = (followup_attachment_inventory(attachments, read_json(work() / "simulator.json"))
+              if SCOPE_NAME == "trail-followup" else attachment_inventory(attachments))
     write_json(work() / "attachment-inventory.json", result)
     assert result["completeExpectedLabels"], "Missing or duplicate expected evidence labels; keep encrypted partial evidence"
-    print("Exported all 26 expected images and three data attachments; no old 24-image sampling cap.")
+    print(f"Exported all {len(IMAGE_LABELS)} expected images and {len(DATA_LABELS)} data attachments; scope {SCOPE_NAME}.")
 
 
 def wrap_key(key, public_data, path):
@@ -386,6 +524,7 @@ def wrap_key(key, public_data, path):
 
 def seal():
     assert "FIGHTER_LIU_MODEL_KEY" not in os.environ, "Resource key must not enter evidence sealing"
+    verify_scope_identity(read_json(work() / "identity.json"))
     assert recipient_digest(RECIPIENT.read_bytes()) == RECIPIENT_SPKI_SHA256
     started = time.monotonic()
     published = work() / "published"
@@ -467,8 +606,10 @@ def cleanup():
 
 def report():
     identity = read_json(work() / "identity.json")
-    result = {"sourceSha": identity["sourceSha"], "runId": identity["runId"], "expectedNativeMethods": EXPECTED_NATIVE_COUNT,
-              "nativeExactSetPassed": (work() / "native-ok.txt").exists(), "expectedImages": 26,
+    verify_scope_identity(identity)
+    result = {"sourceSha": identity["sourceSha"], "runId": identity["runId"], "scope": SCOPE_NAME,
+              "expectedNativeMethods": EXPECTED_NATIVE_COUNT,
+              "nativeExactSetPassed": (work() / "native-ok.txt").exists(), "expectedImages": len(IMAGE_LABELS),
               "timings": read_json(work() / "timings.json") if (work() / "timings.json").exists() else {},
               "physicalDeviceAcceptance": "NOT VERIFIED", "stable60fps": "NOT VERIFIED", "musicAudibility": "NOT TESTED"}
     if (work() / "attachment-inventory.json").exists():

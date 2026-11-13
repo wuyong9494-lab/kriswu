@@ -374,6 +374,115 @@ final class DuelWeaponGameplayTests: XCTestCase {
         }
     }
 
+    /// Four fresh production-contact frames for the ordinary endpoint-ribbon
+    /// adapter. Visible contribution is separate from approving source-art
+    /// fidelity; only the weapon-effects owner is hidden for each comparison.
+    func testOrdinaryRibbonAdapterContributesToRealSourceContacts() throws {
+        let baselineClocks = DuelWorldView.activeClocks
+        for hero in [DuelGame.Hero.ember, .liu] {
+            try autoreleasepool {
+                let state = DuelSession(.init(hero: hero, difficulty: .learning,
+                                               mode: .practice, originalWeapons: true))
+                let view = DuelWorldView(session: state)
+                defer { view.shutdown(); state.shutdown() }
+                XCTAssertNil(state.loadError, "This method requires the authenticated source characters and stage")
+                XCTAssertNotNil(state.game.weaponFight)
+                XCTAssertFalse(state.isPresentationFixture)
+                XCTAssertFalse(view.usesSyntheticPresentationResources)
+                XCTAssertNotNil(view.stageAsset)
+                XCTAssertTrue(view.originalAssets.isEmpty)
+                XCTAssertNil(view.characterAsset)
+                XCTAssertEqual(Set(view.weaponAssets.keys), Set([DuelGame.Hero.ember, .liu]))
+                XCTAssertEqual(Set(view.weaponAssets.values.map { $0.profile.bodyID }).count, 2)
+                XCTAssertEqual(Set(view.weaponAssets.values.map { $0.profile.weaponID }).count, 2)
+                let scene = try XCTUnwrap(view.scene), effects = try XCTUnwrap(view.weaponEffects)
+                XCTAssertEqual(effects.sourceTextureCount, 11)
+                XCTAssertTrue(effects.hasLiveContainer(attachedTo: scene.rootNode))
+                let containers = scene.rootNode.childNodes.filter { $0.name == "duel.weapon-effects" }
+                XCTAssertEqual(containers.count, 1, "The comparison must hide the actual unique ribbon owner")
+                let container = try XCTUnwrap(containers.first)
+                view.frame = CGRect(x: 0, y: 0, width: 956, height: 440); view.layoutIfNeeded()
+                XCTAssertNil(view.opticalFramingFailure)
+                let camera = try XCTUnwrap(view.pointOfView?.camera)
+                camera.wantsHDR = false; camera.wantsExposureAdaptation = false
+                let renderer = SCNRenderer(device: try XCTUnwrap(MTLCreateSystemDefaultDevice()), options: nil)
+                renderer.scene = scene; renderer.pointOfView = view.pointOfView
+                defer { renderer.scene = nil; renderer.pointOfView = nil }
+                let commands = [("weapon1", 0), ("heavy", DuelWeaponInput.longPressTicks)]
+                for (role, hold) in commands {
+                    state.restart(); view.drawState()
+                    XCTAssertFalse(state.paused)
+                    XCTAssertEqual(effects.retainedTrailCount, 0)
+                    XCTAssertEqual(state.game.landedHits, [0, 0])
+                    state.weaponDirection(x: 1, y: 0)
+                    for _ in 0..<600 {
+                        if abs(state.game.fighters[1].x - state.game.fighters[0].x) <= 1200 { break }
+                        state.advance()
+                    }
+                    state.weaponDirection(x: 0, y: 0); state.advance(); view.drawState()
+                    XCTAssertLessThanOrEqual(abs(state.game.fighters[1].x - state.game.fighters[0].x), 1200)
+                    state.weaponAction(.weapon, down: true)
+                    for _ in 0..<hold { state.advance() }
+                    state.weaponAction(.weapon, down: false)
+                    if hold == 0 { state.advance() }
+                    let profile = try XCTUnwrap(state.weaponAssets?.catalog.profile(for: hero))
+                    let clip = try XCTUnwrap(profile.clip(role: role))
+                    XCTAssertEqual(state.game.fighters[0].weaponPose?.clip, clip.name)
+                    for _ in 0..<(clip.ticks + 60) {
+                        if state.game.landedHits[0] > 0 { break }
+                        state.advance(); view.drawState()
+                    }
+                    view.drawState()
+                    let detail = "\(hero.rawValue)/\(role)"
+                    XCTAssertGreaterThan(state.game.landedHits[0], 0, "\(detail): capture the first real contact")
+                    XCTAssertGreaterThan(state.game.damageDealt[0], 0)
+                    XCTAssertLessThan(state.game.fighters[1].health, 1000)
+                    XCTAssertGreaterThan(state.game.hitStop, 0)
+                    XCTAssertNil(view.opticalFramingFailure, "\(detail): require a measured production camera fit")
+                    XCTAssertGreaterThan(effects.renderedVertexCount, 0)
+                    XCTAssertFalse(container.isHidden)
+                    let frozenGame = state.game, frozenTick = state.animationTick
+                    let frozenCamera = view.combatCamera
+                    let frozenTrails = effects.trailDiagnostics, frozenSamples = effects.emittedSampleCount
+                    for _ in 0..<3 { view.drawState() }
+                    XCTAssertEqual(effects.trailDiagnostics, frozenTrails)
+                    XCTAssertEqual(effects.emittedSampleCount, frozenSamples,
+                                   "\(detail): repeated draws cannot append ribbon samples")
+                    let withTrail = try capture(renderer,
+                        name: "ribbon-equipped-\(hero.rawValue)-\(role)-source-contact")
+                    let withoutTrail: [UInt8]
+                    do {
+                        container.isHidden = true
+                        defer { container.isHidden = false }
+                        withoutTrail = try capture(renderer)
+                    }
+                    XCTAssertGreaterThan(changedPixels(withTrail, withoutTrail), 10,
+                                         "\(detail): the ribbon itself must contribute visible production pixels")
+                    XCTAssertEqual(state.game, frozenGame)
+                    XCTAssertEqual(state.animationTick, frozenTick)
+                    XCTAssertEqual(view.combatCamera, frozenCamera)
+                    XCTAssertEqual(effects.trailDiagnostics, frozenTrails)
+                    state.pause()
+                    for _ in 0..<3 { state.advance(); view.drawState() }
+                    XCTAssertEqual(state.game, frozenGame)
+                    XCTAssertEqual(state.animationTick, frozenTick)
+                    XCTAssertEqual(view.combatCamera, frozenCamera)
+                    XCTAssertEqual(effects.trailDiagnostics, frozenTrails,
+                                   "\(detail): pause must freeze both live and fading ribbon geometry")
+                    XCTAssertEqual(effects.emittedSampleCount, frozenSamples)
+                }
+                renderer.scene = nil; renderer.pointOfView = nil
+                view.shutdown(); state.shutdown()
+                XCTAssertNil(view.weaponEffects)
+                XCTAssertNil(container.parent)
+                XCTAssertEqual(effects.retainedTrailCount, 0)
+                XCTAssertEqual(effects.renderedVertexCount, 0)
+                XCTAssertEqual(effects.sourceTextureCount, 0)
+            }
+            XCTAssertEqual(DuelWorldView.activeClocks, baselineClocks)
+        }
+    }
+
     private func particleState(_ bursts: [SCNNode]) -> [[Float]] {
         bursts.flatMap { burst in
             burst.childNodes.map { node in

@@ -4,7 +4,9 @@ import UIKit
 import CryptoKit
 import simd
 
-/// Verified original weapon textures/material profiles on tick-driven ribbons.
+/// Verified source alpha/curves on ordinary tick-driven ribbons, and source
+/// effect textures/material profiles on shadow ribbons. Ordinary history
+/// geometry has no source weapon-mesh UVs, so it cannot sample equipment atlases.
 /// The source skinned trail meshes, Unity particle renderer and original effect
 /// trigger table are not reproduced by this endpoint-history adapter.
 @MainActor
@@ -256,8 +258,12 @@ final class DuelWeaponEffects {
                     material.diffuse.contents = textures[manifest.whiteTexture]
                     material.diffuse.mipFilter = .none
                     material.shaderModifiers = [.fragment: Self.fragment(profile)]
-                    // Reduce the broad katana fan without altering authenticated art or hitboxes.
+                    // Preserve the existing presentation gain. This is separate
+                    // from correcting atlas/UV roles and never changes hitboxes.
                     material.setValue(NSNumber(value: family == "katana" ? 0.48 : 1.0), forKey: "presentationOpacity")
+                    if profile.shader == "weapon" {
+                        material.setValue(NSValue(scnVector4: SCNVector4(1, 0, 0, 0)), forKey: "sourceTrailAges")
+                    }
                     for (name, file) in profile.textures {
                         // Every profile reference was validated before attachment.
                         let property = SCNMaterialProperty(contents: textures[file]!)
@@ -387,7 +393,12 @@ final class DuelWeaponEffects {
                 a = sample.tip - along; b = sample.tip + along
             }
             vertices.append(SCNVector3(a.x, a.y, a.z)); vertices.append(SCNVector3(b.x, b.y, b.z))
-            let u = CGFloat(1 - age(of: sample, at: tick) / layer.profile.lifetime)
+            // Ordinary sourceAlpha keeps its existing x/y orientation, but
+            // spans this continuous history strip instead of sampling only a
+            // lifetime-dependent slice. Age is separate: every joined sample
+            // is exactly one simulation tick apart (see canJoin).
+            let u = layer.profile.shader == "weapon" ? CGFloat(i) / CGFloat(active.count - 1) :
+                CGFloat(1 - age(of: sample, at: tick) / layer.profile.lifetime)
             uv.append(CGPoint(x: u, y: 0)); uv.append(CGPoint(x: u, y: 1))
             if i > 0 {
                 let j = UInt16(2 * (i - 1))
@@ -395,6 +406,11 @@ final class DuelWeaponEffects {
             }
         }
         layer.node.geometry = Self.ribbonGeometry(vertices: vertices, uv: uv, indices: indices, material: layer.material)
+        if layer.profile.shader == "weapon", let first = active.first, let last = active.last {
+            let ages = SCNVector4(Float(age(of: first, at: tick) / layer.profile.lifetime),
+                                 Float(age(of: last, at: tick) / layer.profile.lifetime), 0, 0)
+            layer.material.setValue(NSValue(scnVector4: ages), forKey: "sourceTrailAges")
+        }
         layer.material.setValue(NSNumber(value: Double(tick) / Double(DuelGame.ticksPerSecond)), forKey: "sourceTime")
     }
 
@@ -447,6 +463,8 @@ final class DuelWeaponEffects {
         // GLSL shader modifiers are translated by SceneKit for Metal. Textures
         // are bound by name as SCNMaterialProperty, not generated bitmaps.
         let samplers = layer.textures.keys.sorted().map { "uniform sampler2D \($0);" }.joined(separator: "\n")
+        let ageUniform = layer.shader == "weapon" ? "uniform vec4 sourceTrailAges;" : ""
+        let ageExpression = layer.shader == "weapon" ? "mix(sourceTrailAges.x, sourceTrailAges.y, trailUV.x)" : "1.0 - trailUV.x"
         let header = """
         \(samplers)
         uniform vec4 sourceUVMain;
@@ -456,12 +474,13 @@ final class DuelWeaponEffects {
         uniform vec4 sourceTint;
         uniform float sourceTime;
         uniform float presentationOpacity;
+        \(ageUniform)
         \(curve(layer.colorKeys, name: "sourceColorAt", vector: true))
         \(curve(layer.alphaKeys, name: "sourceAlphaAt", vector: false))
         #pragma transparent
         #pragma body
         vec2 trailUV = _surface.diffuseTexcoord;
-        float trailAge = clamp(1.0 - trailUV.x, 0.0, 1.0);
+        float trailAge = clamp(\(ageExpression), 0.0, 1.0);
         vec4 sourceVertex = vec4(sourceColorAt(trailAge), sourceAlphaAt(trailAge)) * sourceTint;
         vec2 mainUV = trailUV * sourceUVMain.xy + sourceUVMain.zw;
         """
@@ -469,11 +488,13 @@ final class DuelWeaponEffects {
         switch layer.shader {
         case "weapon":
             body = """
-            vec3 weaponRGB = texture2D(sourceMain, mainUV).rgb;
-            float weaponMask = texture2D(sourceMask, mainUV).r;
-            weaponRGB = mix(weaponRGB, weaponRGB * sourceTint.rgb, weaponMask);
+            // sourceMain/sourceMask are equipment-mesh atlases. This endpoint
+            // history adapter has no corresponding mesh UVs; sampling them
+            // with trail UVs paints armor patterns across the swept ribbon.
+            // Keep the authenticated alpha, tint, intensity and age curves.
+            // This is a ribbon adaptation, not a recovered skinned trail mesh.
             float opacity = texture2D(sourceAlpha, trailUV).r * sourceParameters.x * sourceAlphaAt(trailAge);
-            _output.color = vec4(weaponRGB * sourceColorAt(trailAge) * sourceParameters.x * sourceParameters.y, opacity * presentationOpacity);
+            _output.color = vec4(sourceTint.rgb * sourceColorAt(trailAge) * sourceParameters.x * sourceParameters.y, opacity * presentationOpacity);
             """
         case "dashGlow":
             body = """

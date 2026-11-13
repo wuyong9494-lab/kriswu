@@ -8,6 +8,113 @@ import Metal
 /// generated artwork can substitute for a missing private feedback pack.
 @MainActor
 final class DuelWeaponEffectsTests: XCTestCase {
+    /// A focused regression for the endpoint-ribbon adaptation. Actual source
+    /// alpha/curves are required, but poses/camera and sampler substitutions are
+    /// test inputs, not recovered source mesh UVs or production visual approval.
+    func testOrdinaryRibbonsUseSourceAlphaWithoutMeshAtlasAndPreserveAge() throws {
+        let manifestURL = try XCTUnwrap(DuelWeaponEffects.manifestURL(), "Stage original SF3WE resources")
+        let definition = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any])
+        let profiles = try XCTUnwrap(definition["profiles"] as? [String: [String: Any]])
+        func lifetime(_ family: DuelWeaponEffects.Family) throws -> Double {
+            let profile = try XCTUnwrap(profiles[family.rawValue])
+            let layers = try XCTUnwrap(profile["swing"] as? [[String: Any]])
+            return try XCTUnwrap(layers.first?["lifetime"] as? NSNumber).doubleValue
+        }
+        let scene = SCNScene()
+        scene.background.contents = UIColor(red: 0.035, green: 0.045, blue: 0.065, alpha: 1)
+        let camera = SCNNode(); camera.camera = SCNCamera()
+        camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 2
+        camera.camera?.zNear = 0.1; camera.camera?.zFar = 20
+        camera.camera?.wantsHDR = false; camera.camera?.wantsExposureAdaptation = false
+        camera.position = SCNVector3(0, 0, 4); scene.rootNode.addChildNode(camera)
+        let renderer = SCNRenderer(device: try XCTUnwrap(MTLCreateSystemDefaultDevice()), options: nil)
+        renderer.scene = scene; renderer.pointOfView = camera
+        let effects = try DuelWeaponEffects(root: scene.rootNode)
+        defer { effects.shutdown(); renderer.scene = nil; renderer.pointOfView = nil }
+        let container = try XCTUnwrap(scene.rootNode.childNode(withName: "duel.weapon-effects", recursively: false))
+        let ordinaryTemplates = effects.preparationObjects().compactMap { ($0 as? SCNGeometry)?.firstMaterial }
+            .filter { $0.shaderModifiers?[.fragment]?.contains("uniform vec4 sourceTrailAges;") == true }
+        XCTAssertEqual(ordinaryTemplates.count, 2)
+        let empty = try pixels(renderer, atTime: 0)
+        for family in [DuelWeaponEffects.Family.katana, .dualHammers] {
+            effects.reset()
+            let sourceLifetime = try lifetime(family)
+            effects.consumeStep(poses: [pose(tick: 0, family: family, active: false)], animationTick: 0)
+            effects.consumeStep(poses: [pose(tick: 1, family: family)], animationTick: 1)
+            let expectedSlots = family == .katana ? [0] : [0, 1]
+            XCTAssertEqual(effects.trailDiagnostics.emitters.map(\.slot), expectedSlots)
+            let firstLayers = container.childNodes.flatMap(\.childNodes)
+            XCTAssertEqual(firstLayers.count, expectedSlots.count)
+            for layer in firstLayers {
+                try assertOrdinaryStrip(layer, lifetime: sourceLifetime, oldestTicks: 1, newestTicks: 0)
+            }
+            if family == .katana {
+                let first = try pixels(renderer, atTime: 1, name: "ribbon-katana-first-active-step")
+                XCTAssertGreaterThan(changed(empty, first), 20, "The first one-tick strip uses the alpha domain without aging it by a full lifetime")
+            }
+            for tick in 2...5 {
+                effects.consumeStep(poses: [pose(tick: tick, family: family)], animationTick: tick)
+            }
+            let layers = container.childNodes.flatMap(\.childNodes)
+            XCTAssertEqual(layers.count, expectedSlots.count)
+            // The two authenticated families may have different lifetimes.
+            // Derive which known input ticks are still alive rather than
+            // assuming a six-sample minimum in either source profile.
+            let retainedAtFive = (0...5).filter { Double(5 - $0) / 60 < sourceLifetime }
+            let oldestAtFive = try XCTUnwrap(retainedAtFive.first)
+            for layer in layers {
+                try assertOrdinaryStrip(layer, lifetime: sourceLifetime, oldestTicks: 5 - oldestAtFive, newestTicks: 0)
+            }
+            let label = family == .katana ? "ribbon-katana-source-alpha" : "ribbon-double-hammer-source-alpha"
+            let sourcePixels = try pixels(renderer, atTime: 5, name: label)
+            XCTAssertGreaterThan(changed(empty, sourcePixels), 80)
+            let frozen = geometryState(container)
+            let count = effects.emittedSampleCount
+            effects.consumeStep(poses: [pose(tick: 20, family: family)], animationTick: 5)
+            XCTAssertEqual(geometryState(container), frozen, "The age uniforms freeze with geometry and shader time")
+            XCTAssertEqual(effects.emittedSampleCount, count)
+            XCTAssertLessThanOrEqual(maximumDelta(sourcePixels, try pixels(renderer, atTime: 105)), 1)
+
+            // Deliberately unrelated atlas colors must not appear on a history
+            // strip that has no source equipment-mesh UVs. Conversely, changing
+            // the verified alpha sampler to black must remove every ribbon.
+            let materials = try layers.map { try XCTUnwrap($0.geometry?.firstMaterial) }
+            if materials.count == 2 {
+                XCTAssertFalse(materials[0] === materials[1], "Each hammer owns a distinct live material")
+                let firstAges = try XCTUnwrap(materials[0].value(forKey: "sourceTrailAges") as? NSValue)
+                let secondAges = try XCTUnwrap(materials[1].value(forKey: "sourceTrailAges") as? NSValue)
+                materials[0].setValue(NSValue(scnVector4: SCNVector4(0.5, 0.25, 0, 0)), forKey: "sourceTrailAges")
+                XCTAssertEqual(materials[1].value(forKey: "sourceTrailAges") as? NSValue, secondAges)
+                materials[0].setValue(firstAges, forKey: "sourceTrailAges")
+            }
+            try assertAtlasIndependenceAndAlphaControl(materials, renderer: renderer,
+                                                       expected: sourcePixels, empty: empty)
+            XCTAssertLessThanOrEqual(maximumDelta(sourcePixels, try pixels(renderer, atTime: 405)), 1,
+                                     "Sampler substitutions are restored before any further age/lifecycle check")
+            effects.consumeStep(poses: [], animationTick: 6)
+            XCTAssertTrue(effects.trailDiagnostics.emitters.isEmpty)
+            let retainedAtSix = (0...5).filter { Double(6 - $0) / 60 < sourceLifetime }
+            for layer in layers {
+                if retainedAtSix.count >= 2, let oldest = retainedAtSix.first {
+                    try assertOrdinaryStrip(layer, lifetime: sourceLifetime, oldestTicks: 6 - oldest, newestTicks: 1)
+                } else if retainedAtSix.count == 1 {
+                    XCTAssertNil(layer.geometry, "One unexpired point retains its owner but cannot draw a segment")
+                }
+            }
+            XCTAssertEqual(effects.retainedTrailCount, retainedAtSix.isEmpty ? 0 : expectedSlots.count,
+                           "Stopping emission retains exactly the unexpired source history")
+            effects.consumeStep(poses: [], animationTick: 5 + Int(ceil(sourceLifetime * 60)))
+            XCTAssertEqual(effects.retainedTrailCount, 0)
+            XCTAssertTrue(container.childNodes.isEmpty)
+        }
+        for material in ordinaryTemplates {
+            let ages = try XCTUnwrap(material.value(forKey: "sourceTrailAges") as? NSValue).scnVector4Value
+            XCTAssertEqual(ages.x, 1); XCTAssertEqual(ages.y, 0)
+            XCTAssertTrue([ages.x, ages.y, ages.z, ages.w].allSatisfy(\.isFinite), "Template ages are finite and never mutated by a live ribbon")
+        }
+        try assertShaderUsesAgeUniforms(scene: scene, renderer: renderer, empty: empty)
+    }
+
     func testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease() throws {
         _ = try XCTUnwrap(DuelWeaponEffects.manifestURL(), "Stage original SF3WE resources")
         let scene = SCNScene()
@@ -157,9 +264,104 @@ final class DuelWeaponEffectsTests: XCTestCase {
             trail.childNodes.flatMap { node -> [Data] in
                 guard let geometry = node.geometry else { return [] }
                 let time = (geometry.firstMaterial?.value(forKey: "sourceTime") as? NSNumber)?.doubleValue ?? -1
-                return geometry.sources.map(\.data) + geometry.elements.map(\.data) + [Data(String(time).utf8)]
+                var uniforms = [Data(String(time).utf8)]
+                if let material = geometry.firstMaterial,
+                   material.shaderModifiers?[.fragment]?.contains("uniform vec4 sourceTrailAges;") == true,
+                   let ages = (material.value(forKey: "sourceTrailAges") as? NSValue)?.scnVector4Value {
+                    uniforms.append(Data("\(ages.x),\(ages.y),\(ages.z),\(ages.w)".utf8))
+                }
+                return geometry.sources.map(\.data) + geometry.elements.map(\.data) + uniforms
             }
         }
+    }
+
+    private func assertOrdinaryStrip(_ layer: SCNNode, lifetime: Double, oldestTicks: Int, newestTicks: Int) throws {
+        let geometry = try XCTUnwrap(layer.geometry)
+        let uv = try XCTUnwrap(geometry.sources(for: .texcoord).first)
+        XCTAssertTrue(uv.usesFloatComponents)
+        XCTAssertEqual(uv.componentsPerVector, 2)
+        XCTAssertGreaterThanOrEqual(uv.vectorCount, 4)
+        func component(_ index: Int, _ axis: Int) throws -> Double {
+            let offset = uv.dataOffset + index * uv.dataStride + axis * uv.bytesPerComponent
+            guard offset >= 0, offset + uv.bytesPerComponent <= uv.data.count else {
+                XCTFail("UV source exceeds data bounds"); return .nan
+            }
+            if uv.bytesPerComponent == MemoryLayout<Float>.size {
+                return uv.data.withUnsafeBytes { Double($0.loadUnaligned(fromByteOffset: offset, as: Float.self)) }
+            }
+            guard uv.bytesPerComponent == MemoryLayout<Double>.size else {
+                XCTFail("Unsupported UV component width"); return .nan
+            }
+            return uv.data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: Double.self) }
+        }
+        XCTAssertEqual(try component(0, 0), 0, accuracy: 0.000001)
+        XCTAssertEqual(try component(uv.vectorCount - 1, 0), 1, accuracy: 0.000001)
+        for index in stride(from: 0, to: uv.vectorCount, by: 2) {
+            XCTAssertEqual(try component(index, 0), try component(index + 1, 0), accuracy: 0.000001)
+            XCTAssertEqual(try component(index, 1), 0, accuracy: 0.000001)
+            XCTAssertEqual(try component(index + 1, 1), 1, accuracy: 0.000001)
+            if index > 0 { XCTAssertGreaterThan(try component(index, 0), try component(index - 2, 0)) }
+        }
+        let material = try XCTUnwrap(geometry.firstMaterial)
+        let ages = try XCTUnwrap(material.value(forKey: "sourceTrailAges") as? NSValue).scnVector4Value
+        XCTAssertEqual(Double(ages.x) * lifetime * 60, Double(oldestTicks), accuracy: 0.00001,
+                       "Oldest vertex age is elapsed simulation ticks, independent of the full alpha UV span")
+        XCTAssertEqual(Double(ages.y) * lifetime * 60, Double(newestTicks), accuracy: 0.00001)
+    }
+
+    private func assertAtlasIndependenceAndAlphaControl(_ materials: [SCNMaterial], renderer: SCNRenderer,
+                                                      expected: [UInt8], empty: [UInt8]) throws {
+        var original: [(SCNMaterialProperty, Any?)] = []
+        var remembered: Set<ObjectIdentifier> = []
+        func remember(_ property: SCNMaterialProperty) {
+            // Material copies may share custom properties. Save each object's
+            // first value, never a test replacement observed by the second hammer.
+            if remembered.insert(ObjectIdentifier(property)).inserted {
+                original.append((property, property.contents))
+            }
+        }
+        defer { for (property, contents) in original { property.contents = contents } }
+        func solid(_ color: UIColor) -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+                color.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+            }
+        }
+        for material in materials {
+            let main = try XCTUnwrap(material.value(forKey: "sourceMain") as? SCNMaterialProperty)
+            let mask = try XCTUnwrap(material.value(forKey: "sourceMask") as? SCNMaterialProperty)
+            remember(main); remember(mask)
+            main.contents = solid(.magenta); mask.contents = solid(.white)
+        }
+        XCTAssertLessThanOrEqual(maximumDelta(expected, try pixels(renderer, atTime: 205)), 1,
+                                 "Equipment atlases cannot color a ribbon lacking equipment-mesh UVs")
+        for material in materials {
+            let alpha = try XCTUnwrap(material.value(forKey: "sourceAlpha") as? SCNMaterialProperty)
+            remember(alpha); alpha.contents = solid(.black)
+        }
+        XCTAssertLessThanOrEqual(maximumDelta(empty, try pixels(renderer, atTime: 305)), 1,
+                                 "The authenticated sourceAlpha role still controls all ribbon coverage")
+    }
+
+    private func assertShaderUsesAgeUniforms(scene: SCNScene, renderer: SCNRenderer, empty: [UInt8]) throws {
+        // This isolated negative control uses the existing explicit DEBUG
+        // fixture: constant white alpha texture, alpha curve 1 at birth / 0 at
+        // death. It is not a replacement for the three source-image attachments.
+        let fixtureRoot = SCNNode(); scene.rootNode.addChildNode(fixtureRoot)
+        let fixture = DuelWeaponEffects.preparationFixture(root: fixtureRoot)
+        defer { fixture.shutdown(); fixtureRoot.removeFromParentNode() }
+        fixture.consumeStep(poses: [pose(tick: 0, family: .katana, active: false)], animationTick: 0)
+        fixture.consumeStep(poses: [pose(tick: 1, family: .katana)], animationTick: 1)
+        let container = try XCTUnwrap(fixtureRoot.childNode(withName: "duel.weapon-effects", recursively: false))
+        let geometry = try XCTUnwrap(container.childNodes.first?.childNodes.first?.geometry)
+        let material = try XCTUnwrap(geometry.firstMaterial)
+        let vertices = geometry.sources.map(\.data) + geometry.elements.map(\.data)
+        material.setValue(NSValue(scnVector4: SCNVector4(0, 0, 0, 0)), forKey: "sourceTrailAges")
+        XCTAssertGreaterThan(changed(empty, try pixels(renderer, atTime: 505)), 20)
+        material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 0, 0)), forKey: "sourceTrailAges")
+        XCTAssertLessThanOrEqual(maximumDelta(empty, try pixels(renderer, atTime: 605)), 1,
+                                 "The GPU must use elapsed-age uniforms, not infer age from stretched spatial UVs")
+        XCTAssertEqual(geometry.sources.map(\.data) + geometry.elements.map(\.data), vertices,
+                       "The single-variable age probe leaves geometry and alpha UVs fixed")
     }
     private func pixels(_ renderer: SCNRenderer, atTime: Double, name: String? = nil) throws -> [UInt8] {
         SCNTransaction.flush()
