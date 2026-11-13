@@ -5,6 +5,17 @@ import GameController
 
 #if DEBUG
 extension DuelLifecycleTests {
+    func testSceneConfigurationLeavesPhoneLifecycleWithSwiftUI() {
+        let phone = AppDelegate.sceneConfiguration(for: .windowApplication)
+        XCTAssertEqual(phone.role, .windowApplication)
+        XCTAssertNil(phone.delegateClass)
+        XCTAssertNil(phone.storyboard)
+        let television = AppDelegate.sceneConfiguration(for: .windowExternalDisplayNonInteractive)
+        XCTAssertEqual(television.role, .windowExternalDisplayNonInteractive)
+        XCTAssertTrue(television.delegateClass === DuelTelevisionSceneDelegate.self)
+        XCTAssertNil(television.storyboard)
+    }
+
     private func televisionFixture() throws -> (DuelSession, DuelWorldView) {
         let game = DuelGame(hero: .ember, difficulty: .learning, mode: .versus, seed: 93, opponentHero: .liu)
         let session = try DuelSession(presentationFixture: game, localFighterIndex: 0)

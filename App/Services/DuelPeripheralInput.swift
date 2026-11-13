@@ -19,32 +19,45 @@ final class DuelPeripheralInput {
     private let discoverControllers: () -> [GCController]
     private let discoverKeyboard: () -> GCKeyboard?
     private let applicationIsActive: () -> Bool
+    private let center: NotificationCenter
 
     init(controllers: @escaping () -> [GCController] = { GCController.controllers() },
          keyboard: @escaping () -> GCKeyboard? = { GCKeyboard.coalesced },
+         center: NotificationCenter = .default,
          applicationIsActive: @escaping () -> Bool = { UIApplication.shared.applicationState == .active }) {
         discoverControllers = controllers; discoverKeyboard = keyboard
-        self.applicationIsActive = applicationIsActive
+        self.applicationIsActive = applicationIsActive; self.center = center
     }
 
     func start() {
         guard !running else { return }
         running = true
         active = applicationIsActive()
-        let center = NotificationCenter.default
         for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidDisconnect,
                      .GCKeyboardDidConnect, .GCKeyboardDidDisconnect] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.refreshDevices()
+                // NotificationCenter explicitly delivers on the main queue.
+                // Keep cancellation synchronous; an unstructured Task could
+                // arrive after a new press or a replacement control owner.
+                MainActor.assumeIsolated {
+                    guard let self, self.running else { return }
+                    self.refreshDevices()
+                }
             })
         }
         observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification,
                                             object: nil, queue: .main) { [weak self] _ in
-            self?.active = false; self?.reset()
+            MainActor.assumeIsolated {
+                guard let self, self.running else { return }
+                self.active = false; self.reset()
+            }
         })
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification,
                                             object: nil, queue: .main) { [weak self] _ in
-            self?.active = true; self?.refreshDevices()
+            MainActor.assumeIsolated {
+                guard let self, self.running else { return }
+                self.active = true; self.refreshDevices()
+            }
         })
         refreshDevices()
     }
@@ -52,7 +65,7 @@ final class DuelPeripheralInput {
         guard running else { return }
         running = false
         reset()
-        observers.forEach { NotificationCenter.default.removeObserver($0) }; observers.removeAll()
+        observers.forEach { center.removeObserver($0) }; observers.removeAll()
         for pad in pads.values { release(pad) }
         if let keyboard { release(keyboard) }
         pads.removeAll(); keyboard = nil; blocked.removeAll()

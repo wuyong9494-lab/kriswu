@@ -122,7 +122,7 @@ final class DuelCameraFramingTests: XCTestCase {
 
     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
         var lens = DuelCameraOpticalFOV()
-        lens.consume(required: 50, frame: 1, aspect: 2.1)
+        _ = lens.consume(required: 50, frame: 1, aspect: 2.1)
         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
         for _ in 0..<100 {
             XCTAssertEqual(lens.consume(required: 29, frame: 2, aspect: 2.1), first)
@@ -148,7 +148,7 @@ final class DuelCameraFramingTests: XCTestCase {
 
     func testOpticalFOVResetsOnRewindAndRotation() {
         var lens = DuelCameraOpticalFOV()
-        lens.consume(required: 52, frame: 10, aspect: 2.1)
+        _ = lens.consume(required: 52, frame: 10, aspect: 2.1)
         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
                        accuracy: 0.000001)
         XCTAssertEqual(lens.consume(required: 31, frame: 11, aspect: 1.0), 31,

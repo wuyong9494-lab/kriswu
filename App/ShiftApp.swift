@@ -72,8 +72,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
     @MainActor
     func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        let configuration = session.configuration
-        if session.role == .windowExternalDisplayNonInteractive {
+        Self.sceneConfiguration(for: session.role)
+    }
+
+    @MainActor
+    static func sceneConfiguration(for role: UISceneSession.Role) -> UISceneConfiguration {
+        // Return only our configuration contribution. Passing back the session's
+        // existing SwiftUI AppSceneDelegate makes it a custom delegate to be
+        // wrapped again by UIApplicationDelegateAdaptor during app launch.
+        let configuration = UISceneConfiguration(name: nil, sessionRole: role)
+        if role == .windowExternalDisplayNonInteractive {
             configuration.delegateClass = DuelTelevisionSceneDelegate.self
         }
         return configuration

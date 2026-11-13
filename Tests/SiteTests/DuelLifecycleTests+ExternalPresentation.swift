@@ -292,10 +292,17 @@ extension DuelLifecycleTests {
         host.weaponAction(.weapon, down: true); guest.weaponAction(.weapon, down: true)
         XCTAssertNil(host.consumeLocalInput().weaponCommand, "Grounded neutral press waits for release/hold")
         XCTAssertEqual(guest.consumeLocalInput().weaponCommand, .weapon, "Airborne local press resolves immediately")
-        host.clearInput(); guest.clearInput()
-        host.weaponGuard(true); guest.weaponGuard(true)
-        XCTAssertTrue(host.consumeLocalInput().guardHeld)
-        XCTAssertFalse(guest.consumeLocalInput().guardHeld, "Guest defense uses the guest's airborne state")
+        for peripheral in [false, true] {
+            host.clearInput(); guest.clearInput()
+            if peripheral {
+                host.updatePhysicalInput(.init(guardHeld: true), source: "pad:test")
+                guest.updatePhysicalInput(.init(guardHeld: true), source: "pad:test")
+            } else {
+                host.weaponGuard(true); guest.weaponGuard(true)
+            }
+            XCTAssertTrue(host.consumeLocalInput().guardHeld)
+            XCTAssertFalse(guest.consumeLocalInput().guardHeld, "Both touch and peripheral defense use the local seat's airborne state")
+        }
     }
 
     func testTouchAndPeripheralGuardHoldUntilLastOwnerReleases() throws {

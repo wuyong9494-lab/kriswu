@@ -574,16 +574,10 @@ final class DuelSession: ObservableObject {
     /// edges exactly once but never advances the simulation or clears its buffers.
     func consumeLocalInput() -> DuelGame.Input {
         guard acceptsPhysicalInput else { return .neutral }
-        let guardEligible = weaponInput.canRequestGuard
-        var input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
+        let input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
                     airborne: game.weaponFight?.isAirborne(localFighterIndex) ?? false) :
             DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0),
                            guardHeld: held.contains("guard"), taps: taps)
-        if setup.originalWeapons && guardEligible && physicalInput.combined.guardHeld &&
-            input.move == 0 && input.vertical == 0 && input.weaponCommand == nil &&
-            physicalInput.combined.actions.isEmpty && input.taps.isEmpty {
-            input.guardHeld = true
-        }
         taps = []
         return input
     }

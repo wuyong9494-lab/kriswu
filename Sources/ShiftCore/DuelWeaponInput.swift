@@ -34,10 +34,6 @@ public struct DuelWeaponInput: Equatable, Sendable {
     private var manualGuardHeld = false
 
     public init() {}
-    public var canRequestGuard: Bool {
-        guardRecovery == 0 && presses.isEmpty && queued == nil && pendingJumpTicks == nil
-    }
-
     /// Defense requires explicit player intent; a neutral stick never raises it.
     public mutating func setGuardHeld(_ held: Bool) { manualGuardHeld = held }
 

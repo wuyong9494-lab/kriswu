@@ -10,6 +10,7 @@ name: Fighter merged device and framing candidate (unsigned synthetic only)
     - Tests/**
     - Package.swift
     - project.yml
+    - Tools/report_fighter_native_crash.py
     - .github/scripts/build_identity.py
     - scripts/build_fighter_network_rules.py
     - .github/workflows/ios.yml
@@ -228,7 +229,7 @@ jobs:
          '-parallel-testing-enabled','NO','-resultBundlePath',str(p/'selected.xcresult')]
         command.extend('-only-testing:'+x for x in selectors)
         # No retry-tests-on-failure / run-tests-until-failure flags; one iteration.
-        started=time.monotonic()
+        started=time.monotonic(); started_wall=time.time()
         with (p/'simulator.log').open('w') as output:
          process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
          for line in process.stdout: print(line,end='',flush=True);output.write(line)
@@ -254,6 +255,8 @@ jobs:
         except OSError as error:
          print('Could not save native diagnostics:',str(error)[:500],flush=True)
         print('Native result export:',json.dumps(process_result),flush=True)
+        if code!=0:
+         subprocess.run(['python3','Tools/report_fighter_native_crash.py','--since',str(started_wall)],timeout=30,check=False)
         # Preserve the original test failure even when diagnostic extraction also fails.
         # Bash -e prevents the success verifier below from running for any nonzero exit.
         if code!=0: raise SystemExit(code)

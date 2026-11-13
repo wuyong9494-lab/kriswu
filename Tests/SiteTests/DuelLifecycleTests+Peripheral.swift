@@ -4,6 +4,36 @@ import GameController
 
 @MainActor
 extension DuelLifecycleTests {
+    func testPeripheralBackgroundCancelsSynchronouslyAndRequiresNeutralOnResume() throws {
+        let pad = GCController.withExtendedGamepad()
+        let buttons = try XCTUnwrap(pad.extendedGamepad)
+        let center = NotificationCenter()
+        let adapter = DuelPeripheralInput(controllers: { [pad] }, keyboard: { nil },
+                                          center: center, applicationIsActive: { true })
+        var accepted: [DuelPhysicalInput.State] = [], cancellations = 0
+        adapter.canAccept = { true }
+        adapter.onState = { _, state, cancelled in
+            if cancelled { cancellations += 1 } else { accepted.append(state) }
+        }
+        adapter.start()
+        defer { adapter.stop() }
+        buttons.buttonX.setValue(1); adapter.refreshReadiness()
+        XCTAssertTrue(accepted.last?.actions.contains(.weapon) == true)
+        accepted.removeAll(); cancellations = 0
+        center.post(name: UIApplication.willResignActiveNotification, object: nil)
+        XCTAssertGreaterThan(cancellations, 0, "Background must clear input before the next simulation step")
+        center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        adapter.refreshReadiness()
+        XCTAssertTrue(accepted.isEmpty, "Foreground must not replay a held attack")
+        buttons.buttonX.setValue(0); adapter.refreshReadiness()
+        buttons.buttonX.setValue(1); adapter.refreshReadiness()
+        XCTAssertTrue(accepted.last?.actions.contains(.weapon) == true)
+        adapter.stop(); accepted.removeAll(); cancellations = 0
+        center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        center.post(name: .GCControllerDidConnect, object: pad)
+        XCTAssertTrue(accepted.isEmpty); XCTAssertEqual(cancellations, 0)
+    }
+
     func testPeripheralNeutralResetDoesNotSwallowFirstNewPress() throws {
         let pad = GCController.withExtendedGamepad()
         let adapter = DuelPeripheralInput(controllers: { [pad] }, keyboard: { nil }, applicationIsActive: { true })

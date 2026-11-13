@@ -195,7 +195,7 @@ private struct DuelTelevisionHUD: View {
             if let error = session.loadError { Text(error) }
             else if session.paused { Text("已暂停 · 请在手机上操作") }
             else if case .matchOver(let winner) = session.game.phase {
-                Text(winner == nil ? "平局" : winner == session.localFighterIndex ? "对局胜利" : "对局结束")
+                Text(winner == session.localFighterIndex ? "对局胜利" : "对局结束")
             } else if case .roundBreak(let winner, _) = session.game.phase {
                 Text(winner == nil ? "平局 · 准备重赛" : winner == session.localFighterIndex ? "回合胜利" : "回合失利")
             }
