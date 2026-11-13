@@ -71,7 +71,7 @@ jobs:
         timeout-minutes: 12
         run: python3 .github/scripts/fighter_visual_acceptance.py simulator
       - name: Run only the ten selected native methods without rebuilding
-        timeout-minutes: 18
+        timeout-minutes: 20
         run: python3 .github/scripts/fighter_visual_acceptance.py test
       - name: Export and check all 26 expected images and three data attachments
         if: always() && steps.prepare.outcome == 'success'

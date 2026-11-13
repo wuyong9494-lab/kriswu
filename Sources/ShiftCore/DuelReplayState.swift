@@ -7,7 +7,7 @@ import Foundation
 public enum DuelReplayStateEncoding {
     public static let schemaVersion: UInt16 = 2
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 2
+    public static let rulesVersion: UInt16 = 3
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384

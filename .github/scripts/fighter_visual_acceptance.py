@@ -371,15 +371,23 @@ def seal():
     try:
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_STORED) as output:
             total = 0
+            excluded = []
             for path in sorted((work() / "attachments").rglob("*")) if (work() / "attachments").is_dir() else []:
                 if path.is_dir():
                     assert not path.is_symlink()
                     continue
                 regular(path, 12 * 1024**2)
-                assert path.suffix.lower() in (".png", ".jpg", ".jpeg", ".json", ".txt")
+                if path.suffix.lower() not in (".png", ".jpg", ".jpeg", ".json", ".txt"):
+                    # Export remains a failed evidence gate. Preserve bounded
+                    # diagnostics without uploading unexpected crash/media bytes.
+                    excluded.append({"file": str(path.relative_to(work() / "attachments")),
+                                     "bytes": path.stat().st_size, "reason": "attachment type not allowed"})
+                    continue
                 total += path.stat().st_size
                 assert total <= 320 * 1024**2
                 output.write(path, "attachments/" + str(path.relative_to(work() / "attachments")))
+            write_json(work() / "excluded-attachments.json", {"files": excluded,
+                       "effectOnAcceptance": "Exclusion never turns the strict export gate into a pass"})
             # Only bounded log tails and metadata at the private working root;
             # never recurse into source resources, app products or xcresult.
             for path in sorted(work().iterdir()):

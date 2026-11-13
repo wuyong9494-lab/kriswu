@@ -90,20 +90,13 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     public func shadowVisual(_ index: Int) -> DuelShadowVisual? {
         guard profiles.indices.contains(index), let action = actions[index], action.command == .shadow,
-              let origin = action.shadowOriginX else { return nil }
+              action.shadowOriginX != nil else { return nil }
         let katana = profiles[index].isKatana
-        var hammer = katana ? nil : DuelShadowRules.hammer(action.tick, origin: origin, direction: fighters[index].facing)
-        if let points = hammer, let clip = profiles[index].clip(named: action.name) {
-            let phase = fighters[index].weaponPose?.phase ?? 0
-            let a = clip.tracks.sample(clip.tracks.weaponBaseR, phase: phase)
-            let b = clip.tracks.sample(clip.tracks.weaponTipR, phase: phase)
-            let length = sqrt(pow(b.x - a.x, 2) + pow(b.y - a.y, 2) + pow(b.z - a.z, 2))
-            hammer = (points.0, .init(x: points.0.x, y: points.0.y + length, z: points.0.z))
-        }
+        let hammer = katana ? nil : shadowHammer(index, action: action, tick: action.tick)
         return .init(kind: katana ? .katanaDash : .hammerThrow, tick: action.tick,
                      duration: DuelShadowRules.duration(katana: katana),
-                     isAttacking: DuelShadowRules.active(action.tick, katana: katana),
-                     weaponBase: hammer?.0, weaponTip: hammer?.1)
+                     isAttacking: DuelShadowRules.active(action.tick, katana: katana) && (katana || hammer != nil),
+                     weaponBase: hammer?.base, weaponTip: hammer?.tip)
     }
     public func weaponTrailIsActive(_ index: Int) -> Bool {
         if let shadow = shadowVisual(index) { return shadow.isAttacking || shadow.weaponTip != nil }
@@ -163,6 +156,12 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 { shadowCooldowns[i] = max(0, shadowCooldowns[i] - 1) }
         for i in 0..<2 { update(i, input: inputs[i]) }
         separate()
+        // A caster can be pushed by body separation during startup. Anchor
+        // release to the actual post-separation tick-24 hand, then retain that
+        // origin so later pushes cannot rewrite an already flown outgoing path.
+        for i in 0..<2 where !profiles[i].isKatana && actions[i]?.command == .shadow {
+            if (actions[i]?.tick ?? Int.max) <= DuelShadowRules.startup { actions[i]?.shadowOriginX = fighters[i].x }
+        }
         var pending: [(Int, DuelWeaponPoint, DuelWeaponCommand)] = []
         for i in 0..<2 {
             guard var action = actions[i], let command = action.command,
@@ -335,8 +334,33 @@ public struct DuelWeaponFight: Equatable, Sendable {
                                       groundLift: clip.tracks.lift(phase: clip.phase(at: tick)), reaction: reaction)
     }
     private mutating func setShadowPose(_ i: Int, clip: DuelWeaponClip, tick: Int) {
-        let duration = DuelShadowRules.duration(katana: profiles[i].isKatana)
-        setPose(i, clip: clip, tick: min(clip.ticks, tick * clip.ticks / duration))
+        setPose(i, clip: clip, tick: shadowBodyTick(i, clip: clip, tick: tick))
+    }
+    private func shadowBodyTick(_ i: Int, clip: DuelWeaponClip, tick: Int) -> Int {
+        min(clip.ticks, tick * clip.ticks / DuelShadowRules.duration(katana: profiles[i].isKatana))
+    }
+    private func heldShadowHammer(_ i: Int, clip: DuelWeaponClip, tick: Int,
+                                  rootX: Int) -> DuelShadowRules.HammerSegment? {
+        let phase = clip.phase(at: shadowBodyTick(i, clip: clip, tick: tick))
+        let lift = clip.tracks.lift(phase: phase), direction = Double(fighters[i].facing)
+        func world(_ point: DuelWeaponPoint) -> DuelWeaponPoint {
+            .init(x: Double(rootX) / 1000 + point.x * direction,
+                  y: point.y + lift, z: point.z * direction)
+        }
+        let segment = DuelShadowRules.HammerSegment(
+            base: world(clip.tracks.sample(clip.tracks.weaponBaseR, phase: phase)),
+            tip: world(clip.tracks.sample(clip.tracks.weaponTipR, phase: phase)))
+        return DuelShadowRules.valid(segment) ? segment : nil
+    }
+    private func shadowHammer(_ i: Int, action: Action, tick: Int) -> DuelShadowRules.HammerSegment? {
+        guard (24..<72).contains(tick), let origin = action.shadowOriginX,
+              let clip = profiles[i].clip(named: action.name),
+              let release = heldShadowHammer(i, clip: clip, tick: 24, rootX: origin),
+              let catchPose = heldShadowHammer(i, clip: clip, tick: 71, rootX: fighters[i].x),
+              let held = heldShadowHammer(i, clip: clip, tick: tick, rootX: origin) else { return nil }
+        return DuelShadowRules.hammer(tick, origin: origin, direction: fighters[i].facing,
+                                      release: release, catchPose: catchPose,
+                                      length: DuelShadowRules.distance(held.base, held.tip))
     }
     private func active(_ action: Action, clip: DuelWeaponClip, index: Int) -> Bool {
         guard action.command != nil else { return false }
@@ -391,29 +415,28 @@ public struct DuelWeaponFight: Equatable, Sendable {
             let a = x + direction * 250, b = x + direction * 1400
             return .init(minX: min(a, b), maxX: max(a, b), minY: 850, maxY: 1250)
         }
-        guard let visual = shadowVisual(i), let base = visual.weaponBase, let tip = visual.weaponTip else { return nil }
-        let x = Int((base.x * 1000).rounded())
-        return .init(minX: x - 180, maxX: x + 180,
-                     minY: Int((base.y * 1000).rounded()) - 180, maxY: Int((tip.y * 1000).rounded()) + 180)
+        guard let points = shadowHammer(i, action: action, tick: action.tick) else { return nil }
+        return .init(minX: Int((min(points.base.x, points.tip.x) * 1000).rounded()) - 180,
+                     maxX: Int((max(points.base.x, points.tip.x) * 1000).rounded()) + 180,
+                     minY: Int((min(points.base.y, points.tip.y) * 1000).rounded()) - 180,
+                     maxY: Int((max(points.base.y, points.tip.y) * 1000).rounded()) + 180)
     }
     private func shadowContact(_ i: Int, action: Action) -> DuelWeaponPoint? {
         let target = fighters[1 - i], hurt = hurtBox(1 - i)
-        guard target.knockdown == 0, target.invulnerable == 0,
-              let box = shadowAttackBox(i, action: action) else { return nil }
-        var hit = box.overlaps(hurt)
-        if !profiles[i].isKatana, action.tick > DuelShadowRules.startup,
-           let origin = action.shadowOriginX,
-           let before = DuelShadowRules.hammer(action.tick - 1, origin: origin, direction: fighters[i].facing),
-           let now = DuelShadowRules.hammer(action.tick, origin: origin, direction: fighters[i].facing) {
-            let a = Int((before.0.x * 1000).rounded()), b = Int((now.0.x * 1000).rounded())
-            // A vertical hammer translates horizontally, so this rectangle is
-            // its actual swept volume, unlike a diagonal sword's broad AABB.
-            hit = hit || DuelGame.Box(minX: min(a, b) - 180, maxX: max(a, b) + 180,
-                                     minY: box.minY, maxY: box.maxY).overlaps(hurt)
+        guard target.knockdown == 0, target.invulnerable == 0 else { return nil }
+        if profiles[i].isKatana {
+            guard let box = shadowAttackBox(i, action: action), box.overlaps(hurt) else { return nil }
+            return .init(x: Double(min(hurt.maxX, max(hurt.minX, (box.minX + box.maxX) / 2))) / 1000,
+                         y: 1.05, z: 0.08)
         }
-        guard hit else { return nil }
-        return .init(x: Double(min(hurt.maxX, max(hurt.minX, (box.minX + box.maxX) / 2))) / 1000,
-                     y: 1.05, z: 0.08)
+        guard DuelShadowRules.active(action.tick, katana: false),
+              let now = shadowHammer(i, action: action, tick: action.tick),
+              let clip = profiles[i].clip(named: action.name) else { return nil }
+        let released = action.tick > DuelShadowRules.startup
+        let before = released ? shadowHammer(i, action: action, tick: action.tick - 1)
+                              : heldShadowHammer(i, clip: clip, tick: action.tick - 1, rootX: previousX[i])
+        guard let before else { return nil }
+        return DuelShadowRules.hammerContact(previous: before, current: now, sweep: released, hurt: hurt)
     }
     private func contact(_ i: Int, action: Action, clip: DuelWeaponClip, command: DuelWeaponCommand) -> DuelWeaponPoint? {
         if command == .shadow { return shadowContact(i, action: action) }
