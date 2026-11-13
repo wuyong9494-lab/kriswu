@@ -1,0 +1,169 @@
+# Exact excerpts from GitHub job 131667803148; selected metadata and 129 actual passing case records.
+# Test source: 4dd788e3b7b35943ea06f1714dd8ba02a572d636
+2026-11-13T03:26:51.7351060Z ##[group]Operating System
+2026-11-13T03:26:51.7351530Z macOS
+2026-11-13T03:26:51.7351840Z 26.7.2
+2026-11-13T03:26:51.7352270Z 25G332
+2026-11-13T03:26:51.7352640Z ##[endgroup]
+2026-11-13T03:26:51.7353070Z ##[group]Runner Image
+2026-11-13T03:26:51.7353770Z Image: macos-26-arm64
+2026-11-13T03:26:51.7354210Z Version: 20261102.0473.1
+2026-11-13T03:26:51.7355250Z Included Software: https://github.com/actions/runner-images/blob/macos-26-arm64/20261102.0473/images/macos/macos-26-arm64-Readme.md
+2026-11-13T03:26:51.7356660Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-26-arm64%2F20261102.0473
+2026-11-13T03:27:00.4636850Z Xcode 26.6
+2026-11-13T03:27:00.4669850Z Build version 17F113
+2026-11-13T03:27:00.4929530Z Xcode 26.6
+2026-11-13T03:27:05.4452740Z Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+2026-11-13T03:27:05.4453520Z Target: arm64-apple-macosx26.0
+2026-11-13T03:29:37.6973250Z Test Suite 'Selected tests' started at 2026-11-13 03:29:06.198.
+2026-11-13T03:30:07.8679120Z Test Suite 'Selected tests' passed at 2026-11-13 03:30:07.716.
+2026-11-13T03:30:07.9508760Z Core XCTest: 107 passed; 0 failed; 0 skipped; exact selected inventory
+2026-11-13T03:37:58.1850420Z Created isolated simulator: 3E0D7452-1F70-45C9-BED1-B5F5C7615F2E com.apple.CoreSimulator.SimRuntime.iOS-26-5 com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max
+2026-11-13T03:40:46.0485510Z Test Suite 'Selected tests' started at 2026-11-13 03:40:43.563.
+2026-11-13T03:40:50.9862790Z 	 Executed 22 tests, with 0 failures (0 unexpected) in 2.716 (5.145) seconds
+2026-11-13T03:40:51.2980690Z Test Suite 'Selected tests' passed at 2026-11-13 03:40:48.710.
+2026-11-13T03:40:51.4669870Z 	 Executed 22 tests, with 0 failures (0 unexpected) in 2.716 (5.147) seconds
+2026-11-13T03:41:05.5517020Z Native xcodebuild exit code: 0 elapsed seconds: 178.33
+2026-11-13T03:41:29.7004300Z Native result export: {"exitCode": 0, "durationSeconds": 178.33, "resultBundlePresent": true, "exports": {"summary": {"exitCode": 0, "diagnostic": ""}, "tests": {"exitCode": 0, "diagnostic": ""}}}
+2026-11-13T03:41:30.0471340Z Simulator XCTest: 22 passed; 0 failed; 0 skipped; exact selected inventory
+2026-11-13T03:41:41.5095420Z Core XCTest: 107 passed; 0 failed; 0 skipped
+2026-11-13T03:41:41.5387820Z Simulator XCTest: 22 passed; 0 failed; 0 skipped
+2026-11-13T03:41:41.5490840Z Actual simulator: {"udid": "3E0D7452-1F70-45C9-BED1-B5F5C7615F2E", "name": "Fighter integration 43359009520 attempt 1", "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-5", "type": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max", "osVersion": "26.5", "evidenceClass": "simulator synthetic regression"}
+2026-11-13T03:41:41.5596150Z Xcode: Xcode 26.6
+2026-11-13T03:41:41.5699850Z Build version 17F113
+2026-11-13T03:41:41.5802290Z Swift: Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+2026-11-13T03:41:41.5918250Z Target: arm64-apple-macosx26.0
+2026-11-13T03:41:41.6048870Z Simulator SDK: 26.5
+2026-11-13T03:41:41.6128320Z Core seconds: 174
+2026-11-13T03:41:41.6257030Z Native build seconds: 312
+2026-11-13T03:41:41.6358740Z Simulator test seconds: 178.33
+2026-11-13T03:41:41.6679780Z summary.json: {"result": "Passed", "totalTestCount": 22, "passedTests": 22, "failedTests": 0, "skippedTests": 0, "testFailures": []}
+2026-11-13T03:29:37.7080480Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testContinuousCameraEnvelopeKeepsBothFightersVisible]' passed (0.006 seconds).
+2026-11-13T03:29:37.7103970Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testExplicitBoutRestartClearsOpticalFOVEvenOnIdenticalFrame]' passed (0.001 seconds).
+2026-11-13T03:29:37.7118450Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testInvalidTransientGeometryCannotPoisonProjection]' passed (0.000 seconds).
+2026-11-13T03:29:37.7120240Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testLandscapeThresholdHasNoHardLensJump]' passed (0.000 seconds).
+2026-11-13T03:29:37.7122280Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones]' passed (0.000 seconds).
+2026-11-13T03:29:37.7124250Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testOpticalFOVExpandsImmediatelyButReturnsSmoothly]' passed (0.001 seconds).
+2026-11-13T03:29:37.7125900Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testOpticalFOVResetsOnRewindAndRotation]' passed (0.001 seconds).
+2026-11-13T03:29:37.7134860Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testPortraitRetainsOverviewAtEverySeparation]' passed (0.001 seconds).
+2026-11-13T03:29:37.7136550Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose]' passed (0.001 seconds).
+2026-11-13T03:29:37.7138220Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testSeparatedFightersKeepBodyMarginInEveryLandscapeWidth]' passed (0.000 seconds).
+2026-11-13T03:29:37.7140100Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit]' passed (0.000 seconds).
+2026-11-13T03:29:37.7141870Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testUnexpectedFiniteSeparationCannotOverflowCameraDistance]' passed (0.000 seconds).
+2026-11-13T03:29:37.7143320Z Test Case '-[ShiftCoreTests.DuelCameraFramingTests testWideCloseUpAndSeparatedFighters]' passed (0.000 seconds).
+2026-11-13T03:29:37.7146220Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testAuthoritativePairRepositionDropsStaleWideZoom]' passed (0.000 seconds).
+2026-11-13T03:29:37.7148200Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testConfirmedImpactStrengthAndDirectionRemainDistinct]' passed (0.001 seconds).
+2026-11-13T03:29:37.7149760Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testHitStopFreezesFramingWhileContactRecoilSettles]' passed (0.001 seconds).
+2026-11-13T03:29:37.7151500Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testNewContactCanRestartSettledImpulseAndWeakBlockCannotEraseHeavyHit]' passed (0.000 seconds).
+2026-11-13T03:29:37.7153090Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testOpeningShotCentersPairAtEitherStageEdge]' passed (0.000 seconds).
+2026-11-13T03:29:37.7154810Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testRepeatedPresentationDoesNotMoveCameraOrReplayContact]' passed (0.000 seconds).
+2026-11-13T03:29:37.7156600Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples]' passed (0.000 seconds).
+2026-11-13T03:29:37.7285630Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testRewindResetsAndInvalidGeometryCannotPoisonPresentation]' passed (0.001 seconds).
+2026-11-13T03:29:37.7289250Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testRoundRepositionSnapsCameraToTheNewPairCenter]' passed (0.001 seconds).
+2026-11-13T03:29:37.7292190Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testSkippedSamplesUseElapsedTicksInsteadOfOneDrawWorthOfMovement]' passed (0.001 seconds).
+2026-11-13T03:29:37.7295620Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition]' passed (0.001 seconds).
+2026-11-13T03:29:37.7297340Z Test Case '-[ShiftCoreTests.DuelCombatCameraTests testTrackingLagIsIncludedAndZoomReturnsGradually]' passed (0.001 seconds).
+2026-11-13T03:29:37.7301520Z Test Case '-[ShiftCoreTests.DuelManualGuardTests testExplicitGuardRequiresHoldAndResetsOnCancel]' passed (0.002 seconds).
+2026-11-13T03:29:37.7303190Z Test Case '-[ShiftCoreTests.DuelManualGuardTests testManualGuardSurvivesWireEncodingAsExplicitInputOnly]' passed (0.009 seconds).
+2026-11-13T03:29:37.7321700Z Test Case '-[ShiftCoreTests.DuelManualGuardTests testNeutralDoesNotAutomaticallyGuard]' passed (0.002 seconds).
+2026-11-13T03:29:37.7325800Z Test Case '-[ShiftCoreTests.DuelManualGuardTests testNoGuardWhileMovingOrAirborneAndRecoveryStillApplies]' passed (0.000 seconds).
+2026-11-13T03:29:37.7333540Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI]' passed (7.539 seconds).
+2026-11-13T03:29:37.7337160Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testByteBatchAndCounterBounds]' passed (0.012 seconds).
+2026-11-13T03:29:37.7341100Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testCancellationDisconnectAndInterruptionAreTerminal]' passed (0.043 seconds).
+2026-11-13T03:29:37.7346620Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testEpochChangeFailsClosedOnlyForPinnedHostAndStart]' passed (0.010 seconds).
+2026-11-13T03:29:37.7351830Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent]' passed (0.318 seconds).
+2026-11-13T03:29:37.7356390Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic]' passed (0.010 seconds).
+2026-11-13T03:29:37.7360930Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead]' passed (0.011 seconds).
+2026-11-13T03:29:37.7365790Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct]' passed (0.016 seconds).
+2026-11-13T03:29:37.7371020Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry]' passed (0.144 seconds).
+2026-11-13T03:29:37.7375980Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic]' passed (0.004 seconds).
+2026-11-13T03:29:37.7381860Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault]' passed (0.006 seconds).
+2026-11-13T03:29:37.7386960Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic]' passed (0.150 seconds).
+2026-11-13T03:29:37.7392170Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch]' passed (0.009 seconds).
+2026-11-13T03:29:37.7396030Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame]' passed (0.085 seconds).
+2026-11-13T03:29:37.7397980Z Test Case '-[ShiftCoreTests.DuelNetworkReplayTests testWireContainsConsumedLeaseAndLateInputNotOriginalRequests]' passed (0.046 seconds).
+2026-11-13T03:29:37.7401910Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testChainedStageBudgetsReplayIdenticallyThroughWhiffsBlocksAndHitStop]' passed (22.879 seconds).
+2026-11-13T03:29:37.7403670Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testGuardConsumesTheStageOpportunityWithoutExtraChipOrEnergy]' passed (0.007 seconds).
+2026-11-13T03:29:37.7405520Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testHitStopAtTheAnchorAcceptsOneFollowUpWithoutReplayingTheContact]' passed (0.005 seconds).
+2026-11-13T03:29:37.7407340Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testMissedOpeningStrikeCannotBankAnExtraHitForTheSecondStage]' passed (0.017 seconds).
+2026-11-13T03:29:37.7409000Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testPauseCancellationAtTheAnchorCannotReviveTheQueuedStage]' passed (0.045 seconds).
+2026-11-13T03:29:37.7410720Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testSuccessfulOpeningStrikeStillAllowsOneDistinctContinuationHit]' passed (0.018 seconds).
+2026-11-13T03:29:37.7412720Z Test Case '-[ShiftCoreTests.DuelWeaponComboTests testTwoMissedStagesCannotBankExtraHitsForTheThirdStage]' passed (0.019 seconds).
+2026-11-13T03:29:37.7416020Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testAerialKickConsumesLaterAirborneButtonsWithoutReplayingOnLanding]' passed (0.002 seconds).
+2026-11-13T03:29:37.7417770Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testBufferedFollowUpStillTakesPriorityOverHeldGuardAtRecovery]' passed (0.001 seconds).
+2026-11-13T03:29:37.7419580Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testComboAnchorContinuesSourceTimeWithoutReplayingTheSharedStrikePrefix]' passed (0.016 seconds).
+2026-11-13T03:29:37.7421430Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testDirectionalAerialKickDoesNotRequireAGroundDirectionalClip]' passed (0.001 seconds).
+2026-11-13T03:29:37.7423190Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testEmptyCornerOfDiagonalWeaponAABBCannotDamageTheTorso]' passed (0.001 seconds).
+2026-11-13T03:29:37.7424950Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testFightCannotStartWithAnInvalidSameEquipmentCatalog]' passed (0.018 seconds).
+2026-11-13T03:29:37.7426710Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges]' passed (0.001 seconds).
+2026-11-13T03:29:37.7428330Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons]' passed (0.003 seconds).
+2026-11-13T03:30:07.8544830Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testHitReactionRecoveryImmediatelyRestoresHeldDefense]' passed (0.003 seconds).
+2026-11-13T03:30:07.8549880Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testHitStopFreezesPoseAndTimerAndItsBufferedButtonCanBeCancelled]' passed (0.003 seconds).
+2026-11-13T03:30:07.8554070Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testJumpAnimationAloneNeverBecomesAnAttack]' passed (0.002 seconds).
+2026-11-13T03:30:07.8562510Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testMovingWeaponSegmentMakesOneContactAndUpdatesDamage]' passed (0.001 seconds).
+2026-11-13T03:30:07.8585930Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testPauseCancellationDropsARecoveryQueueWithoutUndoingTheCurrentAttack]' passed (0.002 seconds).
+2026-11-13T03:30:07.8587720Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testRecoveryBoundaryAppliesMovementAndCrouchWithoutAnIdleTick]' passed (0.002 seconds).
+2026-11-13T03:30:07.8589470Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testRoundBreakClearsPendingMovesAndResetsBothIndependentProfiles]' passed (0.001 seconds).
+2026-11-13T03:30:07.8592390Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testStationaryGuardBlocksButGuardAndWalkingDoesNotCreateAFreeBlock]' passed (0.002 seconds).
+2026-11-13T03:30:07.8594310Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testUnavailableAerialAttackIsConsumedInsteadOfSavedUntilLanding]' passed (0.002 seconds).
+2026-11-13T03:30:07.8596690Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testUnsupportedCommandsCannotPoisonTheRecoveryBuffer]' passed (0.029 seconds).
+2026-11-13T03:30:07.8598870Z Test Case '-[ShiftCoreTests.DuelWeaponFightTests testUnsupportedHitStopPressLeavesRoomForAValidFollowUp]' passed (0.002 seconds).
+2026-11-13T03:30:07.8602260Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testAlreadyQueuedTapCannotBeOverwrittenByMaturingHeavyHold]' passed (0.001 seconds).
+2026-11-13T03:30:07.8603790Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testAttackReleaseNeverAutomaticallyRaisesGuard]' passed (0.001 seconds).
+2026-11-13T03:30:07.8605770Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testAxesAreClampedAndAirborneNeutralActionsStayGeneric]' passed (0.001 seconds).
+2026-11-13T03:30:07.8607720Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testButtonFirstChordUsesTheLiveDirectionBeforeHeavyThreshold]' passed (0.001 seconds).
+2026-11-13T03:30:07.8609520Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testCancellingOneButtonDoesNotCompleteATapOrEraseACommittedCommand]' passed (0.001 seconds).
+2026-11-13T03:30:07.8611520Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testChordRemainsCapturedWhenBothFingersReleaseBeforeTheNextTick]' passed (0.001 seconds).
+2026-11-13T03:30:07.8613200Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testDirectionChangesCannotRepeatAnAlreadyResolvedHeldAttack]' passed (0.001 seconds).
+2026-11-13T03:30:07.8614950Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testDirectionsResolveRelativeToFacingAndVerticalChordsDoNotJump]' passed (0.001 seconds).
+2026-11-13T03:30:07.8616570Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testDuplicateButtonEdgesDoNotResetHoldOrRepeatRelease]' passed (0.001 seconds).
+2026-11-13T03:30:07.8618330Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testFirstResolvedCommandWinsWithoutReplayingTheOtherFinger]' passed (0.001 seconds).
+2026-11-13T03:30:07.8620310Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testFullCancellationClearsButtonsDirectionMailboxAndJumpBeforeLateRelease]' passed (0.001 seconds).
+2026-11-13T03:30:07.8622170Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testManualGuardRequiresPlayerHoldAndNeutralGroundedInput]' passed (0.000 seconds).
+2026-11-13T03:30:07.8624280Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testNeutralKickHasNoInventedHeavyMappingAndSpecialsKeepTheirIdentity]' passed (0.000 seconds).
+2026-11-13T03:30:07.8628640Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testNeutralTapAndHeavyHoldAreExclusiveAndNeverRepeatWhileHeld]' passed (0.000 seconds).
+2026-11-13T03:30:07.8630640Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testPendingButtonsResolveInPressOrderWhenDirectionArrives]' passed (0.000 seconds).
+2026-11-13T03:30:07.8632530Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testQuickUpReleaseSurvivesTheGracePeriodButAirborneUpCannotJumpAgain]' passed (0.000 seconds).
+2026-11-13T03:30:07.8634250Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testStandaloneUpIsEdgeTriggeredAndDoesNotBounceOnLanding]' passed (0.000 seconds).
+2026-11-13T03:30:07.8635930Z Test Case '-[ShiftCoreTests.DuelWeaponInputTests testUpAllowsOneSimulationTickForASecondFingerChord]' passed (0.000 seconds).
+2026-11-13T03:30:07.8639730Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections]' passed (0.011 seconds).
+2026-11-13T03:30:07.8641620Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testCooldownExpiresOnlyOnUnpausedSimulationTicks]' passed (0.004 seconds).
+2026-11-13T03:30:07.8643320Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow]' passed (0.010 seconds).
+2026-11-13T03:30:07.8646240Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown]' passed (0.005 seconds).
+2026-11-13T03:30:07.8648530Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing]' passed (0.002 seconds).
+2026-11-13T03:30:07.8650520Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testHitInterruptsWindupWithoutRefundOrDelayedProjectile]' passed (0.004 seconds).
+2026-11-13T03:30:07.8652240Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn]' passed (0.020 seconds).
+2026-11-13T03:30:07.8654010Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath]' passed (0.022 seconds).
+2026-11-13T03:30:07.8655640Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testRoundEndAndResetRemoveProjectileAndResetCooldown]' passed (0.003 seconds).
+2026-11-13T03:30:07.8657320Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testShadowCannotRestartOrOccupyBufferWithoutEnergy]' passed (0.003 seconds).
+2026-11-13T03:30:07.8659060Z Test Case '-[ShiftCoreTests.DuelWeaponShadowTests testShadowReplayIncludesHiddenOriginCooldownAndCancellation]' passed (29.653 seconds).
+2026-11-13T03:30:07.8662880Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testAdjacentCeilingIsInclusiveForBothWeaponsWithoutPhantomHits]' passed (0.078 seconds).
+2026-11-13T03:30:07.8664840Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testBadPeakDoesNotSilenceLaterValidStroke]' passed (0.015 seconds).
+2026-11-13T03:30:07.8666940Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testDepthDiscontinuityCountsEvenWhenProjectedMovementLooksSmall]' passed (0.014 seconds).
+2026-11-13T03:30:07.8668800Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testInvalidBaseCannotCreateAFalseShaftHitFromAContinuousTip]' passed (0.059 seconds).
+2026-11-13T03:30:07.8670650Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testInvalidDistancesCannotBeAcceptedAsContinuity]' passed (0.000 seconds).
+2026-11-13T03:30:07.8672710Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testOneDiscontinuousHammerDoesNotSuppressTheOtherHammer]' passed (0.024 seconds).
+2026-11-13T03:30:07.8674530Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testOutOfPlanePreviousSampleCannotSweepBackIntoTorso]' passed (0.013 seconds).
+2026-11-13T03:30:07.8676440Z Test Case '-[ShiftCoreTests.DuelWeaponSweepContinuityTests testTeleportedWeaponCannotCreateDamageAudioOrAnActiveTrail]' passed (0.014 seconds).
+2026-11-13T03:40:46.1599110Z Test Case '-[SiteTests.DuelLifecycleTests testAuthoritativeCameraUsesEveryPublishedStepAndStopsOnCancellation]' passed (0.286 seconds).
+2026-11-13T03:40:46.8703080Z Test Case '-[SiteTests.DuelLifecycleTests testCombatCameraDoesNotAdvanceOnRepeatedDrawsOrPausedLayout]' passed (0.023 seconds).
+2026-11-13T03:40:47.1214140Z Test Case '-[SiteTests.DuelLifecycleTests testCombatCameraMatchesAcrossSingleAndBatchedRendering]' passed (0.028 seconds).
+2026-11-13T03:40:47.1677420Z Test Case '-[SiteTests.DuelLifecycleTests testCurrentControlDismantleClearsInputAndCannotBeRebound]' passed (0.033 seconds).
+2026-11-13T03:40:47.1976120Z Test Case '-[SiteTests.DuelLifecycleTests testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState]' passed (0.072 seconds).
+2026-11-13T03:40:47.2226220Z Test Case '-[SiteTests.DuelLifecycleTests testExternalPhysicalClearPauseAndShutdownPreserveCanonicalBuffers]' passed (0.127 seconds).
+2026-11-13T03:40:47.3440700Z Test Case '-[SiteTests.DuelLifecycleTests testExternalWeaponInputUsesGuestAirborneState]' passed (1.051 seconds).
+2026-11-13T03:40:47.4765950Z Test Case '-[SiteTests.DuelLifecycleTests testNetworkPreparationRevalidatesControlsLayoutWhileSceneIsPending]' passed (0.031 seconds).
+2026-11-13T03:40:47.5366060Z Test Case '-[SiteTests.DuelLifecycleTests testOfflineControlReplacementRetiresOldViewAndPreservesCurrentReset]' passed (0.031 seconds).
+2026-11-13T03:40:47.8366500Z Test Case '-[SiteTests.DuelLifecycleTests testOfflineRestartRejectsNestedRestartResumeAndInputWithoutLosingItsOneReset]' passed (0.267 seconds).
+2026-11-13T03:40:47.8595790Z Test Case '-[SiteTests.DuelLifecycleTests testOfflineRestartStopsAfterInterruptionAtEveryCallbackBoundary]' passed (0.003 seconds).
+2026-11-13T03:40:47.8946010Z Test Case '-[SiteTests.DuelLifecycleTests testOfflineResumeCannotOverwritePauseOrShutdownDuringInputReset]' passed (0.001 seconds).
+2026-11-13T03:40:48.5322410Z Test Case '-[SiteTests.DuelLifecycleTests testOldControlShutdownCannotLetStaleClaimClearNewerInput]' passed (0.008 seconds).
+2026-11-13T03:40:48.5967050Z Test Case '-[SiteTests.DuelLifecycleTests testShutdownDuringControlClaimRejectsLateBindingAndInputHooks]' passed (0.007 seconds).
+2026-11-13T03:40:48.6945750Z Test Case '-[SiteTests.DuelSourceControlsTests testFallbackCannotClaimSourceArtworkAndAccessibilityIncludesManualDefense]' passed (0.009 seconds).
+2026-11-13T03:40:48.7874940Z Test Case '-[SiteTests.DuelSourceControlsTests testManualGuardCancellationClearsTouchAndAccessibilityIntent]' passed (0.455 seconds).
+2026-11-13T03:40:48.8105550Z Test Case '-[SiteTests.DuelSourceControlsTests testManualGuardReentrantCancellationCannotRearmRemainingPointers]' passed (0.004 seconds).
+2026-11-13T03:40:48.8321340Z Test Case '-[SiteTests.DuelSourceControlsTests testManualGuardRequiresLastFingerReleaseAndDragOutCancels]' passed (0.005 seconds).
+2026-11-13T03:40:49.1063050Z Test Case '-[SiteTests.DuelWeaponTrailContinuityTests testActiveTeleportStartsAnUnbridgedStripAndNextValidStepResumes]' passed (0.031 seconds).
+2026-11-13T03:40:49.1436660Z Test Case '-[SiteTests.DuelWeaponTrailContinuityTests testBothHammersKeepIndependentContinuityAndPreparationOwnership]' passed (0.009 seconds).
+2026-11-13T03:40:49.3825710Z Test Case '-[SiteTests.DuelWeaponTrailContinuityTests testFirstActiveSampleSeedsOnlyWithinInclusiveAdjacentCeiling]' passed (0.076 seconds).
+2026-11-13T03:40:50.3767460Z Test Case '-[SiteTests.DuelWeaponTrailContinuityTests testSkippedSimulationTickCannotJoinOtherwiseNearbySamples]' passed (0.159 seconds).

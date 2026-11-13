@@ -1,0 +1,1358 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-13 03:43:55 UTC",
+  "repository": "wuyong9494-lab/kriswu",
+  "evidenceClass": "targeted synthetic core and iOS simulator XCTest",
+  "sourceSha": "4dd788e3b7b35943ea06f1714dd8ba02a572d636",
+  "branch": "codex/fighter-integrated-controls-20261113-1100",
+  "workflowPath": ".github/workflows/fighter-integration-regression.yml",
+  "workflowName": "Fighter integration targeted regression (unsigned synthetic only)",
+  "run": {
+    "id": 43359009520,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43359009520",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "push",
+    "attempt": 1,
+    "createdAt": "2026-11-13T03:26:48Z",
+    "startedAt": "2026-11-13T03:26:48Z",
+    "terminalUpdatedAt": "2026-11-13T03:41:53Z"
+  },
+  "job": {
+    "id": 131667803148,
+    "name": "regression",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43359009520/job/131667803148",
+    "status": "completed",
+    "conclusion": "success",
+    "startedAt": "2026-11-13T03:26:51Z",
+    "completedAt": "2026-11-13T03:41:53Z",
+    "durationSeconds": 902,
+    "steps": [
+      {
+        "number": 1,
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:26:51Z",
+        "completedAt": "2026-11-13T03:26:52Z",
+        "durationSeconds": 1
+      },
+      {
+        "number": 2,
+        "name": "Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:26:52Z",
+        "completedAt": "2026-11-13T03:26:59Z",
+        "durationSeconds": 7
+      },
+      {
+        "number": 3,
+        "name": "Record exact source and bounded synthetic test selectors",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:26:59Z",
+        "completedAt": "2026-11-13T03:27:00Z",
+        "durationSeconds": 1
+      },
+      {
+        "number": 4,
+        "name": "Select installed Xcode and prepare test generator",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:27:00Z",
+        "completedAt": "2026-11-13T03:27:13Z",
+        "durationSeconds": 13
+      },
+      {
+        "number": 5,
+        "name": "Run and verify only the selected SwiftPM tests",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:27:13Z",
+        "completedAt": "2026-11-13T03:30:07Z",
+        "durationSeconds": 174
+      },
+      {
+        "number": 6,
+        "name": "Build unsigned demo host and simulator test bundle once",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:30:07Z",
+        "completedAt": "2026-11-13T03:35:20Z",
+        "durationSeconds": 313
+      },
+      {
+        "number": 7,
+        "name": "Verify demo host and create one installed iPhone simulator",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:35:20Z",
+        "completedAt": "2026-11-13T03:38:03Z",
+        "durationSeconds": 163
+      },
+      {
+        "number": 8,
+        "name": "Run and verify only the selected native XCTest methods",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:38:04Z",
+        "completedAt": "2026-11-13T03:41:30Z",
+        "durationSeconds": 206
+      },
+      {
+        "number": 9,
+        "name": "Stop only this run simulator",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:41:30Z",
+        "completedAt": "2026-11-13T03:41:40Z",
+        "durationSeconds": 10
+      },
+      {
+        "number": 10,
+        "name": "Report source, exact coverage and reached stages",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:41:40Z",
+        "completedAt": "2026-11-13T03:41:41Z",
+        "durationSeconds": 1
+      },
+      {
+        "number": 20,
+        "name": "Post Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:41:41Z",
+        "completedAt": "2026-11-13T03:41:43Z",
+        "durationSeconds": 2
+      },
+      {
+        "number": 21,
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T03:41:43Z",
+        "completedAt": "2026-11-13T03:41:49Z",
+        "durationSeconds": 6
+      }
+    ]
+  },
+  "environment": {
+    "runnerImage": "macos-26-arm64",
+    "runnerImageVersion": "20261102.0473.1",
+    "macOS": "26.7.2",
+    "macOSBuild": "25G332",
+    "architecture": "arm64",
+    "xcode": "26.6",
+    "xcodeBuild": "17F113",
+    "swift": "6.3.3",
+    "swiftFull": "Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)",
+    "simulatorSDK": "26.5",
+    "simulator": {
+      "udid": "3E0D7452-1F70-45C9-BED1-B5F5C7615F2E",
+      "name": "Fighter integration 43359009520 attempt 1",
+      "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+      "type": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max",
+      "osVersion": "26.5",
+      "evidenceClass": "simulator synthetic regression"
+    }
+  },
+  "core": {
+    "actualCount": 107,
+    "passed": 107,
+    "failed": 0,
+    "skipped": 0,
+    "exactMethodSetMatched": true,
+    "expectedMethods": [
+      "DuelWeaponInputTests/testNeutralTapAndHeavyHoldAreExclusiveAndNeverRepeatWhileHeld",
+      "DuelWeaponInputTests/testDirectionsResolveRelativeToFacingAndVerticalChordsDoNotJump",
+      "DuelWeaponInputTests/testButtonFirstChordUsesTheLiveDirectionBeforeHeavyThreshold",
+      "DuelWeaponInputTests/testChordRemainsCapturedWhenBothFingersReleaseBeforeTheNextTick",
+      "DuelWeaponInputTests/testFirstResolvedCommandWinsWithoutReplayingTheOtherFinger",
+      "DuelWeaponInputTests/testPendingButtonsResolveInPressOrderWhenDirectionArrives",
+      "DuelWeaponInputTests/testAlreadyQueuedTapCannotBeOverwrittenByMaturingHeavyHold",
+      "DuelWeaponInputTests/testUpAllowsOneSimulationTickForASecondFingerChord",
+      "DuelWeaponInputTests/testStandaloneUpIsEdgeTriggeredAndDoesNotBounceOnLanding",
+      "DuelWeaponInputTests/testQuickUpReleaseSurvivesTheGracePeriodButAirborneUpCannotJumpAgain",
+      "DuelWeaponInputTests/testFullCancellationClearsButtonsDirectionMailboxAndJumpBeforeLateRelease",
+      "DuelWeaponInputTests/testCancellingOneButtonDoesNotCompleteATapOrEraseACommittedCommand",
+      "DuelWeaponInputTests/testDirectionChangesCannotRepeatAnAlreadyResolvedHeldAttack",
+      "DuelWeaponInputTests/testNeutralKickHasNoInventedHeavyMappingAndSpecialsKeepTheirIdentity",
+      "DuelWeaponInputTests/testManualGuardRequiresPlayerHoldAndNeutralGroundedInput",
+      "DuelWeaponInputTests/testAttackReleaseNeverAutomaticallyRaisesGuard",
+      "DuelWeaponInputTests/testAxesAreClampedAndAirborneNeutralActionsStayGeneric",
+      "DuelWeaponInputTests/testDuplicateButtonEdgesDoNotResetHoldOrRepeatRelease",
+      "DuelCameraFramingTests/testWideCloseUpAndSeparatedFighters",
+      "DuelCameraFramingTests/testPortraitRetainsOverviewAtEverySeparation",
+      "DuelCameraFramingTests/testSeparatedFightersKeepBodyMarginInEveryLandscapeWidth",
+      "DuelCameraFramingTests/testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones",
+      "DuelCameraFramingTests/testLandscapeThresholdHasNoHardLensJump",
+      "DuelCameraFramingTests/testUnexpectedFiniteSeparationCannotOverflowCameraDistance",
+      "DuelCameraFramingTests/testContinuousCameraEnvelopeKeepsBothFightersVisible",
+      "DuelCameraFramingTests/testInvalidTransientGeometryCannotPoisonProjection",
+      "DuelCameraFramingTests/testOpticalFOVExpandsImmediatelyButReturnsSmoothly",
+      "DuelCameraFramingTests/testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose",
+      "DuelCameraFramingTests/testExplicitBoutRestartClearsOpticalFOVEvenOnIdenticalFrame",
+      "DuelCameraFramingTests/testOpticalFOVResetsOnRewindAndRotation",
+      "DuelCameraFramingTests/testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit",
+      "DuelCombatCameraTests/testRepeatedPresentationDoesNotMoveCameraOrReplayContact",
+      "DuelCombatCameraTests/testHitStopFreezesFramingWhileContactRecoilSettles",
+      "DuelCombatCameraTests/testConfirmedImpactStrengthAndDirectionRemainDistinct",
+      "DuelCombatCameraTests/testNewContactCanRestartSettledImpulseAndWeakBlockCannotEraseHeavyHit",
+      "DuelCombatCameraTests/testOpeningShotCentersPairAtEitherStageEdge",
+      "DuelCombatCameraTests/testTrackingLagIsIncludedAndZoomReturnsGradually",
+      "DuelCombatCameraTests/testRoundRepositionSnapsCameraToTheNewPairCenter",
+      "DuelCombatCameraTests/testAuthoritativePairRepositionDropsStaleWideZoom",
+      "DuelCombatCameraTests/testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition",
+      "DuelCombatCameraTests/testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples",
+      "DuelCombatCameraTests/testSkippedSamplesUseElapsedTicksInsteadOfOneDrawWorthOfMovement",
+      "DuelCombatCameraTests/testRewindResetsAndInvalidGeometryCannotPoisonPresentation",
+      "DuelWeaponSweepContinuityTests/testAdjacentCeilingIsInclusiveForBothWeaponsWithoutPhantomHits",
+      "DuelWeaponSweepContinuityTests/testTeleportedWeaponCannotCreateDamageAudioOrAnActiveTrail",
+      "DuelWeaponSweepContinuityTests/testOutOfPlanePreviousSampleCannotSweepBackIntoTorso",
+      "DuelWeaponSweepContinuityTests/testDepthDiscontinuityCountsEvenWhenProjectedMovementLooksSmall",
+      "DuelWeaponSweepContinuityTests/testBadPeakDoesNotSilenceLaterValidStroke",
+      "DuelWeaponSweepContinuityTests/testOneDiscontinuousHammerDoesNotSuppressTheOtherHammer",
+      "DuelWeaponSweepContinuityTests/testInvalidBaseCannotCreateAFalseShaftHitFromAContinuousTip",
+      "DuelWeaponSweepContinuityTests/testInvalidDistancesCannotBeAcceptedAsContinuity",
+      "DuelWeaponFightTests/testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges",
+      "DuelWeaponFightTests/testFightCannotStartWithAnInvalidSameEquipmentCatalog",
+      "DuelWeaponFightTests/testMovingWeaponSegmentMakesOneContactAndUpdatesDamage",
+      "DuelWeaponFightTests/testEmptyCornerOfDiagonalWeaponAABBCannotDamageTheTorso",
+      "DuelWeaponFightTests/testPauseCancellationDropsARecoveryQueueWithoutUndoingTheCurrentAttack",
+      "DuelWeaponFightTests/testComboAnchorContinuesSourceTimeWithoutReplayingTheSharedStrikePrefix",
+      "DuelWeaponFightTests/testStationaryGuardBlocksButGuardAndWalkingDoesNotCreateAFreeBlock",
+      "DuelWeaponFightTests/testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons",
+      "DuelWeaponFightTests/testRecoveryBoundaryAppliesMovementAndCrouchWithoutAnIdleTick",
+      "DuelWeaponFightTests/testBufferedFollowUpStillTakesPriorityOverHeldGuardAtRecovery",
+      "DuelWeaponFightTests/testDirectionalAerialKickDoesNotRequireAGroundDirectionalClip",
+      "DuelWeaponFightTests/testHitReactionRecoveryImmediatelyRestoresHeldDefense",
+      "DuelWeaponFightTests/testUnsupportedCommandsCannotPoisonTheRecoveryBuffer",
+      "DuelWeaponFightTests/testUnsupportedHitStopPressLeavesRoomForAValidFollowUp",
+      "DuelWeaponFightTests/testJumpAnimationAloneNeverBecomesAnAttack",
+      "DuelWeaponFightTests/testAerialKickConsumesLaterAirborneButtonsWithoutReplayingOnLanding",
+      "DuelWeaponFightTests/testUnavailableAerialAttackIsConsumedInsteadOfSavedUntilLanding",
+      "DuelWeaponFightTests/testHitStopFreezesPoseAndTimerAndItsBufferedButtonCanBeCancelled",
+      "DuelWeaponFightTests/testRoundBreakClearsPendingMovesAndResetsBothIndependentProfiles",
+      "DuelWeaponComboTests/testMissedOpeningStrikeCannotBankAnExtraHitForTheSecondStage",
+      "DuelWeaponComboTests/testSuccessfulOpeningStrikeStillAllowsOneDistinctContinuationHit",
+      "DuelWeaponComboTests/testTwoMissedStagesCannotBankExtraHitsForTheThirdStage",
+      "DuelWeaponComboTests/testGuardConsumesTheStageOpportunityWithoutExtraChipOrEnergy",
+      "DuelWeaponComboTests/testHitStopAtTheAnchorAcceptsOneFollowUpWithoutReplayingTheContact",
+      "DuelWeaponComboTests/testPauseCancellationAtTheAnchorCannotReviveTheQueuedStage",
+      "DuelWeaponComboTests/testChainedStageBudgetsReplayIdenticallyThroughWhiffsBlocksAndHitStop",
+      "DuelWeaponShadowTests/testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections",
+      "DuelWeaponShadowTests/testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing",
+      "DuelWeaponShadowTests/testShadowCannotRestartOrOccupyBufferWithoutEnergy",
+      "DuelWeaponShadowTests/testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown",
+      "DuelWeaponShadowTests/testHitInterruptsWindupWithoutRefundOrDelayedProjectile",
+      "DuelWeaponShadowTests/testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow",
+      "DuelWeaponShadowTests/testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn",
+      "DuelWeaponShadowTests/testCooldownExpiresOnlyOnUnpausedSimulationTicks",
+      "DuelWeaponShadowTests/testRoundEndAndResetRemoveProjectileAndResetCooldown",
+      "DuelWeaponShadowTests/testShadowReplayIncludesHiddenOriginCooldownAndCancellation",
+      "DuelWeaponShadowTests/testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath",
+      "DuelNetworkReplayTests/testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI",
+      "DuelNetworkReplayTests/testWireContainsConsumedLeaseAndLateInputNotOriginalRequests",
+      "DuelNetworkReplayTests/testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead",
+      "DuelNetworkReplayTests/testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct",
+      "DuelNetworkReplayTests/testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic",
+      "DuelNetworkReplayTests/testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch",
+      "DuelNetworkReplayTests/testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault",
+      "DuelNetworkReplayTests/testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic",
+      "DuelNetworkReplayTests/testByteBatchAndCounterBounds",
+      "DuelNetworkReplayTests/testCancellationDisconnectAndInterruptionAreTerminal",
+      "DuelNetworkReplayTests/testEpochChangeFailsClosedOnlyForPinnedHostAndStart",
+      "DuelNetworkReplayTests/testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame",
+      "DuelNetworkReplayTests/testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent",
+      "DuelNetworkReplayTests/testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry",
+      "DuelNetworkReplayTests/testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic",
+      "DuelManualGuardTests/testNeutralDoesNotAutomaticallyGuard",
+      "DuelManualGuardTests/testExplicitGuardRequiresHoldAndResetsOnCancel",
+      "DuelManualGuardTests/testNoGuardWhileMovingOrAirborneAndRecoveryStillApplies",
+      "DuelManualGuardTests/testManualGuardSurvivesWireEncodingAsExplicitInputOnly"
+    ],
+    "actualMethods": [
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testContinuousCameraEnvelopeKeepsBothFightersVisible",
+        "result": "passed",
+        "seconds": 0.006
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testExplicitBoutRestartClearsOpticalFOVEvenOnIdenticalFrame",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testInvalidTransientGeometryCannotPoisonProjection",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testLandscapeThresholdHasNoHardLensJump",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testOpticalFOVExpandsImmediatelyButReturnsSmoothly",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testOpticalFOVResetsOnRewindAndRotation",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testPortraitRetainsOverviewAtEverySeparation",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testSeparatedFightersKeepBodyMarginInEveryLandscapeWidth",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testSmallSafeAreaAspectJitterCannotSnapOutOfWideWeaponFit",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testUnexpectedFiniteSeparationCannotOverflowCameraDistance",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCameraFramingTests",
+        "method": "testWideCloseUpAndSeparatedFighters",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testAuthoritativePairRepositionDropsStaleWideZoom",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testConfirmedImpactStrengthAndDirectionRemainDistinct",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testHitStopFreezesFramingWhileContactRecoilSettles",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testNewContactCanRestartSettledImpulseAndWeakBlockCannotEraseHeavyHit",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testOpeningShotCentersPairAtEitherStageEdge",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testRepeatedPresentationDoesNotMoveCameraOrReplayContact",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testRepositionStateResetsAfterRewindAndIgnoresInvalidSamples",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testRewindResetsAndInvalidGeometryCannotPoisonPresentation",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testRoundRepositionSnapsCameraToTheNewPairCenter",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testSkippedSamplesUseElapsedTicksInsteadOfOneDrawWorthOfMovement",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelCombatCameraTests",
+        "method": "testTrackingLagIsIncludedAndZoomReturnsGradually",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelManualGuardTests",
+        "method": "testExplicitGuardRequiresHoldAndResetsOnCancel",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelManualGuardTests",
+        "method": "testManualGuardSurvivesWireEncodingAsExplicitInputOnly",
+        "result": "passed",
+        "seconds": 0.009
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelManualGuardTests",
+        "method": "testNeutralDoesNotAutomaticallyGuard",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelManualGuardTests",
+        "method": "testNoGuardWhileMovingOrAirborneAndRecoveryStillApplies",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI",
+        "result": "passed",
+        "seconds": 7.539
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testByteBatchAndCounterBounds",
+        "result": "passed",
+        "seconds": 0.012
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testCancellationDisconnectAndInterruptionAreTerminal",
+        "result": "passed",
+        "seconds": 0.043
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testEpochChangeFailsClosedOnlyForPinnedHostAndStart",
+        "result": "passed",
+        "seconds": 0.01
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent",
+        "result": "passed",
+        "seconds": 0.318
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic",
+        "result": "passed",
+        "seconds": 0.01
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead",
+        "result": "passed",
+        "seconds": 0.011
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct",
+        "result": "passed",
+        "seconds": 0.016
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry",
+        "result": "passed",
+        "seconds": 0.144
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic",
+        "result": "passed",
+        "seconds": 0.004
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault",
+        "result": "passed",
+        "seconds": 0.006
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic",
+        "result": "passed",
+        "seconds": 0.15
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch",
+        "result": "passed",
+        "seconds": 0.009
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame",
+        "result": "passed",
+        "seconds": 0.085
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelNetworkReplayTests",
+        "method": "testWireContainsConsumedLeaseAndLateInputNotOriginalRequests",
+        "result": "passed",
+        "seconds": 0.046
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testChainedStageBudgetsReplayIdenticallyThroughWhiffsBlocksAndHitStop",
+        "result": "passed",
+        "seconds": 22.879
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testGuardConsumesTheStageOpportunityWithoutExtraChipOrEnergy",
+        "result": "passed",
+        "seconds": 0.007
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testHitStopAtTheAnchorAcceptsOneFollowUpWithoutReplayingTheContact",
+        "result": "passed",
+        "seconds": 0.005
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testMissedOpeningStrikeCannotBankAnExtraHitForTheSecondStage",
+        "result": "passed",
+        "seconds": 0.017
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testPauseCancellationAtTheAnchorCannotReviveTheQueuedStage",
+        "result": "passed",
+        "seconds": 0.045
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testSuccessfulOpeningStrikeStillAllowsOneDistinctContinuationHit",
+        "result": "passed",
+        "seconds": 0.018
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponComboTests",
+        "method": "testTwoMissedStagesCannotBankExtraHitsForTheThirdStage",
+        "result": "passed",
+        "seconds": 0.019
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testAerialKickConsumesLaterAirborneButtonsWithoutReplayingOnLanding",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testBufferedFollowUpStillTakesPriorityOverHeldGuardAtRecovery",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testComboAnchorContinuesSourceTimeWithoutReplayingTheSharedStrikePrefix",
+        "result": "passed",
+        "seconds": 0.016
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testDirectionalAerialKickDoesNotRequireAGroundDirectionalClip",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testEmptyCornerOfDiagonalWeaponAABBCannotDamageTheTorso",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testFightCannotStartWithAnInvalidSameEquipmentCatalog",
+        "result": "passed",
+        "seconds": 0.018
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons",
+        "result": "passed",
+        "seconds": 0.003
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testHitReactionRecoveryImmediatelyRestoresHeldDefense",
+        "result": "passed",
+        "seconds": 0.003
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testHitStopFreezesPoseAndTimerAndItsBufferedButtonCanBeCancelled",
+        "result": "passed",
+        "seconds": 0.003
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testJumpAnimationAloneNeverBecomesAnAttack",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testMovingWeaponSegmentMakesOneContactAndUpdatesDamage",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testPauseCancellationDropsARecoveryQueueWithoutUndoingTheCurrentAttack",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testRecoveryBoundaryAppliesMovementAndCrouchWithoutAnIdleTick",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testRoundBreakClearsPendingMovesAndResetsBothIndependentProfiles",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testStationaryGuardBlocksButGuardAndWalkingDoesNotCreateAFreeBlock",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testUnavailableAerialAttackIsConsumedInsteadOfSavedUntilLanding",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testUnsupportedCommandsCannotPoisonTheRecoveryBuffer",
+        "result": "passed",
+        "seconds": 0.029
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponFightTests",
+        "method": "testUnsupportedHitStopPressLeavesRoomForAValidFollowUp",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testAlreadyQueuedTapCannotBeOverwrittenByMaturingHeavyHold",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testAttackReleaseNeverAutomaticallyRaisesGuard",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testAxesAreClampedAndAirborneNeutralActionsStayGeneric",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testButtonFirstChordUsesTheLiveDirectionBeforeHeavyThreshold",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testCancellingOneButtonDoesNotCompleteATapOrEraseACommittedCommand",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testChordRemainsCapturedWhenBothFingersReleaseBeforeTheNextTick",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testDirectionChangesCannotRepeatAnAlreadyResolvedHeldAttack",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testDirectionsResolveRelativeToFacingAndVerticalChordsDoNotJump",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testDuplicateButtonEdgesDoNotResetHoldOrRepeatRelease",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testFirstResolvedCommandWinsWithoutReplayingTheOtherFinger",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testFullCancellationClearsButtonsDirectionMailboxAndJumpBeforeLateRelease",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testManualGuardRequiresPlayerHoldAndNeutralGroundedInput",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testNeutralKickHasNoInventedHeavyMappingAndSpecialsKeepTheirIdentity",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testNeutralTapAndHeavyHoldAreExclusiveAndNeverRepeatWhileHeld",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testPendingButtonsResolveInPressOrderWhenDirectionArrives",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testQuickUpReleaseSurvivesTheGracePeriodButAirborneUpCannotJumpAgain",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testStandaloneUpIsEdgeTriggeredAndDoesNotBounceOnLanding",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponInputTests",
+        "method": "testUpAllowsOneSimulationTickForASecondFingerChord",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections",
+        "result": "passed",
+        "seconds": 0.011
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testCooldownExpiresOnlyOnUnpausedSimulationTicks",
+        "result": "passed",
+        "seconds": 0.004
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow",
+        "result": "passed",
+        "seconds": 0.01
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown",
+        "result": "passed",
+        "seconds": 0.005
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing",
+        "result": "passed",
+        "seconds": 0.002
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testHitInterruptsWindupWithoutRefundOrDelayedProjectile",
+        "result": "passed",
+        "seconds": 0.004
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn",
+        "result": "passed",
+        "seconds": 0.02
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath",
+        "result": "passed",
+        "seconds": 0.022
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testRoundEndAndResetRemoveProjectileAndResetCooldown",
+        "result": "passed",
+        "seconds": 0.003
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testShadowCannotRestartOrOccupyBufferWithoutEnergy",
+        "result": "passed",
+        "seconds": 0.003
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponShadowTests",
+        "method": "testShadowReplayIncludesHiddenOriginCooldownAndCancellation",
+        "result": "passed",
+        "seconds": 29.653
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testAdjacentCeilingIsInclusiveForBothWeaponsWithoutPhantomHits",
+        "result": "passed",
+        "seconds": 0.078
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testBadPeakDoesNotSilenceLaterValidStroke",
+        "result": "passed",
+        "seconds": 0.015
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testDepthDiscontinuityCountsEvenWhenProjectedMovementLooksSmall",
+        "result": "passed",
+        "seconds": 0.014
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testInvalidBaseCannotCreateAFalseShaftHitFromAContinuousTip",
+        "result": "passed",
+        "seconds": 0.059
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testInvalidDistancesCannotBeAcceptedAsContinuity",
+        "result": "passed",
+        "seconds": 0
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testOneDiscontinuousHammerDoesNotSuppressTheOtherHammer",
+        "result": "passed",
+        "seconds": 0.024
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testOutOfPlanePreviousSampleCannotSweepBackIntoTorso",
+        "result": "passed",
+        "seconds": 0.013
+      },
+      {
+        "module": "ShiftCoreTests",
+        "class": "DuelWeaponSweepContinuityTests",
+        "method": "testTeleportedWeaponCannotCreateDamageAudioOrAnActiveTrail",
+        "result": "passed",
+        "seconds": 0.014
+      }
+    ],
+    "buildSeconds": 104.3,
+    "xctestSeconds": 61.481,
+    "xctestSuiteWallSeconds": 61.517,
+    "stepAndCommandSeconds": 174
+  },
+  "native": {
+    "actualCount": 22,
+    "passed": 22,
+    "failed": 0,
+    "skipped": 0,
+    "exactMethodSetMatched": true,
+    "expectedMethods": [
+      "SiteTests/DuelWeaponTrailContinuityTests/testFirstActiveSampleSeedsOnlyWithinInclusiveAdjacentCeiling",
+      "SiteTests/DuelWeaponTrailContinuityTests/testActiveTeleportStartsAnUnbridgedStripAndNextValidStepResumes",
+      "SiteTests/DuelWeaponTrailContinuityTests/testSkippedSimulationTickCannotJoinOtherwiseNearbySamples",
+      "SiteTests/DuelWeaponTrailContinuityTests/testBothHammersKeepIndependentContinuityAndPreparationOwnership",
+      "SiteTests/DuelSourceControlsTests/testFallbackCannotClaimSourceArtworkAndAccessibilityIncludesManualDefense",
+      "SiteTests/DuelSourceControlsTests/testManualGuardRequiresLastFingerReleaseAndDragOutCancels",
+      "SiteTests/DuelSourceControlsTests/testManualGuardCancellationClearsTouchAndAccessibilityIntent",
+      "SiteTests/DuelSourceControlsTests/testManualGuardReentrantCancellationCannotRearmRemainingPointers",
+      "SiteTests/DuelLifecycleTests/testExternalWeaponInputUsesGuestAirborneState",
+      "SiteTests/DuelLifecycleTests/testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState",
+      "SiteTests/DuelLifecycleTests/testExternalPhysicalClearPauseAndShutdownPreserveCanonicalBuffers",
+      "SiteTests/DuelLifecycleTests/testOfflineControlReplacementRetiresOldViewAndPreservesCurrentReset",
+      "SiteTests/DuelLifecycleTests/testShutdownDuringControlClaimRejectsLateBindingAndInputHooks",
+      "SiteTests/DuelLifecycleTests/testOldControlShutdownCannotLetStaleClaimClearNewerInput",
+      "SiteTests/DuelLifecycleTests/testCurrentControlDismantleClearsInputAndCannotBeRebound",
+      "SiteTests/DuelLifecycleTests/testOfflineResumeCannotOverwritePauseOrShutdownDuringInputReset",
+      "SiteTests/DuelLifecycleTests/testOfflineRestartStopsAfterInterruptionAtEveryCallbackBoundary",
+      "SiteTests/DuelLifecycleTests/testOfflineRestartRejectsNestedRestartResumeAndInputWithoutLosingItsOneReset",
+      "SiteTests/DuelLifecycleTests/testCombatCameraDoesNotAdvanceOnRepeatedDrawsOrPausedLayout",
+      "SiteTests/DuelLifecycleTests/testCombatCameraMatchesAcrossSingleAndBatchedRendering",
+      "SiteTests/DuelLifecycleTests/testAuthoritativeCameraUsesEveryPublishedStepAndStopsOnCancellation",
+      "SiteTests/DuelLifecycleTests/testNetworkPreparationRevalidatesControlsLayoutWhileSceneIsPending"
+    ],
+    "actualMethods": [
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testAuthoritativeCameraUsesEveryPublishedStepAndStopsOnCancellation",
+        "result": "passed",
+        "seconds": 0.286
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testCombatCameraDoesNotAdvanceOnRepeatedDrawsOrPausedLayout",
+        "result": "passed",
+        "seconds": 0.023
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testCombatCameraMatchesAcrossSingleAndBatchedRendering",
+        "result": "passed",
+        "seconds": 0.028
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testCurrentControlDismantleClearsInputAndCannotBeRebound",
+        "result": "passed",
+        "seconds": 0.033
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState",
+        "result": "passed",
+        "seconds": 0.072
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testExternalPhysicalClearPauseAndShutdownPreserveCanonicalBuffers",
+        "result": "passed",
+        "seconds": 0.127
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testExternalWeaponInputUsesGuestAirborneState",
+        "result": "passed",
+        "seconds": 1.051
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testNetworkPreparationRevalidatesControlsLayoutWhileSceneIsPending",
+        "result": "passed",
+        "seconds": 0.031
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testOfflineControlReplacementRetiresOldViewAndPreservesCurrentReset",
+        "result": "passed",
+        "seconds": 0.031
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testOfflineRestartRejectsNestedRestartResumeAndInputWithoutLosingItsOneReset",
+        "result": "passed",
+        "seconds": 0.267
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testOfflineRestartStopsAfterInterruptionAtEveryCallbackBoundary",
+        "result": "passed",
+        "seconds": 0.003
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testOfflineResumeCannotOverwritePauseOrShutdownDuringInputReset",
+        "result": "passed",
+        "seconds": 0.001
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testOldControlShutdownCannotLetStaleClaimClearNewerInput",
+        "result": "passed",
+        "seconds": 0.008
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelLifecycleTests",
+        "method": "testShutdownDuringControlClaimRejectsLateBindingAndInputHooks",
+        "result": "passed",
+        "seconds": 0.007
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelSourceControlsTests",
+        "method": "testFallbackCannotClaimSourceArtworkAndAccessibilityIncludesManualDefense",
+        "result": "passed",
+        "seconds": 0.009
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelSourceControlsTests",
+        "method": "testManualGuardCancellationClearsTouchAndAccessibilityIntent",
+        "result": "passed",
+        "seconds": 0.455
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelSourceControlsTests",
+        "method": "testManualGuardReentrantCancellationCannotRearmRemainingPointers",
+        "result": "passed",
+        "seconds": 0.004
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelSourceControlsTests",
+        "method": "testManualGuardRequiresLastFingerReleaseAndDragOutCancels",
+        "result": "passed",
+        "seconds": 0.005
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelWeaponTrailContinuityTests",
+        "method": "testActiveTeleportStartsAnUnbridgedStripAndNextValidStepResumes",
+        "result": "passed",
+        "seconds": 0.031
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelWeaponTrailContinuityTests",
+        "method": "testBothHammersKeepIndependentContinuityAndPreparationOwnership",
+        "result": "passed",
+        "seconds": 0.009
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelWeaponTrailContinuityTests",
+        "method": "testFirstActiveSampleSeedsOnlyWithinInclusiveAdjacentCeiling",
+        "result": "passed",
+        "seconds": 0.076
+      },
+      {
+        "module": "SiteTests",
+        "class": "DuelWeaponTrailContinuityTests",
+        "method": "testSkippedSimulationTickCannotJoinOtherwiseNearbySamples",
+        "result": "passed",
+        "seconds": 0.159
+      }
+    ],
+    "xcresultSummary": {
+      "result": "Passed",
+      "totalTestCount": 22,
+      "passedTests": 22,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "testFailures": []
+    },
+    "process": {
+      "exitCode": 0,
+      "durationSeconds": 178.33,
+      "resultBundlePresent": true,
+      "exports": {
+        "summary": {
+          "exitCode": 0,
+          "diagnostic": ""
+        },
+        "tests": {
+          "exitCode": 0,
+          "diagnostic": ""
+        }
+      }
+    },
+    "unsignedBuildProcessSeconds": 312,
+    "unsignedBuildStepSeconds": 313,
+    "simulatorPreparationStepSeconds": 163,
+    "xctestSeconds": 2.716,
+    "xctestSuiteWallSeconds": 5.147,
+    "testCommandSeconds": 178.33,
+    "testStepIncludingExportsSeconds": 206
+  },
+  "artifacts": {
+    "totalCount": 0,
+    "uploaded": []
+  },
+  "log": {
+    "file": "game-native-final-job.log",
+    "bytes": 1047095,
+    "sha256": "13d5a6f53a6014f66fe1d88ea381a085c4ded5a9a877d7289d7e758c3729c024",
+    "format": "Exact decoded GitHub job log, UTF-8 with original LF and BOM; retrieved after terminal completion.",
+    "excerptFile": "game-native-final-excerpt.log"
+  },
+  "safetyAndScope": {
+    "privateResourcesLoaded": false,
+    "signing": false,
+    "archive": false,
+    "appOrArtifactUpload": false,
+    "release": false,
+    "testFlight": false,
+    "workflowRetries": 0,
+    "realDevice": false,
+    "visualAcceptance": false,
+    "performanceAcceptance": false,
+    "limitations": [
+      "Only selected synthetic core/native XCTest methods executed; real-resource guard and ArenaFlow UI methods are excluded.",
+      "iPhone 17 Pro Max here is a simulator, not a physical device.",
+      "Timing values describe CI build/test stages, not game frame rate or stable 60fps.",
+      "Existing Build 702 release, private resource safety and historical heavy-test evidence were not changed by this workflow."
+    ]
+  },
+  "remoteReview": {
+    "checkedAt": "2026-11-13 03:43:55 UTC",
+    "branchCount": 52,
+    "knownBranches": [
+      {
+        "name": "codex/fighter-camera-skin-fit-fallback-20261113-1130",
+        "sha": "a452990f7f777b96ffdb323f744643542615daf8"
+      },
+      {
+        "name": "codex/fighter-camera-viewport-jitter-20261113-1030",
+        "sha": "54ff0d78fabf3bcd7247b38cb8e09e749dc9ced8"
+      },
+      {
+        "name": "codex/fighter-character-combat-20261111",
+        "sha": "3903fedf0323d0aaecde35df3288348111bcfd62"
+      },
+      {
+        "name": "codex/fighter-integrated-controls-20261113-1100",
+        "sha": "4dd788e3b7b35943ea06f1714dd8ba02a572d636"
+      },
+      {
+        "name": "codex/fighter-lab-compile-only-20261111",
+        "sha": "a0657d3f42141d673e37e4afd3a41354d644ddfc"
+      }
+    ],
+    "activeStates": [
+      {
+        "state": "in_progress",
+        "count": 0,
+        "runs": []
+      },
+      {
+        "state": "queued",
+        "count": 0,
+        "runs": []
+      },
+      {
+        "state": "waiting",
+        "count": 0,
+        "runs": []
+      },
+      {
+        "state": "requested",
+        "count": 0,
+        "runs": []
+      },
+      {
+        "state": "pending",
+        "count": 0,
+        "runs": []
+      }
+    ],
+    "concurrentCandidate": {
+      "sha": "a452990f7f777b96ffdb323f744643542615daf8",
+      "parents": [
+        "4dd788e3b7b35943ea06f1714dd8ba02a572d636"
+      ],
+      "date": "2026-11-13T03:39:46Z",
+      "message": "Keep last safe optical FOV on invalid live skin bounds [skip ci]\n\nOn measured geometry failure preserve a wider previously fitted camera lens instead of snapping to the narrow pair-only FOV. Retain the failure signal and clear stale occlusion while allowing the next valid sample to recover. Add deterministic Swift regression tests; no assets, fighter rules, defense, CI configuration or publishing changes.",
+      "files": [
+        {
+          "path": "App/Views/DuelWorld.swift",
+          "additions": 6,
+          "deletions": 1
+        },
+        {
+          "path": "Sources/ShiftCore/DuelCameraFraming.swift",
+          "additions": 12,
+          "deletions": 0
+        },
+        {
+          "path": "Tests/ShiftCoreTests/DuelCameraFramingTests.swift",
+          "additions": 24,
+          "deletions": 0
+        }
+      ],
+      "url": "https://github.com/wuyong9494-lab/kriswu/commit/a452990f7f777b96ffdb323f744643542615daf8",
+      "testEvidence": "Not covered by this run. Direct descendant of tested 4dd788e3; inspected only, not merged/rebased or tested by this evidence task."
+    }
+  }
+}
