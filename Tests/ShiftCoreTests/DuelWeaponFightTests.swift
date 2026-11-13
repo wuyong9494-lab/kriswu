@@ -4,6 +4,36 @@ import XCTest
 final class DuelWeaponFightTests: XCTestCase {
     private typealias Fixture = DuelWeaponTestFixtures
 
+    func testUnsafeShadowClipsCannotStartOrConsumeEnergy() throws {
+        var fight = try Fixture.fight()
+        for index in 0..<2 {
+            XCTAssertFalse(fight.supports(.shadow, index: index))
+            XCTAssertFalse(fight.canUse(.shadow, index: index))
+            XCTAssertFalse(fight.shadowIsActive(index))
+        }
+        let initialEnergy = fight.fighters.map(\.energy)
+        fight.step(.init(weaponCommand: .shadow), opponent: .init(weaponCommand: .shadow))
+        XCTAssertEqual(fight.fighters.map(\.energy), initialEnergy)
+        XCTAssertFalse(fight.shadowIsActive(0))
+        XCTAssertFalse(fight.shadowIsActive(1))
+        XCTAssertFalse(fight.weaponTrailIsActive(0))
+        XCTAssertFalse(fight.weaponTrailIsActive(1))
+        XCTAssertTrue(fight.contacts.isEmpty)
+    }
+
+    func testWeaponTrailDoesNotEmitOnIdleOrAfterAttackEnds() throws {
+        var fight = try Fixture.fight(distance: 3000)
+        XCTAssertFalse(fight.weaponTrailIsActive(0))
+        fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
+        var sawActiveTrail = false
+        for _ in 0..<100 {
+            sawActiveTrail = sawActiveTrail || fight.weaponTrailIsActive(0)
+            fight.step(.neutral, opponent: .neutral)
+        }
+        XCTAssertTrue(sawActiveTrail, "Fixture's ordinary katana swing must emit a valid trail")
+        XCTAssertFalse(fight.weaponTrailIsActive(0), "Completed attacks must not retain an emitting trail")
+    }
+
     func testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges() throws {
         let catalog = Fixture.catalog()
         for (first, second) in [(DuelGame.Hero.ember, DuelGame.Hero.liu), (.liu, .ember)] {
