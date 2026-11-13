@@ -378,12 +378,22 @@ final class DuelWeaponGameplayTests: XCTestCase {
     /// adapter. Visible contribution is separate from approving source-art
     /// fidelity; only the weapon-effects owner is hidden for each comparison.
     func testOrdinaryRibbonAdapterContributesToRealSourceContacts() throws {
+        try verifyOrdinaryTrailsAtRealContacts(sourceSkins: false)
+    }
+
+    func testSourceSkinsContributeToRealSourceContactsAndRelease() throws {
+        try verifyOrdinaryTrailsAtRealContacts(sourceSkins: true)
+    }
+
+    private func verifyOrdinaryTrailsAtRealContacts(sourceSkins: Bool) throws {
         let baselineClocks = DuelWorldView.activeClocks
         for hero in [DuelGame.Hero.ember, .liu] {
             try autoreleasepool {
                 let state = DuelSession(.init(hero: hero, difficulty: .learning,
                                                mode: .practice, originalWeapons: true))
                 let view = DuelWorldView(session: state)
+                view.sourceWeaponSkinsEnabled = sourceSkins
+                if sourceSkins { XCTAssertNotNil(state.weaponAssets?.sourceTrails) }
                 defer { view.shutdown(); state.shutdown() }
                 XCTAssertNil(state.loadError, "This method requires the authenticated source characters and stage")
                 XCTAssertNotNil(state.game.weaponFight)
@@ -401,6 +411,11 @@ final class DuelWeaponGameplayTests: XCTestCase {
                 let containers = scene.rootNode.childNodes.filter { $0.name == "duel.weapon-effects" }
                 XCTAssertEqual(containers.count, 1, "The comparison must hide the actual unique ribbon owner")
                 let container = try XCTUnwrap(containers.first)
+                var skins: [SCNNode] = []
+                scene.rootNode.enumerateChildNodes { node, _ in
+                    if node.name == "duel.source-weapon-trails" { skins.append(node) }
+                }
+                if sourceSkins { XCTAssertEqual(skins.count, 2) }
                 view.frame = CGRect(x: 0, y: 0, width: 956, height: 440); view.layoutIfNeeded()
                 XCTAssertNil(view.opticalFramingFailure)
                 let camera = try XCTUnwrap(view.pointOfView?.camera)
@@ -439,8 +454,15 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     XCTAssertLessThan(state.game.fighters[1].health, 1000)
                     XCTAssertGreaterThan(state.game.hitStop, 0)
                     XCTAssertNil(view.opticalFramingFailure, "\(detail): require a measured production camera fit")
-                    XCTAssertGreaterThan(effects.renderedVertexCount, 0)
+                    if sourceSkins {
+                        XCTAssertEqual(effects.renderedVertexCount, 0, "Do not overlay an endpoint ribbon on the original skin")
+                        XCTAssertTrue(skins.contains { !$0.isHidden })
+                    } else {
+                        XCTAssertGreaterThan(effects.renderedVertexCount, 0)
+                    }
                     XCTAssertFalse(container.isHidden)
+                    let bones = skins.flatMap { $0.childNodes.flatMap { $0.skinner?.bones ?? [] } }
+                    let frozenTransforms = bones.map(\.simdWorldTransform)
                     let frozenGame = state.game, frozenTick = state.animationTick
                     let frozenCamera = view.combatCamera
                     let frozenTrails = effects.trailDiagnostics, frozenSamples = effects.emittedSampleCount
@@ -449,11 +471,13 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     XCTAssertEqual(effects.emittedSampleCount, frozenSamples,
                                    "\(detail): repeated draws cannot append ribbon samples")
                     let withTrail = try capture(renderer,
-                        name: "ribbon-equipped-\(hero.rawValue)-\(role)-source-contact")
+                        name: "\(sourceSkins ? "skin" : "ribbon")-equipped-\(hero.rawValue)-\(role)-source-contact")
                     let withoutTrail: [UInt8]
                     do {
-                        container.isHidden = true
-                        defer { container.isHidden = false }
+                        let compared = sourceSkins ? skins : [container]
+                        let hidden = compared.map(\.isHidden)
+                        for node in compared { node.isHidden = true }
+                        defer { for (node, value) in zip(compared, hidden) { node.isHidden = value } }
                         withoutTrail = try capture(renderer)
                     }
                     XCTAssertGreaterThan(changedPixels(withTrail, withoutTrail), 10,
@@ -470,6 +494,7 @@ final class DuelWeaponGameplayTests: XCTestCase {
                     XCTAssertEqual(effects.trailDiagnostics, frozenTrails,
                                    "\(detail): pause must freeze both live and fading ribbon geometry")
                     XCTAssertEqual(effects.emittedSampleCount, frozenSamples)
+                    XCTAssertEqual(bones.map(\.simdWorldTransform), frozenTransforms)
                 }
                 renderer.scene = nil; renderer.pointOfView = nil
                 view.shutdown(); state.shutdown()
@@ -478,6 +503,13 @@ final class DuelWeaponGameplayTests: XCTestCase {
                 XCTAssertEqual(effects.retainedTrailCount, 0)
                 XCTAssertEqual(effects.renderedVertexCount, 0)
                 XCTAssertEqual(effects.sourceTextureCount, 0)
+                for root in skins {
+                    var ancestor: SCNNode? = root
+                    while let node = ancestor {
+                        XCTAssertFalse(node === scene.rootNode)
+                        ancestor = node.parent
+                    }
+                }
             }
             XCTAssertEqual(DuelWorldView.activeClocks, baselineClocks)
         }

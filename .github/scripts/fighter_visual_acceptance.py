@@ -96,7 +96,30 @@ PRESENTATION_ATTACHMENTS.update({
     "real-optical-fit-failure-recovery-" + hero: {"selector": "SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers", "kind": "data"}
     for hero in ("ember", "liu")
 })
+SOURCE_SKIN_SELECTED = [
+    ("DuelSourceWeaponTrailTests", "testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen", "authenticated original four-bone skins, existing source tracks, both facings; fixed test camera"),
+    ("DuelWeaponGameplayTests", "testSourceSkinsContributeToRealSourceContactsAndRelease", "actual fighters and production contacts/camera; no duplicate ordinary history ribbon; pause/release"),
+]
+SOURCE_SKIN_ATTACHMENTS = {
+    f"source-skin-{hero}-{role}-{facing}": {"selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen", "kind": "image"}
+    for hero in ("ember", "liu") for role in ("weapon1", "heavy") for facing in ("positive", "negative")
+}
+SOURCE_SKIN_ATTACHMENTS.update({
+    f"skin-equipped-{hero}-{role}-source-contact": {"selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease", "kind": "image"}
+    for hero in ("ember", "liu") for role in ("weapon1", "heavy")
+})
 SCOPES = {
+    "source-skins-followup": {
+        "selected": SOURCE_SKIN_SELECTED, "methodCount": 2,
+        "imageLabels": list(SOURCE_SKIN_ATTACHMENTS), "dataLabels": [],
+        "commitPrefix": "Capture source fighter skins",
+        "workflow": ".github/workflows/fighter-source-skins-followup.yml",
+        "additionalSources": ["App/Services/DuelSourceWeaponTrails.swift", "App/Services/DuelWeaponAssets.swift",
+                              "App/Services/DuelWeaponEffects.swift", "App/Services/DuelNetworkCompatibilityIdentity.swift",
+                              "App/Services/GLTFModel.swift", "App/Views/DuelWorld.swift",
+                              ".github/scripts/fighter_presentation_assets.py", ".github/scripts/fighter_source_trails.py",
+                              ".github/scripts/export_fighter_source_trails.py"],
+    },
     "coverage-followup": {
         "selected": FOLLOWUP_SELECTED[2:], "methodCount": 2,
         "imageLabels": list(FOLLOWUP_ATTACHMENTS), "dataLabels": [],
@@ -151,8 +174,12 @@ SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTE
 EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
 IMAGE_LABELS = SCOPE["imageLabels"]
 DATA_LABELS = SCOPE["dataLabels"]
-EXPECTED_ATTACHMENTS = PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS
-USES_PRESENTATION = SCOPE_NAME in ("presentation-followup", "coverage-followup")
+EXPECTED_ATTACHMENTS = (SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
+                        PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS)
+USES_SOURCE_SKINS = SCOPE_NAME == "source-skins-followup"
+USES_PRESENTATION = SCOPE_NAME in ("presentation-followup", "coverage-followup", "source-skins-followup")
+if USES_SOURCE_SKINS:
+    MANIFESTS.append(".github/private/fighter-source-trails/manifest.json")
 if USES_PRESENTATION:
     MANIFESTS.append(".github/private/fighter-presentation/manifest.json")
     RECIPIENT = ROOT / ".github/public/fighter-presentation-20261113.public.pem"
@@ -293,7 +320,7 @@ def resource_records():
                          "manifest": manifest_path,
                          "encryptedParts": row.get("parts", manifest.get("parts", [])),
                          "cipherSHA256": row.get("cipher_sha256", manifest.get("cipher_sha256"))})
-    count = 72 if USES_PRESENTATION else 64
+    count = 73 if USES_SOURCE_SKINS else 72 if USES_PRESENTATION else 64
     assert len(rows) == count and len({row["file"] for row in rows}) == count
     return rows
 
@@ -326,6 +353,8 @@ def stage():
     run_logged([sys.executable, ".github/scripts/fighter_sf3_distinct.py"], "stage-distinct", 180)
     if USES_PRESENTATION:
         run_logged([sys.executable, ".github/scripts/fighter_presentation_assets.py", "stage"], "stage-presentation", 60)
+    if USES_SOURCE_SKINS:
+        run_logged([sys.executable, ".github/scripts/fighter_source_trails.py", "stage"], "stage-source-skins", 60)
     audit_resources(ROOT / "App/Resources/FighterPrivate", bundled=False)
     print(str(len(resource_records())) + " character/scenery/feedback/presentation files authenticated and staged; no plaintext upload.")
 

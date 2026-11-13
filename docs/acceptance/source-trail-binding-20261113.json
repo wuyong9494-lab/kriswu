@@ -1,0 +1,117 @@
+{
+  "file": "SF3_SourceTrails.json",
+  "bytes": 20724,
+  "sha256": "6efadacf6a9e18a270a609132f622fb3ef569a505e46c81ff17c4b7ee386d0cc",
+  "meshes": [
+    {
+      "name": "wpn__katana_01_01__trail_l",
+      "vertices": 12,
+      "triangles": 12,
+      "bones": [
+        "w_katana_trail1_l",
+        "w_katana_trail2_l",
+        "w_katana_trail3_l",
+        "w_katana_trail4_l"
+      ],
+      "boneHashes": [
+        2407503352,
+        1384394316,
+        1455748724,
+        2243314099
+      ],
+      "sourceBoneIDs": [
+        260,
+        261,
+        262,
+        263
+      ],
+      "bindOrderMatchesPrefab": true,
+      "equipmentUVPresent": false
+    },
+    {
+      "name": "wpn__katana_01_01__trail_r",
+      "vertices": 12,
+      "triangles": 12,
+      "bones": [
+        "w_katana_trail1_r",
+        "w_katana_trail2_r",
+        "w_katana_trail3_r",
+        "w_katana_trail4_r"
+      ],
+      "boneHashes": [
+        2278262197,
+        1084300750,
+        3969793699,
+        2093810683
+      ],
+      "sourceBoneIDs": [
+        264,
+        265,
+        266,
+        267
+      ],
+      "bindOrderMatchesPrefab": true,
+      "equipmentUVPresent": false
+    },
+    {
+      "name": "wpn__hammers_01_01__trail_l",
+      "vertices": 32,
+      "triangles": 24,
+      "bones": [
+        "w_hammer_trail1_l",
+        "w_hammer_trail2_l",
+        "w_hammer_trail3_l",
+        "w_hammer_trail4_l"
+      ],
+      "boneHashes": [
+        2671555358,
+        390517448,
+        2082826183,
+        1954972577
+      ],
+      "sourceBoneIDs": [
+        260,
+        261,
+        262,
+        263
+      ],
+      "bindOrderMatchesPrefab": true,
+      "equipmentUVPresent": false
+    },
+    {
+      "name": "wpn__hammers_01_01__trail_r",
+      "vertices": 32,
+      "triangles": 24,
+      "bones": [
+        "w_hammer_trail1_r",
+        "w_hammer_trail2_r",
+        "w_hammer_trail3_r",
+        "w_hammer_trail4_r"
+      ],
+      "boneHashes": [
+        2542314323,
+        90431818,
+        3330256656,
+        2382217705
+      ],
+      "sourceBoneIDs": [
+        264,
+        265,
+        266,
+        267
+      ],
+      "bindOrderMatchesPrefab": true,
+      "equipmentUVPresent": false
+    }
+  ],
+  "profiles": [
+    {
+      "id": "sun_katana",
+      "sourceAnimatedClipCount": 19
+    },
+    {
+      "id": "liu_hammers",
+      "sourceAnimatedClipCount": 11
+    }
+  ]
+}

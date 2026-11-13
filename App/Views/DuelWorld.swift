@@ -45,6 +45,12 @@ final class DuelWorldView: SCNView {
     private(set) var weaponAssets: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
+    #if DEBUG
+    /// Native A/B capture only; production always prefers verified source skins.
+    var sourceWeaponSkinsEnabled = true
+    #else
+    private let sourceWeaponSkinsEnabled = true
+    #endif
     private(set) var stageAsset: DuelStageAsset?
     private(set) var verifiedEffectsRoot: SCNNode?
     private(set) var verifiedStageRoot: SCNNode?
@@ -668,7 +674,8 @@ final class DuelWorldView: SCNView {
         guard !ended, scene != nil else { return }
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         for i in 0..<actors.count {
-            actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i))
+            actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
+                           sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true)
             place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
             if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
             else { attackNodes[i].isHidden = true }
@@ -728,10 +735,14 @@ final class DuelWorldView: SCNView {
         let liuIndex = fight.fighters.firstIndex { $0.hero == .liu }
         sourceEffects?.consumeStep(contacts: contacts, swings: swings, animationTick: tick,
                                   liuShadowTick: liuIndex.flatMap { fight.shadowVisual($0)?.tick })
-        weaponEffects?.consumeStep(poses: Self.weaponEffectPoses(fight, tick: tick), animationTick: tick)
+        let skinned = Set(fight.fighters.indices.filter { index in
+            sourceWeaponSkinsEnabled && actors.indices.contains(index) &&
+                actors[index].supportsSourceTrail(fight.fighters[index].weaponPose?.clip)
+        })
+        weaponEffects?.consumeStep(poses: Self.weaponEffectPoses(fight, tick: tick, sourceSkinFighters: skinned), animationTick: tick)
     }
     /// Read-only adapter shared by native presentation verification.
-    static func weaponEffectPoses(_ fight: DuelWeaponFight, tick: Int) -> [DuelWeaponEffects.Pose] {
+    static func weaponEffectPoses(_ fight: DuelWeaponFight, tick: Int, sourceSkinFighters: Set<Int> = []) -> [DuelWeaponEffects.Pose] {
         fight.fighters.enumerated().compactMap { index, fighter in
             guard let pose = fighter.weaponPose, let clip = fight.profiles[index].clip(named: pose.clip) else { return nil }
             let profile = fight.profiles[index], tracks = clip.tracks
@@ -753,7 +764,7 @@ final class DuelWorldView: SCNView {
             return .init(fighterID: index, family: profile.isKatana ? .katana : .dualHammers,
                          // Shadow body time is rescaled source time, not action time.
                          // Keep one ribbon through outbound, apex and return.
-                         motionID: fight.weaponTrailIsActive(index)
+                         motionID: fight.weaponTrailIsActive(index) && (fight.shadowIsActive(index) || !sourceSkinFighters.contains(index))
                             ? (shadow != nil ? "shadow:\(index):\(pose.clip)" : "\(pose.clip):\(tick - pose.tick)") : nil,
                          isShadow: fight.shadowIsActive(index), endpoints: endpoints)
         }
@@ -864,6 +875,10 @@ private final class DuelActor {
     func updateSourceLighting(_ viewTransform: simd_float4x4) {
         weapon?.materialBinding?.update(viewTransform: viewTransform)
     }
+    func supportsSourceTrail(_ clip: String?) -> Bool {
+        guard let clip else { return false }
+        return weapon?.sourceTrailBinding?.supports(clip) == true
+    }
     func hasAttachedWeapon(_ asset: DuelWeaponCharacterAsset) -> Bool {
         guard let weapon else { return false }
         return weapon.asset === asset && weapon.instance.root.parent === root
@@ -969,9 +984,11 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false) {
         if let weapon {
             weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
+            weapon.sourceTrailBinding?.update(clip: fighter.weaponPose?.clip ?? "",
+                                              active: sourceTrailActive && shadow == nil)
             return
         }
         if let original {

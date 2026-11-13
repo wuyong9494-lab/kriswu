@@ -7,8 +7,9 @@ import simd
 /// Verified source alpha/curves on ordinary tick-driven ribbons, and source
 /// effect textures/material profiles on shadow ribbons. Ordinary history
 /// geometry has no source weapon-mesh UVs, so it cannot sample equipment atlases.
-/// The source skinned trail meshes, Unity particle renderer and original effect
-/// trigger table are not reproduced by this endpoint-history adapter.
+/// DuelSourceWeaponTrails supplies verified skinned ordinary trails when available.
+/// This fallback/shadow adapter does not reproduce the Unity particle renderer
+/// or original effect trigger table.
 @MainActor
 final class DuelWeaponEffects {
     enum Family: String { case katana, dualHammers }

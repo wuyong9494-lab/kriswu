@@ -35,6 +35,7 @@ struct DuelNetworkRulesManifest {
         "App/Services/DuelWeaponAssets.swift",
         "App/Services/DuelSourceEffects.swift",
         "App/Services/DuelWeaponEffects.swift",
+        "App/Services/DuelSourceWeaponTrails.swift",
         "App/Services/DuelStage.swift",
         "App/Views/DuelSourceControls.swift",
         "App/Views/DuelNetworkSelectionModel.swift",
@@ -202,6 +203,11 @@ struct DuelNetworkCompatibilityIdentity {
         let catalogURL = directory.appendingPathComponent("SF3_DistinctFighters.json")
         _ = try record(catalogURL, path: "catalog/SF3_DistinctFighters.json", maximum: 32_000_000,
                        hash: DuelWeaponAssets.catalogSHA256)
+        let sourceTrailURL = directory.appendingPathComponent(DuelSourceWeaponTrails.fileName)
+        if FileManager.default.fileExists(atPath: sourceTrailURL.path) {
+            _ = try record(sourceTrailURL, path: "weapon-effects/" + DuelSourceWeaponTrails.fileName,
+                           maximum: 100_000, hash: DuelSourceWeaponTrails.sha256)
+        }
         let assets = try DuelWeaponAssets(directory: directory)
         var transferred = false
         var retainedControls: DuelSourceControlsView?

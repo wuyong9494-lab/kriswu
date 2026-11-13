@@ -12,6 +12,7 @@ final class DuelWeaponAssets {
     let catalog: DuelWeaponCatalog
     let directory: URL
     let presentation: DuelPresentationAssets?
+    let sourceTrails: DuelSourceWeaponTrails?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
     func bindVerifiedPreparation() { belongsToVerifiedPreparation = true }
@@ -30,6 +31,7 @@ final class DuelWeaponAssets {
         try catalog.validate()
         self.catalog = catalog; self.directory = url.deletingLastPathComponent()
         presentation = try DuelPresentationAssets.optional(directory: self.directory)
+        sourceTrails = try DuelSourceWeaponTrails.optional(directory: self.directory)
         for profile in catalog.profiles {
             let modelURL = self.directory.appendingPathComponent(profile.resourceName + ".glb")
             guard FileManager.default.fileExists(atPath: modelURL.path) else { throw AssetError.missing }
@@ -38,7 +40,7 @@ final class DuelWeaponAssets {
     func character(for hero: DuelGame.Hero) throws -> DuelWeaponCharacterAsset {
         if let existing = characters[hero] { return existing }
         guard let profile = catalog.profile(for: hero) else { throw AssetError.incomplete }
-        let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"), profile: profile, presentation: presentation)
+        let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"), profile: profile, presentation: presentation, sourceTrails: sourceTrails)
         characters[hero] = value; return value
     }
     /// Cache-only access for an already verified network owner. A miss never
@@ -54,8 +56,9 @@ final class DuelWeaponCharacterAsset {
     let profile: DuelWeaponProfile
     let model: GLTFModel
     let presentation: DuelPresentationAssets?
+    let sourceTrails: DuelSourceWeaponTrails?
     private let starts: [String: Float]
-    init(url: URL, profile: DuelWeaponProfile, presentation: DuelPresentationAssets? = nil) throws {
+    init(url: URL, profile: DuelWeaponProfile, presentation: DuelPresentationAssets? = nil, sourceTrails: DuelSourceWeaponTrails? = nil) throws {
         let data = try Data(contentsOf: url)
         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
             throw DuelWeaponAssets.AssetError.integrity
@@ -88,7 +91,9 @@ final class DuelWeaponCharacterAsset {
             }
             starts[clip.name] = start
         }
+        try sourceTrails?.validate(model: model, profile: profile)
         self.profile = profile; self.model = model; self.starts = starts; self.presentation = presentation
+        self.sourceTrails = sourceTrails
     }
     func sample(_ selection: DuelWeaponPose, into pose: inout GLTFModel.Pose) {
         pose.reset(from: model.restPose)
@@ -110,6 +115,7 @@ final class DuelWeaponCharacterInstance {
     private var idleBlendStartTick = 0
     private static let idleBlendTicks = 6
     private(set) var materialBinding: DuelPresentationAssets.Binding?
+    private(set) var sourceTrailBinding: DuelSourceWeaponTrails.Binding?
 
     init(_ asset: DuelWeaponCharacterAsset, environment: DuelPresentationAssets.Environment = .palace) {
         self.asset = asset; instance = asset.model.instantiate(); pose = asset.model.restPose
@@ -149,6 +155,9 @@ final class DuelWeaponCharacterInstance {
         // Capture the actual corrected skinners, not the uncorrected asset template.
         do { displayedBounds = try DuelDisplayedSkinBounds(root: instance.root) }
         catch { displayedBoundsFailure = (error as? DuelDisplayedSkinBounds.Failure) ?? .unsupportedGeometry }
+        // Effects must not expand the body envelope used by the combat camera.
+        // Cache body/weapon bounds first; the four-bone skins have their own source binds.
+        sourceTrailBinding = asset.sourceTrails?.install(on: instance, model: asset.model, profile: asset.profile)
     }
     /// The accepted personal heads/neck were exported in the previous rig's
     /// world bind space, including its actor rotation and uniform scale. The

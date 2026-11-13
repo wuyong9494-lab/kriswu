@@ -48,6 +48,7 @@ REQUIRED = HELPERS + (
     "App/Services/DuelWeaponAssets.swift",
     "App/Services/DuelSourceEffects.swift",
     "App/Services/DuelWeaponEffects.swift",
+    "App/Services/DuelSourceWeaponTrails.swift",
     "App/Services/DuelStage.swift",
     "App/Views/DuelSourceControls.swift",
     "App/Views/DuelNetworkSelectionModel.swift",

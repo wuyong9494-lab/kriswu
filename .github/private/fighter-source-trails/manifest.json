@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "purpose": "source-trails-v1",
+  "cipherBytes": 20810,
+  "cipherSHA256": "f7d09d9d0f5e4819e86c2caab75b6eb34190b101dd53ba3330327d715987a0ff",
+  "files": [
+    {
+      "file": "SF3_SourceTrails.json",
+      "bytes": 20724,
+      "sha256": "6efadacf6a9e18a270a609132f622fb3ef569a505e46c81ff17c4b7ee386d0cc"
+    }
+  ]
+}
