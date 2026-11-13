@@ -430,6 +430,10 @@ final class DuelWorldView: SCNView {
             guard let self, !self.ended else { return }
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
             self.combatCamera = DuelCombatCamera()
+            // A restarted bout can reuse frame 0. Clear the previous lens
+            // before rendering its opening pose or the old weapon-swing FOV
+            // can persist and make both fighters appear too small.
+            self.opticalFOV.reset()
             self.consumeFeedback(self.session.game, tick: 0)
             self.drawState()
         }
