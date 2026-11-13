@@ -1,0 +1,352 @@
+name: Fighter merged device and framing candidate (unsigned synthetic only)
+'on':
+  push:
+    branches:
+    - codex/fighter-fidelity-full-20261113
+    paths:
+    - App/**
+    - Sources/**
+    - Shared/**
+    - Tests/**
+    - Package.swift
+    - project.yml
+    - .github/scripts/build_identity.py
+    - scripts/build_fighter_network_rules.py
+    - .github/workflows/ios.yml
+    - .github/workflows/fighter-fidelity-validation.yml
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: fighter-fidelity-validation-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  regression:
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-fidelity-full-20261113'
+    runs-on: macos-26
+    timeout-minutes: 65
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        lfs: false
+        submodules: false
+    - name: Record exact source and bounded synthetic test selectors
+      timeout-minutes: 2
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import datetime, hashlib, json, os, re, subprocess
+        from pathlib import Path
+        expected_branch = 'refs/heads/codex/fighter-fidelity-full-20261113'
+        assert os.environ['GITHUB_REPOSITORY'] == 'wuyong9494-lab/kriswu'
+        assert os.environ['GITHUB_REF'] == expected_branch, 'Unexpected integration branch'
+        assert os.environ['GITHUB_EVENT_NAME'] in ('push', 'workflow_dispatch')
+        head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+        assert head == os.environ['GITHUB_SHA'], 'Checkout does not match recorded source SHA'
+        for name in ('App/Resources/FighterPrivate', 'App/Resources/arena-original-resources.arenapack'):
+            assert not Path(name).exists(), 'Private runtime resource unexpectedly present: ' + name
+        p = Path(os.environ['RUNNER_TEMP']) / 'fighter-fidelity-validation'
+        p.mkdir(exist_ok=False)
+        core_sources = [
+            ('Tests/ShiftCoreTests/DuelWeaponInputTests.swift', 'DuelWeaponInputTests'),
+            ('Tests/ShiftCoreTests/DuelPhysicalInputTests.swift', 'DuelPhysicalInputTests'),
+            ('Tests/ShiftCoreTests/DuelCameraFramingTests.swift', 'DuelCameraFramingTests'),
+            ('Tests/ShiftCoreTests/DuelManualGuardTests.swift', 'DuelManualGuardTests'),
+        ]
+        native_sources = [
+            ('Tests/SiteTests/DuelLifecycleTests+Peripheral.swift', 'DuelLifecycleTests', None),
+            ('Tests/SiteTests/DuelLifecycleTests+Television.swift', 'DuelLifecycleTests', None),
+            ('Tests/SiteTests/DuelLifecycleTests+ExternalPresentation.swift', 'DuelLifecycleTests', [
+                'testTouchAndPeripheralGuardHoldUntilLastOwnerReleases',
+                'testExternalWeaponInputUsesGuestAirborneState',
+                'testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState',
+                'testExternalPhysicalClearPauseAndShutdownPreserveCanonicalBuffers',
+            ]),
+            ('Tests/SiteTests/DuelLobbyMusicSelectionTests.swift', 'DuelLobbyMusicSelectionTests', None),
+            ('Tests/SiteTests/DuelMusicTests.swift', 'DuelMusicTests', None),
+        ]
+        source_hashes = {}
+        def methods(path, klass, chosen=None):
+            file = Path(path)
+            assert file.is_file() and not file.is_symlink(), 'Missing selected source: ' + path
+            data = file.read_text()
+            assert re.search(r'\b(?:class|extension)\s+' + re.escape(klass) + r'\b', data), 'Selected class missing: ' + klass
+            declared = re.findall(r'^\s*func\s+(test\w+)\s*\(', data, flags=re.M)
+            assert declared and len(declared) == len(set(declared)), 'Empty or duplicate method inventory: ' + path
+            selected = declared if chosen is None else chosen
+            assert selected and len(selected) == len(set(selected)) and set(selected) <= set(declared), 'Invalid selected methods: ' + path
+            source_hashes[path] = hashlib.sha256(file.read_bytes()).hexdigest()
+            return [klass + '/' + name for name in selected]
+        core = [method for path, klass in core_sources for method in methods(path, klass)]
+        native = ['SiteTests/' + method for path, klass, selected in native_sources for method in methods(path, klass, selected)]
+        assert 0 < len(core) <= 160 and len(core) == len(set(core)), 'Unbounded or duplicate core inventory'
+        assert 0 < len(native) <= 60 and len(native) == len(set(native)), 'Unbounded or duplicate native inventory'
+        (p / 'core.json').write_text(json.dumps(core, indent=2))
+        (p / 'sim.json').write_text(json.dumps(native, indent=2))
+        (p / 'core-filter.txt').write_text('|'.join(klass for _, klass in core_sources))
+        identity = {'sourceSha': head, 'ref': os.environ['GITHUB_REF'], 'runId': os.environ['GITHUB_RUN_ID'],
+                    'attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'evidenceClass': 'synthetic automated regression',
+                    'preparedAtUTC': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    'coreCount': len(core), 'nativeCount': len(native), 'selectedSourceSHA256': source_hashes}
+        (p / 'identity.json').write_text(json.dumps(identity, indent=2))
+        print(json.dumps(identity, indent=2))
+        print('Core methods:', json.dumps(core))
+        print('Native methods:', json.dumps(native))
+        PYCODE
+    - name: Select installed Xcode and prepare test generator
+      timeout-minutes: 8
+      shell: bash -eo pipefail {0}
+      run: |
+        test -d /Applications/Xcode_26.6.app
+        sudo xcode-select -s /Applications/Xcode_26.6.app
+        xcodebuild -version | tee "$RUNNER_TEMP/fighter-fidelity-validation/xcode-version.txt"
+        grep -Fx 'Xcode 26.6' "$RUNNER_TEMP/fighter-fidelity-validation/xcode-version.txt"
+        swift --version | tee "$RUNNER_TEMP/fighter-fidelity-validation/swift-version.txt"
+        xcrun --sdk iphonesimulator --show-sdk-version | tee "$RUNNER_TEMP/fighter-fidelity-validation/sdk-version.txt"
+        if ! command -v xcodegen >/dev/null 2>&1; then
+          brew install xcodegen
+        fi
+    - name: Run and verify only the selected SwiftPM tests
+      timeout-minutes: 20
+      shell: bash -eo pipefail {0}
+      run: |
+        core_started=$SECONDS
+        swift test --jobs 2 --filter "$(cat "$RUNNER_TEMP/fighter-fidelity-validation/core-filter.txt")" 2>&1 | tee "$RUNNER_TEMP/fighter-fidelity-validation/core.log"
+        export FIGHTER_CORE_SECONDS=$((SECONDS - core_started))
+        python3 - <<'PYCODE'
+        import collections,json,os,re
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-fidelity-validation'
+        expected=json.loads((p/'core.json').read_text());seen=[];started=[]
+        for raw,status in re.findall(r"Test [Cc]ase '([^']+)' (started|passed|failed|skipped)", (p/'core.log').read_text()):
+         match=re.fullmatch(r'-\[(?:\w+\.)?(\w+) (test\w+)\]',raw) or re.fullmatch(r'(?:\w+\.)?(\w+)\.(test\w+)',raw)
+         assert match, 'Unknown XCTest identifier: '+raw
+         name='/'.join(match.groups())
+         assert name in expected, 'Unexpected test: '+name
+         if status=='started': started.append(name)
+         else:
+          assert status=='passed', name+' '+status
+          seen.append(name)
+        assert collections.Counter(seen)==collections.Counter(expected), 'Core results missing or duplicate'
+        assert collections.Counter(started)==collections.Counter(expected), 'Core starts missing or duplicate'
+        print('Core XCTest:', len(expected), 'passed; 0 failed; 0 skipped; exact selected inventory')
+        (p/'core-ok').write_text(str(len(expected))+' passed; 0 failed; 0 skipped\n')
+        (p/'core-duration-seconds').write_text(os.environ['FIGHTER_CORE_SECONDS'])
+        PYCODE
+    - name: Build unsigned demo host and simulator test bundle once
+      timeout-minutes: 25
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        from pathlib import Path
+        import xml.etree.ElementTree as ET
+        p=Path('project.yml');s=p.read_text();needle='    scheme:\n      testTargets:\n        - SiteTests'
+        assert s.count(needle)==1
+        p.write_text(s.replace(needle,needle+'\n      commandLineArguments:\n        "-demo": true'))
+        PYCODE
+
+        python3 .github/scripts/build_identity.py
+        xcodegen generate
+        python3 - <<'PYCODE'
+        from pathlib import Path
+        import xml.etree.ElementTree as ET
+        files=list(Path('ShiftReminder.xcodeproj').rglob('ShiftReminder.xcscheme'));assert len(files)==1
+        root=ET.parse(files[0]).getroot();test=root.find('TestAction');assert test is not None
+        args=test.find('CommandLineArguments')
+        if args is None and test.get('shouldUseLaunchSchemeArgsEnv')=='YES':
+         args=root.find('LaunchAction/CommandLineArguments')
+        assert args is not None and any(a.get('argument')=='-demo' and a.get('isEnabled')=='YES' for a in args), 'Demo missing from generated test scheme'
+        print('Generated test scheme uses -demo')
+        PYCODE
+
+        build_started=$SECONDS
+        xcodebuild build-for-testing -project ShiftReminder.xcodeproj -scheme ShiftReminder  -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'  -derivedDataPath "$RUNNER_TEMP/fighter-fidelity-validation/derived"  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""  2>&1 | tee "$RUNNER_TEMP/fighter-fidelity-validation/build.log"
+
+        echo "$((SECONDS - build_started))" > "$RUNNER_TEMP/fighter-fidelity-validation/build-duration-seconds"
+    - name: Verify demo host and create one installed iPhone simulator
+      timeout-minutes: 12
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import os,plistlib
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-fidelity-validation'
+        files=list((p/'derived/Build/Products').glob('*.xctestrun'));assert len(files)==1, 'Ambiguous xctestrun'
+        data=plistlib.loads(files[0].read_bytes());targets=[]
+        if 'TestConfigurations' in data:
+         for configuration in data['TestConfigurations']: targets.extend(configuration.get('TestTargets',[]))
+        else:
+         targets=[dict(v,BlueprintName=k) for k,v in data.items() if isinstance(v,dict) and k!='__xctestrun_metadata__']
+        assert len(targets)==1 and targets[0].get('BlueprintName')=='SiteTests', 'Unexpected test target'
+        target=targets[0]
+        assert '-demo' in target.get('CommandLineArguments',[]), 'Demo missing from actual xctestrun host arguments'
+        assert not target.get('IsUITestBundle',False)
+        assert not target.get('SkipTestIdentifiers'), 'Unexpected skipped tests'
+        print('Verified SiteTests xctestrun launches demo host; no UI runner')
+        (p/'xctestrun-path').write_text(str(files[0]))
+        PYCODE
+        python3 - <<'PYCODE'
+        import json,os,plistlib,re,subprocess
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-fidelity-validation'
+        def call(*args): return subprocess.check_output(args,text=True,timeout=60)
+        catalog=json.loads(call('xcrun','simctl','list','-j'))
+        def version(v): return tuple(map(int,re.findall(r'\d+',v)))
+        runtimes={r['identifier']:r for r in catalog['runtimes'] if r.get('isAvailable') and '.iOS-' in r['identifier'] and version(r['version'])>=(16,2)}
+        candidates=[]
+        for runtime,devices in catalog['devices'].items():
+         if runtime not in runtimes: continue
+         for device in devices:
+          dtype=device.get('deviceTypeIdentifier','')
+          if device.get('isAvailable') and '.iPhone-' in dtype:
+           candidates.append((dtype.endswith('.iPhone-17-Pro-Max'),version(runtimes[runtime]['version']),runtime,dtype))
+        assert candidates, 'No installed available iPhone/iOS runtime pair; no runtime download authorized'
+        _,_,runtime,dtype=sorted(candidates)[-1]
+        name='Fighter integration '+os.environ['GITHUB_RUN_ID']+' attempt '+os.environ['GITHUB_RUN_ATTEMPT']
+        udid=call('xcrun','simctl','create',name,dtype,runtime).strip()
+        assert re.fullmatch(r'[0-9A-Fa-f-]{36}',udid), 'Unexpected simulator UDID'
+        (p/'created-simulator.json').write_text(json.dumps({'udid':udid,'name':name,'runtime':runtime,'type':dtype,'osVersion':runtimes[runtime]['version'],'evidenceClass':'simulator synthetic regression'}))
+        print('Created isolated simulator:',udid,runtime,dtype)
+        subprocess.run(['xcrun','simctl','boot',udid],check=True,timeout=120)
+        subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=480)
+        PYCODE
+    - name: Run and verify only the selected native XCTest methods
+      timeout-minutes: 15
+      shell: bash -eo pipefail {0}
+      run: |
+        python3 - <<'PYCODE'
+        import json,os,subprocess,time
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-fidelity-validation';device=json.loads((p/'created-simulator.json').read_text())
+        selectors=json.loads((p/'sim.json').read_text())
+        command=['xcodebuild','test-without-building','-xctestrun',(p/'xctestrun-path').read_text(),'-destination','id='+device['udid'],
+         '-parallel-testing-enabled','NO','-resultBundlePath',str(p/'selected.xcresult')]
+        command.extend('-only-testing:'+x for x in selectors)
+        # No retry-tests-on-failure / run-tests-until-failure flags; one iteration.
+        started=time.monotonic()
+        with (p/'simulator.log').open('w') as output:
+         process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+         for line in process.stdout: print(line,end='',flush=True);output.write(line)
+         code=process.wait()
+        duration=round(time.monotonic()-started,3)
+        print('Native xcodebuild exit code:',code,'elapsed seconds:',duration,flush=True)
+        bundle=p/'selected.xcresult';exports={}
+        if bundle.is_dir():
+         for kind in ['summary','tests']:
+          try:
+           with (p/(kind+'.json')).open('w') as output:
+            exported=subprocess.run(['xcrun','xcresulttool','get','test-results',kind,'--path',str(bundle)],
+             stdout=output,stderr=subprocess.PIPE,text=True,timeout=90)
+           exports[kind]={'exitCode':exported.returncode,'diagnostic':exported.stderr[:2000]}
+          except Exception as error:
+           exports[kind]={'exitCode':None,'diagnostic':(type(error).__name__+': '+str(error))[:2000]}
+        else:
+         exports['resultBundle']={'exitCode':None,'diagnostic':'No xcresult bundle exists; use streamed xcodebuild log.'}
+        process_result={'exitCode':code,'durationSeconds':duration,'resultBundlePresent':bundle.is_dir(),'exports':exports}
+        try:
+         (p/'sim-duration-seconds').write_text(str(duration))
+         (p/'native-process.json').write_text(json.dumps(process_result,indent=2))
+        except OSError as error:
+         print('Could not save native diagnostics:',str(error)[:500],flush=True)
+        print('Native result export:',json.dumps(process_result),flush=True)
+        # Preserve the original test failure even when diagnostic extraction also fails.
+        # Bash -e prevents the success verifier below from running for any nonzero exit.
+        if code!=0: raise SystemExit(code)
+        assert bundle.is_dir() and all(exports.get(kind,{}).get('exitCode')==0 for kind in ['summary','tests']), 'Native result export incomplete'
+        PYCODE
+        python3 - <<'PYCODE'
+        import collections,json,os,re
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-fidelity-validation'
+        expected=json.loads((p/'sim.json').read_text());summary=json.loads((p/'summary.json').read_text())
+        # Modern xcresulttool output; unknown/incomplete schemas fail closed.
+        for key,value in [('totalTestCount',len(expected)),('passedTests',len(expected)),('failedTests',0),('skippedTests',0)]:
+         assert type(summary.get(key)) is int and summary[key]==value, 'Unexpected summary '+key+': '+str(summary.get(key))
+        assert summary.get('result')=='Passed', 'XCResult overall result not Passed'
+        data=json.loads((p/'tests.json').read_text());assert isinstance(data.get('testNodes'),list)
+        seen=[]
+        def walk(nodes):
+         for node in nodes:
+          assert isinstance(node,dict)
+          if node.get('nodeType')=='Test Case':
+           raw=node.get('nodeIdentifier');assert isinstance(raw,str), 'Missing test identifier'
+           normalized=raw.removesuffix('()')
+           matches=[s for s in expected if normalized==s or normalized=='/'.join(s.split('/')[1:])]
+           assert len(matches)==1, 'Unknown or ambiguous XCTest identifier: '+raw
+           assert node.get('result')=='Passed', raw+': '+str(node.get('result'))
+           seen.append(matches[0])
+          else:
+           children=node.get('children',[]);assert isinstance(children,list);walk(children)
+        walk(data['testNodes'])
+        assert collections.Counter(seen)==collections.Counter(expected), 'Simulator method set missing or duplicated'
+        print('Simulator XCTest:',len(expected),'passed; 0 failed; 0 skipped; exact selected inventory')
+        (p/'sim-ok').write_text(str(len(expected))+' passed; 0 failed; 0 skipped\n')
+        PYCODE
+    - name: Stop only this run simulator
+      timeout-minutes: 3
+      shell: bash -eo pipefail {0}
+      if: always()
+      run: |
+        python3 - <<'PYCODE'
+        import json,os,subprocess
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'fighter-fidelity-validation/created-simulator.json'
+        if p.exists():
+         device=json.loads(p.read_text());catalog=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','-j'],text=True,timeout=30))
+         matches=[d for devices in catalog['devices'].values() for d in devices if d['udid']==device['udid']]
+         assert len(matches)==1 and matches[0]['name']==device['name'], 'Cleanup ownership mismatch'
+         if matches[0]['state']!='Shutdown': subprocess.run(['xcrun','simctl','shutdown',device['udid']],check=True,timeout=90)
+         print('Stopped only the created regression simulator:',device['udid'])
+        PYCODE
+    - name: Report source, exact coverage and reached stages
+      timeout-minutes: 1
+      shell: bash -eo pipefail {0}
+      if: always()
+      run: |
+        python3 - <<'PYCODE'
+        import json,os
+        from pathlib import Path
+        p = Path(os.environ['RUNNER_TEMP']) / 'fighter-fidelity-validation'
+        lines = ['Fighter integration targeted regression: ' + os.environ['GITHUB_SHA']]
+        for label, filename in [('Source and selector identity', 'identity.json'), ('Core XCTest', 'core-ok'),
+                                ('Simulator XCTest', 'sim-ok'), ('Actual simulator', 'created-simulator.json'),
+                                ('Xcode', 'xcode-version.txt'), ('Swift', 'swift-version.txt'), ('Simulator SDK', 'sdk-version.txt'),
+                                ('Core seconds', 'core-duration-seconds'), ('Native build seconds', 'build-duration-seconds'),
+                                ('Simulator test seconds', 'sim-duration-seconds')]:
+            file = p / filename
+            lines.append(label + ': ' + (file.read_text().strip() if file.exists() else 'NOT VERIFIED; inspect failed or blocked stage.'))
+        diagnostics=[]
+        for filename in ['native-process.json','summary.json','tests.json']:
+            file=p/filename
+            if not file.exists():
+                diagnostics.append(filename+': unavailable; inspect streamed native log.')
+                continue
+            try:
+                data=json.loads(file.read_text())
+                if filename=='summary.json':
+                    data={key:data.get(key) for key in ['result','totalTestCount','passedTests','failedTests','skippedTests','testFailures']}
+                elif filename=='tests.json':
+                    failures=[]
+                    def collect(nodes):
+                        for node in nodes:
+                            if len(failures)>=20: return
+                            if node.get('nodeType')=='Test Case' and node.get('result')!='Passed':
+                                failures.append({'test':node.get('nodeIdentifier'),'result':node.get('result')})
+                            collect(node.get('children',[]))
+                    collect(data.get('testNodes',[]))
+                    data={'nonPassingMethodsUpTo20':failures}
+                diagnostics.append(filename+': '+json.dumps(data,ensure_ascii=False))
+            except (OSError,ValueError,TypeError,AttributeError) as error:
+                diagnostics.append(filename+': unreadable '+(type(error).__name__+': '+str(error))[:300])
+        lines.append('Native diagnostics (bounded to 6000 characters):\n'+'\n'.join(diagnostics)[:6000])
+        lines.append('Scope: only the listed synthetic core/native tests. No private resources, device archive, signing, artifact/app uploads, Release or TestFlight.')
+        lines.append('This is not visual acceptance, original-model acceptance, two-iPhone multiplayer acceptance, or real-device 60fps evidence. Existing Build 702 is unchanged.')
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+            output.write('\n\n'.join(lines) + '\n')
+        print('\n'.join(lines))
+        PYCODE

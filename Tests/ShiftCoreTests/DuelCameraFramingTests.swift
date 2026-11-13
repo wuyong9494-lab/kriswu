@@ -5,7 +5,7 @@ final class DuelCameraFramingTests: XCTestCase {
     func testWideCloseUpAndSeparatedFighters() {
         let close = DuelCameraFraming(aspect: 2.1, separation: 3)
         let apart = DuelCameraFraming(aspect: 2.1, separation: 10)
-        XCTAssertEqual(close.verticalFieldOfView, 29)
+        XCTAssertEqual(close.verticalFieldOfView, 20)
         XCTAssertEqual(close.orthographicScale, 2.85)
         XCTAssertGreaterThan(apart.verticalFieldOfView, close.verticalFieldOfView)
         XCTAssertGreaterThan(apart.orthographicScale, close.orthographicScale)
@@ -38,18 +38,18 @@ final class DuelCameraFramingTests: XCTestCase {
         XCTAssertGreaterThan(DuelCameraFraming(aspect: 1.5, separation: 10).perspectiveDistance, 7.7)
     }
 
-    func testOpeningShotTargetsHalfHeightForNominalTwoMeterSilhouetteOnWidePhones() {
+    func testOpeningShotUsesEquippedStanceHeightOnWidePhones() {
         // An optical estimate, not proof of the actual source character's
         // on-screen bounds. The screenshot and bone-extents gate is separate.
         for aspect in [1.78, 2.1, 2.4] {
             let opening = DuelCameraFraming(aspect: aspect, separation: 3)
-            XCTAssertEqual(opening.verticalFieldOfView, 29)
+            XCTAssertEqual(opening.verticalFieldOfView, 20)
             XCTAssertEqual(opening.perspectiveDistance, 7.7)
             let visibleHeight = 2 * opening.perspectiveDistance
                 * tan(opening.verticalFieldOfView * .pi / 360)
-            let nominalFraction = 2.0 / visibleHeight
-            XCTAssertGreaterThanOrEqual(nominalFraction, 0.48)
-            XCTAssertLessThanOrEqual(nominalFraction, 0.55)
+            let nominalFraction = 1.6 / visibleHeight
+            XCTAssertGreaterThanOrEqual(nominalFraction, 0.56)
+            XCTAssertLessThanOrEqual(nominalFraction, 0.62)
         }
     }
 

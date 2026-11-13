@@ -48,6 +48,7 @@ final class DuelSession: ObservableObject {
     private(set) var held = Set<String>()
     private var taps: DuelGame.Buttons = []
     private var weaponInput = DuelWeaponInput()
+    private var physicalInput = DuelPhysicalInput()
     private(set) var weaponAssets: DuelWeaponAssets?
     private(set) var preparedResources: DuelNetworkPreparedResources?
     private var preparedSessionClaim: UUID?
@@ -409,21 +410,56 @@ final class DuelSession: ObservableObject {
             }
         } else { held.remove(name) }
     }
-    func weaponDirection(x: Int, y: Int) { guard acceptsPhysicalInput else { return }; weaponInput.direction(x: x, y: y) }
-    func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) { guard acceptsPhysicalInput else { return }; weaponInput.action(action, down: down) }
-    func weaponGuard(_ held: Bool) {
-        // Releases remain safe during a transition; only new holds require a
-        // live local input owner. Host/guest routing still consumes this mailbox.
-        guard !held || acceptsPhysicalInput else { return }
-        weaponInput.setGuardHeld(held)
+    func weaponDirection(x: Int, y: Int) {
+        var state = physicalInput["touch"]; state.x = x; state.y = y
+        updatePhysicalInput(state, source: "touch")
     }
-    func cancelWeaponAction(_ action: DuelWeaponInput.Action) { weaponInput.cancel(action: action) }
+    func weaponAction(_ action: DuelWeaponInput.Action, down: Bool) {
+        var state = physicalInput["touch"]
+        if down { state.actions.insert(action) } else { state.actions.remove(action) }
+        updatePhysicalInput(state, source: "touch")
+    }
+    func weaponGuard(_ held: Bool) {
+        guard !held || acceptsPhysicalInput else { return }
+        var state = physicalInput["touch"]; state.guardHeld = held
+        updatePhysicalInput(state, source: "touch", cancelled: !held && !acceptsPhysicalInput)
+    }
+    func cancelWeaponAction(_ action: DuelWeaponInput.Action) {
+        var state = physicalInput["touch"]; state.actions.remove(action)
+        updatePhysicalInput(state, source: "touch", cancelled: true)
+    }
+    func updatePhysicalInput(_ state: DuelPhysicalInput.State, source: String, cancelled: Bool = false) {
+        guard acceptsPhysicalInput || cancelled else { return }
+        let previousSource = physicalInput[source]
+        guard previousSource != state else { return }
+        let previous = physicalInput.combined
+        physicalInput.set(state, source: source)
+        let next = physicalInput.combined
+        // Guard is owned by the union of touch and connected peripherals.
+        weaponInput.setGuardHeld(next.guardHeld)
+        // Cancellation must not become an attack-on-release.
+        for action in DuelWeaponInput.Action.allCases where previous.actions.contains(action) && !next.actions.contains(action) {
+            if cancelled { weaponInput.cancel(action: action) }
+            else { weaponInput.action(action, down: false) }
+        }
+        let losesIntent = previous.x != next.x || previous.y != next.y ||
+            !previous.actions.subtracting(next.actions).isEmpty
+        if cancelled && losesIntent {
+            weaponInput.cancelPendingMotion(x: next.x, y: next.y)
+        } else if previous.x != next.x || previous.y != next.y {
+            weaponInput.direction(x: next.x, y: next.y)
+        }
+        for action in DuelWeaponInput.Action.allCases where !previous.actions.contains(action) && next.actions.contains(action) {
+            weaponInput.action(action, down: true)
+        }
+    }
     func cancelWeaponInput() {
+        physicalInput.reset()
         weaponInput.cancelAll()
         if driver == .offline { game.cancelBufferedInputs() }
     }
     func clearInput() {
-        held.removeAll(); taps = []; weaponInput.cancelAll()
+        held.removeAll(); taps = []; physicalInput.reset(); weaponInput.cancelAll()
         // Guest touch cancellation, view teardown and local interruptions may
         // never erase the host's already accepted combo/hit-stop buffers.
         if driver == .offline { game.cancelBufferedInputs() }
@@ -538,10 +574,16 @@ final class DuelSession: ObservableObject {
     /// edges exactly once but never advances the simulation or clears its buffers.
     func consumeLocalInput() -> DuelGame.Input {
         guard acceptsPhysicalInput else { return .neutral }
-        let input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
+        let guardEligible = weaponInput.canRequestGuard
+        var input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
                     airborne: game.weaponFight?.isAirborne(localFighterIndex) ?? false) :
             DuelGame.Input(move: (held.contains("right") ? 1 : 0) - (held.contains("left") ? 1 : 0),
                            guardHeld: held.contains("guard"), taps: taps)
+        if setup.originalWeapons && guardEligible && physicalInput.combined.guardHeld &&
+            input.move == 0 && input.vertical == 0 && input.weaponCommand == nil &&
+            physicalInput.combined.actions.isEmpty && input.taps.isEmpty {
+            input.guardHeld = true
+        }
         taps = []
         return input
     }
@@ -1116,6 +1158,20 @@ struct DuelWeaponControls: UIViewRepresentable {
         }
         guard session.acceptsWeaponControls(view) else { view.shutdown(); return false }
         session.bindArtworkControls(view)
+        view.peripheralInput.canAccept = { [weak session, weak view] in
+            guard let session, let view else { return false }
+            return session.acceptsWeaponControls(view) && !session.paused &&
+                view.inputEnabled && view.window != nil && !view.isShutdown
+        }
+        view.peripheralInput.onState = { [weak session, weak view] source, state, cancelled in
+            guard let session, let view, session.acceptsWeaponControls(view) else { return }
+            var filtered = state
+            filtered.actions = Set(state.actions.filter {
+                guard let action = DuelSourceControlsView.Action(rawValue: $0.rawValue) else { return false }
+                return view.state(for: action).enabled
+            })
+            session.updatePhysicalInput(filtered, source: source, cancelled: cancelled)
+        }
         view.onDirection = { [weak session, weak view] x, y in
             guard let session, let view, session.acceptsWeaponControls(view) else { return }
             session.weaponDirection(x: x, y: y)
@@ -1169,6 +1225,7 @@ struct DuelWeaponControls: UIViewRepresentable {
                                 description: readiness,
                                 accessibilityLabel: label), for: action)
         }
+        view.peripheralInput.refreshReadiness()
     }
     static func dismantleUIView(_ view: DuelSourceControlsView, coordinator: ()) { view.shutdown() }
 }

@@ -105,6 +105,7 @@ enum ArenaOrientation {
         guard UIDevice.current.userInterfaceIdiom == .phone, wanted != landscape else { return }
         landscape = wanted
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            guard scene.session.role == .windowApplication else { continue }
             for window in scene.windows {
                 var controller = window.rootViewController
                 while let current = controller {

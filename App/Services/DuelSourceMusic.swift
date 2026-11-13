@@ -34,6 +34,18 @@ enum DuelSourceMusic {
               sourcePath: "assets/gamedata/resources/content/locations/palace_exterior_raid/soundtrack_battle.ogg")
     ]
 
+    /// Explicit product fallback, not recovered original Autumn scene dispatch.
+    /// Only the hash-verified private clip may fill the otherwise silent lobby.
+    static let temporaryLobbyTrackName = "SF3Music_Autumn_Lobby"
+    static let temporaryLobbyNotice = "大厅音乐：Temple Fall（临时配乐）"
+    static func playbackTracks(from result: Result) -> [DuelMusic.Scene: URL] {
+        var tracks = result.tracks
+        if tracks[.lobby] == nil {
+            tracks[.lobby] = result.verifiedClips[temporaryLobbyTrackName]
+        }
+        return tracks
+    }
+
     static func load(bundle: Bundle = .main) -> Result {
         load { record in
             bundle.url(forResource: record.name, withExtension: "wav") ??
@@ -90,7 +102,7 @@ final class DuelMusicOwnership {
         makeMusic = {
             if let music { return (music, []) }
             let loaded = DuelSourceMusic.load()
-            return (DuelMusic(tracks: loaded.tracks), loaded.failures)
+            return (DuelMusic(tracks: DuelSourceMusic.playbackTracks(from: loaded)), loaded.failures)
         }
     }
 
@@ -133,6 +145,9 @@ final class DuelMusicOwnership {
         if selected != claim.id || selectedPaused != claim.paused {
             selected = claim.id; selectedPaused = claim.paused
             player?.setScene(scene, paused: claim.paused)
+        } else {
+            // Readiness can change without a new owner or pause-state transition.
+            player?.refreshPlaybackPermission()
         }
     }
 }

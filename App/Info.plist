@@ -35,7 +35,15 @@
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleExternalDisplayNonInteractive</key>
+            <array><dict>
+                <key>UISceneConfigurationName</key><string>DuelTelevision</string>
+                <key>UISceneDelegateClassName</key><string>$(PRODUCT_MODULE_NAME).DuelTelevisionSceneDelegate</string>
+            </dict></array>
+        </dict>
 	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

@@ -8,6 +8,10 @@ func assertFighterLandscapeLobby(_ app: XCUIApplication,
     // child buttons/scroll views. Keep these presentation-only containers untagged.
     XCTAssertFalse(app.buttons["duel.lobby.landscape"].exists, file: file, line: line)
     XCTAssertFalse(app.buttons["duel.lobby.playRail"].exists, file: file, line: line)
+    XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "duel.lobby.orientationTransition").firstMatch.exists,
+                   "The lobby must finish its landscape transition", file: file, line: line)
+    XCTAssertTrue(app.staticTexts["duel.lobby.musicProvenance"].exists,
+                  "Fallback must not claim original Autumn music", file: file, line: line)
     let window = app.windows.firstMatch.frame
     XCTAssertGreaterThan(window.width, window.height, file: file, line: line)
     let showroom = app.descendants(matching: .any).matching(identifier: "duel.lobby.showroom").firstMatch
@@ -55,5 +59,31 @@ extension DuelFlowTests {
         attachment.name = "fighter-largest-text-lobby"; attachment.lifetime = .keepAlways; add(attachment)
         // Selection and scrolling alone must not start or alter a match.
         XCTAssertFalse(app.buttons["duel.pause"].exists)
+    }
+}
+
+extension DuelFlowTests {
+    func testLobbyReentryWaitsForLandscapeAndExitRestoresPortrait() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "game", "-duel-legacy-controls"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let entry = app.buttons["duel.enter"]
+        for _ in 0..<2 {
+            XCTAssertTrue(entry.waitForExistence(timeout: 20))
+            entry.tap()
+            // This action does not exist in the transient portrait placeholder.
+            XCTAssertTrue(app.buttons["duel.practice"].waitForExistence(timeout: 20))
+            assertFighterLandscapeLobby(app)
+            let close = app.buttons["duel.lobby.close"]
+            XCTAssertTrue(close.isHittable)
+            close.tap()
+            XCTAssertTrue(entry.waitForExistence(timeout: 10))
+            let portrait = NSPredicate { _, _ in
+                let size = app.windows.firstMatch.frame.size
+                return size.height > size.width
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: portrait, object: nil)], timeout: 10), .completed)
+        }
     }
 }

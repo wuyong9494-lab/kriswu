@@ -69,9 +69,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
+    @MainActor
+    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = session.configuration
+        if session.role == .windowExternalDisplayNonInteractive {
+            configuration.delegateClass = DuelTelevisionSceneDelegate.self
+        }
+        return configuration
+    }
+
     /// 平时竖着用；乱斗对局里横过来（ArenaOrientation）；iPad 随便转
     @MainActor
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if window?.windowScene?.session.role == .windowExternalDisplayNonInteractive { return .landscape }
         if UIDevice.current.userInterfaceIdiom == .pad { return .all }
         return ArenaOrientation.landscape ? .landscape : .portrait
     }

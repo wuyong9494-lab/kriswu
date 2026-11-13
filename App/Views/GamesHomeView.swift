@@ -15,6 +15,8 @@ struct GamesHomeView: View {
     /// 勇者乱斗的大厅是全屏横着的
     @State private var showingArena = false
     @State private var showingDuel = false
+    // Own landscape across the complete fighter flow, not individual child views.
+    @State private var duelOrientationID = UUID()
 
     var body: some View {
         List {
@@ -34,7 +36,10 @@ struct GamesHomeView: View {
                 NavigationLink { TileGameHomeView() } label: {
                     row("星了个星", "三消储能、移动叠层；主线航程、每日星约与策略试炼", "square.stack.3d.up.fill", 6)
                 }
-                Button { showingDuel = true } label: {
+                Button {
+                    ArenaOrientation.hold(duelOrientationID)
+                    showingDuel = true
+                } label: {
                     HStack {
                         row("裂隙对决 · 战斗样板", "两名角色，单机三局两胜；练习距离、防御与连击", "figure.boxing", 3)
                         Spacer()
@@ -56,7 +61,9 @@ struct GamesHomeView: View {
         // RootView owns a custom safe-area tab bar, not a SwiftUI TabView.
         // A navigation push cannot hide it. Keep the entire fighter flow in
         // its own presentation above the app shell, including the lobby.
-        .fullScreenCover(isPresented: $showingDuel) { DuelHomeView() }
+        .fullScreenCover(isPresented: $showingDuel, onDismiss: {
+            ArenaOrientation.release(duelOrientationID)
+        }) { DuelHomeView() }
         .fullScreenCover(isPresented: $showingArena) {
             ArenaHomeView(threeHeroSample: ProcessInfo.processInfo.arguments.contains("-demo") &&
                           UserDefaults.standard.bool(forKey: "arena.captureFlow"))

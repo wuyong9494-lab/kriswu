@@ -1,0 +1,277 @@
+{
+  "sourceName": "ScreenRecording_11-13-2026 09-41-27_1.mp4",
+  "sourceSHA256": "4e45270d05b48c4c499147b63f8499a952169b3eaa079b82d5bbddb3f3583754",
+  "frames": 1314,
+  "framesPerSecond": 30,
+  "width": 1112,
+  "height": 512,
+  "frameIndexBase": 0,
+  "allSheetsVisuallyInspected": true,
+  "sourceGame": "SF4 Arena; not an SF3 katana/dual-hammer event reference",
+  "sheets": [
+    {
+      "file": "second-00.jpg",
+      "sha256": "03a1b666f30064c69a7d9f8c58c17425d41cffe0d4286f19e96d756cb704162d",
+      "firstFrame": 0,
+      "lastFrame": 29
+    },
+    {
+      "file": "second-01.jpg",
+      "sha256": "38df9f69f05a1338a8c47a58107a9d3df2045f7bc65f121a738be5981d1c9de9",
+      "firstFrame": 30,
+      "lastFrame": 59
+    },
+    {
+      "file": "second-02.jpg",
+      "sha256": "930128458eb7e6afb5569e7e8280951d6c450955f72a432fcee6f47844253d5a",
+      "firstFrame": 60,
+      "lastFrame": 89
+    },
+    {
+      "file": "second-03.jpg",
+      "sha256": "da348ac28f471375bc53c9b76b04323c3b306c5356ac74de01566d5c868bc080",
+      "firstFrame": 90,
+      "lastFrame": 119
+    },
+    {
+      "file": "second-04.jpg",
+      "sha256": "ab87ab5d0f3532506aefb7f33146d37ed673e73e5ee90675ee93a6766267619d",
+      "firstFrame": 120,
+      "lastFrame": 149
+    },
+    {
+      "file": "second-05.jpg",
+      "sha256": "0310047af5d92ae20bbaf36aaad0772082757b0d17ec28f044b5c1628c752bd6",
+      "firstFrame": 150,
+      "lastFrame": 179
+    },
+    {
+      "file": "second-06.jpg",
+      "sha256": "f43b4c1afff8b17f2552526f74699473e933a248ec49d405bed8cec903247845",
+      "firstFrame": 180,
+      "lastFrame": 209
+    },
+    {
+      "file": "second-07.jpg",
+      "sha256": "8cc15474709b6e8e2c2254a15c12b401b630938ff3b096769680f757c6b3a4d8",
+      "firstFrame": 210,
+      "lastFrame": 239
+    },
+    {
+      "file": "second-08.jpg",
+      "sha256": "64c7e270ff0da006bc68f7ce52858eeb035a9e389f7dc27adda9dcbf1b7c50e1",
+      "firstFrame": 240,
+      "lastFrame": 269
+    },
+    {
+      "file": "second-09.jpg",
+      "sha256": "71e32c62c203ab5d1202de12707e0c968c0bb9a4a82dbe106d6cd8d576b804be",
+      "firstFrame": 270,
+      "lastFrame": 299
+    },
+    {
+      "file": "second-10.jpg",
+      "sha256": "137f5dfa72af7b45a3cc19b6516f904555532545f01679bb5a8fc32fa478bf1d",
+      "firstFrame": 300,
+      "lastFrame": 329
+    },
+    {
+      "file": "second-11.jpg",
+      "sha256": "69d4323e8307fcbf0cb3583709e26c57c4c5e63469d1eef5dda05c32114461ce",
+      "firstFrame": 330,
+      "lastFrame": 359
+    },
+    {
+      "file": "second-12.jpg",
+      "sha256": "2a4464c9b1b01d9a6a99e63a9a4c146027542c437ada03307e260aeec99b4c07",
+      "firstFrame": 360,
+      "lastFrame": 389
+    },
+    {
+      "file": "second-13.jpg",
+      "sha256": "621d485e619e2cc82510cd8197430ed8eae09f0759deac096727d2eb2bc0b521",
+      "firstFrame": 390,
+      "lastFrame": 419
+    },
+    {
+      "file": "second-14.jpg",
+      "sha256": "f21514e7279274ed60a0106d952dba93d9a78aba8ba93a7c70d403c297e99043",
+      "firstFrame": 420,
+      "lastFrame": 449
+    },
+    {
+      "file": "second-15.jpg",
+      "sha256": "49a0561c0f81ed216d60d23bb40a125e8750e39fb5da3ad2a4207981f6a204df",
+      "firstFrame": 450,
+      "lastFrame": 479
+    },
+    {
+      "file": "second-16.jpg",
+      "sha256": "bbe3960db6212d1b6c18f7bcb692b6ef88e767e78abc7b4a8a7a18a80b34ca20",
+      "firstFrame": 480,
+      "lastFrame": 509
+    },
+    {
+      "file": "second-17.jpg",
+      "sha256": "fd09dd31faba180ee049d43d90c3c7b893d36a8aacdd1d49b78d656ef4919c5a",
+      "firstFrame": 510,
+      "lastFrame": 539
+    },
+    {
+      "file": "second-18.jpg",
+      "sha256": "c00174f176ce4fc030d46d6c73ff78dba47b4ec22d24a16f1fdf7f03ce29b9f9",
+      "firstFrame": 540,
+      "lastFrame": 569
+    },
+    {
+      "file": "second-19.jpg",
+      "sha256": "ffcab8d825d0ca2e657e79d6ecc3241ed6f739c18c678a4e4bd75027c94cdbff",
+      "firstFrame": 570,
+      "lastFrame": 599
+    },
+    {
+      "file": "second-20.jpg",
+      "sha256": "dba1a2a62f72eb909dcc5b77ad884a46956e59ce098132b7d9e9470023d250ac",
+      "firstFrame": 600,
+      "lastFrame": 629
+    },
+    {
+      "file": "second-21.jpg",
+      "sha256": "e23ddf86804ab2660e16d72864b8f1c78a759b99085c5ff1b8cb6563931706fe",
+      "firstFrame": 630,
+      "lastFrame": 659
+    },
+    {
+      "file": "second-22.jpg",
+      "sha256": "cdf798579d9c8845c3353377f9ddfa8e86c0d865428b36c5b42b82b58cc41d09",
+      "firstFrame": 660,
+      "lastFrame": 689
+    },
+    {
+      "file": "second-23.jpg",
+      "sha256": "89f7f7ff71f09dd900a43310ae559581303e6d9121c609de98c89f3711e942f9",
+      "firstFrame": 690,
+      "lastFrame": 719
+    },
+    {
+      "file": "second-24.jpg",
+      "sha256": "c8909e0aa4b3e18ce1b04018415edab9eb7a258db78608e7fb0326109a0b2414",
+      "firstFrame": 720,
+      "lastFrame": 749
+    },
+    {
+      "file": "second-25.jpg",
+      "sha256": "e0388895d06e74c6c825ff3ba0519b689aacd74f48e026f1e2838e859431f6e3",
+      "firstFrame": 750,
+      "lastFrame": 779
+    },
+    {
+      "file": "second-26.jpg",
+      "sha256": "0eb623a2c5102787ff09120280c7076fc09165de4299fabce985694724a70421",
+      "firstFrame": 780,
+      "lastFrame": 809
+    },
+    {
+      "file": "second-27.jpg",
+      "sha256": "80c941daad545217b2b1ee336f651263a265ed0fbd2a75768fefe3424e02b1ea",
+      "firstFrame": 810,
+      "lastFrame": 839
+    },
+    {
+      "file": "second-28.jpg",
+      "sha256": "a6331c1f3c20bad8a2a09f2521797acf296c0eff8741716ab440b5cc89b5487d",
+      "firstFrame": 840,
+      "lastFrame": 869
+    },
+    {
+      "file": "second-29.jpg",
+      "sha256": "1e4250576d4ea866d06b8c445eeaca8aedbf6a5f79dda857e849d0caa71b5349",
+      "firstFrame": 870,
+      "lastFrame": 899
+    },
+    {
+      "file": "second-30.jpg",
+      "sha256": "90b3b9938e6604f75e88be1ca3f842e5b59193470c6ad9c5215945f922001612",
+      "firstFrame": 900,
+      "lastFrame": 929
+    },
+    {
+      "file": "second-31.jpg",
+      "sha256": "42f9db805c0ba70c39d15a786a3a36cb2945d5401e7e8e3017a06300bdc92744",
+      "firstFrame": 930,
+      "lastFrame": 959
+    },
+    {
+      "file": "second-32.jpg",
+      "sha256": "488ee50d91df2fe350ab1220b5c48b69ed3d120816236cca1b7ec5581a24bc9a",
+      "firstFrame": 960,
+      "lastFrame": 989
+    },
+    {
+      "file": "second-33.jpg",
+      "sha256": "7439b00d68b8813a578f02f1d48dff4233195a0f14d7f31faf08fbbed238fd40",
+      "firstFrame": 990,
+      "lastFrame": 1019
+    },
+    {
+      "file": "second-34.jpg",
+      "sha256": "8a11b8517892d4cb56079da0d3a1511754b82d41d5a54db4577cc0c7cb3396c4",
+      "firstFrame": 1020,
+      "lastFrame": 1049
+    },
+    {
+      "file": "second-35.jpg",
+      "sha256": "2decfc47c10f3b3f064e49ab5277f7eac3e2c7ed063c965e3154c6341111adda",
+      "firstFrame": 1050,
+      "lastFrame": 1079
+    },
+    {
+      "file": "second-36.jpg",
+      "sha256": "ee3f2935563841f00ddd74e7cf25fabdbeb9c5c3e9afc329d31e8d916deef916",
+      "firstFrame": 1080,
+      "lastFrame": 1109
+    },
+    {
+      "file": "second-37.jpg",
+      "sha256": "90dc2c688704b5cd81a8926124d6bf63fcc72fe8903ff144e8217039cc9652a9",
+      "firstFrame": 1110,
+      "lastFrame": 1139
+    },
+    {
+      "file": "second-38.jpg",
+      "sha256": "b8f302d00a47030f06da3f7608e08a03637128071b6646e0d6d45d2b3eae9dd1",
+      "firstFrame": 1140,
+      "lastFrame": 1169
+    },
+    {
+      "file": "second-39.jpg",
+      "sha256": "cd41e6ba3ea5f83974c5d568cccaec02b185a775f96010382bcfe57481fdecae",
+      "firstFrame": 1170,
+      "lastFrame": 1199
+    },
+    {
+      "file": "second-40.jpg",
+      "sha256": "36589fd79371def049f671c8b678705d3a1359bcf318f6f2bad967f1b6582e4c",
+      "firstFrame": 1200,
+      "lastFrame": 1229
+    },
+    {
+      "file": "second-41.jpg",
+      "sha256": "3c128221701c6abed8bc465ce5d333cfced1dd43240e6cd1f361d64f99886e3d",
+      "firstFrame": 1230,
+      "lastFrame": 1259
+    },
+    {
+      "file": "second-42.jpg",
+      "sha256": "c2db8ac374bed06668be4cfec1dbe6af21241997e7b2dd590f3d571594f4f1b3",
+      "firstFrame": 1260,
+      "lastFrame": 1289
+    },
+    {
+      "file": "second-43.jpg",
+      "sha256": "38cabe254166ef7f7a7186bee941e451903acc0f707fca4968cfadf02f95c3db",
+      "firstFrame": 1290,
+      "lastFrame": 1313
+    }
+  ]
+}

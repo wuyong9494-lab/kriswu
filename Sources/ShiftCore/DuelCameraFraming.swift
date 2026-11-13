@@ -23,7 +23,11 @@ public struct DuelCameraFraming: Equatable, Sendable {
         // landscape. A hard 1.5 aspect cut made rotation change the lens
         // abruptly, even when the fighters had not moved.
         let landscapeBlend = Self.smoothstep((aspect - 1.2) / 0.6)
-        let closeUpFOV = min(47, 29 + max(0, separation - 4.5) * 3)
+        // Real equipped actors are about 1.6 m in their fighting stance, not
+        // the two-metre placeholder used by the former 29-degree estimate.
+        // At 7.7 m this gives a 2.72 m vertical field (~59% stance occupancy).
+        // Pair width and the measured skin/weapon fit may still widen the lens.
+        let closeUpFOV = min(47, 20 + max(0, separation - 4.5) * 3)
         let requiredHalfWidth = max(separation * 0.5 + 0.8, 5.8 * (1 - landscapeBlend))
         let overviewFOV = 2 * atan(requiredHalfWidth / (7.7 * aspect)) * 180 / .pi
         // The portrait FOV allowance tapers into the 47-degree landscape

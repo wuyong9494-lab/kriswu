@@ -14,6 +14,57 @@ final class DuelMusicTests: XCTestCase {
         func stop() { XCTAssertTrue(Thread.isMainThread); stops += 1 }
     }
 
+    func testRetainedOwnerPermissionImmediatelyPausesAndRecovers() {
+        let player = Player()
+        let music = DuelMusic(tracks: [.battle: URL(fileURLWithPath: "/fixture.wav")],
+            initiallyActive: true, makePlayer: { _ in player }, activateSession: {})
+        defer { music.shutdown() }
+        let owner = DuelMusicOwnership(music: music), id = UUID()
+        var ready = true
+        owner.claim(id, scene: .battle, paused: false, permitsPlayback: { ready })
+        XCTAssertEqual(player.plays, 1)
+        ready = false
+        owner.update(id, scene: .battle, visible: true, paused: false, permitsPlayback: { ready })
+        XCTAssertEqual(music.status, .paused); XCTAssertEqual(player.pauses, 1)
+        ready = true
+        owner.update(id, scene: .battle, visible: true, paused: false, permitsPlayback: { ready })
+        XCTAssertEqual(music.status, .playing); XCTAssertEqual(player.plays, 2)
+        owner.update(id, scene: .battle, visible: true, paused: false, permitsPlayback: { ready })
+        XCTAssertEqual(player.plays, 2)
+        owner.release(id, scene: .battle)
+        owner.update(id, scene: .battle, visible: true, paused: false, permitsPlayback: { true })
+        XCTAssertEqual(music.status, .stopped); XCTAssertEqual(player.plays, 2)
+    }
+
+    func testPermissionRefreshPreservesHeadphoneRemovalSafety() async {
+        let center = NotificationCenter(), player = Player()
+        let music = DuelMusic(tracks: [.battle: URL(fileURLWithPath: "/fixture.wav")],
+            center: center, initiallyActive: true, makePlayer: { _ in player }, activateSession: {})
+        defer { music.shutdown() }
+        music.setScene(.battle)
+        center.post(name: AVAudioSession.routeChangeNotification, object: nil,
+            userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])
+        await drainNotifications()
+        music.refreshPlaybackPermission()
+        XCTAssertEqual(music.status, .paused); XCTAssertEqual(player.plays, 1)
+        music.resumeAfterUserAction(); XCTAssertEqual(player.plays, 2)
+    }
+
+    func testPermissionRefreshDoesNotRetryFailedAudioSession() {
+        enum FixtureError: Error { case unavailable }
+        let player = Player()
+        var activations = 0
+        let music = DuelMusic(tracks: [.battle: URL(fileURLWithPath: "/fixture.wav")],
+            initiallyActive: true, makePlayer: { _ in player }, activateSession: {
+                activations += 1; throw FixtureError.unavailable
+            })
+        defer { music.shutdown() }
+        music.setScene(.battle)
+        XCTAssertEqual(music.status, .failed)
+        for _ in 0..<20 { music.refreshPlaybackPermission() }
+        XCTAssertEqual(activations, 1); XCTAssertEqual(player.plays, 0)
+    }
+
     private func drainNotifications() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }

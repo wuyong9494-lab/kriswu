@@ -72,6 +72,7 @@ final class DuelSourceControlsView: UIView {
     var onInputCancelled: (() -> Void)?
     /// Terminal renderer ownership release, distinct from temporary touch loss.
     var onShutdown: (() -> Void)?
+    let peripheralInput = DuelPeripheralInput()
     private(set) var isShutdown = false
     var inputEnabled = true {
         didSet {
@@ -411,7 +412,8 @@ final class DuelSourceControlsView: UIView {
     }
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil { cancelAll(); setCharacterOcclusion([]) }
+        if window == nil { peripheralInput.stop(); cancelAll(); setCharacterOcclusion([]) }
+        else if !isShutdown { peripheralInput.start() }
     }
 
     func endPointers(_ ids: [AnyHashable]) { ids.forEach { release($0, cancelled: false) } }
@@ -428,6 +430,7 @@ final class DuelSourceControlsView: UIView {
         // from the cancellation hook. Clear ownership first and avoid recursion.
         guard !cancellingInput else { return }
         cancellingInput = true
+        peripheralInput.reset()
         inputEpoch &+= 1
         defer { cancellingInput = false }
         let held = Action.allCases.filter(isHeld)
@@ -454,6 +457,7 @@ final class DuelSourceControlsView: UIView {
     func shutdown() {
         guard !isShutdown else { return }
         isShutdown = true
+        peripheralInput.stop()
         let released = onShutdown; onShutdown = nil
         onDirection = nil; onAction = nil; onGuard = nil
         onActionCancelled = nil; onInputCancelled = nil

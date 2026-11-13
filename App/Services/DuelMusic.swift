@@ -84,6 +84,16 @@ final class DuelMusic: NSObject {
         pendingUserResume = false
         permitsPlayback = predicate
     }
+    /// Refresh a retained owner's readiness without granting user consent.
+    /// Interruption, route and media-reset gates remain authoritative.
+    func refreshPlaybackPermission() {
+        guard !closed else { return }
+        if !permitsPlayback() { pendingUserResume = false }
+        // Do not turn ordinary ownership updates into failed-session retries.
+        guard status == .playing || status == .paused else { return }
+        reconcile()
+    }
+
     func setPaused(_ value: Bool) {
         guard !closed else { return }
         if value { pendingUserResume = false }

@@ -34,6 +34,9 @@ public struct DuelWeaponInput: Equatable, Sendable {
     private var manualGuardHeld = false
 
     public init() {}
+    public var canRequestGuard: Bool {
+        guardRecovery == 0 && presses.isEmpty && queued == nil && pendingJumpTicks == nil
+    }
 
     /// Defense requires explicit player intent; a neutral stick never raises it.
     public mutating func setGuardHeld(_ held: Bool) { manualGuardHeld = held }
@@ -113,6 +116,15 @@ public struct DuelWeaponInput: Equatable, Sendable {
             taps: jump ? .jump : [], vertical: y, weaponCommand: command)
         queued = nil
         return result
+    }
+
+    /// Source loss must discard queued/chord intent without synthesizing a new
+    /// press from another device that remains held.
+    public mutating func cancelPendingMotion(x: Int, y: Int) {
+        self.x = min(1, max(-1, x)); self.y = min(1, max(-1, y))
+        queued = nil; pendingJumpTicks = nil
+        // Existing unresolved holds are cancelled, not re-armed as new taps.
+        for action in orderedPresses { presses[action]?.resolved = true }
     }
 
     /// Clear direction, held buttons, a pending chord, and the one-command mailbox

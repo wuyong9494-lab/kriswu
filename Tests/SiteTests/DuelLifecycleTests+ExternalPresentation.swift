@@ -298,6 +298,22 @@ extension DuelLifecycleTests {
         XCTAssertFalse(guest.consumeLocalInput().guardHeld, "Guest defense uses the guest's airborne state")
     }
 
+    func testTouchAndPeripheralGuardHoldUntilLastOwnerReleases() throws {
+        let state = try DuelSession(presentationFixture: presentationGame(equipped: true), localFighterIndex: 0)
+        defer { state.shutdown() }
+        try state.startAuthoritativePresentation()
+        state.weaponGuard(true)
+        state.updatePhysicalInput(.init(guardHeld: true), source: "pad:test")
+        state.weaponGuard(false)
+        XCTAssertTrue(state.consumeLocalInput().guardHeld)
+        state.updatePhysicalInput(.neutral, source: "pad:test", cancelled: true)
+        XCTAssertFalse(state.consumeLocalInput().guardHeld)
+        state.weaponGuard(true)
+        state.pause()
+        state.weaponGuard(false)
+        XCTAssertEqual(state.consumeLocalInput(), .neutral)
+    }
+
     func testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState() throws {
         for hero in [DuelGame.Hero.ember, .liu] {
             for seat in [0, 1] {
@@ -592,5 +608,57 @@ extension DuelLifecycleTests {
         state.restart(); XCTAssertEqual(state.game.frame, 0)
         XCTAssertFalse(state.paused); XCTAssertTrue(state.held.isEmpty)
     }
+    func testPeripheralReleaseDoesNotReleaseTouchOwnedWeapon() throws {
+        let state = try DuelSession(presentationFixture: presentationGame(equipped: true), localFighterIndex: 0)
+        defer { state.shutdown() }
+        try state.startAuthoritativePresentation()
+        state.weaponAction(.weapon, down: true)
+        state.updatePhysicalInput(.init(actions: [.weapon]), source: "pad")
+        state.updatePhysicalInput(.neutral, source: "pad")
+        XCTAssertNil(state.consumeLocalInput().weaponCommand)
+        state.weaponAction(.weapon, down: false)
+        XCTAssertEqual(state.consumeLocalInput().weaponCommand, .weapon)
+        XCTAssertNil(state.consumeLocalInput().weaponCommand)
+    }
+
+    func testPeripheralDisconnectCannotEmitTapOrJump() throws {
+        let state = try DuelSession(presentationFixture: presentationGame(equipped: true), localFighterIndex: 0)
+        defer { state.shutdown() }
+        try state.startAuthoritativePresentation()
+        state.updatePhysicalInput(.init(y: 1, actions: [.weapon]), source: "pad")
+        state.updatePhysicalInput(.neutral, source: "pad", cancelled: true)
+        for _ in 0..<3 {
+            let input = state.consumeLocalInput()
+            XCTAssertNil(input.weaponCommand)
+            XCTAssertFalse(input.taps.contains(.jump))
+            XCTAssertEqual(input.move, 0)
+            XCTAssertEqual(input.vertical, 0)
+        }
+    }
+
+    func testPeripheralPauseClearsStateAndIgnoresNewDownUntilResume() throws {
+        let state = try DuelSession(presentationFixture: presentationGame(equipped: true), localFighterIndex: 0)
+        defer { state.shutdown() }
+        try state.startAuthoritativePresentation()
+        state.updatePhysicalInput(.init(x: 1, actions: [.weapon]), source: "keyboard")
+        state.pause()
+        state.updatePhysicalInput(.init(x: 1, actions: [.weapon]), source: "keyboard")
+        XCTAssertEqual(state.consumeLocalInput(), .neutral)
+        try state.startAuthoritativePresentation()
+        let sample = state.consumeLocalInput()
+        XCTAssertEqual(sample.move, 0)
+        XCTAssertNil(sample.weaponCommand)
+    }
+
+    func testPeripheralIdleDisconnectPreservesTouchTap() throws {
+        let state = try DuelSession(presentationFixture: presentationGame(equipped: true), localFighterIndex: 0)
+        defer { state.shutdown() }
+        try state.startAuthoritativePresentation()
+        state.weaponAction(.weapon, down: true)
+        state.updatePhysicalInput(.neutral, source: "idle-pad", cancelled: true)
+        state.weaponAction(.weapon, down: false)
+        XCTAssertEqual(state.consumeLocalInput().weaponCommand, .weapon)
+    }
+
 }
 #endif

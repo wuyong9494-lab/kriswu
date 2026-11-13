@@ -7,7 +7,7 @@ import simd
 struct DuelWorld: UIViewRepresentable {
     let session: DuelSession
     var preparation: DuelNetworkMatchPreparation? = nil
-    func makeUIView(context: Context) -> DuelWorldView {
+    func makeUIView(context: Context) -> DuelTelevisionHostView {
         #if DEBUG
         let source: DuelWorldView.CharacterSource = preparation?.permitsFixture == true ? .presentationFixture : .bundled
         #else
@@ -15,10 +15,10 @@ struct DuelWorld: UIViewRepresentable {
         #endif
         let view = DuelWorldView(session: session, characterSource: source)
         if let preparation { view.schedulePreparationAttachment(preparation) }
-        return view
+        return DuelTelevisionHostView(world: view, session: session)
     }
-    func updateUIView(_ view: DuelWorldView, context: Context) {}
-    static func dismantleUIView(_ view: DuelWorldView, coordinator: ()) { view.shutdown() }
+    func updateUIView(_ view: DuelTelevisionHostView, context: Context) {}
+    static func dismantleUIView(_ view: DuelTelevisionHostView, coordinator: ()) { view.shutdown() }
 }
 
 /// Authored personal characters plus procedural fallbacks. Assets live for one fight.
@@ -443,9 +443,34 @@ final class DuelWorldView: SCNView {
         sceneAssemblyFinished = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    private var relocatingDisplay = false
+
+    /// Transfer the existing renderer, never clone its scene/clock/simulation.
+    /// The temporary window=nil during a synchronous authorized transfer is not
+    /// a network mount loss. All ordinary detachments retain their fail-closed path.
+    @discardableResult
+    func relocateDisplay(to destination: UIView) -> Bool {
+        guard !ended, !relocatingDisplay, destination.window != nil,
+              destination.bounds.width > 0, destination.bounds.height > 0 else { return false }
+        if superview === destination { return true }
+        session.clearInput()
+        guard !ended, destination.window != nil else { return false }
+        relocatingDisplay = true
+        stopClock()
+        removeFromSuperview()
+        frame = destination.bounds
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        destination.addSubview(self)
+        relocatingDisplay = false
+        // Re-evaluate exact mount/readiness and camera bounds after the transfer.
+        didMoveToWindow()
+        setNeedsLayout(); layoutIfNeeded()
+        return !ended && window != nil
+    }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        guard !ended else { return }
+        guard !ended, !relocatingDisplay else { return }
         retryPreparationAttachment()
         if window == nil {
             if preparationOwner != nil && preparationMounted {
@@ -464,6 +489,7 @@ final class DuelWorldView: SCNView {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
+        guard !relocatingDisplay else { return }
         retryPreparationAttachment()
         updateCameraFraming()
         prepareNetworkSceneIfMounted()

@@ -33,7 +33,19 @@ struct DuelHomeView: View {
                                         Color(red: 0.16, green: 0.13, blue: 0.11)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
                     .ignoresSafeArea()
-                if wide {
+                if UIDevice.current.userInterfaceIdiom == .phone && geometry.size.width <= geometry.size.height {
+                    // UIKit rotates asynchronously. Never expose a portrait lobby
+                    // or mount its expensive showroom before landscape geometry.
+                    VStack(spacing: 16) {
+                        HStack { closeButton; Spacer() }
+                        Spacer()
+                        ProgressView().tint(bronze)
+                            .accessibilityIdentifier("duel.lobby.orientationTransition")
+                        Text("正在进入横屏大厅…").font(.callout)
+                        Spacer()
+                    }
+                    .padding(16)
+                } else if wide {
                     stage(visibleRegion: showroomRegion)
                         .background(lobbyFrame(.stage))
                         .ignoresSafeArea()
@@ -127,7 +139,11 @@ struct DuelHomeView: View {
                 }
                     .frame(width: sideWidth, alignment: .leading)
                 Spacer()
-                Text("武者大厅").font(.caption.weight(.semibold)).tracking(2)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("武者大厅").font(.caption.weight(.semibold)).tracking(2)
+                    Text(DuelSourceMusic.temporaryLobbyNotice).font(.caption2)
+                        .accessibilityIdentifier("duel.lobby.musicProvenance")
+                }
                     .foregroundStyle(bronze)
                     .frame(width: sideWidth, alignment: .trailing)
             }
