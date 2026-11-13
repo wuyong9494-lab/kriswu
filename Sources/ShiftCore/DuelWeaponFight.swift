@@ -301,7 +301,13 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let start = max(after + 1, Int(ceil(Double(clip.ticks) * 0.12)))
         let end = Int(Double(clip.ticks) * 0.78)
         guard start <= end else { return Int.max }
-        let speeds = (start...end).map { motionSpeed(i, clip: clip, command: command, tick: $0) }
+        // Use only physically plausible adjacent samples for audio onset.
+        // A discontinuous root/tip jump must not become the peak that silences
+        // the rest of an otherwise valid swing or triggers a fake impact sound.
+        let speeds = (start...end).map { tick -> Double in
+            let speed = motionSpeed(i, clip: clip, command: command, tick: tick)
+            return speed.isFinite && speed <= 0.75 ? speed : 0
+        }
         guard let peak = speeds.max(), peak > 0.005,
               let onset = speeds.firstIndex(where: { $0 >= peak * 0.65 }) else { return Int.max }
         // An explicit native adaptation: start audio at the source geometry's
