@@ -5,6 +5,13 @@ import GameController
 
 #if DEBUG
 extension DuelLifecycleTests {
+    func testTelevisionRenderBudgetCaps4KAndRestoresPhoneScale() {
+        XCTAssertEqual(DuelWorldView.televisionRenderScale(size: .init(width: 3840, height: 2160), screenScale: 1, casting: true), 0.5)
+        XCTAssertEqual(DuelWorldView.televisionRenderScale(size: .init(width: 1920, height: 1080), screenScale: 1, casting: true), 1)
+        XCTAssertEqual(DuelWorldView.televisionRenderScale(size: .init(width: 1080, height: 1920), screenScale: 2, casting: true), 1)
+        XCTAssertEqual(DuelWorldView.televisionRenderScale(size: .init(width: 956, height: 440), screenScale: 3, casting: false), 3)
+        XCTAssertEqual(DuelWorldView.televisionRenderScale(size: .zero, screenScale: 3, casting: true), 3)
+    }
     func testSceneConfigurationLeavesPhoneLifecycleWithSwiftUI() {
         let phone = AppDelegate.sceneConfiguration(for: .windowApplication)
         XCTAssertEqual(phone.role, .windowApplication)

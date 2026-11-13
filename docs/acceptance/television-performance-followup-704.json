@@ -1,0 +1,15 @@
+{
+  "report": "User reports severe television casting stutter in 704",
+  "change": "Cap scene rasterization to 1920x1080 envelope during external presentation or detected screen mirroring; disable multisample AA while casting; restore screen scale and 2x AA on return",
+  "checks": {
+    "swiftParse": true,
+    "structural": 8,
+    "nativeExecuted": false,
+    "televisionMeasured": false
+  },
+  "limitations": [
+    "No claim of fixed wireless transport delay or measured 60fps",
+    "iOS27 dedicated scene accessory registration remains outstanding",
+    "704 still uses provisional Liu hammer throw, not the supplied 333 transformation model or requested white projectile"
+  ]
+}
