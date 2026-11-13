@@ -77,6 +77,44 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if command == .shadow { return false }
         return true
     }
+    /// Diagnostic only: the source shadow clips still require verified
+    /// visibility, projectile and contact events before they can be enabled.
+    /// Samples are measured in the clip's local metres per 60 Hz tick.
+    public struct ShadowMotionAudit: Equatable, Sendable {
+        public let sampledTransitions: Int
+        public let rootDiscontinuities: Int
+        public let weaponDiscontinuities: Int
+        public let maximumRootStep: Double
+        public let maximumWeaponStep: Double
+    }
+
+    public func shadowMotionAudit(index: Int) -> ShadowMotionAudit? {
+        guard profiles.indices.contains(index),
+              let clip = profiles[index].clip(command: .shadow) else { return nil }
+        let tracks = clip.tracks
+        var rootJumps = 0
+        var weaponJumps = 0
+        var maxRoot = 0.0
+        var maxWeapon = 0.0
+        let count = max(0, clip.ticks - 1)
+        for tick in 1..<clip.ticks {
+            let before = clip.phase(at: tick - 1)
+            let after = clip.phase(at: tick)
+            let a = tracks.sample(tracks.root, phase: before)
+            let z = tracks.sample(tracks.root, phase: after)
+            let dx = z.x - a.x, dy = z.y - a.y, dz = z.z - a.z
+            let rootStep = sqrt(dx * dx + dy * dy + dz * dz)
+            let weaponStep = motionSpeed(index, clip: clip, command: .shadow, tick: tick)
+            maxRoot = max(maxRoot, rootStep)
+            maxWeapon = max(maxWeapon, weaponStep)
+            if !rootStep.isFinite || rootStep > 0.75 { rootJumps += 1 }
+            if !weaponStep.isFinite || weaponStep > 0.75 { weaponJumps += 1 }
+        }
+        return .init(sampledTransitions: count, rootDiscontinuities: rootJumps,
+                     weaponDiscontinuities: weaponJumps,
+                     maximumRootStep: maxRoot, maximumWeaponStep: maxWeapon)
+    }
+
     public func canUse(_ command: DuelWeaponCommand, index: Int) -> Bool {
         guard supports(command, index: index) else { return false }
         if command == .shadow { return fighters[index].energy >= 100 }
