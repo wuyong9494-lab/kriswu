@@ -31,6 +31,8 @@ final class DuelWeaponEffects {
     static let manifestSHA256 = "d965d1b3e45411e88d3f99182ab312ba841c9e53a332f82ed83ee89164ac0bae"
     private static let maximumTrails = 16
     private static let maximumSamples = 64
+    // Match the combat contact/audio sweep ceiling (metres per simulation tick).
+    private static let maximumAdjacentStep: Float = 0.75
     private struct File: Decodable { let name: String; let bytes: Int; let sha256: String }
     private struct Manifest: Decodable {
         let version: Int
@@ -170,12 +172,13 @@ final class DuelWeaponEffects {
                 guard let motion = pose.motionID, !motion.isEmpty, motion.count <= 200 else { continue }
                 guard present.insert(key).inserted else { continue }
                 var trail = emitting[key]
-                let discontinuity = trail?.samples.last.map { simd_distance($0.tip, tip) > 2.5 || simd_distance($0.base, base) > 2.5 } ?? false
+                let discontinuity = trail?.samples.last.map { simd_distance($0.tip, tip) > Self.maximumAdjacentStep || simd_distance($0.base, base) > Self.maximumAdjacentStep } ?? false
                 if trail == nil || trail?.motionID != motion || trail?.family != pose.family || trail?.shadow != pose.isShadow || discontinuity {
                     trail = makeTrail(key: key, pose: pose, motion: motion)
                     emitting[key] = trail
                     if let preceding, preceding.0 == pose.family, preceding.1.tick == animationTick - 1,
-                       simd_distance(preceding.1.tip, tip) <= 2.5, simd_distance(preceding.1.base, base) <= 2.5 {
+                       simd_distance(preceding.1.tip, tip) <= Self.maximumAdjacentStep,
+                       simd_distance(preceding.1.base, base) <= Self.maximumAdjacentStep {
                         trail?.samples.append(preceding.1)
                     }
                 }
