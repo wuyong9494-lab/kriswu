@@ -132,6 +132,20 @@ final class DuelCameraFramingTests: XCTestCase {
         XCTAssertGreaterThan(lens.consume(required: 29, frame: 3, aspect: 2.1), 29)
     }
 
+    func testExplicitBoutRestartClearsOpticalFOVEvenOnIdenticalFrame() {
+        var lens = DuelCameraOpticalFOV()
+        XCTAssertEqual(lens.consume(required: 56, frame: 0, aspect: 2.1), 56)
+        // A repeated layout of the same match correctly keeps the widest
+        // measured pose. Restart is different despite reusing frame zero.
+        XCTAssertEqual(lens.consume(required: 29, frame: 0, aspect: 2.1), 56)
+        lens.reset()
+        XCTAssertEqual(lens.consume(required: 29, frame: 0, aspect: 2.1), 29,
+                       "A new bout must not inherit the last weapon swing's optical zoom")
+        XCTAssertEqual(lens.consume(required: 48, frame: 0, aspect: 2.1), 48,
+                       "The new bout must still expand immediately for its real pose")
+        XCTAssertGreaterThan(lens.consume(required: 29, frame: 1, aspect: 2.1), 29)
+    }
+
     func testOpticalFOVResetsOnRewindAndRotation() {
         var lens = DuelCameraOpticalFOV()
         lens.consume(required: 52, frame: 10, aspect: 2.1)
