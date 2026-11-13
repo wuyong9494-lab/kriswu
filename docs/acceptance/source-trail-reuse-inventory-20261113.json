@@ -1,0 +1,112 @@
+{
+  "scope": "Read-only original prefab/mesh inventory, not new runtime implementation or visual acceptance",
+  "decoder": "UnityPy 1.25.4",
+  "sourceFiles": [
+    {
+      "file": "b0a04b3fa5028da909862b6332e2e0b8.bin",
+      "bytes": 43538,
+      "sha256": "e9b3a8d70a738db1a91a728812f6e5f4bfaad4dda896913cb9721a9e8dddb9e4"
+    },
+    {
+      "file": "45d6c13eaf9b6359e0d11caac0ee92e9.bin",
+      "bytes": 148746,
+      "sha256": "d6f278f0f19fb5c26006b1b0e70de3da0836f1e5ea84d27b0ae8d5440a04a540"
+    },
+    {
+      "file": "6c577d30c62b64c3176e1ba9341f8fb7.bin",
+      "bytes": 819472,
+      "sha256": "cdc7bc96e6075fe27c348ae5bd6fbd28da2c096078a942e3f129c04f3d19f96e"
+    }
+  ],
+  "trailRenderers": [
+    {
+      "name": "wpn__katana_01_01__trail_r",
+      "rendererPathID": "-8741220757481555366",
+      "meshName": "wpn__katana_01_01__trail_r",
+      "meshPathID": "9022390907513515417",
+      "vertices": 12,
+      "bindposeCount": 4,
+      "boneSlots": 4,
+      "nullBoneSlots": 4,
+      "boneNames": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "materials": [
+        {
+          "fileID": 1,
+          "pathID": "7117397926802024576"
+        }
+      ]
+    },
+    {
+      "name": "wpn__katana_01_01__trail_l",
+      "rendererPathID": "-7462267209156431085",
+      "meshName": "wpn__katana_01_01__trail_l",
+      "meshPathID": "-6669622918817052916",
+      "vertices": 12,
+      "bindposeCount": 4,
+      "boneSlots": 4,
+      "nullBoneSlots": 4,
+      "boneNames": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "materials": [
+        {
+          "fileID": 1,
+          "pathID": "7117397926802024576"
+        }
+      ]
+    },
+    {
+      "name": "wpn__hammers_01_01__trail_l",
+      "rendererPathID": "-243873974106495886",
+      "meshName": "wpn__hammers_01_01__trail_l",
+      "meshPathID": "-7212086171507119405",
+      "vertices": 32,
+      "bindposeCount": 4,
+      "boneSlots": 4,
+      "nullBoneSlots": 4,
+      "boneNames": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "materials": [
+        {
+          "fileID": 0,
+          "pathID": "-3754267699092616363"
+        }
+      ]
+    },
+    {
+      "name": "wpn__hammers_01_01__trail_r",
+      "rendererPathID": "3652946613870811959",
+      "meshName": "wpn__hammers_01_01__trail_r",
+      "meshPathID": "6742508945122482593",
+      "vertices": 32,
+      "bindposeCount": 4,
+      "boneSlots": 4,
+      "nullBoneSlots": 4,
+      "boneNames": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "materials": [
+        {
+          "fileID": 0,
+          "pathID": "-3754267699092616363"
+        }
+      ]
+    }
+  ],
+  "decision": "Reuse original skinned meshes and source motion tracks only after resolving null prefab bone slots and the emission/retirement controller. A material or mesh alone does not reconstruct the source effect."
+}
