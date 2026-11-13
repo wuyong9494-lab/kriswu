@@ -29,6 +29,18 @@ DEVICE = {"udid": "00112233-4455-6677-8899-AABBCCDDEEFF", "name": "Synthetic man
 
 
 class ClosedFollowupEvidenceTests(unittest.TestCase):
+    def test_coverage_scope_keeps_current_presentation_resources_and_only_affected_methods(self):
+        coverage = load_scope("coverage-followup")
+        self.assertEqual((len(coverage.SELECTORS), len(coverage.IMAGE_LABELS), len(coverage.DATA_LABELS)), (2, 7, 0))
+        self.assertEqual(coverage.SELECTED, FOLLOWUP.FOLLOWUP_SELECTED[2:])
+        self.assertTrue(coverage.USES_PRESENTATION)
+        self.assertIn(".github/private/fighter-presentation/manifest.json", coverage.MANIFESTS)
+        self.assertEqual(len(coverage.resource_records()), 72)
+        self.assertEqual(coverage.recipient_digest(coverage.RECIPIENT.read_bytes()), coverage.RECIPIENT_SPKI_SHA256)
+        self.assertTrue(all(row["selector"] in coverage.SELECTORS for row in coverage.EXPECTED_ATTACHMENTS.values()))
+        self.assertEqual(set(coverage.EXPECTED_ATTACHMENTS), set(coverage.IMAGE_LABELS))
+        self.assertNotEqual(coverage.SCOPE["commitPrefix"], FOLLOWUP.SCOPE["commitPrefix"])
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="fighter-scope-check-")
         self.root = Path(self.temporary.name)

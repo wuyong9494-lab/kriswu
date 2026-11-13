@@ -113,6 +113,7 @@ final class DuelWeaponEffectsTests: XCTestCase {
             XCTAssertTrue([ages.x, ages.y, ages.z, ages.w].allSatisfy(\.isFinite), "Template ages are finite and never mutated by a live ribbon")
         }
         try assertShaderUsesAgeUniforms(scene: scene, renderer: renderer, empty: empty)
+        try assertPartialCoverageCompositesOverBackground(scene: scene, renderer: renderer)
     }
 
     func testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease() throws {
@@ -363,6 +364,57 @@ final class DuelWeaponEffectsTests: XCTestCase {
         XCTAssertEqual(geometry.sources.map(\.data) + geometry.elements.map(\.data), vertices,
                        "The single-variable age probe leaves geometry and alpha UVs fixed")
     }
+    private func assertPartialCoverageCompositesOverBackground(scene: SCNScene, renderer: SCNRenderer) throws {
+        // One tick creates nonoverlapping quads. Use a known white sampler and
+        // fixed birth age, changing coverage only. A straight-white fragment
+        // incorrectly passes a "some pixels changed" test but fails both zero
+        // coverage and the linear-light quarter/half compositing equations.
+        let savedBackground = scene.background.contents
+        defer { scene.background.contents = savedBackground }
+        for background in [UIColor.black, UIColor(red: 0.08, green: 0.22, blue: 0.48, alpha: 1)] {
+            scene.background.contents = background
+            for family in [DuelWeaponEffects.Family.katana, .dualHammers] {
+                let root = SCNNode(); scene.rootNode.addChildNode(root)
+                let fixture = DuelWeaponEffects.preparationFixture(root: root)
+                defer { fixture.shutdown(); root.removeFromParentNode() }
+                let empty = try pixels(renderer, atTime: 701)
+                fixture.consumeStep(poses: [pose(tick: 0, family: family, active: false)], animationTick: 0)
+                fixture.consumeStep(poses: [pose(tick: 1, family: family)], animationTick: 1)
+                let container = try XCTUnwrap(root.childNode(withName: "duel.weapon-effects", recursively: false))
+                let materials = container.childNodes.flatMap(\.childNodes).compactMap { $0.geometry?.firstMaterial }
+                XCTAssertEqual(materials.count, family == .katana ? 1 : 2)
+                for material in materials {
+                    material.setValue(NSValue(scnVector4: SCNVector4(0, 0, 0, 0)), forKey: "sourceTrailAges")
+                }
+                func coverage(_ value: Double) throws -> [UInt8] {
+                    for material in materials { material.setValue(NSNumber(value: value), forKey: "presentationOpacity") }
+                    return try pixels(renderer, atTime: 702)
+                }
+                let zero = try coverage(0), full = try coverage(1)
+                XCTAssertLessThanOrEqual(maximumDelta(empty, zero), 1, "Zero coverage must leave the background unchanged")
+                let interior = stride(from: 0, to: full.count, by: 4).filter {
+                    full[$0] > 252 && full[$0 + 1] > 252 && full[$0 + 2] > 252
+                }
+                XCTAssertGreaterThan(interior.count, 20, "The full-coverage control must actually draw opaque interiors")
+                func linear(_ byte: UInt8) -> Double {
+                    let c = Double(byte) / 255
+                    return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+                }
+                for alpha in [0.25, 0.5] {
+                    let partial = try coverage(alpha)
+                    let errors = interior.flatMap { offset in
+                        (0..<3).map { channel in
+                            abs(linear(partial[offset + channel]) -
+                                (linear(full[offset + channel]) * alpha + linear(zero[offset + channel]) * (1 - alpha)))
+                        }
+                    }
+                    XCTAssertLessThan(errors.max() ?? 1, 0.035,
+                                      "Partial coverage must blend with the background once, without opaque white or double attenuation")
+                }
+            }
+        }
+    }
+
     private func pixels(_ renderer: SCNRenderer, atTime: Double, name: String? = nil) throws -> [UInt8] {
         SCNTransaction.flush()
         let side = 256

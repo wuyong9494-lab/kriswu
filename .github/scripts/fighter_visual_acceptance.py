@@ -97,6 +97,16 @@ PRESENTATION_ATTACHMENTS.update({
     for hero in ("ember", "liu")
 })
 SCOPES = {
+    "coverage-followup": {
+        "selected": FOLLOWUP_SELECTED[2:], "methodCount": 2,
+        "imageLabels": list(FOLLOWUP_ATTACHMENTS), "dataLabels": [],
+        "commitPrefix": "Capture targeted fighter coverage",
+        "workflow": ".github/workflows/fighter-coverage-followup.yml",
+        "additionalSources": ["App/Services/DuelWeaponEffects.swift", "App/Services/DuelPresentationAssets.swift",
+                              "App/Services/DuelWeaponAssets.swift", "App/Services/DuelSourceEffects.swift",
+                              "App/Services/GLTFModel.swift", "App/Views/DuelWorld.swift",
+                              ".github/scripts/fighter_presentation_assets.py"],
+    },
     "baseline-11": {
         "selected": BASELINE_SELECTED, "methodCount": 11,
         "imageLabels": BASELINE_IMAGE_LABELS, "dataLabels": BASELINE_DATA_LABELS,
@@ -142,7 +152,8 @@ EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
 IMAGE_LABELS = SCOPE["imageLabels"]
 DATA_LABELS = SCOPE["dataLabels"]
 EXPECTED_ATTACHMENTS = PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS
-if SCOPE_NAME == "presentation-followup":
+USES_PRESENTATION = SCOPE_NAME in ("presentation-followup", "coverage-followup")
+if USES_PRESENTATION:
     MANIFESTS.append(".github/private/fighter-presentation/manifest.json")
     RECIPIENT = ROOT / ".github/public/fighter-presentation-20261113.public.pem"
     RECIPIENT_SPKI_SHA256 = "08e3294de08e37cc25a4a39332947c2208281f4b784a49561668a256e0c31779"
@@ -282,7 +293,7 @@ def resource_records():
                          "manifest": manifest_path,
                          "encryptedParts": row.get("parts", manifest.get("parts", [])),
                          "cipherSHA256": row.get("cipher_sha256", manifest.get("cipher_sha256"))})
-    count = 72 if SCOPE_NAME == "presentation-followup" else 64
+    count = 72 if USES_PRESENTATION else 64
     assert len(rows) == count and len({row["file"] for row in rows}) == count
     return rows
 
@@ -313,7 +324,7 @@ def stage():
     # any file. The secret is scoped to this step only and never copied.
     run_logged([sys.executable, ".github/scripts/fighter_sf3_assets.py"], "stage-scenery", 180)
     run_logged([sys.executable, ".github/scripts/fighter_sf3_distinct.py"], "stage-distinct", 180)
-    if SCOPE_NAME == "presentation-followup":
+    if USES_PRESENTATION:
         run_logged([sys.executable, ".github/scripts/fighter_presentation_assets.py", "stage"], "stage-presentation", 60)
     audit_resources(ROOT / "App/Resources/FighterPrivate", bundled=False)
     print(str(len(resource_records())) + " character/scenery/feedback/presentation files authenticated and staged; no plaintext upload.")

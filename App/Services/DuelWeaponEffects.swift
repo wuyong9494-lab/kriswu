@@ -493,8 +493,13 @@ final class DuelWeaponEffects {
             // with trail UVs paints armor patterns across the swept ribbon.
             // Keep the authenticated alpha, tint, intensity and age curves.
             // This is a ribbon adaptation, not a recovered skinned trail mesh.
-            float opacity = texture2D(sourceAlpha, trailUV).r * sourceParameters.x * sourceAlphaAt(trailAge);
-            _output.color = vec4(sourceTint.rgb * sourceColorAt(trailAge) * sourceParameters.x * sourceParameters.y, opacity * presentationOpacity);
+            float opacity = clamp(texture2D(sourceAlpha, trailUV).r * sourceParameters.x * sourceAlphaAt(trailAge) * presentationOpacity, 0.0, 1.0);
+            // A fragment modifier replaces SceneKit's final, premultiplied
+            // output. Alpha alone cannot attenuate straight white RGB here:
+            // zero coverage would still add white to the background. Keep
+            // the authenticated coverage and premultiply exactly once.
+            vec3 color = sourceTint.rgb * sourceColorAt(trailAge) * sourceParameters.x * sourceParameters.y;
+            _output.color = vec4(color * opacity, opacity);
             """
         case "dashGlow":
             body = """
