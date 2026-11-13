@@ -107,6 +107,7 @@ final class DuelWorldView: SCNView {
         session.renderPause = { [weak self] paused in
             self?.sourceEffects?.setPaused(paused)
             self?.weaponEffects?.setPaused(paused)
+            self?.shadowVoice.setPaused(paused)
             if paused { self?.stopClock() } else { self?.startClock() }
         }
         if session.setup.originalWeapons, let directory = session.weaponAssets?.directory {
