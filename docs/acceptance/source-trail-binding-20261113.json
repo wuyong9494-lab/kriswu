@@ -26,7 +26,13 @@
         263
       ],
       "bindOrderMatchesPrefab": true,
-      "equipmentUVPresent": false
+      "equipmentUVPresent": false,
+      "skinDataComponent": {
+        "pathID": "5795981320600843027",
+        "class": "Banzai.SFGF.Configs.SkinData",
+        "assembly": "Banzai.SFGF.Configs",
+        "serializedCullMode": 0
+      }
     },
     {
       "name": "wpn__katana_01_01__trail_r",
@@ -51,7 +57,13 @@
         267
       ],
       "bindOrderMatchesPrefab": true,
-      "equipmentUVPresent": false
+      "equipmentUVPresent": false,
+      "skinDataComponent": {
+        "pathID": "-3852086528204506534",
+        "class": "Banzai.SFGF.Configs.SkinData",
+        "assembly": "Banzai.SFGF.Configs",
+        "serializedCullMode": 0
+      }
     },
     {
       "name": "wpn__hammers_01_01__trail_l",
@@ -76,7 +88,13 @@
         263
       ],
       "bindOrderMatchesPrefab": true,
-      "equipmentUVPresent": false
+      "equipmentUVPresent": false,
+      "skinDataComponent": {
+        "pathID": "3724572326892561522",
+        "class": "Banzai.SFGF.Configs.SkinData",
+        "assembly": "Banzai.SFGF.Configs",
+        "serializedCullMode": 0
+      }
     },
     {
       "name": "wpn__hammers_01_01__trail_r",
@@ -101,7 +119,13 @@
         267
       ],
       "bindOrderMatchesPrefab": true,
-      "equipmentUVPresent": false
+      "equipmentUVPresent": false,
+      "skinDataComponent": {
+        "pathID": "-217932045254173897",
+        "class": "Banzai.SFGF.Configs.SkinData",
+        "assembly": "Banzai.SFGF.Configs",
+        "serializedCullMode": 0
+      }
     }
   ],
   "profiles": [
@@ -113,5 +137,6 @@
       "id": "liu_hammers",
       "sourceAnimatedClipCount": 11
     }
-  ]
+  ],
+  "cullInterpretation": "Source materials use _Cull=2, while SkinData serializes cullMode=0 for both trail and solid skins. The enum and runtime override semantics are not established; do not infer that every source material is two-sided."
 }

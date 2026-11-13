@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "runId": "43399280258",
+  "sourceSha": "76d493ab9f1e9b2db9303b159a7c3fa8a9135856",
+  "attempt": 1,
+  "verifiedAt": "2026-11-13T09:37:53.599462+00:00",
+  "scope": "source-skins-followup",
+  "nativePassed": 0,
+  "nativeFailed": 2,
+  "nativeSkipped": 0,
+  "imageCount": 12,
+  "dataCount": 0,
+  "stagedResourceIdentities": 73,
+  "compiledResourceIdentities": 73,
+  "selectedSourceFileCount": 21,
+  "selectedSourceSHA256": {
+    "Tests/SiteTests/DuelSourceWeaponTrailTests.swift": "634767cd762e9e035166a72b9274e31ac9304d7e3b2600b9dffbdbbf42de70f5",
+    "Tests/SiteTests/DuelWeaponGameplayTests.swift": "38cee86307aa26fb0882a7bdc79461e2a750f1d554e0f94bbf0cd2b686b47e03",
+    ".github/private/sf3/manifest.json": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+    ".github/private/sf3-distinct/manifest.json": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+    ".github/private/fighter-source-trails/manifest.json": "390dd75ac5aa218bdd2cd3c5909ca75a0c2148c5676687dd6fd732fb797471cb",
+    ".github/private/fighter-presentation/manifest.json": "0595cdd5b06068a1c2ea8e1a304195ac1b7d404d5051935e19cc4188c0d3cad5",
+    "project.yml": "3ab100cb92c89782a4d007d6aeca9118c313091dcd7cdab7107a8faeea98468a",
+    ".github/scripts/fighter_visual_acceptance.py": "4cf32a00d1ce705cd7a87d53bf1e22b4adf01e912fdbd16216f9ece8c2d3dc36",
+    ".github/scripts/fighter_private_model.py": "925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79",
+    ".github/scripts/fighter_sf3_assets.py": "fb8cd750f4ff134fd27f1040e47691a3932c062660d7ba7b4e9508e4d6151d11",
+    ".github/scripts/fighter_sf3_distinct.py": "9f27051a445c96e038881cf67793a7968f46efd94b2866dfbe9ce4971f1e619c",
+    ".github/workflows/fighter-source-skins-followup.yml": "4c606d5375a07a894b4eadd796251a3f5e9932f25a8ba2212e008f09d2db2dd2",
+    "App/Services/DuelSourceWeaponTrails.swift": "b6ea9d15437a6a8fd9ead5601c33230dc59cb3896d1d518f8750f44707d8861e",
+    "App/Services/DuelWeaponAssets.swift": "061711b889cfeacc066bd64c77af94ef2d3fb99d8e3135610945f1be78a175b3",
+    "App/Services/DuelWeaponEffects.swift": "7180ad4ba9ed50f15e23ce2b62e0244201963039441dea0d9df72d287185794c",
+    "App/Services/DuelNetworkCompatibilityIdentity.swift": "657aad734b1cc46995f853888d62f5ae90489381720b0ebb96ecfeaf45ff4721",
+    "App/Services/GLTFModel.swift": "d41d57ad32a17827a9d0394e13b54eb0ad94c5d252eb31eb178b2c4dd8390532",
+    "App/Views/DuelWorld.swift": "dac7328cf16925c5187b6b3a7ee842d21d3517b349cee29e234fcde82086bc0c",
+    ".github/scripts/fighter_presentation_assets.py": "7265d99a7aac0a27b8ee09dd259f00c6feec71a9c0f0d645c5a72b439e5d54a3",
+    ".github/scripts/fighter_source_trails.py": "ef80f69675f657c281ab0e8c9f3079466c0ecfcbe7042d7d9bdfe0b4d33d31a0",
+    ".github/scripts/export_fighter_source_trails.py": "0aa44589efbf79383373409d90307e50a1b5f8043e24710d89410acc6740014f"
+  },
+  "methods": [
+    {
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "result": "Failed",
+      "durationSeconds": 13.180720925331116
+    },
+    {
+      "selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease",
+      "result": "Failed",
+      "durationSeconds": 45.562623023986816
+    }
+  ],
+  "images": [
+    {
+      "file": "1DF50444-DA44-4BC1-B993-A98337048B88.png",
+      "bytes": 58373,
+      "sha256": "ff74329f4a2696b181a5475a6577303de109a0c42e187387b08edc899316909c",
+      "label": "source-skin-liu-heavy-negative",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "3AD68AF0-ED0C-43FC-BC4C-8D221D3946F4.png",
+      "bytes": 60614,
+      "sha256": "bd1394686aec8cd6fe52df7f745e13792a7474ca6791abe6b3fb0827639c8cf3",
+      "label": "source-skin-liu-heavy-positive",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "A515702B-FDD2-40F8-A4F9-F403D2A58708.png",
+      "bytes": 57812,
+      "sha256": "23f1cc8cd3eb65a06780b72d35d5d8a17a69fb58e48dec65a67308409e7ed95a",
+      "label": "source-skin-liu-weapon1-negative",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "CC9E82D6-DBE2-4C19-B588-FE00E89BFC95.png",
+      "bytes": 55845,
+      "sha256": "f0e99e1ec5d57e653a71990b9c466abe29d3b98c66a17e56da4485dde65c1e94",
+      "label": "source-skin-liu-weapon1-positive",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "FC7A06B0-E801-43B7-BFB9-9E93BFED12EC.png",
+      "bytes": 57786,
+      "sha256": "120ec0deb73b5eed001acbf3cdeb2bca1c86b78539a53d49415747c4d424c6cb",
+      "label": "source-skin-ember-heavy-negative",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "EBF1ADFF-99CB-4E1A-98E6-418D53265023.png",
+      "bytes": 47142,
+      "sha256": "031e08c8049cf1415fd9b61ec0d7c1ce8fdbf1257c1dd7cc9bf7447ddec057d4",
+      "label": "source-skin-ember-heavy-positive",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "A6F663E2-C4FA-4C08-BCFC-CD62229FE063.png",
+      "bytes": 59577,
+      "sha256": "9d86ee5e144d4c64a161e9bbdb40d1b087dc28fb4f9c672efedf955bb4abe076",
+      "label": "source-skin-ember-weapon1-negative",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "72141DCC-0B26-46F9-B6EA-A19A9D2A4319.png",
+      "bytes": 46890,
+      "sha256": "d741fe9ffb8cf25fab957fe5ac1eeb28b36a90706eac5cb4d6b1406a2dc63d72",
+      "label": "source-skin-ember-weapon1-positive",
+      "selector": "SiteTests/DuelSourceWeaponTrailTests/testOriginalSkinBindingsRenderBothFacingsAndRemainFrozen",
+      "kind": "image"
+    },
+    {
+      "file": "47D2685E-EB0F-46DF-AE1B-748B88800F2A.png",
+      "bytes": 565706,
+      "sha256": "2ce72d11010e3b963bcb810ec8c0a8e9adc2d1773c3ddc797835bf92564ebaa7",
+      "label": "skin-equipped-liu-heavy-source-contact",
+      "selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease",
+      "kind": "image"
+    },
+    {
+      "file": "C1C18195-F846-4E66-80AE-5D4F5D95BDF1.png",
+      "bytes": 571014,
+      "sha256": "e95c5ccb7395e96b6ec4327dec6435b72b7831434922f27129caaa94b38444cb",
+      "label": "skin-equipped-liu-weapon1-source-contact",
+      "selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease",
+      "kind": "image"
+    },
+    {
+      "file": "B97793EC-B399-43B2-A1A3-C00040DA56C8.png",
+      "bytes": 566731,
+      "sha256": "95aa00460c949dca3f7d492095e9a89b768bb153d368fe9a238fc638318e2f51",
+      "label": "skin-equipped-ember-heavy-source-contact",
+      "selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease",
+      "kind": "image"
+    },
+    {
+      "file": "C584433F-176F-4867-A550-C4901B046236.png",
+      "bytes": 566850,
+      "sha256": "16c900dbc45da94ed524c6b8c036f5b5a5cf02c1ed169d4658a8d5396ab7c53c",
+      "label": "skin-equipped-ember-weapon1-source-contact",
+      "selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease",
+      "kind": "image"
+    }
+  ],
+  "archiveSHA256": "7ebca370bed241191561272296c41c8115eca10c023080062cf9ad109917aebe",
+  "timings": {
+    "stage-scenery": {
+      "durationSeconds": 0.892,
+      "exitCode": 0
+    },
+    "stage-distinct": {
+      "durationSeconds": 0.776,
+      "exitCode": 0
+    },
+    "stage-presentation": {
+      "durationSeconds": 0.223,
+      "exitCode": 0
+    },
+    "stage-source-skins": {
+      "durationSeconds": 0.192,
+      "exitCode": 0
+    },
+    "build-identity": {
+      "durationSeconds": 0.05,
+      "exitCode": 0
+    },
+    "project-generation": {
+      "durationSeconds": 0.225,
+      "exitCode": 0
+    },
+    "native-build": {
+      "durationSeconds": 423.896,
+      "exitCode": 0
+    },
+    "simulator-boot": {
+      "durationSeconds": 2.676,
+      "exitCode": 0
+    },
+    "simulator-ready": {
+      "durationSeconds": 356.196,
+      "exitCode": 0
+    },
+    "simulator-total": {
+      "durationSeconds": 362.527,
+      "exitCode": 0
+    },
+    "selected-native": {
+      "durationSeconds": 313.601,
+      "exitCode": 65
+    },
+    "export-attachments": {
+      "durationSeconds": 0.31,
+      "exitCode": 0
+    }
+  },
+  "visualAcceptance": "12张原图全部审看：孙登正向普攻/重击和两张生产命中图缺少刀光；双锤有实际像素贡献。两项方法失败，不能验收。",
+  "limitations": [
+    "Simulator evidence only; no physical-device, stable-60fps or dual-device acceptance",
+    "Source geometry, weights, inverse binds and existing motion are reused; UV1 equipment color and original emission events remain unverified",
+    "Neutral-alpha and katana-facing adapters remain; no 1:1 fidelity claim",
+    "Build 702 and TestFlight unchanged"
+  ],
+  "allImagesReviewed": true,
+  "failingAssertions": {
+    "fixedPoseKatana": 2,
+    "productionKatana": 2,
+    "unchangedPixelThresholds": [
+      20,
+      10
+    ]
+  },
+  "imageReview": {
+    "production": "孙登两种攻击都未显示刀光；双锤有较细的原网格拖尾。人物材质仍偏亮，完整质感未签收。",
+    "source-pose": "武士刀在正向两张图中缺失，反向可见；双锤两种攻击和两个朝向都可见。原网格形状已经与旧端点历史条不同。"
+  }
+}
