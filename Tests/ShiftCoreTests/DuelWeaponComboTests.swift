@@ -86,7 +86,9 @@ final class DuelWeaponComboTests: XCTestCase {
             XCTAssertEqual(fight.landedHits, [0, 0])
             XCTAssertEqual(fight.damageDealt, [0, 0])
             XCTAssertEqual(fight.fighters[1].health, 1000 - (hero == .ember ? 80 : 105) / 12)
-            XCTAssertEqual(fight.fighters.map(\.energy), [startingEnergy[0] + 8, startingEnergy[1] + 10])
+            // This fixed 102-step trace includes 17 passive recharge pulses.
+            // Only the single blocked contact may add the separate 8/10 bonus.
+            XCTAssertEqual(fight.fighters.map(\.energy), [startingEnergy[0] + 17 + 8, startingEnergy[1] + 17 + 10])
         }
     }
 

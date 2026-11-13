@@ -529,7 +529,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
                               direction: fighters[i].facing, heavy: heavy, usesWeapon: !command.rawValue.hasPrefix("kick")))
         if blocked { events.append(.blocked(defender: defender)) }
         else { landedHits[i] += 1; damageDealt[i] += damage; events.append(.hit(attacker: i, damage: damage)) }
-        hitStop = max(hitStop, blocked ? 2 : heavy ? 5 : 3)
+        // Short impact accent: avoid freezing a normal exchange for 50–83 ms.
+        hitStop = max(hitStop, blocked ? 1 : heavy ? 2 : 1)
     }
     private mutating func separate() {
         let distance = fighters[1].x - fighters[0].x

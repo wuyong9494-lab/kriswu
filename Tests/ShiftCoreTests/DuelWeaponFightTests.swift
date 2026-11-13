@@ -4,6 +4,27 @@ import XCTest
 final class DuelWeaponFightTests: XCTestCase {
     private typealias Fixture = DuelWeaponTestFixtures
 
+    func testImpactPauseIsOneFrameForLightAndBlockTwoForHeavy() throws {
+        for command in [DuelWeaponCommand.weapon, .heavy] {
+            for blocked in [false, true] {
+                var fight = try Fixture.fight()
+                fight.step(.init(weaponCommand: command), opponent: .init(guardHeld: blocked))
+                for _ in 0..<80 where fight.hitStop == 0 {
+                    fight.step(.neutral, opponent: .init(guardHeld: blocked))
+                }
+                XCTAssertFalse(fight.contacts.isEmpty)
+                XCTAssertEqual(fight.hitStop, blocked || command == .weapon ? 1 : 2)
+                let pose = fight.fighters[0].weaponPose
+                let pause = fight.hitStop
+                for _ in 0..<pause { fight.step(.neutral, opponent: .neutral) }
+                XCTAssertEqual(fight.fighters[0].weaponPose, pose)
+                XCTAssertEqual(fight.hitStop, 0)
+                fight.step(.neutral, opponent: .neutral)
+                XCTAssertNotEqual(fight.fighters[0].weaponPose, pose)
+            }
+        }
+    }
+
     func testFightRetainsTheTwoDifferentProfilesWhenPlayerOrderChanges() throws {
         let catalog = Fixture.catalog()
         for (first, second) in [(DuelGame.Hero.ember, DuelGame.Hero.liu), (.liu, .ember)] {
@@ -287,8 +308,8 @@ final class DuelWeaponFightTests: XCTestCase {
 
     func testUnsupportedHitStopPressLeavesRoomForAValidFollowUp() throws {
         var fight = try Fixture.fight()
-        fight.step(.init(weaponCommand: .weapon), opponent: .neutral)
-        for _ in 0..<12 where fight.hitStop == 0 { fight.step(.neutral, opponent: .neutral) }
+        fight.step(.init(weaponCommand: .heavy), opponent: .neutral)
+        for _ in 0..<80 where fight.hitStop == 0 { fight.step(.neutral, opponent: .neutral) }
         XCTAssertGreaterThanOrEqual(fight.hitStop, 2)
         fight.step(.init(weaponCommand: .ranged), opponent: .neutral)
         fight.step(.init(weaponCommand: .kick), opponent: .neutral)

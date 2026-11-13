@@ -1,5 +1,5 @@
 name: Fighter back guard, shadow recharge and larger lobby (unsigned only)
-# Eight targeted methods, six images; existing assets and environment review.
+# Fourteen targeted methods, six images; existing assets and environment review.
 'on':
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 1
           lfs: false
           submodules: false
-      - name: Pin source, eight exact methods and six attachment labels
+      - name: Pin source, fourteen exact methods and six attachment labels
         id: prepare
         timeout-minutes: 2
         run: |
@@ -80,7 +80,7 @@ jobs:
       - name: Prepare one installed iPhone 17 Pro Max simulator
         timeout-minutes: 12
         run: python3 .github/scripts/fighter_visual_acceptance.py simulator
-      - name: Run only the eight targeted native methods without rebuilding
+      - name: Run only the fourteen targeted native methods without rebuilding
         timeout-minutes: 20
         run: python3 .github/scripts/fighter_visual_acceptance.py test
       - name: Export exactly six images with exact method ownership

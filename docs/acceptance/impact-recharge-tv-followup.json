@@ -1,0 +1,42 @@
+{
+  "baseline": "1.2 (704)",
+  "feedback": "User confirmed pause on each hit, plus dim shadow controls and TV stutter",
+  "changes": {
+    "hitStopFrames": {
+      "normal": 1,
+      "block": 1,
+      "heavy": 2
+    },
+    "priorHitStopFrames": {
+      "normal": 3,
+      "block": 2,
+      "heavy": 5
+    },
+    "recharge": "After cooldown +1 energy per six active simulation frames",
+    "television": "1920x1080 render envelope and no multisample AA while casting; phone settings restored",
+    "diagnostics": "Separate simulation CPU, presentation CPU, intentional frozen steps and raster dimensions; no GPU time claim",
+    "replayRules": 6
+  },
+  "verification": {
+    "coreMethods": 79,
+    "initialFailedMethods": 1,
+    "initialAssertions": 2,
+    "correction": "Fixed 102-step combo trace includes 17 passive recharge pulses; retained single block/damage/energy bonus assertions",
+    "correctedMethodPassed": true,
+    "helperTests": 13,
+    "swiftParse": true,
+    "nativeStatus": "pending"
+  },
+  "model333": {
+    "container": "ZIP containing FBX and two JPEG textures",
+    "vertices": 80762,
+    "armatures": 0,
+    "animationActions": 0,
+    "integrated": false
+  },
+  "limitations": [
+    "No physical TV/iPhone performance acceptance",
+    "Original choreography/material fidelity unverified",
+    "No new-model or requested white projectile implementation"
+  ]
+}

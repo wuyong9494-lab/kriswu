@@ -38,6 +38,8 @@ final class DuelWorldView: SCNView {
     private var intervalCursor = 0
     private var slowCallbacks = 0
     private var sampleCount = 0
+    private var cpuSamples: [(simulation: Double, drawing: Double)] = []
+    private var frozenStepCount = 0
     private var actors: [DuelActor] = []
     private(set) var characterAsset: DuelCharacterAsset?
     private var characterAssets: [DuelGame.Hero: DuelCharacterAsset] = [:]
@@ -677,8 +679,15 @@ final class DuelWorldView: SCNView {
         if steps > 0, firstStepDelay == nil, let started = clockStartedAt {
             firstStepDelay = max(0, timestamp - started)
         }
-        for _ in 0..<steps { session.advance() }
+        let cpuStart = CACurrentMediaTime()
+        for _ in 0..<steps {
+            if session.game.hitStop > 0 { frozenStepCount += 1 }
+            session.advance()
+        }
+        let simulationEnd = CACurrentMediaTime()
         drawState()
+        let drawingEnd = CACurrentMediaTime()
+        cpuSamples.append((simulationEnd - cpuStart, drawingEnd - simulationEnd))
         if case .matchOver = session.game.phase { stopClock() }
         sampleCount += 1
         if elapsed > 0.025 { slowCallbacks += 1 }
@@ -687,8 +696,16 @@ final class DuelWorldView: SCNView {
         if timestamp - lastReport >= 1 {
             lastReport = timestamp
             let sorted = intervals.sorted(), p95 = sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))] * 1000
+            func cpuP95(_ values: [Double]) -> Double {
+                let sorted = values.sorted()
+                return sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))] * 1000
+            }
+            let detail = String(format: "\n逻辑CPU p95 %.1f ms · 画面CPU p95 %.1f ms · 命中停顿步 %d\n渲染 %.0f×%.0f · AA %d",
+                cpuP95(cpuSamples.map(\.simulation)), cpuP95(cpuSamples.map(\.drawing)), frozenStepCount,
+                bounds.width * contentScaleFactor, bounds.height * contentScaleFactor, antialiasingMode.rawValue)
+            cpuSamples.removeAll(keepingCapacity: true); frozenStepCount = 0
             session.metrics(String(format: "刷新回调 p95 %.1f ms · 慢回调 %d/%d\n内存 %.0f MB · 热状态 %d · 丢弃补步 %.2f s",
-                p95, slowCallbacks, sampleCount, Self.memoryMB(), ProcessInfo.processInfo.thermalState.rawValue, clock.droppedSeconds))
+                p95, slowCallbacks, sampleCount, Self.memoryMB(), ProcessInfo.processInfo.thermalState.rawValue, clock.droppedSeconds) + detail)
         }
     }
     func drawState() {
