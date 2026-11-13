@@ -318,8 +318,15 @@ public struct DuelWeaponFight: Equatable, Sendable {
         }
         for n in now.indices where old.indices.contains(n) {
             let a = world(old[n], previous: true), b = world(now[n], previous: false)
-            let localSpeed = hypot(now[n].x - old[n].x, now[n].y - old[n].y)
-            guard localSpeed > 0.005, abs(now[n].z) < 0.8 else { continue }
+            let dx = now[n].x - old[n].x
+            let dy = now[n].y - old[n].y
+            let dz = now[n].z - old[n].z
+            let localSpeed = sqrt(dx * dx + dy * dy + dz * dz)
+            // A source clip can teleport a weapon tip or its root between
+            // samples (notably the unrecovered shadow/projectile transitions).
+            // Never sweep a discontinuity across the opponent as a fabricated hit.
+            guard localSpeed > 0.005, localSpeed <= 0.75,
+                  abs(now[n].z) < 0.8, abs(old[n].z) < 0.8 else { continue }
             if Self.segment(a, b, intersects: box, radius: radius) {
                 return .init(x: min(Double(box.maxX) / 1000, max(Double(box.minX) / 1000, b.x)),
                              y: min(Double(box.maxY) / 1000, max(Double(box.minY) / 1000, b.y)), z: 0.08)
