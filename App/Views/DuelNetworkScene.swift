@@ -27,6 +27,7 @@ final class DuelNetworkSceneView: SCNView {
     private var displayedX: [Float] = []
     private var displayedY: [Float] = []
     private var impactNodes: [SCNNode] = []
+    private var impactFramesRemaining: [Int] = []
     private var weaponAssets: DuelWeaponAssets?
     private var stageAsset: DuelStageAsset?
     private let cameraNode = SCNNode()
@@ -93,6 +94,7 @@ final class DuelNetworkSceneView: SCNView {
             actors.removeAll()
             impactNodes.forEach { $0.removeFromParentNode() }
             impactNodes.removeAll()
+            impactFramesRemaining.removeAll()
             previousHealth.removeAll()
             displayedX.removeAll()
             displayedY.removeAll()
@@ -104,11 +106,13 @@ final class DuelNetworkSceneView: SCNView {
                 actor.root.name = "duel.network.actor.\(actors.count)"
                 actors.append(actor)
                 scene?.rootNode.addChildNode(actor.root)
-                let impact = DuelActor.shape(SCNSphere(radius: 0.16), .systemOrange)
+                let impactColor: UIColor = hero == .liu ? .systemOrange : .systemPurple
+                let impact = DuelActor.shape(SCNSphere(radius: 0.16), impactColor)
                 impact.geometry?.firstMaterial?.lightingModel = .constant
                 impact.castsShadow = false
                 impact.isHidden = true
                 impactNodes.append(impact)
+                impactFramesRemaining.append(0)
                 scene?.rootNode.addChildNode(impact)
             }
             lastTick = nil
@@ -148,11 +152,22 @@ final class DuelNetworkSceneView: SCNView {
             fighter.weaponPose = snapshot.animation?.pose
             let impact = impactNodes[index]
             let damaged = hadPrevious && snapshot.health < previousHealth[index]
-            impact.isHidden = !damaged
             if damaged {
+                // Keep the last authoritative hit visible for several snapshots
+                // instead of a single network frame, without adding actions or
+                // independent particle clocks.
+                impactFramesRemaining[index] = 5
                 impact.position = SCNVector3(Float(snapshot.x) / 1000,
                                              Float(snapshot.y) / 1000 + 1.15, 0.4)
-                impact.scale = SCNVector3(1.6, 1.6, 1.6)
+            }
+            let remaining = impactFramesRemaining[index]
+            impact.isHidden = remaining == 0
+            if remaining > 0 {
+                let progress = Float(6 - remaining) / 5
+                let size = 1.2 + progress * 2.0
+                impact.scale = SCNVector3(size, size, size)
+                impact.opacity = CGFloat(1 - progress)
+                impactFramesRemaining[index] = remaining - 1
             }
             actors[index].pose(fighter, frame: Int(state.tick % 60_000),
                                grapple: nil, index: index, phase: .fighting)
@@ -194,6 +209,7 @@ final class DuelNetworkSceneView: SCNView {
         actors.forEach { $0.root.removeFromParentNode() }
         actors.removeAll()
         impactNodes.removeAll()
+        impactFramesRemaining.removeAll()
         previousHealth.removeAll()
         displayedX.removeAll()
         displayedY.removeAll()
