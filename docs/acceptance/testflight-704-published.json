@@ -1,0 +1,41 @@
+{
+  "uploadRun": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43416774563",
+  "externalRecoveryRun": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43419362108",
+  "external": {
+    "build_number": "704",
+    "version": "1.2",
+    "source_sha": "454a45731fe24ee555e46d79f4ca901e62f1f1ef",
+    "build_id": "124d751f-2185-4fe9-ba75-5acca4829d05",
+    "build_audience_type": "APP_STORE_ELIGIBLE",
+    "external_group_count": 1,
+    "groups_verified": true,
+    "auto_notify_enabled": true,
+    "submitted_this_run": true,
+    "external_build_state": "IN_BETA_TESTING",
+    "internal_build_state": "IN_BETA_TESTING",
+    "installable_now": true
+  },
+  "archive": {
+    "build_number": "704",
+    "version": "1.2",
+    "source_sha": "454a45731fe24ee555e46d79f4ca901e62f1f1ef",
+    "fighter_run_id": 43414470552,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
+    "app_and_extension_build_verified": true,
+    "additional_resources_verified": [
+      "Fidelity_mask_0.png",
+      "Fidelity_mask_1.png",
+      "Fidelity_mask_2.png",
+      "Fidelity_mask_3.png",
+      "Fidelity_matcap_autumn.png",
+      "Fidelity_matcap_palace.png",
+      "Fidelity_presentation.json",
+      "SF3_SourceTrails.json",
+      "liu_shadow_callout.wav"
+    ]
+  },
+  "nativePassed": 8,
+  "nativeFailed": 0,
+  "note": "Upload succeeded. Initial external query returned HTTP 403; corrected group relationship query and completed external submission without reupload."
+}
