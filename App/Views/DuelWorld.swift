@@ -575,6 +575,8 @@ final class DuelWorldView: SCNView {
             opticalFOV.reset()
             camera.orthographicScale = framing.orthographicScale
         }
+        let viewTransform = simd_inverse(eye.simdWorldTransform)
+        for actor in actors { actor.updateSourceLighting(viewTransform) }
     }
 
     @objc private func interrupted() { guard !ended else { return }; session.pause() }
@@ -723,7 +725,9 @@ final class DuelWorldView: SCNView {
         }
         // Called for every fixed simulation step, including all catch-up steps.
         // A display frame is not an event queue and must not drop earlier hits.
-        sourceEffects?.consumeStep(contacts: contacts, swings: swings, animationTick: tick)
+        let liuIndex = fight.fighters.firstIndex { $0.hero == .liu }
+        sourceEffects?.consumeStep(contacts: contacts, swings: swings, animationTick: tick,
+                                  liuShadowTick: liuIndex.flatMap { fight.shadowVisual($0)?.tick })
         weaponEffects?.consumeStep(poses: Self.weaponEffectPoses(fight, tick: tick), animationTick: tick)
     }
     /// Read-only adapter shared by native presentation verification.
@@ -857,6 +861,9 @@ private final class DuelActor {
     private let character: DuelCharacterInstance?
     private let original: DuelOriginalCombatInstance?
     private let weapon: DuelWeaponCharacterInstance?
+    func updateSourceLighting(_ viewTransform: simd_float4x4) {
+        weapon?.materialBinding?.update(viewTransform: viewTransform)
+    }
     func hasAttachedWeapon(_ asset: DuelWeaponCharacterAsset) -> Bool {
         guard let weapon else { return false }
         return weapon.asset === asset && weapon.instance.root.parent === root

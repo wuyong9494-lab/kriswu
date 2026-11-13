@@ -1,0 +1,109 @@
+name: Fighter targeted material framing and voice followup (unsigned only)
+# Six bounded real-resource methods; existing required review and branch restrictions remain unchanged.
+'on':
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths:
+      - 'App/**'
+      - 'Sources/**'
+      - 'Shared/**'
+      - 'Tests/SiteTests/**'
+      - 'project.yml'
+      - '.github/scripts/fighter_visual_acceptance.py'
+      - '.github/scripts/fighter_presentation_assets.py'
+      - '.github/private/fighter-presentation/**'
+      - '.github/public/fighter-presentation-20261113.public.pem'
+      - '.github/workflows/fighter-presentation-followup.yml'
+permissions:
+  contents: read
+concurrency:
+  group: fighter-private-visual-acceptance
+  cancel-in-progress: false
+jobs:
+  visual:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.event_name == 'push' &&
+      startsWith(github.event.head_commit.message, 'Capture targeted fighter presentation')
+    runs-on: macos-26
+    timeout-minutes: 60
+    # This is the same existing environment used by successful run 43238606975.
+    environment: fighter-private-assets
+    env:
+      FIGHTER_VISUAL_SCOPE: presentation-followup
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin source, six exact methods and fourteen attachment labels
+        id: prepare
+        timeout-minutes: 2
+        run: |
+          export FIGHTER_VISUAL_WORK="$RUNNER_TEMP/fighter-visual-acceptance"
+          printf 'FIGHTER_VISUAL_WORK=%s\n' "$FIGHTER_VISUAL_WORK" >> "$GITHUB_ENV"
+          python3 .github/scripts/fighter_visual_acceptance.py prepare
+      - name: Select installed native tools
+        timeout-minutes: 8
+        run: |
+          test -d /Applications/Xcode_26.6.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version > "$FIGHTER_VISUAL_WORK/xcode-version.txt"
+          grep -Fx 'Xcode 26.6' "$FIGHTER_VISUAL_WORK/xcode-version.txt"
+          swift --version > "$FIGHTER_VISUAL_WORK/swift-version.txt"
+          xcrun --sdk iphonesimulator --show-sdk-version > "$FIGHTER_VISUAL_WORK/sdk-version.txt"
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          brew install openssl@3
+      - name: Authenticate existing assets and the new encrypted presentation pack
+        timeout-minutes: 5
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: python3 .github/scripts/fighter_visual_acceptance.py stage
+      - name: Build only the unsigned native test host once and verify compiled resources
+        timeout-minutes: 20
+        run: python3 .github/scripts/fighter_visual_acceptance.py build
+      - name: Prepare one installed iPhone 17 Pro Max simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_visual_acceptance.py simulator
+      - name: Run only the six targeted native methods without rebuilding
+        timeout-minutes: 20
+        run: python3 .github/scripts/fighter_visual_acceptance.py test
+      - name: Export exactly twelve images and two data attachments with method ownership
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_visual_acceptance.py export
+      - name: Encrypt new bounded evidence for existing and current private recipients
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_visual_acceptance.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-presentation-followup-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-visual-acceptance/published/fighter-visual-evidence.enc
+            ${{ runner.temp }}/fighter-visual-acceptance/published/fighter-visual-evidence.key.enc
+            ${{ runner.temp }}/fighter-visual-acceptance/published/fighter-visual-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-visual-acceptance/published/fighter-visual-evidence.SHA256SUMS
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Stop only this run's simulator and remove runner plaintext
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 3
+        run: python3 .github/scripts/fighter_visual_acceptance.py cleanup
+      - name: Report exact source, counts and completed phase timings
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_visual_acceptance.py report

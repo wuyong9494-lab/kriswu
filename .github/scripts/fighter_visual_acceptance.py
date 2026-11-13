@@ -72,6 +72,30 @@ FOLLOWUP_ATTACHMENTS.update({
     }
     for hero in ("ember", "liu") for role in ("weapon1", "heavy")
 })
+PRESENTATION_SELECTED = [
+    ("DuelPresentationAssetsTests", "testActualMasksAndEnvironmentMatcapsRenderWithoutChangingSkeletons", "actual masks/MatCap and both unchanged skeletons; fixed test camera; not original renderer equivalence"),
+    ("DuelPresentationAssetsTests", "testCalloutDecodesAndFollowsOneActionThroughPauseCancellationAndRestart", "actual mastered WAV decoding; injected playback lifecycle assertions; not audible device acceptance"),
+    ("DuelPresentationAssetsTests", "testAlteredMaskAndVoiceAreRejectedBeforeRenderingOrPlayback", "actual pack mutation rejection; no silent fallback"),
+    ("DuelWeaponGameplayTests", "testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes", "actual fighters and production camera; new material composition and source contact effects"),
+    ("DuelWeaponGameplayTests", "testOrdinaryRibbonAdapterContributesToRealSourceContacts", "actual fighters and production camera; ordinary weapon/heavy ribbon contribution"),
+    ("DuelWeaponGameplayTests", "testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers", "actual resources and production camera; changed near framing plus artificial skin failure"),
+]
+PRESENTATION_ATTACHMENTS = {
+    "fidelity-materials-" + environment: {"selector": "SiteTests/DuelPresentationAssetsTests/testActualMasksAndEnvironmentMatcapsRenderWithoutChangingSkeletons", "kind": "image"}
+    for environment in ("palace", "autumn")
+}
+PRESENTATION_ATTACHMENTS.update({
+    f"equipped-{hero}-{role}-source-contact": {"selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes", "kind": "image"}
+    for hero in ("ember", "liu") for role in ("weapon1", "heavy", "kick")
+})
+PRESENTATION_ATTACHMENTS.update({
+    f"ribbon-equipped-{hero}-{role}-source-contact": {"selector": "SiteTests/DuelWeaponGameplayTests/testOrdinaryRibbonAdapterContributesToRealSourceContacts", "kind": "image"}
+    for hero in ("ember", "liu") for role in ("weapon1", "heavy")
+})
+PRESENTATION_ATTACHMENTS.update({
+    "real-optical-fit-failure-recovery-" + hero: {"selector": "SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers", "kind": "data"}
+    for hero in ("ember", "liu")
+})
 SCOPES = {
     "baseline-11": {
         "selected": BASELINE_SELECTED, "methodCount": 11,
@@ -90,6 +114,17 @@ SCOPES = {
                               "App/Services/DuelDisplayedSkinBounds.swift", "App/Services/DuelStage.swift",
                               "App/Views/DuelWorld.swift", "App/Views/DuelView.swift"],
     },
+    "presentation-followup": {
+        "selected": PRESENTATION_SELECTED, "methodCount": 6,
+        "imageLabels": [label for label, row in PRESENTATION_ATTACHMENTS.items() if row["kind"] == "image"],
+        "dataLabels": [label for label, row in PRESENTATION_ATTACHMENTS.items() if row["kind"] == "data"],
+        "commitPrefix": "Capture targeted fighter presentation",
+        "workflow": ".github/workflows/fighter-presentation-followup.yml",
+        "additionalSources": ["App/Services/DuelPresentationAssets.swift", "App/Services/DuelWeaponAssets.swift",
+                              "App/Services/DuelSourceEffects.swift", "App/Services/GLTFModel.swift",
+                              "App/Views/DuelWorld.swift", "App/Views/DuelLobbyPreview.swift",
+                              ".github/scripts/fighter_presentation_assets.py"],
+    },
 }
 
 
@@ -106,6 +141,11 @@ SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTE
 EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
 IMAGE_LABELS = SCOPE["imageLabels"]
 DATA_LABELS = SCOPE["dataLabels"]
+EXPECTED_ATTACHMENTS = PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS
+if SCOPE_NAME == "presentation-followup":
+    MANIFESTS.append(".github/private/fighter-presentation/manifest.json")
+    RECIPIENT = ROOT / ".github/public/fighter-presentation-20261113.public.pem"
+    RECIPIENT_SPKI_SHA256 = "08e3294de08e37cc25a4a39332947c2208281f4b784a49561668a256e0c31779"
 
 
 def work():
@@ -200,10 +240,10 @@ def prepare():
     assert event["head_commit"]["message"].startswith(SCOPE["commitPrefix"])
     assert len(SELECTORS) == len(set(SELECTORS)) == EXPECTED_NATIVE_COUNT
     assert len(IMAGE_LABELS + DATA_LABELS) == len(set(IMAGE_LABELS + DATA_LABELS))
-    if SCOPE_NAME == "trail-followup":
+    if SCOPE_NAME != "baseline-11":
         assert os.environ["GITHUB_WORKFLOW_REF"] == "wuyong9494-lab/kriswu/" + SCOPE["workflow"] + "@" + BRANCH
-        assert set(FOLLOWUP_ATTACHMENTS) == set(IMAGE_LABELS + DATA_LABELS)
-        assert all(row["selector"] in SELECTORS for row in FOLLOWUP_ATTACHMENTS.values())
+        assert set(EXPECTED_ATTACHMENTS) == set(IMAGE_LABELS + DATA_LABELS)
+        assert all(row["selector"] in SELECTORS for row in EXPECTED_ATTACHMENTS.values())
     assert recipient_digest(RECIPIENT.read_bytes()) == RECIPIENT_SPKI_SHA256
     hashes, method_sources = selected_source_inventory()
     for path in MANIFESTS + ["project.yml", ".github/scripts/fighter_visual_acceptance.py",
@@ -220,7 +260,7 @@ def prepare():
                 "selectors": [{"identifier": selector, "scenarioType": row[2], "sourceFile": method_sources[selector]}
                               for selector, row in zip(SELECTORS, SELECTED)],
                 "expectedImageLabels": IMAGE_LABELS, "expectedDataLabels": DATA_LABELS,
-                "expectedAttachments": FOLLOWUP_ATTACHMENTS if SCOPE_NAME == "trail-followup" else None,
+                "expectedAttachments": EXPECTED_ATTACHMENTS if SCOPE_NAME != "baseline-11" else None,
                 "recipientSPKISHA256": RECIPIENT_SPKI_SHA256,
                 "wrappedKeyEncoding": "raw-32", "wrappedKeyEntropyBytes": 32,
                 "keyWrapping": "RSA-OAEP-SHA256; same new envelope password to both recipients",
@@ -242,7 +282,8 @@ def resource_records():
                          "manifest": manifest_path,
                          "encryptedParts": row.get("parts", manifest.get("parts", [])),
                          "cipherSHA256": row.get("cipher_sha256", manifest.get("cipher_sha256"))})
-    assert len(rows) == 64 and len({row["file"] for row in rows}) == 64
+    count = 72 if SCOPE_NAME == "presentation-followup" else 64
+    assert len(rows) == count and len({row["file"] for row in rows}) == count
     return rows
 
 
@@ -272,12 +313,15 @@ def stage():
     # any file. The secret is scoped to this step only and never copied.
     run_logged([sys.executable, ".github/scripts/fighter_sf3_assets.py"], "stage-scenery", 180)
     run_logged([sys.executable, ".github/scripts/fighter_sf3_distinct.py"], "stage-distinct", 180)
+    if SCOPE_NAME == "presentation-followup":
+        run_logged([sys.executable, ".github/scripts/fighter_presentation_assets.py", "stage"], "stage-presentation", 60)
     audit_resources(ROOT / "App/Resources/FighterPrivate", bundled=False)
-    print("64 existing character/scenery/feedback files authenticated and staged; no resource upload.")
+    print(str(len(resource_records())) + " character/scenery/feedback/presentation files authenticated and staged; no plaintext upload.")
 
 
 def build():
     assert "FIGHTER_LIU_MODEL_KEY" not in os.environ, "Resource key must not enter build/test steps"
+    assert "FIGHTER_PRESENTATION_KEY" not in os.environ, "Presentation key must not enter build/test steps"
     project = ROOT / "project.yml"
     source = project.read_text()
     original_hash = digest(project)
@@ -309,7 +353,7 @@ def build():
     assert app.is_dir()
     audit_resources(app, bundled=True)
     assert not any(p.suffix in (".enc", ".pem", ".key") or "Model_Key" in p.name for p in app.rglob("*") if p.is_file())
-    print("Unsigned SiteTests host built once; demo arguments and all 64 compiled resource identities verified.")
+    print("Unsigned SiteTests host built once; demo arguments and all " + str(len(resource_records())) + " compiled resource identities verified.")
 
 
 def simulator():
@@ -368,6 +412,7 @@ def verify_results(summary, data):
 
 def test():
     assert "FIGHTER_LIU_MODEL_KEY" not in os.environ
+    assert "FIGHTER_PRESENTATION_KEY" not in os.environ
     verify_scope_identity(read_json(work() / "identity.json"))
     device = read_json(work() / "simulator.json")
     command = ["xcodebuild", "test-without-building", "-xctestrun", (work() / "xctestrun-path.txt").read_text(),
@@ -427,12 +472,12 @@ def followup_attachment_inventory(root, expected_device=None):
             seen_files.add(name)
             human = attachment.get("suggestedHumanReadableName", "")
             suffix = path.suffix.lower()
-            matches = [label for label in FOLLOWUP_ATTACHMENTS
+            matches = [label for label in EXPECTED_ATTACHMENTS
                        if re.fullmatch(re.escape(label) + r"_[0-9]+_[0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}" + re.escape(suffix), human)]
             assert len(matches) == 1 and matches[0] not in seen_labels, "Unexpected or repeated exact attachment label"
             label = matches[0]
             seen_labels.add(label)
-            expected = FOLLOWUP_ATTACHMENTS[label]
+            expected = EXPECTED_ATTACHMENTS[label]
             assert expected["selector"] == selector, "Attachment belongs to the wrong selected method"
             if expected_device:
                 assert attachment.get("deviceId") == expected_device["udid"] and attachment.get("deviceName") == expected_device["name"], "Attachment simulator identity mismatch"
@@ -446,7 +491,7 @@ def followup_attachment_inventory(root, expected_device=None):
                 data_matches[label].append(name)
             entries.append({"file": name, "bytes": path.stat().st_size, "sha256": digest(path),
                             "label": label, "selector": selector, "kind": expected["kind"]})
-    assert seen_labels == set(FOLLOWUP_ATTACHMENTS), "Missing expected evidence labels"
+    assert seen_labels == set(EXPECTED_ATTACHMENTS), "Missing expected evidence labels"
     assert seen_files | {"manifest.json"} == {str(path.relative_to(root)) for path in files}, "Extra unreferenced attachment payload"
     entries.append({"file": "manifest.json", "bytes": manifest_path.stat().st_size,
                     "sha256": digest(manifest_path), "label": "xcresult attachment manifest", "kind": "manifest"})
@@ -456,7 +501,7 @@ def followup_attachment_inventory(root, expected_device=None):
 
 
 def attachment_inventory(root):
-    if SCOPE_NAME == "trail-followup":
+    if SCOPE_NAME != "baseline-11":
         return followup_attachment_inventory(root)
     files = sorted(p for p in root.rglob("*") if p.is_file() or p.is_symlink())
     assert len(files) <= 160, "Attachment count exceeds bounded probe"
@@ -504,7 +549,7 @@ def export():
     run_logged(["xcrun", "xcresulttool", "export", "attachments", "--path", str(bundle), "--output-path", str(attachments)],
                "export-attachments", 240)
     result = (followup_attachment_inventory(attachments, read_json(work() / "simulator.json"))
-              if SCOPE_NAME == "trail-followup" else attachment_inventory(attachments))
+              if SCOPE_NAME != "baseline-11" else attachment_inventory(attachments))
     write_json(work() / "attachment-inventory.json", result)
     assert result["completeExpectedLabels"], "Missing or duplicate expected evidence labels; keep encrypted partial evidence"
     print(f"Exported all {len(IMAGE_LABELS)} expected images and {len(DATA_LABELS)} data attachments; scope {SCOPE_NAME}.")
@@ -524,6 +569,7 @@ def wrap_key(key, public_data, path):
 
 def seal():
     assert "FIGHTER_LIU_MODEL_KEY" not in os.environ, "Resource key must not enter evidence sealing"
+    assert "FIGHTER_PRESENTATION_KEY" not in os.environ, "Presentation key must not enter evidence sealing"
     verify_scope_identity(read_json(work() / "identity.json"))
     assert recipient_digest(RECIPIENT.read_bytes()) == RECIPIENT_SPKI_SHA256
     started = time.monotonic()

@@ -142,6 +142,7 @@ final class DuelSourceEffects: NSObject {
     private var bursts: [Burst] = []
     private var sequence = 0
     private var lastTick: Int?
+    private var lastLiuShadowTick: Int?
     private var paused = false
     private var ended = false
     private(set) var emittedHits = 0
@@ -153,7 +154,8 @@ final class DuelSourceEffects: NSObject {
     var activeParticleCount: Int { bursts.reduce(0) { $0 + $1.particles.filter { !$0.node.isHidden }.count } }
     var sourceTextureCount: Int { textures.count }
     /// Verified retained resources, independent of media-server player lifetime.
-    var sourceAudioCount: Int { audioBytes.values.reduce(0) { $0 + $1.count } }
+    var sourceAudioCount: Int { audioBytes.filter { $0.key != "liuShadow" }.values.reduce(0) { $0 + $1.count } }
+    var hasLiuShadowVoice: Bool { audioBytes["liuShadow"]?.count == 1 }
     var allocatedAudioPlayerCount: Int { players.values.reduce(0) { $0 + $1.count } }
     var playingAudioPlayerCount: Int { players.values.reduce(0) { $0 + $1.filter(\.isPlaying).count } }
     var pausedAudioPlayerCount: Int { pausedPlayers.count }
@@ -252,6 +254,11 @@ final class DuelSourceEffects: NSObject {
         }
         guard textures.count == 9, audioBytes.count == 10,
               audioBytes.values.reduce(0, { $0 + $1.count }) == 29 else { throw Failure.manifest }
+        // Independent, pre-produced callout. Missing older optional packs remain
+        // distinguishable; a present altered WAV never becomes a silent fallback.
+        if let callout = try DuelPresentationAssets.verifiedVoice(directory: base) {
+            audioBytes["liuShadow"] = [callout]
+        }
         players = try buildPlayers(requirePreparation: false)
         manifest = definition
         observeMediaServices()
@@ -448,9 +455,19 @@ final class DuelSourceEffects: NSObject {
     /// curves start at zero. Their first displayed state is therefore visible
     /// before hit-stop freezes it. Events are never deduplicated by this clock:
     /// two contacts at the same tick must remain two effects.
-    func consumeStep(contacts: [Contact], swings: [Swing], animationTick: Int) {
+    func consumeStep(contacts: [Contact], swings: [Swing], animationTick: Int, liuShadowTick: Int? = nil) {
         guard !ended, !paused, animationTick >= 0 else { return }
         if let lastTick, animationTick < lastTick { reset() }
+        // A fixed-step action edge owns the shout. Repeated frame-zero draws,
+        // hit-stop, or attaching a renderer halfway through a skill cannot replay it.
+        if liuShadowTick == 0, lastLiuShadowTick != 0 { play("liuShadow") }
+        if liuShadowTick == nil, lastLiuShadowTick != nil {
+            for player in players["liuShadow"] ?? [] {
+                player.stop(); player.currentTime = 0
+                pausedPlayers.remove(ObjectIdentifier(player))
+            }
+        }
+        lastLiuShadowTick = liuShadowTick
         for swing in swings { playWhoosh(heavy: swing.heavy, tick: animationTick, sound: swing.sound) }
         let birthTick = max(0, animationTick - 1)
         for contact in contacts {
@@ -564,7 +581,7 @@ final class DuelSourceEffects: NSObject {
 
     func reset() {
         for burst in bursts { burst.root.removeFromParentNode() }
-        bursts.removeAll(); lastTick = nil; sequence = 0
+        bursts.removeAll(); lastTick = nil; lastLiuShadowTick = nil; sequence = 0
         emittedHits = 0; emittedBlocks = 0; playedSounds = 0
         playedSoundCategories.removeAll()
         for group in players.values { for player in group { player.stop(); player.currentTime = 0 } }

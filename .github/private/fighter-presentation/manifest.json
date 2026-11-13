@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "purpose": "presentation-v1",
+  "cipherFile": "presentation-v1.enc.b64",
+  "cipherEncoding": "base64",
+  "cipherBytes": 885593,
+  "cipherSHA256": "58455f8d3ef024354c8c859899c220927ba576b784538a6cf5d2352bfe776c86",
+  "archiveBytes": 885511,
+  "archiveSHA256": "20216dbe4d992fcd334c2999683852f02d0a2bbf1a8563a23cf28c8657edeb61",
+  "files": [
+    {
+      "file": "Fidelity_mask_0.png",
+      "bytes": 69276,
+      "sha256": "6e7113837b40d85cd843540408c4dc8fa1acf77c76ce6a1b4a9304bb31c0364c"
+    },
+    {
+      "file": "Fidelity_mask_1.png",
+      "bytes": 49667,
+      "sha256": "f68863680b3f088137646f935f75771679272d2a28d0503c028c1f505764809b"
+    },
+    {
+      "file": "Fidelity_mask_2.png",
+      "bytes": 114535,
+      "sha256": "81d1326f9c3e49f8ea0f7f9fe377b2cdde537f81061ce6badf65e19065692667"
+    },
+    {
+      "file": "Fidelity_mask_3.png",
+      "bytes": 91353,
+      "sha256": "6015e4534b2ce2423fff3808bb6aa9d512ad428ebb386d8f5e627b0daed14669"
+    },
+    {
+      "file": "Fidelity_matcap_autumn.png",
+      "bytes": 204028,
+      "sha256": "ad082b77b3bedc90110a5945f876c2b5b39c8380fb5daafffb07f7e1b31a6095"
+    },
+    {
+      "file": "Fidelity_matcap_palace.png",
+      "bytes": 211928,
+      "sha256": "78c118f7e2e5079c7feb179c611f71c44fbfe8845058084d1ec58438bb5b4927"
+    },
+    {
+      "file": "Fidelity_presentation.json",
+      "bytes": 2984,
+      "sha256": "0ca27c39b7d65086dfd391b4716186b819c25e0933165b6df6ba1a4e09d63feb"
+    },
+    {
+      "file": "liu_shadow_callout.wav",
+      "bytes": 140758,
+      "sha256": "a5e5d709d45f41325b33a13e858ffa3426b72471fb84f0f93e1d4c8a852c7c00"
+    }
+  ],
+  "limitations": [
+    "Source mask/MatCap and environment values; no original rim/fog/HDR equivalence verified.",
+    "No transformation model or authored shadow skeleton is included."
+  ]
+}

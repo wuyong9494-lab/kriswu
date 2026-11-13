@@ -1,6 +1,7 @@
 import SwiftUI
 import SceneKit
 import UIKit
+import simd
 
 /// Interactive 3D character showroom; its lightweight idle clock stops offscreen.
 struct DuelLobbyPreview: UIViewRepresentable {
@@ -108,6 +109,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         framing = fit
         cameraNode.position = SCNVector3(Float(fit.position.x), Float(fit.position.y), Float(fit.position.z))
         cameraNode.look(at: showroomCenter)
+        equippedActor?.materialBinding?.update(viewTransform: simd_inverse(cameraNode.simdWorldTransform))
         camera.fieldOfView = CGFloat(fit.verticalFieldOfViewDegrees)
         // A perspective lens shift changes composition, not the physical eye.
         // Both landscape fitting and stacked-preview zoom must remain in front
@@ -221,7 +223,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
                 let assets = try weaponAssets ?? DuelWeaponAssets()
                 let asset = try assets.character(for: hero)
                 guard let idle = asset.profile.clip(role: "idle") else { return }
-                let actor = DuelWeaponCharacterInstance(asset)
+                let actor = DuelWeaponCharacterInstance(asset, environment: .autumn)
                 let lift = idle.tracks.lift(phase: 0)
                 actor.apply(.init(clip: idle.name, tick: 0,
                                   duration: idle.ticks, groundLift: lift))
