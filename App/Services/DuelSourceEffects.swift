@@ -152,6 +152,10 @@ final class DuelSourceEffects: NSObject {
     private(set) var playedSoundCategories: [String: Int] = [:]
 
     var activeBurstCount: Int { bursts.count }
+    var allocatedParticleCount: Int {
+        bursts.reduce(0) { $0 + $1.particles.count } +
+            availableBursts.values.reduce(0) { $0 + $1.reduce(0) { $0 + $1.particles.count } }
+    }
     var activeParticleCount: Int { bursts.reduce(0) { $0 + $1.particles.filter { !$0.node.isHidden }.count } }
     var sourceTextureCount: Int { textures.count }
     /// Verified retained resources, independent of media-server player lifetime.
@@ -262,6 +266,9 @@ final class DuelSourceEffects: NSObject {
         }
         players = try buildPlayers(requirePreparation: false)
         manifest = definition
+        // Single-player does not enter the network renderer preparation path.
+        // Build its pool during resource loading too, before the first contact.
+        ensureBurstPool()
         observeMediaServices()
     }
 

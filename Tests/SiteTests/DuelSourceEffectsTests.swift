@@ -66,6 +66,7 @@ final class DuelSourceEffectsTests: XCTestCase {
         var effects: DuelSourceEffects? = try DuelSourceEffects(root: scene.rootNode)
         weak var weakEffects = effects
         defer { effects?.shutdown(); renderer.scene = nil; renderer.pointOfView = nil }
+        XCTAssertEqual(effects?.allocatedParticleCount, 368, "Production loading prewarms both kinds before any contact or network preparation")
         XCTAssertEqual(effects?.sourceTextureCount, 9)
         XCTAssertEqual(effects?.sourceAudioCount, 29)
         let empty = try capture(renderer)
