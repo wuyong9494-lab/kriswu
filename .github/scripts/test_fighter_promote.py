@@ -281,4 +281,95 @@ class CandidateTests(unittest.TestCase):
             with self.assertRaises(ValueError): f.verify_candidate_resources(Path('app'), Path('source'))
 
 
+class SourceSkinCandidateTests(unittest.TestCase):
+    def setUp(self):
+        self.r = dict(channel='testflight-internal', source_branch=f.SOURCE_SKIN_BRANCH,
+                      source_sha=f.SOURCE_SKIN_SHA, fighter_run_id=f.SOURCE_SKIN_RUN,
+                      music_source_sha=f.MUSIC_SHA, build_number='703', version='1.2',
+                      bundle_id='com.kriswu.shiftreminder', liu_sha256=f.model.SHA, notes='Internal only')
+        self.run = dict(id=f.SOURCE_SKIN_RUN, head_sha=f.SOURCE_SKIN_SHA,
+                        head_branch=f.SOURCE_SKIN_BRANCH, event='push', run_attempt=1,
+                        path='.github/workflows/fighter-source-skins-followup.yml',
+                        status='completed', conclusion='success')
+        self.job = dict(name='visual', head_sha=f.SOURCE_SKIN_SHA, run_id=f.SOURCE_SKIN_RUN,
+                        run_attempt=1, status='completed', conclusion='success',
+                        steps=[dict(name=n, status='completed', conclusion='success') for n in f.SOURCE_SKIN_STEPS])
+
+    def check(self, job=None, latest=None):
+        with patch.object(f.asc, 'github', side_effect=[self.run,
+                dict(total_count=1, jobs=[self.job if job is None else job]),
+                self.run if latest is None else latest]):
+            f.check_ci(self.r)
+
+    def test_only_exact_requested_703_is_permitted(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / 'fighter-testflight.json'
+            p.write_text(json.dumps(self.r)); self.assertEqual(f.load_request(p), self.r)
+            for key, value in [('source_sha', f.CANDIDATE_SHA), ('fighter_run_id', f.SOURCE_SKIN_RUN+1),
+                               ('music_source_sha', 'a'*40), ('build_number', '702'), ('version', '1.3')]:
+                with self.subTest(key=key):
+                    p.write_text(json.dumps(dict(self.r, **{key:value})))
+                    with self.assertRaises(ValueError): f.load_request(p)
+
+    def test_rendering_packaging_and_exact_native_scope_are_mandatory(self):
+        self.check()
+        for name in f.SOURCE_SKIN_STEPS:
+            for fault in ('missing', 'duplicate', 'failure', 'skipped', 'in_progress'):
+                with self.subTest(step=name, fault=fault):
+                    job = copy.deepcopy(self.job)
+                    step = next(s for s in job['steps'] if s['name'] == name)
+                    if fault == 'missing': job['steps'].remove(step)
+                    elif fault == 'duplicate': job['steps'].append(copy.deepcopy(step))
+                    elif fault == 'in_progress': step['status'] = fault
+                    else: step['conclusion'] = fault
+                    with self.assertRaises(ValueError): self.check(job=job)
+
+    def test_rerun_race_wrong_source_and_job_attempt_fail_closed(self):
+        for field, value in [('id', 1), ('run_attempt', 2), ('head_sha', f.CANDIDATE_SHA),
+                             ('head_branch', 'main'), ('status', 'in_progress'), ('conclusion', 'failure'),
+                             ('path', '.github/workflows/fighter-real-resource-acceptance.yml')]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.check(latest=dict(self.run, **{field:value}))
+        for field, value in [('run_id', 1), ('run_attempt', 2), ('head_sha', f.CANDIDATE_SHA),
+                             ('status', 'in_progress'), ('conclusion', 'skipped')]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.check(job=dict(self.job, **{field:value}))
+
+    def test_added_assets_require_pinned_manifest_and_actual_bundle_bytes(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); app = root/'app'; app.mkdir(); source = root/'source'; source.mkdir()
+            (app/'trail.json').write_bytes(b'original')
+            manifest = source/'manifest.json'
+            manifest.write_text(json.dumps({'files':[dict(file='trail.json',bytes=8,
+                sha256=hashlib.sha256(b'original').hexdigest())]}))
+            expected = (('manifest.json', hashlib.sha256(manifest.read_bytes()).hexdigest(), 1),)
+            with patch.object(f, 'SOURCE_SKIN_MANIFESTS', expected):
+                self.assertEqual(f.verify_source_skin_resources(app, source), ['trail.json'])
+                (app/'trail.json').write_bytes(b'modified')
+                with self.assertRaises(ValueError): f.verify_source_skin_resources(app, source)
+                (app/'trail.json').write_bytes(b'original'); manifest.write_text('{}')
+                with self.assertRaises(ValueError): f.verify_source_skin_resources(app, source)
+        with self.assertRaises(ValueError): f.verify_source_skin_resources(Path('app'), None)
+
+    def test_703_cannot_report_archive_success_without_new_assets(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); app = root/'Products/Applications/ShiftReminder.app'
+            widget = app/'PlugIns/Widget.appex/Info.plist'; widget.parent.mkdir(parents=True)
+            info = dict(CFBundleIdentifier=self.r['bundle_id'], CFBundleShortVersionString='1.2',
+                        CFBundleVersion='703', ArenaCommitSHA=f.SOURCE_SKIN_SHA)
+            (app/'Info.plist').write_bytes(plistlib.dumps(info))
+            widget.write_bytes(plistlib.dumps(dict(info, CFBundleIdentifier=self.r['bundle_id']+'.widget')))
+            with patch.object(f.model, 'verify_app'), patch.object(f, 'verify_candidate_resources') as old, \
+                 patch.object(f, 'verify_source_skin_resources', return_value=['trail.json']) as new, \
+                 patch.object(f.asc, 'save_report') as report:
+                f.archive(self.r, root, Path('source'))
+                old.assert_called_once_with(app, Path('source'))
+                new.assert_called_once_with(app, Path('source'))
+                self.assertEqual(report.call_args.kwargs['additional_resources_verified'], ['trail.json'])
+                report.reset_mock(); new.side_effect = ValueError('missing source skin')
+                with self.assertRaises(ValueError): f.archive(self.r, root, Path('source'))
+                report.assert_not_called()
+
+
 if __name__ == '__main__': unittest.main()

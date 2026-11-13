@@ -21,6 +21,27 @@ CANDIDATE_BRANCH = 'codex/fighter-lab-compile-only-20261111'
 CANDIDATE_SHA = '93de03a4fcc1a56189a808a3e8960f057b63a33a'
 CANDIDATE_RUN = 43238606975
 MUSIC_SHA = '36878beef5d9c8d86193b7eea04e5e381042691d'
+SOURCE_SKIN_BRANCH = 'codex/fighter-visual-acceptance-20261113-1200'
+SOURCE_SKIN_SHA = '1c2cfa70a36974592fdb14811f6b7a7d2b6239e7'
+SOURCE_SKIN_RUN = 43402771798
+SOURCE_SKIN_STEPS = (
+    'Pin source, two exact methods and twelve attachment labels',
+    'Select installed native tools',
+    'Authenticate existing assets and encrypted presentation and source skin packs',
+    'Build only the unsigned native test host once and verify compiled resources',
+    'Prepare one installed iPhone 17 Pro Max simulator',
+    'Run only the two targeted native methods without rebuilding',
+    'Export exactly twelve images with exact method ownership',
+    'Encrypt new bounded evidence for existing and current private recipients',
+    'Run actions/upload-artifact@v4',
+    'Report exact source, counts and completed phase timings',
+)
+SOURCE_SKIN_MANIFESTS = (
+    ('.github/private/fighter-presentation/manifest.json',
+     '0595cdd5b06068a1c2ea8e1a304195ac1b7d404d5051935e19cc4188c0d3cad5', 8),
+    ('.github/private/fighter-source-trails/manifest.json',
+     '390dd75ac5aa218bdd2cd3c5909ca75a0c2148c5676687dd6fd732fb797471cb', 1),
+)
 ACCEPTANCE_STEPS = (
     'Stage verified private character',
     'Authenticate and stage independently encrypted music',
@@ -38,6 +59,18 @@ ACCEPTANCE_STEPS = (
 
 def candidate(r):
     return r.get('source_branch') == CANDIDATE_BRANCH
+
+
+def source_skin_candidate(r):
+    return r.get('source_branch') == SOURCE_SKIN_BRANCH
+
+
+def validate_source_skin_candidate(r):
+    require(r.get('source_sha') == SOURCE_SKIN_SHA, 'Only the approved source skin source is permitted')
+    require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] == SOURCE_SKIN_RUN,
+            'Only the completed source skin run is permitted')
+    require(r.get('music_source_sha') == MUSIC_SHA, 'Pinned music source required')
+    require(r.get('build_number') == '703' and r.get('version') == '1.2', 'Only approved 1.2 (703)')
 
 
 def validate_candidate(r):
@@ -64,9 +97,11 @@ def load_request(path):
     require(r.get('liu_sha256') == model.SHA, 'Actual Liu identity required')
     require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] > 0, 'Exact fighter CI run required')
     branch = r.get('source_branch', BRANCH)
-    require(branch in (BRANCH, FIGHTER_BRANCH, HOST_BRANCH, CANDIDATE_BRANCH), 'Unapproved source branch')
+    require(branch in (BRANCH, FIGHTER_BRANCH, HOST_BRANCH, CANDIDATE_BRANCH, SOURCE_SKIN_BRANCH), 'Unapproved source branch')
     if candidate(r):
         validate_candidate(r)
+    if source_skin_candidate(r):
+        validate_source_skin_candidate(r)
     if branch == BRANCH:
         require(type(r.get('source_run_id')) is int and r['source_run_id'] > 0, 'Exact iOS CI run required')
     require(isinstance(r.get('notes'), str) and 0 < len(r['notes']) < 3800, 'Testing notes required')
@@ -89,9 +124,15 @@ def validate_run(r, run, jobs, workflow, names):
 
 def check_ci(r):
     gates = [('fighter_run_id', 'fighter-lab.yml', ('core', 'envelope', 'device', 'native', 'character'))]
+    pinned_run, required_steps = None, ()
     if candidate(r):
         validate_candidate(r)
         gates = [('fighter_run_id', 'fighter-real-resource-acceptance.yml', ('real_resources',))]
+        pinned_run, required_steps = CANDIDATE_RUN, ACCEPTANCE_STEPS
+    if source_skin_candidate(r):
+        validate_source_skin_candidate(r)
+        gates = [('fighter_run_id', 'fighter-source-skins-followup.yml', ('visual',))]
+        pinned_run, required_steps = SOURCE_SKIN_RUN, SOURCE_SKIN_STEPS
     if r.get('source_branch', BRANCH) == BRANCH:
         gates.insert(0, ('source_run_id', 'ios.yml', ('build', 'core-tests-linux')))
     # These fighter branches intentionally exclude ios.yml. Their dedicated CI
@@ -102,21 +143,21 @@ def check_ci(r):
         jobs = asc.github(f'/actions/runs/{r[key]}/attempts/{attempt}/jobs?per_page=100')
         require(jobs['total_count'] <= 100, 'Job pagination required; refusing incomplete gate')
         validate_run(r, run, jobs['jobs'], workflow, names)
-        if candidate(r):
+        if pinned_run is not None:
             require(type(attempt) is int and attempt > 0, 'Invalid attempt')
-            require(run.get('id') == CANDIDATE_RUN, 'Wrong run identity')
+            require(run.get('id') == pinned_run, 'Wrong run identity')
             require(jobs['total_count'] == len(jobs['jobs']) == 1, 'Unexpected acceptance jobs')
             job = jobs['jobs'][0]
-            require(job.get('status') == 'completed' and job.get('run_id') == CANDIDATE_RUN
+            require(job.get('status') == 'completed' and job.get('run_id') == pinned_run
                     and job.get('run_attempt') == attempt, 'Job attempt/status mismatch')
-            for name in ACCEPTANCE_STEPS:
+            for name in required_steps:
                 steps = [s for s in job.get('steps', []) if s.get('name') == name]
                 require(len(steps) == 1 and steps[0].get('status') == 'completed'
                         and steps[0].get('conclusion') == 'success', 'Required acceptance step failed: ' + name)
         latest = asc.github('/actions/runs/' + str(r[key]))
-        if candidate(r):
+        if pinned_run is not None:
             validate_run(r, latest, jobs['jobs'], workflow, names)
-            require(latest.get('id') == CANDIDATE_RUN, 'Changed run identity')
+            require(latest.get('id') == pinned_run, 'Changed run identity')
         require(latest.get('run_attempt') == attempt and latest.get('status') == 'completed'
                 and latest.get('conclusion') == 'success' and latest.get('head_sha') == r['source_sha'],
                 'CI changed during gate; recheck before release')
@@ -163,6 +204,23 @@ def verify_candidate_resources(app, source):
         verify_resource(app, name, size, digest)
 
 
+def verify_source_skin_resources(app, source):
+    require(source is not None, 'Fixed source checkout required for new resource verification')
+    names = set()
+    for relative, expected_hash, expected_count in SOURCE_SKIN_MANIFESTS:
+        path = Path(source) / relative
+        require(path.is_file() and not path.is_symlink(), 'Missing source resource manifest')
+        data = path.read_bytes()
+        require(hashlib.sha256(data).hexdigest() == expected_hash, 'Untested source resource manifest')
+        rows = json.loads(data)['files']
+        require(len(rows) == expected_count, 'Wrong additional resource count')
+        for row in rows:
+            require(row['file'] not in names, 'Duplicate additional resource identity')
+            names.add(row['file'])
+            verify_resource(app, row['file'], row['bytes'], row['sha256'])
+    return sorted(names)
+
+
 def archive(r, path, source=None):
     app = path / 'Products/Applications/ShiftReminder.app'
     info = plistlib.loads((app / 'Info.plist').read_bytes())
@@ -177,10 +235,16 @@ def archive(r, path, source=None):
     for file in [app / 'Info.plist', *extensions]:
         require(str(plistlib.loads(file.read_bytes()).get('CFBundleVersion')) == r['build_number'], 'Wrong build number')
     model.verify_app(app)
+    additional = []
     if candidate(r):
         validate_candidate(r)
         verify_candidate_resources(app, source)
-    asc.save_report('promotion-archive.json', r, liu_sha256=model.SHA, app_and_extension_build_verified=True)
+    if source_skin_candidate(r):
+        validate_source_skin_candidate(r)
+        verify_candidate_resources(app, source)
+        additional = verify_source_skin_resources(app, source)
+    asc.save_report('promotion-archive.json', r, liu_sha256=model.SHA,
+                    app_and_extension_build_verified=True, additional_resources_verified=additional)
 
 
 def main():

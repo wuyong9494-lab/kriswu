@@ -1,12 +1,12 @@
 {
   "channel": "testflight-internal",
-  "source_sha": "93de03a4fcc1a56189a808a3e8960f057b63a33a",
-  "fighter_run_id": 43238606975,
-  "build_number": "702",
+  "source_sha": "1c2cfa70a36974592fdb14811f6b7a7d2b6239e7",
+  "fighter_run_id": 43402771798,
+  "build_number": "703",
   "version": "1.2",
   "bundle_id": "com.kriswu.shiftreminder",
   "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
-  "notes": "内部测试：接入 Game Center 远程战斗，保留实际人物、原动作资源、音乐和全屏控件；加强身份绑定、断线、发送失败、房间移交及退出释放保护。固定来源 93de03a，真实资源模拟器原生 298 项与界面 5 项通过。尚未通过两台 iPhone 实战，不代表原版比例、技能打击感或真机性能已验收。请重点测试两台已登录 Game Center 的 iPhone 邀请、选角、连续移动攻击、结算同步、断线与重新进入。",
-  "source_branch": "codex/fighter-lab-compile-only-20261111",
+  "notes": "内部测试：整合手柄与无线电视候选改动、战斗镜头和人物材质调整，接回孙登武士刀与刘泉纬双锤的原始拖尾网格、权重及骨骼动作；修复孙登转向后刀光消失，加入独立加密材质、语音与拖尾资源，保留现有音乐。固定来源1c2cfa7，最新2项原生专项通过，12张原图已审看，73项资源身份核验。此前整合回归结果保留，不冒充本次完整验收。人物高光、动态配色、技能启停与完整原版质感仍待修复；两台iPhone实战、电视全屏低延迟和稳定60fps未验收。请重点试用两角色双向普攻/重击、连续操作、手柄、投屏、联机退出与重新进入。",
+  "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
   "music_source_sha": "36878beef5d9c8d86193b7eea04e5e381042691d"
 }

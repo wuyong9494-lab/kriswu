@@ -3,7 +3,7 @@ run-name: Upload verified TestFlight build
 
 on:
   push:
-    branches: [codex/fighter-lab-compile-only-20261111]
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
     paths: ['.github/releases/fighter-testflight.json']
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-lab-compile-only-20261111' && github.event_name == 'push' && github.event.before == '93de03a4fcc1a56189a808a3e8960f057b63a33a' && github.event.head_commit.message == 'Promote verified fighter 1.2 (702) to internal TestFlight'
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' && github.event_name == 'push' && github.event.before == 'acb0b110badedf112476927d9f7a8620acab18c4' && github.event.head_commit.message == 'Promote verified fighter 1.2 (703) to internal TestFlight'
     environment: fighter-private-assets
     outputs:
       upload_required: ${{ steps.verify.outputs.upload_required }}
@@ -126,6 +126,14 @@ jobs:
           python3 .github/scripts/fighter_sf3_assets.py
           python3 .github/scripts/fighter_sf3_assets.py --original-rig
           python3 .github/scripts/fighter_sf3_distinct.py
+          xcodegen generate
+      - name: Authenticate and stage the tested presentation and source skin resources
+        working-directory: source
+        env:
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: |
+          python3 .github/scripts/fighter_presentation_assets.py stage
+          python3 .github/scripts/fighter_source_trails.py stage
           xcodegen generate
       - name: Stage pinned independently encrypted music and provenance
         env:
