@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-11-13T13:22:21.644Z",
+  "uploadRun": {
+    "id": 43430284191,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43430284191",
+    "source": "9b4a6d58c53c8d4c141d0c15292d206ceea4030c",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "apple": {
+    "build_number": "705",
+    "version": "1.2",
+    "source_sha": "81a870bdf1c92dff668ee0b1c9a87b82465257c2",
+    "fighter_run_id": 43427815592,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "build_id": "957475ff-f542-4b61-a90b-385a544957fe",
+    "processing_state": "VALID",
+    "uploaded_this_run": true,
+    "notes_written": true,
+    "source_identity_verified_this_run": true,
+    "internal_build_state": "IN_BETA_TESTING",
+    "external_build_state": "READY_FOR_BETA_SUBMISSION"
+  },
+  "external": {
+    "build_number": "705",
+    "version": "1.2",
+    "source_sha": "81a870bdf1c92dff668ee0b1c9a87b82465257c2",
+    "fighter_run_id": 43427815592,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "build_id": "957475ff-f542-4b61-a90b-385a544957fe",
+    "build_audience_type": "APP_STORE_ELIGIBLE",
+    "external_group_count": 1,
+    "groups_verified": true,
+    "auto_notify_enabled": true,
+    "submitted_this_run": true,
+    "external_build_state": "IN_BETA_TESTING",
+    "internal_build_state": "IN_BETA_TESTING",
+    "installable_now": true
+  },
+  "archive": {
+    "build_number": "705",
+    "version": "1.2",
+    "source_sha": "81a870bdf1c92dff668ee0b1c9a87b82465257c2",
+    "fighter_run_id": 43427815592,
+    "source_branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "liu_sha256": "ac9c5f1e1186a66466ec37457601b82bfcd654bcac9aee8cde65b36ed173caa9",
+    "app_and_extension_build_verified": true,
+    "additional_resources_verified": [
+      "Fidelity_mask_0.png",
+      "Fidelity_mask_1.png",
+      "Fidelity_mask_2.png",
+      "Fidelity_mask_3.png",
+      "Fidelity_matcap_autumn.png",
+      "Fidelity_matcap_palace.png",
+      "Fidelity_presentation.json",
+      "SF3_SourceTrails.json",
+      "liu_shadow_callout.wav"
+    ]
+  },
+  "native": {
+    "runId": 43427815592,
+    "sourceSha": "81a870bdf1c92dff668ee0b1c9a87b82465257c2",
+    "passed": 14,
+    "failed": 0,
+    "skipped": 0,
+    "imagesReviewed": 6,
+    "resourceIdentities": 73
+  },
+  "limitations": [
+    "Physical-device impact feel, TV latency and stable 60fps are not verified.",
+    "Original choreography, materials and visual fidelity are not accepted as 1:1.",
+    "Liu still uses the provisional hammer throw; 333 transformation and white emission are not included."
+  ]
+}
