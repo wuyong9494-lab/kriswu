@@ -220,6 +220,7 @@ final class DuelSourceControlsView: UIView {
         shadowStatus.backgroundColor = UIColor.black.withAlphaComponent(0.7)
         shadowStatus.isUserInteractionEnabled = false
         shadowStatus.isAccessibilityElement = false
+        shadowStatus.isHidden = true
         addSubview(shadowStatus)
         // VoiceOver retains deliberate defense without a separate on-screen
         // control. Ordinary touch uses the facing-relative Back direction.
@@ -272,7 +273,8 @@ final class DuelSourceControlsView: UIView {
             guard let button = buttons[action], let frame = layoutSnapshot.actions[action] else { continue }
             button.frame = frame
             if action == .shadow {
-                shadowStatus.frame = CGRect(x: frame.midX - 60, y: frame.maxY + 2, width: 120, height: 18)
+                // Keep status beside the cluster, clear of the kick below shadow.
+                shadowStatus.frame = CGRect(x: frame.minX - 126, y: frame.midY - 9, width: 120, height: 18)
             }
             button.layer.cornerRadius = frame.width / 2
             if action == .ranged {
@@ -541,6 +543,7 @@ final class DuelSourceControlsView: UIView {
         button.alpha = (enabled ? (state.ready ? 2.0 / 3.0 : 0.38) * (isHeld(action) ? 0.7843137 : 1) : 0.22) * artworkFade
         if action == .shadow {
             shadowStatus.text = !inputEnabled ? "操作已暂停" : state.description
+            shadowStatus.isHidden = shadowStatus.text?.isEmpty != false
         }
         button.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
         button.accessibilityLabel = state.accessibilityLabel ?? action.label

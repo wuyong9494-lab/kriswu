@@ -418,6 +418,15 @@ final class DuelSourceControlsTests: XCTestCase {
         XCTAssertEqual(installed.loadedSpriteNames, required)
         installed.frame = CGRect(x: 0, y: 0, width: 956, height: 440)
         installed.setNeedsLayout(); installed.layoutIfNeeded()
+        let status = try XCTUnwrap(installed.subviews.compactMap { $0 as? UILabel }.first)
+        XCTAssertTrue(status.isHidden, "Empty status must not leave a black bar")
+        installed.setState(.init(enabled: false, ready: false, description: "需要 100 能量（当前 42）"), for: .shadow)
+        XCTAssertFalse(status.isHidden)
+        XCTAssertTrue(installed.bounds.contains(status.frame))
+        for frame in installed.layoutSnapshot.actions.values {
+            XCTAssertFalse(status.frame.intersects(frame), "Status must not cover any action artwork")
+        }
+        XCTAssertFalse(status.isUserInteractionEnabled)
         let image = UIGraphicsImageRenderer(size: installed.bounds.size).image { context in
             UIColor(white: 0.08, alpha: 1).setFill()
             context.cgContext.fill(installed.bounds)
