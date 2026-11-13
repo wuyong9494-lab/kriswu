@@ -131,11 +131,11 @@ final class DuelWeaponFlowTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["duel.resourceError"].exists, "Missing or corrupt source assets must fail this suite")
         XCTAssertEqual(app.staticTexts["duel.name.0"].label, "\(person) · \(weapon)")
         let expected = Set(["duel.control.joystick", "duel.control.weapon", "duel.control.kick",
-                            "duel.control.ranged", "duel.control.shadow", "duel.control.guard"])
+                            "duel.control.ranged", "duel.control.shadow"])
         let controls = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "duel.control.")).allElementsBoundByIndex
         XCTAssertEqual(Set(controls.map(\.identifier)), expected,
-                       "Preserve four source actions and one stick, with a separate explicit manual-defense control")
+                       "Preserve four source actions and one stick; Back supplies defense")
         let stick = joystick(app)
         XCTAssertTrue(stick.exists)
         XCTAssertEqual(stick.label, "八方向摇杆")
@@ -146,15 +146,14 @@ final class DuelWeaponFlowTests: XCTestCase {
             XCTAssertTrue(app.buttons["duel.control.\(action)"].isHittable)
         }
         XCTAssertTrue(app.buttons["duel.control.shadow"].exists)
-        XCTAssertTrue(app.buttons["duel.control.guard"].isHittable)
-        XCTAssertEqual(app.buttons["duel.control.guard"].value as? String, "未按住")
+        XCTAssertFalse(app.buttons["duel.control.guard"].exists)
         XCTAssertFalse(app.buttons["duel.control.ranged"].isEnabled)
         XCTAssertTrue((app.buttons["duel.control.ranged"].value as? String ?? "").contains("未装备"))
         XCTAssertEqual(try hits(app), 0)
         XCTAssertEqual(try damage(app), 0)
     }
 
-    func testOriginalManualDefenseIsReachableAndReleasesAcrossPauseAndSelection() throws {
+    func testOriginalBackDefenseReleasesAcrossPauseAndSelection() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-demo", "-screen", "game"]
         XCUIDevice.shared.orientation = .portrait
@@ -168,25 +167,19 @@ final class DuelWeaponFlowTests: XCTestCase {
             tapLobbyButton(app.buttons["duel.practice"], app: app)
             XCTAssertTrue(app.buttons["duel.pause"].waitForExistence(timeout: 15))
             XCTAssertFalse(app.staticTexts["duel.resourceError"].exists)
-            let defense = app.buttons["duel.control.guard"]
-            XCTAssertTrue(defense.waitForExistence(timeout: 5))
-            XCTAssertTrue(defense.isHittable)
-            XCTAssertGreaterThanOrEqual(defense.frame.width, 44)
-            XCTAssertGreaterThanOrEqual(defense.frame.height, 44)
-            XCTAssertEqual(defense.label, "手动防御")
-            XCTAssertEqual(defense.value as? String, "未按住")
-            defense.press(forDuration: 0.5)
-            XCTAssertEqual(defense.value as? String, "未按住", "A completed physical hold must release defense")
-            defense.press(forDuration: 0.2, thenDragTo: app.buttons["duel.pause"])
-            XCTAssertEqual(defense.value as? String, "未按住", "Dragging out cancels without retargeting")
+            let defense = joystick(app)
+            XCTAssertTrue(defense.exists)
+            XCTAssertFalse(app.buttons["duel.control.guard"].exists)
+            stickCoordinate(app, x: -1, y: 0).press(forDuration: 0.5)
+            XCTAssertEqual(defense.value as? String, "居中", "Releasing Back must release defense")
             app.buttons["duel.pause"].tap()
             XCTAssertTrue(app.buttons["duel.resume"].waitForExistence(timeout: 5))
             app.buttons["duel.resume"].tap()
             XCTAssertTrue(app.buttons["duel.pause"].waitForExistence(timeout: 5))
-            XCTAssertEqual(defense.value as? String, "未按住")
+            XCTAssertEqual(defense.value as? String, "居中")
             try restart(app)
-            XCTAssertEqual(defense.value as? String, "未按住")
-            capture("original-\(hero)-manual-defense-release")
+            XCTAssertEqual(defense.value as? String, "居中")
+            capture("original-\(hero)-back-defense-release")
             app.buttons["duel.pause"].tap()
             XCTAssertTrue(app.buttons["duel.exit"].waitForExistence(timeout: 5))
             app.buttons["duel.exit"].tap()

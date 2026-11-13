@@ -321,7 +321,7 @@ extension DuelLifecycleTests {
         XCTAssertEqual(state.consumeLocalInput(), .neutral)
     }
 
-    func testExternalManualGuardUsesLocalSeatAndPreservesAuthoritativeState() throws {
+    func testExternalBackGuardUsesLocalSeatAndPreservesAuthoritativeState() throws {
         for hero in [DuelGame.Hero.ember, .liu] {
             for seat in [0, 1] {
                 let initial = presentationGame(host: hero, equipped: true)
@@ -337,7 +337,8 @@ extension DuelLifecycleTests {
                 try state.startAuthoritativePresentation()
                 binding.updateReadiness(view)
                 XCTAssertFalse(state.consumeLocalInput().guardHeld)
-                let point = CGPoint(x: view.layoutSnapshot.manualGuard.midX, y: view.layoutSnapshot.manualGuard.midY)
+                let point = CGPoint(x: view.layoutSnapshot.joystick.midX - CGFloat(state.localFighter.facing) * 180 * view.layoutSnapshot.scale,
+                                    y: view.layoutSnapshot.joystick.midY)
                 view.beginPointers([.init(id: "guard", location: point)])
                 XCTAssertTrue(state.consumeLocalInput().guardHeld)
                 XCTAssertEqual(state.game, initial, "Local UI may not simulate or mutate authoritative state")

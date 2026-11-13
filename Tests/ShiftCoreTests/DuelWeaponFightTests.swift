@@ -110,14 +110,14 @@ final class DuelWeaponFightTests: XCTestCase {
         XCTAssertEqual(fight.fighters[1].health, 1000 - fight.damageDealt[0])
     }
 
-    func testStationaryGuardBlocksButGuardAndWalkingDoesNotCreateAFreeBlock() throws {
+    func testStationaryGuardBlocksButForwardWalkingDoesNotCreateAFreeBlock() throws {
         var guarded = try Fixture.fight(), walking = try Fixture.fight()
         guarded.step(.init(weaponCommand: .weapon), opponent: .init(guardHeld: true))
-        walking.step(.init(weaponCommand: .weapon), opponent: .init(move: 1, guardHeld: true))
+        walking.step(.init(weaponCommand: .weapon), opponent: .init(move: -1, guardHeld: true))
         var guardedContact: DuelWeaponFight.Contact?, movingContact: DuelWeaponFight.Contact?
         for _ in 0..<12 {
             guarded.step(.neutral, opponent: .init(guardHeld: true))
-            walking.step(.neutral, opponent: .init(move: 1, guardHeld: true))
+            walking.step(.neutral, opponent: .init(move: -1, guardHeld: true))
             if let contact = guarded.contacts.first { guardedContact = contact }
             if let contact = walking.contacts.first { movingContact = contact }
         }
@@ -126,6 +126,63 @@ final class DuelWeaponFightTests: XCTestCase {
         XCTAssertEqual(guarded.landedHits[0], 0)
         XCTAssertEqual(walking.landedHits[0], 1)
         XCTAssertGreaterThan(guarded.fighters[1].health, walking.fighters[1].health)
+    }
+
+    func testBackGuardBlocksSourceContactsForEitherFacingWithoutNeutralAutoGuard() throws {
+        for hero in [DuelGame.Hero.ember, .liu] {
+            for facing in [1, -1] {
+                let other: DuelGame.Hero = hero == .ember ? .liu : .ember
+                let fighters = [DuelGame.Fighter(hero: hero, x: 5000, facing: facing),
+                                DuelGame.Fighter(hero: other, x: 5000 + facing * 800, facing: -facing)]
+                var fight = try XCTUnwrap(DuelWeaponFight(fighters: fighters, mode: .practice,
+                    difficulty: .learning, catalog: Fixture.catalog(), seed: 7))
+                var input = DuelWeaponInput()
+                input.direction(x: facing, y: 0) // The defender's Back direction.
+                fight.step(.init(weaponCommand: .weapon), opponent: input.consume(facing: -facing, airborne: false))
+                var blocks = 0
+                for _ in 0..<40 {
+                    fight.step(.neutral, opponent: input.consume(facing: -facing, airborne: false))
+                    blocks += fight.contacts.filter { $0.kind == .block }.count
+                }
+                XCTAssertEqual(blocks, 1)
+                XCTAssertGreaterThan(fight.fighters[1].health, 980)
+                input.direction(x: 0, y: 0)
+                fight.step(.neutral, opponent: input.consume(facing: -facing, airborne: false))
+                XCTAssertFalse(fight.fighters[1].guarding)
+            }
+        }
+    }
+
+    func testDamageBudgetRefillsBothShadowMetersBeforeEitherHealthBarRunsOut() throws {
+        // Each actual contact is followed by recovery and a fixture re-approach.
+        // Preserve health/energy across exchanges; do not award energy for a miss.
+        for hero in [DuelGame.Hero.ember, .liu] {
+            for command in [DuelWeaponCommand.weapon, .heavy, .kick] {
+                let other: DuelGame.Hero = hero == .ember ? .liu : .ember
+                var fighters = [DuelGame.Fighter(hero: hero, x: 3500, facing: 1),
+                                DuelGame.Fighter(hero: other, x: 4300, facing: -1)]
+                fighters[0].energy = 0; fighters[1].energy = 0
+                var contacts = 0
+                for _ in 0..<10 {
+                    var fight = try XCTUnwrap(DuelWeaponFight(fighters: fighters, mode: .versus,
+                        difficulty: .learning, catalog: Fixture.catalog(), seed: 7))
+                    fight.step(.init(weaponCommand: command), opponent: .neutral)
+                    for _ in 0..<90 {
+                        fight.step(.neutral, opponent: .neutral)
+                        contacts += fight.contacts.count
+                    }
+                    XCTAssertEqual(fight.phase, .fighting)
+                    fighters = fight.fighters
+                    if fighters.allSatisfy({ $0.energy == 100 }) {
+                        XCTAssertGreaterThanOrEqual(fighters[1].health, 400, "Both weapons must unlock shadow while substantial health remains")
+                        break
+                    }
+                    fighters[0].x = 3500; fighters[1].x = 4300
+                }
+                XCTAssertGreaterThan(contacts, 0)
+                XCTAssertEqual(fighters.map(\.energy), [100, 100], "\(hero)/\(command)")
+            }
+        }
     }
 
     func testHeldGuardReturnsOnTheFirstReadyTickForBothWeapons() throws {

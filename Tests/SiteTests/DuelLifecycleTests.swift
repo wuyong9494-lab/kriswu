@@ -101,7 +101,7 @@ final class DuelLifecycleTests: XCTestCase {
     func testShowroomRotationZoomScrollAndTeardown() {
         let lobby = DuelLobbySceneView(hero: .ember)
         XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
-        XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+        XCTAssertEqual(lobby.zoom, DuelLobbySceneView.defaultZoom, accuracy: 0.0001)
         XCTAssertTrue(DuelLobbySceneView.acceptsHorizontalPan(CGPoint(x: 20, y: 1)))
         XCTAssertFalse(DuelLobbySceneView.acceptsHorizontalPan(CGPoint(x: 1, y: 20)))
         XCTAssertFalse(DuelLobbySceneView.acceptsHorizontalPan(.zero))
@@ -118,7 +118,7 @@ final class DuelLifecycleTests: XCTestCase {
         if showroomHasSource(for: .liu) {
             XCTAssertEqual(lobby.selectedHero, .liu)
             XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
-            XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+            XCTAssertEqual(lobby.zoom, DuelLobbySceneView.defaultZoom, accuracy: 0.0001)
         } else {
             XCTAssertEqual(lobby.selectedHero, previousSelection)
             XCTAssertEqual(lobby.yaw, previousYaw, accuracy: 0.0001)

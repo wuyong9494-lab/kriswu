@@ -346,7 +346,7 @@ final class DuelSession: ObservableObject {
     }
     var tutorial: String {
         if setup.originalWeapons {
-            return ["推动左侧摇杆靠近对手", "点击右侧武器按钮，观察刀或锤的攻击距离", "向上推动摇杆跳跃，落地站定后按住防御", "配合方向攻击，并尝试踢击与长按武器重击", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
+            return ["推动左侧摇杆靠近对手", "点击右侧武器按钮，观察刀或锤的攻击距离", "向上推动摇杆跳跃，落地后持续后拉摇杆防御", "配合方向攻击，并尝试踢击与长按武器重击", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
         }
         return ["按住左侧方向，靠近对手", "方向与普攻可同时按：命中后再点普攻", "先点击跳跃，落地后再按住防御", "分别使出两种技能，注意能量消耗", "已完成：继续练习，或返回挑战电脑"][min(4, tutorialStep)]
     }
@@ -1353,9 +1353,7 @@ final class DuelNetworkControlsView: UIView {
         let layout = controls.layoutSnapshot
         guard bounds.width.isFinite, bounds.height.isFinite, layout.scale.isFinite,
               layout.scale > 0, layout.joystick.width >= 44, layout.joystick.height >= 44,
-              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.joystick),
-              layout.manualGuard.width >= 44, layout.manualGuard.height >= 44,
-              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.manualGuard) else { return false }
+              bounds.insetBy(dx: -0.5, dy: -0.5).contains(layout.joystick) else { return false }
         return DuelSourceControlsView.Action.allCases.allSatisfy { action in
             guard let frame = layout.actions[action], let touch = layout.actionTouch[action] else { return false }
             return frame.width >= 44 && frame.height >= 44 &&

@@ -10,7 +10,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     public enum Action: String, CaseIterable, Sendable { case weapon, kick, ranged, shadow }
     public static let longPressTicks = 18
     public static let jumpChordGraceTicks = 1
-    // Explicit defense must not engage on the same tick as an attack release.
+    // Defense must not engage on the same tick as an attack release.
     public static let guardRecoveryTicks = 8
     public private(set) var x = 0
     public private(set) var y = 0
@@ -34,7 +34,7 @@ public struct DuelWeaponInput: Equatable, Sendable {
     private var manualGuardHeld = false
 
     public init() {}
-    /// Defense requires explicit player intent; a neutral stick never raises it.
+    /// Optional accessibility / peripheral hold. Touch defense uses Back.
     public mutating func setGuardHeld(_ held: Bool) { manualGuardHeld = held }
 
     /// x points right; y points up. Facing is applied only when consuming the
@@ -47,7 +47,6 @@ public struct DuelWeaponInput: Equatable, Sendable {
         // Button-first chords remain live until the neutral tap/hold resolves.
         // Capture the direction now even if both fingers end before the next tick.
         if self.x != 0 || self.y != 0 {
-            guardRecovery = Self.guardRecoveryTicks
             resolveHeldDirections()
         }
     }
@@ -105,9 +104,10 @@ public struct DuelWeaponInput: Equatable, Sendable {
             } else { pendingJumpTicks = remaining - 1 }
         }
         let command = queued.map { Self.command(for: $0, facing: facing) }
+        let backward = x == (facing < 0 ? 1 : -1)
         let result = DuelGame.Input(
             move: x,
-            guardHeld: manualGuardHeld && !recoveringGuard && !airborne && x == 0 && y == 0 && presses.isEmpty && command == nil &&
+            guardHeld: (backward || (manualGuardHeld && x == 0)) && !recoveringGuard && !airborne && y == 0 && presses.isEmpty && command == nil &&
                 !jump && pendingJumpTicks == nil,
             taps: jump ? .jump : [], vertical: y, weaponCommand: command)
         queued = nil

@@ -8,6 +8,8 @@ extension DuelLifecycleTests {
     func testShowroomPerspectiveProjectionClearsRailWithoutCroppingSceneView() throws {
         let lobby = DuelLobbySceneView(hero: .ember)
         defer { lobby.shutdown() }
+        // Explicit full-scene zoom still validates the complete floor envelope.
+        lobby.scalePreview(by: DuelLobbySceneView.defaultZoom)
         for size in [CGSize(width: 956, height: 440), CGSize(width: 844, height: 390),
                      CGSize(width: 1024, height: 768)] {
             lobby.frame = CGRect(origin: .zero, size: size)

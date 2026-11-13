@@ -116,6 +116,7 @@ extension DuelWeaponAssetTests {
         let lobby = DuelLobbySceneView(hero: .ember)
         defer { lobby.shutdown() }
         var sampleCount = 0
+        var capturedHeroes = Set<DuelGame.Hero>()
         for hero in [DuelGame.Hero.ember, .liu, .ember] {
             autoreleasepool { lobby.select(hero) }
             XCTAssertEqual(lobby.selectedHero, hero)
@@ -130,6 +131,27 @@ extension DuelWeaponAssetTests {
                 lobby.setVisibleRegion(normalized)
                 lobby.layoutSubviews()
                 autoreleasepool { _ = lobby.snapshot() }
+                if size.width == 956 && !capturedHeroes.contains(hero) {
+                    capturedHeroes.insert(hero)
+                    lobby.rotatePreview(by: .pi - lobby.yaw)
+                    lobby.renderIdle(at: 0)
+                    let points = try lobbyWorldVertices(root)
+                    func projectedHeight() -> CGFloat {
+                        let ys = points.map { CGFloat(lobby.projectPoint(SCNVector3($0.x, $0.y, $0.z)).y) }
+                        return (ys.max() ?? 0) - (ys.min() ?? 0)
+                    }
+                    let enlargedHeight = projectedHeight()
+                    let enlarged = XCTAttachment(image: lobby.snapshot())
+                    enlarged.name = "lobby-larger-\(hero.rawValue)"; enlarged.lifetime = .keepAlways; add(enlarged)
+                    lobby.scalePreview(by: DuelLobbySceneView.defaultZoom)
+                    _ = lobby.snapshot()
+                    XCTAssertGreaterThan(enlargedHeight, projectedHeight() * 1.30,
+                                         "Default fighter and face must actually become larger on screen")
+                    let before = XCTAttachment(image: lobby.snapshot())
+                    before.name = "lobby-previous-size-\(hero.rawValue)"; before.lifetime = .keepAlways; add(before)
+                    lobby.scalePreview(by: 1 / DuelLobbySceneView.defaultZoom)
+                    _ = lobby.snapshot()
+                }
                 let clear = CGRect(x: size.width * 0.3 + 2, y: 2,
                                    width: size.width * 0.4 - 4, height: size.height * 0.74 - 4)
                 for yaw in [Float.pi, 0, Float.pi / 2, -Float.pi / 2] {
@@ -238,14 +260,8 @@ extension DuelWeaponAssetTests {
                        "The camera adds its 8-point margin above the 10-point rail gap")
 
         _ = view.snapshot()
-        for point in DuelLobbyFraming.envelope {
-            let native = view.projectPoint(SCNVector3(Float(point.x), Float(point.y), Float(point.z)))
-            let nativeInLayout = CGPoint(x: stage.minX + CGFloat(native.x),
-                                         y: stage.minY + CGFloat(native.y))
-            XCTAssertTrue(opening.insetBy(dx: 7.9, dy: 7.9).contains(nativeInLayout),
-                          "Native body/pedestal allowance must clear the actual navigated controls")
-            XCTAssertLessThan(nativeInLayout.y, rail.minY)
-        }
+        // The close default crops unused floor allowance, so validate actual
+        // body/head/weapon vertices below, not the old oversized floor cube.
         // Also project the real selected actor into this measured opening, so
         // manually supplied regions in the rotation test are not the only gate.
         let selected = try XCTUnwrap(view.selectedHero)
@@ -261,6 +277,11 @@ extension DuelWeaponAssetTests {
         }
         XCTAssertTrue(opening.insetBy(dx: 2, dy: 2).contains(actorBounds),
                       "The real selected actor must clear the actual navigation/rail layout")
+        let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "lobby-larger-navigated"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
     private func lobbyDescendant<T: UIView>(_ type: T.Type, in view: UIView) -> T? {

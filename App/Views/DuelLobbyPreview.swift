@@ -30,7 +30,8 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
     private var lastIdleTime: CFTimeInterval?
     private var accumulatedIdleTime: CFTimeInterval = 0
     private(set) var yaw: Float = .pi
-    private(set) var zoom: Float = 1
+    static let defaultZoom: Float = 0.75
+    private(set) var zoom: Float = DuelLobbySceneView.defaultZoom
     private var cameraNode: SCNNode?
     private let showroomCenter = SCNVector3(4.7, 0.85, -0.35)
     private(set) var visibleRegion: CGRect?
@@ -273,7 +274,7 @@ final class DuelLobbySceneView: SCNView, UIGestureRecognizerDelegate {
         weaponAssets = nextWeaponAssets
         if let previousHero { previousAssets?.releaseCharacter(for: previousHero) }
         selectedHero = hero
-        idleTick = 0; yaw = .pi; zoom = 1
+        idleTick = 0; yaw = .pi; zoom = Self.defaultZoom
         updateCameraFraming()
         scene.rootNode.addChildNode(nextRoot)
         startIdle()

@@ -118,7 +118,8 @@ final class DuelWeaponShadowTests: XCTestCase {
                 if game.fighters[0].weaponPose?.reaction == true { interrupted = true }
                 if interrupted { XCTAssertNil(game.shadowVisual(0)); XCTAssertNil(game.attackBox(0)) }
             }
-            XCTAssertTrue(interrupted); XCTAssertEqual(game.fighters[0].energy, 5)
+            XCTAssertTrue(interrupted)
+            XCTAssertEqual(game.fighters[0].energy, (1000 - game.fighters[0].health + 3) / 4)
             XCTAssertEqual(game.landedHits[0], 0)
         }
     }

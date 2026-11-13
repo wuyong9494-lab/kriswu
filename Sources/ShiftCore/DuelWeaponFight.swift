@@ -257,7 +257,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
     }
     private mutating func updateReady(_ i: Int, input: DuelGame.Input) {
         fighters[i].facing = fighters[1 - i].x >= fighters[i].x ? 1 : -1
-        fighters[i].guarding = input.guardHeld && input.weaponCommand == nil && input.vertical == 0 && input.move == 0
+        // Back is relative to the current opponent, including after crossing
+        // sides. Retreat can block; forward, crouch, jump and attacks cannot.
+        fighters[i].guarding = input.guardHeld && input.weaponCommand == nil && input.vertical == 0 &&
+            (input.move == 0 || input.move == -fighters[i].facing)
         if let command = input.weaponCommand ?? queued[i] {
             queued[i] = nil; startCommand(i, command: command); return
         }
@@ -497,9 +500,17 @@ public struct DuelWeaponFight: Equatable, Sendable {
         let base = command.rawValue.hasPrefix("kick") ? 65 : command == .heavy ? (profiles[i].isKatana ? 145 : 190) :
             command == .shadow ? (profiles[i].isKatana ? 170 : 195) : (profiles[i].isKatana ? 80 : 105)
         let damage = blocked ? max(1, base / 12) : base
-        fighters[defender].health = max(0, fighters[defender].health - damage)
-        if command != .shadow { fighters[i].energy = min(100, fighters[i].energy + (blocked ? 4 : 12)) }
-        fighters[defender].energy = min(100, fighters[defender].energy + 5)
+        let actualDamage = min(damage, fighters[defender].health)
+        fighters[defender].health -= actualDamage
+        // Native balance: refill within a normal health bar, including heavy
+        // exchanges. Damage beyond remaining health cannot generate energy.
+        // A shadow hit never refunds the caster's own cost.
+        if command != .shadow {
+            let gain = blocked ? 8 : (actualDamage + 4) / 5
+            fighters[i].energy = min(100, fighters[i].energy + gain)
+        }
+        let received = blocked ? 10 : (actualDamage + 3) / 4
+        fighters[defender].energy = min(100, fighters[defender].energy + received)
         fighters[defender].x = clamped(fighters[defender].x + fighters[i].facing * (heavy ? 200 : 65))
         let role = blocked ? "guard" : heavy ? "knockdown" : "hit"
         if let clip = profiles[defender].clip(role: role) {

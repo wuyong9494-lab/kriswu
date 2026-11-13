@@ -219,6 +219,31 @@ final class DuelWeaponInputTests: XCTestCase {
         }
     }
 
+    func testBackGuardTracksFacingAndYieldsToAttacksJumpAndRelease() {
+        for facing in [1, -1] {
+            var input = DuelWeaponInput()
+            input.direction(x: -facing, y: 0)
+            for _ in 0..<90 { XCTAssertTrue(input.consume(facing: facing, airborne: false).guardHeld) }
+            XCTAssertFalse(input.consume(facing: -facing, airborne: false).guardHeld, "Same screen direction becomes forward after a side change")
+            XCTAssertFalse(input.consume(facing: facing, airborne: true).guardHeld)
+            input.press(.weapon)
+            let attack = input.consume(facing: facing, airborne: false)
+            XCTAssertEqual(attack.weaponCommand, .weaponBack)
+            XCTAssertFalse(attack.guardHeld)
+            input.release(.weapon)
+            for _ in 0..<DuelWeaponInput.guardRecoveryTicks { _ = input.consume(facing: facing, airborne: false) }
+            XCTAssertTrue(input.consume(facing: facing, airborne: false).guardHeld)
+            input.direction(x: -facing, y: 1)
+            XCTAssertFalse(input.consume(facing: facing, airborne: false).guardHeld)
+            input.cancelAll()
+            XCTAssertEqual(input.consume(facing: facing, airborne: false), .neutral)
+            input.direction(x: -facing, y: 0)
+            XCTAssertTrue(input.consume(facing: facing, airborne: false).guardHeld)
+            input.direction(x: 0, y: 0)
+            XCTAssertFalse(input.consume(facing: facing, airborne: false).guardHeld)
+        }
+    }
+
     func testManualGuardRequiresPlayerHoldAndNeutralGroundedInput() {
         var input = DuelWeaponInput()
         XCTAssertFalse(input.consume(facing: 1, airborne: false).guardHeld)

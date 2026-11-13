@@ -125,13 +125,7 @@ final class DuelSourceControlsTests: XCTestCase {
             XCTAssertEqual(punch.width / layout.joystick.width, 205.0 / 500.0, accuracy: 0.00001,
                            "Keep the measured source control proportions")
             XCTAssertLessThan(layout.joystick.maxX, shadow.minX)
-            XCTAssertGreaterThanOrEqual(layout.manualGuard.width, 44)
-            XCTAssertGreaterThanOrEqual(layout.manualGuard.height, 44)
-            XCTAssertTrue(safe.contains(layout.manualGuard))
-            XCTAssertFalse(layout.manualGuard.intersects(layout.joystickTouch))
-            for zone in layout.actionTouch.values {
-                XCTAssertFalse(layout.manualGuard.intersects(zone), "Manual defense cannot steal a source action")
-            }
+
         }
     }
 
@@ -358,87 +352,63 @@ final class DuelSourceControlsTests: XCTestCase {
         XCTAssertTrue(pending.isEmpty)
     }
 
-    func testFallbackCannotClaimSourceArtworkAndAccessibilityIncludesManualDefense() {
+    func testFallbackCannotClaimSourceArtworkAndDefenseUsesTheStick() {
         let view = controls()
         XCTAssertFalse(view.sourceArtAvailable)
         XCTAssertTrue(view.loadedSpriteNames.isEmpty)
         let identifiers = Set(view.subviews.compactMap(\.accessibilityIdentifier))
         XCTAssertEqual(identifiers, Set(["duel.control.joystick", "duel.control.weapon", "duel.control.kick",
-                                         "duel.control.ranged", "duel.control.shadow", "duel.control.guard"]))
+                                         "duel.control.ranged", "duel.control.shadow"]))
         XCTAssertFalse(view.point(inside: CGPoint(x: 478, y: 220), with: nil),
                        "The middle of the fight must remain available to the scene")
     }
 
-    func testManualGuardRequiresLastFingerReleaseAndDragOutCancels() throws {
+    func testBackStickRoutesHoldReleaseAndNeverCapturesCenter() throws {
         let view = controls()
-        let button = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" } as? UIButton)
-        let point = center(view.layoutSnapshot.manualGuard)
-        var edges: [Bool] = []
-        view.onGuard = { edges.append($0) }
-        XCTAssertEqual(button.accessibilityValue, "未按住")
-        view.beginPointers([.init(id: 1, location: point), .init(id: 2, location: point)])
-        XCTAssertEqual(edges, [true])
-        XCTAssertEqual(button.accessibilityValue, "已按住")
-        view.cancelPointers([1])
-        XCTAssertEqual(edges, [true], "A second physical finger still owns defense")
-        view.endPointers([2])
-        XCTAssertEqual(edges, [true, false])
-        XCTAssertEqual(button.accessibilityValue, "未按住")
-        view.beginPointers([.init(id: 3, location: point)])
-        view.movePointers([.init(id: 3, location: center(try XCTUnwrap(view.layoutSnapshot.actions[.weapon])))])
-        view.endPointers([3])
-        XCTAssertEqual(edges, [true, false, true, false], "A dragged-out finger cannot retarget or rearm defense")
+        var input = DuelWeaponInput()
+        view.onDirection = { input.direction(x: $0, y: $1) }
+        view.onInputCancelled = { input.cancelAll() }
+        XCTAssertNil(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" })
+        XCTAssertFalse(view.point(inside: CGPoint(x: 478, y: 405), with: nil))
+        for facing in [1, -1] {
+            view.beginPointers([.init(id: "back", location: stickPoint(view, x: -facing, y: 0))])
+            for _ in 0..<90 { XCTAssertTrue(input.consume(facing: facing, airborne: false).guardHeld) }
+            view.endPointers(["back"])
+            XCTAssertFalse(input.consume(facing: facing, airborne: false).guardHeld)
+            view.beginPointers([.init(id: "back", location: stickPoint(view, x: -facing, y: 0))])
+            view.inputEnabled = false
+            XCTAssertEqual(input.consume(facing: facing, airborne: false), .neutral)
+            view.inputEnabled = true
+        }
     }
 
-    func testManualGuardCancellationClearsTouchAndAccessibilityIntent() throws {
+    func testAccessibilityDefenseCancelsOnPauseRotationAndShutdown() throws {
         let view = controls()
-        let button = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" } as? UIButton)
+        let stick = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.joystick" })
+        XCTAssertEqual(stick.accessibilityCustomActions?.map(\.name), ["切换防御"])
         var edges: [Bool] = []
         view.onGuard = { edges.append($0) }
-        XCTAssertTrue(button.accessibilityActivate())
-        XCTAssertEqual(button.accessibilityValue, "已按住")
-        XCTAssertTrue(button.accessibilityActivate())
+        XCTAssertTrue(view.toggleAccessibilityGuard())
+        XCTAssertTrue(view.toggleAccessibilityGuard())
         XCTAssertEqual(edges, [true, false])
-        XCTAssertTrue(button.accessibilityActivate())
-        view.inputEnabled = false
-        XCTAssertEqual(edges, [true, false, true, false])
-        XCTAssertEqual(button.accessibilityValue, "操作已暂停")
-        XCTAssertFalse(button.accessibilityActivate())
-        view.inputEnabled = true
-        XCTAssertEqual(button.accessibilityValue, "未按住")
-        for operation in ["reset", "rotation", "window"] {
-            view.beginPointers([.init(id: operation, location: center(view.layoutSnapshot.manualGuard))])
+        for operation in ["pause", "rotation", "window"] {
+            XCTAssertTrue(view.toggleAccessibilityGuard())
             switch operation {
-            case "reset": view.cancelAll()
+            case "pause": view.inputEnabled = false
             case "rotation":
                 view.frame.size = CGSize(width: 812, height: 375)
                 view.setNeedsLayout(); view.layoutIfNeeded()
             default: view.didMoveToWindow()
             }
-            view.endPointers([operation])
-            XCTAssertEqual(button.accessibilityValue, "未按住", operation)
-            XCTAssertEqual(Array(edges.suffix(2)), [true, false], operation)
+            XCTAssertEqual(Array(edges.suffix(2)), [true, false])
+            if !view.inputEnabled { XCTAssertFalse(view.toggleAccessibilityGuard()); view.inputEnabled = true }
         }
+        view.onGuard = { held in edges.append(held); if held { view.cancelAll() } }
+        XCTAssertFalse(view.toggleAccessibilityGuard())
+        XCTAssertEqual(Array(edges.suffix(2)), [true, false])
         view.shutdown()
         XCTAssertNil(view.onGuard)
-        XCTAssertFalse(button.accessibilityActivate())
-    }
-
-    func testManualGuardReentrantCancellationCannotRearmRemainingPointers() throws {
-        let view = controls()
-        let button = try XCTUnwrap(view.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" } as? UIButton)
-        let point = center(view.layoutSnapshot.manualGuard)
-        var edges: [Bool] = []
-        view.onGuard = { held in
-            edges.append(held)
-            if held { view.cancelAll() }
-        }
-        view.beginPointers([.init(id: 1, location: point), .init(id: 2, location: point)])
-        view.endPointers([1, 2])
-        XCTAssertEqual(edges, [true, false])
-        XCTAssertEqual(button.accessibilityValue, "未按住")
-        XCTAssertFalse(button.accessibilityActivate())
-        XCTAssertEqual(edges, [true, false, true, false])
+        XCTAssertFalse(view.toggleAccessibilityGuard())
     }
 
     func testActualSourceSpritesLoadRenderAndRejectDecodableTampering() throws {
@@ -455,7 +425,7 @@ final class DuelSourceControlsTests: XCTestCase {
         }
         XCTAssertGreaterThan(image.pngData()?.count ?? 0, 5000)
         let attachment = XCTAttachment(image: image)
-        attachment.name = "source-native-controls-four-actions-manual-defense-eight-directions"
+        attachment.name = "source-native-controls-four-actions-back-defense-eight-directions"
         attachment.lifetime = .keepAlways; add(attachment)
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("SourceControls-\(UUID().uuidString)")

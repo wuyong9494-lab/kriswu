@@ -10,7 +10,7 @@ import simd
 /// damage constants, recovered event timing, or the undocumented source FPS.
 @MainActor
 final class DuelWeaponGameplayTests: XCTestCase {
-    func testOriginalManualGuardReleasesAcrossPauseRestartAndControlReplacement() throws {
+    func testOriginalBackGuardReleasesAcrossPauseRestartAndControlReplacement() throws {
         for hero in [DuelGame.Hero.ember, .liu] {
             let state = DuelSession(.init(hero: hero, difficulty: .learning,
                                           mode: .practice, originalWeapons: true))
@@ -25,8 +25,9 @@ final class DuelWeaponGameplayTests: XCTestCase {
                 view.setNeedsLayout(); view.layoutIfNeeded()
             }
             func hold(_ view: DuelSourceControlsView, _ id: String) {
-                let frame = view.layoutSnapshot.manualGuard
-                view.beginPointers([.init(id: id, location: CGPoint(x: frame.midX, y: frame.midY))])
+                let frame = view.layoutSnapshot.joystick
+                let x = frame.midX - CGFloat(state.localFighter.facing) * 180 * view.layoutSnapshot.scale
+                view.beginPointers([.init(id: id, location: CGPoint(x: x, y: frame.midY))])
             }
             XCTAssertTrue(binding.bind(old))
             let staleGuard = old.onGuard
@@ -53,11 +54,40 @@ final class DuelWeaponGameplayTests: XCTestCase {
             XCTAssertFalse(state.consumeLocalInput().guardHeld)
             current.endPointers(["current", "restart"])
             XCTAssertFalse(state.consumeLocalInput().guardHeld)
-            let guardButton = try XCTUnwrap(current.subviews.first {
-                $0.accessibilityIdentifier == "duel.control.guard"
-            } as? UIButton)
-            XCTAssertEqual(guardButton.accessibilityValue, "未按住")
+            XCTAssertNil(current.subviews.first { $0.accessibilityIdentifier == "duel.control.guard" })
         }
+    }
+
+    func testLiuCanRefillAndCastShadowAgainBeforeKnockout() throws {
+        let assets = try DuelWeaponAssets()
+        var fight = try XCTUnwrap(DuelWeaponFight(
+            fighters: [.init(hero: .ember, x: 4000, facing: 1), .init(hero: .liu, x: 5200, facing: -1)],
+            mode: .versus, difficulty: .learning, catalog: assets.catalog, seed: 7))
+        fight.step(.neutral, opponent: .init(weaponCommand: .shadow))
+        XCTAssertTrue(fight.shadowIsActive(1))
+        XCTAssertEqual(fight.fighters[1].energy, 0)
+        var returned = false, castAgain = false
+        for _ in 0..<2400 {
+            if fight.canUse(.shadow, index: 1), fight.fighters[1].attack == nil,
+               fight.fighters[1].stun == 0, fight.fighters[1].knockdown == 0 {
+                XCTAssertGreaterThan(fight.fighters[1].health, 400)
+                fight.step(.neutral, opponent: .init(weaponCommand: .shadow))
+                castAgain = fight.shadowIsActive(1)
+                break
+            }
+            let gap = abs(fight.fighters[0].x - fight.fighters[1].x)
+            let toward = fight.fighters[0].x < fight.fighters[1].x ? 1 : -1
+            let input: DuelGame.Input = gap > 1050 ? .init(move: toward) :
+                (fight.fighters[0].attack == nil ? .init(weaponCommand: .weapon) : .neutral)
+            // Allow the first throw to finish, then receive real source hits.
+            fight.step(returned ? input : .neutral, opponent: .neutral)
+            if !fight.shadowIsActive(1) { returned = true }
+            XCTAssertEqual(fight.phase, .fighting)
+        }
+        XCTAssertTrue(returned)
+        XCTAssertTrue(castAgain, "Liu must refill, finish cooldown and launch a second real shadow before KO")
+        XCTAssertEqual(fight.fighters[1].energy, 0)
+        XCTAssertGreaterThan(fight.shadowCooldownRemaining(1), 0)
     }
 
     func testActualSourceWeaponHeavyAndKickHitInBothDirectionsWithoutCrossingBodies() throws {

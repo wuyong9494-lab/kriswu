@@ -108,7 +108,41 @@ SOURCE_SKIN_ATTACHMENTS.update({
     f"skin-equipped-{hero}-{role}-source-contact": {"selector": "SiteTests/DuelWeaponGameplayTests/testSourceSkinsContributeToRealSourceContactsAndRelease", "kind": "image"}
     for hero in ("ember", "liu") for role in ("weapon1", "heavy")
 })
+PLAYABILITY_SELECTED = [
+    ("DuelSourceControlsTests", "testBackStickRoutesHoldReleaseAndNeverCapturesCenter", "actual UIKit direction routing and shared physical-input adapter; no separate defense button"),
+    ("DuelSourceControlsTests", "testAccessibilityDefenseCancelsOnPauseRotationAndShutdown", "VoiceOver shortcut lifetime without an on-screen defense button"),
+    ("DuelSourceControlsTests", "testActualSourceSpritesLoadRenderAndRejectDecodableTampering", "authenticated source control sprites and actual UIKit rendering"),
+    ("DuelWeaponGameplayTests", "testOriginalBackGuardReleasesAcrossPauseRestartAndControlReplacement", "actual equipment; local session control replacement and pause/restart"),
+    ("DuelWeaponGameplayTests", "testLiuCanRefillAndCastShadowAgainBeforeKnockout", "actual source attacks; first shadow, recharge, cooldown and second Liu shadow in one fight"),
+    ("DuelLifecycleTests", "testExternalBackGuardUsesLocalSeatAndPreservesAuthoritativeState", "host/guest seat-relative input; no local mutation of authoritative state"),
+    ("DuelWeaponAssetTests", "testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch", "actual body, head and weapon vertices; 72 hero/rotation/idle samples; larger-default comparison"),
+    ("DuelWeaponAssetTests", "testRealNavigatedLobbyUsesExactStageCenterAndRailGeometry", "actual SwiftUI navigation, menus and larger fighter framing"),
+]
+PLAYABILITY_ATTACHMENTS = {
+    "source-native-controls-four-actions-back-defense-eight-directions": {
+        "selector": "SiteTests/DuelSourceControlsTests/testActualSourceSpritesLoadRenderAndRejectDecodableTampering", "kind": "image"},
+    "lobby-larger-navigated": {
+        "selector": "SiteTests/DuelWeaponAssetTests/testRealNavigatedLobbyUsesExactStageCenterAndRailGeometry", "kind": "image"},
+}
+PLAYABILITY_ATTACHMENTS.update({
+    f"lobby-{size}-{hero}": {
+        "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch", "kind": "image"}
+    for size in ("larger", "previous-size") for hero in ("ember", "liu")
+})
 SCOPES = {
+    "playability-followup": {
+        "selected": PLAYABILITY_SELECTED, "methodCount": 8,
+        "imageLabels": list(PLAYABILITY_ATTACHMENTS), "dataLabels": [],
+        "commitPrefix": "Capture fighter back guard and lobby",
+        "workflow": ".github/workflows/fighter-playability-followup.yml",
+        "additionalSources": ["App/Views/DuelSourceControls.swift", "App/Views/DuelView.swift",
+                              "App/Views/DuelLobbyPreview.swift", "App/Views/DuelHomeView.swift",
+                              "Sources/ShiftCore/DuelWeaponInput.swift", "Sources/ShiftCore/DuelWeaponFight.swift",
+                              "Sources/ShiftCore/DuelReplayState.swift", "Sources/ShiftCore/DuelLobbyFraming.swift",
+                              "App/Services/DuelSourceWeaponTrails.swift", "App/Services/DuelWeaponAssets.swift",
+                              "App/Services/DuelPresentationAssets.swift", "App/Services/GLTFModel.swift",
+                              ".github/scripts/fighter_presentation_assets.py", ".github/scripts/fighter_source_trails.py"],
+    },
     "source-skins-followup": {
         "selected": SOURCE_SKIN_SELECTED, "methodCount": 2,
         "imageLabels": list(SOURCE_SKIN_ATTACHMENTS), "dataLabels": [],
@@ -174,10 +208,10 @@ SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTE
 EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
 IMAGE_LABELS = SCOPE["imageLabels"]
 DATA_LABELS = SCOPE["dataLabels"]
-EXPECTED_ATTACHMENTS = (SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
+EXPECTED_ATTACHMENTS = (PLAYABILITY_ATTACHMENTS if SCOPE_NAME == "playability-followup" else SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
                         PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS)
-USES_SOURCE_SKINS = SCOPE_NAME == "source-skins-followup"
-USES_PRESENTATION = SCOPE_NAME in ("presentation-followup", "coverage-followup", "source-skins-followup")
+USES_SOURCE_SKINS = SCOPE_NAME in ("source-skins-followup", "playability-followup")
+USES_PRESENTATION = SCOPE_NAME in ("presentation-followup", "coverage-followup", "source-skins-followup", "playability-followup")
 if USES_SOURCE_SKINS:
     MANIFESTS.append(".github/private/fighter-source-trails/manifest.json")
 if USES_PRESENTATION:
@@ -305,7 +339,7 @@ def prepare():
                 "limitations": ["Simulator evidence, not physical-device acceptance or stable-60fps measurement",
                                 "Original skill choreography and audible sound/music are not accepted by these methods",
                                 "No SwiftPM/core107, old synthetic22, full resource suite or UI flow is rerun",
-                                "Build702/TestFlight/Release state is unchanged; no app or source resource is uploaded"]}
+                                "This unsigned job does not change TestFlight/Release state or upload an app/source resource"]}
     write_json(work() / "identity.json", identity)
     print(f"Pinned source {actual}; scope {SCOPE_NAME}; {EXPECTED_NATIVE_COUNT} native methods; "
           f"{len(IMAGE_LABELS)} image labels and {len(DATA_LABELS)} data labels; unsigned simulator only.")

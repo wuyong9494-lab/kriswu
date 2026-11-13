@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `2`, unsigned 16-bit simulation rules version `3`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `2`, unsigned 16-bit simulation rules version `4`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.

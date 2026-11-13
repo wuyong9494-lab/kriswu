@@ -307,7 +307,7 @@ struct DuelHomeView: View {
     private var skillHelp: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(usesOriginalWeapons ?
-                 "左侧摇杆移动；右侧武器与踢击配合方向出招。落地站定并收招后，按住防御按钮防御；松开解除。" :
+                 "左侧摇杆移动；持续向远离对手的方向后拉可防御，松开解除。配合右侧武器与踢击出招。暗影满能量且冷却结束后可施放。" :
                  "普攻命中后继续点击，可衔接三段连击。")
                 .foregroundStyle(.white.opacity(0.78))
             Text(usesOriginalWeapons ?

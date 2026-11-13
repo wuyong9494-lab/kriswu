@@ -355,7 +355,7 @@ final class DuelWeaponAssetTests: XCTestCase {
         XCTAssertNotNil(lobby.scene?.rootNode.childNode(
             withName: "duel.lobby.character.liu", recursively: false))
         XCTAssertEqual(lobby.yaw, .pi, accuracy: 0.0001)
-        XCTAssertEqual(lobby.zoom, 1, accuracy: 0.0001)
+        XCTAssertEqual(lobby.zoom, DuelLobbySceneView.defaultZoom, accuracy: 0.0001)
     }
 
     func testShowroomSwitchesBetweenDistinctAssetsAndReleasesOldModel() throws {
@@ -373,7 +373,7 @@ final class DuelWeaponAssetTests: XCTestCase {
         XCTAssertNotNil(lobby.scene?.rootNode.childNode(
             withName: "duel.lobby.character.liu", recursively: false))
         XCTAssertEqual(lobby.yaw, .pi)
-        XCTAssertEqual(lobby.zoom, 1)
+        XCTAssertEqual(lobby.zoom, DuelLobbySceneView.defaultZoom)
         lobby.shutdown()
         XCTAssertNil(lobby.scene)
     }

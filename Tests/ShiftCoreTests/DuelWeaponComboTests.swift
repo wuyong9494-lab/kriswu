@@ -86,7 +86,7 @@ final class DuelWeaponComboTests: XCTestCase {
             XCTAssertEqual(fight.landedHits, [0, 0])
             XCTAssertEqual(fight.damageDealt, [0, 0])
             XCTAssertEqual(fight.fighters[1].health, 1000 - (hero == .ember ? 80 : 105) / 12)
-            XCTAssertEqual(fight.fighters.map(\.energy), [startingEnergy[0] + 4, startingEnergy[1] + 5])
+            XCTAssertEqual(fight.fighters.map(\.energy), [startingEnergy[0] + 8, startingEnergy[1] + 10])
         }
     }
 
