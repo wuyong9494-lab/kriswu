@@ -25,7 +25,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' && github.event_name == 'push' && github.event.before == 'c3bc88954aaffa79c26445ca9714cf164af112e5' && github.event.head_commit.message == 'Promote verified fighter 1.2 (704) to external TestFlight'
+    if: github.repository == 'wuyong9494-lab/kriswu' && github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' && github.event_name == 'push' && github.event.before == '81a870bdf1c92dff668ee0b1c9a87b82465257c2' && github.event.head_commit.message == 'Promote verified fighter 1.2 (705) to external TestFlight'
     environment: fighter-private-assets
     outputs:
       upload_required: ${{ steps.verify.outputs.upload_required }}

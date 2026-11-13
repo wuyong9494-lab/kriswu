@@ -24,8 +24,8 @@ MUSIC_SHA = '36878beef5d9c8d86193b7eea04e5e381042691d'
 SOURCE_SKIN_BRANCH = 'codex/fighter-visual-acceptance-20261113-1200'
 SOURCE_SKIN_SHA = '1c2cfa70a36974592fdb14811f6b7a7d2b6239e7'
 SOURCE_SKIN_RUN = 43402771798
-PLAYABILITY_SHA = '454a45731fe24ee555e46d79f4ca901e62f1f1ef'
-PLAYABILITY_RUN = 43414470552
+PLAYABILITY_SHA = '81a870bdf1c92dff668ee0b1c9a87b82465257c2'
+PLAYABILITY_RUN = 43427815592
 SOURCE_SKIN_STEPS = (
     'Pin source, two exact methods and twelve attachment labels',
     'Select installed native tools',
@@ -39,8 +39,8 @@ SOURCE_SKIN_STEPS = (
     'Report exact source, counts and completed phase timings',
 )
 PLAYABILITY_STEPS = tuple(name.replace('two exact methods and twelve attachment labels',
-                                      'eight exact methods and six attachment labels')
-                         .replace('the two targeted native methods', 'the eight targeted native methods')
+                                      'fourteen exact methods and six attachment labels')
+                         .replace('the two targeted native methods', 'the fourteen targeted native methods')
                          .replace('exactly twelve images', 'exactly six images')
                          for name in SOURCE_SKIN_STEPS)
 SOURCE_SKIN_MANIFESTS = (
@@ -73,16 +73,16 @@ def source_skin_candidate(r):
 
 
 def playability_candidate(r):
-    return r.get('source_branch') == SOURCE_SKIN_BRANCH and r.get('build_number') == '704'
+    return r.get('source_branch') == SOURCE_SKIN_BRANCH and r.get('build_number') == '705'
 
 
 def validate_playability_candidate(r):
-    require(r.get('channel') == 'testflight-external', '704 must permit external TestFlight')
+    require(r.get('channel') == 'testflight-external', '705 must permit external TestFlight')
     require(r.get('source_sha') == PLAYABILITY_SHA, 'Exact verified playability source required')
     require(type(r.get('fighter_run_id')) is int and r['fighter_run_id'] == PLAYABILITY_RUN,
             'Exact completed playability run required')
     require(r.get('music_source_sha') == MUSIC_SHA, 'Pinned music source required')
-    require(r.get('build_number') == '704' and r.get('version') == '1.2', 'Only approved 1.2 (704)')
+    require(r.get('build_number') == '705' and r.get('version') == '1.2', 'Only approved 1.2 (705)')
     require(r.get('external_group_policy') == 'existing-active-external', 'Existing external groups required')
     require(r.get('notify_external_testers') is True, 'Notify the existing external test audience')
 

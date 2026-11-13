@@ -8,7 +8,7 @@ class ExternalCandidateTests(unittest.TestCase):
     def setUp(self):
         self.request = dict(channel='testflight-external', source_branch=promotion.SOURCE_SKIN_BRANCH,
             source_sha=promotion.PLAYABILITY_SHA, fighter_run_id=promotion.PLAYABILITY_RUN,
-            build_number='704', version='1.2', music_source_sha=promotion.MUSIC_SHA,
+            build_number='705', version='1.2', music_source_sha=promotion.MUSIC_SHA,
             external_group_policy='existing-active-external', notify_external_testers=True)
 
     def test_candidate_pins_new_source_run_channel_and_audience(self):
@@ -40,8 +40,8 @@ class ExternalCandidateTests(unittest.TestCase):
             if path.endswith('/buildBetaDetail'):
                 return {'data': {'id': 'detail', 'attributes': {
                     'externalBuildState': state, 'autoNotifyEnabled': notified}}}
-            if '/betaGroups?' in path:
-                return {'data': [{'id': 'existing'}] if linked else []}
+            if path == '/betaGroups/existing/relationships/builds?limit=200':
+                return {'data': [{'id': 'build'}] if linked else []}
             if path.startswith('/betaAppReviewSubmissions?'):
                 return {'data': []}
             self.fail((method, path))
