@@ -53,8 +53,18 @@ final class DuelShadowPresentationTests: XCTestCase {
             try await expectShadowValue(shadow, contains: "冷却中")
             for _ in 0..<450 { session.advance() }
             XCTAssertEqual(try XCTUnwrap(session.game.weaponFight).shadowCooldownRemaining(0), 0)
-            XCTAssertEqual(session.localFighter.energy, 0)
+            XCTAssertGreaterThan(session.localFighter.energy, 0)
+            XCTAssertLessThan(session.localFighter.energy, 100)
             try await expectShadowValue(shadow, contains: "需要 100 能量")
+            for _ in 0..<600 { session.advance() }
+            XCTAssertEqual(session.localFighter.energy, 100)
+            try await expectShadowValue(shadow, contains: "可施放")
+            let zone = try XCTUnwrap(controls.layoutSnapshot.actions[.shadow])
+            controls.beginPointers([.init(id: "shadow-recast", location: CGPoint(x: zone.midX, y: zone.midY))])
+            session.advance()
+            XCTAssertEqual(session.localFighter.energy, 0)
+            XCTAssertNotNil(session.game.weaponFight?.shadowVisual(0))
+            controls.cancelAll()
 
             session.restart()
             try await expectShadowValue(shadow, contains: "可施放")

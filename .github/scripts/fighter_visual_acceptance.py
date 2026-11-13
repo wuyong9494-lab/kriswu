@@ -118,6 +118,14 @@ PLAYABILITY_SELECTED = [
     ("DuelWeaponAssetTests", "testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch", "actual body, head and weapon vertices; 72 hero/rotation/idle samples; larger-default comparison"),
     ("DuelWeaponAssetTests", "testRealNavigatedLobbyUsesExactStageCenterAndRailGeometry", "actual SwiftUI navigation, menus and larger fighter framing"),
 ]
+PLAYABILITY_SELECTED += [
+    ("DuelShadowPresentationTests", "testHostedControlsObserveShadowCostCooldownAndRestartForBothFighters", "actual resources; automatic refill and second physical pointer shadow press"),
+    ("DuelLifecycleTests", "testTelevisionRenderBudgetCaps4KAndRestoresPhoneScale", "4K/1080p/portrait/phone render budget"),
+    ("DuelLifecycleTests", "testTelevisionTransferPreservesSceneAndAuthoritativeState", "same renderer, clock and authoritative state"),
+    ("DuelLifecycleTests", "testTelevisionDisconnectReturnsExistingRendererToPhone", "disconnect restoration"),
+    ("DuelLifecycleTests", "testTelevisionTransferRearmsHeldControllerOnlyAfterNeutral", "controller transfer lifecycle"),
+    ("DuelLifecycleTests", "testTelevisionRepeatedRoutingDoesNotRepeatedlyCancelPhoneControls", "routing stability"),
+]
 PLAYABILITY_ATTACHMENTS = {
     "source-native-controls-four-actions-back-defense-eight-directions": {
         "selector": "SiteTests/DuelSourceControlsTests/testActualSourceSpritesLoadRenderAndRejectDecodableTampering", "kind": "image"},
@@ -131,11 +139,11 @@ PLAYABILITY_ATTACHMENTS.update({
 })
 SCOPES = {
     "playability-followup": {
-        "selected": PLAYABILITY_SELECTED, "methodCount": 8,
+        "selected": PLAYABILITY_SELECTED, "methodCount": 14,
         "imageLabels": list(PLAYABILITY_ATTACHMENTS), "dataLabels": [],
         "commitPrefix": "Capture fighter back guard and lobby",
         "workflow": ".github/workflows/fighter-playability-followup.yml",
-        "additionalSources": ["App/Views/DuelSourceControls.swift", "App/Views/DuelView.swift",
+        "additionalSources": ["App/Views/DuelWorld.swift", "App/Views/DuelTelevision.swift", "Tests/SiteTests/DuelLifecycleTests+Television.swift", "App/Views/DuelSourceControls.swift", "App/Views/DuelView.swift",
                               "App/Views/DuelLobbyPreview.swift", "App/Views/DuelHomeView.swift",
                               "Sources/ShiftCore/DuelWeaponInput.swift", "Sources/ShiftCore/DuelWeaponFight.swift",
                               "Sources/ShiftCore/DuelReplayState.swift", "Sources/ShiftCore/DuelLobbyFraming.swift",
