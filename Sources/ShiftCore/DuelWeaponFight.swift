@@ -85,7 +85,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
     public func weaponTrailIsActive(_ index: Int) -> Bool {
         guard let action = actions[index], let command = action.command,
               !command.rawValue.hasPrefix("kick"), let clip = profiles[index].clip(named: action.name) else { return false }
-        return active(action, clip: clip) && motionSpeed(index, clip: clip, command: command, tick: action.tick) > 0.009
+        let speed = motionSpeed(index, clip: clip, command: command, tick: action.tick)
+        // Suppress a trail across discontinuous weapon samples: it would draw
+        // a long false slash even though contact() correctly rejects the hit.
+        return active(action, clip: clip) && speed > 0.009 && speed <= 0.75
     }
     public func shadowIsActive(_ index: Int) -> Bool { actions[index]?.command == .shadow }
     public func hurtBox(_ index: Int) -> DuelGame.Box {
