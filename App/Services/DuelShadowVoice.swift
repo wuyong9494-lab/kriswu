@@ -10,6 +10,7 @@ final class DuelShadowVoice {
     private var player: AVAudioPlayer?
     private var lastCueID: String?
     private var isPaused = false
+    private var pausedDuringPlayback = false
 
     private static func bundledURL(bundle: Bundle = .main) -> URL? {
         bundle.url(forResource: assetName, withExtension: "caf")
@@ -27,6 +28,7 @@ final class DuelShadowVoice {
             let prepared = try AVAudioPlayer(contentsOf: url)
             guard prepared.prepareToPlay() else { return false }
             player?.stop()
+            pausedDuringPlayback = false
             player = prepared
             guard prepared.play() else { player = nil; return false }
             lastCueID = cueID
@@ -37,8 +39,16 @@ final class DuelShadowVoice {
     }
 
     func setPaused(_ paused: Bool) {
+        guard isPaused != paused else { return }
         isPaused = paused
-        if paused { player?.pause() } else { player?.play() }
+        if paused {
+            pausedDuringPlayback = player?.isPlaying == true
+            if pausedDuringPlayback { player?.pause() }
+        } else {
+            // Do not replay an already completed shout when the fight resumes.
+            if pausedDuringPlayback { player?.play() }
+            pausedDuringPlayback = false
+        }
     }
 
     func reset() {
@@ -46,5 +56,6 @@ final class DuelShadowVoice {
         player = nil
         lastCueID = nil
         isPaused = false
+        pausedDuringPlayback = false
     }
 }
