@@ -64,9 +64,12 @@ public struct DuelCombatCamera: Equatable, Sendable {
         if isFirstPose || pairRepositioned { centerX = target }
         else { centerX += (target - centerX) * (1 - pow(0.88, animationElapsed)) }
         let required = 2 * max(abs(a - centerX), abs(b - centerX))
-        // Expand immediately to protect the silhouettes. Ease back in over
-        // animation ticks so a dash/knockback does not produce zoom pumping.
-        if required > separation { separation = required }
+        // An authoritative pair reposition is a new composition, not a
+        // continuing dash. Do not retain the old wide shot after centering the
+        // new pair or the fighters remain undersized for several ticks.
+        if pairRepositioned { separation = max(3, required) }
+        // Ordinary moves retain immediate expansion and gradual contraction.
+        else if required > separation { separation = required }
         else if animationElapsed > 0 {
             separation = required + (separation - required) * pow(0.92, animationElapsed)
         }

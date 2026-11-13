@@ -119,6 +119,28 @@ final class DuelCombatCameraTests: XCTestCase {
                                    max(abs(4 - dash.centerX), abs(8 - dash.centerX)))
     }
 
+    func testAuthoritativePairRepositionDropsStaleWideZoom() {
+        var camera = DuelCombatCamera()
+        camera.consume(frame: 1, animationTick: 1, firstX: 0, secondX: 10)
+        XCTAssertEqual(camera.centerX, 5)
+        XCTAssertEqual(camera.separation, 10)
+
+        // A single-fighter advance preserves the old framing envelope.
+        camera.consume(frame: 2, animationTick: 2, firstX: 3, secondX: 10)
+        let oldWideShot = camera.separation
+        XCTAssertGreaterThan(oldWideShot, 9.5)
+
+        // Both fighters then move left together in consecutive simulation
+        // samples. Reposition the lens and its zoom on the same tick.
+        camera.consume(frame: 3, animationTick: 3, firstX: 0, secondX: 7)
+        XCTAssertEqual(camera.centerX, 3.5, accuracy: 0.000001)
+        XCTAssertEqual(camera.separation, 7, accuracy: 0.000001,
+                       "The old shot must not keep both characters undersized")
+        XCTAssertLessThan(camera.separation, oldWideShot)
+        camera.consume(frame: 4, animationTick: 4, firstX: 0, secondX: 7)
+        XCTAssertEqual(camera.separation, 7, accuracy: 0.000001)
+    }
+
     func testSkippedWalkingSamplesDoNotMistakeMotionForRoundReposition() {
         var camera = DuelCombatCamera()
         camera.consume(frame: 1, animationTick: 1, firstX: 1, secondX: 3)
