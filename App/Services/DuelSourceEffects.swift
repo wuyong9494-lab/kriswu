@@ -124,6 +124,7 @@ final class DuelSourceEffects: NSObject {
     private var textures: [String: UIImage] = [:]
     // Manifest validation bounds this to 2 effects × 64 tracks; no global cache.
     private var preparationTemplates: [String: [SCNGeometry]] = [:]
+    private var availableBursts: [String: [Burst]] = [:]
     private var players: [String: [DuelEffectPlayback]] = [:]
     // Owned copies of authenticated bytes, never URLs that can change after load.
     private var audioBytes: [String: [Data]] = [:]
@@ -411,14 +412,48 @@ final class DuelSourceEffects: NSObject {
     }
     #endif
 
-    /// Retained shader/material and SCNPlane-layout templates for every verified
-    /// hit/block track. This does not emit contacts, advance time or play sound.
-    /// Runtime copies isolate mutable uniforms and atlas transforms. Preparation
-    /// does not guarantee allocation-free bursts or sustained frame performance.
+    /// Prepare the actual bounded particle pool before entering combat. Each
+    /// slot owns its mutable uniforms and atlas transforms; textures are shared.
+    /// This removes SceneKit object construction from warm impact events, not
+    /// all per-frame allocations or a guarantee of sustained frame performance.
     func preparationObjects() -> [Any] {
         guard !ended else { return [] }
+        ensureBurstPool()
+        let slots = availableBursts.keys.sorted().flatMap { availableBursts[$0]! } + bursts
+        return slots.flatMap { $0.particles }.compactMap { $0.node.geometry }
+    }
+
+    private func ensureBurstPool() {
+        guard availableBursts.isEmpty, !ended, let manifest else { return }
         ensurePreparationTemplates()
-        return preparationTemplates.keys.sorted().flatMap { preparationTemplates[$0]! }.map { $0 as Any }
+        for kind in [Kind.hit, .block] {
+            guard let effect = manifest.effects[kind.rawValue],
+                  let templates = preparationTemplates[kind.rawValue] else { continue }
+            availableBursts[kind.rawValue] = (0..<Self.maximumBursts).map { _ in
+                let holder = SCNNode()
+                let billboard = SCNBillboardConstraint()
+                billboard.freeAxes = .all
+                holder.constraints = [billboard]
+                let particles = effect.tracks.enumerated().map { index, track in
+                    let plane = templates[index].copy() as! SCNGeometry
+                    let material = templates[index].firstMaterial!.copy() as! SCNMaterial
+                    plane.materials = [material]
+                    let node = SCNNode(geometry: plane)
+                    node.name = track.name; node.castsShadow = false; node.isHidden = true
+                    node.renderingOrder = 100 + track.sortingOrder
+                    holder.addChildNode(node)
+                    return Particle(track: track, node: node, material: material)
+                }
+                return Burst(kind: kind, tick: 0, direction: 1, root: holder,
+                             duration: effect.duration, particles: particles)
+            }
+        }
+    }
+
+    private func recycle(_ burst: Burst) {
+        burst.root.removeFromParentNode()
+        for particle in burst.particles { particle.node.isHidden = true }
+        availableBursts[burst.kind.rawValue, default: []].append(burst)
     }
 
     private func ensurePreparationTemplates() {
@@ -484,32 +519,17 @@ final class DuelSourceEffects: NSObject {
     func emit(kind: Kind, position: SCNVector3, direction: Int, tick: Int, heavy: Bool = false,
               sound: SoundFamily = .unarmed) {
         guard !ended, !paused, tick >= 0, let effect = manifest?.effects[kind.rawValue] else { return }
-        ensurePreparationTemplates()
-        guard let templates = preparationTemplates[kind.rawValue] else { return }
+        ensureBurstPool()
+        // Recycle before checkout so even eight simultaneous same-kind impacts
+        // have a free slot. The oldest active effect remains the eviction policy.
+        if bursts.count == Self.maximumBursts { recycle(bursts.removeFirst()) }
+        guard let slot = availableBursts[kind.rawValue]?.popLast() else { return }
         sequence += 1
-        let holder = SCNNode()
-        holder.name = "duel.source-effect.\(kind.rawValue).\(sequence)"
-        holder.position = position
-        let billboard = SCNBillboardConstraint()
-        billboard.freeAxes = .all
-        holder.constraints = [billboard]
-        var particles: [Particle] = []
-        for (index, track) in effect.tracks.enumerated() {
-            // Uniform color and atlas transform vary independently per particle.
-            // Copy the retained prepared template, rather than rebuilding shaders.
-            let plane = templates[index].copy() as! SCNGeometry
-            let material = templates[index].firstMaterial!.copy() as! SCNMaterial
-            plane.materials = [material]
-            let node = SCNNode(geometry: plane)
-            node.name = track.name; node.castsShadow = false; node.isHidden = true
-            node.renderingOrder = 100 + track.sortingOrder
-            holder.addChildNode(node)
-            particles.append(Particle(track: track, node: node, material: material))
-        }
-        root.addChildNode(holder)
+        slot.root.name = "duel.source-effect.\(kind.rawValue).\(sequence)"
+        slot.root.position = position
+        root.addChildNode(slot.root)
         bursts.append(Burst(kind: kind, tick: tick, direction: direction < 0 ? -1 : 1,
-                            root: holder, duration: effect.duration, particles: particles))
-        while bursts.count > Self.maximumBursts { bursts.removeFirst().root.removeFromParentNode() }
+                            root: slot.root, duration: effect.duration, particles: slot.particles))
         if kind == .hit { emittedHits += 1 } else { emittedBlocks += 1 }
         switch sound {
         case .unarmed: play(kind == .block ? "block" : heavy ? "heavyHit" : "hit")
@@ -539,7 +559,7 @@ final class DuelSourceEffects: NSObject {
         var surviving: [Burst] = []
         for burst in bursts {
             let time = Double(max(0, tick - burst.tick)) / Double(DuelGame.ticksPerSecond)
-            if time >= burst.duration { burst.root.removeFromParentNode(); continue }
+            if time >= burst.duration { recycle(burst); continue }
             for particle in burst.particles {
                 guard let state = particle.track.sample(at: time) else { particle.node.isHidden = true; continue }
                 // Preserve the source reflection in scale below. Only a
@@ -580,7 +600,7 @@ final class DuelSourceEffects: NSObject {
     }
 
     func reset() {
-        for burst in bursts { burst.root.removeFromParentNode() }
+        for burst in bursts { recycle(burst) }
         bursts.removeAll(); lastTick = nil; lastLiuShadowTick = nil; sequence = 0
         emittedHits = 0; emittedBlocks = 0; playedSounds = 0
         playedSoundCategories.removeAll()
@@ -592,7 +612,7 @@ final class DuelSourceEffects: NSObject {
         guard !ended else { return }
         reset(); ended = true; center.removeObserver(self)
         audioStatus = .stopped
-        preparationTemplates.removeAll()
+        preparationTemplates.removeAll(); availableBursts.removeAll()
         players.removeAll(); audioBytes.removeAll(); textures.removeAll(); manifest = nil
     }
 

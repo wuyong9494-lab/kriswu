@@ -676,7 +676,7 @@ extension DuelLifecycleTests {
         let children = root.childNodes.count
         var objects = source.preparationObjects() + weapon.preparationObjects()
         let geometries = try objects.map { try XCTUnwrap($0 as? SCNGeometry) }
-        XCTAssertEqual(geometries.count, 69)
+        XCTAssertEqual(geometries.count, 517) // 2 kinds × 8 slots × 32 tracks + 5 weapon templates
         XCTAssertTrue(geometries.allSatisfy { $0.firstMaterial?.shaderModifiers?[.fragment] != nil })
         let identities = geometries.map(ObjectIdentifier.init)
         XCTAssertEqual((source.preparationObjects() + weapon.preparationObjects()).compactMap { $0 as? SCNGeometry }
@@ -706,8 +706,9 @@ extension DuelLifecycleTests {
         let burst = try XCTUnwrap(root.childNodes.first { $0.name == "duel.source-effect.hit.1" })
         let liveSource = burst.childNodes.compactMap { $0.geometry?.firstMaterial }
         XCTAssertFalse(liveSource.isEmpty)
-        XCTAssertTrue(liveSource.allSatisfy { material in !sourceMaterials.contains { $0 === material } })
-        for (material, transform) in zip(sourceMaterials, sourceTransforms) {
+        XCTAssertTrue(liveSource.allSatisfy { material in sourceMaterials.contains { $0 === material } })
+        XCTAssertEqual(Set(sourceMaterials.map(ObjectIdentifier.init)).count, sourceMaterials.count)
+        for (material, transform) in zip(sourceMaterials, sourceTransforms) where !liveSource.contains(where: { $0 === material }) {
             XCTAssertTrue(SCNMatrix4EqualToMatrix4(material.diffuse.contentsTransform, transform))
         }
         let endpoints: [DuelWeaponEffects.Endpoints] = [.init(slot: 0, base: SCNVector3Zero, tip: SCNVector3(0, 1, 0))]

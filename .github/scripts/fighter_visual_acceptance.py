@@ -137,7 +137,21 @@ PLAYABILITY_ATTACHMENTS.update({
         "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch", "kind": "image"}
     for size in ("larger", "previous-size") for hero in ("ember", "liu")
 })
+IMPACT_POOL_ATTACHMENTS = {
+    label: {"selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease", "kind": "image"}
+    for label in ("source-hit-first-simulation-step", "source-hit-original-six-layers", "source-block-original-nine-layers")
+}
 SCOPES = {
+    "impact-pool": {
+        "selected": [BASELINE_SELECTED[2],
+            ("DuelSourceEffectsTests", "testPrewarmedImpactPoolReusesObjectsAndClearsRetiredState", "bounded repeated contacts; object identity, signed scale and release"),
+            ("DuelLifecycleTests", "testNetworkEffectPreparationHasStableTemplatesAndNoRuntimeSideEffects", "prewarm identity and reset lifecycle"),
+            ("DuelLifecycleTests", "testNetworkEffectRuntimeCopiesKeepPreparedMaterialUniformsIndependent", "isolated slot uniforms and weapon materials")],
+        "methodCount": 4, "imageLabels": list(IMPACT_POOL_ATTACHMENTS), "dataLabels": [],
+        "commitPrefix": "Capture fighter impact pool",
+        "workflow": ".github/workflows/fighter-impact-pool.yml",
+        "additionalSources": ["App/Services/DuelSourceEffects.swift", "Tests/SiteTests/DuelLifecycleTests+NetworkPreparation.swift"],
+    },
     "playability-followup": {
         "selected": PLAYABILITY_SELECTED, "methodCount": 14,
         "imageLabels": list(PLAYABILITY_ATTACHMENTS), "dataLabels": [],
@@ -216,10 +230,10 @@ SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTE
 EXPECTED_NATIVE_COUNT = SCOPE["methodCount"]
 IMAGE_LABELS = SCOPE["imageLabels"]
 DATA_LABELS = SCOPE["dataLabels"]
-EXPECTED_ATTACHMENTS = (PLAYABILITY_ATTACHMENTS if SCOPE_NAME == "playability-followup" else SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
+EXPECTED_ATTACHMENTS = (IMPACT_POOL_ATTACHMENTS if SCOPE_NAME == "impact-pool" else PLAYABILITY_ATTACHMENTS if SCOPE_NAME == "playability-followup" else SOURCE_SKIN_ATTACHMENTS if SCOPE_NAME == "source-skins-followup" else
                         PRESENTATION_ATTACHMENTS if SCOPE_NAME == "presentation-followup" else FOLLOWUP_ATTACHMENTS)
 USES_SOURCE_SKINS = SCOPE_NAME in ("source-skins-followup", "playability-followup")
-USES_PRESENTATION = SCOPE_NAME in ("presentation-followup", "coverage-followup", "source-skins-followup", "playability-followup")
+USES_PRESENTATION = SCOPE_NAME in ("impact-pool", "presentation-followup", "coverage-followup", "source-skins-followup", "playability-followup")
 if USES_SOURCE_SKINS:
     MANIFESTS.append(".github/private/fighter-source-trails/manifest.json")
 if USES_PRESENTATION:

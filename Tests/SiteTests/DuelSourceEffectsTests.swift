@@ -9,6 +9,46 @@ import simd
 /// Missing actual resources fail: a procedural flash cannot pass this suite.
 @MainActor
 final class DuelSourceEffectsTests: XCTestCase {
+    func testPrewarmedImpactPoolReusesObjectsAndClearsRetiredState() throws {
+        let root = SCNNode()
+        let effects = DuelSourceEffects.preparationFixture(root: root)
+        defer { effects.shutdown() }
+        let prepared = effects.preparationObjects().compactMap { $0 as? SCNGeometry }
+        let identities = Set(prepared.map(ObjectIdentifier.init))
+        XCTAssertEqual(identities.count, 512)
+        var seenRoots = Set<ObjectIdentifier>()
+        for tick in 0..<120 {
+            effects.emit(kind: tick % 2 == 0 ? .hit : .block,
+                         position: SCNVector3(Float(tick), 0, 0), direction: tick % 2 == 0 ? 1 : -1, tick: tick)
+            let newest = try XCTUnwrap(root.childNodes.last)
+            XCTAssertTrue(newest.childNodes.allSatisfy(\.isHidden), "Checkout must not show the previous owner's frame")
+            seenRoots.insert(ObjectIdentifier(newest))
+            effects.advance(to: tick + 1)
+            XCTAssertLessThanOrEqual(effects.activeBurstCount, 8)
+            for node in root.childNodes.flatMap(\.childNodes) {
+                XCTAssertTrue(identities.contains(ObjectIdentifier(try XCTUnwrap(node.geometry))))
+            }
+        }
+        XCTAssertLessThanOrEqual(seenRoots.count, 16)
+        effects.reset()
+        XCTAssertTrue(root.childNodes.isEmpty)
+        XCTAssertEqual(Set(effects.preparationObjects().compactMap { $0 as? SCNGeometry }.map(ObjectIdentifier.init)), identities)
+        effects.emit(kind: .hit, position: SCNVector3Zero, direction: -1, tick: 0)
+        effects.advance(to: 1)
+        let live = try XCTUnwrap(root.childNodes.first)
+        XCTAssertTrue(live.childNodes.allSatisfy { $0.scale.x < 0 })
+        weak var released: SCNNode?
+        autoreleasepool {
+            effects.emit(kind: .block, position: SCNVector3Zero, direction: 1, tick: 1)
+            released = root.childNodes.last
+            effects.shutdown()
+        }
+        SCNTransaction.flush()
+        XCTAssertNil(released)
+        XCTAssertTrue(root.childNodes.isEmpty)
+        XCTAssertTrue(effects.preparationObjects().isEmpty)
+    }
+
     func testActualHitAndBlockRenderFreezePauseAndRelease() throws {
         _ = try XCTUnwrap(DuelSourceEffects.manifestURL(), "Stage the verified original feedback pack")
         let scene = SCNScene()
