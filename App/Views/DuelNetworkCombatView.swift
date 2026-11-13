@@ -64,7 +64,7 @@ struct DuelNetworkCombatView: View {
                                     .tint(.purple)
                                     .disabled(!ultimateReady(in: state))
                                     .accessibilityIdentifier("duel.combat.ultimate")
-                                    .accessibilityValue(ultimateReady(in: state) ? "能量已满，可以释放" : "能量不足")
+                                    .accessibilityValue(ultimateReady(in: state) ? "刘泉纬大招可释放" : "当前角色或战斗状态不可释放")
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -118,12 +118,17 @@ struct DuelNetworkCombatView: View {
         }
     }
 
-    /// Generic ultimate readiness only; shadow-specific animation is not implemented here.
+    /// The existing Liu grapple readiness only; shadow moves are not implemented here.
     private func ultimateReady(in state: DuelNetworkCombatState) -> Bool {
         guard combat.status == .running, state.phase == .fighting else { return false }
         let seat = combat.localSeat
         guard state.fighters.indices.contains(seat) else { return false }
-        return state.fighters[seat].energy >= 100
+        let fighter = state.fighters[seat]
+        // The existing DuelGame ultimate is Liu's grounded grapple only.
+        // Do not advertise a working shadow move for Sun before the source
+        // animation and authoritative combat support have been integrated.
+        return fighter.hero == .liu && fighter.energy == 100 &&
+            fighter.y == 0 && fighter.stun == 0 && fighter.knockdown == 0
     }
 
     private func heldButton(_ title: String, move: Int = 0, guardHeld: Bool = false) -> some View {
