@@ -1,0 +1,397 @@
+{
+  "schemaVersion": 1,
+  "repo": "wuyong9494-lab/kriswu",
+  "checkedAtUTC": "2026-11-13T05:28:20Z",
+  "scope": "Read-only monitoring of one authorized run. No rerun, extra approval, download, code change, private-key read or secret-value read.",
+  "run": {
+    "id": 43369559706,
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "failure",
+    "sourceSHA": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+    "branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "path": ".github/workflows/fighter-visual-acceptance.yml",
+    "event": "push",
+    "createdAt": "2026-11-13T05:04:15Z",
+    "runStartedAtField": "2026-11-13T05:04:15Z",
+    "terminalUpdatedAt": "2026-11-13T05:26:36Z",
+    "htmlURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43369559706"
+  },
+  "job": {
+    "id": 131701889529,
+    "name": "visual",
+    "status": "completed",
+    "conclusion": "failure",
+    "runnerName": "GitHub Actions 1000002663",
+    "runnerLabels": [
+      "macos-26"
+    ],
+    "startedAt": "2026-11-13T05:13:41Z",
+    "completedAt": "2026-11-13T05:26:36Z",
+    "wallDurationSeconds": 775,
+    "steps": [
+      {
+        "number": 1,
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:13:42Z",
+        "completedAt": "2026-11-13T05:13:43Z",
+        "durationSeconds": 1
+      },
+      {
+        "number": 2,
+        "name": "Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:13:43Z",
+        "completedAt": "2026-11-13T05:13:49Z",
+        "durationSeconds": 6
+      },
+      {
+        "number": 3,
+        "name": "Pin source, eleven methods, asset references and screenshot labels",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:13:49Z",
+        "completedAt": "2026-11-13T05:13:49Z",
+        "durationSeconds": 0
+      },
+      {
+        "number": 4,
+        "name": "Select installed native tools",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:13:49Z",
+        "completedAt": "2026-11-13T05:14:01Z",
+        "durationSeconds": 12
+      },
+      {
+        "number": 5,
+        "name": "Authenticate existing character and scenery chunks without upload",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:14:01Z",
+        "completedAt": "2026-11-13T05:14:03Z",
+        "durationSeconds": 2
+      },
+      {
+        "number": 6,
+        "name": "Build only the unsigned native test host once and verify compiled resources",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:14:03Z",
+        "completedAt": "2026-11-13T05:19:40Z",
+        "durationSeconds": 337
+      },
+      {
+        "number": 7,
+        "name": "Prepare one installed iPhone 17 Pro Max simulator",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:19:40Z",
+        "completedAt": "2026-11-13T05:21:20Z",
+        "durationSeconds": 100
+      },
+      {
+        "number": 8,
+        "name": "Run only the eleven selected native methods without rebuilding",
+        "status": "completed",
+        "conclusion": "failure",
+        "startedAt": "2026-11-13T05:21:20Z",
+        "completedAt": "2026-11-13T05:26:14Z",
+        "durationSeconds": 294
+      },
+      {
+        "number": 9,
+        "name": "Export and check all 26 expected images and three data attachments",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:14Z",
+        "completedAt": "2026-11-13T05:26:16Z",
+        "durationSeconds": 2
+      },
+      {
+        "number": 10,
+        "name": "Encrypt new bounded evidence for existing and current private recipients",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:16Z",
+        "completedAt": "2026-11-13T05:26:16Z",
+        "durationSeconds": 0
+      },
+      {
+        "number": 11,
+        "name": "Run actions/upload-artifact@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:16Z",
+        "completedAt": "2026-11-13T05:26:20Z",
+        "durationSeconds": 4
+      },
+      {
+        "number": 12,
+        "name": "Stop only this run's simulator and remove runner plaintext",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:20Z",
+        "completedAt": "2026-11-13T05:26:29Z",
+        "durationSeconds": 9
+      },
+      {
+        "number": 13,
+        "name": "Report exact source, counts and completed phase timings",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:29Z",
+        "completedAt": "2026-11-13T05:26:29Z",
+        "durationSeconds": 0
+      },
+      {
+        "number": 26,
+        "name": "Post Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:29Z",
+        "completedAt": "2026-11-13T05:26:30Z",
+        "durationSeconds": 1
+      },
+      {
+        "number": 27,
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "2026-11-13T05:26:30Z",
+        "completedAt": "2026-11-13T05:26:33Z",
+        "durationSeconds": 3
+      }
+    ]
+  },
+  "timingSemantics": {
+    "preRunnerSeconds": 566,
+    "preRunnerScope": "Combined review/queue/dispatch delay; excluded from build/native times; exact approval-to-queue split is not inferred.",
+    "workflowLifetimeSeconds": 1341,
+    "jobWallSeconds": 775,
+    "nativeBuildCommandSeconds": 336.366,
+    "nativeBuildPhaseSeconds": 337,
+    "simulatorPreparationCommandSeconds": 96.906,
+    "simulatorPreparationPhaseSeconds": 100,
+    "nativeTestCommandSeconds": 252.312,
+    "nativeTestAndResultExportPhaseSeconds": 294,
+    "note": "API step timestamps have second precision. Helper monotonic durations measure their named command scopes. Workflow run_started_at is not a build/test start timestamp."
+  },
+  "nativeEvidence": {
+    "expectedMethods": 11,
+    "exactSetPassed": false,
+    "xcodebuildExitCode": 65,
+    "executionIterations": 1,
+    "actualExecutedCount": null,
+    "actualPassedCount": null,
+    "actualFailedCount": null,
+    "actualSkippedCount": null,
+    "methodLevelStatus": "Not available in public log. Inspect existing encrypted metadata/summary.json, metadata/tests.json and metadata/selected-native.log before attributing a method/assertion failure.",
+    "failureClass": "xcodebuild native command returned 65; not merely an export/attachment-label gate failure.",
+    "simulator": "iPhone 17 Pro Max / iOS 26.5",
+    "imageExport": {
+      "expectedImages": 26,
+      "exportedImages": 26,
+      "expectedDataAttachments": 3,
+      "allExpectedLabelsPresent": true,
+      "exportStepConclusion": "success",
+      "sealStepConclusion": "success",
+      "uploadStepConclusion": "success"
+    }
+  },
+  "resourceEvidence": {
+    "stagedAndCompiledIdentityVerifiedFiles": 64,
+    "scope": "Existing authenticated scenery/distinct packs; successful staging and compiled bytes/hash checks. This does not prove every resource was displayed or audible.",
+    "newSourceResourceUploads": 0
+  },
+  "artifacts": [
+    {
+      "id": 14012354471,
+      "name": "fighter-visual-acceptance-43369559706-1-encrypted",
+      "sizeBytes": 6355864,
+      "expired": false,
+      "createdAt": "2026-11-13T05:26:20Z",
+      "expiresAt": "2026-11-16T05:26:18Z",
+      "digest": "sha256:2b7ed1d33b115793834fc4f9252d429f276092e4ab6b06ddbb38a77a45085ea8",
+      "sourceSHA": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+      "sourceRunId": 43369559706
+    }
+  ],
+  "publicSummary": {
+    "sourceSha": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+    "runId": "43369559706",
+    "expectedNativeMethods": 11,
+    "nativeExactSetPassed": false,
+    "expectedImages": 26,
+    "timings": {
+      "stage-scenery": {
+        "durationSeconds": 0.604,
+        "exitCode": 0
+      },
+      "stage-distinct": {
+        "durationSeconds": 0.542,
+        "exitCode": 0
+      },
+      "build-identity": {
+        "durationSeconds": 0.034,
+        "exitCode": 0
+      },
+      "project-generation": {
+        "durationSeconds": 0.154,
+        "exitCode": 0
+      },
+      "native-build": {
+        "durationSeconds": 336.366,
+        "exitCode": 0
+      },
+      "simulator-boot": {
+        "durationSeconds": 2.51,
+        "exitCode": 0
+      },
+      "simulator-ready": {
+        "durationSeconds": 91.694,
+        "exitCode": 0
+      },
+      "simulator-total": {
+        "durationSeconds": 96.906,
+        "exitCode": 0
+      },
+      "selected-native": {
+        "durationSeconds": 252.312,
+        "exitCode": 65
+      },
+      "export-attachments": {
+        "durationSeconds": 0.39,
+        "exitCode": 0
+      },
+      "evidence-sealing": {
+        "durationSeconds": 0.351,
+        "exitCode": 0
+      },
+      "simulator-shutdown": {
+        "durationSeconds": 3.676,
+        "exitCode": 0
+      },
+      "simulator-delete": {
+        "durationSeconds": 0.369,
+        "exitCode": 0
+      }
+    },
+    "physicalDeviceAcceptance": "NOT VERIFIED",
+    "stable60fps": "NOT VERIFIED",
+    "musicAudibility": "NOT TESTED",
+    "exportedImageCount": 26,
+    "allExpectedLabelsPresent": true
+  },
+  "monitoring": {
+    "observations": [
+      {
+        "checkedAt": "2026-11-13 05:14:39 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:15:40 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:16:48 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:17:28 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:18:09 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:18:49 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:19:30 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Build only the unsigned native test host once and verify compiled resources"
+      },
+      {
+        "checkedAt": "2026-11-13 05:20:10 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Prepare one installed iPhone 17 Pro Max simulator"
+      },
+      {
+        "checkedAt": "2026-11-13 05:20:51 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Prepare one installed iPhone 17 Pro Max simulator"
+      },
+      {
+        "checkedAt": "2026-11-13 05:21:31 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:22:12 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:22:52 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:23:33 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:24:13 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:24:54 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:25:34 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Run only the eleven selected native methods without rebuilding"
+      },
+      {
+        "checkedAt": "2026-11-13 05:26:15 UTC",
+        "jobStatus": "in_progress",
+        "activeStep": "Export and check all 26 expected images and three data attachments"
+      },
+      {
+        "checkedAt": "2026-11-13 05:26:55 UTC",
+        "jobStatus": "completed",
+        "activeStep": null
+      }
+    ],
+    "intervalPolicy": "Approximately 40 seconds between job checks; no wait exceeded 45 seconds. One terminal run metadata request retried after RemoteProtocolError.",
+    "transientReadErrors": [
+      {
+        "operation": "terminal run metadata",
+        "errorClass": "RemoteProtocolError",
+        "resolvedBy": "single successful read retry"
+      }
+    ]
+  },
+  "limitations": [
+    "No private artifact was downloaded by this monitoring agent.",
+    "Native pass is not established; detailed failure investigation must reuse the encrypted artifact.",
+    "26 screenshots and matching labels are capture evidence, not completed visual fidelity acceptance.",
+    "Physical iPhone acceptance, stable 60fps and audible music remain unverified."
+  ]
+}

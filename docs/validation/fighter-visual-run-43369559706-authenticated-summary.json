@@ -1,0 +1,2341 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUTC": "2026-11-13T05:35:18.225486+00:00",
+  "runId": "43369559706",
+  "attempt": 1,
+  "sourceSha": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+  "sourceRef": "refs/heads/codex/fighter-visual-acceptance-20261113-1200",
+  "preparedAtUTC": "2026-11-13T05:13:49.874369+00:00",
+  "verificationMode": "Read-only metadata, authenticated payload hashes, source blob comparison, and derived numerical validation. No native tests rerun, no image viewing, no code modification, no key material read.",
+  "envelope": {
+    "authenticationEstablishedByPriorLocalVerification": true,
+    "artifactSHA256": "2b7ed1d33b115793834fc4f9252d429f276092e4ab6b06ddbb38a77a45085ea8",
+    "localVerificationSHA256": "5a4687d4fb5b0a35b96a3f7b803799d001a6c45ea05969058b8ef8d64b11aafc",
+    "scope": "Uses the authenticated extraction supplied by the parent agent; does not repeat decryption or independently access any key."
+  },
+  "evidenceIntegrityPassed": true,
+  "verificationChecks": [
+    {
+      "check": "identity source and run match requested authenticated artifact",
+      "passed": true
+    },
+    {
+      "check": "existing envelope verification record reports authenticated",
+      "passed": true
+    },
+    {
+      "check": "source commit resolves exactly",
+      "passed": true
+    },
+    {
+      "check": "all selected source hashes match git 2206",
+      "passed": true
+    },
+    {
+      "check": "identity exact eleven selectors match helper at git source",
+      "passed": true
+    },
+    {
+      "check": "identity expected image and data labels match known source inventory",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponAssetTests/testPersonalHeadFollowsBodyFacingAndSourceNeckAnimation",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponAssetTests/testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponGameplayTests/testActualSourceWeaponHeavyAndKickHitInBothDirectionsWithoutCrossingBodies",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelShadowPresentationTests/testRealHammerTravelsBothWaysAndRestoresWithoutAccumulatingOrReplacingMesh",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelShadowPresentationTests/testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+      "passed": true
+    },
+    {
+      "check": "method source exists at recorded hash: SiteTests/DuelWeaponAssetTests/testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit",
+      "passed": true
+    },
+    {
+      "check": "authenticated resource manifest matches git: .github/private/sf3/manifest.json",
+      "passed": true
+    },
+    {
+      "check": "authenticated resource manifest matches git: .github/private/sf3-distinct/manifest.json",
+      "passed": true
+    },
+    {
+      "check": "compiled resource identities have exact expected cardinality",
+      "passed": true
+    },
+    {
+      "check": "all 64 compiled resource measurements and encrypted references match source manifests",
+      "passed": true
+    },
+    {
+      "check": "all staged records also match source manifests",
+      "passed": true
+    },
+    {
+      "check": "xcresult contains each selected method exactly once",
+      "passed": true
+    },
+    {
+      "check": "xcresult 10 pass 1 failure 0 skipped agrees with summary",
+      "passed": true
+    },
+    {
+      "check": "native process confirms one eleven-method iteration with failing exit code",
+      "passed": true
+    },
+    {
+      "check": "only expected shadow trail method failed",
+      "passed": true
+    },
+    {
+      "check": "six assertion failures belong to one method and all are line 367 count 3 versus 2",
+      "passed": true
+    },
+    {
+      "check": "failed source line is retainedTrailCount equality assertion",
+      "passed": true
+    },
+    {
+      "check": "attachment inventory exact file set",
+      "passed": true
+    },
+    {
+      "check": "attachment inventory actual bytes and SHA256 all match",
+      "passed": true
+    },
+    {
+      "check": "all expected 26 image and 3 data labels are individually unique",
+      "passed": true
+    },
+    {
+      "check": "xcresult attachment manifest has 29 distinct payloads",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: distinct-source-render-idle",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: distinct-source-render-idle",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: distinct-source-render-weapon1",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: distinct-source-render-weapon1",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: distinct-source-render-heavy",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: distinct-source-render-heavy",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: distinct-source-render-kick",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: distinct-source-render-kick",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-hit-first-simulation-step",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-hit-first-simulation-step",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-hit-original-six-layers",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-hit-original-six-layers",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-block-original-nine-layers",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-block-original-nine-layers",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-katana-first-active-step",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-katana-first-active-step",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-katana-original-material",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-katana-original-material",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-double-hammer-original-material",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-double-hammer-original-material",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-katana-dash-two-materials",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-katana-dash-two-materials",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: source-hammer-smooth-trail-material",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: source-hammer-smooth-trail-material",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: equipped-ember-weapon1-source-contact",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: equipped-ember-weapon1-source-contact",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: equipped-ember-heavy-source-contact",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: equipped-ember-heavy-source-contact",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: equipped-ember-kick-source-contact",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: equipped-ember-kick-source-contact",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: equipped-liu-weapon1-source-contact",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: equipped-liu-weapon1-source-contact",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: equipped-liu-heavy-source-contact",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: equipped-liu-heavy-source-contact",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: equipped-liu-kick-source-contact",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: equipped-liu-kick-source-contact",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-positive-tick-23",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-positive-tick-23",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-positive-tick-24",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-positive-tick-24",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-positive-tick-71",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-positive-tick-71",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-positive-tick-72",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-positive-tick-72",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-negative-tick-23",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-negative-tick-23",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-negative-tick-24",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-negative-tick-24",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-negative-tick-71",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-negative-tick-71",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-facing-negative-tick-72",
+      "passed": true
+    },
+    {
+      "check": "valid PNG signature: shadow-boundary-liu-facing-negative-tick-72",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: shadow-boundary-liu-world-evidence",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: real-optical-fit-failure-recovery-ember",
+      "passed": true
+    },
+    {
+      "check": "label is bound to xcresult manifest: real-optical-fit-failure-recovery-liu",
+      "passed": true
+    },
+    {
+      "check": "boundary authenticated asset identities match source constants and compiled records",
+      "passed": true
+    },
+    {
+      "check": "boundary JSON exact eight distinct facing/tick samples",
+      "passed": true
+    },
+    {
+      "check": "boundary camera is documented fixed studio camera",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-positive-tick-23",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-positive-tick-23",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-positive-tick-23",
+      "passed": true
+    },
+    {
+      "check": "attached right hammer matches held endpoints within source assertion tolerance: shadow-boundary-liu-facing-positive-tick-23",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-positive-tick-24",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-positive-tick-24",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-positive-tick-24",
+      "passed": true
+    },
+    {
+      "check": "release or catch matches same-tick held endpoints within native endpoint tolerance: shadow-boundary-liu-facing-positive-tick-24",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-positive-tick-71",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-positive-tick-71",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-positive-tick-71",
+      "passed": true
+    },
+    {
+      "check": "release or catch matches same-tick held endpoints within native endpoint tolerance: shadow-boundary-liu-facing-positive-tick-71",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-positive-tick-72",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-positive-tick-72",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-positive-tick-72",
+      "passed": true
+    },
+    {
+      "check": "attached right hammer matches held endpoints within source assertion tolerance: shadow-boundary-liu-facing-positive-tick-72",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-negative-tick-23",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-negative-tick-23",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-negative-tick-23",
+      "passed": true
+    },
+    {
+      "check": "attached right hammer matches held endpoints within source assertion tolerance: shadow-boundary-liu-facing-negative-tick-23",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-negative-tick-24",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-negative-tick-24",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-negative-tick-24",
+      "passed": true
+    },
+    {
+      "check": "release or catch matches same-tick held endpoints within native endpoint tolerance: shadow-boundary-liu-facing-negative-tick-24",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-negative-tick-71",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-negative-tick-71",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-negative-tick-71",
+      "passed": true
+    },
+    {
+      "check": "release or catch matches same-tick held endpoints within native endpoint tolerance: shadow-boundary-liu-facing-negative-tick-71",
+      "passed": true
+    },
+    {
+      "check": "boundary vectors finite and state matches tick: shadow-boundary-liu-facing-negative-tick-72",
+      "passed": true
+    },
+    {
+      "check": "boundary PNG digest and dimensions match JSON: shadow-boundary-liu-facing-negative-tick-72",
+      "passed": true
+    },
+    {
+      "check": "left hammer remains held within source assertion tolerance: shadow-boundary-liu-facing-negative-tick-72",
+      "passed": true
+    },
+    {
+      "check": "attached right hammer matches held endpoints within source assertion tolerance: shadow-boundary-liu-facing-negative-tick-72",
+      "passed": true
+    },
+    {
+      "check": "recorded boundary displacements independently reproduce within float tolerance: (1, 23, 24)",
+      "passed": true
+    },
+    {
+      "check": "recorded boundary displacements independently reproduce within float tolerance: (1, 71, 72)",
+      "passed": true
+    },
+    {
+      "check": "recorded boundary displacements independently reproduce within float tolerance: (-1, 23, 24)",
+      "passed": true
+    },
+    {
+      "check": "recorded boundary displacements independently reproduce within float tolerance: (-1, 71, 72)",
+      "passed": true
+    },
+    {
+      "check": "exact four boundary displacement pairs",
+      "passed": true
+    },
+    {
+      "check": "real camera numeric failure and recovery evidence: ember",
+      "passed": true
+    },
+    {
+      "check": "real camera numeric failure and recovery evidence: liu",
+      "passed": true
+    },
+    {
+      "check": "camera and hammer boundary use same authenticated Liu resource identity",
+      "passed": true
+    },
+    {
+      "check": "all 29 payload labels belong to the exact producing native method",
+      "passed": true
+    },
+    {
+      "check": "safe summary contains no raw coordinate vectors, image payloads, original failure text, or key material",
+      "passed": true
+    }
+  ],
+  "sourceVerification": {
+    "recordCount": 14,
+    "allMatchGitCommit": true,
+    "records": [
+      {
+        "file": "Tests/SiteTests/DuelWeaponAssetTests.swift",
+        "recordedSHA256": "4a422c707a7e863c693d059e28615eeaaccfc91e7ce1e124160c892b198552c0",
+        "gitSourceSHA256": "4a422c707a7e863c693d059e28615eeaaccfc91e7ce1e124160c892b198552c0",
+        "matches": true
+      },
+      {
+        "file": "Tests/SiteTests/DuelSourceEffectsTests.swift",
+        "recordedSHA256": "a8148f04e8b1e952e21e887580b8d739a91c0230e52dd3ebb6fb60974fb6b2af",
+        "gitSourceSHA256": "a8148f04e8b1e952e21e887580b8d739a91c0230e52dd3ebb6fb60974fb6b2af",
+        "matches": true
+      },
+      {
+        "file": "Tests/SiteTests/DuelWeaponEffectsTests.swift",
+        "recordedSHA256": "72f09472a3788b2b8efcce6706779c1c57c1fe6af5ba9b5446862355c17e7f39",
+        "gitSourceSHA256": "72f09472a3788b2b8efcce6706779c1c57c1fe6af5ba9b5446862355c17e7f39",
+        "matches": true
+      },
+      {
+        "file": "Tests/SiteTests/DuelWeaponGameplayTests.swift",
+        "recordedSHA256": "6a427987fc5129594b17216a167d85afe38f07b6dae4e42f37e79952600d6325",
+        "gitSourceSHA256": "6a427987fc5129594b17216a167d85afe38f07b6dae4e42f37e79952600d6325",
+        "matches": true
+      },
+      {
+        "file": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+        "recordedSHA256": "259b91c7dff44e80b6403274baa8e96891a866da1672241f4d9dfc71926ec640",
+        "gitSourceSHA256": "259b91c7dff44e80b6403274baa8e96891a866da1672241f4d9dfc71926ec640",
+        "matches": true
+      },
+      {
+        "file": "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift",
+        "recordedSHA256": "7b5829c73b93a2bf6ce87cd58f165ccf3cfc972648366140909106be08b28445",
+        "gitSourceSHA256": "7b5829c73b93a2bf6ce87cd58f165ccf3cfc972648366140909106be08b28445",
+        "matches": true
+      },
+      {
+        "file": ".github/private/sf3/manifest.json",
+        "recordedSHA256": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+        "gitSourceSHA256": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+        "matches": true
+      },
+      {
+        "file": ".github/private/sf3-distinct/manifest.json",
+        "recordedSHA256": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+        "gitSourceSHA256": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+        "matches": true
+      },
+      {
+        "file": "project.yml",
+        "recordedSHA256": "01053360a125c83fe2c90d400a6929eb517ed34180246922fca3b542c163b9c1",
+        "gitSourceSHA256": "01053360a125c83fe2c90d400a6929eb517ed34180246922fca3b542c163b9c1",
+        "matches": true
+      },
+      {
+        "file": ".github/scripts/fighter_visual_acceptance.py",
+        "recordedSHA256": "deaada8fa48fb7a2e2a87630f4cc66f25e73d2d1e75242bd74184d704bc8bd54",
+        "gitSourceSHA256": "deaada8fa48fb7a2e2a87630f4cc66f25e73d2d1e75242bd74184d704bc8bd54",
+        "matches": true
+      },
+      {
+        "file": ".github/scripts/fighter_private_model.py",
+        "recordedSHA256": "925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79",
+        "gitSourceSHA256": "925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79",
+        "matches": true
+      },
+      {
+        "file": ".github/scripts/fighter_sf3_assets.py",
+        "recordedSHA256": "fb8cd750f4ff134fd27f1040e47691a3932c062660d7ba7b4e9508e4d6151d11",
+        "gitSourceSHA256": "fb8cd750f4ff134fd27f1040e47691a3932c062660d7ba7b4e9508e4d6151d11",
+        "matches": true
+      },
+      {
+        "file": ".github/scripts/fighter_sf3_distinct.py",
+        "recordedSHA256": "9f27051a445c96e038881cf67793a7968f46efd94b2866dfbe9ce4971f1e619c",
+        "gitSourceSHA256": "9f27051a445c96e038881cf67793a7968f46efd94b2866dfbe9ce4971f1e619c",
+        "matches": true
+      },
+      {
+        "file": ".github/workflows/fighter-visual-acceptance.yml",
+        "recordedSHA256": "1f123104cb90a803a9b7d042465f2a7cf717bceb09d4e6739341c74b84707f32",
+        "gitSourceSHA256": "1f123104cb90a803a9b7d042465f2a7cf717bceb09d4e6739341c74b84707f32",
+        "matches": true
+      }
+    ],
+    "manifestReferences": [
+      {
+        "file": ".github/private/sf3/manifest.json",
+        "sha256": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+        "matchesGitSource": true,
+        "resourceCount": 3
+      },
+      {
+        "file": ".github/private/sf3-distinct/manifest.json",
+        "sha256": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+        "matchesGitSource": true,
+        "resourceCount": 61
+      }
+    ],
+    "scope": "Verifies every identity.selectedSourceSHA256 entry against the exact git commit. This inventory contains test/helper/workflow/config/manifest files, not a separately hashed full runtime-source closure."
+  },
+  "compiledResources": {
+    "expectedCount": 64,
+    "verifiedCount": 64,
+    "perManifestCount": {
+      ".github/private/sf3/manifest.json": 3,
+      ".github/private/sf3-distinct/manifest.json": 61
+    },
+    "totalBytes": 65144685,
+    "records": [
+      {
+        "file": "Sun_FullBody_Prototype.glb",
+        "manifest": ".github/private/sf3/manifest.json",
+        "expectedBytes": 7953392,
+        "actualBytes": 7953392,
+        "expectedSHA256": "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241",
+        "actualSHA256": "87b7b420206e1962e121eb49ac459b19144f66fef9590770b37849adc9576241",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 16,
+        "encryptedPartReferencesSHA256": "68d4745f7f5bed0c31b51fa93e64bdec7e577aab727c53b4e0eda8fa3f2c10d1",
+        "cipherSHA256": "5e9a14055509eca01fdaedecd86c1fdc1a515752eebc50e7e4b5905ded7f6ebb"
+      },
+      {
+        "file": "SF3_Palace_Exterior.glb",
+        "manifest": ".github/private/sf3/manifest.json",
+        "expectedBytes": 9292540,
+        "actualBytes": 9292540,
+        "expectedSHA256": "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8",
+        "actualSHA256": "185aff02bbfb932e6cbf77daf9dba34d02adf6cec4ff78ee595414cef1f169d8",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 18,
+        "encryptedPartReferencesSHA256": "40bd80f7dd91680e053ad70c25768105957af732527a718ce114229c6659adb8",
+        "cipherSHA256": "c97c179a4ad749556d0e56a621d6ecaed4a13a887ac5089ca016795329814f36"
+      },
+      {
+        "file": "SF3_Autumn_Lobby.glb",
+        "manifest": ".github/private/sf3/manifest.json",
+        "expectedBytes": 11164484,
+        "actualBytes": 11164484,
+        "expectedSHA256": "616d5cb125f49c6b378cf280c90cf10e927b5b71aa461ecb34d7cdaad08c62c1",
+        "actualSHA256": "616d5cb125f49c6b378cf280c90cf10e927b5b71aa461ecb34d7cdaad08c62c1",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 22,
+        "encryptedPartReferencesSHA256": "dd14e6aa5a3af20120647599e6dbcf9a58c6b051fe08dea5e74a884ae447ef3f",
+        "cipherSHA256": "bf8c62bf8007bedc92858dcc78568659600c1202c41966ebd61f7acb8df40660"
+      },
+      {
+        "file": "Liu_Legion_Hammers.glb",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 9577896,
+        "actualBytes": 9577896,
+        "expectedSHA256": "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f",
+        "actualSHA256": "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_1692847236679218621.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 9394,
+        "actualBytes": 9394,
+        "expectedSHA256": "e1dcb29a9d8faee1cf0ab7bae4c32cd8152d1e8d17cb439492c3f5aac03e2a8f",
+        "actualSHA256": "e1dcb29a9d8faee1cf0ab7bae4c32cd8152d1e8d17cb439492c3f5aac03e2a8f",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_2906228261325823643.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 3782,
+        "actualBytes": 3782,
+        "expectedSHA256": "84e033daae18fbe07a2ce8eca5f48a3ddfff8265100e3b7a51bc9b57e050e03b",
+        "actualSHA256": "84e033daae18fbe07a2ce8eca5f48a3ddfff8265100e3b7a51bc9b57e050e03b",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_6005843368368382829.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 5441,
+        "actualBytes": 5441,
+        "expectedSHA256": "fd867fe0423d64a8cd4e0c08f1d69c897cbca87cd27fedd1f22965e4e1d7cbae",
+        "actualSHA256": "fd867fe0423d64a8cd4e0c08f1d69c897cbca87cd27fedd1f22965e4e1d7cbae",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_9167170427115367903.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 7383,
+        "actualBytes": 7383,
+        "expectedSHA256": "09df11a56e2667b7d8d39b596e40fc96cd713b698b8d122fdfe35d8f8d439785",
+        "actualSHA256": "09df11a56e2667b7d8d39b596e40fc96cd713b698b8d122fdfe35d8f8d439785",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_block_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 15202,
+        "actualBytes": 15202,
+        "expectedSHA256": "e71762085167314fb664b4eb1d8a8f400e12cbf3c34c398ee96343da71cf1640",
+        "actualSHA256": "e71762085167314fb664b4eb1d8a8f400e12cbf3c34c398ee96343da71cf1640",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_block_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 15202,
+        "actualBytes": 15202,
+        "expectedSHA256": "c225d11df604e8f1cdb222a2aa5a54ac85a07d5dbdc0fb7a456d407364816ada",
+        "actualSHA256": "c225d11df604e8f1cdb222a2aa5a54ac85a07d5dbdc0fb7a456d407364816ada",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_block_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 15202,
+        "actualBytes": 15202,
+        "expectedSHA256": "fdba19c09e1d7336c329c150c898cb685c45cce581a44e2513511a480c350edb",
+        "actualSHA256": "fdba19c09e1d7336c329c150c898cb685c45cce581a44e2513511a480c350edb",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hammerBlock_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 128388,
+        "actualBytes": 128388,
+        "expectedSHA256": "911314f123f54d14cb509604f06f5e03cf7eb5f840bcc03dc1a8ad322f0f7c6c",
+        "actualSHA256": "911314f123f54d14cb509604f06f5e03cf7eb5f840bcc03dc1a8ad322f0f7c6c",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hammerBlock_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 104056,
+        "actualBytes": 104056,
+        "expectedSHA256": "879b9454aa9a9cfaaa7c412416a1e8f47db08bb1dd30bbd4e49a4533322a8782",
+        "actualSHA256": "879b9454aa9a9cfaaa7c412416a1e8f47db08bb1dd30bbd4e49a4533322a8782",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hammerBlock_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 88360,
+        "actualBytes": 88360,
+        "expectedSHA256": "e7401275bca548c793319db79f1912a4f0903c41679451bcd6eaaf4d33d8a538",
+        "actualSHA256": "e7401275bca548c793319db79f1912a4f0903c41679451bcd6eaaf4d33d8a538",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hammerHit_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 133722,
+        "actualBytes": 133722,
+        "expectedSHA256": "13ad3a757d50a2365b7743b3a5de6c8279937ee2b0a1f9d52341b09403db8881",
+        "actualSHA256": "13ad3a757d50a2365b7743b3a5de6c8279937ee2b0a1f9d52341b09403db8881",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hammerHit_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 124074,
+        "actualBytes": 124074,
+        "expectedSHA256": "e50fa8750cd77dd76ed55275bdc5f99b91f66041200a018690849884b6e2b319",
+        "actualSHA256": "e50fa8750cd77dd76ed55275bdc5f99b91f66041200a018690849884b6e2b319",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hammerHit_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 107536,
+        "actualBytes": 107536,
+        "expectedSHA256": "d6ae66c1956f51a90dad2922f148422e515b0004f7b37db7b9af8f9b3d8a145f",
+        "actualSHA256": "d6ae66c1956f51a90dad2922f148422e515b0004f7b37db7b9af8f9b3d8a145f",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_heavyHit_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 65580,
+        "actualBytes": 65580,
+        "expectedSHA256": "8100872fe6b92bb1759efdc9fdcb0011260cb061d45e30023f5fd6c7e0dfebca",
+        "actualSHA256": "8100872fe6b92bb1759efdc9fdcb0011260cb061d45e30023f5fd6c7e0dfebca",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_heavyHit_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 65580,
+        "actualBytes": 65580,
+        "expectedSHA256": "48a3e86d9e7d9b876db52f3ea533bbb1ad24decab9c28b0122d8a3c49b9db3ee",
+        "actualSHA256": "48a3e86d9e7d9b876db52f3ea533bbb1ad24decab9c28b0122d8a3c49b9db3ee",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_heavyHit_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 65580,
+        "actualBytes": 65580,
+        "expectedSHA256": "fa0148e6b404307fc8a18b692f1670170cb1399650ff32f649014aeea0bc3686",
+        "actualSHA256": "fa0148e6b404307fc8a18b692f1670170cb1399650ff32f649014aeea0bc3686",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_heavyWhoosh_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 30362,
+        "actualBytes": 30362,
+        "expectedSHA256": "c1f7067bdc587cfde012be353a59b5bf82a2946eb67e3147cb203251f1ff6d82",
+        "actualSHA256": "c1f7067bdc587cfde012be353a59b5bf82a2946eb67e3147cb203251f1ff6d82",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_heavyWhoosh_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 30362,
+        "actualBytes": 30362,
+        "expectedSHA256": "b5d725fdd0f93cb87bee8dc6e91fbaad7744ca2d72b9b298b161363ff5ff8adf",
+        "actualSHA256": "b5d725fdd0f93cb87bee8dc6e91fbaad7744ca2d72b9b298b161363ff5ff8adf",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_heavyWhoosh_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 30362,
+        "actualBytes": 30362,
+        "expectedSHA256": "1d127b8d7d105602015bfb4e71e6c4b679fe656291a6daf3a3ba127a6a678230",
+        "actualSHA256": "1d127b8d7d105602015bfb4e71e6c4b679fe656291a6daf3a3ba127a6a678230",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hit_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 65580,
+        "actualBytes": 65580,
+        "expectedSHA256": "1b06056113221e45b0875d26c5065db0b9ab6ddfa608e2d0cfcee44d99aeea35",
+        "actualSHA256": "1b06056113221e45b0875d26c5065db0b9ab6ddfa608e2d0cfcee44d99aeea35",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hit_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 65580,
+        "actualBytes": 65580,
+        "expectedSHA256": "9a1384126fa3cecc2462936f459d3b4d7e3c0a253efa1ae2c30ba2abdb1ed196",
+        "actualSHA256": "9a1384126fa3cecc2462936f459d3b4d7e3c0a253efa1ae2c30ba2abdb1ed196",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_hit_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 30362,
+        "actualBytes": 30362,
+        "expectedSHA256": "bbd31673ee43f959d80e706cfab4831c9159326932b2172745c74e243d81885e",
+        "actualSHA256": "bbd31673ee43f959d80e706cfab4831c9159326932b2172745c74e243d81885e",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaBlock_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 17270,
+        "actualBytes": 17270,
+        "expectedSHA256": "7ac3c401d86671aeb0de4cfd8f1edf375930136ef3462e2dc478ded1eab0a247",
+        "actualSHA256": "7ac3c401d86671aeb0de4cfd8f1edf375930136ef3462e2dc478ded1eab0a247",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaBlock_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 17270,
+        "actualBytes": 17270,
+        "expectedSHA256": "2161bec6fd389e0db6342081f66a3c44498164ef7b632b48aafe11ccd4e4532d",
+        "actualSHA256": "2161bec6fd389e0db6342081f66a3c44498164ef7b632b48aafe11ccd4e4532d",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaHit_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 17958,
+        "actualBytes": 17958,
+        "expectedSHA256": "1947a1234823a51060b8280f433f0519fa64b262e90f0fc51512820f3aedcac1",
+        "actualSHA256": "1947a1234823a51060b8280f433f0519fa64b262e90f0fc51512820f3aedcac1",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaHit_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 22094,
+        "actualBytes": 22094,
+        "expectedSHA256": "21d05e605a5fb7fd51da7337069d9fce124f28fadc9d16629dc590ef085542a6",
+        "actualSHA256": "21d05e605a5fb7fd51da7337069d9fce124f28fadc9d16629dc590ef085542a6",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaHit_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 22094,
+        "actualBytes": 22094,
+        "expectedSHA256": "953691d6b95deb17e90b036e5fc5e46d7fb1261b647d806adb1ab36b458a8005",
+        "actualSHA256": "953691d6b95deb17e90b036e5fc5e46d7fb1261b647d806adb1ab36b458a8005",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaWhoosh_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 10380,
+        "actualBytes": 10380,
+        "expectedSHA256": "94269e510caa478b99b7c47afe77c769b14be3e59de9049573fe6f6dfb51694e",
+        "actualSHA256": "94269e510caa478b99b7c47afe77c769b14be3e59de9049573fe6f6dfb51694e",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaWhoosh_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 14514,
+        "actualBytes": 14514,
+        "expectedSHA256": "b0400ae0c30a7174de773ca065094fb89b8f17aca80feb11e9a2c43a7a1be4be",
+        "actualSHA256": "b0400ae0c30a7174de773ca065094fb89b8f17aca80feb11e9a2c43a7a1be4be",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_katanaWhoosh_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 17960,
+        "actualBytes": 17960,
+        "expectedSHA256": "8ddb1dd889d55c4a6f4805c2bf9f60bd28993bf3aa0c3f3149b5ab4e4a291bde",
+        "actualSHA256": "8ddb1dd889d55c4a6f4805c2bf9f60bd28993bf3aa0c3f3149b5ab4e4a291bde",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_manifest.json",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 417325,
+        "actualBytes": 417325,
+        "expectedSHA256": "c4f66cb7f2805bbee6c8667ad9e4bb90f90f3e6d07c368b1dcb1da6699331e7f",
+        "actualSHA256": "c4f66cb7f2805bbee6c8667ad9e4bb90f90f3e6d07c368b1dcb1da6699331e7f",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_n1354882762432724247.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 3307,
+        "actualBytes": 3307,
+        "expectedSHA256": "f23cf847b8201a0ba460f04c685f155d852182b3f0c66c25fd936d25def22d19",
+        "actualSHA256": "f23cf847b8201a0ba460f04c685f155d852182b3f0c66c25fd936d25def22d19",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_n1718551801726471877.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 6389,
+        "actualBytes": 6389,
+        "expectedSHA256": "0a6b54d4355b111e8d370cdc12b667acc14af786c48650f81190f485dd17ef94",
+        "actualSHA256": "0a6b54d4355b111e8d370cdc12b667acc14af786c48650f81190f485dd17ef94",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_n3697046036923823885.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 13149,
+        "actualBytes": 13149,
+        "expectedSHA256": "bd8eaf09e3f9f5a278aa8509c6dd2df92d26d13891d1d06fbcf8caec497a8753",
+        "actualSHA256": "bd8eaf09e3f9f5a278aa8509c6dd2df92d26d13891d1d06fbcf8caec497a8753",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_n8666170619262010817.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 32764,
+        "actualBytes": 32764,
+        "expectedSHA256": "b3b9ff41b0a135e3fce0ea89b1ab6d0f603182fec7972e58317e53c2e9d32323",
+        "actualSHA256": "b3b9ff41b0a135e3fce0ea89b1ab6d0f603182fec7972e58317e53c2e9d32323",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_n987967639808468488.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 10899,
+        "actualBytes": 10899,
+        "expectedSHA256": "44787a46af5c5bbb0cc45d58ca7a082682a9735e3438d8b6e687ba4b520f8adc",
+        "actualSHA256": "44787a46af5c5bbb0cc45d58ca7a082682a9735e3438d8b6e687ba4b520f8adc",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_whoosh_1.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 20022,
+        "actualBytes": 20022,
+        "expectedSHA256": "eda76fef26efe156a4b87fd9afd9326350c4922cce99de73a1ca9294a226ea9d",
+        "actualSHA256": "eda76fef26efe156a4b87fd9afd9326350c4922cce99de73a1ca9294a226ea9d",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_whoosh_2.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 21004,
+        "actualBytes": 21004,
+        "expectedSHA256": "0368d861e94ea51b0faa1718d3e2bb419788532893bc96a1fe40c0bb9f6cc315",
+        "actualSHA256": "0368d861e94ea51b0faa1718d3e2bb419788532893bc96a1fe40c0bb9f6cc315",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3FX_whoosh_3.wav",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 19370,
+        "actualBytes": 19370,
+        "expectedSHA256": "fbc1bee934527fe0cba5ecd631e5a85d2655da17a2a1c4bf12a1951dca17c026",
+        "actualSHA256": "fbc1bee934527fe0cba5ecd631e5a85d2655da17a2a1c4bf12a1951dca17c026",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_fist.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 13906,
+        "actualBytes": 13906,
+        "expectedSHA256": "be9260fe6a6568d574a52cea91b9566157d4bdb4e2910ce56b7f6aed77df08cf",
+        "actualSHA256": "be9260fe6a6568d574a52cea91b9566157d4bdb4e2910ce56b7f6aed77df08cf",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_foot.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 13968,
+        "actualBytes": 13968,
+        "expectedSHA256": "1629dedbbec4232ff5c1fe9d0a9274a2833620b98b5a299d3df8b1cf3ca06fba",
+        "actualSHA256": "1629dedbbec4232ff5c1fe9d0a9274a2833620b98b5a299d3df8b1cf3ca06fba",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_shadow.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 22148,
+        "actualBytes": 22148,
+        "expectedSHA256": "288bccb032861cf27f368cbbe4acccc5d37c47de318c95cb067f983d67ff3895",
+        "actualSHA256": "288bccb032861cf27f368cbbe4acccc5d37c47de318c95cb067f983d67ff3895",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_shuriken_button.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 7706,
+        "actualBytes": 7706,
+        "expectedSHA256": "da3341281cebced8f61046f16f16901fd919341d281cdb888408488044b44750",
+        "actualSHA256": "da3341281cebced8f61046f16f16901fd919341d281cdb888408488044b44750",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_stick_arrow.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 1316,
+        "actualBytes": 1316,
+        "expectedSHA256": "3e051a2543f650372768738aef21264fac0e1dd4567293c948d696a6c0d7888b",
+        "actualSHA256": "3e051a2543f650372768738aef21264fac0e1dd4567293c948d696a6c0d7888b",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_stick_arrow_small.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 188,
+        "actualBytes": 188,
+        "expectedSHA256": "b2ee0fdc016545f81f40c016774fa4923a9e0aabb16203c572f385b6b0fcb5a0",
+        "actualSHA256": "b2ee0fdc016545f81f40c016774fa4923a9e0aabb16203c572f385b6b0fcb5a0",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3UI_stick_circle.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 6766,
+        "actualBytes": 6766,
+        "expectedSHA256": "afdeff42db49b8526a67f4264cce7e19380aff839e15317c62e9ccaed936e8d8",
+        "actualSHA256": "afdeff42db49b8526a67f4264cce7e19380aff839e15317c62e9ccaed936e8d8",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_1394430195881985131.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 5290,
+        "actualBytes": 5290,
+        "expectedSHA256": "c8a01bc4e4574aff6e7dbf3615fbc673301364f776c1bd8483f509025f8fc386",
+        "actualSHA256": "c8a01bc4e4574aff6e7dbf3615fbc673301364f776c1bd8483f509025f8fc386",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_4153006194443883429.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 92065,
+        "actualBytes": 92065,
+        "expectedSHA256": "55d858ddcff0d2a42af53533e5a7f333054a132509839cb75e24ab50f0999324",
+        "actualSHA256": "55d858ddcff0d2a42af53533e5a7f333054a132509839cb75e24ab50f0999324",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_4588180554299203298.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 231183,
+        "actualBytes": 231183,
+        "expectedSHA256": "eb8fb69983f6647a8c52d4f2d3e2b5be9b5f9b860a4b70f8963cb851aae6179b",
+        "actualSHA256": "eb8fb69983f6647a8c52d4f2d3e2b5be9b5f9b860a4b70f8963cb851aae6179b",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_4684984860859675029.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 99530,
+        "actualBytes": 99530,
+        "expectedSHA256": "8140b298c163d5e25384bfeda81d381fa70c5afd029b8bb3a0805fd18017d620",
+        "actualSHA256": "8140b298c163d5e25384bfeda81d381fa70c5afd029b8bb3a0805fd18017d620",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_5380868539664110777.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 31097,
+        "actualBytes": 31097,
+        "expectedSHA256": "efd2b1ee50dae3c1d2870201bec43aad63ef94c8d13340c323640d0ba0a04874",
+        "actualSHA256": "efd2b1ee50dae3c1d2870201bec43aad63ef94c8d13340c323640d0ba0a04874",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_7296303405002008897.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 69276,
+        "actualBytes": 69276,
+        "expectedSHA256": "6e7113837b40d85cd843540408c4dc8fa1acf77c76ce6a1b4a9304bb31c0364c",
+        "actualSHA256": "6e7113837b40d85cd843540408c4dc8fa1acf77c76ce6a1b4a9304bb31c0364c",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_manifest.json",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 6745,
+        "actualBytes": 6745,
+        "expectedSHA256": "d965d1b3e45411e88d3f99182ab312ba841c9e53a332f82ed83ee89164ac0bae",
+        "actualSHA256": "d965d1b3e45411e88d3f99182ab312ba841c9e53a332f82ed83ee89164ac0bae",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_n1248539435798039785.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 73049,
+        "actualBytes": 73049,
+        "expectedSHA256": "bb33d6c130274ce3c9a92748e20960de8899a6a4aa9e5d87782d48539539571b",
+        "actualSHA256": "bb33d6c130274ce3c9a92748e20960de8899a6a4aa9e5d87782d48539539571b",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_n1364136893739331023.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 49667,
+        "actualBytes": 49667,
+        "expectedSHA256": "f68863680b3f088137646f935f75771679272d2a28d0503c028c1f505764809b",
+        "actualSHA256": "f68863680b3f088137646f935f75771679272d2a28d0503c028c1f505764809b",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_n3904629693119460560.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 86,
+        "actualBytes": 86,
+        "expectedSHA256": "8cce60052e08828a3bafc5a74665510101e25ccfd1544950762385a0c94ce9dc",
+        "actualSHA256": "8cce60052e08828a3bafc5a74665510101e25ccfd1544950762385a0c94ce9dc",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_n465777674698922527.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 69289,
+        "actualBytes": 69289,
+        "expectedSHA256": "3f25d8f78584518b508170662cbcc53d95cf019298ad2dd45cf5c89011664b24",
+        "actualSHA256": "3f25d8f78584518b508170662cbcc53d95cf019298ad2dd45cf5c89011664b24",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3WE_n5921951616421857958.png",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 112837,
+        "actualBytes": 112837,
+        "expectedSHA256": "e68e8b1b096592ac5f150db7098c9d7f7d2b42411066f81b89f4efb87888c3db",
+        "actualSHA256": "e68e8b1b096592ac5f150db7098c9d7f7d2b42411066f81b89f4efb87888c3db",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "SF3_DistinctFighters.json",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 13211630,
+        "actualBytes": 13211630,
+        "expectedSHA256": "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f",
+        "actualSHA256": "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      },
+      {
+        "file": "Sun_Herald_Katana.glb",
+        "manifest": ".github/private/sf3-distinct/manifest.json",
+        "expectedBytes": 11147772,
+        "actualBytes": 11147772,
+        "expectedSHA256": "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+        "actualSHA256": "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+        "manifestReferenceMatches": true,
+        "measurementMatches": true,
+        "verified": true,
+        "encryptedPartReferenceCount": 32,
+        "encryptedPartReferencesSHA256": "6e0642abc8ef7eebe8a9cdd5c9f8727b492c251892b7cabe7f4d0b30a92f1f28",
+        "cipherSHA256": "88e52fa61a54b0b850342e63845a03ba7a68f4c2612d90015c63d9031504c416"
+      }
+    ],
+    "scope": "Authenticated runner bundle byte/hash measurements compared with source manifests and encrypted chunk references. Private resource binaries are not present here for a second local rehash. Presence does not prove every resource was displayed or audible."
+  },
+  "nativeResults": {
+    "result": "Failed",
+    "total": 11,
+    "passed": 10,
+    "failed": 1,
+    "skipped": 0,
+    "exactSelectedMethodCardinalityVerified": true,
+    "allSelectedPassed": false,
+    "processExitCode": 65,
+    "iterations": 1,
+    "startTimeUTC": "2026-11-13T05:22:29.036000+00:00",
+    "finishTimeUTC": "2026-11-13T05:25:57.179000+00:00",
+    "xcresultElapsedSeconds": 208.143,
+    "methods": [
+      {
+        "selector": "SiteTests/DuelWeaponAssetTests/testPersonalHeadFollowsBodyFacingAndSourceNeckAnimation",
+        "scenarioType": "actual-model hierarchy assertions",
+        "sourceFile": "Tests/SiteTests/DuelWeaponAssetTests.swift",
+        "result": "Passed",
+        "durationSeconds": 4.291181921958923,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelWeaponAssetTests/testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads",
+        "scenarioType": "actual models; fixed neutral orthographic test scene",
+        "sourceFile": "Tests/SiteTests/DuelWeaponAssetTests.swift",
+        "result": "Passed",
+        "durationSeconds": 4.821797013282776,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+        "scenarioType": "authenticated textures; synthetic contact events and test camera",
+        "sourceFile": "Tests/SiteTests/DuelSourceEffectsTests.swift",
+        "result": "Passed",
+        "durationSeconds": 4.112159013748169,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+        "scenarioType": "authenticated textures; synthetic endpoint poses and test camera",
+        "sourceFile": "Tests/SiteTests/DuelWeaponEffectsTests.swift",
+        "result": "Passed",
+        "durationSeconds": 1.8694720268249512,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelWeaponGameplayTests/testActualSourceWeaponHeavyAndKickHitInBothDirectionsWithoutCrossingBodies",
+        "scenarioType": "actual resource catalog; authoritative combat assertions",
+        "sourceFile": "Tests/SiteTests/DuelWeaponGameplayTests.swift",
+        "result": "Passed",
+        "durationSeconds": 0.5009390115737915,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "scenarioType": "actual fighters, stage, gameplay contacts and production world/camera",
+        "sourceFile": "Tests/SiteTests/DuelWeaponGameplayTests.swift",
+        "result": "Passed",
+        "durationSeconds": 46.22635793685913,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealHammerTravelsBothWaysAndRestoresWithoutAccumulatingOrReplacingMesh",
+        "scenarioType": "actual source skinned weapon; authoritative provisional shadow geometry",
+        "sourceFile": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+        "result": "Passed",
+        "durationSeconds": 3.2447060346603394,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelShadowPresentationTests/testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails",
+        "scenarioType": "actual source textures; authoritative provisional shadow poses",
+        "sourceFile": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+        "result": "Failed",
+        "durationSeconds": 1.9128810167312622,
+        "assertionFailureCount": 6
+      },
+      {
+        "selector": "SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers",
+        "scenarioType": "actual resources and production camera; artificial skin-failure injection",
+        "sourceFile": "Tests/SiteTests/DuelWeaponGameplayTests.swift",
+        "result": "Passed",
+        "durationSeconds": 20.35876202583313,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "scenarioType": "actual source models and authoritative shadow ticks; fixed test renderer",
+        "sourceFile": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+        "result": "Passed",
+        "durationSeconds": 6.039183974266052,
+        "assertionFailureCount": 0
+      },
+      {
+        "selector": "SiteTests/DuelWeaponAssetTests/testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit",
+        "scenarioType": "native optical-fit validation; synthetic empty/partial/complete skin envelopes; no image",
+        "sourceFile": "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift",
+        "result": "Passed",
+        "durationSeconds": 0.014533042907714844,
+        "assertionFailureCount": 0
+      }
+    ],
+    "failedMethod": {
+      "selector": "SiteTests/DuelShadowPresentationTests/testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails",
+      "assertionFailureCount": 6,
+      "distinctFailureSignatures": [
+        {
+          "sourceFile": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+          "line": 367,
+          "assertion": "XCTAssertEqual",
+          "actual": 3,
+          "expected": 2,
+          "occurrences": 6
+        }
+      ],
+      "scope": "One failed native method with six repeated assertions; not six failed methods. The aggregate run is failed."
+    }
+  },
+  "attachments": {
+    "expectedImages": 26,
+    "actualImages": 26,
+    "expectedData": 3,
+    "actualData": 3,
+    "payloadCount": 29,
+    "inventoryFileCountIncludingManifest": 30,
+    "allExpectedLabelsUnique": true,
+    "images": [
+      {
+        "label": "distinct-source-render-idle",
+        "sha256": "0688925d4165a11bac0e008551167ea40ff36652b749f63e6ba3844c84fff391",
+        "bytes": 93099,
+        "selector": "SiteTests/DuelWeaponAssetTests/testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads",
+        "methodResult": "Passed",
+        "timestamp": 1794547424.068,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "distinct-source-render-weapon1",
+        "sha256": "5420a9cddbedf6b46bb88e54a7b7c2651207ac798b19d5d0cfc9f9abc0fb9a6d",
+        "bytes": 102239,
+        "selector": "SiteTests/DuelWeaponAssetTests/testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads",
+        "methodResult": "Passed",
+        "timestamp": 1794547424.113,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "distinct-source-render-heavy",
+        "sha256": "002bb39b729ca6506b8551ca35d04c6e466df29cf6209d0af9d485639b3a9856",
+        "bytes": 78931,
+        "selector": "SiteTests/DuelWeaponAssetTests/testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads",
+        "methodResult": "Passed",
+        "timestamp": 1794547424.147,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "distinct-source-render-kick",
+        "sha256": "dfdf363228f1a59aec74da6ab7205ef232a899035c628d5149af467f4ac549b6",
+        "bytes": 103631,
+        "selector": "SiteTests/DuelWeaponAssetTests/testRenderBothDistinctSourceBodiesWeaponsAndPersonalHeads",
+        "methodResult": "Passed",
+        "timestamp": 1794547424.172,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "source-hit-first-simulation-step",
+        "sha256": "60fd614030226248f5adacc25bf5e943fb3f1da20c449b5590becab26a45f4fd",
+        "bytes": 4417,
+        "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547413.41,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-hit-original-six-layers",
+        "sha256": "c0a2901f7bd49a041ba331bc6367a33697fa612d51dfd1d0156b1ee14f637adf",
+        "bytes": 13094,
+        "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547413.687,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-block-original-nine-layers",
+        "sha256": "1ff9100128fc3552a36a3eb7befb165bc833a5f65959c248cdae12b50411e7b2",
+        "bytes": 7049,
+        "selector": "SiteTests/DuelSourceEffectsTests/testActualHitAndBlockRenderFreezePauseAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547414.24,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-katana-first-active-step",
+        "sha256": "f562303afdc19c059ef578948a6126e73f7c27240b4ae1f1c81f120ecadf8a41",
+        "bytes": 5378,
+        "selector": "SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547424.505,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-katana-original-material",
+        "sha256": "45dd729a28bf1c46cbeac4d3de9f14047d0b280ccb9d99b756f6d3783089a4a2",
+        "bytes": 12889,
+        "selector": "SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547424.602,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-double-hammer-original-material",
+        "sha256": "6e6e7f8975577b4c74969b71d5125450408c4376cdcd938fa6b78ec97b66643f",
+        "bytes": 11144,
+        "selector": "SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547425.334,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-katana-dash-two-materials",
+        "sha256": "c4875e793add8fd8f2d0493e41b210d651090c32ddc1a75471fb5f42e3ae8ce5",
+        "bytes": 27463,
+        "selector": "SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547425.727,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "source-hammer-smooth-trail-material",
+        "sha256": "251d3d9c420f68ffd3bd0c8b1a62f3f0344627a2f3668c937edb7fe87cdef850",
+        "bytes": 4977,
+        "selector": "SiteTests/DuelWeaponEffectsTests/testSourceWeaponTrailsRenderAtRealEndpointsAndFreezeAndRelease",
+        "methodResult": "Passed",
+        "timestamp": 1794547425.9,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "label": "equipped-ember-weapon1-source-contact",
+        "sha256": "4ee272b1d5f35b64e9f8c61f920f8d9b4f14245c869bf30020d71f824e30090f",
+        "bytes": 564034,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "methodResult": "Passed",
+        "timestamp": 1794547448.046,
+        "width": 956,
+        "height": 440
+      },
+      {
+        "label": "equipped-ember-heavy-source-contact",
+        "sha256": "62e323365a9334510c20a4705cb48f5910181ea56c9551b7c61f500d5b1b3f82",
+        "bytes": 563336,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "methodResult": "Passed",
+        "timestamp": 1794547448.751,
+        "width": 956,
+        "height": 440
+      },
+      {
+        "label": "equipped-ember-kick-source-contact",
+        "sha256": "879b0e50243787eeb8a99897b6a9621a106356116389b567c2c0bbb40de28dfa",
+        "bytes": 555593,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "methodResult": "Passed",
+        "timestamp": 1794547449.32,
+        "width": 956,
+        "height": 440
+      },
+      {
+        "label": "equipped-liu-weapon1-source-contact",
+        "sha256": "8f3c9161437fb7c7c763961780c8ce1ac168ad55b63b8d158e8f42b1064d6762",
+        "bytes": 557105,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "methodResult": "Passed",
+        "timestamp": 1794547470.823,
+        "width": 956,
+        "height": 440
+      },
+      {
+        "label": "equipped-liu-heavy-source-contact",
+        "sha256": "654b9de11fb8398b69cd0d98289a1739baf5f9c54df0d483f1605b61bf67857b",
+        "bytes": 554943,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "methodResult": "Passed",
+        "timestamp": 1794547471.559,
+        "width": 956,
+        "height": 440
+      },
+      {
+        "label": "equipped-liu-kick-source-contact",
+        "sha256": "ee10ec1327022fb9102e98b75c6e1a4fa1d89e0d8b059ad73da9ab0eb59b6951",
+        "bytes": 549700,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testEquippedSessionsShowRealHitsPauseRestartAndReleaseTheirScenes",
+        "methodResult": "Passed",
+        "timestamp": 1794547472.31,
+        "width": 956,
+        "height": 440
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-23",
+        "sha256": "182ab56ce123cfba61c1b8a531cb8b9d2560cdccf2848b818a679827b90b5196",
+        "bytes": 112940,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547409.916,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-24",
+        "sha256": "f6ef25012048c3e2a0927fadf4d044ad03c74d20ee92db61ba04a302746742fb",
+        "bytes": 115430,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.164,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-71",
+        "sha256": "5f3885d68ee3bc4694b1f24e4b5e21c594d428b4358726c546ecb2755c5e1fb2",
+        "bytes": 118475,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.279,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-72",
+        "sha256": "e40045c8f4f7ed13471c8a196678141c414d6077ddc82d86784845d1edac2aa2",
+        "bytes": 115631,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.302,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-23",
+        "sha256": "40757466e6bef3494b42478fb6660aa63e038b2f73299621a803dcc6d1407570",
+        "bytes": 103333,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.556,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-24",
+        "sha256": "6b745894a326114b11df352a90308fdfb0b4db14624fab1d1d82d9dd0e237940",
+        "bytes": 105591,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.66,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-71",
+        "sha256": "59d94d174c9b454df5213865edb8e5b400281be04939dab5005e56c64a65617e",
+        "bytes": 113819,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.794,
+        "width": 1200,
+        "height": 800
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-72",
+        "sha256": "10cabd8858fc902ff8b7d59df9c7490e68482b2b0b4731bcc166f78daa54f748",
+        "bytes": 111586,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.834,
+        "width": 1200,
+        "height": 800
+      }
+    ],
+    "data": [
+      {
+        "label": "shadow-boundary-liu-world-evidence",
+        "sha256": "4d6c9c6189e8697a478496527c988d08adacf05e6589743efb82c17970ccd1ce",
+        "bytes": 11454,
+        "selector": "SiteTests/DuelShadowPresentationTests/testRealShadowReleaseAndCatchBoundariesRenderForBothFacings",
+        "methodResult": "Passed",
+        "timestamp": 1794547410.912
+      },
+      {
+        "label": "real-optical-fit-failure-recovery-ember",
+        "sha256": "dc309d0141426999b0db5fdbbf21240aca675255cb184c77822ed446fde69e6c",
+        "bytes": 228,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers",
+        "methodResult": "Passed",
+        "timestamp": 1794547492.457
+      },
+      {
+        "label": "real-optical-fit-failure-recovery-liu",
+        "sha256": "b2884e172d756f3ad410fb255bb34464fabd9e32a478f189bf7c6cc8b3b99dab",
+        "bytes": 226,
+        "selector": "SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers",
+        "methodResult": "Passed",
+        "timestamp": 1794547492.466
+      }
+    ],
+    "visualInspectionPerformedByThisVerifier": false,
+    "scope": "Attachment presence, provenance, size, digest and dimensions only; image content and aesthetic acceptance are reviewed separately."
+  },
+  "hammerBoundary": {
+    "nativeMethodResult": "Passed",
+    "dataSHA256": "4d6c9c6189e8697a478496527c988d08adacf05e6589743efb82c17970ccd1ce",
+    "catalogSHA256": "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f",
+    "characterSHA256": "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f",
+    "effectsManifestSHA256": "d965d1b3e45411e88d3f99182ab312ba841c9e53a332f82ed83ee89164ac0bae",
+    "camera": {
+      "exposureAdaptation": false,
+      "hdr": false,
+      "height": 800,
+      "orthographicScale": 1.9,
+      "projection": "orthographic",
+      "width": 1200
+    },
+    "sampleCount": 8,
+    "samplesWithoutWorldCoordinates": [
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-23",
+        "facing": 1,
+        "shadowTick": 23,
+        "simulationFrame": 24,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 29,
+        "bodyClipPhase": 0.23387096774193547,
+        "detached": false,
+        "attacking": false,
+        "pngSHA256": "182ab56ce123cfba61c1b8a531cb8b9d2560cdccf2848b818a679827b90b5196",
+        "rightBaseToSameTickHeldErrorMetres": 0.0,
+        "rightTipToSameTickHeldErrorMetres": 0.0,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 0.0,
+        "trailVertices": 0
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-24",
+        "facing": 1,
+        "shadowTick": 24,
+        "simulationFrame": 25,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 31,
+        "bodyClipPhase": 0.25,
+        "detached": true,
+        "attacking": true,
+        "pngSHA256": "f6ef25012048c3e2a0927fadf4d044ad03c74d20ee92db61ba04a302746742fb",
+        "rightBaseToSameTickHeldErrorMetres": 4.773607396972581e-07,
+        "rightTipToSameTickHeldErrorMetres": 4.76837158203125e-07,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 1.5273477371735567e-08,
+        "trailVertices": 8
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-71",
+        "facing": 1,
+        "shadowTick": 71,
+        "simulationFrame": 72,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 91,
+        "bodyClipPhase": 0.7338709677419355,
+        "detached": true,
+        "attacking": false,
+        "pngSHA256": "5f3885d68ee3bc4694b1f24e4b5e21c594d428b4358726c546ecb2755c5e1fb2",
+        "rightBaseToSameTickHeldErrorMetres": 2.9200193199910854e-07,
+        "rightTipToSameTickHeldErrorMetres": 2.9200193199910854e-07,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 0.0,
+        "trailVertices": 28
+      },
+      {
+        "label": "shadow-boundary-liu-facing-positive-tick-72",
+        "facing": 1,
+        "shadowTick": 72,
+        "simulationFrame": 73,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 93,
+        "bodyClipPhase": 0.75,
+        "detached": false,
+        "attacking": false,
+        "pngSHA256": "e40045c8f4f7ed13471c8a196678141c414d6077ddc82d86784845d1edac2aa2",
+        "rightBaseToSameTickHeldErrorMetres": 0.0,
+        "rightTipToSameTickHeldErrorMetres": 0.0,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 0.0,
+        "trailVertices": 24
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-23",
+        "facing": -1,
+        "shadowTick": 23,
+        "simulationFrame": 24,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 29,
+        "bodyClipPhase": 0.23387096774193547,
+        "detached": false,
+        "attacking": false,
+        "pngSHA256": "40757466e6bef3494b42478fb6660aa63e038b2f73299621a803dcc6d1407570",
+        "rightBaseToSameTickHeldErrorMetres": 0.0,
+        "rightTipToSameTickHeldErrorMetres": 0.0,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 0.0,
+        "trailVertices": 0
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-24",
+        "facing": -1,
+        "shadowTick": 24,
+        "simulationFrame": 25,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 31,
+        "bodyClipPhase": 0.25,
+        "detached": true,
+        "attacking": true,
+        "pngSHA256": "6b745894a326114b11df352a90308fdfb0b4db14624fab1d1d82d9dd0e237940",
+        "rightBaseToSameTickHeldErrorMetres": 6.016545663244253e-07,
+        "rightTipToSameTickHeldErrorMetres": 4.789280498024284e-07,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 5.729251381647593e-08,
+        "trailVertices": 8
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-71",
+        "facing": -1,
+        "shadowTick": 71,
+        "simulationFrame": 72,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 91,
+        "bodyClipPhase": 0.7338709677419355,
+        "detached": true,
+        "attacking": false,
+        "pngSHA256": "59d94d174c9b454df5213865edb8e5b400281be04939dab5005e56c64a65617e",
+        "rightBaseToSameTickHeldErrorMetres": 1.244581521619624e-06,
+        "rightTipToSameTickHeldErrorMetres": 6.848052318737541e-07,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 2.2110002273478813e-08,
+        "trailVertices": 28
+      },
+      {
+        "label": "shadow-boundary-liu-facing-negative-tick-72",
+        "facing": -1,
+        "shadowTick": 72,
+        "simulationFrame": 73,
+        "bodyClip": "dual_hammers_heavy_slash",
+        "bodyClipTick": 93,
+        "bodyClipPhase": 0.75,
+        "detached": false,
+        "attacking": false,
+        "pngSHA256": "10cabd8858fc902ff8b7d59df9c7490e68482b2b0b4731bcc166f78daa54f748",
+        "rightBaseToSameTickHeldErrorMetres": 0.0,
+        "rightTipToSameTickHeldErrorMetres": 0.0,
+        "leftBaseErrorMetres": 0,
+        "leftTipErrorMetres": 0,
+        "rightLengthDifferenceFromSameTickHeldMetres": 0.0,
+        "trailVertices": 24
+      }
+    ],
+    "errorRangesMetres": {
+      "leftHeldEndpoint": {
+        "minimum": 0,
+        "maximum": 0
+      },
+      "rightAttachedHeldEndpoint": {
+        "minimum": 0.0,
+        "maximum": 0.0
+      },
+      "rightReleaseCatchToSameTickHeldEndpoint": {
+        "minimum": 2.9200193199910854e-07,
+        "maximum": 1.244581521619624e-06
+      },
+      "rightLengthDifferenceFromSameTickHeld": {
+        "minimum": 0.0,
+        "maximum": 5.729251381647593e-08
+      },
+      "displacementRecomputation": {
+        "minimum": 3.082594457470833e-10,
+        "maximum": 4.3685297046458516e-09
+      }
+    },
+    "boundaryDisplacements": [
+      {
+        "facing": 1,
+        "fromTick": 23,
+        "toTick": 24,
+        "baseDisplacementMetres": 0.11613418906927109,
+        "tipDisplacementMetres": 0.13853804767131805,
+        "maximumRecomputationErrorMetres": 4.3685297046458516e-09,
+        "qualityThresholdApplied": false,
+        "baseMotionDifferenceFromHeldSourceStepMetres": 4.773607396972581e-07,
+        "tipMotionDifferenceFromHeldSourceStepMetres": 4.76837158203125e-07
+      },
+      {
+        "facing": 1,
+        "fromTick": 71,
+        "toTick": 72,
+        "baseDisplacementMetres": 0.02833624556660652,
+        "tipDisplacementMetres": 0.040826525539159775,
+        "maximumRecomputationErrorMetres": 3.212176045985782e-10,
+        "qualityThresholdApplied": false,
+        "baseMotionDifferenceFromHeldSourceStepMetres": 2.9200193199910854e-07,
+        "tipMotionDifferenceFromHeldSourceStepMetres": 2.9200193199910854e-07
+      },
+      {
+        "facing": -1,
+        "fromTick": 23,
+        "toTick": 24,
+        "baseDisplacementMetres": 0.11613405495882034,
+        "tipDisplacementMetres": 0.13853782415390015,
+        "maximumRecomputationErrorMetres": 1.914832459259941e-09,
+        "qualityThresholdApplied": false,
+        "baseMotionDifferenceFromHeldSourceStepMetres": 6.016545663244253e-07,
+        "tipMotionDifferenceFromHeldSourceStepMetres": 4.789280498024284e-07
+      },
+      {
+        "facing": -1,
+        "fromTick": 71,
+        "toTick": 72,
+        "baseDisplacementMetres": 0.028335683047771454,
+        "tipDisplacementMetres": 0.04082592576742172,
+        "maximumRecomputationErrorMetres": 1.3088878939027104e-09,
+        "qualityThresholdApplied": false,
+        "baseMotionDifferenceFromHeldSourceStepMetres": 1.244581521619624e-06,
+        "tipMotionDifferenceFromHeldSourceStepMetres": 6.848052318737541e-07
+      }
+    ],
+    "scope": [
+      "Actual source models and textures under fixed studio orthographic lighting; not production battle-camera screenshots.",
+      "Detached at 24 and 71; attacking only at 24 among these four sampled ticks; attached at 23 and 72.",
+      "Adjacent-frame displacement is recorded without an aesthetic pass threshold; normal source body motion advances between ticks.",
+      "Original skill choreography, full movement smoothness, 47/48 apex transition, interruption visuals, sound, device performance and stable 60fps remain unaccepted."
+    ]
+  },
+  "cameraRecovery": {
+    "nativeMethodResult": "Passed",
+    "records": [
+      {
+        "label": "real-optical-fit-failure-recovery-ember",
+        "sha256": "dc309d0141426999b0db5fdbbf21240aca675255cb184c77822ed446fde69e6c",
+        "hero": "ember",
+        "evidenceClass": "real-source-resource-with-injected-skin-failure",
+        "profileSHA256": "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
+        "verifiedResourceFile": "Sun_Herald_Katana.glb",
+        "simulationFrame": 0,
+        "fovDegrees": {
+          "landscapeFOV": 29.0,
+          "portraitFOV": 100.0,
+          "failedFOV": 100.0,
+          "restoredFOV": 29.0
+        },
+        "retainedFOVErrorDegrees": 0.0,
+        "restoredFOVErrorDegrees": 0.0,
+        "verified": true
+      },
+      {
+        "label": "real-optical-fit-failure-recovery-liu",
+        "sha256": "b2884e172d756f3ad410fb255bb34464fabd9e32a478f189bf7c6cc8b3b99dab",
+        "hero": "liu",
+        "evidenceClass": "real-source-resource-with-injected-skin-failure",
+        "profileSHA256": "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f",
+        "verifiedResourceFile": "Liu_Legion_Hammers.glb",
+        "simulationFrame": 0,
+        "fovDegrees": {
+          "landscapeFOV": 29.0,
+          "portraitFOV": 100.0,
+          "failedFOV": 100.0,
+          "restoredFOV": 29.0
+        },
+        "retainedFOVErrorDegrees": 0.0,
+        "restoredFOVErrorDegrees": 0.0,
+        "verified": true
+      }
+    ],
+    "emptyEnvelopeMethodResult": "Passed",
+    "scope": [
+      "Actual authenticated characters and production perspective camera, with artificial visible-mesh skinner failure injection and the same skinner restored.",
+      "Two text attachments only; no images in the fault-injection method.",
+      "Successful method includes invalidSkin, three repeated retained-FOV layouts, stale control-occlusion clearing, same-frame recovery and unchanged combat-camera tracking assertions.",
+      "Empty/partial envelope test is synthetic array validation, not real-model coverage; counts 0/15/17 reject and 16-point examples retain fitting behavior.",
+      "These results do not accept original-game body proportions, every animation pose, aesthetic camera fitting or physical-device behavior."
+    ]
+  },
+  "timings": {
+    "stage-scenery": {
+      "durationSeconds": 0.604,
+      "exitCode": 0
+    },
+    "stage-distinct": {
+      "durationSeconds": 0.542,
+      "exitCode": 0
+    },
+    "build-identity": {
+      "durationSeconds": 0.034,
+      "exitCode": 0
+    },
+    "project-generation": {
+      "durationSeconds": 0.154,
+      "exitCode": 0
+    },
+    "native-build": {
+      "durationSeconds": 336.366,
+      "exitCode": 0
+    },
+    "simulator-boot": {
+      "durationSeconds": 2.51,
+      "exitCode": 0
+    },
+    "simulator-ready": {
+      "durationSeconds": 91.694,
+      "exitCode": 0
+    },
+    "simulator-total": {
+      "durationSeconds": 96.906,
+      "exitCode": 0
+    },
+    "selected-native": {
+      "durationSeconds": 252.312,
+      "exitCode": 65
+    },
+    "export-attachments": {
+      "durationSeconds": 0.39,
+      "exitCode": 0
+    }
+  },
+  "simulator": {
+    "name": "Fighter visual 43369559706 attempt 1",
+    "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+    "type": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max",
+    "osVersion": "26.5",
+    "evidenceClass": "real-resource simulator"
+  },
+  "metadataSHA256": {
+    "identity.json": "ca083d50502340db3bf2b408d483f7702cc5748927d41a81ff51bd84529f24a1",
+    "compiled-resources.json": "914178e5d61cafb10156823e0bec234b0891365e1d7c62d865edb2bbd3365df0",
+    "staged-resources.json": "83057d9e4696bd257b9a071cfc834eff2942ba330594f5527af39f217a123f71",
+    "summary.json": "420c0135dfde606358f81f80caad9837172890d42721d30ca36c384b23885adc",
+    "tests.json": "828e45b24bc3c32d7e4106fff1bd4fbc7a0ca339117c5e6ecc3a2ad64405ced6",
+    "native-process.json": "2d78ebfcf77173f00aadd671e84eae440c5b60dc144d9d45c45b1fd775ee85e3",
+    "attachment-inventory.json": "7f111de07df4645f2cdb819903f61ed7339b90a9bdb2c12d373044279483e035",
+    "timings.json": "47574acc91e8f8ee6fce6ddd27b1b83bfd83605bd70ff9b5f6c1cb3b80eee7e9",
+    "simulator.json": "79972f45288e01257b9390783f5407e5f84d13d91bef37ea77cd0325167b3e62",
+    "compiled-project.json": "faea6d7a012a34f3b73e064ee34ed3c3582ecc7d0d3fe3a3028907f59ee159ef"
+  },
+  "releaseScope": {
+    "unsignedSimulatorOnly": true,
+    "physicalDeviceAccepted": false,
+    "stable60FPSAccepted": false,
+    "originalFiveFidelityGoalsAccepted": false,
+    "build702StateChanged": false,
+    "testFlightUploaded": false,
+    "releasePublished": false
+  },
+  "privacy": {
+    "rawWorldCoordinatesIncluded": false,
+    "imagesIncluded": false,
+    "rawLogTextIncluded": false,
+    "keyMaterialAccessed": false,
+    "rawCameraTextIncluded": false,
+    "derivedErrorsHashesTimesAndMethodInventoryOnly": true
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "classification": "incorrect acceptance assumption corrected; no demonstrated lifecycle leak fix",
+  "nativeExecution": false,
+  "swiftSyntaxParse": {
+    "exitCode": 0,
+    "mode": "-frontend -parse -D DEBUG",
+    "scope": [
+      "App/Services/DuelWeaponEffects.swift",
+      "Tests/SiteTests/DuelShadowPresentationTests.swift",
+      "Tests/SiteTests/DuelWeaponTrailContinuityTests.swift"
+    ],
+    "typecheckedAgainstSceneKit": false
+  },
+  "productionEffectCodeUnchangedOutsideDebugAndComment": true,
+  "files": [
+    {
+      "path": "App/Services/DuelWeaponEffects.swift",
+      "sha256": "cab64e76e4cdd0c787de338126b28f7ed0eeff329e8e5d274521ed7c4fa00056",
+      "lines": 512,
+      "addedLines": 43,
+      "removedLines": 0
+    },
+    {
+      "path": "Tests/SiteTests/DuelShadowPresentationTests.swift",
+      "sha256": "c8a9b5f5a099783dc0bf4e893e23ab3cb60496ffbd56f153142bc8ee9dfc8538",
+      "lines": 496,
+      "addedLines": 120,
+      "removedLines": 3
+    },
+    {
+      "path": "Tests/SiteTests/DuelWeaponTrailContinuityTests.swift",
+      "sha256": "77ed6f672d68dc2779bee9b4946888edd8edec168d8d785f9773032fbc85b8d3",
+      "lines": 105,
+      "addedLines": 25,
+      "removedLines": 0
+    }
+  ],
+  "priorRun": {
+    "runID": 43369559706,
+    "testsExecuted": 11,
+    "passed": 10,
+    "failedMethods": 1,
+    "failedAssertionsInMethod": 6,
+    "skipped": 0
+  },
+  "limitations": [
+    "Actual failed ticks and weapon slots were not recorded by the old run.",
+    "The new assertions and DEBUG getter have not run or typechecked on an Apple platform.",
+    "No gameplay curve, visual material, texture, continuity ceiling, lifetime, workflow, or source asset was changed."
+  ],
+  "gitDiffCheck": {
+    "exitCode": 0,
+    "output": ""
+  },
+  "checksAdded": [
+    "Independent authenticated profile and hero expectation for Liu slots 0/1 and Sun right slot 1; exact cardinality excludes a dropped hammer.",
+    "Authoritative fight emission window, one current owner per expected physical weapon, real endpoint values match the appended sample.",
+    "Same tick replay freezes the entire diagnostic snapshot.",
+    "Both endpoint distances and tick adjacency forbid a strip bridging a discontinuity.",
+    "Retired history never appends or moves, survives its original source lifetime, then disappears; new ownership cannot be removed with an old strip.",
+    "Per-layer vertex and triangle counts correspond only to its unexpired samples.",
+    "Synthetic existing discontinuity test retains both strips through tick 30, expires only the old strip at tick 31, then drains the final strip at tick 61."
+  ],
+  "targetedNativeSelectorsPending": [
+    "SiteTests/DuelShadowPresentationTests/testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails",
+    "SiteTests/DuelWeaponTrailContinuityTests/testActiveTeleportStartsAnUnbridgedStripAndNextValidStepResumes"
+  ],
+  "artifactLabelContractChanged": false,
+  "committed": true,
+  "ciTriggered": false,
+  "sourceSha": "5835db9ec66bb48611987eec7500505e14f685dd",
+  "parentSha": "2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc",
+  "sourceTree": "d7853c7feebf695f96079a6e80ff379139cdca03",
+  "publication": {
+    "branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "commitMessageHasSkipCI": true,
+    "remoteRefUpdatedWithExpectedParent": true,
+    "localGitTreeMatchedRemoteTree": true,
+    "sourceHashesMatchedBeforeAndAfterPublication": true,
+    "nativeResultReattributed": false
+  },
+  "review": {
+    "independentReadOnlyReviews": 2,
+    "blockingFindingsRemaining": 0,
+    "caughtAndFixedDuringReview": "Physical-slot and emission expectations are independent of the adapter output; losing a hammer cannot shrink the expected slot set."
+  }
+}

@@ -2,10 +2,16 @@
 
 本轮继续分支：`codex/fighter-visual-acceptance-20261113-1200`；当前游戏代码整合点为
 `5462aad48b6d3add4b19125f507f7ffa0a476e38`。后续文档提交不另外计作代码测试。
+拖尾验收假设修正为 `5835db9ec66bb48611987eec7500505e14f685dd`，仅 DEBUG 诊断与测试，
+运行时游戏效果保持；该新修正尚待两个指定 native 方法复验。
 不要从默认 `main` 或旧资源分支重新开始。
 
-**已经完成连续投锤规则修复，33 项定向核心/回放回归通过；当前真实资源原生测试、截图与真机验收仍未执行。**
-GitHub 在分配 runner 前拒绝该分支进入现有 `fighter-private-assets` 环境。不能把这次失败记为资源加载、模型或 native 测试失败，不能把未运行记成通过。
+**连续投锤规则修复已有 33 项定向核心 / 回放通过证据；本次真实资源原生执行为 10 通过、1 失败、0 跳过，26 张原图和 3 个数据附件已核验。真机与五项视觉品质仍未通过。**
+用户已添加确切分支规则，并明确授权代点本次 required review；原环境保护保持。
+当前 [run 43369559706](https://github.com/wuyong9494-lab/kriswu/actions/runs/43369559706)
+绑定 `2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc`，不再处于环境拒绝状态。
+失败集中于影技拖尾总保留数断言，不能将当前结果写成全通过或资源加载失败。
+实际审图、耗时、安全边界和最小继续方案见 [本次验收报告](fighter-visual-review-43369559706.md)。
 
 ## 代码与证据承接
 
@@ -17,8 +23,10 @@ GitHub 在分配 runner 前拒绝该分支进入现有 `fighter-private-assets` 
 | `a452990f7f777b96ffdb323f744643542615daf8` → `b68977017c205f29f50bb3619dbd7695385edd52` | 三个镜头文件精确整合；b689 的两个父提交是 7d320d5 与 a452990f。无效蒙皮几何保留此前安全的较宽视角，并保留失败状态。 |
 | `77ccd5f3cc2a1ccae18fd0fd98c4a435fd67da14` | 将工作目录从不支持 `runner` context 的 job env 移入 prepare 步骤；随后触及现有环境分支限制。 |
 | `02d4e83e6bcd7e1018225c4fd66037c97f72b6cc` | 连续投锤与折叠扫掠修复。33 项实测的 214 文件源清单逐项匹配此提交，发布使用 `[skip ci]`。 |
-| `201a203b75242bdcdd4536a92d7bf27ef3395d38` | 后续自动开发的相机空/不完整包围盒保护，直接父提交为 77ccd5f；只有两个 App/native test 文件，无远端执行通过证据。 |
+| `201a203b75242bdcdd4536a92d7bf27ef3395d38` | 后续相机空/不完整包围盒保护，直接父提交为 77ccd5f；只有两个 App/native test 文件。该分支当时无远端执行证据；精确整合后新增方法已在 2206 的本次运行通过。 |
 | `5462aad48b6d3add4b19125f507f7ffa0a476e38` | 双父为 02d4e83 与 201a203；精确保留 201a 两文件，增加第十一项定向 native selector。214 文件核心闭包不变。 |
+| `2206a5fe26a8b0c9f6217d6f11eca8fcc31474fc` | f742 文档交接之后仅增加 workflow 触发注释，游戏实现保持 5462；本次获准执行的确切源码。 |
+| `5835db9ec66bb48611987eec7500505e14f685dd` | 修正 retained 总量与当前发射者混淆的验收假设；三文件 DEBUG 诊断及严格生命周期测试，`[skip ci]`，Apple native 复验待执行。 |
 
 最新整合源码与上述受测源码的关系以 [来源绑定记录](validation/fighter-visual-20261113-source-binding.json) 为准。
 201a 的空 check/status 集合不能解释成构建运行中。复用历史证据必须保留原 SHA、运行环境与测试范围；不重跑完整工作流，不把旧 107/22 迁移成当前全部通过。
@@ -43,7 +51,7 @@ GitHub 在分配 runner 前拒绝该分支进入现有 `fighter-private-assets` 
 
 ### 镜头防护
 
-已整合 a452 的安全 FOV 保留逻辑。201a 另为 `DuelDisplayedSkinBounds.verticalFOV` 加入空数组与非 16 倍数采样的拒绝条件，新增 native 方法检查 0/15/17 点拒绝、16 点保持与扩宽；两个文件已在 5462aad 精确整合，Git blobs 与 201a 相同。此方法尚未执行；源码解析成功不等于 SceneKit 编译或模拟器通过。
+已整合 a452 的安全 FOV 保留逻辑。201a 另为 `DuelDisplayedSkinBounds.verticalFOV` 加入空数组与非 16 倍数采样的拒绝条件，新增 native 方法检查 0/15/17 点拒绝、16 点保持与扩宽；两个文件已在 5462aad 精确整合，Git blobs 与 201a 相同。本次 2206 模拟器运行中该方法通过；它仍是合成几何输入，不能写成真实双角色全动作取景通过。另一真实资源 / 生产镜头故障注入方法也通过，两个角色均记录 29° 横屏、100° 竖屏 / 故障保留、恢复 29°；人工故障注入与真实画面审查分列。
 
 这项总点数保护不单独证明“双角色各自都贡献了完整几何”；当一方缺失而另一方仍提供完整块时，仍需在真实模型/生产镜头场景验证各自身份和边界。不能仅用总数通过替代该验收。
 
@@ -53,11 +61,12 @@ GitHub 在分配 runner 前拒绝该分支进入现有 `fighter-private-assets` 
 | --- | --- | --- |
 | [最终连续投锤核心结果](validation/hammer-anchor-final-core-replay.json) | 33/33，失败 0、跳过 0、缺失/额外/重复方法 0 | Linux Swift 核心；16 shadow、2 replay golden、15 network replay。 |
 | 同一轮 [日志](validation/hammer-anchor-final-core-replay.log) / [源清单](validation/hammer-anchor-final-core-replay.sha256) | 2026-11-13 04:36:00–04:36:48 UTC；北京时间 12:36；命令 48.004s，增量构建 0.32s，测试 45.98s | 214 文件在执行前后不变，且逐项匹配 02d4e83。不是 iOS 构建时长或 60fps 数据。 |
-| [镜头安全 FOV 单方法结果](validation/camera-failed-skin-core-summary.json) | 1/1；命令 15.287s，构建 13.33s | a452 对应核心函数的独立检查，未并入上述 33 计数；真实失败注入/恢复方法仍待执行。 |
+| [镜头安全 FOV 单方法结果](validation/camera-failed-skin-core-summary.json) | 1/1；命令 15.287s，构建 13.33s | a452 对应核心函数的独立检查，未并入上述 33 计数；真实故障注入 / 恢复的新增结果在下述 2206 运行中单列。 |
 | [原验收辅助脚本检查](validation/fighter-visual-helper-validation.json) | 24 个本地合成检查 | 原十方法配置、标签、封装、双接收方与失败清理。不是模型/原生验收。 |
 | [诊断封装检查](validation/fighter-visual-diagnostics-validation.json) | 7 个本地合成检查 | 严格导出门禁不放宽；异常附件排除后仍能密封允许的失败诊断；不上传异常 crash 内容。 |
 | [十一方法选择器检查](validation/fighter-visual-eleven-selector-validation.json) | 13 个定向检查 | 支持命名 Swift extension；拒绝缺失/额外/重复/跳过与旧十项结果。加密与清理代码不变，未重跑加密检查或 native。 |
-| [空采样后继核对](validation/camera-empty-envelope-review.json) | 两文件解析通过，blob 与 201a 一致 | 源码/解析证据；native 未执行。核心 214 文件闭包保持。 |
+| [空采样后继核对](validation/camera-empty-envelope-review.json) | 历史两文件解析通过，blob 与 201a 一致 | 原始记录保留；新增 native 通过来自 2206 本次运行，不改写历史记录。核心 214 文件闭包保持。 |
+| [2206 真实资源原生与截图报告](fighter-visual-review-43369559706.md) | 11 个方法各一次：10 通过、1 失败、0 跳过；26 图 / 3 数据完整 | iPhone 17 Pro Max / iOS 26.5 模拟器。含真实资源与明确标识的合成场景；不是五项品质或真机 60fps 通过。 |
 
 第一版投锤补丁的 18 项和临时单方法结果不计入最终 33；最终折叠修复后的结果是上表唯一计数依据。后继相机/App 文件不在该 SwiftPM 源清单中，证据可按未变的核心闭包复用，不能扩大为未执行的 native 通过。
 
@@ -76,11 +85,13 @@ GitHub 在分配 runner 前拒绝该分支进入现有 `fighter-private-assets` 
 
 运行创建到结果记录共 4 秒、job 记录间隔 3 秒，是平台拒绝阶段的时间，**不是构建或原生运行耗时**。资源 staging、unsigned build、模拟器测试与截图导出均未开始。
 
-需仓库环境管理员允许上述**确切分支**使用现有 `fighter-private-assets` 环境，保留其 reviewers、secret 与其他保护规则。未自动修改环境、移除 environment、借用旧获准分支或以重试绕过限制。放行后应以最新整合源码执行新一轮定向验证，不重跑已经过期的 77ccd5f。
+上述历史阻塞现已解决：用户添加了**确切分支**规则，随后明确授权代点本次 required review。
+reviewers、secret 与其他保护规则保持；没有移除 environment、借用旧获准分支或绕过限制。
+获准的新运行使用 2206 最新整合源码，没有重跑已经过期的 77ccd5f。
 
-## 下一轮：11 个指定方法、26 张图片、3 份数据附件
+## 本次已执行范围：11 个指定方法、26 张图片、3 份数据附件
 
-两个历史失败运行计划为 **10** 个方法。201a 新增一个无图几何检查，下一轮才是 **11** 个；图片与数据数量不变。精确选择器、类型及标签以 `.github/scripts/fighter_visual_acceptance.py` 的 `SELECTED`、`IMAGE_LABELS`、`DATA_LABELS` 为准。
+两个历史失败运行计划为 **10** 个方法。201a 新增一个无图几何检查，本次 2206 运行才是 **11** 个；图片与数据数量不变。精确选择器、类型及标签以 `.github/scripts/fighter_visual_acceptance.py` 的 `SELECTED`、`IMAGE_LABELS`、`DATA_LABELS` 为准。
 
 | 指定方法 | 证据类型与局限 |
 | --- | --- |
@@ -112,7 +123,7 @@ GitHub 在分配 runner 前拒绝该分支进入现有 `fighter-private-assets` 
 | 人物质感 | 既有真实 PBR / 源材质路径保持 | 固定姿态、镜头、曝光比较皮肤/布料/金属与接缝；未依据猜测调亮或提高所有纹理上限。 |
 | 打击质感 | 接触点跟随实际扫掠，防漏碰/假碰，回程无伤 | 真实轻/重击、格挡、挥空的画面与声音、停顿、受击/击退同步。 |
 | 技能质感 | 源相位脱手/回手与确定性回放有核心证据 | 真实 tick 边界图与完整动作录屏；原版编舞、333 变身与预制喊声仍未验收。 |
-| 特效质感 | mesh/trail/contact 共享端点，生命周期保护保留 | 同相位亮度、宽度、消退、遮挡、占屏比例；真实资源截图尚无新增。 |
+| 特效质感 | mesh/trail/contact 共享端点，26 张实际图已取得并审查 | 普攻拖尾装备 atlas 纹样 / 扇形硬边已观察到；同相位亮度、宽度、消退、遮挡和整段音画仍待修复 / 验收。 |
 
 每个问题继续记录源码 SHA、资源及分块引用、实际加载结果/失败原因、修复文件、独立修复提交、精确回归、模拟器画面、无障碍检查、真机结果、性能与构建时间。未得到的结果保留为空或待验证。
 
