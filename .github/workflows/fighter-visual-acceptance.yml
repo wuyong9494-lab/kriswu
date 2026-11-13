@@ -1,4 +1,5 @@
 name: Fighter bounded real-resource visuals (unsigned only)
+# Start the eleven-method capture after exact branch admission; required review remains enabled.
 'on':
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
