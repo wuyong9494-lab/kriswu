@@ -1,0 +1,14 @@
+{
+  "scope": "local synthetic failure-diagnostics check; no real asset secret or native execution",
+  "checksPassed": 7,
+  "checks": [
+    "strict export gate still rejects unexpected attachment type",
+    "allowed diagnostics still seal when an extra bounded crash attachment exists",
+    "permitted image and actual failed process metadata retained",
+    "unexpected crash content never enters encrypted upload payload",
+    "excluded attachment recorded without converting export failure into acceptance",
+    "symlink still fails closed and removes partial publication",
+    "output key removed from process environment"
+  ],
+  "helperSHA256": "1fdf33b4ef6c8e173f57b82059ef84afa6f89978f40d7acd6ba5456a2404588a"
+}

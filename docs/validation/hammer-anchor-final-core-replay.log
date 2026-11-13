@@ -1,0 +1,85 @@
+[0/1] Planning build
+Building for debugging...
+[0/6] Write swift-version--650BC371111A5670.txt
+Build complete! (0.32s)
+Test Suite 'Selected tests' started at 2026-11-12 20:36:02.119
+Test Suite 'DuelNetworkReplayTests' started at 2026-11-12 20:36:02.121
+Test Case 'DuelNetworkReplayTests.testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI' started at 2026-11-12 20:36:02.121
+Test Case 'DuelNetworkReplayTests.testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI' passed (8.152 seconds)
+Test Case 'DuelNetworkReplayTests.testByteBatchAndCounterBounds' started at 2026-11-12 20:36:10.272
+Test Case 'DuelNetworkReplayTests.testByteBatchAndCounterBounds' passed (0.006 seconds)
+Test Case 'DuelNetworkReplayTests.testCancellationDisconnectAndInterruptionAreTerminal' started at 2026-11-12 20:36:10.279
+Test Case 'DuelNetworkReplayTests.testCancellationDisconnectAndInterruptionAreTerminal' passed (0.136 seconds)
+Test Case 'DuelNetworkReplayTests.testEpochChangeFailsClosedOnlyForPinnedHostAndStart' started at 2026-11-12 20:36:10.415
+Test Case 'DuelNetworkReplayTests.testEpochChangeFailsClosedOnlyForPinnedHostAndStart' passed (0.004 seconds)
+Test Case 'DuelNetworkReplayTests.testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent' started at 2026-11-12 20:36:10.419
+Test Case 'DuelNetworkReplayTests.testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent' passed (0.405 seconds)
+Test Case 'DuelNetworkReplayTests.testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic' started at 2026-11-12 20:36:10.824
+Test Case 'DuelNetworkReplayTests.testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic' passed (0.006 seconds)
+Test Case 'DuelNetworkReplayTests.testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead' started at 2026-11-12 20:36:10.830
+Test Case 'DuelNetworkReplayTests.testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead' passed (0.006 seconds)
+Test Case 'DuelNetworkReplayTests.testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct' started at 2026-11-12 20:36:10.836
+Test Case 'DuelNetworkReplayTests.testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct' passed (0.026 seconds)
+Test Case 'DuelNetworkReplayTests.testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry' started at 2026-11-12 20:36:10.862
+Test Case 'DuelNetworkReplayTests.testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry' passed (0.194 seconds)
+Test Case 'DuelNetworkReplayTests.testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic' started at 2026-11-12 20:36:11.056
+Test Case 'DuelNetworkReplayTests.testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic' passed (0.004 seconds)
+Test Case 'DuelNetworkReplayTests.testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault' started at 2026-11-12 20:36:11.060
+Test Case 'DuelNetworkReplayTests.testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault' passed (0.006 seconds)
+Test Case 'DuelNetworkReplayTests.testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic' started at 2026-11-12 20:36:11.067
+Test Case 'DuelNetworkReplayTests.testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic' passed (0.221 seconds)
+Test Case 'DuelNetworkReplayTests.testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch' started at 2026-11-12 20:36:11.288
+Test Case 'DuelNetworkReplayTests.testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch' passed (0.005 seconds)
+Test Case 'DuelNetworkReplayTests.testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame' started at 2026-11-12 20:36:11.293
+Test Case 'DuelNetworkReplayTests.testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame' passed (0.173 seconds)
+Test Case 'DuelNetworkReplayTests.testWireContainsConsumedLeaseAndLateInputNotOriginalRequests' started at 2026-11-12 20:36:11.467
+Test Case 'DuelNetworkReplayTests.testWireContainsConsumedLeaseAndLateInputNotOriginalRequests' passed (0.022 seconds)
+Test Suite 'DuelNetworkReplayTests' passed at 2026-11-12 20:36:11.489
+	 Executed 15 tests, with 0 failures (0 unexpected) in 9.368 (9.368) seconds
+Test Suite 'DuelReplayStateTests' started at 2026-11-12 20:36:11.489
+Test Case 'DuelReplayStateTests.testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths' started at 2026-11-12 20:36:11.489
+Test Case 'DuelReplayStateTests.testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths' passed (0.0 seconds)
+Test Case 'DuelReplayStateTests.testInitialGameGoldenPinsTheCompleteVersionTwoFieldOrder' started at 2026-11-12 20:36:11.489
+Test Case 'DuelReplayStateTests.testInitialGameGoldenPinsTheCompleteVersionTwoFieldOrder' passed (0.001 seconds)
+Test Suite 'DuelReplayStateTests' passed at 2026-11-12 20:36:11.490
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DuelWeaponShadowTests' started at 2026-11-12 20:36:11.491
+Test Case 'DuelWeaponShadowTests.testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections' started at 2026-11-12 20:36:11.491
+Test Case 'DuelWeaponShadowTests.testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections' passed (0.011 seconds)
+Test Case 'DuelWeaponShadowTests.testCooldownExpiresOnlyOnUnpausedSimulationTicks' started at 2026-11-12 20:36:11.501
+Test Case 'DuelWeaponShadowTests.testCooldownExpiresOnlyOnUnpausedSimulationTicks' passed (0.004 seconds)
+Test Case 'DuelWeaponShadowTests.testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow' started at 2026-11-12 20:36:11.506
+Test Case 'DuelWeaponShadowTests.testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow' passed (0.005 seconds)
+Test Case 'DuelWeaponShadowTests.testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown' started at 2026-11-12 20:36:11.510
+Test Case 'DuelWeaponShadowTests.testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown' passed (0.002 seconds)
+Test Case 'DuelWeaponShadowTests.testHammerAxisAndWallCorridorKeepLengthIncludingAntiparallelAnchors' started at 2026-11-12 20:36:11.513
+Test Case 'DuelWeaponShadowTests.testHammerAxisAndWallCorridorKeepLengthIncludingAntiparallelAnchors' passed (0.002 seconds)
+Test Case 'DuelWeaponShadowTests.testHammerContactUsesActualSegmentsAndRejectsEmptyCornersAndDiscontinuities' started at 2026-11-12 20:36:11.515
+Test Case 'DuelWeaponShadowTests.testHammerContactUsesActualSegmentsAndRejectsEmptyCornersAndDiscontinuities' passed (0.0 seconds)
+Test Case 'DuelWeaponShadowTests.testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing' started at 2026-11-12 20:36:11.515
+Test Case 'DuelWeaponShadowTests.testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing' passed (0.104 seconds)
+Test Case 'DuelWeaponShadowTests.testHammerReleaseAndCatchMatchActualMappedHeldPoseInBothDirections' started at 2026-11-12 20:36:11.619
+Test Case 'DuelWeaponShadowTests.testHammerReleaseAndCatchMatchActualMappedHeldPoseInBothDirections' passed (0.079 seconds)
+Test Case 'DuelWeaponShadowTests.testHammerReleaseOriginFreezesAfterPushAndReturnTracksCurrentHandWithReplay' started at 2026-11-12 20:36:11.698
+Test Case 'DuelWeaponShadowTests.testHammerReleaseOriginFreezesAfterPushAndReturnTracksCurrentHandWithReplay' passed (4.003 seconds)
+Test Case 'DuelWeaponShadowTests.testHitInterruptsWindupWithoutRefundOrDelayedProjectile' started at 2026-11-12 20:36:15.701
+Test Case 'DuelWeaponShadowTests.testHitInterruptsWindupWithoutRefundOrDelayedProjectile' passed (0.004 seconds)
+Test Case 'DuelWeaponShadowTests.testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn' started at 2026-11-12 20:36:15.705
+Test Case 'DuelWeaponShadowTests.testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn' passed (0.04 seconds)
+Test Case 'DuelWeaponShadowTests.testInvalidHammerAnchorsFailClosedWithoutFixedPathFallback' started at 2026-11-12 20:36:15.745
+Test Case 'DuelWeaponShadowTests.testInvalidHammerAnchorsFailClosedWithoutFixedPathFallback' passed (0.084 seconds)
+Test Case 'DuelWeaponShadowTests.testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath' started at 2026-11-12 20:36:15.829
+Test Case 'DuelWeaponShadowTests.testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath' passed (0.043 seconds)
+Test Case 'DuelWeaponShadowTests.testRoundEndAndResetRemoveProjectileAndResetCooldown' started at 2026-11-12 20:36:15.872
+Test Case 'DuelWeaponShadowTests.testRoundEndAndResetRemoveProjectileAndResetCooldown' passed (0.002 seconds)
+Test Case 'DuelWeaponShadowTests.testShadowCannotRestartOrOccupyBufferWithoutEnergy' started at 2026-11-12 20:36:15.873
+Test Case 'DuelWeaponShadowTests.testShadowCannotRestartOrOccupyBufferWithoutEnergy' passed (0.003 seconds)
+Test Case 'DuelWeaponShadowTests.testShadowReplayIncludesHiddenOriginCooldownAndCancellation' started at 2026-11-12 20:36:15.876
+Test Case 'DuelWeaponShadowTests.testShadowReplayIncludesHiddenOriginCooldownAndCancellation' passed (32.225 seconds)
+Test Suite 'DuelWeaponShadowTests' passed at 2026-11-12 20:36:48.101
+	 Executed 16 tests, with 0 failures (0 unexpected) in 36.61 (36.61) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 20:36:48.102
+	 Executed 33 tests, with 0 failures (0 unexpected) in 45.98 (45.98) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.0.3 (18c42c19cac3faf)
+✔ Test run with 0 tests passed after 0.001 seconds.

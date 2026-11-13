@@ -1,0 +1,51 @@
+{
+  "recordedAtUTC": "2026-11-13T04:46:01.241760+00:00",
+  "testedGameCommit": "02d4e83e6bcd7e1018225c4fd66037c97f72b6cc",
+  "sourceVerification": "all 214 recorded Core/Test/Package files match git show at testedGameCommit",
+  "sourceManifest": "hammer-anchor-final-core-replay.sha256",
+  "sourceManifestSHA256": "1705315a2dcab2fcc2d9b568104d84f50df5fecede1d309ef17f4fbcc0a06c92",
+  "evidence": "hammer-anchor-final-core-replay.json",
+  "corePassed": 33,
+  "nativeExecuted": 0,
+  "currentRealImages": 0,
+  "deviceEvidence": null,
+  "fps60Accepted": false,
+  "cameraSourceCommit": "a452990f7f777b96ffdb323f744643542615daf8",
+  "cameraMergedCommit": "b68977017c205f29f50bb3619dbd7695385edd52",
+  "cameraSeparateCoreEvidence": "camera-failed-skin-core-summary.json",
+  "cameraCorePassed": 1,
+  "historicalSuccessfulGameCommit": "4dd788e3b7b35943ea06f1714dd8ba02a572d636",
+  "historicalRunId": 43359009520,
+  "historicalScopes": {
+    "core": 107,
+    "syntheticNative": 22,
+    "networkRules": 16
+  },
+  "historicalResultsReattributed": false,
+  "failedRuns": "fighter-visual-attempts-20261113.json",
+  "nextNativeMethods": 11,
+  "nextImages": 26,
+  "nextDataAttachments": 3,
+  "environment": "fighter-private-assets",
+  "requiredBranch": "codex/fighter-visual-acceptance-20261113-1200",
+  "releaseTriggered": false,
+  "testflightTriggered": false,
+  "currentGameCommit": "5462aad48b6d3add4b19125f507f7ffa0a476e38",
+  "currentGameParents": [
+    "02d4e83e6bcd7e1018225c4fd66037c97f72b6cc",
+    "201a203b75242bdcdd4536a92d7bf27ef3395d38"
+  ],
+  "currentCoreSourceClosureUnchanged": true,
+  "currentCoreVerification": "All 214 manifest files match both testedGameCommit and currentGameCommit exactly; no rerun claimed.",
+  "emptyEnvelopeSuccessor": "201a203b75242bdcdd4536a92d7bf27ef3395d38",
+  "emptyEnvelopeEvidence": "camera-empty-envelope-review.json",
+  "emptyEnvelopeNativeStatus": "not executed; parser/source identity only",
+  "selectorGateEvidence": "fighter-visual-eleven-selector-validation.json",
+  "selectorGateChecksPassed": 13,
+  "currentFileHashes": {
+    ".github/scripts/fighter_visual_acceptance.py": "deaada8fa48fb7a2e2a87630f4cc66f25e73d2d1e75242bd74184d704bc8bd54",
+    ".github/workflows/fighter-visual-acceptance.yml": "b7726da7a81742eaf9bfdec100c9adb44f880e2aa848e38d2279d2de447dc64e",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift": "7b5829c73b93a2bf6ce87cd58f165ccf3cfc972648366140909106be08b28445",
+    "App/Services/DuelDisplayedSkinBounds.swift": "64dc2d7b3fbd73d12aced0e5fe8f8a7129df50d0e3b14a805d24dd8d84f1acb5"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "command": [
+    "/workspace/scratch/f425b9d69678/swift-toolchain/usr/bin/swift",
+    "test",
+    "--jobs",
+    "2",
+    "--filter",
+    "DuelWeaponShadowTests|DuelReplayStateTests/(testInitialGameGoldenPinsTheCompleteVersionTwoFieldOrder|testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths)|DuelNetworkReplayTests"
+  ],
+  "startedUTC": "2026-11-13T04:36:00.259497+00:00",
+  "endedUTC": "2026-11-13T04:36:48.263515+00:00",
+  "exitCode": 0,
+  "elapsedSeconds": 48.004,
+  "incrementalBuildSeconds": 0.32,
+  "executionSummary": [
+    "33",
+    "0",
+    "45.98"
+  ],
+  "expectedCount": 33,
+  "passedCount": 33,
+  "failureCount": 0,
+  "skipCount": 0,
+  "missing": [],
+  "unexpected": [],
+  "duplicatePasses": 0,
+  "suites": {
+    "DuelWeaponShadowTests": {
+      "count": 16,
+      "caseExecutionSeconds": 36.611
+    },
+    "DuelNetworkReplayTests": {
+      "count": 15,
+      "caseExecutionSeconds": 9.366
+    },
+    "DuelReplayStateTests": {
+      "count": 2,
+      "caseExecutionSeconds": 0.001
+    }
+  },
+  "passedMethods": [
+    "DuelNetworkReplayTests.testBothHeroOrdersReplayActualHostWireEveryTickWithoutAI",
+    "DuelNetworkReplayTests.testByteBatchAndCounterBounds",
+    "DuelNetworkReplayTests.testCancellationDisconnectAndInterruptionAreTerminal",
+    "DuelNetworkReplayTests.testEpochChangeFailsClosedOnlyForPinnedHostAndStart",
+    "DuelNetworkReplayTests.testHostTerminalProjectionPreservesSeatsAndDuplicateIsIdempotent",
+    "DuelNetworkReplayTests.testIdentityNamespaceSessionStartAndVersionFailuresAreAtomic",
+    "DuelNetworkReplayTests.testMissingGuestIsExplicitNeutralAndReplicaNeverRunsAhead",
+    "DuelNetworkReplayTests.testOnlyCommittedCorrectRoleMatchingSnapshotAndCatalogCanConstruct",
+    "DuelNetworkReplayTests.testPlausibleButTamperedTerminalProjectionRejectsEntireCandidateAndAllowsRetry",
+    "DuelNetworkReplayTests.testSequenceGapRetryDuplicatesConflictsAndOldReplayAreAtomic",
+    "DuelNetworkReplayTests.testStrictRawScalarsCombinationsAndMissingFieldsDoNotClampOrDefault",
+    "DuelNetworkReplayTests.testTerminalProjectionShapeFailuresAndLegacyAbsentSnapshotAreAtomic",
+    "DuelNetworkReplayTests.testTickGapsOverlapInternalGapsAndInvalidFinalFrameRejectWholeBatch",
+    "DuelNetworkReplayTests.testVerificationPinsConfigurationAndStreamBoundaryNotOnlyVisibleGame",
+    "DuelNetworkReplayTests.testWireContainsConsumedLeaseAndLateInputNotOriginalRequests",
+    "DuelReplayStateTests.testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths",
+    "DuelReplayStateTests.testInitialGameGoldenPinsTheCompleteVersionTwoFieldOrder",
+    "DuelWeaponShadowTests.testBothSkillsHaveStartupOneHitRecoveryEnergyAndCooldownInBothDirections",
+    "DuelWeaponShadowTests.testCooldownExpiresOnlyOnUnpausedSimulationTicks",
+    "DuelWeaponShadowTests.testEarlyHitStopPressCannotBypassShadowRecoveryBufferWindow",
+    "DuelWeaponShadowTests.testGuardBlocksBothShadowsAndHitStopFreezesTheirClockAndCooldown",
+    "DuelWeaponShadowTests.testHammerAxisAndWallCorridorKeepLengthIncludingAntiparallelAnchors",
+    "DuelWeaponShadowTests.testHammerContactUsesActualSegmentsAndRejectsEmptyCornersAndDiscontinuities",
+    "DuelWeaponShadowTests.testHammerMovesContinuouslyAndReturnNeverDamagesOrEmitsAnotherSwing",
+    "DuelWeaponShadowTests.testHammerReleaseAndCatchMatchActualMappedHeldPoseInBothDirections",
+    "DuelWeaponShadowTests.testHammerReleaseOriginFreezesAfterPushAndReturnTracksCurrentHandWithReplay",
+    "DuelWeaponShadowTests.testHitInterruptsWindupWithoutRefundOrDelayedProjectile",
+    "DuelWeaponShadowTests.testInterruptionAfterHammerReleaseRemovesItsFutureHitAndReturn",
+    "DuelWeaponShadowTests.testInvalidHammerAnchorsFailClosedWithoutFixedPathFallback",
+    "DuelWeaponShadowTests.testRawShadowDiscontinuitiesDoNotEnterAnyCollisionOrMovementPath",
+    "DuelWeaponShadowTests.testRoundEndAndResetRemoveProjectileAndResetCooldown",
+    "DuelWeaponShadowTests.testShadowCannotRestartOrOccupyBufferWithoutEnergy",
+    "DuelWeaponShadowTests.testShadowReplayIncludesHiddenOriginCooldownAndCancellation"
+  ],
+  "sourceStableDuringRun": true,
+  "sourceFileCount": 214,
+  "sourceManifestSHA256": "1705315a2dcab2fcc2d9b568104d84f50df5fecede1d309ef17f4fbcc0a06c92",
+  "sourceManifestPath": "/workspace/scratch/f425b9d69678/hammer-anchor-final-core-replay.sha256",
+  "ownedFileSHA256": {
+    "Sources/ShiftCore/DuelWeaponShadow.swift": "de193a6686f7bcac985d1c0cd1fb15c48bd7dcf43dbbe6ec1daf5385eb159f64",
+    "Sources/ShiftCore/DuelWeaponFight.swift": "c9a5e7ae33d9bb4da4683a0f56839adb8e23ea38c7783f80b9565b465f3dedfb",
+    "Sources/ShiftCore/DuelReplayState.swift": "b43ac7136395bc0ffd4c1c573cb1a26770b824df6f37ec30fd16efdc8052d51c",
+    "Tests/ShiftCoreTests/DuelWeaponShadowTests.swift": "d33a885b159f6352e3e1ba791bc1693dbae67ba99b16678a73e71d77dbf504fa",
+    "Tests/ShiftCoreTests/DuelReplayStateTests.swift": "5c7bd45a37ae2684dedd2b94709bcde75ed6e99c4d9edbf4ebd528f83c4e5a5d"
+  },
+  "baseHEAD": "77ccd5f3cc2a1ccae18fd0fd98c4a435fd67da14",
+  "logSHA256": "dd3264140e43aab64494dea0bf96805a4f827c9e824aa1c36890e4c20e75468a",
+  "logPath": "/workspace/scratch/f425b9d69678/hammer-anchor-final-core-replay.log",
+  "scope": "Final frozen Linux core regression only: 16 shadow + 2 replay golden + 15 network replay. Does not establish native or real resource visual acceptance."
+}

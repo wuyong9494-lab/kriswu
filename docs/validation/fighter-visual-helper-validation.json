@@ -1,0 +1,30 @@
+{
+  "scope": "local synthetic helper validation only; no CI dispatch, real asset decrypt or repository secret read",
+  "checksPassed": 24,
+  "checks": [
+    "exact ten native methods accepted",
+    "missing method rejected",
+    "duplicate method rejected",
+    "skipped method rejected",
+    "unselected method rejected",
+    "ten selectors resolve exactly once in current Swift files",
+    "26 image and 3 data labels bounded",
+    "task public key SPKI fingerprint matches root-provided digest",
+    "exporter-style opaque filenames resolve all 26+3 labels",
+    "missing labelled screenshot detected",
+    "duplicate labelled screenshot detected",
+    "symlink attachment rejected",
+    "invalid PNG signature rejected",
+    "both RSA-OAEP-SHA256 recipients unwrap identical raw32 output key",
+    "output key removed from environment after sealing",
+    "existing FIGHTER1 envelope unseals and contains complete image/metadata set",
+    "source assets, app products and private keys excluded from archive",
+    "tampered ciphertext rejected before decryption",
+    "truncated envelope rejected",
+    "wrong envelope purpose rejected",
+    "wrong synthetic output key rejected",
+    "all three ciphertext checksums verified",
+    "temporary clear ZIP removed after success",
+    "seal failure removes partial publication, archive and output-key environment"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "reviewedAtUTC": "2026-11-13T04:24:29.494021+00:00",
+  "repository": "wuyong9494-lab/kriswu",
+  "attempts": [
+    {
+      "id": 43364628039,
+      "name": ".github/workflows/fighter-visual-acceptance.yml",
+      "head_branch": "codex/fighter-visual-acceptance-20261113-1200",
+      "head_sha": "b68977017c205f29f50bb3619dbd7695385edd52",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-13T04:18:13Z",
+      "updated_at": "2026-11-13T04:18:13Z",
+      "run_started_at": "2026-11-13T04:18:13Z",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43364628039",
+      "jobCount": 0,
+      "nativeExecuted": 0,
+      "imagesProduced": 0,
+      "sourceReviewedCause": "runner.temp referenced in jobs.visual.env, which is outside GitHub documented context availability; fixed in 77ccd5f",
+      "serverErrorAnnotationRetrieved": false,
+      "contextReference": "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability"
+    },
+    {
+      "id": 43364818020,
+      "name": "Fighter bounded real-resource visuals (unsigned only)",
+      "head_branch": "codex/fighter-visual-acceptance-20261113-1200",
+      "head_sha": "77ccd5f3cc2a1ccae18fd0fd98c4a435fd67da14",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-13T04:20:00Z",
+      "updated_at": "2026-11-13T04:20:04Z",
+      "run_started_at": "2026-11-13T04:20:00Z",
+      "html_url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43364818020",
+      "job": {
+        "id": 131686634923,
+        "name": "visual",
+        "status": "completed",
+        "conclusion": "failure",
+        "started_at": "2026-11-13T04:20:00Z",
+        "completed_at": "2026-11-13T04:20:03Z",
+        "steps": [],
+        "runner_name": "",
+        "labels": [
+          "macos-26"
+        ]
+      },
+      "annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/wuyong9494-lab/kriswu/blob/77ccd5f3cc2a1ccae18fd0fd98c4a435fd67da14/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": ".github#L1",
+          "message": "Branch \"codex/fighter-visual-acceptance-20261113-1200\" is not allowed to deploy to fighter-private-assets due to environment protection rules.",
+          "raw_details": null
+        },
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/wuyong9494-lab/kriswu/blob/77ccd5f3cc2a1ccae18fd0fd98c4a435fd67da14/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The deployment was rejected or didn't satisfy other protection rules.",
+          "raw_details": ""
+        }
+      ],
+      "nativeExecuted": 0,
+      "imagesProduced": 0,
+      "failureStage": "GitHub environment branch protection; no runner assigned"
+    }
+  ],
+  "requiredEnvironment": "fighter-private-assets",
+  "requiredBranch": "codex/fighter-visual-acceptance-20261113-1200",
+  "environmentProtectionChanged": false,
+  "requestedScope": {
+    "nativeSelectors": 10,
+    "expectedImages": 26,
+    "unsignedSimulatorOnly": true,
+    "release": false,
+    "testflight": false,
+    "existingResourceUploads": false
+  }
+}

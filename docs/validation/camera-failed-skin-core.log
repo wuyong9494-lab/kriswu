@@ -1,0 +1,59 @@
+[0/1] Planning build
+Building for debugging...
+[0/8] Write sources
+[2/8] Write swift-version--650BC371111A5670.txt
+[4/10] Compiling ShiftCore DuelCameraFraming.swift
+[5/10] Emitting module ShiftCore
+[7/29] Emitting module TileDailyAudit
+[9/30] Emitting module StarRailAudit
+[10/31] Compiling ShiftCoreTests DuelCameraFramingTests.swift
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:125:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+123 |     func testRepeatedLayoutsNeverAccelerateOpticalZoomOrCropNewPose() {
+124 |         var lens = DuelCameraOpticalFOV()
+125 |         lens.consume(required: 50, frame: 1, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+126 |         let first = lens.consume(required: 29, frame: 2, aspect: 2.1)
+127 |         for _ in 0..<100 {
+
+/workspace/scratch/f425b9d69678/kriswu-integration/Tests/ShiftCoreTests/DuelCameraFramingTests.swift:151:14: warning: result of call to 'consume(required:frame:aspect:)' is unused
+149 |     func testOpticalFOVResetsOnRewindAndRotation() {
+150 |         var lens = DuelCameraOpticalFOV()
+151 |         lens.consume(required: 52, frame: 10, aspect: 2.1)
+    |              `- warning: result of call to 'consume(required:frame:aspect:)' is unused
+152 |         XCTAssertEqual(lens.consume(required: 29, frame: 11, aspect: 2.1), 52 * 0.92 + 29 * 0.08,
+153 |                        accuracy: 0.000001)
+[11/31] Emitting module ShiftCoreTests
+[14/33] Emitting module StarJourneyAudit
+[16/33] Emitting module StarExpeditionAudit
+[16/33] Wrapping AST for ShiftCoreTests for debugging
+[18/33] /workspace/scratch/f425b9d69678/kriswu-integration/.build/x86_64-unknown-linux-gnu/debug/ShiftCorePackageDiscoveredTests.derived/all-discovered-tests.swift
+[19/34] Write sources
+[20/34] Wrapping AST for ShiftCore for debugging
+[21/34] Write Objects.LinkFileList
+[23/36] Linking TileDailyAudit
+[24/36] Linking StarRailAudit
+[25/36] Write Objects.LinkFileList
+[27/36] Linking StarJourneyAudit
+[28/36] Linking StarExpeditionAudit
+[30/36] Emitting module ShiftCorePackageDiscoveredTests
+[31/36] Compiling ShiftCorePackageDiscoveredTests ShiftCoreTests.swift
+[32/37] Compiling ShiftCorePackageDiscoveredTests all-discovered-tests.swift
+[33/38] /workspace/scratch/f425b9d69678/kriswu-integration/.build/x86_64-unknown-linux-gnu/debug/ShiftCorePackageTests.derived/runner.swift
+[34/39] Write sources
+[35/39] Wrapping AST for ShiftCorePackageDiscoveredTests for debugging
+[37/41] Compiling ShiftCorePackageTests runner.swift
+[38/41] Emitting module ShiftCorePackageTests
+[39/41] Write Objects.LinkFileList
+[40/41] Linking ShiftCorePackageTests.xctest
+Build complete! (13.33s)
+Test Suite 'Selected tests' started at 2026-11-12 20:11:05.076
+Test Suite 'DuelCameraFramingTests' started at 2026-11-12 20:11:05.081
+Test Case 'DuelCameraFramingTests.testFailedSkinGeometryRetainsWiderLensWithoutTreatingItAsSuccess' started at 2026-11-12 20:11:05.081
+Test Case 'DuelCameraFramingTests.testFailedSkinGeometryRetainsWiderLensWithoutTreatingItAsSuccess' passed (0.003 seconds)
+Test Suite 'DuelCameraFramingTests' passed at 2026-11-12 20:11:05.084
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 20:11:05.084
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.0.3 (18c42c19cac3faf)
+✔ Test run with 0 tests passed after 0.001 seconds.

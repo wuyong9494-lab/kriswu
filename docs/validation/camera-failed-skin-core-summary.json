@@ -1,0 +1,48 @@
+{
+  "baseHEAD": "7d320d590b7772928b89b7d0f9e6ad4193ee29fb",
+  "appliedSourceCommit": "a452990f7f777b96ffdb323f744643542615daf8",
+  "workingTreeUncommitted": true,
+  "evidenceClass": "deterministic SwiftPM core regression; native real-resource test not executed",
+  "command": [
+    "/workspace/scratch/f425b9d69678/swift-toolchain/usr/bin/swift",
+    "test",
+    "--jobs",
+    "2",
+    "--filter",
+    "DuelCameraFramingTests/testFailedSkinGeometryRetainsWiderLensWithoutTreatingItAsSuccess$"
+  ],
+  "startedAtUTC": "2026-11-13T04:10:49.818156+00:00",
+  "finishedAtUTC": "2026-11-13T04:11:05.109427+00:00",
+  "wallSeconds": 15.287,
+  "exitCode": 0,
+  "selectedMethodPassed": true,
+  "xctestSummaryCounts": [
+    [
+      1,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      0
+    ]
+  ],
+  "verifiedOneMethodPassed": true,
+  "nativeSelectorPending": "SiteTests/DuelWeaponGameplayTests/testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers",
+  "nativeParserCheck": "swiftc -frontend -parse succeeded; not native compilation or execution",
+  "sourceSHA256": {
+    "App/Views/DuelWorld.swift": "5d7566eb65147852a91e8c48dd467cc75324677dbd7039b06c456f75a7c23642",
+    "Sources/ShiftCore/DuelCameraFraming.swift": "93e1a76dbb2a606897ecd2d790c4d94a15999c08e5c2a87b83278987064732d7",
+    "Tests/ShiftCoreTests/DuelCameraFramingTests.swift": "706dea2c1dca1978f4de56635a3b397201ca36cdf91e91ced30e3663f0b08879",
+    "Tests/SiteTests/DuelWeaponGameplayTests.swift": "6a427987fc5129594b17216a167d85afe38f07b6dae4e42f37e79952600d6325"
+  },
+  "sourceGitBlob": {
+    "App/Views/DuelWorld.swift": "852356d1dfbc823474150e043aa94cba8b3b6495",
+    "Sources/ShiftCore/DuelCameraFraming.swift": "fdfbb10b8c05bc0a203dabd9403b62a9fab82776",
+    "Tests/ShiftCoreTests/DuelCameraFramingTests.swift": "1ca248fab3c3906b343e1571f4a2e3152b729363",
+    "Tests/SiteTests/DuelWeaponGameplayTests.swift": "f51fd85f3e483f6b0f3af8aee5e8ea3810415d3c"
+  },
+  "logSHA256": "692ba0449c3c1bf65b3c9a376c42b3125f5eb112fce78a88e372685dec94d2ee",
+  "logPath": "/workspace/scratch/f425b9d69678/camera-failed-skin-core.log"
+}

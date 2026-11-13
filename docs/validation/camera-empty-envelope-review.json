@@ -1,0 +1,47 @@
+{
+  "reviewedAtUTC": "2026-11-13T04:43:20.201508+00:00",
+  "baseHEAD": "02d4e83e6bcd7e1018225c4fd66037c97f72b6cc",
+  "appliedSourceCommit": "201a203b75242bdcdd4536a92d7bf27ef3395d38",
+  "sourceCommitParent": "77ccd5f3cc2a1ccae18fd0fd98c4a435fd67da14",
+  "changedFiles": [
+    "App/Services/DuelDisplayedSkinBounds.swift",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift"
+  ],
+  "sourceGitBlob": {
+    "App/Services/DuelDisplayedSkinBounds.swift": "d2138b65a78f492602841020689c5329b230b544",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift": "eda2ccfa2aed9523b2c4b1a08293cc14df8829cb"
+  },
+  "exactSourceBlobsMatch": true,
+  "sourceSHA256": {
+    "App/Services/DuelDisplayedSkinBounds.swift": "64dc2d7b3fbd73d12aced0e5fe8f8a7129df50d0e3b14a805d24dd8d84f1acb5",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift": "7b5829c73b93a2bf6ce87cd58f165ccf3cfc972648366140909106be08b28445"
+  },
+  "parserCommand": [
+    "/workspace/scratch/f425b9d69678/swift-toolchain/usr/bin/swiftc",
+    "-frontend",
+    "-parse",
+    "App/Services/DuelDisplayedSkinBounds.swift",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift"
+  ],
+  "parserExitCode": 0,
+  "diffCheckExitCode": 0,
+  "parserLog": "/workspace/scratch/f425b9d69678/camera-empty-envelope-parse.log",
+  "evidenceClass": "source review and Swift frontend parsing only; no native compilation or execution",
+  "nativeSelectorPending": "SiteTests/DuelWeaponAssetTests/testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit",
+  "nativeScenarioType": "synthetic 0/15/17/16-point optical bounds inputs; no private resource required; no image attachments",
+  "remote201Checks": {
+    "checkRuns": 0,
+    "commitStatuses": 0,
+    "workflowRuns": 0
+  },
+  "reusedCoreEvidence": {
+    "sourceCommit": "02d4e83e6bcd7e1018225c4fd66037c97f72b6cc",
+    "passedMethods": 33,
+    "manifestFileCount": 214,
+    "originalManifestSHA256": "1705315a2dcab2fcc2d9b568104d84f50df5fecede1d309ef17f4fbcc0a06c92",
+    "currentManifestSHA256": "1705315a2dcab2fcc2d9b568104d84f50df5fecede1d309ef17f4fbcc0a06c92",
+    "mismatches": [],
+    "cameraFilesOutsideClosure": true
+  },
+  "testsExecutedThisReview": 0
+}

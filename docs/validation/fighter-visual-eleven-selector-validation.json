@@ -1,0 +1,75 @@
+{
+  "scope": "targeted local selector/extension/exact-result validation only; no cryptography rerun, real resource decryption, CI, build or native execution",
+  "sourceHeadAtValidation": "02d4e83e6bcd7e1018225c4fd66037c97f72b6cc",
+  "sourceHashes": {
+    ".github/scripts/fighter_visual_acceptance.py": "deaada8fa48fb7a2e2a87630f4cc66f25e73d2d1e75242bd74184d704bc8bd54",
+    ".github/workflows/fighter-visual-acceptance.yml": "b7726da7a81742eaf9bfdec100c9adb44f880e2aa848e38d2279d2de447dc64e",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift": "7b5829c73b93a2bf6ce87cd58f165ccf3cfc972648366140909106be08b28445",
+    "App/Services/DuelDisplayedSkinBounds.swift": "64dc2d7b3fbd73d12aced0e5fe8f8a7129df50d0e3b14a805d24dd8d84f1acb5"
+  },
+  "newSelector": "SiteTests/DuelWeaponAssetTests/testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit",
+  "newSelectorSourceFile": "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift",
+  "plannedNativeMethods": 11,
+  "expectedImages": 26,
+  "expectedDataAttachments": 3,
+  "historyPolicy": "The two previous failed runs remain 10-method plans. This validation applies only to the next 11-method revision.",
+  "checksPassed": 13,
+  "checks": [
+    {
+      "name": "11 unique selectors including the new no-image method; 26 images and 3 data labels unchanged",
+      "result": "PASS"
+    },
+    {
+      "name": "new method resolved from Swift extension and exact source file SHA256 bound",
+      "result": "PASS"
+    },
+    {
+      "name": "exact 11-method passed result accepted",
+      "result": "PASS"
+    },
+    {
+      "name": "missing method rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "duplicate method rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "skipped new method rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "unselected extra method rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "old 10-method summary cannot satisfy new 11-method gate",
+      "result": "PASS"
+    },
+    {
+      "name": "missing extension declaration rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "duplicate method across Swift extensions rejected",
+      "result": "PASS"
+    },
+    {
+      "name": "diagnostic exclusions, encryption, cleanup, image/data inventories unchanged",
+      "result": "PASS"
+    },
+    {
+      "name": "Python AST, YAML and shell syntax valid; workflow behavior and native 20-minute budget unchanged",
+      "result": "PASS"
+    },
+    {
+      "name": "git diff --check",
+      "result": "PASS"
+    }
+  ],
+  "frozenOwnedFiles": [
+    ".github/scripts/fighter_visual_acceptance.py",
+    ".github/workflows/fighter-visual-acceptance.yml"
+  ]
+}

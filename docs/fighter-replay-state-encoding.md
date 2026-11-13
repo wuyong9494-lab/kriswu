@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `2`, unsigned 16-bit simulation rules version `2`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `2`, unsigned 16-bit simulation rules version `3`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -89,3 +89,24 @@ contains no stored simulation state. Source-derived network compatibility
 fingerprints include the new rules file automatically. Older executable rules
 and schema identities must not be combined with this build. See
 `fighter-provisional-shadow-2026-11-10.md` for timing and verification limits.
+
+## Source-anchored hammer rules update (2026-11-13)
+
+Rules version 3 changes the provisional hammer's spatial path. Release tick 24
+and return tick 71 use the same integer-mapped heavy-clip samples as the displayed
+body. A shared sampler provides the rendered weapon, effect endpoints, attack
+bounds and continuous contact path. The previous absolute apex and active/return
+windows remain bounded; contacts use actual moving segments, including analytic
+corner events for a folded sweep, instead of a broad vertical rectangle.
+
+`Action.shadowOriginX` follows body separation until the release tick, then stays
+fixed for outgoing travel. The harmless return approaches the caster's current
+held pose. This reuses the already encoded field and adds no stored state, so the
+schema remains 2. Both independent header/golden fixtures change only their
+rules-version bytes. Wire packet layout is unchanged; source-derived network
+compatibility must still identify the new executable and reject an old peer.
+
+The initial compiler-availability note above describes the original diagnostic
+patch. The 2026-11-13 follow-up uses scoped Linux core/replay checks, recorded in
+`fighter-visual-acceptance-2026-11-13.md`. It does not repeat the previously passed
+full workflow or establish cross-architecture/native/physical-device acceptance.
