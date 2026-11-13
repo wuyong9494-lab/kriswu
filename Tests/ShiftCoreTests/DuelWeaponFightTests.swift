@@ -4,6 +4,22 @@ import XCTest
 final class DuelWeaponFightTests: XCTestCase {
     private typealias Fixture = DuelWeaponTestFixtures
 
+    func testShadowMotionAuditIsDeterministicAndDoesNotEnableShadow() throws {
+        let fight = try Fixture.fight()
+        for seat in 0..<2 {
+            let first = fight.shadowMotionAudit(index: seat)
+            XCTAssertEqual(first, fight.shadowMotionAudit(index: seat))
+            if let audit = first {
+                XCTAssertGreaterThanOrEqual(audit.sampledTransitions, 0)
+                XCTAssertTrue((0...audit.sampledTransitions).contains(audit.rootDiscontinuities))
+                XCTAssertTrue((0...audit.sampledTransitions).contains(audit.weaponDiscontinuities))
+            }
+            XCTAssertFalse(fight.supports(.shadow, index: seat))
+        }
+        XCTAssertNil(fight.shadowMotionAudit(index: -1))
+        XCTAssertNil(fight.shadowMotionAudit(index: 2))
+    }
+
     func testUnsafeShadowClipsCannotStartOrConsumeEnergy() throws {
         var fight = try Fixture.fight()
         for index in 0..<2 {
