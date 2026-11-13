@@ -29,3 +29,11 @@ unsigned playability scope contains eight exact native methods, six screenshots
 and the same 73 authenticated resources. It does not upload another TestFlight
 build. External TestFlight promotion must reference a successful exact-source
 run and explicitly allow external testing, unlike internal-only build 703.
+
+## Native follow-up diagnosis
+
+Run 43411346089 built the native app and verified all 73 resource identities. Seven of eight selected methods passed and all six expected images were exported with exact ownership. The Liu second-shadow fixture alone failed: it pressed on the last displayed hit reaction frame, when `stun == 0` but `weaponPose.reaction == true`. Recovery deliberately consumes attack edges.
+
+Reproduction with the exact authenticated catalog (`c4ee840d…139ed5f`) and unchanged ShiftCore observed health 600, energy 100 and cooldown 0 at tick 836; the early press was ignored. At tick 837 the reaction had ended and the same press started the second shadow, spending energy and starting cooldown 360. The native test now checks the displayed reaction has ended and hit stop is clear before pressing. The 2,400-tick bound, health > 400, active-shadow, spent-energy and restarted-cooldown assertions are unchanged. No application runtime or resource files changed for this test correction; the native recheck remains required.
+
+All six authenticated screenshots were reviewed: both fighters are visibly larger with complete heads, weapons and feet; the navigated lobby does not overlap the menus; the separate center defense control is absent. Original lighting/material equivalence and physical-device acceptance remain open.

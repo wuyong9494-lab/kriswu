@@ -68,8 +68,12 @@ final class DuelWeaponGameplayTests: XCTestCase {
         XCTAssertEqual(fight.fighters[1].energy, 0)
         var returned = false, castAgain = false
         for _ in 0..<2400 {
+            // A reaction still owns its final displayed source frame when the
+            // stun counter reaches zero. Press only after that pose returns to
+            // idle; a press during recovery is intentionally consumed.
             if fight.canUse(.shadow, index: 1), fight.fighters[1].attack == nil,
-               fight.fighters[1].stun == 0, fight.fighters[1].knockdown == 0 {
+               fight.fighters[1].stun == 0, fight.fighters[1].knockdown == 0,
+               fight.fighters[1].weaponPose?.reaction == false, fight.hitStop == 0 {
                 XCTAssertGreaterThan(fight.fighters[1].health, 400)
                 fight.step(.neutral, opponent: .init(weaponCommand: .shadow))
                 castAgain = fight.shadowIsActive(1)
@@ -85,7 +89,7 @@ final class DuelWeaponGameplayTests: XCTestCase {
             XCTAssertEqual(fight.phase, .fighting)
         }
         XCTAssertTrue(returned)
-        XCTAssertTrue(castAgain, "Liu must refill, finish cooldown and launch a second real shadow before KO")
+        XCTAssertTrue(castAgain, "Liu must refill, finish cooldown and launch a second real shadow before KO; health=\(fight.fighters[1].health), energy=\(fight.fighters[1].energy), cooldown=\(fight.shadowCooldownRemaining(1)), reaction=\(String(describing: fight.fighters[1].weaponPose?.reaction))")
         XCTAssertEqual(fight.fighters[1].energy, 0)
         XCTAssertGreaterThan(fight.shadowCooldownRemaining(1), 0)
     }

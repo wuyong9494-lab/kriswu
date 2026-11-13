@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "runId": "43411346089",
+  "sourceSha": "d83cab53987952f410fa26053e5d63c483f90996",
+  "attempt": 1,
+  "verifiedAt": "2026-11-13T11:04:34.144283+00:00",
+  "scope": "playability-followup",
+  "nativePassed": 7,
+  "nativeFailed": 1,
+  "nativeSkipped": 0,
+  "imageCount": 6,
+  "dataCount": 0,
+  "stagedResourceIdentities": 73,
+  "compiledResourceIdentities": 73,
+  "selectedSourceFileCount": 28,
+  "selectedSourceSHA256": {
+    "Tests/SiteTests/DuelSourceControlsTests.swift": "7c81f3d7d08d64cdf4d4b7cf6792f95b1a6b2693bcb73dce0ed010071341576f",
+    "Tests/SiteTests/DuelWeaponGameplayTests.swift": "3f9ec47890334b7c2496c1233da46f122908496d999829d8c317e5882be53e2c",
+    "Tests/SiteTests/DuelLifecycleTests+ExternalPresentation.swift": "122576ecdc0847fa5ddd9d52f2d2d5ce6be0e0f60350ddb45f0025d055ba365d",
+    "Tests/SiteTests/DuelWeaponAssetTests+LobbyFraming.swift": "918fec8d6f5fb9078b9954dcd7af0164b9af5b5e88c4eeb3436504a74b0d8925",
+    ".github/private/sf3/manifest.json": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
+    ".github/private/sf3-distinct/manifest.json": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
+    ".github/private/fighter-source-trails/manifest.json": "390dd75ac5aa218bdd2cd3c5909ca75a0c2148c5676687dd6fd732fb797471cb",
+    ".github/private/fighter-presentation/manifest.json": "0595cdd5b06068a1c2ea8e1a304195ac1b7d404d5051935e19cc4188c0d3cad5",
+    "project.yml": "3ab100cb92c89782a4d007d6aeca9118c313091dcd7cdab7107a8faeea98468a",
+    ".github/scripts/fighter_visual_acceptance.py": "aa6ee504d28fd6dc3fee4df6e53448d97d38662f6c7b9dc61d5f5346e9ce7623",
+    ".github/scripts/fighter_private_model.py": "925c25094359c4df9cc901a54e11e4374ea471e7cb8680b77380360767b15d79",
+    ".github/scripts/fighter_sf3_assets.py": "fb8cd750f4ff134fd27f1040e47691a3932c062660d7ba7b4e9508e4d6151d11",
+    ".github/scripts/fighter_sf3_distinct.py": "9f27051a445c96e038881cf67793a7968f46efd94b2866dfbe9ce4971f1e619c",
+    ".github/workflows/fighter-playability-followup.yml": "b1855da1165a2ac2e63e2adddb83c4ef5296cc3b496d271278554726c177bb0a",
+    "App/Views/DuelSourceControls.swift": "95d128a9a5be8454c3b6972996f1c1cb2046cfb73399536a65e8269c0c907e38",
+    "App/Views/DuelView.swift": "bd1bcedba9f3ebafb3c845e90d9f33acce37b958ce446cd8e3df26cb91b42b4c",
+    "App/Views/DuelLobbyPreview.swift": "c6245c152a0d6db4584db9a3574ffe99d9a758063519a8fa00d59935cb091186",
+    "App/Views/DuelHomeView.swift": "4563389da4017970709aa873cf4afcab6a55ba3ec28195b9a6ae61f3dac4cde5",
+    "Sources/ShiftCore/DuelWeaponInput.swift": "d0b3ff10abd6a0614444792ec176fab2ba5a1b353469f9d2ed350f46393f1b67",
+    "Sources/ShiftCore/DuelWeaponFight.swift": "13cf65dc9e5ec9ac3df004198e588b467586256dc0e2b4f2047a95754e2b60ee",
+    "Sources/ShiftCore/DuelReplayState.swift": "1ed98c6fdefc364d6e39b66dd9416b2787a3f6dbdfe67b8ca742fb466b1266ec",
+    "Sources/ShiftCore/DuelLobbyFraming.swift": "3ba621a67544a66a0045afcf010259c7621353c4e99aff719b3fba1c76bc406c",
+    "App/Services/DuelSourceWeaponTrails.swift": "e683ae7d05c52b59178f305407a221d9243496075f21d8e5afca247e3ddec05a",
+    "App/Services/DuelWeaponAssets.swift": "061711b889cfeacc066bd64c77af94ef2d3fb99d8e3135610945f1be78a175b3",
+    "App/Services/DuelPresentationAssets.swift": "12822e0bd145c61e81c15dc4c392188a94c61c52a66ed534c932a97f73a59362",
+    "App/Services/GLTFModel.swift": "d41d57ad32a17827a9d0394e13b54eb0ad94c5d252eb31eb178b2c4dd8390532",
+    ".github/scripts/fighter_presentation_assets.py": "7265d99a7aac0a27b8ee09dd259f00c6feec71a9c0f0d645c5a72b439e5d54a3",
+    ".github/scripts/fighter_source_trails.py": "ef80f69675f657c281ab0e8c9f3079466c0ecfcbe7042d7d9bdfe0b4d33d31a0"
+  },
+  "methods": [
+    {
+      "selector": "SiteTests/DuelLifecycleTests/testExternalBackGuardUsesLocalSeatAndPreservesAuthoritativeState",
+      "result": "Passed",
+      "durationSeconds": 0.08037793636322021
+    },
+    {
+      "selector": "SiteTests/DuelSourceControlsTests/testAccessibilityDefenseCancelsOnPauseRotationAndShutdown",
+      "result": "Passed",
+      "durationSeconds": 0.008796930313110352
+    },
+    {
+      "selector": "SiteTests/DuelSourceControlsTests/testActualSourceSpritesLoadRenderAndRejectDecodableTampering",
+      "result": "Passed",
+      "durationSeconds": 0.7066940069198608
+    },
+    {
+      "selector": "SiteTests/DuelSourceControlsTests/testBackStickRoutesHoldReleaseAndNeverCapturesCenter",
+      "result": "Passed",
+      "durationSeconds": 0.01079094409942627
+    },
+    {
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealNavigatedLobbyUsesExactStageCenterAndRailGeometry",
+      "result": "Passed",
+      "durationSeconds": 21.759000062942505
+    },
+    {
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch",
+      "result": "Passed",
+      "durationSeconds": 26.994829058647156
+    },
+    {
+      "selector": "SiteTests/DuelWeaponGameplayTests/testLiuCanRefillAndCastShadowAgainBeforeKnockout",
+      "result": "Failed",
+      "durationSeconds": 1.3125089406967163
+    },
+    {
+      "selector": "SiteTests/DuelWeaponGameplayTests/testOriginalBackGuardReleasesAcrossPauseRestartAndControlReplacement",
+      "result": "Passed",
+      "durationSeconds": 1.7412590980529785
+    }
+  ],
+  "images": [
+    {
+      "file": "497CCDF0-244A-45ED-A2DD-4CCF0F6390ED.png",
+      "bytes": 161068,
+      "sha256": "c4956123edc25eb49b844c9443fa0b11148eccc50db52275f9f67660cd15f535",
+      "label": "source-native-controls-four-actions-back-defense-eight-directions",
+      "selector": "SiteTests/DuelSourceControlsTests/testActualSourceSpritesLoadRenderAndRejectDecodableTampering",
+      "kind": "image"
+    },
+    {
+      "file": "7A56ECB2-2FFF-49EC-9788-BB0008F4D95B.png",
+      "bytes": 8883332,
+      "sha256": "182d3d07f7d97cbe206029354af9abfc934abb9c1216e82b41938f3453d3c400",
+      "label": "lobby-larger-navigated",
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealNavigatedLobbyUsesExactStageCenterAndRailGeometry",
+      "kind": "image"
+    },
+    {
+      "file": "286294D7-D44A-4C3A-87B1-811A9E32015A.png",
+      "bytes": 3927149,
+      "sha256": "12b644290869df1c44595681b94757715a61a0eb846decf0e69173e599ed2b0e",
+      "label": "lobby-previous-size-liu",
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch",
+      "kind": "image"
+    },
+    {
+      "file": "9FA4ABAC-233F-4C5F-A332-C2B595C9C47C.png",
+      "bytes": 4047167,
+      "sha256": "51ec0e2a25032cc6ce08c2cc0529270128992f0a89cd0d2e8d3ed226c96098d4",
+      "label": "lobby-larger-liu",
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch",
+      "kind": "image"
+    },
+    {
+      "file": "FB60F7AD-A67A-4D47-9452-6F99D7D5AE58.png",
+      "bytes": 3938880,
+      "sha256": "cec41f2c000e86c8dff22451554986080e76372392d6331ffbfb9f3ee204d2f6",
+      "label": "lobby-previous-size-ember",
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch",
+      "kind": "image"
+    },
+    {
+      "file": "AB95CAB0-5C16-4D98-B5A7-695BFEF1CF11.png",
+      "bytes": 4063592,
+      "sha256": "68c523e1a0e832327ff9277654923cd58fa01df06cbddc1adb8952c4da04d3ba",
+      "label": "lobby-larger-ember",
+      "selector": "SiteTests/DuelWeaponAssetTests/testRealSourceIdleVerticesRemainAboveRailThroughRotationAndHeroSwitch",
+      "kind": "image"
+    }
+  ],
+  "archiveSHA256": "3791cb342b9b1c24505be62d01c518ce49493c86f88d9ba7b30ad7209f7d765a",
+  "timings": {
+    "stage-scenery": {
+      "durationSeconds": 0.797,
+      "exitCode": 0
+    },
+    "stage-distinct": {
+      "durationSeconds": 0.564,
+      "exitCode": 0
+    },
+    "stage-presentation": {
+      "durationSeconds": 0.163,
+      "exitCode": 0
+    },
+    "stage-source-skins": {
+      "durationSeconds": 0.122,
+      "exitCode": 0
+    },
+    "build-identity": {
+      "durationSeconds": 0.044,
+      "exitCode": 0
+    },
+    "project-generation": {
+      "durationSeconds": 0.222,
+      "exitCode": 0
+    },
+    "native-build": {
+      "durationSeconds": 392.824,
+      "exitCode": 0
+    },
+    "simulator-boot": {
+      "durationSeconds": 2.757,
+      "exitCode": 0
+    },
+    "simulator-ready": {
+      "durationSeconds": 423.637,
+      "exitCode": 0
+    },
+    "simulator-total": {
+      "durationSeconds": 430.585,
+      "exitCode": 0
+    },
+    "selected-native": {
+      "durationSeconds": 303.066,
+      "exitCode": 65
+    },
+    "export-attachments": {
+      "durationSeconds": 0.622,
+      "exitCode": 0
+    }
+  },
+  "visualAcceptance": "Reviewed all 6 authenticated originals: both fighters visibly larger, complete heads/weapons/feet; navigated lobby has no menu overlap; center defense button absent. Lighting and original fidelity remain unaccepted.",
+  "limitations": [
+    "Simulator evidence only; no physical-device, stable-60fps or dual-device acceptance",
+    "Source attacks and second Liu shadow are checked; original choreography and shader equivalence remain unverified",
+    "Back defense, shadow recharge and close lobby changed; no 1:1 fidelity claim",
+    "This unsigned native run does not upload TestFlight"
+  ],
+  "failureDiagnosis": {
+    "selector": "SiteTests/DuelWeaponGameplayTests/testLiuCanRefillAndCastShadowAgainBeforeKnockout",
+    "cause": "Test pressed on final displayed reaction frame when stun counter was zero; recovery intentionally consumes attack edges. Runtime code unchanged.",
+    "catalogSHA256": "c4ee840d89cf1b2b8b82db0aebce878dbc5c2f2f60a52cf5b5a77b84f139ed5f",
+    "reproducedEarlyPress": {
+      "tick": 836,
+      "health": 600,
+      "energy": 100,
+      "cooldown": 0,
+      "reaction": true,
+      "poseTick": 50,
+      "poseDuration": 50,
+      "shadowStarted": false
+    },
+    "reproducedRecoveredPress": {
+      "tick": 837,
+      "health": 600,
+      "energyBefore": 100,
+      "energyAfter": 0,
+      "cooldownAfter": 360,
+      "reactionBefore": false,
+      "shadowStarted": true
+    },
+    "evidenceClass": "Exact authenticated catalog with built ShiftCore on Linux; native recheck still required"
+  }
+}
