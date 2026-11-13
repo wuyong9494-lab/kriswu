@@ -1,5 +1,6 @@
 name: Fighter targeted trail followup (unsigned only)
 # One closed four-method repair scope. The historical eleven-method capture is not rerun.
+# Capture reviewed ribbon repair da689f8; keep the required environment review.
 'on':
   push:
     branches: [codex/fighter-visual-acceptance-20261113-1200]
