@@ -28,10 +28,35 @@ final class DuelWeaponTrailContinuityTests: XCTestCase {
         effects.consumeStep(poses: [pose(x: 0.9)], animationTick: 2)
         let container = try XCTUnwrap(root.childNode(withName: "duel.weapon-effects", recursively: false))
         XCTAssertEqual(container.childNodes.count, 2)
+        let retiringRoot = try XCTUnwrap(container.childNodes.first)
+        let currentRoot = try XCTUnwrap(container.childNodes.last)
+        let currentID = try XCTUnwrap(effects.trailDiagnostics.emitters.first?.stripID)
         XCTAssertNil(container.childNodes.last?.childNodes.first?.geometry,
                      "A teleported point must not bridge to the old ribbon")
         effects.consumeStep(poses: [pose(x: 1)], animationTick: 3)
         XCTAssertEqual(container.childNodes.last?.childNodes.first?.geometry?.sources(for: .vertex).first?.vectorCount, 4)
+        for tick in 4...30 {
+            effects.consumeStep(poses: [pose(x: 1 + Float(tick - 3) * 0.01)], animationTick: tick)
+            XCTAssertEqual(effects.trailDiagnostics.emitters.map(\.stripID), [currentID])
+            XCTAssertEqual(effects.retainedTrailCount, 2, "The old strip retains its original 0.5s fade")
+        }
+        let retiring = try XCTUnwrap(effects.trailDiagnostics.retained.first { $0.id != currentID })
+        XCTAssertEqual(retiring.samples.map(\.tick), [1], "Retired samples expire but never receive current endpoints")
+        XCTAssertTrue(retiringRoot.parent === container)
+        effects.consumeStep(poses: [pose(x: 1.28)], animationTick: 31)
+        XCTAssertEqual(effects.retainedTrailCount, 1, "The last old sample expires at exactly 30 ticks")
+        XCTAssertNil(retiringRoot.parent)
+        XCTAssertTrue(currentRoot.parent === container)
+        XCTAssertEqual(effects.trailDiagnostics.emitters.map(\.stripID), [currentID],
+                       "Retiring the old strip cannot remove the new owner of the same weapon slot")
+        XCTAssertEqual(effects.trailDiagnostics.retained.first?.samples.last?.tick, 31)
+        effects.consumeStep(poses: [], animationTick: 32)
+        XCTAssertTrue(effects.trailDiagnostics.emitters.isEmpty)
+        effects.consumeStep(poses: [], animationTick: 60)
+        XCTAssertEqual(effects.retainedTrailCount, 1)
+        effects.consumeStep(poses: [], animationTick: 61)
+        XCTAssertEqual(effects.retainedTrailCount, 0)
+        XCTAssertTrue(container.childNodes.isEmpty)
     }
 
     func testSkippedSimulationTickCannotJoinOtherwiseNearbySamples() throws {

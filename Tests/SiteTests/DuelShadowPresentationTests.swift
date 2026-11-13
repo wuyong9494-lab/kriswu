@@ -342,6 +342,10 @@ final class DuelShadowPresentationTests: XCTestCase {
             let live = try DuelWeaponEffects(root: root)
             defer { live.shutdown() }
             XCTAssertEqual(live.sourceTextureCount, 11)
+            let profile = try XCTUnwrap(assets.catalog.profile(for: hero))
+            let physicalSlots = Set(profile.activeWeaponSides.map { $0 == "left" ? 0 : 1 })
+            XCTAssertEqual(physicalSlots, hero == .liu ? [0, 1] : [1])
+            XCTAssertEqual(profile.activeWeaponSides.count, physicalSlots.count)
             let other: DuelGame.Hero = hero == .ember ? .liu : .ember
             var fight = try XCTUnwrap(DuelWeaponFight(fighters: [
                 .init(hero: hero, x: 2000, facing: 1), .init(hero: other, x: 9000, facing: -1)],
@@ -349,8 +353,13 @@ final class DuelShadowPresentationTests: XCTestCase {
             fight.step(.init(weaponCommand: .shadow), opponent: .neutral)
             var emitted = false
             var previousMotion: String?
+            var previousTrails: DuelWeaponEffects.TrailDiagnostics?
             for tick in 0..<200 {
                 let rendered = try XCTUnwrap(DuelWorldView.weaponEffectPoses(fight, tick: tick).first)
+                XCTAssertEqual(rendered.fighterID, 0)
+                XCTAssertEqual(rendered.family, hero == .ember ? .katana : .dualHammers)
+                let shouldEmit = fight.weaponTrailIsActive(0)
+                XCTAssertEqual(rendered.motionID != nil, shouldEmit)
                 if let motion = rendered.motionID {
                     XCTAssertTrue(motion.hasPrefix("shadow:0:"))
                     if let previousMotion { XCTAssertEqual(motion, previousMotion) }
@@ -358,21 +367,129 @@ final class DuelShadowPresentationTests: XCTestCase {
                 }
                 live.consumeStep(poses: [rendered], animationTick: tick)
                 emitted = emitted || live.renderedVertexCount > 0
+                let trails = live.trailDiagnostics
+                let context = "\(hero) animationTick=\(tick) shadowTick=\(fight.shadowVisual(0)?.tick ?? -1)"
+                try assertShadowTrailLifecycle(trails, previous: previousTrails, pose: rendered,
+                                               physicalSlots: physicalSlots, shouldEmit: shouldEmit,
+                                               tick: tick, context: context)
                 let count = live.emittedSampleCount
                 let trailCount = live.retainedTrailCount
                 live.consumeStep(poses: [rendered], animationTick: tick)
                 XCTAssertEqual(live.emittedSampleCount, count, "Repeated rendering / hitstop cannot advance source effects")
                 XCTAssertEqual(live.retainedTrailCount, trailCount)
-                if hero == .liu, let visual = fight.shadowVisual(0), (30..<70).contains(visual.tick) {
-                    XCTAssertEqual(live.retainedTrailCount, 2, "One source ribbon per hammer persists through apex and return")
-                }
+                XCTAssertEqual(live.trailDiagnostics, trails, "\(context): repeated ticks must freeze every strip")
+                previousTrails = trails
                 fight.step(.neutral, opponent: .neutral)
             }
             XCTAssertTrue(emitted)
+            XCTAssertTrue(previousTrails?.retained.isEmpty == true,
+                          "Source lifetimes must drain normally, without a large clock jump")
             live.consumeStep(poses: [], animationTick: 400)
             XCTAssertEqual(live.retainedTrailCount, 0)
+            XCTAssertTrue(live.trailDiagnostics.emitters.isEmpty)
             live.shutdown()
             XCTAssertTrue(root.childNodes.isEmpty)
+        }
+    }
+
+    private func assertShadowTrailLifecycle(_ state: DuelWeaponEffects.TrailDiagnostics,
+        previous: DuelWeaponEffects.TrailDiagnostics?, pose: DuelWeaponEffects.Pose,
+        physicalSlots: Set<Int>, shouldEmit: Bool,
+        tick: Int, context: String) throws {
+        typealias Strip = DuelWeaponEffects.TrailDiagnostics.Strip
+        func age(_ sample: DuelWeaponEffects.TrailDiagnostics.Point) -> Double {
+            Double(tick - sample.tick) / Double(DuelGame.ticksPerSecond)
+        }
+        let maximumStep = Float(DuelWeaponSweepContinuity.maximumAdjacentDistance) + 0.00001
+        XCTAssertEqual(Set(pose.endpoints.map(\.slot)), physicalSlots, "\(context): every physical weapon needs endpoints")
+        XCTAssertEqual(pose.endpoints.count, physicalSlots.count, context)
+        let expectedSlots: Set<Int> = shouldEmit ? physicalSlots : []
+        // Current ownership is per physical weapon. Retained strips additionally
+        // include disconnected, non-emitting history with its original fade.
+        XCTAssertEqual(state.emitters.count, expectedSlots.count, context)
+        XCTAssertEqual(Set(state.emitters.map(\.slot)), expectedSlots, context)
+        XCTAssertEqual(Set(state.emitters.map(\.stripID)).count, state.emitters.count, context)
+        XCTAssertTrue(state.emitters.allSatisfy { $0.fighterID == pose.fighterID }, context)
+        XCTAssertEqual(Set(state.retained.map(\.id)).count, state.retained.count, context)
+        XCTAssertEqual(state.attachedRootCount, state.retained.count, context)
+        let byID = state.retained.reduce(into: [String: Strip]()) { $0[$1.id] = $1 }
+        let oldByID = (previous?.retained ?? []).reduce(into: [String: Strip]()) { $0[$1.id] = $1 }
+
+        for emitter in state.emitters {
+            let strip = try XCTUnwrap(byID[emitter.stripID], "\(context): an owner must retain its actual strip")
+            let endpoint = try XCTUnwrap(pose.endpoints.first { $0.slot == emitter.slot })
+            let tail = try XCTUnwrap(strip.samples.last)
+            XCTAssertEqual(strip.slot, emitter.slot, context)
+            XCTAssertEqual(strip.family, pose.family, context)
+            XCTAssertEqual(strip.motionID, pose.motionID, context)
+            XCTAssertEqual(strip.isShadow, pose.isShadow, context)
+            XCTAssertEqual(tail.tick, tick, "\(context): each active weapon must append exactly this tick")
+            XCTAssertEqual(tail.base, SIMD3<Float>(endpoint.base.x, endpoint.base.y, endpoint.base.z), context)
+            XCTAssertEqual(tail.tip, SIMD3<Float>(endpoint.tip.x, endpoint.tip.y, endpoint.tip.z), context)
+            if let oldOwner = previous?.emitters.first(where: { $0.slot == emitter.slot }),
+               let old = oldByID[oldOwner.stripID], let oldTail = old.samples.last,
+               old.family == strip.family, old.motionID == strip.motionID, old.isShadow == strip.isShadow {
+                let baseStep = simd_distance(oldTail.base, tail.base), tipStep = simd_distance(oldTail.tip, tail.tip)
+                let continuous = oldTail.tick == tick - 1 && baseStep <= maximumStep && tipStep <= maximumStep
+                let detail = "\(context) slot=\(emitter.slot) baseStep=\(baseStep)m tipStep=\(tipStep)m"
+                XCTAssertEqual(old.id == strip.id, continuous,
+                               "\(detail): only a real discontinuity may replace the current strip")
+                if old.id != strip.id {
+                    // Keep the actual interior split locatable in the encrypted
+                    // native log; do not add screenshot/data artifact labels.
+                    print("Shadow trail split: \(detail) oldTailTick=\(oldTail.tick) sourceLifetime=\(old.lifetime)s")
+                }
+            }
+        }
+
+        for strip in state.retained {
+            let detail = "\(context) slot=\(strip.slot) strip=\(strip.id)"
+            let isEmitting = state.emitters.contains { $0.stripID == strip.id }
+            XCTAssertTrue(strip.isAttached, detail)
+            XCTAssertEqual(strip.fighterID, pose.fighterID, detail)
+            XCTAssertFalse(strip.samples.isEmpty, detail)
+            XCTAssertGreaterThan(strip.lifetime, 0, detail)
+            XCTAssertLessThanOrEqual(strip.lifetime, 1.01, detail)
+            XCTAssertEqual(strip.lifetime, strip.layers.map(\.lifetime).max(), detail)
+            XCTAssertTrue(strip.samples.allSatisfy { age($0) >= 0 && age($0) < strip.lifetime },
+                          "\(detail): no future or expired sample may remain")
+            for (a, b) in zip(strip.samples, strip.samples.dropFirst()) {
+                XCTAssertEqual(b.tick, a.tick + 1, "\(detail): no missing-tick bridge")
+                XCTAssertLessThanOrEqual(simd_distance(a.base, b.base), maximumStep, "\(detail): no base bridge")
+                XCTAssertLessThanOrEqual(simd_distance(a.tip, b.tip), maximumStep, "\(detail): no tip bridge")
+            }
+            for layer in strip.layers {
+                let samples = strip.samples.filter { age($0) < layer.lifetime }.count
+                XCTAssertEqual(layer.vertices, samples >= 2 ? samples * 2 : 0, detail)
+                XCTAssertEqual(layer.triangles, samples >= 2 ? (samples - 1) * 2 : 0, detail)
+            }
+            if let old = oldByID[strip.id] {
+                XCTAssertEqual(strip.slot, old.slot, detail)
+                XCTAssertEqual(strip.family, old.family, detail)
+                XCTAssertEqual(strip.motionID, old.motionID, detail)
+                XCTAssertEqual(strip.isShadow, old.isShadow, detail)
+                XCTAssertEqual(strip.lifetime, old.lifetime, detail)
+                let survivors = old.samples.filter { age($0) < old.lifetime }
+                XCTAssertEqual(strip.samples.filter { $0.tick < tick }, survivors,
+                               "\(detail): previous samples may only expire, never move or disappear early")
+                if isEmitting {
+                    XCTAssertTrue(previous?.emitters.contains { $0.stripID == strip.id } == true,
+                                  "\(detail): a retired strip cannot resume emission")
+                    XCTAssertEqual(strip.samples.filter { $0.tick == tick }.count, 1, detail)
+                } else {
+                    XCTAssertEqual(strip.samples, survivors,
+                                   "\(detail): a retired strip must never append another sample")
+                }
+            } else {
+                XCTAssertTrue(isEmitting, "\(detail): a new strip must belong to exactly one current weapon")
+                XCTAssertLessThanOrEqual(strip.samples.count, 2, "\(detail): only the adjacent seed may precede a new strip")
+                XCTAssertTrue(strip.samples.allSatisfy { $0.tick == tick || $0.tick == tick - 1 }, detail)
+            }
+        }
+        for old in previous?.retained ?? [] where byID[old.id] == nil {
+            let tail = try XCTUnwrap(old.samples.last)
+            XCTAssertGreaterThanOrEqual(age(tail), old.lifetime,
+                "\(context) slot=\(old.slot): a retired strip must keep its full source lifetime")
         }
     }
 

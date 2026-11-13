@@ -85,6 +85,8 @@ final class DuelWeaponEffects {
     private var ended = false
     private var sequence = 0
     private(set) var emittedSampleCount = 0
+    /// Includes stopped strips until their last source sample has faded out.
+    /// This is not the number of weapons currently emitting a strip.
     var retainedTrailCount: Int { trails.count }
     /// Runtime trails are added to this exact private node. A same-named
     /// replacement under the prepared root cannot make a detached owner ready.
@@ -150,6 +152,47 @@ final class DuelWeaponEffects {
     }
 
     #if DEBUG
+    /// Read-only test inspection; assembled only when requested. In particular,
+    /// no per-frame diagnostics or additional runtime trail state are retained.
+    struct TrailDiagnostics: Equatable {
+        struct Point: Equatable { let tick: Int; let base: SIMD3<Float>; let tip: SIMD3<Float> }
+        struct Layer: Equatable { let lifetime: Double; let vertices: Int; let triangles: Int }
+        struct Strip: Equatable {
+            let id: String
+            let fighterID: Int
+            let slot: Int
+            let family: Family
+            let motionID: String
+            let isShadow: Bool
+            let lifetime: Double
+            let samples: [Point]
+            let layers: [Layer]
+            let isAttached: Bool
+        }
+        struct Emitter: Equatable { let fighterID: Int; let slot: Int; let stripID: String }
+        let retained: [Strip]
+        let emitters: [Emitter]
+        let attachedRootCount: Int
+    }
+    var trailDiagnostics: TrailDiagnostics {
+        let retained = trails.map { trail in
+            TrailDiagnostics.Strip(id: trail.root.name ?? "unnamed", fighterID: trail.key.fighter,
+                slot: trail.key.slot, family: trail.family, motionID: trail.motionID, isShadow: trail.shadow,
+                lifetime: trail.lifetime,
+                samples: trail.samples.map { .init(tick: $0.tick, base: $0.base, tip: $0.tip) },
+                layers: trail.layers.map {
+                    .init(lifetime: $0.profile.lifetime,
+                          vertices: $0.node.geometry?.sources(for: .vertex).first?.vectorCount ?? 0,
+                          triangles: $0.node.geometry?.elements.reduce(0) { $0 + $1.primitiveCount } ?? 0)
+                }, isAttached: trail.root.parent === container)
+        }
+        let emitters = emitting.map {
+            TrailDiagnostics.Emitter(fighterID: $0.key.fighter, slot: $0.key.slot,
+                                     stripID: $0.value.root.name ?? "unnamed")
+        }.sorted { ($0.fighterID, $0.slot) < ($1.fighterID, $1.slot) }
+        return .init(retained: retained, emitters: emitters, attachedRootCount: container.childNodes.count)
+    }
+
     /// Synthetic test data only. Separate from source asset loading/authentication;
     /// no files or audio are read or created.
     static func preparationFixture(root: SCNNode) -> DuelWeaponEffects {
