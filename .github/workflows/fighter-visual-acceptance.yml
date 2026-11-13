@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 1
           lfs: false
           submodules: false
-      - name: Pin source, ten methods, asset references and screenshot labels
+      - name: Pin source, eleven methods, asset references and screenshot labels
         id: prepare
         timeout-minutes: 2
         run: |
@@ -70,7 +70,7 @@ jobs:
       - name: Prepare one installed iPhone 17 Pro Max simulator
         timeout-minutes: 12
         run: python3 .github/scripts/fighter_visual_acceptance.py simulator
-      - name: Run only the ten selected native methods without rebuilding
+      - name: Run only the eleven selected native methods without rebuilding
         timeout-minutes: 20
         run: python3 .github/scripts/fighter_visual_acceptance.py test
       - name: Export and check all 26 expected images and three data attachments

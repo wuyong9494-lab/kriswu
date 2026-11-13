@@ -41,8 +41,10 @@ SELECTED = [
     ("DuelShadowPresentationTests", "testBothShadowFamiliesUseVerifiedSourceEffectsAndReleaseTheirTrails", "actual source textures; authoritative provisional shadow poses"),
     ("DuelWeaponGameplayTests", "testRealOpticalFitRetainsLensOnInvalidSkinAndRecovers", "actual resources and production camera; artificial skin-failure injection"),
     ("DuelShadowPresentationTests", "testRealShadowReleaseAndCatchBoundariesRenderForBothFacings", "actual source models and authoritative shadow ticks; fixed test renderer"),
+    ("DuelWeaponAssetTests", "testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit", "native optical-fit validation; synthetic empty/partial/complete skin envelopes; no image"),
 ]
 SELECTORS = ["SiteTests/" + klass + "/" + method for klass, method, _ in SELECTED]
+EXPECTED_NATIVE_COUNT = 11
 IMAGE_LABELS = (
     ["distinct-source-render-" + role for role in ("idle", "weapon1", "heavy", "kick")]
     + ["source-hit-first-simulation-step", "source-hit-original-six-layers", "source-block-original-nine-layers"]
@@ -110,6 +112,30 @@ def recipient_digest(data):
     return hashlib.sha256(der).hexdigest()
 
 
+def selected_source_inventory(root=ROOT):
+    """Bind only the selected methods, including their named Swift extensions."""
+    hashes, sources = {}, {}
+    directory = root / "Tests/SiteTests"
+    for klass, method, _ in SELECTED:
+        candidates = [directory / (klass + ".swift")] + sorted(directory.glob(klass + "+*.swift"))
+        declarations = []
+        for path in candidates:
+            if not path.is_file():
+                continue
+            assert not path.is_symlink(), "Selected source must be a regular file"
+            text = path.read_text()
+            count = len(re.findall(r"^\s*func\s+" + re.escape(method) + r"\s*\(", text, re.M))
+            if count:
+                assert re.search(r"\b(?:class|extension)\s+" + re.escape(klass) + r"\b", text)
+                declarations.extend([path] * count)
+        assert len(declarations) == 1, "Missing or duplicate exact method: " + klass + "/" + method
+        path = declarations[0]
+        source = str(path.relative_to(root))
+        hashes[source] = digest(path)
+        sources["SiteTests/" + klass + "/" + method] = source
+    return hashes, sources
+
+
 def prepare():
     os.umask(0o077)
     assert os.environ["GITHUB_REPOSITORY"] == "wuyong9494-lab/kriswu"
@@ -120,14 +146,9 @@ def prepare():
     assert actual == expected, "Checkout/source SHA mismatch"
     event = read_json(Path(os.environ["GITHUB_EVENT_PATH"]))
     assert event["head_commit"]["message"].startswith("Capture current fighter visual acceptance")
-    assert len(SELECTORS) == len(set(SELECTORS)) == 10 and len(IMAGE_LABELS) == 26
+    assert len(SELECTORS) == len(set(SELECTORS)) == EXPECTED_NATIVE_COUNT and len(IMAGE_LABELS) == 26
     assert recipient_digest(RECIPIENT.read_bytes()) == RECIPIENT_SPKI_SHA256
-    hashes = {}
-    for klass, method, _ in SELECTED:
-        path = ROOT / "Tests/SiteTests" / (klass + ".swift")
-        text = path.read_text()
-        assert len(re.findall(r"\bfunc\s+" + re.escape(method) + r"\s*\(", text)) == 1, "Missing exact method"
-        hashes[str(path.relative_to(ROOT))] = digest(path)
+    hashes, method_sources = selected_source_inventory()
     for path in MANIFESTS + ["project.yml", ".github/scripts/fighter_visual_acceptance.py",
                              ".github/scripts/fighter_private_model.py", ".github/scripts/fighter_sf3_assets.py",
                              ".github/scripts/fighter_sf3_distinct.py", ".github/workflows/fighter-visual-acceptance.yml"]:
@@ -137,7 +158,9 @@ def prepare():
                 "runId": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
                 "preparedAtUTC": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "selectedSourceSHA256": hashes, "resourceManifestReferences": MANIFESTS,
-                "selectors": [{"identifier": selector, "scenarioType": row[2]} for selector, row in zip(SELECTORS, SELECTED)],
+                "expectedNativeMethods": EXPECTED_NATIVE_COUNT,
+                "selectors": [{"identifier": selector, "scenarioType": row[2], "sourceFile": method_sources[selector]}
+                              for selector, row in zip(SELECTORS, SELECTED)],
                 "expectedImageLabels": IMAGE_LABELS, "expectedDataLabels": DATA_LABELS,
                 "recipientSPKISHA256": RECIPIENT_SPKI_SHA256,
                 "wrappedKeyEncoding": "raw-32", "wrappedKeyEntropyBytes": 32,
@@ -147,7 +170,7 @@ def prepare():
                                 "No SwiftPM/core107, old synthetic22, full resource suite or UI flow is rerun",
                                 "Build702/TestFlight/Release state is unchanged; no app or source resource is uploaded"]}
     write_json(work() / "identity.json", identity)
-    print(f"Pinned source {actual}; 10 native methods; 26 image labels and 3 data labels; unsigned simulator only.")
+    print(f"Pinned source {actual}; {EXPECTED_NATIVE_COUNT} native methods; 26 image labels and 3 data labels; unsigned simulator only.")
 
 
 def resource_records():
@@ -258,7 +281,7 @@ def export_result(kind):
 
 
 def verify_results(summary, data):
-    for key, value in [("totalTestCount", 10), ("passedTests", 10), ("failedTests", 0), ("skippedTests", 0)]:
+    for key, value in [("totalTestCount", EXPECTED_NATIVE_COUNT), ("passedTests", EXPECTED_NATIVE_COUNT), ("failedTests", 0), ("skippedTests", 0)]:
         assert type(summary.get(key)) is int and summary[key] == value, "Unexpected summary count"
     assert summary.get("result") == "Passed" and isinstance(data.get("testNodes"), list)
     seen = []
@@ -287,15 +310,15 @@ def test():
         run_logged(command, "selected-native", 990)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         code = error.returncode if isinstance(error, subprocess.CalledProcessError) else 124
-    write_json(work() / "native-process.json", {"exitCode": code, "selectedCount": 10, "iterations": 1})
+    write_json(work() / "native-process.json", {"exitCode": code, "selectedCount": EXPECTED_NATIVE_COUNT, "iterations": 1})
     if (work() / "selected.xcresult/Info.plist").is_file():
         export_result("summary")
         export_result("tests")
     if code:
         raise SystemExit(code)
     verify_results(read_json(work() / "summary.json"), read_json(work() / "tests.json"))
-    (work() / "native-ok.txt").write_text("10 passed; 0 failed; 0 skipped; exact method inventory\n")
-    print("Native results: 10 passed; 0 failed; 0 skipped; exact method inventory; no retries.")
+    (work() / "native-ok.txt").write_text(f"{EXPECTED_NATIVE_COUNT} passed; 0 failed; 0 skipped; exact method inventory\n")
+    print(f"Native results: {EXPECTED_NATIVE_COUNT} passed; 0 failed; 0 skipped; exact method inventory; no retries.")
 
 
 def attachment_inventory(root):
@@ -444,7 +467,7 @@ def cleanup():
 
 def report():
     identity = read_json(work() / "identity.json")
-    result = {"sourceSha": identity["sourceSha"], "runId": identity["runId"], "expectedNativeMethods": 10,
+    result = {"sourceSha": identity["sourceSha"], "runId": identity["runId"], "expectedNativeMethods": EXPECTED_NATIVE_COUNT,
               "nativeExactSetPassed": (work() / "native-ok.txt").exists(), "expectedImages": 26,
               "timings": read_json(work() / "timings.json") if (work() / "timings.json").exists() else {},
               "physicalDeviceAcceptance": "NOT VERIFIED", "stable60fps": "NOT VERIFIED", "musicAudibility": "NOT TESTED"}

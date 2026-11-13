@@ -32,6 +32,27 @@ extension DuelWeaponAssetTests {
             size: size, verticalFieldOfView: 35).isEmpty)
     }
 
+    func testEmptyOrPartialSkinEnvelopeCannotClaimSuccessfulOpticalFit() throws {
+        // A hidden character produces no displayed influence points. Treat
+        // missing or incomplete 16-point boxes as unknown geometry, rather
+        // than allowing the lens to shrink to its pair-only minimum.
+        for count in [0, 15, 17] {
+            let incomplete = [SIMD3<Float>](repeating: SIMD3(0, 0, -10), count: count)
+            XCTAssertThrowsError(try DuelDisplayedSkinBounds.verticalFOV(
+                points: incomplete, aspect: 2.1, minimum: 29, near: 0.1)) { error in
+                XCTAssertEqual(error as? DuelDisplayedSkinBounds.Failure, .unsupportedGeometry)
+            }
+        }
+
+        // Complete pose samples must retain the existing optical fit.
+        let complete = [SIMD3<Float>](repeating: SIMD3(0, 0, -10), count: 16)
+        XCTAssertEqual(try DuelDisplayedSkinBounds.verticalFOV(
+            points: complete, aspect: 2.1, minimum: 29, near: 0.1), 29, accuracy: 0.000001)
+        let extended = [SIMD3<Float>](repeating: SIMD3(6, 0, -10), count: 16)
+        XCTAssertGreaterThan(try DuelDisplayedSkinBounds.verticalFOV(
+            points: extended, aspect: 2.1, minimum: 29, near: 0.1), 29)
+    }
+
     func testArtworkCoordinatesConvertBetweenMountedViewsAndClearWhenWorldDetaches() throws {
         let session = DuelSession(.init(hero: .ember, difficulty: .learning, mode: .practice))
         let world = DuelWorldView(session: session, characterSource: .procedural)
