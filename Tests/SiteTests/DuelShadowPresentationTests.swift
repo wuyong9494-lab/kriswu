@@ -93,7 +93,9 @@ final class DuelShadowPresentationTests: XCTestCase {
     }
 
     /// Evaluates a real source skinned vertex, not a substitute weapon node.
-    private func vertex(_ index: Int, skinner: SCNSkinner) throws -> SIMD3<Float> {
+    private func vertex(_ index: Int, holder: SCNNode) throws -> SIMD3<Float> {
+        let skinner = try XCTUnwrap(holder.skinner)
+        let skinSources = try XCTUnwrap(GLTFModel.skinSources(for: holder))
         let positions = try XCTUnwrap(skinner.baseGeometry?.sources(for: .vertex).first)
         func scalar(_ source: SCNGeometrySource, _ component: Int) -> Float {
             source.data.withUnsafeBytes {
@@ -105,7 +107,7 @@ final class DuelShadowPresentationTests: XCTestCase {
         let inverses = try XCTUnwrap(skinner.boneInverseBindTransforms)
         var value = SIMD4<Float>.zero
         for component in 0..<4 {
-            let source = skinner.boneIndices
+            let source = skinSources.indices
             let joint = source.data.withUnsafeBytes {
                 Int(UInt16(littleEndian: $0.loadUnaligned(fromByteOffset:
                     source.dataOffset + index * source.dataStride + component * 2, as: UInt16.self)))
@@ -114,7 +116,7 @@ final class DuelShadowPresentationTests: XCTestCase {
             let inverse = simd_float4x4(columns: (
                 SIMD4(m.m11, m.m12, m.m13, m.m14), SIMD4(m.m21, m.m22, m.m23, m.m24),
                 SIMD4(m.m31, m.m32, m.m33, m.m34), SIMD4(m.m41, m.m42, m.m43, m.m44)))
-            value += scalar(skinner.boneWeights, component) * (skinner.bones[joint].simdWorldTransform * inverse * p)
+            value += scalar(skinSources.weights, component) * (skinner.bones[joint].simdWorldTransform * inverse * p)
         }
         return SIMD3(value.x, value.y, value.z)
     }
@@ -137,7 +139,8 @@ final class DuelShadowPresentationTests: XCTestCase {
             let actor = DuelWeaponCharacterInstance(character), root = SCNNode()
             root.addChildNode(actor.instance.root)
             let mesh = actor.instance.nodes[try XCTUnwrap(character.model.node(named: meshName))]
-            let skinner = try XCTUnwrap(mesh.childNodes.compactMap(\.skinner).first)
+            let holder = try XCTUnwrap(mesh.childNodes.first { $0.skinner != nil })
+            let skinner = try XCTUnwrap(holder.skinner)
             let geometry = try XCTUnwrap(skinner.baseGeometry)
             let materials = geometry.materials
             let right = actor.instance.nodes[try XCTUnwrap(character.model.node(named: "weapon_r"))]
@@ -150,8 +153,8 @@ final class DuelShadowPresentationTests: XCTestCase {
                 let heldRight = right.simdTransform, heldLeft = left.simdWorldTransform
                 actor.pose(fighter, root: root, shadow: shadow)
                 if let base = shadow?.weaponBase, let tip = shadow?.weaponTip {
-                    let actualBase = try vertex(baseVertex, skinner: skinner)
-                    let actualTip = try vertex(tipVertex, skinner: skinner)
+                    let actualBase = try vertex(baseVertex, holder: holder)
+                    let actualTip = try vertex(tipVertex, holder: holder)
                     XCTAssertLessThan(simd_distance(actualBase, SIMD3(Float(base.x), Float(base.y), Float(base.z))), 0.003)
                     XCTAssertLessThan(simd_distance(actualTip, SIMD3(Float(tip.x), Float(tip.y), Float(tip.z))), 0.003)
                     outbound = outbound || shadow!.tick < 48
@@ -253,10 +256,10 @@ final class DuelShadowPresentationTests: XCTestCase {
                     actor.pose(fighter, root: root, shadow: shadow)
                     let effectPose = try XCTUnwrap(DuelWorldView.weaponEffectPoses(fight, tick: fight.frame).first)
                     effects.consumeStep(poses: [effectPose], animationTick: fight.frame)
-                    let actualBase = try vertex(right.base, skinner: right.skin)
-                    let actualTip = try vertex(right.tip, skinner: right.skin)
-                    let actualLeftBase = try vertex(left.base, skinner: left.skin)
-                    let actualLeftTip = try vertex(left.tip, skinner: left.skin)
+                    let actualBase = try vertex(right.base, holder: right.holder)
+                    let actualTip = try vertex(right.tip, holder: right.holder)
+                    let actualLeftBase = try vertex(left.base, holder: left.holder)
+                    let actualLeftTip = try vertex(left.tip, holder: left.holder)
                     XCTAssertTrue([actualBase, actualTip, actualLeftBase, actualLeftTip].allSatisfy(finite))
                     for node in actor.instance.nodes {
                         for column in 0..<4 {
@@ -268,8 +271,8 @@ final class DuelShadowPresentationTests: XCTestCase {
                     XCTAssertTrue(right.skin.baseGeometry === right.geometry)
                     XCTAssertEqual(right.geometry.materials.count, rightMaterials.count)
                     for (a, b) in zip(right.geometry.materials, rightMaterials) { XCTAssertTrue(a === b) }
-                    let leftBaseError = simd_distance(actualLeftBase, try vertex(heldLeft.base, skinner: heldLeft.skin))
-                    let leftTipError = simd_distance(actualLeftTip, try vertex(heldLeft.tip, skinner: heldLeft.skin))
+                    let leftBaseError = simd_distance(actualLeftBase, try vertex(heldLeft.base, holder: heldLeft.holder))
+                    let leftTipError = simd_distance(actualLeftTip, try vertex(heldLeft.tip, holder: heldLeft.holder))
                     XCTAssertLessThan(leftBaseError, 0.00001)
                     XCTAssertLessThan(leftTipError, 0.00001)
                     for column in 0..<4 {
@@ -282,8 +285,8 @@ final class DuelShadowPresentationTests: XCTestCase {
                     } else {
                         // Includes tick 72 immediately after the last detached
                         // pose; source mesh and socket identity must be retained.
-                        XCTAssertLessThan(simd_distance(actualBase, try vertex(heldRight.base, skinner: heldRight.skin)), 0.00001)
-                        XCTAssertLessThan(simd_distance(actualTip, try vertex(heldRight.tip, skinner: heldRight.skin)), 0.00001)
+                        XCTAssertLessThan(simd_distance(actualBase, try vertex(heldRight.base, holder: heldRight.holder)), 0.00001)
+                        XCTAssertLessThan(simd_distance(actualTip, try vertex(heldRight.tip, holder: heldRight.holder)), 0.00001)
                         for column in 0..<4 {
                             XCTAssertLessThan(simd_distance(actor.instance.nodes[rightIndex].simdTransform[column],
                                                            heldActor.instance.nodes[rightIndex].simdTransform[column]), 0.00001)
@@ -308,8 +311,8 @@ final class DuelShadowPresentationTests: XCTestCase {
                             "bodyClip": selection.clip, "bodyClipTick": selection.tick, "bodyClipPhase": selection.phase,
                             "detached": shadow.weaponBase != nil, "attacking": shadow.isAttacking,
                             "rightBaseWorld": numbers(actualBase), "rightTipWorld": numbers(actualTip),
-                            "heldRightBaseWorld": numbers(try vertex(heldRight.base, skinner: heldRight.skin)),
-                            "heldRightTipWorld": numbers(try vertex(heldRight.tip, skinner: heldRight.skin)),
+                            "heldRightBaseWorld": numbers(try vertex(heldRight.base, holder: heldRight.holder)),
+                            "heldRightTipWorld": numbers(try vertex(heldRight.tip, holder: heldRight.holder)),
                             "rightHandWorld": numbers(actor.instance.nodes[handIndex].simdWorldPosition),
                             "rightWeaponSocketWorld": numbers(actor.instance.nodes[rightIndex].simdWorldPosition),
                             "leftBaseErrorMetres": Double(leftBaseError), "leftTipErrorMetres": Double(leftTipError),

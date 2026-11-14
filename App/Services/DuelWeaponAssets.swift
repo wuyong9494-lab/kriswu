@@ -269,19 +269,21 @@ final class DuelWeaponCharacterInstance {
             guard let index = asset.model.node(named: name) else { continue }
             for holder in instance.nodes[index].childNodes {
                 guard let original = holder.skinner,
+                      let geometry = original.baseGeometry,
+                      let sources = GLTFModel.skinSources(for: holder),
                       let inverseBinds = original.boneInverseBindTransforms else { continue }
                 let corrected = inverseBinds.map { value -> NSValue in
                     let bind = simd_float4x4(value.scnMatrix4Value)
                     return NSValue(scnMatrix4: SCNMatrix4(bind * inverseOuter))
                 }
-                let skin = SCNSkinner(baseGeometry: original.baseGeometry,
-                                     bones: original.bones,
-                                     boneInverseBindTransforms: corrected,
-                                     boneWeights: original.boneWeights,
-                                     boneIndices: original.boneIndices)
-                skin.skeleton = original.skeleton
-                skin.baseGeometryBindTransform = original.baseGeometryBindTransform
-                holder.skinner = skin
+                // Preserve the actual imported influences when replacing the
+                // instance's binds; SceneKit can return empty source getters.
+                // The new binding belongs only to this corrected skinner.
+                _ = GLTFModel.installSkinner(on: holder, geometry: geometry,
+                    bones: original.bones, inverseBinds: corrected,
+                    weights: sources.weights, indices: sources.indices,
+                    skeleton: original.skeleton,
+                    baseGeometryBindTransform: original.baseGeometryBindTransform)
             }
         }
     }

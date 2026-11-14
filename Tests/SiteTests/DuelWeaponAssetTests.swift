@@ -72,6 +72,7 @@ final class DuelWeaponAssetTests: XCTestCase {
         let index = try XCTUnwrap(actor.asset.model.node(named: mesh))
         let holder = try XCTUnwrap(actor.instance.nodes[index].childNodes.first { $0.skinner != nil })
         let skinner = try XCTUnwrap(holder.skinner)
+        let skinSources = try XCTUnwrap(GLTFModel.skinSources(for: holder))
         let source = try XCTUnwrap(skinner.baseGeometry?.sources(for: .vertex).first)
         let inverse = try XCTUnwrap(skinner.boneInverseBindTransforms)
         XCTAssertGreaterThan(source.vectorCount, vertex)
@@ -80,12 +81,12 @@ final class DuelWeaponAssetTests: XCTestCase {
                              float(source, vertex: vertex, component: 2), 1)
         var bones: [SCNNode] = [], matrices: [simd_float4x4] = [], weights: [Float] = []
         for component in 0..<4 {
-            let index = joint(skinner.boneIndices, vertex: vertex, component: component)
+            let index = joint(skinSources.indices, vertex: vertex, component: component)
             XCTAssertLessThan(index, skinner.bones.count)
             XCTAssertLessThan(index, inverse.count)
             bones.append(skinner.bones[index])
             matrices.append(matrix(inverse[index].scnMatrix4Value))
-            weights.append(float(skinner.boneWeights, vertex: vertex, component: component))
+            weights.append(float(skinSources.weights, vertex: vertex, component: component))
         }
         XCTAssertEqual(weights.reduce(0, +), 1, accuracy: 0.00001)
         return VertexMarker(point: position, bones: bones, inverse: matrices, weights: weights)

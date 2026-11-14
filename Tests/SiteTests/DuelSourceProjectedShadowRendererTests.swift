@@ -97,13 +97,19 @@ final class DuelProjectedShadowFixture {
         let js = SCNGeometrySource(data: jd, semantic: .boneIndices, vectorCount: 4,
             usesFloatComponents: false, componentsPerVector: 4, bytesPerComponent: 2, dataOffset: 0, dataStride: 8)
         let uploadLayout = "weights=\(Renderer.sourceLayout(ws));indices=\(Renderer.sourceLayout(js))"
-        holder.skinner = SCNSkinner(baseGeometry: geometry, bones: [bone],
-            boneInverseBindTransforms: [NSValue(scnMatrix4: SCNMatrix4Identity)], boneWeights: ws, boneIndices: js)
-        holder.skinner?.skeleton = bone; holder.castsShadow = true
+        GLTFModel.installSkinner(on: holder, geometry: geometry, bones: [bone],
+            inverseBinds: [NSValue(scnMatrix4: SCNMatrix4Identity)], weights: ws, indices: js, skeleton: bone)
+        holder.castsShadow = true
         if let skin = holder.skinner, let positions = geometry.sources(for: .vertex).first {
             print("Synthetic SceneKit skin upload: \(uploadLayout)")
             print("Synthetic SceneKit skin returned: position=\(Renderer.sourceLayout(positions));weights=\(Renderer.sourceLayout(skin.boneWeights));indices=\(Renderer.sourceLayout(skin.boneIndices))")
         }
+        if let retained = GLTFModel.skinSources(for: holder) {
+            print("Synthetic SceneKit retained inputs: weights=\(Renderer.sourceLayout(retained.weights));indices=\(Renderer.sourceLayout(retained.indices))")
+            XCTAssertEqual(retained.weights.data, weights.withUnsafeBytes { Data($0) })
+            XCTAssertEqual(retained.indices.data, joints.withUnsafeBytes { Data($0) })
+            XCTAssertFalse(retained.weights === ws); XCTAssertFalse(retained.indices === js)
+        } else { XCTFail("A source-created holder must retain the exact constructor inputs") }
         return .init(root: root, nodes: [holder, bone], materials: [material], outlines: [])
     }
 
@@ -338,8 +344,43 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let skin = try XCTUnwrap(a.nodes[0].skinner); a.nodes[0].skinner = nil
         XCTAssertThrowsError(try create()); XCTAssertTrue(a.nodes[0].castsShadow)
         a.nodes[0].skinner = skin
-        // The optical-fit path reads the same actual SceneKit getters. It
-        // must respond to bones without modifying the corrected source model.
+        let sourceHolder = b.nodes[0]
+        let sourceGeometry = try XCTUnwrap(sourceHolder.geometry)
+        let sourceSkin = try XCTUnwrap(sourceHolder.skinner)
+        let captured = try XCTUnwrap(GLTFModel.skinSources(for: sourceHolder))
+        let capturedWeights = captured.weights.data.withUnsafeBytes { Data($0) }
+        let capturedIndices = captured.indices.data.withUnsafeBytes { Data($0) }
+        let clone = sourceHolder.clone()
+        // Force the alias even on runtimes whose clone implementation happens
+        // to copy userData; the typed owner identity must reject borrowed data.
+        clone.userData = sourceHolder.userData
+        XCTAssertNil(GLTFModel.skinSources(for: clone))
+        GLTFModel.installSkinner(on: clone, geometry: sourceGeometry, bones: sourceSkin.bones,
+            inverseBinds: sourceSkin.boneInverseBindTransforms,
+            weights: captured.weights, indices: captured.indices, skeleton: sourceSkin.skeleton)
+        XCTAssertNotNil(GLTFModel.skinSources(for: clone))
+        XCTAssertNotNil(GLTFModel.skinSources(for: sourceHolder))
+        XCTAssertFalse(clone.userData === sourceHolder.userData)
+        XCTAssertTrue(sourceHolder.skinner === sourceSkin)
+        XCTAssertEqual(GLTFModel.skinSources(for: sourceHolder)?.weights.data, capturedWeights)
+        XCTAssertEqual(GLTFModel.skinSources(for: sourceHolder)?.indices.data, capturedIndices)
+        clone.geometry = try XCTUnwrap(sourceGeometry.copy() as? SCNGeometry)
+        XCTAssertNil(GLTFModel.skinSources(for: clone), "A different geometry cannot borrow the retained input")
+        let correctedBinds = [NSValue(scnMatrix4: SCNMatrix4MakeTranslation(0.25, 0, 0))]
+        GLTFModel.installSkinner(on: clone, geometry: sourceGeometry, bones: sourceSkin.bones,
+            inverseBinds: correctedBinds, weights: captured.weights, indices: captured.indices,
+            skeleton: sourceSkin.skeleton)
+        let reboundSkin = try XCTUnwrap(clone.skinner)
+        XCTAssertEqual(try XCTUnwrap(reboundSkin.boneInverseBindTransforms?.first).scnMatrix4Value.m41, 0.25)
+        XCTAssertEqual(GLTFModel.skinSources(for: clone)?.weights.data, capturedWeights)
+        XCTAssertEqual(GLTFModel.skinSources(for: clone)?.indices.data, capturedIndices)
+        let stranger = Fixture.actor(name: "unrelated_binding")
+        clone.skinner = stranger.nodes[0].skinner
+        XCTAssertNil(GLTFModel.skinSources(for: clone), "A replacement skinner cannot inherit a previous binding")
+        clone.geometry = sourceGeometry; clone.skinner = reboundSkin
+        XCTAssertNotNil(GLTFModel.skinSources(for: clone))
+        // Optical fitting and projection consume the same exact constructor
+        // inputs, and follow bones without modifying the corrected model.
         let originalGeometry = b.nodes[0].geometry, originalSkin = b.nodes[0].skinner
         let originalNodes = b.nodes.map(ObjectIdentifier.init)
         let bounds = try DuelDisplayedSkinBounds(root: b.root)

@@ -35,6 +35,75 @@ final class GLTFModel: @unchecked Sendable {
         let outlines: [SCNNode]
     }
 
+    /// Exact inputs supplied to this holder's SCNSkinner constructor. On the
+    /// observed iOS 26.5 runtime, boneWeights/boneIndices getters returned empty
+    /// sources immediately after a valid construction. An empty getter cannot
+    /// authorize invented rigid weights or a substitute skeleton.
+    struct SkinSources {
+        let weights: SCNGeometrySource
+        let indices: SCNGeometrySource
+    }
+    private final class SkinSourceBinding: NSObject {
+        weak var holder: SCNNode?
+        weak var geometry: SCNGeometry?
+        weak var skinner: SCNSkinner?
+        let boneIDs: [ObjectIdentifier]
+        let sources: SkinSources
+        init(holder: SCNNode, geometry: SCNGeometry, skinner: SCNSkinner,
+             bones: [SCNNode], sources: SkinSources) {
+            self.holder = holder; self.geometry = geometry; self.skinner = skinner
+            boneIDs = bones.map(ObjectIdentifier.init); self.sources = sources
+            super.init()
+        }
+    }
+    private static let skinSourcesKey = "duel.gltf.exact-skin-inputs.v1"
+
+    /// One creation path for imported geometry, corrected personal binds and
+    /// explicit synthetic fixtures. Snapshot bytes before invoking SceneKit;
+    /// the retained sources themselves are not passed to that native call.
+    /// No global registry or node-retaining metadata cycle is introduced.
+    @discardableResult
+    static func installSkinner(on holder: SCNNode, geometry: SCNGeometry,
+                               bones: [SCNNode], inverseBinds: [NSValue]?,
+                               weights: SCNGeometrySource, indices: SCNGeometrySource,
+                               skeleton: SCNNode?,
+                               baseGeometryBindTransform: SCNMatrix4 = SCNMatrix4Identity) -> SCNSkinner {
+        func snapshot(_ source: SCNGeometrySource) -> SCNGeometrySource {
+            let bytes = source.data.withUnsafeBytes { Data($0) }
+            return SCNGeometrySource(data: bytes, semantic: source.semantic, vectorCount: source.vectorCount,
+                usesFloatComponents: source.usesFloatComponents, componentsPerVector: source.componentsPerVector,
+                bytesPerComponent: source.bytesPerComponent, dataOffset: source.dataOffset, dataStride: source.dataStride)
+        }
+        let sources = SkinSources(weights: snapshot(weights), indices: snapshot(indices))
+        // A caller may itself be rebuilding from another holder's retained
+        // inputs. Isolate the native upload as well, so neither that record nor
+        // the imported template can be changed or released by framework work.
+        let upload = SkinSources(weights: snapshot(weights), indices: snapshot(indices))
+        let skinner = SCNSkinner(baseGeometry: geometry, bones: bones,
+            boneInverseBindTransforms: inverseBinds, boneWeights: upload.weights, boneIndices: upload.indices)
+        skinner.skeleton = skeleton; skinner.baseGeometryBindTransform = baseGeometryBindTransform
+        holder.geometry = geometry; holder.skinner = skinner
+        // Cloned nodes can share userData. Upserting this holder's record must
+        // never overwrite the source holder's otherwise valid binding.
+        let metadata = (holder.userData?.mutableCopy() as? NSMutableDictionary) ?? NSMutableDictionary()
+        metadata[skinSourcesKey] = SkinSourceBinding(holder: holder, geometry: geometry,
+            skinner: skinner, bones: bones, sources: sources)
+        holder.userData = metadata
+        return skinner
+    }
+
+    /// A cloned dictionary, replaced geometry/skinner or reordered bones cannot
+    /// reuse another construction's sources. Missing/stale input is a failure;
+    /// there is deliberately no fallback to empty framework getters.
+    static func skinSources(for holder: SCNNode) -> SkinSources? {
+        guard let binding = holder.userData?[skinSourcesKey] as? SkinSourceBinding,
+              binding.holder === holder, let geometry = holder.geometry,
+              binding.geometry === geometry, let skinner = holder.skinner,
+              binding.skinner === skinner, skinner.baseGeometry === geometry,
+              skinner.bones.map(ObjectIdentifier.init) == binding.boneIDs else { return nil }
+        return binding.sources
+    }
+
     /// An authenticated source export may name a descendant as its skeleton
     /// root even though its joint table also includes an ancestor. Callers must
     /// opt in after verifying that export; ordinary glTF loading stays strict.
@@ -697,12 +766,11 @@ final class GLTFModel: @unchecked Sendable {
                 for (part, partGeometry) in parts {
                     if let skin, !skin.joints.isEmpty, skin.joints.allSatisfy({ made.indices.contains($0) }),
                        let indices = primitive.boneIndices, let weights = primitive.boneWeights {
-                        let skinner = SCNSkinner(baseGeometry: partGeometry, bones: skin.joints.map { made[$0] },
-                                                 boneInverseBindTransforms: skin.inverseBinds, boneWeights: weights, boneIndices: indices)
                         // SceneKit expects the root of the bone hierarchy, not
                         // the mesh node (which may be a sibling of every bone).
-                        skinner.skeleton = made[skin.skeleton]
-                        part.skinner = skinner
+                        Self.installSkinner(on: part, geometry: partGeometry,
+                            bones: skin.joints.map { made[$0] }, inverseBinds: skin.inverseBinds,
+                            weights: weights, indices: indices, skeleton: made[skin.skeleton])
                     }
                     made[index].addChildNode(part)
                 }

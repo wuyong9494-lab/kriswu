@@ -34,12 +34,13 @@ final class DuelDisplayedSkinBounds {
         guard !holders.isEmpty else { throw Failure.unsupportedGeometry }
         parts = try holders.map { holder in
             guard let skin = holder.skinner, let geometry = skin.baseGeometry,
+                  let sources = GLTFModel.skinSources(for: holder),
                   let positions = geometry.sources(for: .vertex).first,
                   let binds = skin.boneInverseBindTransforms, binds.count == skin.bones.count,
                   !binds.isEmpty,
                   SCNMatrix4EqualToMatrix4(skin.baseGeometryBindTransform, SCNMatrix4Identity)
             else { throw Failure.unsupportedGeometry }
-            let indices = skin.boneIndices, weights = skin.boneWeights
+            let indices = sources.indices, weights = sources.weights
             let influenceCount = weights.componentsPerVector
             guard positions.semantic == .vertex, weights.semantic == .boneWeights,
                   indices.semantic == .boneIndices,
@@ -70,10 +71,10 @@ final class DuelDisplayedSkinBounds {
                         func scalar(_ b: UnsafeRawBufferPointer, _ o: Int) -> Float {
                             Float(bitPattern: UInt32(littleEndian: b.loadUnaligned(fromByteOffset: o, as: UInt32.self)))
                         }
-                        // SCNSkinner exposes its own packed geometry sources;
-                        // their integer width need not match the uploaded GLTF
-                        // ushort4. Read the actual layout without changing skin
-                        // data, normalizing weights, or inventing influences.
+                        // Read the exact source buffers retained when this
+                        // holder's skinner was constructed. SceneKit's getter
+                        // can be empty even for valid input. Do not infer a
+                        // rigid skin, normalize weights or invent influences.
                         func jointIndex(_ offset: Int) -> Int {
                             switch indices.bytesPerComponent {
                             case 1:

@@ -442,12 +442,12 @@ final class DuelSourceWeaponTrails {
                     SIMD4(m[8], m[9], m[10], m[11]), SIMD4(m[12], m[13], m[14], m[15])))
                 return NSValue(scnMatrix4: SCNMatrix4(matrix))
             }
-            let skin = SCNSkinner(baseGeometry: geometry,
-                                 bones: mesh.bones.map { instance.nodes[model.node(named: $0)!] },
-                                 boneInverseBindTransforms: binds,
-                                 boneWeights: floats(mesh.weights, semantic: .boneWeights, width: 4), boneIndices: joints)
-            skin.skeleton = instance.nodes[model.node(named: source.skeletonNode ?? "skeleton")!]
-            let holder = SCNNode(geometry: geometry); holder.skinner = skin; holder.name = mesh.name
+            let holder = SCNNode(geometry: geometry); holder.name = mesh.name
+            _ = GLTFModel.installSkinner(on: holder, geometry: geometry,
+                bones: mesh.bones.map { instance.nodes[model.node(named: $0)!] },
+                inverseBinds: binds,
+                weights: floats(mesh.weights, semantic: .boneWeights, width: 4), indices: joints,
+                skeleton: instance.nodes[model.node(named: source.skeletonNode ?? "skeleton")!])
             holder.castsShadow = false; root.addChildNode(holder); holders.append(holder)
         }
         instance.nodes[model.node(named: source.attachmentNode ?? "SF3_Actor_Meters")!].addChildNode(root)

@@ -451,8 +451,11 @@ final class DuelSourceProjectedShadowRenderer {
                   (1...512).contains(binds.count), (1...250_000).contains(position.vectorCount) else {
                 throw Failure.geometry
             }
-            let vertices = try readSkinSources(position: position, weights: skin.boneWeights,
-                indices: skin.boneIndices, boneCount: binds.count)
+            guard let sources = GLTFModel.skinSources(for: holder) else {
+                throw Failure.skinLayout("missing-or-stale retained skin inputs")
+            }
+            let vertices = try readSkinSources(position: position, weights: sources.weights,
+                indices: sources.indices, boneCount: binds.count)
             let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
             let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
             guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
@@ -488,8 +491,8 @@ final class DuelSourceProjectedShadowRenderer {
             originalFlags: holders.map { ($0, $0.castsShadow) })
     }
 
-    /// Read the actual SCNSkinner getters, not an assumption that SceneKit
-    /// retained the original uint16x4 upload representation. The public skin
+    /// Read the exact retained constructor inputs, not empty framework getters
+    /// or an assumed uint16x4 layout. The public skin
     /// contract maps one integer index to each floating-point influence; at
     /// most four influences fit this GPU vertex format. Unknown representations
     /// and invalid source values still fail before changing any caster flags.
@@ -557,7 +560,7 @@ final class DuelSourceProjectedShadowRenderer {
     }
 
     /// Layout metadata only; no original vertex or texture bytes are logged.
-    /// SceneKit may expose a representation different from the upload source.
+    /// SceneKit may expose empty getters despite valid constructor inputs.
     static func sourceLayout(_ source: SCNGeometrySource) -> String {
         "semantic=\(source.semantic.rawValue),float=\(source.usesFloatComponents),components=\(source.componentsPerVector),bytes=\(source.bytesPerComponent),count=\(source.vectorCount),offset=\(source.dataOffset),stride=\(source.dataStride),length=\(source.data.count)"
     }

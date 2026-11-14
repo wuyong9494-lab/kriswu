@@ -318,7 +318,8 @@ extension DuelWeaponAssetTests {
                         SIMD4(m.m41, m.m42, m.m43, m.m44)))
                     return bone.simdWorldTransform * bind
                 }
-                let indices = skin.boneIndices, weights = skin.boneWeights
+                let skinSources = try XCTUnwrap(GLTFModel.skinSources(for: node))
+                let indices = skinSources.indices, weights = skinSources.weights
                 XCTAssertEqual(indices.bytesPerComponent, 2)
                 XCTAssertTrue(weights.usesFloatComponents)
                 XCTAssertEqual(weights.bytesPerComponent, 4)

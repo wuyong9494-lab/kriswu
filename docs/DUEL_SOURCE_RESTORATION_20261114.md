@@ -74,6 +74,14 @@ The decryption key is not stored in this repository.
 - Original paired front/back throws and active/passive escape clips. Both
   actors play their own skeleton's motion. Range and wall tests use recovered
   mass-weighted centers of mass, preserving submillimeter precision.
+- Each imported skinner retains an independent copy of the exact weight and
+  joint-index sources passed to its constructor. That record is local to its
+  mesh holder and accepts only the same geometry, skinner and bone order.
+  Projected shadows, optical framing and personal head/neck bind corrections
+  use those authenticated inputs, because the tested SceneKit runtime returns
+  empty weight/index getter objects even for a valid constructor input.
+  A missing or mismatched record fails validation; an empty getter is never
+  interpreted as an implicit rigid skin or replaced with invented weights.
 - The eight authenticated H17 stance clips now drive the entrance, later-round
   entrance, round victory, final victory, and their idle transitions. Source
   AnimationEnd ticks (392, 100, 198, and 314) remain separate from the full
@@ -253,6 +261,28 @@ missing, but its background-only discard assertion still passed. The repaired
 contract must also prove the neck is visible while the effect is active and
 after reset. A successful discard alone is insufficient evidence. These
 diagnostics do not turn the run's recorded 108/9 result into a passing run.
+
+The eighth build (run 43605066520, published source eab00708) compiled and
+executed all 117 selected methods once: 108 passed, nine failed, zero skipped.
+Its 18 upload/getter diagnostic pairs establish the actual representation:
+the synthetic float4 weights and UInt16x4 indices were uploaded with complete
+data, but both getters returned empty semantics and zero components, counts,
+strides and data lengths. Position data remained valid. Seven projector
+methods and one Morph projection method failed with skinLayout; the added
+optical-framing check rejected the same empty data as unsupportedGeometry.
+This was not a test-process crash or a GPU pixel mismatch. The repaired no-UV
+neck's visible, edge-color, discard, reset and second-mask assertions passed,
+with no missing-texcoord or no-pipeline diagnostics. The strict 20-byte GPU
+mip comparison also passed.
+
+Run eight's authenticated artifact preserved all 34 inventory entries and
+matched the eight source-tree pins and 18 source-file digests. Its format JSON
+was present and correct, but XCTest also emitted eight automatic failure-text
+attachments, so the strict attachment inventory correctly remained failed.
+There were no images. The subsequent repair retains the real constructor
+inputs and uses them through the original loader, bind-correction, trail and
+synthetic-fixture paths. Its next Apple execution remains required before the
+projector and late-soul comparisons can be reported as passed.
 
 The source-only Apple workflow now selects exactly 117 synthetic native methods,
 including 11 Morph and nine independent projected-shadow GPU/contract methods.
