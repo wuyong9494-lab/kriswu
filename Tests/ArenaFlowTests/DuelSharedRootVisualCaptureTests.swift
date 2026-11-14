@@ -26,7 +26,7 @@ final class DuelSharedRootVisualCaptureTests: XCTestCase {
                 count("duel.pause") == 1 && count("duel.resume") == 0 &&
                 count("duel.stats.0") == 1 && count("duel.stats.1") == 1 &&
                 value("duel.control.joystick") == "居中" &&
-                value("duel.control.weapon").contains("可施放")
+                value("duel.control.weapon") == "可施放"
         }
     }
     private enum Failure: Error { case notObserved(String) }
@@ -105,7 +105,7 @@ final class DuelSharedRootVisualCaptureTests: XCTestCase {
             guard hero == "ember" else { continue }
             let before = try wait(app, phase: "sun-branches-ready", timeout: 12) {
                 $0.isReadyPractice && $0.label("duel.control.shadow") == "枝蔓囚笼" &&
-                    $0.value("duel.control.shadow").contains("可施放")
+                    $0.value("duel.control.shadow") == "可施放"
             }
             let health = try XCTUnwrap(integer(after: "生命 ", in: before.value("duel.stats.1")))
             XCTAssertGreaterThan(health, 0)

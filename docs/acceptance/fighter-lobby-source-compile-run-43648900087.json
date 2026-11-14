@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "evidenceType": "source-compile-only",
+  "decision": "compiled; no runtime, simulator, device or original-resource acceptance implied",
+  "run": {
+    "id": 43648900087,
+    "name": "Lobby identity source compile (unsigned build only)",
+    "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+    "tree": "f0bd64525ae7df38e0db8b2e14368593f4189f90",
+    "branch": "codex/fighter-visual-acceptance-20261113-1200",
+    "workflow": ".github/workflows/fighter-lobby-source-compile.yml",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43648900087",
+    "event": "push",
+    "message": "Verify lobby identity source compile 20261115",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-14T22:35:31Z",
+    "startedAt": "2026-11-14T22:35:31Z",
+    "updatedAt": "2026-11-14T22:42:03Z",
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 06:35:31 — 2026-11-15 06:42:03（Asia/Shanghai，UTC+08:00；开始时间至最终状态更新时间）"
+  },
+  "job": {
+    "id": 132612723233,
+    "name": "lobby-source-compile",
+    "status": "completed",
+    "conclusion": "success",
+    "run_id": 43648900087,
+    "logs_url": null,
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Verify pinned source and compile the unsigned app once",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      }
+    ]
+  },
+  "runner": {
+    "image": "macos-26-arm64",
+    "imageVersion": "20261102.0473.1",
+    "osVersion": "26.7.2",
+    "agentVersion": "2.338.2",
+    "imageRelease": "https://github.com/actions/runner-images/releases/tag/macos-26-arm64%2F20261102.0473"
+  },
+  "verification": {
+    "singlePublicJobLogFetch": true,
+    "helperReportCount": 1,
+    "pinnedInputManifestMatched": true,
+    "focusInputPinsMatched": true,
+    "workflowAndHelperPinsMatched": true,
+    "sourceSHAAndRunAttemptMatched": true,
+    "artifactListCount": 0,
+    "noRetriesRequested": true,
+    "testsReexecuted": 0,
+    "publicJobLogCapture": {
+      "encoding": "UTF-8 decoded log, captured as a newline-terminated text file",
+      "bytes": 24633,
+      "sha256": "72af1afa1faa4c8be309437b621cfd8e8a3d783171b7cf20dc58c5933cfac218",
+      "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43648900087/job/132612723233",
+      "downloadedOnce": true,
+      "note": "This capture digest is not a GitHub artifact digest. Per-command log hashes below were recorded by the runner; full command logs were not uploaded."
+    },
+    "sourceInventory": {
+      "canonicalJSON": "json.dumps(rows, ensure_ascii=True, sort_keys=True, separators=(comma,colon)); rows sorted by path",
+      "rowFields": [
+        "path",
+        "mode",
+        "bytes",
+        "sha256"
+      ],
+      "discoveryOnlyInputs": [
+        "Tests"
+      ],
+      "unrelatedScriptsAndDocsExcluded": true
+    }
+  },
+  "report": {
+    "artifactUploaded": false,
+    "attempt": 1,
+    "commands": [
+      {
+        "exitCode": 0,
+        "logBytes": 321,
+        "logSHA256": "f28de54f93f59f0f1324a5b731fef476ff6a5cb57dcab1c8c5285939f5ddf06c",
+        "phase": "install-xcodegen",
+        "seconds": 7.246
+      },
+      {
+        "exitCode": 0,
+        "logBytes": 16,
+        "logSHA256": "bf8aa757345fcd22d1fd26e760aa058f02991e2d930686b8eaf750cd6e5f8532",
+        "phase": "xcodegen-version",
+        "seconds": 0.021
+      },
+      {
+        "exitCode": 0,
+        "logBytes": 162,
+        "logSHA256": "9d9d341631681e7149041d234b84c2a8445011d0e4601f4bdafee86ae8b05f67",
+        "phase": "generate-project",
+        "seconds": 0.182
+      },
+      {
+        "exitCode": 0,
+        "logBytes": 591616,
+        "logSHA256": "854c2d1378e527e2ba1620df2fe57ef2e2d2c06cff7ecc04f55f8bf42c7cedb6",
+        "phase": "unsigned-source-build",
+        "seconds": 364.924
+      }
+    ],
+    "deviceValidated": false,
+    "elapsedSeconds": 373.801,
+    "evidenceType": "source-compile-only",
+    "focusSHA256": {
+      "App/Services/DuelTriadSourceMaterial.swift": "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856",
+      "App/Views/DuelHomeView.swift": "2fbfb2b8d8ee41e3a7c7d02686c53b4c5d97e6edbdaab3ff9b238bdbe3989ee2",
+      "App/Views/DuelLobbyPreview.swift": "cdb2d78a87c8a74d3e308cf901739f07944361c235df6b203291635db32f6263",
+      "project.yml": "21ad8ca03cafb81c7ad72821627227076da7602a855020f7bbf4b16cdb08c0d1",
+      "scripts/build_fighter_network_rules.py": "50593000b48c128206cffbdde72f71c60daacddae9fe10cc8a76182c49f9ac45"
+    },
+    "helperSHA256": "1b03895207689692cd744c39f1356b53ee12b749f7726fdce0827401a74d3fab",
+    "inputBytes": 58614601,
+    "inputCount": 823,
+    "inputManifestSHA256": "faa18f44ca9d3ab54bd54323b7ca074f21995ff4330d6fe67da4cd38e745dee4",
+    "limitations": [
+      "Compilation is not runtime, simulator or iPhone acceptance.",
+      "Original H17/D19 models, audio and resource closure are not exercised.",
+      "Tests are pinned only because project generation discovers their source paths."
+    ],
+    "privateResourcesStaged": false,
+    "products": {
+      "networkRulesFingerprint": "7d53146e6237bcc643dedb7f9b4462bcb57953f44170bf89926a854f3fb25c5a",
+      "networkRulesSHA256": "f76c404d815a62428a7bb9d55572ffe17cfeecb6cd94702b70797fa7d35419be",
+      "privateReleaseEnabled": false,
+      "testBundlesProduced": 0,
+      "unsignedApplicationBuilt": true
+    },
+    "ref": "refs/heads/codex/fighter-visual-acceptance-20261113-1200",
+    "repository": "wuyong9494-lab/kriswu",
+    "runID": "43648900087",
+    "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43648900087",
+    "schemaVersion": 1,
+    "simulatorLaunched": false,
+    "sourceSHA": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+    "status": "compiled",
+    "testsExecuted": 0,
+    "workflow": ".github/workflows/fighter-lobby-source-compile.yml",
+    "workflowSHA256": "73f82fcf8557b14dccfb9cd40bc6291d580692608039e00c362f795f2ce74c79",
+    "xcodeBuild": "17F113",
+    "xcodeVersion": "26.6",
+    "xcodegenInstalledByThisRun": true,
+    "xcodegenVersion": "Version: 2.46.0"
+  },
+  "verifiedAtUTC": "2026-11-14T22:44:10.678008+00:00",
+  "sourceLinks": [
+    {
+      "path": "App/Services/DuelTriadSourceMaterial.swift",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/App/Services/DuelTriadSourceMaterial.swift"
+    },
+    {
+      "path": "App/Views/DuelHomeView.swift",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/App/Views/DuelHomeView.swift"
+    },
+    {
+      "path": "App/Views/DuelLobbyPreview.swift",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/App/Views/DuelLobbyPreview.swift"
+    },
+    {
+      "path": "project.yml",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/project.yml"
+    },
+    {
+      "path": "scripts/build_fighter_network_rules.py",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/scripts/build_fighter_network_rules.py"
+    },
+    {
+      "path": ".github/scripts/fighter_lobby_source_compile.py",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/.github/scripts/fighter_lobby_source_compile.py"
+    },
+    {
+      "path": ".github/workflows/fighter-lobby-source-compile.yml",
+      "sha": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5afd8195e2f611ab2e7c37f5096a4251a4616ee9/.github/workflows/fighter-lobby-source-compile.yml"
+    }
+  ]
+}

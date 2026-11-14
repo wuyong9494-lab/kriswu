@@ -59,6 +59,7 @@ final class DuelWorldView: SCNView {
     var sourceProjectedShadowIsInstalled: Bool { triadRenderSurface?.projectedShadow != nil }
     private(set) var triadMetalRenderer: DuelTriadMetalRenderer?
     private(set) var triadRenderSurface: DuelTriadRenderSurface?
+    private var triadSurfaceFrameDriver: DuelTriadSurfaceFrameDriver?
     /// Private acceptance diagnostics retain source compiler/runtime errors.
     /// They are not rendered in the product or written to public logs.
     private(set) var triadPreparationFailure: String?
@@ -450,11 +451,13 @@ final class DuelWorldView: SCNView {
                 triadSourceEffects = DuelTriadSourceEffects(assets: effects, factory: factory, parent: world.rootNode)
                 let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
                     pointOfView: pointOfView, packets: renderer)
+                let frameDriver = try DuelTriadSurfaceFrameDriver(surface: surface)
                 surface.lateSourceGeometry = { [weak self] in self?.triadSummons?.lateSourceGeometry ?? [] }
                 surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                 surface.contentScaleFactor = contentScaleFactor
                 addSubview(surface)
                 triadMetalRenderer = renderer; triadRenderSurface = surface
+                triadSurfaceFrameDriver = frameDriver
                 rendersContinuously = false; isPlaying = false
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
@@ -747,6 +750,7 @@ final class DuelWorldView: SCNView {
         triadSourceEffects?.shutdown(); triadSourceEffects = nil
         triadSourceMorph?.shutdown(); triadSourceMorph = nil
         triadMorphOwner = nil; triadMorphTrigger = nil; triadMorphRequested = false
+        triadSurfaceFrameDriver?.shutdown(); triadSurfaceFrameDriver = nil
         triadRenderSurface?.shutdown(); triadRenderSurface?.removeFromSuperview(); triadRenderSurface = nil
         triadMetalRenderer?.shutdown(); triadMetalRenderer = nil; delegate = nil
         NotificationCenter.default.removeObserver(self)
@@ -866,9 +870,9 @@ final class DuelWorldView: SCNView {
             node.position = SCNVector3(Float(projectile.x) / 1000, 0.9, 0.15)
         }
         SCNTransaction.commit()
-        if let surface = triadRenderSurface {
+        if let frameDriver = triadSurfaceFrameDriver {
             do {
-                try surface.drawFrame(tick: session.game.weaponFight?.triadPresentation.liveTick ?? session.animationTick,
+                try frameDriver.drawFrame(tick: session.game.weaponFight?.triadPresentation.liveTick ?? session.animationTick,
                     pointOfView: pointOfView, samples: antialiasingMode == .none ? 1 : 2)
             } catch { triadPreparationFailure = String(describing: error); triadMetalRenderer?.clear(); session.characterFailed() }
         }

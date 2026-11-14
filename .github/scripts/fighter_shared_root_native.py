@@ -7,6 +7,8 @@ event, source, release and test gates remain unchanged. No signing, upload,
 Secret mutation, TestFlight operation, media conversion or asset acquisition.
 The material followup selects the four failed resource methods plus two new
 uniform regressions, and never reexecutes the five contracts already passed.
+The UI remediation rebuilds the changed App and selects only the failed UI
+method. Native results remain historical and are never counted in that scope.
 """
 from __future__ import annotations
 
@@ -38,15 +40,20 @@ REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
 INITIAL_SCOPE = "initial-nine"
 MATERIAL_SCOPE = "material-followup-six"
+UI_SCOPE = "ui-remediation-only"
 SCOPE = os.environ.get("FIGHTER_SHARED_ROOT_SCOPE", INITIAL_SCOPE)
-if SCOPE not in (INITIAL_SCOPE, MATERIAL_SCOPE):
+if SCOPE not in (INITIAL_SCOPE, MATERIAL_SCOPE, UI_SCOPE):
     raise ValueError("Unreviewed shared-root execution scope")
 IS_MATERIAL_FOLLOWUP = SCOPE == MATERIAL_SCOPE
-WORKFLOW = (".github/workflows/fighter-shared-root-material-followup.yml" if IS_MATERIAL_FOLLOWUP
+IS_UI_REMEDIATION = SCOPE == UI_SCOPE
+WORKFLOW = (".github/workflows/fighter-shared-root-ui-remediation.yml" if IS_UI_REMEDIATION else
+            ".github/workflows/fighter-shared-root-material-followup.yml" if IS_MATERIAL_FOLLOWUP
             else ".github/workflows/fighter-shared-root-native.yml")
-COMMIT_MESSAGE = ("Verify shared root material followup 20261115" if IS_MATERIAL_FOLLOWUP
+COMMIT_MESSAGE = ("Verify shared root UI remediation 20261115" if IS_UI_REMEDIATION else
+                  "Verify shared root material followup 20261115" if IS_MATERIAL_FOLLOWUP
                   else "Verify shared root native increment 20261115")
-SOURCE_BASELINE = ("68f1e7de45351c3e4b2607c56ff8ab111d0c7130" if IS_MATERIAL_FOLLOWUP
+SOURCE_BASELINE = ("5afd8195e2f611ab2e7c37f5096a4251a4616ee9" if IS_UI_REMEDIATION else
+                   "68f1e7de45351c3e4b2607c56ff8ab111d0c7130" if IS_MATERIAL_FOLLOWUP
                    else "6ebca235dfb579454c99528791f5c8e84bc9ff6f")
 REVIEWED_ENTRIES = {
     "App": "093a5558930ad0702f6e977f300498707a97630c",
@@ -67,7 +74,24 @@ UNIFORM_TEST_SHA = "e982e1ab17702552571a2fc8b00445039cf9e217ad615bf122074e67ece7
 MODEL_TEST = "Tests/SiteTests/DuelSharedRootInstalledModelTests.swift"
 MODEL_TEST_SHA = "58a5d25eb978e443b79ad4844d57a6cc2fad5e264fd6f1a0ac51e2f4b4fbbe93"
 UI_TEST = "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
-UI_TEST_SHA = "50cbcd0d6f43f843bc5c1fd2a3b05f18632217a0a32a2384626c0c21477080f0"
+UI_TEST_SHA = ("d144949cad4b14eeef47ad7bf7d0134a5671016732d9690f77599aa54b911cee" if IS_UI_REMEDIATION
+               else "50cbcd0d6f43f843bc5c1fd2a3b05f18632217a0a32a2384626c0c21477080f0")
+UI_APP_PINS = {
+    "App/Views/DuelWorld.swift": "e01058a8f5f57ce516621534f0e642397537a3532b7b3ffc88e80cf93bcf948e",
+    "App/Services/DuelTriadSurfaceFrameDriver.swift": "1986d589d7ca309e426491f818f4f9e0f9d81a2a99f6a2c4c2e1b6274f347849",
+    "App/Views/DuelView.swift": "7576166011575d14e94a7d8fc880039afc3cd03cd1b8eab02928ec66beed3925",
+}
+UI_OTHER_APP_INVENTORY_SHA = "d246306f6801c0ac9ccc11c0e42f3258ecade2d21f351f7f0b340e78b9ca9efc"
+UI_OTHER_TEST_INVENTORY_SHA = "6025ca6ccb2c1dea8214bd32002ca6ddb5dd17dfdfd65a3c976856ef019ebd40"
+UI_OTHER_SCRIPT_INVENTORY_SHA = "d5e7f85e8e6a416ff4b9d92b506191b27c8f1ded5bfb39416d34840d9daf5131"
+UI_OTHER_WORKFLOW_INVENTORY_SHA = "5bcbb3b977eb5803f3b27dec8eca538dd16b8d00be09a0dfd38648f71a22a6b8"
+UI_SCRIPTS_TREE = "64730d41241222d66e0837afdd50ae3b813be83d"
+UI_SCOPE_TEST = ".github/scripts/test_fighter_shared_root_ui_remediation.py"
+UI_SCOPE_TEST_SHA = "6ab2868fd65dc7da7e0651fd14898e7ed3db61c9f025fd23c77cde50e514f3b4"
+# Only this exact, single workflow field is replaced by 64 zeroes when hashing.
+# The real field and environment must equal this helper's complete byte digest.
+UI_WORKFLOW_CANONICAL_SHA = "caaee04b088eae85ba53c2f9cc7071a02ecc95ce1c4da662248d688f8e55ca93"
+UI_HELPER_PIN_FIELD = '      EXPECTED_SHARED_ROOT_UI_HELPER_SHA256: "'
 UI_SELECTORS = ("ArenaFlowTests/DuelSharedRootVisualCaptureTests/"
                 "testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",)
 INITIAL_TEST_METHODS = {
@@ -91,20 +115,24 @@ UNIFORM_METHODS = (
     "testInstalledSourceMaterialsResolveOnlyReviewedUnassignedCustomPosition",
     "testUnreviewedMissingUniformsRemainRejectedAndExplicitValuesKeepPriority",
 )
-TEST_METHODS = ({
+MATERIAL_TEST_METHODS = {
     "DuelTriadFloorfallIntegrationTests": INITIAL_TEST_METHODS["DuelTriadFloorfallIntegrationTests"],
     "DuelSharedRootInstalledModelTests": INITIAL_TEST_METHODS["DuelSharedRootInstalledModelTests"],
     "DuelTriadRuntimeUniformTests": UNIFORM_METHODS,
-} if IS_MATERIAL_FOLLOWUP else INITIAL_TEST_METHODS)
+}
+TEST_METHODS = ({} if IS_UI_REMEDIATION else MATERIAL_TEST_METHODS
+                if IS_MATERIAL_FOLLOWUP else INITIAL_TEST_METHODS)
 PREVIOUS_PASSED_SELECTORS = tuple("SiteTests/DuelTriadRootVictimAudioTests/" + method
     for method in INITIAL_TEST_METHODS["DuelTriadRootVictimAudioTests"])
 MODEL_SELECTOR = "SiteTests/DuelSharedRootInstalledModelTests/" + \
     INITIAL_TEST_METHODS["DuelSharedRootInstalledModelTests"][0]
 SELECTORS = tuple("SiteTests/" + klass + "/" + method
                   for klass, methods in TEST_METHODS.items() for method in methods)
-EXPECTED_COUNT = 6 if IS_MATERIAL_FOLLOWUP else 9
-METHOD_SCOPE = {"installedAudio": 3, "syntheticContracts": 0 if IS_MATERIAL_FOLLOWUP else 5,
-                "installedModels": 1, "runtimeUniformRegressions": 2 if IS_MATERIAL_FOLLOWUP else 0}
+EXPECTED_COUNT = 0 if IS_UI_REMEDIATION else 6 if IS_MATERIAL_FOLLOWUP else 9
+METHOD_SCOPE = {"installedAudio": 0 if IS_UI_REMEDIATION else 3,
+                "syntheticContracts": 0 if IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION else 5,
+                "installedModels": 0 if IS_UI_REMEDIATION else 1,
+                "runtimeUniformRegressions": 2 if IS_MATERIAL_FOLLOWUP else 0}
 EXPECTED_ATTACHMENTS = {
     "native": {"shared-root-installed-model-report": (MODEL_SELECTOR, "data")},
     "ui": {
@@ -224,9 +252,9 @@ def selected_inventory():
 
 
 def preserved_prior_evidence():
-    if not IS_MATERIAL_FOLLOWUP:
+    if not (IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION):
         return []
-    return [{
+    result = [{
         "runID": "43644209347", "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
         "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347",
         "artifactID": "14133862654",
@@ -237,9 +265,25 @@ def preserved_prior_evidence():
         "selectedAgain": False, "countsBelongToCurrentRun": False,
         "scope": "Historical synthetic binding/capability contracts; not original-media loading or playback",
     }]
+    if IS_UI_REMEDIATION:
+        result.append({
+            "runID": "43647414701", "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+            "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43647414701",
+            "artifactID": "14134893882",
+            "artifactSHA256": "1f157104bba6e631461a994ef5291e2babf3326d91ed0f407eb1697ea99a1b6e",
+            "nativeSummarySHA256": "62006d5fdbdd2379c23b1e61812c8e09a1321f904603db298b88789484ee0ea0",
+            "nativeTestNodesSHA256": "4ee46ce530c0f2c51d9c7951f6d1dded32cce8386891c8f446d735b70fbb6438",
+            "passedSelectors": tuple("SiteTests/" + klass + "/" + method
+                for klass, methods in MATERIAL_TEST_METHODS.items() for method in methods),
+            "passedMethods": 6, "selectedAgain": False, "countsBelongToCurrentRun": False,
+            "scope": "Historical installed audio/model and runtime-uniform methods; no current native execution",
+        })
+    return result
 
 
 def reviewed_test_pins():
+    if IS_UI_REMEDIATION:
+        return {UI_TEST: UI_TEST_SHA}
     result = {MODEL_TEST: MODEL_TEST_SHA, UI_TEST: UI_TEST_SHA}
     if IS_MATERIAL_FOLLOWUP:
         result[UNIFORM_TEST] = UNIFORM_TEST_SHA
@@ -250,9 +294,44 @@ def pin_scope_sources():
     for path, expected in reviewed_test_pins().items():
         require(re.fullmatch(r"[a-f0-9]{64}", expected), "New source review pin is not finalized")
         pinned(path, expected)
-    if IS_MATERIAL_FOLLOWUP:
+    if IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION:
         require(re.fullmatch(r"[a-f0-9]{64}", MATERIAL_SOURCE_SHA), "Material review pin is not finalized")
         pinned(MATERIAL_SOURCE, MATERIAL_SOURCE_SHA)
+    if IS_UI_REMEDIATION:
+        for path, expected in UI_APP_PINS.items():
+            pinned(path, expected)
+        pin_ui_ci_sources()
+
+
+def normalized_ui_workflow(raw):
+    text = raw.decode("utf-8")
+    pattern = re.compile(r"^" + re.escape(UI_HELPER_PIN_FIELD) + r'([a-f0-9]{64})"$', re.M)
+    matches = list(pattern.finditer(text))
+    require(len(matches) == 1 and text.count("EXPECTED_SHARED_ROOT_UI_HELPER_SHA256") == 1,
+            "Workflow must contain exactly one exact helper-pin field")
+    match = matches[0]
+    normalized = text[:match.start(1)] + "0" * 64 + text[match.end(1):]
+    return normalized.encode("utf-8"), match.group(1)
+
+
+def pin_ui_ci_sources():
+    require(re.fullmatch(r"[a-f0-9]{64}", UI_SCOPE_TEST_SHA)
+            and re.fullmatch(r"[a-f0-9]{64}", UI_WORKFLOW_CANONICAL_SHA), "UI CI review pins are not finalized")
+    pinned(UI_SCOPE_TEST, UI_SCOPE_TEST_SHA)
+    normalized, helper_sha = normalized_ui_workflow(regular(ROOT / WORKFLOW, 64 * 1024).read_bytes())
+    require(sha(normalized) == UI_WORKFLOW_CANONICAL_SHA
+            and helper_sha == digest(Path(__file__))
+            and os.environ.get("EXPECTED_SHARED_ROOT_UI_HELPER_SHA256") == helper_sha,
+            "Reviewed workflow, helper bytes or exact helper-pin environment differs")
+
+
+def selected_ui_inventory():
+    path = regular(ROOT / UI_TEST, 512 * 1024)
+    source = path.read_text()
+    methods = re.findall(r"^\s*func\s+(test\w+)\s*\(", source, re.M)
+    require(methods == [UI_SELECTORS[0].split("/")[-1]] and "XCTSkip" not in source,
+            "Exact UI-only method or no-skip contract changed")
+    return [{"identifier": UI_SELECTORS[0], "sourceFile": UI_TEST, "sourceSHA256": digest(path)}]
 
 
 def retained_tree_digest(rows, excluded):
@@ -261,7 +340,21 @@ def retained_tree_digest(rows, excluded):
     return sha(b"".join(line + b"\n" for line, name in zip(rows.splitlines(), names) if name not in excluded))
 
 
-def validate_source_trees(entries, test_rows, app_rows=None):
+def validate_source_trees(entries, test_rows, app_rows=None, script_rows=None, workflow_rows=None):
+    if IS_UI_REMEDIATION:
+        expected = {name: value for name, value in REVIEWED_ENTRIES.items() if name != "App"}
+        expected["scripts"] = UI_SCRIPTS_TREE
+        require(entries == expected, "UI build inputs differ from the reviewed 5afd source baseline")
+        require(app_rows is not None and retained_tree_digest(app_rows, UI_APP_PINS) == UI_OTHER_APP_INVENTORY_SHA,
+                "App changed outside the reviewed frame-lifecycle and readiness-description files")
+        require(retained_tree_digest(test_rows, {UI_TEST}) == UI_OTHER_TEST_INVENTORY_SHA,
+                "Tests changed outside the one reviewed UI-readiness method")
+        require(script_rows is not None and retained_tree_digest(script_rows,
+                {".github/scripts/fighter_shared_root_native.py", UI_SCOPE_TEST}) == UI_OTHER_SCRIPT_INVENTORY_SHA,
+                "CI scripts changed outside the reviewed helper and its new scope tests")
+        require(workflow_rows is not None and retained_tree_digest(workflow_rows, {WORKFLOW}) == UI_OTHER_WORKFLOW_INVENTORY_SHA,
+                "An existing workflow changed outside the new UI-only workflow")
+        return
     expected = {name: value for name, value in REVIEWED_ENTRIES.items()
                 if not (IS_MATERIAL_FOLLOWUP and name == "App")}
     require(entries == expected, "Application or build inputs differ from source baseline")
@@ -283,25 +376,40 @@ def validate_event(environment, event, actual):
             and environment.get("GITHUB_RUN_ATTEMPT") == "1"
             and re.fullmatch(r"[0-9]+", environment.get("GITHUB_RUN_ID", "")),
             "Unexpected repository, branch, workflow or repeated attempt")
+    if IS_UI_REMEDIATION:
+        require(environment.get("GITHUB_WORKFLOW_SHA") == expected
+                and event.get("repository", {}).get("full_name") == REPOSITORY,
+                "UI workflow commit or event repository differs")
     if environment.get("GITHUB_EVENT_NAME") == "push":
         require(event.get("ref") == BRANCH and not event.get("deleted", False)
                 and event.get("head_commit", {}).get("id") == expected
                 and event.get("head_commit", {}).get("message") == COMMIT_MESSAGE, "Unreviewed push trigger")
     elif environment.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+        require(not IS_UI_REMEDIATION, "The UI-only remediation has no dispatch or repeat entry")
         require(event.get("inputs", {}).get("source_sha") == expected, "Dispatch requires explicit workflow SHA")
     else:
         raise ValueError("No PR, schedule or reusable workflow execution")
 
 
 def source_gate():
-    names = [name for name in REVIEWED_ENTRIES if not (IS_MATERIAL_FOLLOWUP and name == "App")]
+    names = [name for name in REVIEWED_ENTRIES if not ((IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION) and name == "App")]
     raw = subprocess.check_output(["git", "ls-tree", "HEAD", *names], cwd=ROOT, text=True)
     entries = {line.split("\t")[1]: line.split("\t")[0].split()[2] for line in raw.splitlines()}
     test_rows = subprocess.check_output(["git", "ls-tree", "-r", "HEAD", "Tests"], cwd=ROOT)
     app_rows = (subprocess.check_output(["git", "ls-tree", "-r", "HEAD", "App"], cwd=ROOT)
-                if IS_MATERIAL_FOLLOWUP else None)
-    validate_source_trees(entries, test_rows, app_rows)
+                if IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION else None)
+    script_rows = (subprocess.check_output(["git", "ls-tree", "-r", "HEAD", ".github/scripts"], cwd=ROOT)
+                   if IS_UI_REMEDIATION else None)
+    workflow_rows = (subprocess.check_output(["git", "ls-tree", "-r", "HEAD", ".github/workflows"], cwd=ROOT)
+                     if IS_UI_REMEDIATION else None)
+    validate_source_trees(entries, test_rows, app_rows, script_rows, workflow_rows)
     pin_scope_sources()
+    if IS_UI_REMEDIATION:
+        selected_ui_inventory()
+        paths = ("App", "Sources", "Shared", "Widget", "Tests", "scripts", ".github/scripts", ".github/workflows")
+        for options in (("--others", "--exclude-standard"), ("--others", "--ignored", "--exclude-standard")):
+            require(not subprocess.check_output(["git", "ls-files", *options, "--", *paths], cwd=ROOT).strip(),
+                    "Untracked or ignored files could change discovered build inputs")
     require(not subprocess.check_output(["git", "diff", "--name-only", "HEAD"], cwd=ROOT, text=True).strip(),
             "Tracked modifications exist before preparation")
 
@@ -365,6 +473,13 @@ def identity():
             and value["executionScope"] == SCOPE and value["sourceBaselineSHA"] == SOURCE_BASELINE
             and value["helperSHA256"] == digest(Path(__file__))
             and value["workflowSHA256"] == digest(ROOT / WORKFLOW), "Prepared run or source identity changed")
+    if IS_UI_REMEDIATION:
+        require(value.get("nativeExecutionStatus") == "not_selected"
+                and value.get("expectedNativeMethods") == 0 and value.get("methodScope") == METHOD_SCOPE
+                and value.get("uiSelectors") == list(UI_SELECTORS)
+                and value.get("uiSourceInventory") == selected_ui_inventory()
+                and value.get("appRemediationSourcePins") == UI_APP_PINS,
+                "UI-only scope or exact source inventory changed")
     dependencies()
     pin_scope_sources()
     return value
@@ -433,21 +548,29 @@ def prepare():
     work().mkdir(mode=0o700, exist_ok=False)
     write_json(work() / "identity.json", {
         "sourceSHA": actual, "sourceBaselineSHA": SOURCE_BASELINE,
-        "reviewedEntries": {name: value for name, value in REVIEWED_ENTRIES.items()
-                            if not (IS_MATERIAL_FOLLOWUP and name == "App")},
+        "reviewedEntries": {name: (UI_SCRIPTS_TREE if IS_UI_REMEDIATION and name == "scripts" else value)
+                            for name, value in REVIEWED_ENTRIES.items()
+                            if not ((IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION) and name == "App")},
         "executionScope": SCOPE,
-        "sourceMapping": ("Application/build inputs and prior tests match 68f1e7 except the pinned Material file; two new pinned uniform tests."
+        "sourceMapping": ("Build inputs match 5afd except three exact App frame/readiness files and one UI predicate file; only the failed UI method is selected."
+                          if IS_UI_REMEDIATION else
+                          "Application/build inputs and prior tests match 68f1e7 except the pinned Material file; two new pinned uniform tests."
                           if IS_MATERIAL_FOLLOWUP else
                           "Application and prior tests exactly match 6ebca; two independently pinned new test files."),
-        "materialSourceSHA256": MATERIAL_SOURCE_SHA if IS_MATERIAL_FOLLOWUP else None,
-        "otherAppInventorySHA256": BASE_OTHER_APP_INVENTORY_SHA if IS_MATERIAL_FOLLOWUP else None,
+        "materialSourceSHA256": MATERIAL_SOURCE_SHA if IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION else None,
+        "otherAppInventorySHA256": (UI_OTHER_APP_INVENTORY_SHA if IS_UI_REMEDIATION else
+                                     BASE_OTHER_APP_INVENTORY_SHA if IS_MATERIAL_FOLLOWUP else None),
+        "appRemediationSourcePins": UI_APP_PINS if IS_UI_REMEDIATION else None,
+        "scriptsTree": UI_SCRIPTS_TREE if IS_UI_REMEDIATION else REVIEWED_ENTRIES["scripts"],
+        "uiSourceInventory": selected_ui_inventory() if IS_UI_REMEDIATION else None,
         "newUniformTestSHA256": UNIFORM_TEST_SHA if IS_MATERIAL_FOLLOWUP else None,
         "newModelTestSHA256": MODEL_TEST_SHA, "runID": os.environ["GITHUB_RUN_ID"],
         "newUITestSHA256": UI_TEST_SHA, "uiSelectors": UI_SELECTORS, "expectedUIMethods": 1,
         "attempt": os.environ["GITHUB_RUN_ATTEMPT"], "ref": BRANCH, "selectors": selected_inventory(),
         "expectedNativeMethods": EXPECTED_COUNT, "methodScope": METHOD_SCOPE,
-        "installedAudioMethods": 3, "syntheticContractMethods": METHOD_SCOPE["syntheticContracts"],
-        "installedModelMethods": 1, "runtimeUniformRegressions": METHOD_SCOPE["runtimeUniformRegressions"],
+        "installedAudioMethods": METHOD_SCOPE["installedAudio"], "syntheticContractMethods": METHOD_SCOPE["syntheticContracts"],
+        "installedModelMethods": METHOD_SCOPE["installedModels"], "runtimeUniformRegressions": METHOD_SCOPE["runtimeUniformRegressions"],
+        "nativeExecutionStatus": "not_selected" if IS_UI_REMEDIATION else "selected",
         "preservedPriorEvidence": preserved_prior_evidence(),
         "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_PACK_SHA,
         "helperSHA256": digest(Path(__file__)), "workflowSHA256": digest(ROOT / WORKFLOW),
@@ -619,23 +742,34 @@ def build():
     require((work() / "stage-ok.json").is_file(), "Resource authentication must complete before build")
     project = ROOT / "project.yml"
     original = project.read_bytes()
-    needle = "    scheme:\n      testTargets:\n        - SiteTests"
-    source = original.decode()
-    require(source.count(needle) == 1, "Ambiguous host scheme")
-    generated = source.replace(needle, needle + '\n        - ArenaFlowTests\n      commandLineArguments:\n        "-demo": true')
-    spec = ROOT / "project.shared-root-native.yml"
-    require(not spec.exists() and not spec.is_symlink(), "Temporary generated spec already exists")
-    spec.write_text(generated)
+    if IS_UI_REMEDIATION:
+        # This existing scheme builds the changed App and its UI runner only.
+        # SiteTests is neither a target in its test plan nor an execution scope.
+        spec, scheme, change = project, "ArenaFlow", "None; use the existing ArenaFlow scheme without modifying project.yml"
+        require("  ArenaFlow:\n    build:\n      targets:\n        ShiftReminder: all\n        ArenaFlowTests: [test]" in original.decode(),
+                "The existing reviewed UI scheme is absent")
+        generation = ["xcodegen", "generate"]
+    else:
+        needle = "    scheme:\n      testTargets:\n        - SiteTests"
+        source = original.decode()
+        require(source.count(needle) == 1, "Ambiguous host scheme")
+        generated = source.replace(needle, needle + '\n        - ArenaFlowTests\n      commandLineArguments:\n        "-demo": true')
+        spec = ROOT / "project.shared-root-native.yml"
+        require(not spec.exists() and not spec.is_symlink(), "Temporary generated spec already exists")
+        spec.write_text(generated)
+        scheme = "ShiftReminder"
+        change = "Add existing ArenaFlowTests target and -demo to this run's temporary scheme"
+        generation = ["xcodegen", "generate", "--spec", spec.name]
     write_json(work() / "compiled-project.json", {
         "originalSHA256": sha(original), "generatedSHA256": digest(spec),
-        "onlyProjectConfigurationChange": "Add existing ArenaFlowTests target and -demo to this run's temporary scheme",
+        "onlyProjectConfigurationChange": change, "scheme": scheme,
         "trackedProjectModified": False,
         "signingAllowed": False, "releaseSHA256": RELEASE_SHA,
     })
     run_logged([sys.executable, ".github/scripts/build_identity.py"], "build-identity", 60)
-    run_logged(["xcodegen", "generate", "--spec", spec.name], "project-generation", 120)
+    run_logged(generation, "project-generation", 120)
     run_logged(["xcodebuild", "build-for-testing", "-project", "ShiftReminder.xcodeproj",
-                "-scheme", "ShiftReminder", "-configuration", "Debug", "-sdk", "iphonesimulator",
+                "-scheme", scheme, "-configuration", "Debug", "-sdk", "iphonesimulator",
                 "-destination", "generic/platform=iOS Simulator", "-derivedDataPath", str(work() / "derived"),
                 "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO", "CODE_SIGN_IDENTITY=",
                 "FIGHTER_ASSET_RELEASE_SHA256=" + RELEASE_SHA], "native-build", 1200)
@@ -644,11 +778,21 @@ def build():
     require(len(runs) == 1, "Ambiguous build-for-testing result")
     targets = dependencies().test_targets(plistlib.loads(regular(runs[0], 2 * 1024**2).read_bytes()))
     by_name = {t.get("BlueprintName"): t for t in targets}
-    require(len(targets) == 2 and set(by_name) == {"SiteTests", "ArenaFlowTests"}
-            and "-demo" in by_name["SiteTests"].get("CommandLineArguments", [])
-            and not by_name["SiteTests"].get("IsUITestBundle", False)
-            and by_name["ArenaFlowTests"].get("IsUITestBundle") is True
-            and not any(t.get("SkipTestIdentifiers") for t in targets), "Unexpected compiled test hosts")
+    if IS_UI_REMEDIATION:
+        require(len(targets) == 1 and set(by_name) == {"ArenaFlowTests"}
+                and by_name["ArenaFlowTests"].get("IsUITestBundle") is True
+                and not by_name["ArenaFlowTests"].get("SkipTestIdentifiers"), "Only the reviewed UI target may be built for testing")
+        bundles = list(products.rglob("*.xctest"))
+        require(bundles and {path.name for path in bundles} == {"ArenaFlowTests.xctest"},
+                "UI-only build unexpectedly produced a native test bundle")
+        require(project.read_bytes() == original and not (ROOT / "project.shared-root-native.yml").exists(),
+                "UI-only build must retain the existing project specification")
+    else:
+        require(len(targets) == 2 and set(by_name) == {"SiteTests", "ArenaFlowTests"}
+                and "-demo" in by_name["SiteTests"].get("CommandLineArguments", [])
+                and not by_name["SiteTests"].get("IsUITestBundle", False)
+                and by_name["ArenaFlowTests"].get("IsUITestBundle") is True
+                and not any(t.get("SkipTestIdentifiers") for t in targets), "Unexpected compiled test hosts")
     (work() / "xctestrun-path.txt").write_text(str(runs[0]))
     app = products / "Debug-iphonesimulator/ShiftReminder.app"
     audit_resources(app, read_json(work() / "expected-resources.json"), bundled=True)
@@ -686,7 +830,7 @@ def simulator():
 
 
 def verify_results(summary, data, expected=SELECTORS):
-    require(tuple(expected) in (SELECTORS, UI_SELECTORS) and len(set(expected)) == len(expected),
+    require(len(expected) > 0 and tuple(expected) in (SELECTORS, UI_SELECTORS) and len(set(expected)) == len(expected),
             "Unexpected test selection")
     for key, value in (("totalTestCount", len(expected)), ("passedTests", len(expected)),
                        ("failedTests", 0), ("skippedTests", 0)):
@@ -714,6 +858,7 @@ def verify_results(summary, data, expected=SELECTORS):
 
 
 def execute_tests(ui=False):
+    require(not IS_UI_REMEDIATION or ui, "Native execution is prohibited in the UI-only remediation")
     no_resource_keys()
     identity()
     scope, expected = ("ui", UI_SELECTORS) if ui else ("native", SELECTORS)
@@ -741,10 +886,25 @@ def execute_tests(ui=False):
     if code:
         raise PhaseFailure("Native invocation failed; original process code and failure bodies retained", code)
     require(result["exports"] == {"summary": 0, "tests": 0}, "Missing native result exports")
-    verify_results(read_json(work() / (scope + "-summary.json")),
+    summary = read_json(work() / (scope + "-summary.json"))
+    verify_results(summary,
                    read_json(work() / (scope + "-tests.json")), expected)
+    if IS_UI_REMEDIATION:
+        verify_ui_result_device(summary, device)
     (work() / (scope + "-ok.txt")).write_text(str(len(expected)) + " passed; 0 failed; 0 skipped; exact methods once.\n")
     print(scope + " XCTest: " + str(len(expected)) + " passed, 0 failed, 0 skipped; one execution per method.")
+
+
+def verify_ui_result_device(summary, device):
+    configurations = summary.get("devicesAndConfigurations")
+    require(isinstance(configurations, list) and len(configurations) == 1,
+            "UI results must belong to exactly one owned simulator")
+    configuration = configurations[0]
+    observed = configuration.get("device", {})
+    require(observed.get("deviceId") == device["udid"] and observed.get("deviceName") == device["name"]
+            and observed.get("modelName") == "iPhone 17 Pro Max" and observed.get("platform") == "iOS Simulator"
+            and configuration.get("passedTests") == 1 and configuration.get("failedTests") == 0
+            and configuration.get("skippedTests") == 0, "UI result simulator ownership or exact counts differ")
 
 
 def test():
@@ -752,6 +912,24 @@ def test():
 
 
 def ui():
+    if IS_UI_REMEDIATION:
+        started = datetime.datetime.now(datetime.timezone.utc)
+        failure = None
+        try:
+            execute_tests(ui=True)
+        except Exception as error:
+            failure = error
+        try:
+            finished = datetime.datetime.now(datetime.timezone.utc)
+            collect_ui_runtime_diagnostics(started, finished)
+        except Exception as error:
+            write_json(work() / "ui-runtime-log-failure.json",
+                       {"errorType": type(error).__name__, "detail": str(error)[:2000]})
+            if failure is None:
+                failure = error
+        if failure is not None:
+            raise failure
+        return
     try:
         execute_tests(ui=True)
     finally:
@@ -765,7 +943,81 @@ def ui():
                 write_json(work() / "ui-runtime-log-failure.json", {"errorType": type(error).__name__})
 
 
+DRAWABLE_DIAGNOSTICS = {
+    "doublePresent": "Each CAMetalLayerDrawable can only be presented once!",
+    "textureAfterPresent": "[CAMetalLayerDrawable texture] should not be called after already presenting this drawable.",
+}
+UI_RUNTIME_OK = "Complete owned UI invocation log; zero known drawable diagnostics. Pixel review pending.\n"
+
+
+def verify_ui_runtime_log(path, *, collection_code, device, started, finished):
+    require(collection_code == 0, "Runtime log collection did not succeed")
+    require(started.tzinfo is not None and finished.tzinfo is not None and started <= finished,
+            "UI runtime coverage interval is invalid")
+    expected_name = "Fighter shared root " + os.environ["GITHUB_RUN_ID"] + " attempt " + os.environ["GITHUB_RUN_ATTEMPT"]
+    require(device.get("name") == expected_name and device.get("physicalDevice") is False
+            and re.fullmatch(r"[0-9A-Fa-f-]{36}", device.get("udid", "")), "Runtime log simulator identity differs")
+    raw = regular(path, 128 * 1024**2).read_bytes()
+    events = json.loads(raw)
+    require(isinstance(events, list) and events and all(isinstance(row, dict) for row in events),
+            "Runtime log is empty or has an invalid complete JSON structure")
+    counts = {name: 0 for name in DRAWABLE_DIAGNOSTICS}
+    owned, stamps = 0, []
+    # log --start/--end uses second-granularity bounds. Parse only messages from
+    # this installed App and refuse entries outside the requested full interval.
+    low = started.replace(microsecond=0)
+    high = finished.replace(microsecond=0) + datetime.timedelta(seconds=1)
+    for row in events:
+        if not str(row.get("processImagePath", "")).endswith("/ShiftReminder.app/ShiftReminder"):
+            continue
+        message = row.get("eventMessage") or row.get("formatString")
+        require(isinstance(message, str) and message, "Owned runtime entry has no message")
+        stamp = datetime.datetime.fromisoformat(str(row.get("timestamp", "")).replace(" ", "T", 1))
+        require(stamp.tzinfo is not None and low <= stamp <= high, "Runtime entry falls outside this UI invocation")
+        owned += 1
+        stamps.append(stamp)
+        normalized = " ".join(message.split()).casefold()
+        for name, diagnostic in DRAWABLE_DIAGNOSTICS.items():
+            if diagnostic.casefold() in normalized:
+                counts[name] += 1
+    require(owned > 0, "No entries from the installed App were captured for this UI invocation")
+    return {
+        "collectionExitCode": collection_code, "completeJSONParsed": True,
+        "ownedSimulatorVerified": True, "simulatorUDID": device["udid"],
+        "requestedStartUTC": low.isoformat(), "requestedEndUTC": high.isoformat(),
+        "coverage": "Full UI invocation through result export; source log scanned before sealing",
+        "sourceBytes": len(raw), "sourceSHA256": sha(raw), "entries": len(events), "appEntries": owned,
+        "firstAppEntryUTC": min(stamps).isoformat(), "lastAppEntryUTC": max(stamps).isoformat(),
+        "knownDiagnosticCounts": counts, "knownDiagnosticCount": sum(counts.values()),
+        "knownDiagnosticsAbsent": not any(counts.values()),
+        "sealedTextTailOnly": len(raw) > 2 * 1024**2,
+        "pixelReview": "PENDING", "performanceVerified": False,
+    }
+
+
+def collect_ui_runtime_diagnostics(started, finished):
+    device = read_json(work() / "simulator.json")
+    catalog = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "-j"],
+                                                text=True, timeout=30))
+    owned = [row for rows in catalog["devices"].values() for row in rows if row.get("udid") == device["udid"]]
+    require(len(owned) == 1 and owned[0].get("name") == device["name"], "Runtime log device is not the owned simulator")
+    low = started.replace(microsecond=0)
+    high = finished.replace(microsecond=0) + datetime.timedelta(seconds=1)
+    code = run_logged(["xcrun", "simctl", "spawn", device["udid"], "log", "show",
+                       "--start", low.strftime("%Y-%m-%d %H:%M:%S%z"),
+                       "--end", high.strftime("%Y-%m-%d %H:%M:%S%z"), "--style", "json",
+                       "--predicate", 'process == "ShiftReminder"'], "ui-runtime-log", 60, check=False)
+    result = verify_ui_runtime_log(work() / "ui-runtime-log.log", collection_code=code,
+                                  device=device, started=started, finished=finished)
+    write_json(work() / "ui-runtime-diagnostics.json", result)
+    require(result["knownDiagnosticsAbsent"], "Known drawable double-present or texture-after-present diagnostic occurred")
+    (work() / "ui-runtime-ok.txt").write_text(UI_RUNTIME_OK)
+
+
 def attachment_inventory(directory, device, scope):
+    if IS_UI_REMEDIATION:
+        require(scope == "ui", "Native attachments are not selected in UI remediation")
+        return ui_remediation_attachment_inventory(directory, device)
     expected = EXPECTED_ATTACHMENTS[scope]
     selectors = SELECTORS if scope == "native" else UI_SELECTORS
     paths = sorted(directory.rglob("*"))
@@ -825,13 +1077,98 @@ def attachment_inventory(directory, device, scope):
             "files": entries, "unknownAutomaticAttachments": len(seen_files) - len(entries)}
 
 
+def ui_attachment_files(directory):
+    require(directory.is_dir() and not directory.is_symlink(), "Unsafe UI attachment directory")
+    paths = sorted(directory.rglob("*"))
+    require(not any(path.is_symlink() for path in paths), "Symlink in exported UI evidence")
+    files, total = [], 0
+    for path in paths:
+        info = path.lstat()
+        if stat.S_ISDIR(info.st_mode):
+            continue
+        require(stat.S_ISREG(info.st_mode) and info.st_size <= 128 * 1024**2,
+                "Automatic UI attachment is not regular or exceeds its 128 MiB bound")
+        total += info.st_size
+        files.append(path)
+    require(1 <= len(files) <= 512 and total <= 384 * 1024**2, "UI attachment count or total byte bound exceeded")
+    return files
+
+
+def attachment_label(item, path, expected):
+    human, suffix = item.get("suggestedHumanReadableName", ""), path.suffix.lower()
+    require(isinstance(human, str), "Malformed attachment label")
+    return [label for label in expected if re.fullmatch(
+        re.escape(label) + r"(?:_[0-9]+_[0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})?"
+        + re.escape(suffix), human)]
+
+
+def ui_remediation_attachment_inventory(directory, device):
+    expected = EXPECTED_ATTACHMENTS["ui"]
+    files = ui_attachment_files(directory)
+    manifest = read_json(directory / "manifest.json", 24 * 1024**2)
+    require(isinstance(manifest, list), "Unexpected UI attachment manifest")
+    labels, seen, entries, mandatory_paths = set(), set(), [], set()
+    for group in manifest:
+        require(isinstance(group, dict) and isinstance(group.get("attachments"), list), "Malformed UI attachment group")
+        identifier = group.get("testIdentifier", "")
+        require(isinstance(identifier, str), "Malformed UI attachment owner")
+        identifier = identifier.removesuffix("()")
+        owners = [selector for selector in UI_SELECTORS if identifier in (selector, "/".join(selector.split("/")[1:]))]
+        for item in group["attachments"]:
+            require(isinstance(item, dict), "Malformed UI attachment entry")
+            name = item.get("exportedFileName", "")
+            require(isinstance(name, str) and name and Path(name).name == name and "\\" not in name
+                    and ".." not in name and name not in seen, "Unsafe or repeated UI attachment file")
+            path = directory / name
+            require(path in files, "Referenced UI attachment does not exist")
+            seen.add(name)
+            candidates = attachment_label(item, path, expected)
+            if not candidates:
+                continue
+            require(len(candidates) == 1 and candidates[0] not in labels, "Repeated exact UI attachment label")
+            label = candidates[0]
+            selector, kind = expected[label]
+            require(owners == [selector] and item.get("deviceId") == device["udid"]
+                    and item.get("deviceName") == device["name"], "UI attachment method or simulator identity differs")
+            regular(path, 24 * 1024**2)  # Mandatory artifacts retain their original nonempty 24 MiB limit.
+            if kind == "image":
+                require(path.suffix.lower() == ".png", "Expected a real mandatory PNG")
+                png_metadata(path)
+            else:
+                require(path.suffix.lower() in (".json", ".txt"), "Expected mandatory UI observations JSON")
+                value = read_json(path, 24 * 1024**2)
+                require(isinstance(value, dict) and value.get("expectedReleaseSHA256") == RELEASE_SHA
+                        and value.get("flowCompleted") is True and value.get("internalCombatStateInjected") is False
+                        and value.get("exactRootAnimationTicksObserved") is False,
+                        "UI observations did not complete the reviewed real-control scenario")
+            labels.add(label)
+            mandatory_paths.add(path)
+            entries.append({"label": label, "selector": selector, "file": name, "kind": kind,
+                            "bytes": path.stat().st_size, "sha256": digest(path)})
+    automatic = [path for path in files if path not in mandatory_paths and path.name != "manifest.json"]
+    require(sum(path.stat().st_size for path in automatic) <= 256 * 1024**2,
+            "Automatic UI attachment aggregate exceeds 256 MiB")
+    require(labels == set(expected), "Missing required UI method-owned captures or observations")
+    require(sum(row["bytes"] for row in entries) <= 160 * 1024**2,
+            "Mandatory UI evidence exceeds the unchanged sealed-media budget")
+    diagnostics = [{"file": path.relative_to(directory).as_posix(), "bytes": path.stat().st_size,
+                    "sha256": digest(path), "countsAsCoverage": False,
+                    "videoOmittedFromSealedEvidence": path.suffix.lower() in (".mp4", ".mov", ".m4v", ".hevc")}
+                   for path in automatic]
+    return {"scope": "ui", "completeExpectedLabels": True, "exactMethodAndSimulatorOwnership": True,
+            "files": entries, "unknownAutomaticAttachments": len(automatic),
+            "automaticDiagnostics": diagnostics,
+            "omittedVideoCount": sum(row["videoOmittedFromSealedEvidence"] for row in diagnostics),
+            "automaticAttachmentsNeverCountAsCoverage": True}
+
+
 def export():
     no_resource_keys()
     identity()
     once("export")
     failures = []
     device = read_json(work() / "simulator.json") if (work() / "simulator.json").is_file() else None
-    for scope in ("native", "ui"):
+    for scope in (("ui",) if IS_UI_REMEDIATION else ("native", "ui")):
         bundle, destination = work() / (scope + ".xcresult"), work() / (scope + "-attachments")
         try:
             require(device and (bundle / "Info.plist").is_file(), "No finalized result bundle for attachment export")
@@ -845,7 +1182,8 @@ def export():
             write_json(work() / (scope + "-attachments-failure.json"),
                        {"scope": scope, "errorType": type(error).__name__, "detail": str(error)[:4000]})
     require(not failures, "One or more method-owned attachment sets are incomplete; partial evidence retained")
-    print("Exported exact native model metadata and six UI screenshots plus observations with method and device ownership.")
+    print("Exported six exact UI screenshots plus observations with method and device ownership; native receipts are not selected."
+          if IS_UI_REMEDIATION else "Exported exact native model metadata and six UI screenshots plus observations with method and device ownership.")
 
 
 def png_metadata(path):
@@ -891,6 +1229,42 @@ def capture():
     print("Captured two Liu lobby images and private logs; image review remains required.")
 
 
+def current_native_artifacts():
+    # These two filenames label the common application build, not XCTest
+    # execution. Every other native result/invocation path is forbidden here.
+    build_logs = {"native-build.log", "native-build-stderr.log"}
+    return sorted(path.name for path in work().iterdir() if path.name not in build_logs
+                  and (path.name.startswith(("native-", "native.", "selected-native"))))
+
+
+def ui_runtime_summary():
+    path, marker = work() / "ui-runtime-diagnostics.json", work() / "ui-runtime-ok.txt"
+    if not path.is_file():
+        return {"verified": False, "status": "UNAVAILABLE", "pixelReview": "PENDING"}
+    try:
+        value = read_json(path)
+        device = read_json(work() / "simulator.json")
+        keys = ("collectionExitCode", "completeJSONParsed", "ownedSimulatorVerified", "simulatorUDID",
+                "requestedStartUTC", "requestedEndUTC", "coverage", "sourceBytes", "sourceSHA256", "entries",
+                "appEntries", "firstAppEntryUTC", "lastAppEntryUTC", "knownDiagnosticCounts",
+                "knownDiagnosticCount", "knownDiagnosticsAbsent", "sealedTextTailOnly", "pixelReview",
+                "performanceVerified")
+        counts = value.get("knownDiagnosticCounts")
+        source = work() / "ui-runtime-log.log"
+        verified = (marker.is_file() and marker.read_text() == UI_RUNTIME_OK
+                    and value.get("collectionExitCode") == 0 and value.get("completeJSONParsed") is True
+                    and value.get("ownedSimulatorVerified") is True and value.get("simulatorUDID") == device["udid"]
+                    and type(value.get("appEntries")) is int and 0 < value["appEntries"] <= value.get("entries", 0)
+                    and counts == {name: 0 for name in DRAWABLE_DIAGNOSTICS}
+                    and value.get("knownDiagnosticCount") == 0 and value.get("knownDiagnosticsAbsent") is True
+                    and source.is_file() and value.get("sourceBytes") == source.stat().st_size
+                    and value.get("sourceSHA256") == digest(source)
+                    and value.get("pixelReview") == "PENDING" and value.get("performanceVerified") is False)
+        return dict({key: value.get(key) for key in keys}, verified=bool(verified))
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"verified": False, "status": "INVALID", "pixelReview": "PENDING"}
+
+
 def public_summary():
     ident = read_json(work() / "identity.json")
     result = {
@@ -898,15 +1272,15 @@ def public_summary():
         "runID": ident["runID"], "attempt": ident["attempt"], "expectedNativeMethods": EXPECTED_COUNT,
         "executionScope": SCOPE, "methodScope": METHOD_SCOPE,
         "preservedPriorEvidence": preserved_prior_evidence(),
-        "previousFiveContractsSelectedAgain": False if IS_MATERIAL_FOLLOWUP else None,
-        "materialSourceSHA256": MATERIAL_SOURCE_SHA if IS_MATERIAL_FOLLOWUP else None,
+        "previousFiveContractsSelectedAgain": False if IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION else None,
+        "materialSourceSHA256": MATERIAL_SOURCE_SHA if IS_MATERIAL_FOLLOWUP or IS_UI_REMEDIATION else None,
         "newUniformTestSHA256": UNIFORM_TEST_SHA if IS_MATERIAL_FOLLOWUP else None,
         "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_PACK_SHA,
         "resourcesAuthenticated": (work() / "stage-ok.json").is_file(),
         "compiled373ResourcesVerified": (work() / "build-ok.txt").is_file(),
-        "nativeExactSetPassed": (work() / "native-ok.txt").is_file(),
+        "nativeExactSetPassed": False if IS_UI_REMEDIATION else (work() / "native-ok.txt").is_file(),
         "uiExactMethodPassed": (work() / "ui-ok.txt").is_file(),
-        "nativeModelReceiptVerified": (work() / "native-attachments-ok.json").is_file(),
+        "nativeModelReceiptVerified": False if IS_UI_REMEDIATION else (work() / "native-attachments-ok.json").is_file(),
         "uiExactCaptureSetVerified": (work() / "ui-attachments-ok.json").is_file(),
         "expectedUIMethods": 1,
         "simulatorLobbyCaptured": (work() / "capture-ok.json").is_file(),
@@ -915,7 +1289,23 @@ def public_summary():
         "rootGameplayScreenshot": (work() / "ui-attachments-ok.json").is_file(),
         "productionPanguAssetsActivated": False, "previous117Rerun": False, "TestFlightUploaded": False,
     }
-    for scope in ("native", "ui"):
+    if IS_UI_REMEDIATION:
+        unexpected = current_native_artifacts()
+        runtime = ui_runtime_summary()
+        result.update(nativeExecutionStatus="not_selected", nativeModelReceiptStatus="not_selected",
+                      nativeArtifactsAbsent=not unexpected, unexpectedNativeArtifacts=unexpected,
+                      previousSixNativeMethodsSelectedAgain=False, appRemediationSourcePins=UI_APP_PINS,
+                      newUITestSHA256=UI_TEST_SHA, uiRuntimeDiagnostics=runtime,
+                      uiRuntimeDiagnosticGatePassed=runtime["verified"],
+                      uiSealedCaptureSetComplete=False,
+                      automaticAttachmentsNeverCountAsCoverage=True)
+        if (work() / "attachment-seal-policy.json").is_file():
+            policy = read_json(work() / "attachment-seal-policy.json")
+            result["attachmentSealPolicy"] = {key: policy.get(key) for key in
+                ("selectedFileCount", "selectedBytes", "omittedFileCount", "omittedVideoCount",
+                 "mandatoryValidationPassed", "completeValidatedMandatorySetSealed", "automaticAttachmentsNeverCountAsCoverage")}
+            result["uiSealedCaptureSetComplete"] = policy.get("completeValidatedMandatorySetSealed") is True
+    for scope in (("ui",) if IS_UI_REMEDIATION else ("native", "ui")):
         if (work() / (scope + "-process.json")).is_file():
             native = read_json(work() / (scope + "-process.json"))
             result[scope + "Process"] = {k: native.get(k) for k in ("exitCode", "selectedCount", "iterations")}
@@ -965,6 +1355,11 @@ def reusable_ui_products():
     receipt = {"needed": False, "available": False, "nativeNineReexecutionAllowed": False,
                "passedNativeScopeReexecutionAllowed": False, "executionScope": SCOPE,
                "previousFiveContractsReexecutionAllowed": False}
+    if IS_UI_REMEDIATION:
+        receipt.update(nativeExecutionStatus="not_selected", previousSixNativeMethodsReexecutionAllowed=False,
+                       reason="Changed App requires this scope's new UI-only build; no historical native products reused")
+        write_json(work() / "ui-recovery.json", receipt)
+        return None
     target = work() / "private-ui-recovery.zip"
     if not ((work() / "native-ok.txt").is_file() and
             not ((work() / "ui-ok.txt").is_file() and (work() / "ui-attachments-ok.json").is_file())):
@@ -1012,6 +1407,8 @@ def reusable_ui_products():
 
 
 def bounded_attachments():
+    if IS_UI_REMEDIATION:
+        return bounded_ui_remediation_attachments()
     files, total = [], 0
     for scope in ("native", "ui"):
         directory = work() / (scope + "-attachments")
@@ -1031,6 +1428,57 @@ def bounded_attachments():
     return files
 
 
+def bounded_ui_remediation_attachments():
+    directory = work() / "ui-attachments"
+    paths = ui_attachment_files(directory) if directory.exists() else []
+    priority = set()
+    manifest = directory / "manifest.json"
+    if manifest.is_file() and 0 < manifest.stat().st_size <= 24 * 1024**2:
+        priority.add(manifest)  # Required to independently recheck method/device ownership after unsealing.
+        try:
+            groups = read_json(manifest, 24 * 1024**2)
+            for group in groups if isinstance(groups, list) else []:
+                for item in group.get("attachments", []) if isinstance(group, dict) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("exportedFileName", "")
+                    path = directory / name if isinstance(name, str) else None
+                    if path in paths and attachment_label(item, path, EXPECTED_ATTACHMENTS["ui"]):
+                        priority.add(path)
+        except (OSError, ValueError, TypeError):
+            pass  # Export's strict validation remains failed; only partial diagnostics are preserved.
+    receipt_path = work() / "ui-attachments-ok.json"
+    validated_required = set()
+    if receipt_path.is_file():
+        receipt = read_json(receipt_path)
+        validated_required = {directory / row["file"] for row in receipt["files"]} | {manifest}
+        priority.update(validated_required)
+    files, omitted, total = [], [], 0
+    for path in sorted(paths, key=lambda p: (p not in priority, p.as_posix())):
+        size, suffix = path.stat().st_size, path.suffix.lower()
+        reason = ("unsupported-media-type" if suffix not in (".png", ".json", ".txt") else
+                  "empty-system-record" if not size else
+                  "exceeds-unchanged-24-MiB-sealed-file-limit" if size > 24 * 1024**2 else
+                  "bounded-total-or-count-limit" if total + size > 160 * 1024**2 or len(files) >= 256 else None)
+        if reason:
+            omitted.append({"file": path.relative_to(directory).as_posix(), "bytes": size,
+                            "sha256": digest(path), "reason": reason,
+                            "mandatoryLabelCandidate": path in priority, "countsAsCoverage": False,
+                            "video": suffix in (".mp4", ".mov", ".m4v", ".hevc")})
+            continue
+        total += size
+        files.append((path, "ui-attachments/" + path.relative_to(directory).as_posix()))
+    write_json(work() / "attachment-seal-policy.json", {
+        "selectedFileCount": len(files), "selectedBytes": total, "omittedFileCount": len(omitted),
+        "omittedVideoCount": sum(row["video"] for row in omitted), "omitted": omitted,
+        "mandatoryValidationPassed": receipt_path.is_file(),
+        "completeValidatedMandatorySetSealed": bool(validated_required) and validated_required <= {path for path, _ in files},
+        "automaticAttachmentsNeverCountAsCoverage": True,
+        "coverage": "Only the separate exact mandatory-label gate can certify capture completeness",
+    })
+    return files
+
+
 def seal():
     no_resource_keys()
     identity()
@@ -1044,6 +1492,7 @@ def seal():
     recovery = None
     try:
         recovery = reusable_ui_products()
+        selected_attachments = bounded_attachments() if IS_UI_REMEDIATION else None
         write_json(work() / "public-summary.json", public_summary())
         entries, total = [], 0
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_STORED) as output:
@@ -1070,7 +1519,7 @@ def seal():
                     name = "captures/" + path.name
                     output.write(path, name)
                     entries.append({"file": name, "bytes": path.stat().st_size, "sha256": digest(path)})
-            for path, name in bounded_attachments():
+            for path, name in (selected_attachments if selected_attachments is not None else bounded_attachments()):
                 output.write(path, name)
                 entries.append({"file": name, "bytes": path.stat().st_size, "sha256": digest(path)})
             output.writestr("private-evidence-inventory.json", json.dumps(entries, indent=2))
@@ -1159,17 +1608,27 @@ def report():
     print(json.dumps(summary, indent=2))
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
-            output.write("### Shared-root " + SCOPE + ": " + str(EXPECTED_COUNT) +
-                         " native methods + 1 UI capture\n\n")
+            output.write("### Shared-root " + SCOPE + (": native not selected; 1 UI capture\n\n"
+                         if IS_UI_REMEDIATION else ": " + str(EXPECTED_COUNT) + " native methods + 1 UI capture\n\n"))
             output.write("Each scope requires its exact methods once and zero skipped. Pixel review remains separate.\n\n")
-            if IS_MATERIAL_FOLLOWUP:
+            if IS_UI_REMEDIATION:
+                output.write("The six and five historical native passes retain their original runs; none are selected or counted here. Full-invocation runtime diagnostics are required; pixel review stays pending.\n\n")
+            elif IS_MATERIAL_FOLLOWUP:
                 output.write("Five contract passes remain attributed only to run 43644209347; this run selects none of them.\n\n")
             fence = chr(96) * 3
             output.write(fence + "json\n" + json.dumps(summary, indent=2) + "\n" + fence + "\n")
-    require(all(summary.get(k) is True for k in ("resourcesAuthenticated", "compiled373ResourcesVerified",
-            "nativeExactSetPassed", "uiExactMethodPassed", "nativeModelReceiptVerified",
-            "uiExactCaptureSetVerified", "diagnosticsSealed", "cleanupComplete")),
-            "Native increment did not reach every required execution and evidence gate")
+    required = ("resourcesAuthenticated", "compiled373ResourcesVerified", "uiExactMethodPassed",
+                "uiExactCaptureSetVerified", "diagnosticsSealed", "cleanupComplete")
+    if IS_UI_REMEDIATION:
+        required += ("nativeArtifactsAbsent", "uiRuntimeDiagnosticGatePassed", "uiSealedCaptureSetComplete")
+        require(summary.get("executionScope") == UI_SCOPE and summary.get("expectedNativeMethods") == 0
+                and summary.get("nativeExecutionStatus") == "not_selected" and summary.get("methodScope") == METHOD_SCOPE
+                and summary.get("nativeExactSetPassed") is False and summary.get("nativeModelReceiptVerified") is False
+                and "nativeObservedCounts" not in summary and "nativeProcess" not in summary,
+                "UI-only scope cannot count or accept a native result, including an empty result set")
+    else:
+        required += ("nativeExactSetPassed", "nativeModelReceiptVerified")
+    require(all(summary.get(k) is True for k in required), "Increment did not reach every required execution and evidence gate")
 
 
 def main():

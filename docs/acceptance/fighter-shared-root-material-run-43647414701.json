@@ -1,0 +1,475 @@
+{
+  "schema": 1,
+  "evidenceType": "native-methods-and-failed-simulator-visual-validation",
+  "acceptance": {
+    "nativeMethods": "PASSED",
+    "uiScenario": "FAILED",
+    "simulatorVisualReview": "FAILED",
+    "releaseBlockedByVisualFailure": true,
+    "audiblePlayback": "NOT VERIFIED",
+    "physicalIPhone17ProMax": "NOT VERIFIED",
+    "productionPanguAssetsActivated": false
+  },
+  "run": {
+    "id": 43647414701,
+    "sha": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+    "name": "Fighter shared-root material followup (four failed plus two new native methods and one UI capture)",
+    "path": ".github/workflows/fighter-shared-root-material-followup.yml",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "failure",
+    "createdAt": "2026-11-14T22:18:45Z",
+    "startedAt": "2026-11-14T22:18:45Z",
+    "updatedAt": "2026-11-14T22:42:22Z",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43647414701",
+    "timeZone": "Asia/Shanghai",
+    "humanBeijingLabel": "北京时间 2026-11-15 06:18:45 — 2026-11-15 06:42:22（Asia/Shanghai，UTC+08:00；开始时间至最终状态更新时间）"
+  },
+  "job": {
+    "id": 132608191547,
+    "name": "native",
+    "status": "completed",
+    "conclusion": "failure",
+    "run_id": 43647414701,
+    "logs_url": null,
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Pin 68f1e7 baseline plus one material fix, four failed and two new native methods",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Select the installed Xcode and simulator tools",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4
+      },
+      {
+        "name": "Authenticate 73 baseline files, 295 original overlay files and the 13-payload delta",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5
+      },
+      {
+        "name": "Build one unsigned host with both test targets and verify all 373 compiled resources",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Prepare one installed iPhone 17 Pro Max simulator",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      },
+      {
+        "name": "Execute only four failed resource methods and two new uniform regressions once",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Capture both real-resource fighters and Sun branches through one new UI method",
+        "status": "completed",
+        "conclusion": "failure",
+        "number": 9
+      },
+      {
+        "name": "Capture a separate Liu lobby diagnostic if the UI method fails",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Export exact method-owned native metadata and UI images, preserving failed partial evidence",
+        "status": "completed",
+        "conclusion": "failure",
+        "number": 11
+      },
+      {
+        "name": "Seal bounded diagnostics and captures, including failed phases",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 12
+      },
+      {
+        "name": "Run actions/upload-artifact@v4",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 13
+      },
+      {
+        "name": "Remove this run's simulator, staged media, products and plaintext diagnostics",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 14
+      },
+      {
+        "name": "Report reached gates without treating completion, artifacts or skipped tests as passing",
+        "status": "completed",
+        "conclusion": "failure",
+        "number": 15
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 30
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 31
+      }
+    ]
+  },
+  "source": {
+    "sourceSHA": "5788ebb1001a6e0f31c5208cb2b955b48b00741c",
+    "sourceBaselineSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+    "executionScope": "material-followup-six",
+    "materialSourceSHA256": "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856",
+    "otherAppInventorySHA256": "823f65ee5de955a7dd8ba2de3abd7290ed1e6c3b8fc58bd6bb3f7b193c6c162a",
+    "newUniformTestSHA256": "e982e1ab17702552571a2fc8b00445039cf9e217ad615bf122074e67ece7b3ac",
+    "newModelTestSHA256": "58a5d25eb978e443b79ad4844d57a6cc2fad5e264fd6f1a0ac51e2f4b4fbbe93",
+    "newUITestSHA256": "50cbcd0d6f43f843bc5c1fd2a3b05f18632217a0a32a2384626c0c21477080f0",
+    "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "helperSHA256": "016bb5a3a7065692dfc214036e7146b26c9e589ea7c58abf72c5a26ad1b8c978",
+    "workflowSHA256": "458f83947c57a39035090e0ee2997194896cfe1d3c53e3fdc8375cab6821d6f3",
+    "preparedAtUTC": "2026-11-14T22:20:51.922100+00:00"
+  },
+  "native": {
+    "expectedCount": 6,
+    "observedCount": 6,
+    "exactMethodSetOnce": true,
+    "exactSetPassed": true,
+    "resultDeviceMatchesOwnedSimulator": true,
+    "summaryCounts": {
+      "totalTestCount": 6,
+      "passedTests": 6,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "result": "Passed"
+    },
+    "process": {
+      "exitCode": 0,
+      "selectedCount": 6,
+      "iterations": 1,
+      "exports": {
+        "summary": 0,
+        "tests": 0
+      }
+    },
+    "methods": [
+      {
+        "selector": "SiteTests/DuelSharedRootInstalledModelTests/testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions",
+        "result": "Passed"
+      },
+      {
+        "selector": "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+        "result": "Passed"
+      },
+      {
+        "selector": "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback",
+        "result": "Passed"
+      },
+      {
+        "selector": "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+        "result": "Passed"
+      },
+      {
+        "selector": "SiteTests/DuelTriadRuntimeUniformTests/testInstalledSourceMaterialsResolveOnlyReviewedUnassignedCustomPosition",
+        "result": "Passed"
+      },
+      {
+        "selector": "SiteTests/DuelTriadRuntimeUniformTests/testUnreviewedMissingUniformsRemainRejectedAndExplicitValuesKeepPriority",
+        "result": "Passed"
+      }
+    ],
+    "missingSelectors": [],
+    "unexpectedSelectors": [],
+    "duplicateSelectors": []
+  },
+  "ui": {
+    "expectedCount": 1,
+    "observedCount": 1,
+    "exactMethodSetOnce": true,
+    "exactSetPassed": false,
+    "resultDeviceMatchesOwnedSimulator": true,
+    "summaryCounts": {
+      "totalTestCount": 1,
+      "passedTests": 0,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "result": "Failed"
+    },
+    "process": {
+      "exitCode": 65,
+      "selectedCount": 1,
+      "iterations": 1,
+      "exports": {
+        "summary": 0,
+        "tests": 0
+      }
+    },
+    "methods": [
+      {
+        "selector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+        "result": "Failed"
+      }
+    ],
+    "xcresultFailures": [
+      {
+        "failureText": "XCTAssertEqual failed: (\"XCTWaiterResult(rawValue: 2)\") is not equal to (\"XCTWaiterResult(rawValue: 1)\") - Did not observe sun-root-visible within its bounded UI budget",
+        "targetName": "ArenaFlowTests",
+        "testIdentifier": 1,
+        "testIdentifierString": "DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls()",
+        "testIdentifierURL": "test://com.apple.xcode/ShiftReminder/ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+        "testName": "testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls()"
+      }
+    ]
+  },
+  "simulator": {
+    "deviceType": "iPhone 17 Pro Max",
+    "osVersion": "26.5",
+    "physicalDevice": false,
+    "ownedResultDeviceMatched": true
+  },
+  "resources": {
+    "authenticated": true,
+    "compiled373ResourcesVerified": true,
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "installedModelReceipt": {
+      "bytes": 1481,
+      "sha256": "cb38b1048a46a72b958154aabf701618adf79ee17f06f05035a957e3e8761261",
+      "characters": [
+        {
+          "profileID": "sun_triad",
+          "characterSHA256": "ce9e1b77c59fa63116af73409173fcd8922f2063ab2e0624534691fa00195ef6",
+          "loadedClips": 65,
+          "isPangu": false
+        },
+        {
+          "profileID": "liu_hammers",
+          "characterSHA256": "a3aada76d336b9c4f9bda3904b5e947711d916f683a2dcbf7b8184377e01a517",
+          "loadedClips": 59,
+          "isPangu": false
+        }
+      ],
+      "liuVictimClipCount": 3,
+      "renderedPixelsVerified": false,
+      "audiblePlaybackVerified": false
+    }
+  },
+  "uiFindings": {
+    "failedPhase": "sun-root-visible",
+    "boundedWaitSeconds": 8,
+    "flowCompleted": false,
+    "rootHealthDecreaseObserved": false,
+    "readinessPredicate": ".contains(\"可施放\")",
+    "observedAcceptedValue": "暂不可施放",
+    "readinessPredicateBugConfirmed": true,
+    "readinessBugEvidence": [
+      "Pinned test source at lines 106-108 uses substring matching.",
+      "The captured sun-branches-ready observation reports 暂不可施放."
+    ],
+    "renderingRootCause": "NOT DETERMINED; correcting the readiness predicate alone has not been shown to repair the image defects.",
+    "observationsAndScreenshotsShareExactFrame": false,
+    "missingRequiredCaptures": [
+      "shared-root-ui-liu-lobby",
+      "shared-root-ui-liu-practice",
+      "shared-root-ui-sun-root-control-released",
+      "shared-root-ui-sun-root-observed"
+    ],
+    "targetCaptureSetComplete": false,
+    "originalPNGs": [
+      {
+        "label": "shared-root-ui-sun-lobby",
+        "archiveEntry": "ui-attachments/FBF47B60-0F6F-436C-ACCB-72FAFC2A4A7B.png",
+        "bytes": 3372200,
+        "sha256": "448e4f2d463eea4d13d300149e4ae694565006498062032c457601f06831a73d",
+        "width": 1320,
+        "height": 2868,
+        "ownerSelector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+        "visualObservation": "Lobby character and stage are visible; the old katana label remains in this source revision.",
+        "observationSource": "Root agent direct review of the original decrypted PNG; no image editing or re-encoding."
+      },
+      {
+        "label": "shared-root-ui-sun-practice",
+        "archiveEntry": "ui-attachments/A9BEF00D-500D-46E8-925C-AEA836802156.png",
+        "bytes": 444987,
+        "sha256": "02888c6f7fcd16abfe06cb8eae2468c0c16e74918d8ff43b2daddfd9849ed15d",
+        "width": 1320,
+        "height": 2868,
+        "ownerSelector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+        "visualObservation": "Practice capture shows a black scene and a large cyan-white effect.",
+        "observationSource": "Root agent direct review of the original decrypted PNG; no image editing or re-encoding."
+      },
+      {
+        "label": "shared-root-ui-failure",
+        "archiveEntry": "ui-attachments/A274A2DC-4B48-4A61-AE60-97359E98D36F.png",
+        "bytes": 2410131,
+        "sha256": "fc9f42b6509fc5e4855fc6001f642b1793c55b15b60dae6b4670dd95d76b0b04",
+        "width": 1320,
+        "height": 2868,
+        "ownerSelector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+        "visualObservation": "Purple branch effects cover the frame; the characters and stage are not visible.",
+        "observationSource": "Root agent direct review of the original decrypted PNG; no image editing or re-encoding."
+      }
+    ],
+    "archivedVisualReviewWas": "PENDING",
+    "currentVisualReview": "FAILED",
+    "currentVisualReviewSource": "Root agent direct review after authenticated local extraction.",
+    "attachmentExportDirectFailure": "Expected bounded regular file",
+    "attachmentExportBoundary": "All exported files were checked as nonempty and <=24 MiB before mandatory-label selection. The sealed subset does not identify whether the trigger was an empty automatic attachment or an oversized one."
+  },
+  "historicalEvidence": {
+    "runID": "43644209347",
+    "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+    "passedSyntheticMethods": 5,
+    "selectedAgain": false,
+    "includedInCurrentSix": false,
+    "previous117Rerun": false
+  },
+  "laterLobbyFix": {
+    "sourceSHA": "5afd8195e2f611ab2e7c37f5096a4251a4616ee9",
+    "runID": "43648900087",
+    "result": "compiled",
+    "testsExecuted": 0,
+    "originalResourcesStaged": false,
+    "includedInThisMaterialRun": false,
+    "evidence": "fighter-lobby-source-compile-run-43648900087.json",
+    "effectOnThisVisualFailure": "No retrospective change; this run still records the old lobby label and failed battle visuals."
+  },
+  "encryptedArtifact": {
+    "id": 14134893882,
+    "name": "fighter-shared-root-material-followup-43647414701-1-encrypted",
+    "bytes": 224223739,
+    "sha256": "1f157104bba6e631461a994ef5291e2babf3326d91ed0f407eb1697ea99a1b6e",
+    "githubDigestVerifiedByExistingReceipt": true,
+    "localArchiveSHA256Rechecked": true,
+    "authenticatedEvidenceUnsealPreviouslyVerified": true,
+    "inventoryEntriesPreviouslyVerified": 67,
+    "downloadedAgainForThisReport": false,
+    "decryptedAgainForThisReport": false
+  },
+  "uiRecovery": {
+    "file": "fighter-shared-root-native-ui-recovery.enc",
+    "bytes": 208784354,
+    "sha256": "a45f16a8b1b7dcc1dbccc18bb36062ab96af4c72d6f27949c86f746f7304f12f",
+    "cipherPresent": true,
+    "decrypted": false,
+    "readinessToExecute": "NOT ESTABLISHED; only encrypted bytes and their digest are verified.",
+    "passedNativeScopeReexecutionAllowed": false,
+    "archiveSummaryPrecedesEncryption": true
+  },
+  "cleanup": {
+    "conclusion": "success",
+    "source": "Final Actions job steps",
+    "archivedSummaryPredatesCleanup": true
+  },
+  "metadataFiles": [
+    {
+      "archiveEntry": "metadata/identity.json",
+      "bytes": 5747,
+      "sha256": "fe566fc7f806a6ae0c071ca4c4846c9801d330064099b511586cf568fe94d8f0"
+    },
+    {
+      "archiveEntry": "metadata/native-summary.json",
+      "bytes": 1010,
+      "sha256": "62006d5fdbdd2379c23b1e61812c8e09a1321f904603db298b88789484ee0ea0"
+    },
+    {
+      "archiveEntry": "metadata/native-tests.json",
+      "bytes": 5813,
+      "sha256": "4ee46ce530c0f2c51d9c7951f6d1dded32cce8386891c8f446d735b70fbb6438"
+    },
+    {
+      "archiveEntry": "metadata/ui-summary.json",
+      "bytes": 1746,
+      "sha256": "f08af55a05f5857af74b791f251d1bf72d1531ab8c5f97bef46705544be3e164"
+    },
+    {
+      "archiveEntry": "metadata/ui-tests.json",
+      "bytes": 2630,
+      "sha256": "1213467817bc6f4f7693efa01b3af231034bfa20c3e64033f8578ee93054b91b"
+    },
+    {
+      "archiveEntry": "metadata/ui-failure.json",
+      "bytes": 142,
+      "sha256": "d58c030a71c1f01228c1e3f0221c05786e868eed2ab06db4d57fe5221b0f2788"
+    },
+    {
+      "archiveEntry": "metadata/ui-recovery.json",
+      "bytes": 717,
+      "sha256": "18637b979b76b4bfa24a0699b389103ac0a0e1d8e6e216e41a38201fa03fb172"
+    },
+    {
+      "archiveEntry": "metadata/public-summary.json",
+      "bytes": 6533,
+      "sha256": "bbd4ba3afdbf62ecdb91dc8a4eaf0d362d0148f53553dfffb86683b2f9c50e40"
+    },
+    {
+      "archiveEntry": "native-attachments/8CBEEF22-385F-4168-AD5B-A1C38FB8C294.json",
+      "bytes": 1481,
+      "sha256": "cb38b1048a46a72b958154aabf701618adf79ee17f06f05035a957e3e8761261"
+    },
+    {
+      "archiveEntry": "ui-attachments/D0648B5B-1A94-43E5-8CEE-BC694CBBA838.json",
+      "bytes": 11703,
+      "sha256": "a3e2aca831352d9ffde5d3dae419a8a00ac44a871cee93317f4a82d26dfb7e9f"
+    }
+  ],
+  "publicReportExclusions": [
+    "No decryption key or wrapped-key material.",
+    "No Library identifier.",
+    "No original media or PNG bytes.",
+    "No assertion of audible playback, physical-device validation, completed Pangu assets or full visual acceptance."
+  ],
+  "verifiedAtUTC": "2026-11-14T22:48:42.483191+00:00",
+  "sourceLinks": [
+    {
+      "path": "App/Services/DuelTriadSourceMaterial.swift",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/App/Services/DuelTriadSourceMaterial.swift"
+    },
+    {
+      "path": "Tests/SiteTests/DuelTriadRuntimeUniformTests.swift",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/Tests/SiteTests/DuelTriadRuntimeUniformTests.swift"
+    },
+    {
+      "path": "Tests/SiteTests/DuelTriadFloorfallIntegrationTests.swift",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/Tests/SiteTests/DuelTriadFloorfallIntegrationTests.swift"
+    },
+    {
+      "path": "Tests/SiteTests/DuelSharedRootInstalledModelTests.swift",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/Tests/SiteTests/DuelSharedRootInstalledModelTests.swift"
+    },
+    {
+      "path": "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
+    },
+    {
+      "path": ".github/workflows/fighter-shared-root-material-followup.yml",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/.github/workflows/fighter-shared-root-material-followup.yml"
+    },
+    {
+      "path": ".github/scripts/fighter_shared_root_native.py",
+      "url": "https://github.com/wuyong9494-lab/kriswu/blob/5788ebb1001a6e0f31c5208cb2b955b48b00741c/.github/scripts/fighter_shared_root_native.py"
+    }
+  ]
+}

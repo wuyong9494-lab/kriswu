@@ -1,0 +1,109 @@
+name: Fighter shared-root UI remediation (one failed UI method; native not selected)
+
+'on':
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths:
+      - .github/workflows/fighter-shared-root-ui-remediation.yml
+      - .github/scripts/fighter_shared_root_native.py
+      - .github/scripts/test_fighter_shared_root_ui_remediation.py
+      - App/Services/DuelTriadSurfaceFrameDriver.swift
+      - App/Views/DuelWorld.swift
+      - App/Views/DuelView.swift
+      - Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.run_attempt == 1 &&
+      github.event_name == 'push' &&
+      github.event.head_commit.message == 'Verify shared root UI remediation 20261115'
+    concurrency:
+      group: fighter-private-visual-acceptance
+      cancel-in-progress: false
+    runs-on: macos-26
+    timeout-minutes: 65
+    environment: fighter-private-assets
+    env:
+      FIGHTER_SHARED_ROOT_SCOPE: ui-remediation-only
+      EXPECTED_SHARED_ROOT_UI_HELPER_SHA256: "945f612990abba097a5b53a45b25d9230f8bfde14628d4a78e6e631e26782036"
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin 5afd inputs plus three App fixes and the one UI readiness predicate
+        id: prepare
+        timeout-minutes: 2
+        run: python3 .github/scripts/fighter_shared_root_native.py prepare
+      - name: Select the installed Xcode and simulator tools
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_shared_root_native.py tools
+      - name: Authenticate 73 baseline files, 295 original overlay files and the 13-payload delta
+        id: stage
+        timeout-minutes: 8
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: python3 .github/scripts/fighter_shared_root_native.py stage
+      - name: Build the existing ArenaFlow scheme only and verify all 373 compiled resources
+        id: build
+        timeout-minutes: 25
+        run: python3 .github/scripts/fighter_shared_root_native.py build
+      - name: Prepare one installed iPhone 17 Pro Max simulator
+        id: simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_shared_root_native.py simulator
+      - name: Execute the failed UI method once and scan its full runtime interval
+        id: ui
+        if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success'
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_shared_root_native.py ui
+      - name: Capture a separate Liu lobby diagnostic if the UI method or runtime gate fails
+        if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success' && steps.ui.outcome != 'success'
+        timeout-minutes: 4
+        run: python3 .github/scripts/fighter_shared_root_native.py capture
+      - name: Export exact UI captures and retain bounded automatic diagnostic metadata
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_shared_root_native.py export
+      - name: Seal bounded diagnostics and captures, including failed phases
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_shared_root_native.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-shared-root-ui-remediation-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.enc
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.key.enc
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.SHA256SUMS
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Remove this run's simulator, staged media, products and plaintext diagnostics
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_shared_root_native.py cleanup
+      - name: Report UI gates with historical native passes separate and pixel review pending
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_shared_root_native.py report
