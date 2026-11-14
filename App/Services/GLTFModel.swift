@@ -1,6 +1,7 @@
 import SceneKit
 import UIKit
 import ImageIO
+import ObjectiveC
 import simd
 
 /// 读 glTF 2.0 的 3D 模型（.glb，或 .gltf 加旁边的 .bin、贴图），做成 SceneKit 的节点。
@@ -56,7 +57,12 @@ final class GLTFModel: @unchecked Sendable {
             super.init()
         }
     }
-    private static let skinSourcesKey = "duel.gltf.exact-skin-inputs.v1"
+    /// The private class metatype has a stable identity for this process.
+    /// Its full identifier bits are only an opaque association key; the
+    /// resulting pointer is never dereferenced or used as a mutable registry.
+    private static var skinSourcesKey: UnsafeRawPointer {
+        UnsafeRawPointer(bitPattern: UInt(bitPattern: ObjectIdentifier(SkinSourceBinding.self)))!
+    }
 
     /// One creation path for imported geometry, corrected personal binds and
     /// explicit synthetic fixtures. Snapshot bytes before invoking SceneKit;
@@ -83,20 +89,21 @@ final class GLTFModel: @unchecked Sendable {
             boneInverseBindTransforms: inverseBinds, boneWeights: upload.weights, boneIndices: upload.indices)
         skinner.skeleton = skeleton; skinner.baseGeometryBindTransform = baseGeometryBindTransform
         holder.geometry = geometry; holder.skinner = skinner
-        // Cloned nodes can share userData. Upserting this holder's record must
-        // never overwrite the source holder's otherwise valid binding.
-        let metadata = (holder.userData?.mutableCopy() as? NSMutableDictionary) ?? NSMutableDictionary()
-        metadata[skinSourcesKey] = SkinSourceBinding(holder: holder, geometry: geometry,
+        // SCNNode is an Objective-C object; its public API has no userData
+        // property. An association belongs to this exact holder and is not a
+        // shared mutable dictionary that a cloned holder could overwrite.
+        // https://developer.apple.com/documentation/objectivec/objc_setassociatedobject(_:_:_:_:)
+        let binding = SkinSourceBinding(holder: holder, geometry: geometry,
             skinner: skinner, bones: bones, sources: sources)
-        holder.userData = metadata
+        objc_setAssociatedObject(holder, skinSourcesKey, binding, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return skinner
     }
 
-    /// A cloned dictionary, replaced geometry/skinner or reordered bones cannot
+    /// A cloned holder, replaced geometry/skinner or reordered bones cannot
     /// reuse another construction's sources. Missing/stale input is a failure;
     /// there is deliberately no fallback to empty framework getters.
     static func skinSources(for holder: SCNNode) -> SkinSources? {
-        guard let binding = holder.userData?[skinSourcesKey] as? SkinSourceBinding,
+        guard let binding = objc_getAssociatedObject(holder, skinSourcesKey) as? SkinSourceBinding,
               binding.holder === holder, let geometry = holder.geometry,
               binding.geometry === geometry, let skinner = holder.skinner,
               binding.skinner === skinner, skinner.baseGeometry === geometry,

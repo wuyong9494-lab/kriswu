@@ -284,6 +284,20 @@ inputs and uses them through the original loader, bind-correction, trail and
 synthetic-fixture paths. Its next Apple execution remains required before the
 projector and late-soul comparisons can be reported as passed.
 
+The ninth build (run 43607530791, published source ff170064) stopped during
+App compilation: SCNNode does not expose the userData property used by the
+first retained-input binding. No simulator test method ran, and 117 remains
+the planned selection rather than an execution count. Its authenticated
+artifact matched all 15 inventory entries, eight source trees and 18 file
+digests; no xcresult or data/image attachments were produced.
+The repair uses the public Objective-C associated-object APIs on the exact
+holder, retaining the private typed record with weak back-references and
+independent byte snapshots. A private metatype identity supplies the opaque
+association key. Clone reinstallation, geometry/skinner replacement and
+corrected-bind checks remain in the same native method. The original holder
+must remain valid, and a clone receives distinct sources with identical bytes.
+Local Swift key checks and parsing do not replace the next Apple SDK build.
+
 The source-only Apple workflow now selects exactly 117 synthetic native methods,
 including 11 Morph and nine independent projected-shadow GPU/contract methods.
 It receives no asset keys, uses no private asset environment, and excludes the

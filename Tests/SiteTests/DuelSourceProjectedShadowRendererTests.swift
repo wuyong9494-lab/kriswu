@@ -351,16 +351,18 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let capturedWeights = captured.weights.data.withUnsafeBytes { Data($0) }
         let capturedIndices = captured.indices.data.withUnsafeBytes { Data($0) }
         let clone = sourceHolder.clone()
-        // Force the alias even on runtimes whose clone implementation happens
-        // to copy userData; the typed owner identity must reject borrowed data.
-        clone.userData = sourceHolder.userData
+        // A cloned SceneKit holder has no construction record of its own.
+        // It cannot inherit the original holder's private association.
         XCTAssertNil(GLTFModel.skinSources(for: clone))
         GLTFModel.installSkinner(on: clone, geometry: sourceGeometry, bones: sourceSkin.bones,
             inverseBinds: sourceSkin.boneInverseBindTransforms,
             weights: captured.weights, indices: captured.indices, skeleton: sourceSkin.skeleton)
-        XCTAssertNotNil(GLTFModel.skinSources(for: clone))
+        let cloneInputs = try XCTUnwrap(GLTFModel.skinSources(for: clone))
         XCTAssertNotNil(GLTFModel.skinSources(for: sourceHolder))
-        XCTAssertFalse(clone.userData === sourceHolder.userData)
+        XCTAssertFalse(cloneInputs.weights === captured.weights)
+        XCTAssertFalse(cloneInputs.indices === captured.indices)
+        XCTAssertEqual(cloneInputs.weights.data, capturedWeights)
+        XCTAssertEqual(cloneInputs.indices.data, capturedIndices)
         XCTAssertTrue(sourceHolder.skinner === sourceSkin)
         XCTAssertEqual(GLTFModel.skinSources(for: sourceHolder)?.weights.data, capturedWeights)
         XCTAssertEqual(GLTFModel.skinSources(for: sourceHolder)?.indices.data, capturedIndices)
