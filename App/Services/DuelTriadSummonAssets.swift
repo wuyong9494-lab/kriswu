@@ -186,6 +186,17 @@ final class DuelTriadSummonAssets {
 /// Redraws and skipped display frames cannot create attacks or advance timers.
 @MainActor
 final class DuelTriadSummonRenderer {
+    /// The source companion shader emits straight Gamma RGB and uses
+    /// SrcAlpha/OneMinusSrcAlpha. SceneKit's final fragment output reaches a
+    /// premultiplied-over RGB blend on the tested Apple path (Run11). Adapt
+    /// that output once, so the visible equation remains S*a + D*(1-a).
+    /// This is deliberately scoped to the late companions: their accumulated
+    /// alpha is not the source's a*a term. No later RGB operation reads that
+    /// destination alpha; the controlled surface makes final presentation A=1.
+    static func sourceAlphaFragment(_ source: String) -> String {
+        source + "\n_output.color.rgb *= _output.color.a;\n"
+    }
+
     private struct Key: Hashable { let owner: Int; let id: UInt64 }
     private struct Instance {
         let root: SCNNode
@@ -271,7 +282,7 @@ final class DuelTriadSummonRenderer {
                         // in view space, so the same absolute dot is normal.z.
                         // Original MainTex is black; the visible RGB is rim
                         // light. Its independent alpha mask survives below.
-                        modifiers[.fragment] = """
+                        modifiers[.fragment] = Self.sourceAlphaFragment("""
                         #pragma arguments
                         float4 sourceFresnel;
                         float sourceFresnelMix;
@@ -279,7 +290,7 @@ final class DuelTriadSummonRenderer {
                         #pragma body
                         float edge = pow(clamp(1.0 - abs(normalize(_surface.normal).z), 0.0, 1.0), sourceFresnel.w);
                         _output.color = float4(edge * sourceFresnel.rgb * sourceFresnelMix, _surface.diffuse.a);
-                        """
+                        """)
                         material.shaderModifiers = modifiers
                     }
                 }

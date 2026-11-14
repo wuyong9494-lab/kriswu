@@ -620,11 +620,14 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         soulMaterial.diffuse.contents = UIColor.white
         soulMaterial.blendMode = .alpha; soulMaterial.readsFromDepthBuffer = true
         soulMaterial.writesToDepthBuffer = false
-        soulMaterial.shaderModifiers = [.fragment: """
+        soulMaterial.shaderModifiers = [.fragment: DuelTriadSummonRenderer.sourceAlphaFragment("""
+        #pragma arguments
+        float syntheticSourceAlpha;
         #pragma transparent
         #pragma body
-        _output.color = float4(0.7, 0.15, 0.45, 0.5);
-        """]
+        _output.color = float4(0.7, 0.15, 0.45, syntheticSourceAlpha);
+        """)]
+        soulMaterial.setValue(NSNumber(value: 0.5), forKey: "syntheticSourceAlpha")
         soul.geometry?.materials = [soulMaterial]; soul.position.z = 1
         soul.categoryBitMask = DuelTriadRenderSurface.lateSourceCategory
         soul.castsShadow = false; soul.isHidden = true; scene.rootNode.addChildNode(soul)
@@ -675,6 +678,17 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
             // A late-only frame must still preserve source Gamma, blend just
             // once, and present A=1 even without an installed projector.
             surface.projectedShadow = nil; soul.isHidden = false; lateGeometry = [soul]
+            for alpha in [Float(0), Float(1)] {
+                soulMaterial.setValue(NSNumber(value: alpha), forKey: "syntheticSourceAlpha")
+                let boundary = pixel(try capture(tick: 2, samples: samples))
+                for c in 0..<3 {
+                    let expected = soulRGB[c] * 255 * alpha + Float(before[c]) * (1 - alpha)
+                    XCTAssertEqual(Float(boundary[c]), expected, accuracy: 3,
+                        "Source alpha zero must emit no RGB; alpha one must retain the full source color")
+                }
+                XCTAssertEqual(boundary.w, 255)
+            }
+            soulMaterial.setValue(NSNumber(value: soulAlpha), forKey: "syntheticSourceAlpha")
             let lateOnly = try capture(tick: 2, samples: samples), soulOnly = pixel(lateOnly)
             for c in 0..<3 {
                 let expected = soulRGB[c] * 255 * soulAlpha + Float(before[c]) * (1 - soulAlpha)

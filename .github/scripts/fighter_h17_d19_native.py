@@ -33,8 +33,8 @@ WORKFLOW = ".github/workflows/fighter-pangu-native.yml"
 COMMIT_MESSAGE = "Verify Pangu native bindings 20261114"
 # Filled only after the source and private release are frozen and reviewed.
 # A pending pin deliberately makes preparation fail before native execution.
-REVIEWED_SOURCE = '80b0803124de92a5ce2f697c195b25ba73c7b3e5'
-REVIEWED_ENTRIES = {'App': 'a5471e7c136c32e609e075692a102e4281ba2f7a', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': '4f04851e4352f21fb643321fa1f9eeb94bf67a14', 'Tests': '4893dd10dd1797c5b0576fbdea8b6fbb184bd871', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'd9fa8c6e43cd104d0d6f5b4ab0f6e0d4bcd67cb7'}
+REVIEWED_SOURCE = '9756a844eb4d89df8ef8ba9121f7792fba98d0d4'
+REVIEWED_ENTRIES = {'App': '2fbd2b8f0396dfb405757e7ad2ec513ebf68e561', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': '4f04851e4352f21fb643321fa1f9eeb94bf67a14', 'Tests': 'e6b9cb4d80f5a757a2d4dff00bdc9543bb4bc084', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'd9fa8c6e43cd104d0d6f5b4ab0f6e0d4bcd67cb7'}
 RELEASE_MANIFEST = ".github/private/fighter-h17-d19/manifest.json"
 RELEASE_MANIFEST_SHA256 = '697d62e8d9bf81da4521b6b828e4b1c4d2aa00e7141eab4d1558b3aa2ee032ff'
 BASE_MANIFEST_PINS = {

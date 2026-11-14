@@ -130,8 +130,9 @@ The decryption key is not stored in this repository.
   screen aspect and the source's previous-forward positioning order, and
   resets that history with the arena. Receiver projection preserves the
   source half-precision rows, raw RGBA color and no-W-division rule.
-  Final presentation writes opaque alpha only after source rendering; the
-  original intermediate RGBA math and final RGB bytes are retained.
+  Receiver and source-packet RGBA math remain available to the following
+  effects. Final presentation writes opaque alpha after the late soul layer;
+  that SceneKit layer's intermediate alpha has the explicit boundary below.
 - H17's current soul/root/wave model creations do not register additional
   projected casters. All 44 recovered CreateModel records leave ModelInfo
   `IsShadowCaster` unset; getter 29388, constructor 32191 and registrar 34903
@@ -148,6 +149,10 @@ The decryption key is not stored in this repository.
   receiver, matching their source queues 2110/2460/2470/2500. The final pass
   restores camera/background state and resolves multisampling after the soul
   blend. It issues no second time update or committed-frame callback.
+  A shared fragment-output adapter premultiplies soul RGB once by its original
+  alpha for SceneKit's observed premultiplied-over path. The source Fresnel
+  expression, transition and independent alpha mask are unchanged; the GPU
+  fixture uses the same adapter and an independent straight-alpha expectation.
 - The authenticated Liu neck bridge has 120 vertices and no UV0, with a
   constant base color and no texture references. Only this exact named actor
   base material may use constant source UV `(0,0)` in its Morph shader. The
@@ -324,6 +329,27 @@ The same method now requires its opaque reference to visibly differ from the
 background before testing depth preservation. The next Apple run must verify
 that this transaction repair makes the late layer observable.
 
+The eleventh build (run 43609715350, published source 7591bac4) again compiled
+and executed all 117 selected methods once: 116 passed, one failed, zero
+skipped. The new positive opaque-color control, background difference and
+actual depth-occlusion assertions all passed. Late-only and layered rendering
+now differed: [255,115,166] and [197,74,163] at both 1x and 4x. Only the two
+RGB comparisons failed, producing 12 assertions in that one method. The
+other eight projector methods, all 11 Morph methods, retained inputs and
+strict mip checks remained passed. All 27 evidence entries, eight source
+trees, 18 file digests and the single 368-byte format attachment matched;
+there were no image attachments or shader-pipeline errors.
+
+The new pixels numerically match straight RGB fed into a premultiplied-over
+path: Cs + Cd*(1-As). Independent inspection of source variant3930 confirms
+straight RGB and AlphaTex.r*_Alpha, with SrcAlpha/OneMinusSrcAlpha blending.
+The repair therefore multiplies only the final fragment RGB by the original
+alpha, once, in the production soul material and its shared synthetic adapter.
+It preserves the independent Cs*As + Cd*(1-As) expectation and adds alpha-zero
+and alpha-one boundaries within the existing method. The transaction repair,
+single timed update and existing acceptance thresholds remain unchanged.
+The next Apple run must verify this RGB boundary adaptation.
+
 The source-only Apple workflow now selects exactly 117 synthetic native methods,
 including 11 Morph and nine independent projected-shadow GPU/contract methods.
 It receives no asset keys, uses no private asset environment, and excludes the
@@ -354,8 +380,14 @@ method inventory is evidence of execution until an actual run completes.
 - Render-order recovery is scoped to the installed Palace/H17 layers. Source
   Palace flames and wind are present in the original bundle but absent from
   the current GLB; their existence is not evidence of installed scenery.
-  The new late-soul pass still requires actual Apple GPU validation of Gamma
-  blending, preserved depth, background load behavior and 1x/4x resolves.
+  Run11 verified the late layer's preserved depth, background load behavior
+  and 1x/4x paths; its corrected Gamma RGB composition awaits the next run.
+  SceneKit's intermediate soul alpha uses premultiplied-over, while the source
+  shader's unified SrcAlpha factors also multiply its alpha by itself. That
+  intermediate alpha is not claimed byte-equivalent. Subsequent soul RGB
+  does not read destination alpha; only resolve/copy and the final alpha-only
+  write follow this layer. The adaptation targets the source's displayed RGB
+  and opaque presentation, without claiming identical intermediate RGBA.
   These contracts do not establish whole-client pixel parity.
 - Remaining Unity modules, cross-emitter dynamic bounds sorting and some
   common floorfall sound events still need their own recovery or native
