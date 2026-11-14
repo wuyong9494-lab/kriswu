@@ -25,7 +25,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
-BRANCH = "refs/heads/codex/fighter-pangu-native-20261114"
+BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
 WORKFLOW = ".github/workflows/fighter-pangu-native.yml"
 COMMIT_MESSAGE = "Verify Pangu native bindings 20261114"
 REVIEWED_SOURCE = "ea383be06819fc93c36f99b874fdd18a0a358f4b"

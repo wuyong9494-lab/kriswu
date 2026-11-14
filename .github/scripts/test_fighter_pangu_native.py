@@ -40,6 +40,7 @@ class PanguNativeContractTests(unittest.TestCase):
         self.assertTrue(all(len(name.split("/")) == 3 for name in self.expected))
 
     def testEventRequiresExactMessageBranchWorkflowShaAndFirstAttempt(self):
+        self.assertEqual(native.BRANCH, "refs/heads/codex/fighter-visual-acceptance-20261113-1200")
         sha = "a" * 40
         env = {"GITHUB_SHA": sha, "GITHUB_REPOSITORY": native.REPOSITORY,
                "GITHUB_REF": native.BRANCH, "GITHUB_EVENT_NAME": "push", "GITHUB_RUN_ATTEMPT": "1",
@@ -47,6 +48,7 @@ class PanguNativeContractTests(unittest.TestCase):
         event = {"ref": native.BRANCH, "head_commit": {"id": sha, "message": native.COMMIT_MESSAGE}}
         native.validate_event(env, event, sha)
         for key, value in (("GITHUB_REF", "refs/heads/main"), ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+                           ("GITHUB_REF", "refs/heads/codex/fighter-pangu-native-20261114"),
                            ("GITHUB_RUN_ATTEMPT", "2"), ("GITHUB_REPOSITORY", "someone/fork"),
                            ("GITHUB_WORKFLOW_REF", "another-workflow"), ("GITHUB_SHA", "b" * 40)):
             with self.subTest(key=key), self.assertRaises(ValueError):
