@@ -1,0 +1,461 @@
+{
+  "schemaVersion": 1,
+  "validationDate": "2026-11-14",
+  "status": "native-contracts-passed-original-parity-still-unverified",
+  "source": {
+    "baseCommit": "0d83323a5463b9f3feb57cc00532da2ade5a5c48",
+    "reviewedLocalCommit": "ea383be06819fc93c36f99b874fdd18a0a358f4b",
+    "publishedSourceCommit": "567bbbcf1e07f33445d83114c6323cda50481634",
+    "publishedSourceTree": "5a7b67f0305cda2af6011c37f27ebe42db1d9160",
+    "nativeRunCommit": "4751a05bbc09f0f15783ede006d25319eabbaefa",
+    "nativeRunTree": "5bc0a611b06878fd07cba991cdcc81848f8c1448",
+    "reviewedEntries": {
+      "App": "0b7abd46a9ae5d628a94b1e7603784a421bbf77d",
+      "Sources": "03a563ad464524bc2947fcfc700c6208db6ab196",
+      "Shared": "e41e160b4262a9defbb3c5e92b4d020c5e0c2b80",
+      "Tests": "f924617fb78f17dd1b60b6f4f1b0c7ac7fb38d54",
+      "scripts": "9b71896f67a12ab967171c09404565e6471a7d15",
+      "Package.swift": "ffc64914ed88ae83bb4569fea0777b08ea2d29b6",
+      "project.yml": "16f1e55826ae257c96182c692b7f9ad8c450aa38"
+    },
+    "sourceMapping": "Git Data publication preserved the exact reviewed source tree. CI-only follow-ups did not change the seven pinned application/core/test/build entries.",
+    "reviewBranch": "codex/fighter-pangu-native-20261114",
+    "validationBranch": "codex/fighter-visual-acceptance-20261113-1200",
+    "sourceAndTestFilesPublished": 78,
+    "ciConfigurationFiles": 5,
+    "rawOriginalAssetsAdded": 0
+  },
+  "github": {
+    "repository": "wuyong9494-lab/kriswu",
+    "runId": 43568518933,
+    "jobId": 132367556829,
+    "attempt": 1,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43568518933",
+    "workflow": ".github/workflows/fighter-pangu-native.yml",
+    "conclusion": "success",
+    "createdAtUTC": "2026-11-14T06:53:39Z",
+    "completedAtUTC": "2026-11-14T07:05:57Z",
+    "environment": "fighter-private-assets",
+    "existingProtectionRulesUnchanged": true,
+    "requiredEnvironmentReviewCompleted": true
+  },
+  "toolchain": {
+    "xcode": "Xcode 26.6\nBuild version 17F113",
+    "swift": "Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+    "simulatorSDK": "26.5",
+    "simulator": {
+      "type": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max",
+      "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+      "osVersion": "26.5",
+      "physicalDevice": false
+    }
+  },
+  "execution": {
+    "unsignedDebugHostBuilds": 1,
+    "nativeBuildSeconds": 345.456,
+    "nativeTestInvocations": 1,
+    "nativeInvocationSeconds": 93.455,
+    "xctestStartUTC": "2026-11-14T07:04:30.182000+00:00",
+    "xctestFinishUTC": "2026-11-14T07:05:34.045000+00:00",
+    "xctestElapsedSeconds": 63.863,
+    "total": 49,
+    "passed": 49,
+    "failed": 0,
+    "skipped": 0,
+    "syntheticContracts": 46,
+    "existingResourceRegressions": 3,
+    "exactUniqueMethodInventoryVerified": true,
+    "exitCode": 0,
+    "stagedResourceReceiptsVerified": 73,
+    "compiledResourceReceiptsVerified": 73,
+    "allWorkflowStepsSucceeded": true,
+    "cleanupCompleted": true
+  },
+  "methodGroups": {
+    "DuelFighterAssetReleaseLoaderTests": 12,
+    "DuelFighterCharacterContainerTests": 10,
+    "DuelLifecycleTests": 2,
+    "DuelPanguSourceAudioBindingTests": 13,
+    "DuelPanguSourceTrailBindingTests": 11,
+    "DuelWeaponAssetTests": 1
+  },
+  "methods": [
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testCatalogHashAndDeclaredSizeAreCheckedBeforeCatalogDecoding",
+      "result": "Passed",
+      "durationSeconds": 0.01732790470123291,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testChangedManifestBytesCannotPassTheOriginalBuildPin",
+      "result": "Passed",
+      "durationSeconds": 0.0028510093688964844,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testEmptyAndOversizedManifestsAreRejectedBeforeDecoding",
+      "result": "Passed",
+      "durationSeconds": 0.0066640377044677734,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testEmptyBuildPinOnlyPermitsAnAbsentManifest",
+      "result": "Passed",
+      "durationSeconds": 0.00400090217590332,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testMalformedBuildPinsFailBeforeLookingForManifest",
+      "result": "Passed",
+      "durationSeconds": 0.0063980817794799805,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testManifestSymlinkIsRejectedEvenWhenTargetBytesMatchThePin",
+      "result": "Passed",
+      "durationSeconds": 0.003036022186279297,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testNoBuildPinAndNoManifestLeavesOptionalReleaseAbsent",
+      "result": "Passed",
+      "durationSeconds": 0.002102971076965332,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testPresentManifestCannotAuthorizeItselfWithoutBuildPin",
+      "result": "Passed",
+      "durationSeconds": 0.0034160614013671875,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testUnapprovedCatalogBasenameIsRejectedEvenWithAValidReleasePin",
+      "result": "Passed",
+      "durationSeconds": 0.0034159421920776367,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testUnsafeCatalogPathsFailBeforeAnyCatalogRead",
+      "result": "Passed",
+      "durationSeconds": 0.01306605339050293,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testValidBuildPinRequiresTheManifestToExist",
+      "result": "Passed",
+      "durationSeconds": 0.0020400285720825195,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterAssetReleaseLoaderTests/testVerifiedReadReturnsExactBytesAndRejectsSymlinkedCatalogs",
+      "result": "Passed",
+      "durationSeconds": 0.0018349885940551758,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testAssetVersionAndRequiredExtensionSupportAreExplicit",
+      "result": "Passed",
+      "durationSeconds": 0.0035070180892944336,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testBinaryChunkAndDeclaredBufferMustAgree",
+      "result": "Passed",
+      "durationSeconds": 0.007046937942504883,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testChunkBoundsAlignmentAndOrderingAreValidated",
+      "result": "Passed",
+      "durationSeconds": 0.0011320114135742188,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testEmbeddedBufferImageAndTextureReferencesAreAccepted",
+      "result": "Passed",
+      "durationSeconds": 0.0008310079574584961,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testEmbeddedImagesAndTextureSourcesCannotUseMissingReferences",
+      "result": "Passed",
+      "durationSeconds": 0.001177072525024414,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testEveryBufferAndImageURIIsRejectedIncludingDataAndNull",
+      "result": "Passed",
+      "durationSeconds": 0.005607008934020996,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testEveryBufferViewMustStayWithinTheDeclaredBuffer",
+      "result": "Passed",
+      "durationSeconds": 0.0010620355606079102,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testHeaderAndDeclaredLengthCannotBeForgedOrTruncated",
+      "result": "Passed",
+      "durationSeconds": 0.0006749629974365234,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testMalformedArraysCannotSilentlyBecomeEmptyCollections",
+      "result": "Passed",
+      "durationSeconds": 0.0017420053482055664,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelFighterCharacterContainerTests/testPinnedContainerCannotAuthorizeMutableSidecarBytes",
+      "result": "Passed",
+      "durationSeconds": 0.004617929458618164,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelFighterCharacterContainerTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelLifecycleTests/testNetworkIdentityVerifiesCompleteInstalledPrivateContentWithoutStartingClock",
+      "result": "Passed",
+      "durationSeconds": 14.44691002368927,
+      "scenarioType": "existing authenticated resource regression",
+      "sourceFile": "Tests/SiteTests/DuelLifecycleTests+CompatibilityIdentity.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelLifecycleTests/testVerifiedPreparationRetainsAllOriginalObjectsAndReleasesPayloadOnce",
+      "result": "Passed",
+      "durationSeconds": 14.13818609714508,
+      "scenarioType": "existing authenticated resource regression",
+      "sourceFile": "Tests/SiteTests/DuelLifecycleTests+VerifiedPreparation.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testAnUnboundTargetCannotFallBackToLegacyAudio",
+      "result": "Passed",
+      "durationSeconds": 0.03217911720275879,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testCueDedupKeepsDistinctSequencesAndPausedEventsRemainUnconsumed",
+      "result": "Passed",
+      "durationSeconds": 0.014590978622436523,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testEverySupportedCueUsesItsExactAcceptedEventAndCastPhase",
+      "result": "Passed",
+      "durationSeconds": 0.004558920860290527,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testExactTargetIdentityAndAllContentReceiptsAreRequired",
+      "result": "Passed",
+      "durationSeconds": 0.003630995750427246,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testFinishingStepConsumesAcceptedCuesOnceAfterCombatPhaseChanges",
+      "result": "Passed",
+      "durationSeconds": 0.004557013511657715,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testMissingCorruptSymlinkAndEscapingResourcesFailClosed",
+      "result": "Passed",
+      "durationSeconds": 0.012563943862915039,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testMissingSkillCueAndSilentImpactCannotUseGenericPanguAudio",
+      "result": "Passed",
+      "durationSeconds": 0.018763065338134766,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testMissingUnknownAndDuplicateAudioBindingsFailClosed",
+      "result": "Passed",
+      "durationSeconds": 0.009341001510620117,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testNilAbilityCueOnlyMatchesGeneratedAttackAndNeverOrdinaryContact",
+      "result": "Passed",
+      "durationSeconds": 0.004909992218017578,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testReleasedAndContactCuesSeparateGeneratedAndEmpoweredVariants",
+      "result": "Passed",
+      "durationSeconds": 0.005159974098205566,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testUnknownAmbiguousOrUnmatchableCueMappingsFailClosed",
+      "result": "Passed",
+      "durationSeconds": 0.025702953338623047,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testVerifiedBytesSurviveFileRemovalAndOnlyPlayPanguCategories",
+      "result": "Passed",
+      "durationSeconds": 0.021795988082885742,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceAudioBindingTests/testWrongManifestPinProfileAndCharacterCannotLoad",
+      "result": "Passed",
+      "durationSeconds": 0.004443049430847168,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testAuthoredMaterialAndSkeletonAreInstalledWithoutLegacySubstitution",
+      "result": "Passed",
+      "durationSeconds": 0.0251920223236084,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testCorruptWrongSizeSymlinkAndEscapingTextureFailClosed",
+      "result": "Passed",
+      "durationSeconds": 0.024728059768676758,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testLegacyBindingStillUsesItsOriginalActiveFlag",
+      "result": "Passed",
+      "durationSeconds": 0.0007129907608032227,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testMissingActiveSideInvalidBoneIndexAndBadWeightsFailClosed",
+      "result": "Passed",
+      "durationSeconds": 0.01879596710205078,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testMissingOrUnsupportedMaterialCannotChooseLegacyDefaults",
+      "result": "Passed",
+      "durationSeconds": 0.02546393871307373,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testModelBindingRejectsMissingBonesAndClips",
+      "result": "Passed",
+      "durationSeconds": 0.010395050048828125,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testTargetManifestCannotUseLegacyPinOrIgnoreItsReleasePin",
+      "result": "Passed",
+      "durationSeconds": 0.004664063453674316,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testTargetPhaseWindowsIncludeExactBoundariesAndIgnoreLegacySpeed",
+      "result": "Passed",
+      "durationSeconds": 0.005594015121459961,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testTargetProfilesUseTheirOwnVerifiedTexturesAndCompleteReceipts",
+      "result": "Passed",
+      "durationSeconds": 0.0043909549713134766,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testTargetWindowsRequireEveryClipAndRejectOverlapsOrInvalidPhases",
+      "result": "Passed",
+      "durationSeconds": 0.030471086502075195,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelPanguSourceTrailBindingTests/testUnknownProfileWrongModelAndMissingClipFailClosed",
+      "result": "Passed",
+      "durationSeconds": 0.013936996459960938,
+      "scenarioType": "synthetic fixture contract",
+      "sourceFile": "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    },
+    {
+      "identifier": "SiteTests/DuelWeaponAssetTests/testEquippedRecoveryBlendsToIdleWithoutChangingSourceSample",
+      "result": "Passed",
+      "durationSeconds": 2.979158043861389,
+      "scenarioType": "existing authenticated resource regression",
+      "sourceFile": "Tests/SiteTests/DuelWeaponAssetTests.swift"
+    }
+  ],
+  "evidence": {
+    "artifactId": 14104070475,
+    "artifactName": "fighter-pangu-native-43568518933-1-encrypted",
+    "artifactBytes": 922746,
+    "artifactZipSHA256": "985f149a7db8522e1f7f922cc293f2c9c3751b07dd0ba08ce5b743d658bd96a3",
+    "artifactExpiresAtUTC": "2026-11-17T07:05:44Z",
+    "ciphertextSHA256": "d16413dd4597ffc8fb6d8bc527f1d70de8959f1839848668987c5e2baeca917f",
+    "authenticatedPlaintextZipSHA256": "48b4a5fb93944603180127321e373c6b278593b82b3ccd35ff774dd307fc8f0a",
+    "textEvidenceMembers": 29,
+    "artifactDigestChecksumsAndMACVerified": true,
+    "nativeSummarySHA256": "8ae4f76c3a09fe177a378e658927aac9a162aabfe927687e5190a0af15f0be5f",
+    "nativeTestTreeSHA256": "e889a0175aa0a7438af7bc5e9958c6fa3a0bdbf316d99f2009b8a1c10f105278",
+    "sourceIdentitySHA256": "b7185744e148442aefb5d39856499a091ee797423879ef8d709633cd1bc76b03",
+    "recipientSPKISHA256": "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e15",
+    "publicEvidenceContains": "Sanitized per-method results, counts and provenance only; raw resources, private keys and decrypted logs are not committed."
+  },
+  "initialBlockedAttempt": {
+    "runId": 43568110283,
+    "commit": "d2cf1cae5095c63a2c5d471f94c29bc1844b8ac5",
+    "executedJobSteps": 0,
+    "nativeBuilds": 0,
+    "nativeTests": 0,
+    "reason": "New review branch was outside the existing environment branch allowlist.",
+    "resolution": "Fast-forward the reviewed source and focused workflow to the already permitted visual-acceptance branch; retain all protection rules and complete the existing environment review."
+  },
+  "limits": {
+    "productionPanguAssetsActivated": false,
+    "originalPanguModelMotionEffectsAudioParity": "not verified",
+    "physicalDeviceAcceptance": "not verified",
+    "formalVersionNumerics": "Unchanged: the 38 verified reference facts and 14 unresolved items retain their prior evidence status.",
+    "stable60fps": "not measured",
+    "testFlightOrAppStoreUpload": "not performed",
+    "scope": "46 synthetic native binding contracts plus three regressions over the existing authenticated legacy resource packs; these are not original Pangu asset acceptance tests."
+  }
+}
