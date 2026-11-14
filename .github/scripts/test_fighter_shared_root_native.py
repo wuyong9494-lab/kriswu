@@ -156,6 +156,45 @@ class SharedRootNativeHelperTests(unittest.TestCase):
                 native.run_logged(["fixture-command"], "fixture-no-key", 1)
                 self.assertFalse(set(start.call_args.kwargs["env"]) & set(native.KEY_NAMES))
 
+    def test_xcodebuild_uses_default_single_execution_for_both_exact_scopes(self):
+        # Actual Xcode 26.6 rejected "-test-iterations 1" before executing any
+        # method. The established native workflow relies on the default single
+        # execution; exact result-node multiplicity remains the acceptance gate.
+        for ui, expected in ((False, native.SELECTORS), (True, native.UI_SELECTORS)):
+            with self.subTest(ui=ui), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                scope = "ui" if ui else "native"
+                summary, data = result_fixture(expected)
+                (root / "build-ok.txt").write_text("synthetic verified build")
+                (root / "simulator.json").write_text(json.dumps({"udid": "fixture"}))
+                (root / "xctestrun-path.txt").write_text("fixture.xctestrun")
+                (root / (scope + ".xcresult")).mkdir()
+                (root / (scope + ".xcresult/Info.plist")).write_text("fixture")
+                commands = []
+
+                def run(command, label, timeout, **kwargs):
+                    commands.append(command)
+                    output = kwargs.get("output_name")
+                    if output:
+                        (root / output).write_text(json.dumps(summary if output.endswith("summary.json") else data))
+                    return 0
+
+                with patch.object(native, "work", return_value=root), patch.object(native, "identity"), \
+                        patch.object(native, "no_resource_keys"), patch.object(native, "run_logged", side_effect=run), \
+                        patch("builtins.print"):
+                    native.execute_tests(ui=ui)
+                command = commands[0]
+                self.assertEqual(command[:2], ["xcodebuild", "test-without-building"])
+                self.assertNotIn("-test-iterations", command)
+                self.assertNotIn("-retry-tests-on-failure", command)
+                self.assertNotIn("-run-tests-until-failure", command)
+                self.assertEqual(tuple(s.removeprefix("-only-testing:") for s in command
+                                       if s.startswith("-only-testing:")), expected)
+                record = json.loads((root / (scope + "-process.json")).read_text())
+                self.assertEqual(record["iterations"], 1)
+                self.assertEqual(record["selectedCount"], len(expected))
+                self.assertTrue((root / (scope + "-ok.txt")).is_file())
+
     def model_attachment(self, root, device):
         label = "shared-root-installed-model-report"
         raw = {"releaseSHA256": native.RELEASE_SHA, "characters": [{}, {}], "liuVictimMotions": [{}, {}, {}]}

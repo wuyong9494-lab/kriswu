@@ -1,0 +1,197 @@
+{
+  "schema": "fighter-shared-root-native-invocation-failure-v1",
+  "runID": 43642548703,
+  "jobID": 132593069280,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43642548703",
+  "sourceSHA": "bf5cc1893b4cff80cd04dda08ffff0cdf1ec408a",
+  "sourceBaselineSHA": "6ebca235dfb579454c99528791f5c8e84bc9ff6f",
+  "status": "completed",
+  "conclusion": "failure",
+  "runAttempt": 1,
+  "updatedAtUTC": "2026-11-14T21:36:06Z",
+  "artifact": {
+    "id": 14132858423,
+    "name": "fighter-shared-root-native-43642548703-1-encrypted",
+    "bytes": 5178380,
+    "sha256": "54ba5f91862c35a1914111d9bcfc45ae888cbdaa18167817711437d1d3fbd79c",
+    "downloadAndAuthenticatedDecryptionPerformedOnceByRoot": true
+  },
+  "successfulStages": [
+    "source-gate",
+    "tools",
+    "73+295+13 authenticated staging",
+    "one unsigned build with both targets and 373 compiled resource hashes",
+    "iPhone17ProMax simulator boot",
+    "two fallback PNG captures and logs; visual content failed review",
+    "encrypted diagnostics upload",
+    "owned plaintext and simulator cleanup"
+  ],
+  "native": {
+    "selectedMethods": 9,
+    "processExitCode": 64,
+    "totalTestCount": 0,
+    "passedTests": 0,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "result": "unknown",
+    "testCaseLeaves": 0,
+    "executedMethods": 0
+  },
+  "ui": {
+    "selectedMethods": 1,
+    "processExitCode": 64,
+    "totalTestCount": 0,
+    "passedTests": 0,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "result": "unknown",
+    "testCaseLeaves": 0,
+    "executedMethods": 0
+  },
+  "confirmedCause": {
+    "phase": "xcodebuild invocation validation before method execution",
+    "stderr": "xcodebuild: error: Must specify -test-iterations with more than 1 iteration.",
+    "badArguments": [
+      "-test-iterations",
+      "1"
+    ],
+    "failedTestMethod": null
+  },
+  "evidence": [
+    {
+      "file": "metadata/selected-native-stderr.log",
+      "bytes": 77,
+      "sha256": "ce4e83dd5528a01a356303dff0386e1c1e54ed87cc496e24041a5a6cd6c3444f"
+    },
+    {
+      "file": "metadata/selected-ui-stderr.log",
+      "bytes": 77,
+      "sha256": "ce4e83dd5528a01a356303dff0386e1c1e54ed87cc496e24041a5a6cd6c3444f"
+    },
+    {
+      "file": "metadata/native-process.json",
+      "bytes": 115,
+      "sha256": "fc4d704e7e79e0f3232da5676d29230d61fa1d92d4d9b309ca6f1dca13528b40"
+    },
+    {
+      "file": "metadata/ui-process.json",
+      "bytes": 115,
+      "sha256": "87a2423985dc3a7cb5fe0caab99d87a334f936f0ebe67c4ee91a8c26633c74ce"
+    },
+    {
+      "file": "metadata/native-summary.json",
+      "bytes": 381,
+      "sha256": "289d21623905a6bba5cd643d22203218667baf55957d3efe358dd530c5099dc6"
+    },
+    {
+      "file": "metadata/ui-summary.json",
+      "bytes": 381,
+      "sha256": "3f07542f08db8dd2bacc74059810af7fa98d82f2b44b4fc8511a3e55f3148366"
+    },
+    {
+      "file": "metadata/native-tests.json",
+      "bytes": 242,
+      "sha256": "410ad17f24efc5095ca1ba1e1e472290bb12eaf0c1a4cc5f471c7139ed525ce0"
+    },
+    {
+      "file": "metadata/ui-tests.json",
+      "bytes": 242,
+      "sha256": "410ad17f24efc5095ca1ba1e1e472290bb12eaf0c1a4cc5f471c7139ed525ce0"
+    },
+    {
+      "file": "metadata/capture-ok.json",
+      "bytes": 859,
+      "sha256": "0f815b998e492edad4b0058c31bb20a2d18184f85e1a2aa03e26ef535ce665c9"
+    }
+  ],
+  "fix": {
+    "productionFile": ".github/scripts/fighter_shared_root_native.py",
+    "change": "Only remove -test-iterations 1; retain default single execution, exact selector and result multiplicity gates.",
+    "preservedNativeSelectors": [
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback",
+      "SiteTests/DuelTriadRootVictimAudioTests/testVerifiedRootEndUsesLiuOwnershipAtTick38AndDeduplicatesTheSameFrame",
+      "SiteTests/DuelTriadRootVictimAudioTests/testRootEndRejectsWrongClockFrameContextVariantCountAndSunImpersonation",
+      "SiteTests/DuelTriadRootVictimAudioTests/testEveryVictimClipMustMatchSourceSHAFramesTicksGridAndPelvisBeforeSharing",
+      "SiteTests/DuelTriadRootVictimAudioTests/testOrdinarySharedThrowsKeepSoundFrameClockWithoutTheRootEndException",
+      "SiteTests/DuelTriadRootVictimAudioTests/testMorphTargetMetadataAcceptsOnlyReviewedHammersAndCompleteNewVictimCapability",
+      "SiteTests/DuelSharedRootInstalledModelTests/testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions"
+    ],
+    "preservedUISelectors": [
+      "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls"
+    ],
+    "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "timeoutChanged": false,
+    "oldProtectedHelperChanged": false,
+    "appCoreOrResourcesChanged": false
+  },
+  "priorInvocationBasis": {
+    "files": [
+      ".github/scripts/fighter_h17_source_native.py",
+      ".github/scripts/fighter_h17_d19_native.py"
+    ],
+    "observation": "Established test-without-building commands do not set -test-iterations; planned iterations metadata remains 1.",
+    "oldTestsRerun": false
+  },
+  "newTargetedCheck": {
+    "method": "SharedRootNativeHelperTests.test_xcodebuild_uses_default_single_execution_for_both_exact_scopes",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_fighter_shared_root_native.py SharedRootNativeHelperTests.test_xcodebuild_uses_default_single_execution_for_both_exact_scopes -v",
+    "runner": "Python unittest with mocked xcodebuild and result exports",
+    "red": {
+      "methods": 1,
+      "failingSubcases": 2,
+      "exitCode": 1,
+      "durationSeconds": 0.007
+    },
+    "green": {
+      "methods": 1,
+      "subcases": 2,
+      "passed": 1,
+      "failed": 0,
+      "exitCode": 0,
+      "durationSeconds": 0.005
+    },
+    "previous15Rerun": false,
+    "appleMethodsExecuted": 0
+  },
+  "limitations": {
+    "native9AndUI1StillPendingFirstActualMethodExecution": true,
+    "previousProductsRetained": false,
+    "nextRunRequiresBuild": true,
+    "screenshotsVisualReview": "REVIEWED: no visible character or controls",
+    "audiblePlaybackVerified": false,
+    "physicalDeviceVerified": false,
+    "D19Activated": false,
+    "resourceUploadRepeated": false,
+    "fixedRunTriggeredByAuthor": false
+  },
+  "filesSHA256": {
+    ".github/scripts/fighter_shared_root_native.py": "f631d2468f16375f293fc0caa566b2e11de809f6b65df8626127f5b20ad240db",
+    ".github/scripts/test_fighter_shared_root_native.py": "cf642e5cff6b4885217223d0668e60e063c4e147275069cf3d55c87ad2e99ed4",
+    "docs/acceptance/fighter-shared-root-native-run-43642548703.md": "47280f007f0e73d6348254821fa4c0be1de293ff6da5d482039cc0a679227ff8"
+  },
+  "fallbackCaptureReview": {
+    "reviewer": "root",
+    "status": "reviewed: blank/black background with no visible character or controls",
+    "matchingImageSHA256": "f6054ed7358280685f4473812f6169bf1828732cada366c330c40e3afcaccea5",
+    "images": [
+      {
+        "file": "liu-shared-root-lobby-1.png",
+        "bytes": 1810848,
+        "sha256": "f6054ed7358280685f4473812f6169bf1828732cada366c330c40e3afcaccea5",
+        "width": 1320,
+        "height": 2868
+      },
+      {
+        "file": "liu-shared-root-lobby-2.png",
+        "bytes": 1810848,
+        "sha256": "f6054ed7358280685f4473812f6169bf1828732cada366c330c40e3afcaccea5",
+        "width": 1320,
+        "height": 2868
+      }
+    ],
+    "hallwayOrCharacterVisibilityPassed": false,
+    "loadingOrDisplayCause": "under separate read-only investigation; not established by the xcodebuild parameter error"
+  }
+}

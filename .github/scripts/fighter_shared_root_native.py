@@ -625,7 +625,7 @@ def execute_tests(ui=False):
     device = read_json(work() / "simulator.json")
     command = ["xcodebuild", "test-without-building", "-xctestrun",
                (work() / "xctestrun-path.txt").read_text(), "-destination", "id=" + device["udid"],
-               "-parallel-testing-enabled", "NO", "-test-iterations", "1",
+               "-parallel-testing-enabled", "NO",
                "-resultBundlePath", str(work() / (scope + ".xcresult"))]
     command += ["-only-testing:" + selector for selector in expected]
     code = run_logged(command, "selected-" + scope, 720 if not ui else 360, check=False)
