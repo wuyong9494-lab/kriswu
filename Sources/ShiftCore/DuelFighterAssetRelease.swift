@@ -73,6 +73,7 @@ public struct DuelFighterAssetRelease: Codable, Equatable, Sendable {
     public let triadAudio: File?
     public let triadSummons: File?
     public let triadEffects: File?
+    public let triadMorph: File?
     public let profiles: [Profile]
 
     public enum Failure: Error, Equatable {
@@ -93,7 +94,8 @@ public struct DuelFighterAssetRelease: Codable, Equatable, Sendable {
         try triadAudio?.validate(maximum: 512_000)
         try triadSummons?.validate(maximum: 1_000_000)
         try triadEffects?.validate(maximum: 32_000_000)
-        let audioFiles = [panguAudio, triadAudio, triadSummons, triadEffects].compactMap { $0 }
+        try triadMorph?.validate(maximum: 256_000)
+        let audioFiles = [panguAudio, triadAudio, triadSummons, triadEffects, triadMorph].compactMap { $0 }
         guard catalog.name == "SF3_DistinctFighters.json",
               sourceTrails.name.hasSuffix(".json"), audioFiles.allSatisfy({
                   $0.name.hasSuffix(".json") || ($0 == triadEffects && $0.name.hasSuffix(".json.gz"))
@@ -108,6 +110,7 @@ public struct DuelFighterAssetRelease: Codable, Equatable, Sendable {
               (panguAudio != nil) == hasPangu, (triadAudio != nil) == hasTriad,
               (triadSummons != nil) == hasTriad,
               (triadEffects != nil) == hasTriad,
+              triadMorph == nil || hasTriad,
               profiles.count == target.profiles.count,
               Set(profiles.map(\.id)) == Set(target.profiles.map(\.id)) else { throw Failure.profile }
         for binding in profiles {

@@ -18,6 +18,7 @@ final class DuelWeaponAssets {
     let triadAudio: DuelTriadAudioBinding?
     let triadSummons: DuelTriadSummonAssets?
     let triadEffects: DuelTriadEffectAssets?
+    let triadMorph: DuelTriadSourceMorphAssets?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
     func bindVerifiedPreparation() { belongsToVerifiedPreparation = true }
@@ -59,12 +60,19 @@ final class DuelWeaponAssets {
                 triadEffects = try DuelTriadEffectAssets(directory: base, manifestName: effects.name,
                     expectedSHA256: effects.sha256, profile: triad, companions: triadSummons)
             } else { triadEffects = nil }
+            if let morph = release.definition.triadMorph,
+               let owner = catalog.profiles.first(where: \.isTriad),
+               let target = catalog.profiles.first(where: { !$0.isTriad }) {
+                triadMorph = try DuelTriadSourceMorphAssets(directory: base, manifestName: morph.name,
+                    expectedSHA256: morph.sha256, owner: owner, target: target)
+            } else { triadMorph = nil }
         } else {
             sourceTrails = try DuelSourceWeaponTrails.optional(directory: base)
             panguAudio = nil
             triadAudio = nil
             triadSummons = nil
             triadEffects = nil
+            triadMorph = nil
         }
         for profile in catalog.profiles {
             let modelURL = self.directory.appendingPathComponent(profile.resourceName + ".glb")

@@ -50,6 +50,34 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
         XCTAssertEqual(sun.profile.triadRules?.ability(.branches)?.attack?.lifetimeTicks, 61)
         XCTAssertEqual(liu.profile.id, "liu_hammers"); XCTAssertFalse(liu.profile.isPangu)
         XCTAssertFalse(liu.profile.isTriad); XCTAssertNil(assets.panguAudio)
+        let morph = try XCTUnwrap(assets.triadMorph)
+        XCTAssertNotNil(release.definition.triadMorph)
+        XCTAssertEqual(morph.ownerProfileID, sun.profile.id)
+        XCTAssertEqual(morph.targetProfileID, liu.profile.id)
+        XCTAssertEqual(morph.targetCharacterSHA256, liu.profile.sha256)
+        XCTAssertEqual(morph.trigger.clip, DuelTriadStanceState.Motion.win.clip)
+        XCTAssertEqual(morph.trigger.sourceFrame, 36)
+        XCTAssertEqual(morph.trigger.triggerTick, 70)
+        XCTAssertEqual(morph.trigger.transitionTicks, 140)
+        XCTAssertEqual(morph.trigger.normalRenderBoundaries, 1)
+        XCTAssertEqual(morph.mask.sourceTextureFormat, 45)
+        XCTAssertEqual(morph.mask.sourceColorSpace, 0)
+        XCTAssertEqual(Set(morph.materials.map(\.name)), Set([
+            "mat_arm__str_03_base", "mat_wpn__hammers_01_01_base", "Liu_Neck_Skin", "tripo_mat_c4757646"]))
+        let morphPrepared = try morph.prepare(device: MTLCreateSystemDefaultDevice())
+        let liuInstance = DuelWeaponCharacterInstance(liu)
+        for name in ["mat_arm__str_03_base", "mat_wpn__hammers_01_01_base"] {
+            let material = try XCTUnwrap(liuInstance.instance.materials.first { $0.name == name })
+            XCTAssertFalse(material.isDoubleSided); XCTAssertEqual(material.cullMode, .back)
+            XCTAssertEqual(material.diffuse.minificationFilter, .linear)
+            XCTAssertEqual(material.diffuse.magnificationFilter, .linear)
+            XCTAssertEqual(material.diffuse.mipFilter, .none)
+            XCTAssertEqual(material.diffuse.wrapS, .repeat); XCTAssertEqual(material.diffuse.wrapT, .repeat)
+            XCTAssertEqual(material.diffuse.maxAnisotropy, 1)
+        }
+        let morphBinding = try morphPrepared.install(on: liuInstance.instance, materials: morph.materials)
+        XCTAssertEqual(morphBinding.progress, 0); XCTAssertFalse(morphBinding.isComplete)
+        morphBinding.shutdown()
         for character in [sun, liu] {
             let profile = character.profile
             let data = try Data(contentsOf: assets.directory.appendingPathComponent(profile.resourceName + ".glb"))
@@ -91,6 +119,7 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
     func testInstalledSourceEffectsAudioAndMixedTrailsRetainEveryFileIdentity() throws {
         let assets = try installed(), trails = try XCTUnwrap(assets.sourceTrails)
         let audio = try XCTUnwrap(assets.triadAudio), effects = try XCTUnwrap(assets.triadEffects)
+        let morph = try XCTUnwrap(assets.triadMorph)
         XCTAssertEqual(Set(trails.profiles.map(\.id)), Set(assets.catalog.profiles.map(\.id)))
         let sunTrail = try XCTUnwrap(trails.profiles.first { $0.id == "sun_triad" })
         let liuTrail = try XCTUnwrap(trails.profiles.first { $0.id == "liu_hammers" })
@@ -104,7 +133,8 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
         XCTAssertFalse(effects.bindings.isEmpty); XCTAssertFalse(effects.markers.isEmpty)
         XCTAssertFalse(audio.cues.isEmpty); XCTAssertFalse(audio.markers.isEmpty)
         XCTAssertEqual(audio.characterSHA256, assets.catalog.profile(for: .ember)?.sha256)
-        for records in [trails.verifiedFiles, audio.verifiedFiles, effects.verifiedFiles] {
+        XCTAssertEqual(morph.verifiedFiles.count, 2)
+        for records in [trails.verifiedFiles, audio.verifiedFiles, effects.verifiedFiles, morph.verifiedFiles] {
             try audit(records, directory: assets.directory)
         }
         // Validate both actual rigs against their separate trail bindings.
@@ -121,7 +151,8 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
         let groups = [("weapon-effects/", try XCTUnwrap(assets.sourceTrails).verifiedFiles),
                       ("triad-audio/", try XCTUnwrap(assets.triadAudio).verifiedFiles),
                       ("triad-souls/", try XCTUnwrap(assets.triadSummons).verifiedFiles),
-                      ("triad-effects/", try XCTUnwrap(assets.triadEffects).verifiedFiles)]
+                      ("triad-effects/", try XCTUnwrap(assets.triadEffects).verifiedFiles),
+                      ("triad-morph/", try XCTUnwrap(assets.triadMorph).verifiedFiles)]
         for (prefix, records) in groups {
             for file in records {
                 let matches = identity.verifiedFiles.filter { $0.path == prefix + file.path }
@@ -164,6 +195,8 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
         }
         XCTAssertNil(state.loadError); XCTAssertNotNil(world.stageAsset)
         XCTAssertEqual(Set(world.weaponAssets.keys), Set([DuelGame.Hero.ember, .liu]))
+        XCTAssertEqual(world.sourceMorphProgress, 0)
+        XCTAssertFalse(world.sourceMorphIsComplete)
         let surface = try XCTUnwrap(world.triadRenderSurface, world.triadPreparationFailure ?? "Missing controlled source surface")
         let renderer = try XCTUnwrap(world.triadMetalRenderer, world.triadPreparationFailure ?? "Missing source Metal packets")
         XCTAssertFalse(world.rendersContinuously); XCTAssertFalse(world.isPlaying)

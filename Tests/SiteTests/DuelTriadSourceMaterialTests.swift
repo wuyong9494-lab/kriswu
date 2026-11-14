@@ -153,7 +153,35 @@ final class DuelTriadSourceMaterialTests: XCTestCase {
         var main = [UInt8](repeating: 0, count: 16), mip = [UInt8](repeating: 0, count: 4)
         main.withUnsafeMutableBytes { texture.getBytes($0.baseAddress!, bytesPerRow: 8, from: MTLRegionMake2D(0, 0, 2, 2), mipmapLevel: 0) }
         mip.withUnsafeMutableBytes { texture.getBytes($0.baseAddress!, bytesPerRow: 4, from: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 1) }
-        XCTAssertEqual(Data(main + mip), original)
+        // getBytes is a CPU copy, so retain it as a diagnostic comparison.
+        // The acceptance assertion must read both original mip levels through
+        // an actual GPU command and wait for completion before CPU inspection.
+        let rowStride = max(256, texture.device.minimumLinearTextureAlignment(for: texture.pixelFormat))
+        let readback = try XCTUnwrap(texture.device.makeBuffer(length: rowStride * 3, options: .storageModeShared))
+        readback.contents().initializeMemory(as: UInt8.self, repeating: 0xa5, count: readback.length)
+        let queue = try XCTUnwrap(texture.device.makeCommandQueue())
+        let command = try XCTUnwrap(queue.makeCommandBuffer())
+        let blit = try XCTUnwrap(command.makeBlitCommandEncoder())
+        let levels = [(level: 0, width: 2, height: 2, offset: 0),
+                      (level: 1, width: 1, height: 1, offset: rowStride * 2)]
+        for level in levels {
+            blit.copy(from: texture, sourceSlice: 0, sourceLevel: level.level,
+                sourceOrigin: MTLOriginMake(0, 0, 0), sourceSize: MTLSizeMake(level.width, level.height, 1),
+                to: readback, destinationOffset: level.offset,
+                destinationBytesPerRow: rowStride, destinationBytesPerImage: 0)
+        }
+        blit.endEncoding(); command.commit(); command.waitUntilCompleted()
+        XCTAssertEqual(command.status, .completed, String(describing: command.error))
+        var gpuBytes = Data()
+        for level in levels {
+            for row in 0..<level.height {
+                gpuBytes.append(Data(bytes: readback.contents().advanced(by: level.offset + row * rowStride),
+                    count: level.width * 4))
+            }
+        }
+        let diagnostic = "Synthetic mip bytes: CPU getBytes=\(main + mip); GPU blit=\(Array(gpuBytes)); expected=\(Array(original))"
+        print(diagnostic)
+        XCTAssertEqual(gpuBytes, original, diagnostic)
     }
 
     func testMissingOrTruncatedOriginalMipDataCannotPrepare() throws {

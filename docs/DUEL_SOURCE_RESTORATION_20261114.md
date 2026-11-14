@@ -16,16 +16,21 @@ The Liu reference model is not renamed or granted D19 equipment powers. Its
 original geometry, skins, materials, textures and 50 animation channels are
 checked unchanged before six original source throw channels are appended.
 
-The authenticated overlay contains 293 files, totaling 129,708,877 bytes.
+The authenticated overlay contains 295 files, totaling 129,746,107 bytes.
 The catalog and release validate with the current Swift implementation.
+Against the previous 293-file overlay, 292 files remain byte-identical, the
+release binding changes, and only the original Morph manifest and raw texture
+are added. Neither character model nor its animation bytes changed.
 
 | Independently pinned item | SHA-256 |
 | --- | --- |
 | Sun 65-motion GLB | `ce9e1b77c59fa63116af73409173fcd8922f2063ab2e0624534691fa00195ef6` |
 | Liu 56-motion GLB | `f83d8cbbd7b2158604dad9eff28398bcf57c64fdcb4146e5c142608484a5a472` |
 | H17 compressed effects | `ce7350283846c370e00df073d2c04146687301c095a1be4b6f19aece982f2435` |
-| Fighter release | `f07f749666827e796919511a2aa50a0f41e9aa872a4702bc68a7d06668213d4a` |
-| Encrypted overlay manifest | `6dfb96cb056834521f6dac0d19235cea6208ed09247171313dff3927a522c69e` |
+| Fighter release | `fe8056c7a65c51a83704d975f696316d0848d998143a384d85b8ef5aad8f0db3` |
+| Morph binding | `1bf98c9c06ac813333fb943be1440bea21dc5d4e7d5979454835790c02164680` |
+| Original Morph mask | `f5572cfbbe87bd2feb2e9aa93843815b0acdf1b71c0dd7ab584df24ce3ede514` |
+| Encrypted overlay manifest | `af2dfb819f2d256f71c557495c9bf731c7557138214f14509dd94e541f3d8164` |
 
 The overlay is AES-256-GCM authenticated, split into 68 bounded binary shards.
 The staging helper independently validated shard assembly, authenticated
@@ -69,6 +74,21 @@ The decryption key is not stored in this repository.
   throw markers have their own character and source-clip digest checks.
 - Public SceneKit/Metal rendering integration with explicit render targets,
   sample counts, depth handling, pause/shutdown and capture contracts.
+- Original H17 final-victory HideModel/Morph: the real frame-36 source marker
+  (tick 70) targets the enemy, waits for one committed render boundary, then
+  runs the recovered 140-tick linear transition. Cutoff follows
+  `(1 + edge) * (1 - progress) - edge`, not node opacity. The original linear
+  ETC2 mask, V-origin correction, opaque discard and Gamma-space edge colors
+  are authenticated separately. Armor and actor base geometry use the source
+  black/teal override; the weapon retains its distinct blue/cyan defaults.
+- The four exact Liu materials are bound to that enemy-only effect. The
+  accepted personal head/neck follow the original actor-base-model branch
+  without a fictional equipment type. Pause and repeated renders cannot
+  advance the tween. Completion hides the affected mesh holders; arena reset
+  restores the installation-time materials and visibility.
+- Liu's appended-motion release explicitly retains the original armor/hammer
+  back-face culling and single-mip bilinear/repeat texture state. Its new GLB
+  digest no longer relies on the old-export initializer's hash whitelist.
 
 ## Verification completed before Apple execution
 
@@ -84,6 +104,7 @@ as a claimed number of distinct tests.
 | Pelvis, source D19 fight and canonical replay checks | 31 passed initially; the one incorrect cast fixture was corrected and its exact retest passed |
 | Independent pelvis FK extraction fixtures | 4 passed; 484 real samples cross-checked |
 | CI gate contracts | 28 passed |
+| Private release schema, binding isolation and Morph trust boundary | 26 passed; the old unsupported-version fixture was updated for the already supported H17 schema 2 |
 | Offline particle sorting extraction fixtures | 5 passed |
 | Current real catalog and fighter release | Swift validation passed |
 | Actual source audio manifest and 88 WAVs | Foundation loading passed; 89 verified records, 112 markers, eight cues |
@@ -111,9 +132,18 @@ lifetime uses the explicit XCTest enum. The five renderer methods and their
 format, depth, projection, and sample-count assertions are unchanged. This
 build executed no native methods either.
 
-The source-only Apple workflow selects exactly 97 synthetic native methods.
+The fourth build (run 43591757910) compiled successfully, booted the simulator,
+and executed all 97 selected methods: 96 passed, one failed, zero skipped.
+The failure was the 20-byte original-mip readback comparison; the old test read
+CPU texture storage without submitting GPU work. The revised test checks the
+same exact bytes through a completed GPU blit and retains CPU readback as
+diagnostic evidence. This change does not establish that the failure is fixed
+until the next Apple run actually passes.
+
+The source-only Apple workflow now selects exactly 108 synthetic native methods,
+including 11 additional Morph lifecycle and actual GPU contract tests.
 It receives no asset keys, uses no private asset environment, and excludes the
-five installed-source tests. The protected full-resource workflow selects 102
+five installed-source tests. The protected full-resource workflow selects 113
 methods, including those five tests and the original-resource captures. Neither
 method inventory is evidence of execution until an actual run completes.
 
@@ -128,10 +158,11 @@ method inventory is evidence of execution until an actual run completes.
   arena lifecycle. These are explicit lifecycle adapters: the original
   PLAYER/NOT_PLAYER lock selection, opponent's 20-tick start gate, and global
   phase dispatcher are not inferred from local/network player indices.
-- The original final-victory MorphMask has been recovered and byte-verified.
-  Its source shader uses opaque pixel discard and a black-to-teal edge, not
-  node opacity. Its native transition/lifecycle binding is being checked
-  independently and is not installed by the current encrypted overlay.
+- Morph reproduces the recovered normal coroutine/tween path. The original
+  special pending-exit-shadow callback dictionary is absent from this arena;
+  its 46 render-boundary waits are not invented as 45 logical ticks. The
+  accepted personal geometry and persistent-actor reset are explicit arena
+  adapters. Native GPU assertions do not establish Unity base-lighting parity.
 - Remaining Unity modules, cross-emitter dynamic bounds sorting and some
   common floorfall sound events still need their own recovery or native
   comparison. Normalized arena stats/impulses are explicitly identified in

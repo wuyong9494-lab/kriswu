@@ -34,11 +34,11 @@ class H17D19NativeContractTests(unittest.TestCase):
             for name in self.expected]}]}
 
     def testInventoryContainsTheExactReviewedNativeSetWithoutOldCatalogAssertions(self):
-        self.assertEqual(len(self.expected), 102)
-        self.assertEqual(len(set(self.expected)), 102)
-        self.assertEqual(sum(row["scenarioType"] == "synthetic fixture contract" for row in self.rows), 97)
+        self.assertEqual(len(self.expected), 113)
+        self.assertEqual(len(set(self.expected)), 113)
+        self.assertEqual(sum(row["scenarioType"] == "synthetic fixture contract" for row in self.rows), 108)
         self.assertEqual(sum(row["scenarioType"] == "authenticated source release" for row in self.rows), 5)
-        self.assertEqual(len(self.hashes), 9)
+        self.assertEqual(len(self.hashes), 10)
         self.assertTrue(all(len(name.split("/")) == 3 for name in self.expected))
         self.assertFalse(any("DuelLifecycleTests/" in name for name in self.expected))
 

@@ -54,6 +54,55 @@ final class DuelFighterAssetReleaseTests: XCTestCase {
         try JSONDecoder().decode(Release.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
+    private func triadDocument(for target: DuelWeaponCatalog) -> Object {
+        var value = document(for: target)
+        value["schemaVersion"] = 2
+        value.removeValue(forKey: "panguAudio")
+        for key in ["triadAudio", "triadSummons", "triadEffects", "triadMorph"] {
+            value[key] = ["name": "Synthetic_" + key + ".json", "bytes": 1,
+                          "sha256": String(repeating: "a", count: 64)]
+        }
+        return value
+    }
+
+    func testOptionalMorphPreservesOldTriadReleaseAndBindsNewManifest() throws {
+        let target = try DuelTriadFightFixture.catalog()
+        var document = triadDocument(for: target)
+        let release = try decode(document)
+        XCTAssertNoThrow(try release.validate(catalog: target))
+        XCTAssertEqual(release.triadMorph?.name, "Synthetic_triadMorph.json")
+        XCTAssertEqual(try JSONDecoder().decode(Release.self, from: JSONEncoder().encode(release)), release)
+        document.removeValue(forKey: "triadMorph")
+        let old = try decode(document)
+        XCTAssertNil(old.triadMorph)
+        XCTAssertNoThrow(try old.validate(catalog: target))
+    }
+
+    func testMorphCannotAliasOtherBindingsOrEscapeThePinnedFileBoundary() throws {
+        let target = try DuelTriadFightFixture.catalog(), original = triadDocument(for: target)
+        for name in ["../Morph.json", "Morph.texture", Release.fileName,
+                     "SF3_DistinctFighters.json", "Synthetic_triadEffects.json", "SF3FX_manifest.json"] {
+            var value = original
+            var file = try XCTUnwrap(value["triadMorph"] as? Object)
+            file["name"] = name; value["triadMorph"] = file
+            try assertRejected(value, catalog: target, as: .file, name)
+        }
+        for bytes in [0, 256_001] {
+            var value = original
+            var file = try XCTUnwrap(value["triadMorph"] as? Object)
+            file["bytes"] = bytes; value["triadMorph"] = file
+            try assertRejected(value, catalog: target, as: .file)
+        }
+    }
+
+    func testMorphCannotBeAuthorizedByAnUnrelatedPanguOnlyRelease() throws {
+        let target = try catalog()
+        var value = document(for: target)
+        value["triadMorph"] = ["name": "Synthetic_Morph.json", "bytes": 1,
+                               "sha256": String(repeating: "a", count: 64)]
+        try assertRejected(value, catalog: target, as: .profile)
+    }
+
     private func changingProfile(_ original: Object, id: String = "liu_pangu",
                                  _ mutation: (inout Object) throws -> Void) throws -> Object {
         var result = original
@@ -386,10 +435,13 @@ final class DuelFighterAssetReleaseTests: XCTestCase {
 
     func testUnsupportedReleaseSchemaAndInvalidIdentityAreRejected() throws {
         let target = try catalog(), original = document(for: target)
-        for version in [-1, 0, 2, Int.max] {
+        for version in [-1, 0, 3, Int.max] {
             var changed = original; changed["schemaVersion"] = version
             try assertRejected(changed, catalog: target, as: .version)
         }
+        var triadVersionWithPanguOnly = original
+        triadVersionWithPanguOnly["schemaVersion"] = 2
+        try assertRejected(triadVersionWithPanguOnly, catalog: target, as: .profile)
         for id in ["", String(repeating: "i", count: 129)] {
             var changed = original; changed["id"] = id
             try assertRejected(changed, catalog: target, as: .identity)

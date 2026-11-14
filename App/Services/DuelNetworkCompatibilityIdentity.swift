@@ -236,6 +236,7 @@ struct DuelNetworkCompatibilityIdentity {
             if release.definition.triadAudio != nil { bindings.append(("triad-audio/", assets.triadAudio?.verifiedFiles ?? [])) }
             if release.definition.triadSummons != nil { bindings.append(("triad-souls/", assets.triadSummons?.verifiedFiles ?? [])) }
             if release.definition.triadEffects != nil { bindings.append(("triad-effects/", assets.triadEffects?.verifiedFiles ?? [])) }
+            if release.definition.triadMorph != nil { bindings.append(("triad-morph/", assets.triadMorph?.verifiedFiles ?? [])) }
             for (prefix, files) in bindings {
                 guard !files.isEmpty else { throw Failure.invalidResource(prefix) }
                 for file in files {

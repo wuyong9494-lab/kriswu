@@ -50,6 +50,12 @@ final class DuelWorldView: SCNView {
     private var panguDiagnostics: DuelPanguDiagnostics?
     private var triadSummons: DuelTriadSummonRenderer?
     private var triadSourceEffects: DuelTriadSourceEffects?
+    private var triadSourceMorph: DuelTriadSourceMorph.Binding?
+    private var triadMorphOwner: Int?
+    private var triadMorphTrigger: DuelTriadSourceMorphAssets.Trigger?
+    private var triadMorphRequested = false
+    var sourceMorphProgress: Float? { triadSourceMorph?.progress }
+    var sourceMorphIsComplete: Bool { triadSourceMorph?.isComplete == true }
     private(set) var triadMetalRenderer: DuelTriadMetalRenderer?
     private(set) var triadRenderSurface: DuelTriadRenderSurface?
     /// Private acceptance diagnostics retain source compiler/runtime errors.
@@ -450,6 +456,25 @@ final class DuelWorldView: SCNView {
                 rendersContinuously = false; isPlaying = false
             } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
         }
+        if session.setup.originalWeapons, let assets = session.weaponAssets?.triadMorph,
+           let fight = session.game.weaponFight {
+            do {
+                guard let owner = fight.profiles.firstIndex(where: { $0.id == assets.ownerProfileID }),
+                      let target = fight.profiles.firstIndex(where: {
+                          $0.id == assets.targetProfileID && $0.sha256 == assets.targetCharacterSHA256
+                      }), owner != target, actors.indices.contains(target),
+                      let surface = triadRenderSurface else {
+                    throw DuelTriadSourceMorphAssets.Failure.identity
+                }
+                let prepared = try assets.prepare(device: device)
+                triadSourceMorph = try actors[target].installSourceMorph(prepared, materials: assets.materials)
+                triadMorphOwner = owner; triadMorphTrigger = assets.trigger
+                // The recovered HideModel coroutine waits for a real end of
+                // frame before starting its 140-tick linear tween. A fixed
+                // simulation step or a layout call cannot satisfy that wait.
+                surface.didSubmitFrame = { [weak self] in self?.sourceMorphDidRenderFrame() }
+            } catch { triadPreparationFailure = String(describing: error); session.characterFailed() }
+        }
         if session.setup.originalWeapons && !usesSyntheticPresentationResources {
             if session.usesVerifiedPreparedResources {
                 if let prepared = session.preparedResources, let root = prepared.effectsRoot,
@@ -474,6 +499,7 @@ final class DuelWorldView: SCNView {
             self.panguDiagnostics?.reset()
             self.triadSummons?.reset()
             self.triadSourceEffects?.reset()
+            self.triadSourceMorph?.reset(); self.triadMorphRequested = false
             self.triadMetalRenderer?.clear()
             self.combatCamera = DuelCombatCamera()
             // A restarted bout can reuse frame 0. Clear the previous lens
@@ -695,6 +721,8 @@ final class DuelWorldView: SCNView {
         panguDiagnostics?.shutdown(); panguDiagnostics = nil
         triadSummons?.shutdown(); triadSummons = nil
         triadSourceEffects?.shutdown(); triadSourceEffects = nil
+        triadSourceMorph?.shutdown(); triadSourceMorph = nil
+        triadMorphOwner = nil; triadMorphTrigger = nil; triadMorphRequested = false
         triadRenderSurface?.shutdown(); triadRenderSurface?.removeFromSuperview(); triadRenderSurface = nil
         triadMetalRenderer?.shutdown(); triadMetalRenderer = nil; delegate = nil
         NotificationCenter.default.removeObserver(self)
@@ -770,6 +798,7 @@ final class DuelWorldView: SCNView {
         if let hold = session.game.grapple {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
         }
+        updateSourceMorph(session.game.weaponFight)
         // SceneKit and source FX must observe this same final camera. Moving
         // it after making source packets would separate effects from bodies.
         updateCameraFraming()
@@ -830,6 +859,7 @@ final class DuelWorldView: SCNView {
                              firstX: Double(game.fighters[0].x) / 1000,
                              secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
         guard let fight = game.weaponFight else { return }
+        consumeSourceMorph(fight)
         if let effects = triadSourceEffects {
             do {
                 try effects.consume(fight)
@@ -867,6 +897,45 @@ final class DuelWorldView: SCNView {
                 actors[index].supportsSourceTrail(fight.fighters[index].weaponPose?.clip)
         })
         weaponEffects?.consumeStep(poses: Self.weaponEffectPoses(fight, tick: tick, sourceSkinFighters: skinned), animationTick: tick)
+    }
+
+    private func consumeSourceMorph(_ fight: DuelWeaponFight) {
+        guard let binding = triadSourceMorph, let owner = triadMorphOwner,
+              let trigger = triadMorphTrigger else { return }
+        do {
+            // Source lock 1796, final-victory trigger 12 targets Enemy. Frame
+            // 36 is one-based in configuration, hence sample index 35/tick 70.
+            // Round wins, another actor's clip and repeated draws cannot fire it.
+            if !triadMorphRequested, fight.sourceStance(owner)?.purpose == .finalVictory,
+               fight.sourceMotionSamples.contains(where: {
+                   $0.owner == owner && $0.clip == trigger.clip &&
+                       $0.crosses(sourceFrame: trigger.sourceFrame - 1,
+                                  totalSourceFrames: DuelTriadStanceState.Motion.win.frames)
+               }) {
+                try binding.requestHide(sourceTick: fight.sourcePresentationTick,
+                                        transitionTicks: trigger.transitionTicks)
+                triadMorphRequested = true
+            }
+            try binding.update(sourceTick: fight.sourcePresentationTick, paused: session.paused)
+        } catch { failSourceMorph(error) }
+    }
+
+    private func updateSourceMorph(_ fight: DuelWeaponFight?) {
+        guard let binding = triadSourceMorph, let fight else { return }
+        do { try binding.update(sourceTick: fight.sourcePresentationTick, paused: session.paused) }
+        catch { failSourceMorph(error) }
+    }
+
+    private func sourceMorphDidRenderFrame() {
+        guard !ended, let binding = triadSourceMorph,
+              let fight = session.game.weaponFight else { return }
+        do { try binding.didRenderFrame(sourceTick: fight.sourcePresentationTick) }
+        catch { failSourceMorph(error) }
+    }
+
+    private func failSourceMorph(_ error: Error) {
+        triadPreparationFailure = String(describing: error)
+        triadMetalRenderer?.clear(); session.characterFailed()
     }
     /// Contact events and the generic impact queue are appended in the same
     /// simulation order. A skill's cue owns its audio even when two contacts
@@ -1035,6 +1104,11 @@ private final class DuelActor {
     private let character: DuelCharacterInstance?
     private let original: DuelOriginalCombatInstance?
     private let weapon: DuelWeaponCharacterInstance?
+    func installSourceMorph(_ prepared: DuelTriadSourceMorph.Prepared,
+                            materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> DuelTriadSourceMorph.Binding {
+        guard let weapon else { throw DuelTriadSourceMorph.Failure.geometry }
+        return try prepared.install(on: weapon.instance, materials: materials)
+    }
     func updateSourceLighting(_ viewTransform: simd_float4x4) {
         weapon?.materialBinding?.update(viewTransform: viewTransform)
     }

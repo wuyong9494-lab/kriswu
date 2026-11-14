@@ -33,10 +33,10 @@ WORKFLOW = ".github/workflows/fighter-pangu-native.yml"
 COMMIT_MESSAGE = "Verify Pangu native bindings 20261114"
 # Filled only after the source and private release are frozen and reviewed.
 # A pending pin deliberately makes preparation fail before native execution.
-REVIEWED_SOURCE = '6cd70738b940ecdd03e7d1098c1ae0345f168b69'
-REVIEWED_ENTRIES = {'App': '20b407c8583768e43b5e31b876675b7fc80d2f8f', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': '3e38a2db6d20159da2f60067b9e2c02580f11c55', 'Tests': 'f7d30f7bf33f077f7e1e2ff7e530603594d72548', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': 'e0bc07a690e2195cc3caff27a6098aeebd608c7c', 'scripts': '9d299a98b97676035dfb392d7205f0ec0499da5d'}
+REVIEWED_SOURCE = 'b55e7d3d23b32983d607ee08ef71d17c84fff9ae'
+REVIEWED_ENTRIES = {'App': 'd796692d6b9fed2bcb41711e514d657e460b030e', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': 'cb5156378c63605e8fb339aa55baf4d0ece4f656', 'Tests': '1cec878d74c08b3f7995649171d655313bed6630', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'bd141189e626dba1d63272bd0b673b73c53a5b8c'}
 RELEASE_MANIFEST = ".github/private/fighter-h17-d19/manifest.json"
-RELEASE_MANIFEST_SHA256 = '6dfb96cb056834521f6dac0d19235cea6208ed09247171313dff3927a522c69e'
+RELEASE_MANIFEST_SHA256 = 'af2dfb819f2d256f71c557495c9bf731c7557138214f14509dd94e541f3d8164'
 BASE_MANIFEST_PINS = {
     ".github/private/sf3/manifest.json": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
     ".github/private/sf3-distinct/manifest.json": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
@@ -57,6 +57,7 @@ SYNTHETIC_SOURCES = (
     ("DuelPanguSourceAudioBindingTests", 13),
     ("DuelPanguSourceTrailBindingTests", 11),
     ("DuelTriadSourceMaterialTests", 19),
+    ("DuelTriadSourceMorphTests", 11),
     ("DuelTriadMetalRendererTests", 5),
     ("DuelTriadSourceAudioBindingTests", 22),
     ("DuelBoundedGzipTests", 5),

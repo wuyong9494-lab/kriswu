@@ -49,6 +49,9 @@ final class DuelTriadRenderSurface: MTKView {
     private var presentationPaused = false
     private(set) var lastSubmittedTick: Int?
     private(set) var submittedFrames = 0
+    /// A real render boundary, after command-buffer commit. This callback does
+    /// not advance simulation time; source MORPH uses it to end its frame wait.
+    var didSubmitFrame: (() -> Void)?
     var lastFailure: Failure? { completion.error }
 
     /// Apple's documented Simulator texture limits exclude 2x MSAA. The
@@ -133,6 +136,7 @@ final class DuelTriadRenderSurface: MTKView {
         }
         command.present(drawable); command.commit(); submitted = true
         lastSubmittedTick = tick; submittedFrames += 1
+        didSubmitFrame?()
     }
 
     /// The same path is exposed to native acceptance with an explicit texture
@@ -225,7 +229,7 @@ final class DuelTriadRenderSurface: MTKView {
         guard let target = gpu.makeTexture(descriptor: description),
               let command = queue.makeCommandBuffer() else { throw Failure.allocation }
         try encodeFrame(to: target, atTick: tick, samples: samples, commandBuffer: command)
-        command.commit(); command.waitUntilCompleted()
+        command.commit(); didSubmitFrame?(); command.waitUntilCompleted()
         guard command.status == .completed else { throw Failure.command(String(describing: command.error)) }
         var data = Data(count: width * height * 4)
         data.withUnsafeMutableBytes {
@@ -269,6 +273,7 @@ final class DuelTriadRenderSurface: MTKView {
     func shutdown() {
         guard !stopped else { return }
         stopped = true; presentationPaused = true; targets = nil
+        didSubmitFrame = nil
         delegate = nil; isPaused = true
         sceneRenderer.delegate = nil; sceneRenderer.scene = nil; sceneRenderer.pointOfView = nil
         removeFromSuperview()
