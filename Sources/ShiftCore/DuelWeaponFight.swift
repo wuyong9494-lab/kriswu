@@ -77,7 +77,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private var panguSpace = DuelPanguSpatialState()
     private var triadStates: [DuelTriadState?] = [nil, nil]
     private var triadSpace = DuelTriadSpatialState()
-    private var roundNumber = 1
+    public private(set) var roundNumber = 1
     private var ordinaryThrowStates: [DuelWeaponThrowState?] = [nil, nil]
     private var ordinaryThrowKnockdownTicks = [0, 0]
     private var sourceThrowStates: [DuelSourceThrowState?] = [nil, nil]
@@ -1238,8 +1238,9 @@ extension DuelWeaponFight {
     }
 
     private mutating func spawnPanguAttack(_ attack: DuelPanguState.Attack, owner: Int, activeTicks: Int) {
-        panguSpace.spawn(attack, owner: owner, fighter: fighters[owner], target: fighters[1 - owner],
-            activeTicks: activeTicks, frame: panguSpace.tick)
+        guard panguSpace.spawn(attack, owner: owner, fighter: fighters[owner], target: fighters[1 - owner],
+            targetPelvis: attack.sourceStrike?.isWind == true ? sourcePelvis(1 - owner) : nil,
+            activeTicks: activeTicks, frame: panguSpace.tick) else { return }
         if let volume = panguSpace.volumes.last {
             recordPanguPresentation(.attackReleased(DuelPanguPresentation.volume(volume, fighter: fighters[owner])))
         }
@@ -1880,6 +1881,20 @@ extension DuelWeaponFight {
         let pose = fighters[index].weaponPose
         let clip = pose.flatMap { profiles[index].clip(named: $0.clip) } ?? profiles[index].clip(role: "idle")
         guard let clip, let points = clip.tracks.centerOfMass else { return nil }
+        let local = clip.tracks.sample(points, phase: pose?.phase ?? 0)
+        let f = fighters[index], facing = Double(f.facing)
+        return .init(x: Double(f.x) / 1000 + local.x * facing,
+            y: Double(f.y) / 1000 + local.y + (pose?.groundLift ?? 0), z: local.z * facing)
+    }
+
+    /// Authored node origin in arena metres. Horizontal source displacement
+    /// already moves Fighter.x; only the local FK point and current ground
+    /// lift belong here. Missing data stays nil instead of substituting COM.
+    public func sourcePelvis(_ index: Int) -> DuelWeaponPoint? {
+        guard fighters.indices.contains(index) else { return nil }
+        let pose = fighters[index].weaponPose
+        let clip = pose.flatMap { profiles[index].clip(named: $0.clip) } ?? profiles[index].clip(role: "idle")
+        guard let clip, let points = clip.tracks.pelvis else { return nil }
         let local = clip.tracks.sample(points, phase: pose?.phase ?? 0)
         let f = fighters[index], facing = Double(f.facing)
         return .init(x: Double(f.x) / 1000 + local.x * facing,

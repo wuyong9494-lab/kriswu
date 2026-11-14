@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 from sun_triad_assets import glb_read, private_output, require
@@ -34,6 +35,17 @@ def record(path):
 def write(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n")
     return record(path)
+
+
+def validate_pelvis_tracks(profile):
+    for clip in profile["clips"]:
+        points = clip["tracks"].get("pelvis")
+        require(isinstance(points, list) and len(points) == 2 * clip["frames"] - 1,
+                "Missing original half-frame pelvis track: " + clip["name"])
+        require(all(isinstance(point, list) and len(point) == 3 and
+                    all(isinstance(value, (int, float)) and not isinstance(value, bool) and
+                        math.isfinite(value) and -100 <= value <= 100 for value in point)
+                    for point in points), "Invalid original pelvis track: " + clip["name"])
 
 
 def verify_animation_append(original_path, appended_path, original, appended):
@@ -64,12 +76,15 @@ def build(args):
     require(profile["id"] == "sun_triad", "Expected recovered H17 profile")
     baseline = next(p for p in catalog["profiles"] if p["id"] == "liu_hammers")
     legacy = load(args.candidate / "runtime/SF3_Liu_Profile.json")
+    for character in (profile, legacy):
+        validate_pelvis_tracks(character)
     liu_model = args.candidate / "ordinary-throws/liu/Liu_Legion_Hammers.glb"
     verify_animation_append(args.candidate / "legacy-liu/Liu_Legion_Hammers.glb", liu_model, baseline, legacy)
     catalog["profiles"] = [profile, legacy]
     catalog["provenance"] = dict(
         selection="Recovered H17 source character and authenticated legacy opponent with six appended original source throw motions.",
         sourceCombat="H17 formal configuration and source bone capsules; normalized stats and impulses explicitly marked in profile.",
+        sourcePelvis="Original pelvis node FK at half source frames in each actor's existing metre basis; excludes arena position and ground lift.",
         d19="D19 runtime is validated separately. This resource release does not substitute the legacy opponent for a D19 character.")
     catalog_file = write(out / "SF3_DistinctFighters.json", catalog)
     copied = {}

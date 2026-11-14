@@ -254,6 +254,9 @@ struct DuelReplayStateWriter {
         try optional(value.centerOfMass) { writer, points in
             try writer.array(points) { try $0.point($1) }
         }
+        try optional(value.pelvis) { writer, points in
+            try writer.array(points) { try $0.point($1) }
+        }
     }
     mutating func combo(_ value: DuelWeaponComboLink) throws {
         try string(value.from); try string(value.to); try int(value.sourceFrame)

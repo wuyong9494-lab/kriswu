@@ -53,8 +53,10 @@ final class DuelPanguSourceFightTests: XCTestCase {
         let caster = DuelGame.Fighter(hero: .liu, x: 1800, facing: 1)
         var target = DuelGame.Fighter(hero: .ember, x: 6200, facing: -1); target.guarding = true
         var space = DuelPanguSpatialState()
-        space.spawn(attack, owner: 0, fighter: caster, target: target, activeTicks: 1, frame: 10)
+        space.spawn(attack, owner: 0, fighter: caster, target: target,
+            targetPelvis: .init(x: 6.2, y: 0.8), activeTicks: 1, frame: 10)
         XCTAssertEqual(space.volumes.first?.x, 6200)
+        XCTAssertEqual(space.volumes.first?.originY, 800)
         let hits = space.contacts(frame: 10, fighters: [caster, target],
             hurts: [.init(minX: 1600, maxX: 2000, minY: 0, maxY: 1800), .init(minX: 6000, maxX: 6400, minY: 0, maxY: 1800)],
             previousX: [1800, 6200], previousHurtY: [0, 0])

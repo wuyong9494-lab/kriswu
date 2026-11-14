@@ -67,13 +67,18 @@ public struct DuelWeaponTracks: Equatable, Codable, Sendable {
     /// the other FK tracks. It is not the pelvis or the actor's arena origin.
     /// Nil is retained only for the older catalog's coordinate adapter.
     public let centerOfMass: [DuelWeaponPoint]?
+    /// The original pelvis node origin after half-frame bone interpolation
+    /// and FK, in the same local metre basis as hand/foot tracks. This is an
+    /// absolute pose landmark, not root displacement or a mass-weighted centre.
+    public let pelvis: [DuelWeaponPoint]?
     public init(samplesPerSourceFrame: Int, root: [DuelWeaponPoint], handL: [DuelWeaponPoint],
                 handR: [DuelWeaponPoint], footL: [DuelWeaponPoint], footR: [DuelWeaponPoint],
                 weaponBaseL: [DuelWeaponPoint], weaponTipL: [DuelWeaponPoint],
                 weaponBaseR: [DuelWeaponPoint], weaponTipR: [DuelWeaponPoint], groundLift: [Double],
                 collisionEdges: [DuelWeaponCollisionEdge]? = nil,
                 hurtCapsules: [DuelWeaponHurtCapsule]? = nil,
-                centerOfMass: [DuelWeaponPoint]? = nil) {
+                centerOfMass: [DuelWeaponPoint]? = nil,
+                pelvis: [DuelWeaponPoint]? = nil) {
         self.samplesPerSourceFrame = samplesPerSourceFrame; self.root = root
         self.handL = handL; self.handR = handR; self.footL = footL; self.footR = footR
         self.weaponBaseL = weaponBaseL; self.weaponTipL = weaponTipL
@@ -81,6 +86,7 @@ public struct DuelWeaponTracks: Equatable, Codable, Sendable {
         self.collisionEdges = collisionEdges
         self.hurtCapsules = hurtCapsules
         self.centerOfMass = centerOfMass
+        self.pelvis = pelvis
     }
 
     public func sample(_ points: [DuelWeaponPoint], phase: Double) -> DuelWeaponPoint {
@@ -245,6 +251,12 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
                 if let centers = t.centerOfMass {
                     guard centers.count == n,
                           centers.allSatisfy({ point in
+                              [point.x, point.y, point.z].allSatisfy { $0.isFinite && (-100...100).contains($0) }
+                          }) else { throw ValidationError.invalidTracks }
+                }
+                if let pelvis = t.pelvis {
+                    guard pelvis.count == n,
+                          pelvis.allSatisfy({ point in
                               [point.x, point.y, point.z].allSatisfy { $0.isFinite && (-100...100).contains($0) }
                           }) else { throw ValidationError.invalidTracks }
                 }

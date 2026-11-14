@@ -197,9 +197,10 @@ final class DuelReplayStateTests: XCTestCase {
         // The same unpublished schema also adds 18 nil COM-track markers
         // (18 B), two nil source-throw states (6 B), and two 64-bit source
         // throw-ban clocks with their array length (20 B).
-        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_470)
-        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_478)
-        XCTAssertEqual(try Encoding.encode(game).count, 66_928)
+        // Authored pelvis adds one nil marker after COM in each of 18 clips.
+        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_488)
+        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_496)
+        XCTAssertEqual(try Encoding.encode(game).count, 66_946)
     }
 
     func testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths() throws {

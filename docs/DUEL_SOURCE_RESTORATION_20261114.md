@@ -16,7 +16,7 @@ The Liu reference model is not renamed or granted D19 equipment powers. Its
 original geometry, skins, materials, textures and 50 animation channels are
 checked unchanged before six original source throw channels are appended.
 
-The authenticated overlay contains 293 files, totaling 129,460,943 bytes.
+The authenticated overlay contains 293 files, totaling 129,708,877 bytes.
 The catalog and release validate with the current Swift implementation.
 
 | Independently pinned item | SHA-256 |
@@ -24,8 +24,8 @@ The catalog and release validate with the current Swift implementation.
 | Sun 65-motion GLB | `ce9e1b77c59fa63116af73409173fcd8922f2063ab2e0624534691fa00195ef6` |
 | Liu 56-motion GLB | `f83d8cbbd7b2158604dad9eff28398bcf57c64fdcb4146e5c142608484a5a472` |
 | H17 compressed effects | `ce7350283846c370e00df073d2c04146687301c095a1be4b6f19aece982f2435` |
-| Fighter release | `a56b4e38498d9c6c176b339c37e8339e942951165b76644d36e7c284597ea454` |
-| Encrypted overlay manifest | `884a7cebef4c6ca28101ee1491b8da5d31714e283b5fe8a6ce4204b11e8d70c4` |
+| Fighter release | `f07f749666827e796919511a2aa50a0f41e9aa872a4702bc68a7d06668213d4a` |
+| Encrypted overlay manifest | `6dfb96cb056834521f6dac0d19235cea6208ed09247171313dff3927a522c69e` |
 
 The overlay is AES-256-GCM authenticated, split into 68 bounded binary shards.
 The staging helper independently validated shard assembly, authenticated
@@ -39,6 +39,10 @@ The decryption key is not stored in this repository.
   serialization.
 - D19 formal runtime rules including heavenfall, Light, shield, cooldown,
   impact and source counterthrow behavior. Equipment identity remains strict.
+- D19 wind and upper-wind releases align to the actual enemy pelvis on X/Y.
+  All 121 character clips carry independently verified half-frame pelvis
+  tracks; missing source data never falls back to a guessed field origin.
+  Pivot-aligned fall and ultimate attacks retain their own source alignment.
 - Original paired front/back throws and active/passive escape clips. Both
   actors play their own skeleton's motion. Range and wall tests use recovered
   mass-weighted centers of mass, preserving submillimeter precision.
@@ -64,11 +68,18 @@ as a claimed number of distinct tests.
 | Input, replay, source-motion sample and throw batch | 55 passed |
 | Fractional throw boundaries plus source audio events | 29 passed |
 | Particle renderer grouping, age/depth ordering and invalid keys | 5 passed |
+| Pelvis, source D19 fight and canonical replay checks | 31 passed initially; the one incorrect cast fixture was corrected and its exact retest passed |
+| Independent pelvis FK extraction fixtures | 4 passed; 484 real samples cross-checked |
 | CI gate contracts | 28 passed |
 | Offline particle sorting extraction fixtures | 5 passed |
 | Current real catalog and fighter release | Swift validation passed |
 | Actual source audio manifest and 88 WAVs | Foundation loading passed; 89 verified records, 112 markers, eight cues |
 | Authenticated encrypted overlay | Cross-implementation assembly/decrypt/ZIP/file validation passed |
+
+The first source-only Apple build (run 43587119695) reported one compile
+error: SourceFX could not read the private Core round counter. The counter is
+now public with a private setter; its canonical encoding is unchanged. That
+failed build executed no native test methods.
 
 The source-only Apple workflow selects exactly 97 synthetic native methods.
 It receives no asset keys, uses no private asset environment, and excludes the

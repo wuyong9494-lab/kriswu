@@ -95,7 +95,8 @@ struct DuelPanguSpatialState: Equatable, Sendable {
             }
             let followsCaster = attack.delivery == .melee
             let anchorX = followsCaster ? fighter.x : originX
-            let anchorY = followsCaster ? fighter.y : attack.anchorAtOpponent ? originY : 0
+            let anchorY = followsCaster ? fighter.y :
+                (attack.anchorAtOpponent || attack.sourceStrike?.isWind == true) ? originY : 0
             let radial = attack.delivery == .landingShock
             let far = anchorX + direction * attack.rangeMillimeters
             return .init(minX: radial ? anchorX - attack.rangeMillimeters : min(anchorX, far),
@@ -135,16 +136,32 @@ struct DuelPanguSpatialState: Equatable, Sendable {
     mutating func enqueue(_ effects: [DuelPanguState.Effect], owner: Int) {
         deferred.append(contentsOf: effects.map { .init(owner: owner, effect: $0) })
     }
+    @discardableResult
     mutating func spawn(_ attack: Attack, owner: Int, fighter: DuelGame.Fighter,
-                        target: DuelGame.Fighter? = nil, activeTicks: Int, frame: Int) {
+                        target: DuelGame.Fighter? = nil, targetPelvis: DuelWeaponPoint? = nil,
+                        activeTicks: Int, frame: Int) -> Bool {
         let projectile = attack.delivery == .projectile || attack.delivery == .windBlade
         let lifetime = projectile ? (attack.rangeMillimeters + max(1, attack.projectileSpeedMillimetersPerTick) - 1) /
             max(1, attack.projectileSpeedMillimetersPerTick) + 1 : max(1, activeTicks)
         let anchor = attack.anchorAtOpponent ? target ?? fighter : fighter
+        let originX: Int, originY: Int
+        if attack.sourceStrike?.isWind == true {
+            // D19 records 224/235 align Enemy/Nodes/pelvis on X and Y with
+            // zero shift. Missing bone data must not become a pivot guess.
+            guard let pelvis = targetPelvis,
+                  [pelvis.x, pelvis.y].allSatisfy({ $0.isFinite && (-1_000_000...1_000_000).contains($0) }) else {
+                return false
+            }
+            originX = Int((pelvis.x * 1000).rounded())
+            originY = Int((pelvis.y * 1000).rounded())
+        } else {
+            originX = anchor.x; originY = anchor.y
+        }
         let expires = attack.sourceLifetimeTicks.map { frame + max(1, $0) - 1 } ?? (frame + lifetime)
-        volumes.append(.init(owner: owner, attack: attack, originX: anchor.x,
-            originY: anchor.y, direction: fighter.facing, expiresAt: expires,
-            x: anchor.x))
+        volumes.append(.init(owner: owner, attack: attack, originX: originX,
+            originY: originY, direction: fighter.facing, expiresAt: expires,
+            x: originX))
+        return true
     }
 
     /// Projectile sweeps use the defender's current translating frame. A fast

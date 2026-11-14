@@ -46,7 +46,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
                                      "activeWeaponSides", "roles", "clips", "comboLinks", "combatRules", "panguRules", "ordinaryThrows", "triadRules", "summonTracks"])
         fields(catalog.profiles[0].clips[0], ["name", "frames", "sha256", "bundle", "tracks", "playbackTicks"])
         fields(catalog.profiles[0].clips[0].tracks, ["samplesPerSourceFrame", "root", "handL", "handR", "footL", "footR",
-                                                   "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift", "collisionEdges", "hurtCapsules", "centerOfMass"])
+                                                   "weaponBaseL", "weaponTipL", "weaponBaseR", "weaponTipR", "groundLift", "collisionEdges", "hurtCapsules", "centerOfMass", "pelvis"])
         fields(DuelWeaponComboLink(from: "a", to: "b", sourceFrame: 1), ["from", "to", "sourceFrame"])
         let rules = catalog.profiles[0].resolvedCombatRules
         fields(rules, ["id", "basis", "sourceVersion", "sourceSHA256", "evidence", "attacks"])
