@@ -1045,9 +1045,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
             }
         }
         if !blocked, strike.knocksDown, interruptible, var state = panguStates[defender] {
-            // A completed cast may still own scheduled follow-up wind blades.
-            // Knockdown cancels those not yet released, even without a cast.
-            state.cancelPendingDerivedAttacks(); panguStates[defender] = state
+            // Legacy cast follow-ups cancel on knockdown. The original D19
+            // global wind counter/timer survives the owner's reaction.
+            state.cancelPendingDerivedAttacks(preservingSourceWindCounter: state.rules.runtime != nil)
+            panguStates[defender] = state
             panguSpace.cancelUnreleasedAttacks(owner: defender)
         }
         // Schedule a response; never teleport a fighter on the contact tick.
@@ -1591,7 +1592,7 @@ extension DuelWeaponFight {
                 if let cast = state.activeCast {
                     guard state.rules.ability(cast.ability)?.interruptible == true else { return }
                 }
-                state.cancelPendingDerivedAttacks()
+                state.cancelPendingDerivedAttacks(preservingSourceWindCounter: state.rules.runtime != nil)
                 let effects = state.interrupt(); panguStates[target] = state
                 panguSpace.enqueue(effects, owner: target)
                 panguSpace.cancelMelee(owner: target); panguSpace.lifts[target] = nil
@@ -1898,7 +1899,7 @@ extension DuelWeaponFight {
               triadStates[target]?.impactImmune != true else { return }
         if var state = panguStates[target] {
             if let cast = state.activeCast, state.rules.ability(cast.ability)?.interruptible != true { return }
-            state.cancelPendingDerivedAttacks()
+            state.cancelPendingDerivedAttacks(preservingSourceWindCounter: state.rules.runtime != nil)
             let effects = state.interrupt(); panguStates[target] = state
             panguSpace.enqueue(effects, owner: target); panguSpace.cancelMelee(owner: target)
             panguSpace.lifts[target] = nil
@@ -2043,12 +2044,24 @@ extension DuelWeaponFight {
 
     private func sourceThrowCandidate(_ index: Int, command: DuelWeaponCommand) -> DuelSourceThrowState? {
         let target = 1 - index
+        let targetD19 = profiles[target].isPangu && panguStates[target]?.rules.runtime != nil
+        // The source query reads the target's CURRENT animation intervals.
+        // A cast's open interval must not authorize a different reaction,
+        // ordinary action or paired animation that happens to occupy it.
+        let targetCastAllowsResponse: Bool
+        if targetD19, let pangu = panguStates[target], pangu.sourceCastAllowsThrowResponse,
+           let cast = pangu.activeCast, let action = actions[target],
+           !action.reaction, action.command == nil, action.role == cast.ability.motionRole,
+           profiles[target].roles[cast.ability.motionRole] == action.name {
+            targetCastAllowsResponse = true
+        } else { targetCastAllowsResponse = false }
         guard let rules = profiles[index].ordinaryThrows?.source,
               let targetRules = profiles[target].ordinaryThrows?.source,
               command == .weaponForward || command == .weaponBack,
               sourceThrowDisabledTicks[index] == 0, !ordinaryThrowOwns(index), !ordinaryThrowOwns(target),
-              actions[index] == nil, actions[target] == nil,
-              panguStates[index]?.activeCast == nil, panguStates[target]?.activeCast == nil,
+              actions[index] == nil, actions[target] == nil || targetCastAllowsResponse,
+              panguStates[index]?.activeCast == nil,
+              panguStates[target]?.activeCast == nil || targetCastAllowsResponse,
               triadStates[index]?.activeCast == nil, triadStates[target]?.activeCast == nil,
               throwGrounded(index), throwGrounded(target),
               fighters[index].health > 0, fighters[target].health > 0,
@@ -2062,7 +2075,6 @@ extension DuelWeaponFight {
               !triadSpace.controls[index].locked(at: triadSpace.tick),
               !triadSpace.controls[target].locked(at: triadSpace.tick),
               panguSpace.lifts[index] == nil, panguSpace.lifts[target] == nil else { return nil }
-        let targetD19 = profiles[target].isPangu && panguStates[target]?.rules.runtime != nil
         guard canBeThrown(target) || targetD19 else { return nil }
         guard let ownCOM = sourceCenterOfMass(index), let enemyCOM = sourceCenterOfMass(target) else { return nil }
         let ownX = ownCOM.x * 1000, targetX = enemyCOM.x * 1000
@@ -2106,6 +2118,14 @@ extension DuelWeaponFight {
             let roll = Int((random >> 32) % 99) + 1
             state = candidates[roll >= 50 ? 0 : 1]
         } else { state = candidates[0] }
+        if state.variant == .panguEscape, panguStates[state.target]?.activeCast != nil {
+            guard var pangu = panguStates[state.target], pangu.sourceCastAllowsThrowResponse else { return }
+            let effects = pangu.acceptSourceThrowResponse()
+            guard pangu.activeCast == nil else { return }
+            panguStates[state.target] = pangu
+            panguSpace.enqueue(effects, owner: state.target)
+            consumePanguEffects()
+        }
         for index in [state.initiator, state.target] {
             actions[index] = nil; queued[index] = nil; impactMotions[index] = nil
             fighters[index].attack = nil; fighters[index].guarding = false
@@ -2370,7 +2390,7 @@ extension DuelWeaponFight {
             fighters[i].attack = nil; fighters[i].guarding = false
             panguSpace.jumpEligible[i] = false; panguSpace.speedRemainders[i] = 0
             if i == state.target, var pangu = panguStates[i] {
-                pangu.cancelPendingDerivedAttacks()
+                pangu.cancelPendingDerivedAttacks(preservingSourceWindCounter: pangu.rules.runtime != nil)
                 let effects = pangu.interrupt()
                 panguStates[i] = pangu; panguSpace.enqueue(effects, owner: i)
                 panguSpace.cancelMelee(owner: i); panguSpace.lifts[i] = nil

@@ -29,19 +29,19 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         .init(name: name, sourceItemType: item, actorBaseGeometry: base,
             tile: tile, edgeSize: edge, edgeStart: start, edgeEnd: end)
     }
-    private func quad(uv: CGPoint, material: SCNMaterial) -> SCNNode {
+    private func quad(uv: CGPoint?, material: SCNMaterial) -> SCNNode {
         let vertices: [SCNVector3] = [SCNVector3(-1, -1, 0), SCNVector3(1, -1, 0),
             SCNVector3(1, 1, 0), SCNVector3(-1, 1, 0)]
         let indices: [UInt16] = [0, 1, 2, 0, 2, 3]
-        let sources = [SCNGeometrySource(vertices: vertices),
-            SCNGeometrySource(normals: [SCNVector3](repeating: SCNVector3(0, 0, 1), count: 4)),
-            SCNGeometrySource(textureCoordinates: [CGPoint](repeating: uv, count: 4))]
+        var sources = [SCNGeometrySource(vertices: vertices),
+            SCNGeometrySource(normals: [SCNVector3](repeating: SCNVector3(0, 0, 1), count: 4))]
+        if let uv { sources.append(SCNGeometrySource(textureCoordinates: [CGPoint](repeating: uv, count: 4))) }
         let geometry = SCNGeometry(sources: sources,
             elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
         geometry.materials = [material]
         return SCNNode(geometry: geometry)
     }
-    private func fixture(uv: CGPoint = CGPoint(x: 0.25, y: 0.25),
+    private func fixture(uv: CGPoint? = CGPoint(x: 0.25, y: 0.25),
                          color: UIColor = .red) -> GLTFModel.Instance {
         let material = SCNMaterial(); material.name = "synthetic-body"
         material.lightingModel = .constant; material.diffuse.contents = color
@@ -81,12 +81,39 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         XCTAssertNoThrow(try prepared.install(on: instance, materials: [parameters(item: nil, base: true)]))
         instance.materials[0].diffuse.contentsTransform = SCNMatrix4MakeScale(2, 1, 1)
         XCTAssertThrowsError(try prepared.install(on: instance, materials: [parameters()]))
+
+        let missingEquipmentUV = fixture(uv: nil)
+        XCTAssertThrowsError(try prepared.install(on: missingEquipmentUV, materials: [parameters()]))
+        XCTAssertThrowsError(try prepared.install(on: missingEquipmentUV,
+            materials: [parameters(item: nil, base: true)]), "Other personal meshes cannot infer a missing UV")
+        let neck = fixture(uv: nil), neckMaterial = neck.materials[0]
+        neckMaterial.name = "Liu_Neck_Skin"
+        let neckParameters = parameters(name: "Liu_Neck_Skin", item: nil, base: true, tile: 0.2)
+        XCTAssertNoThrow(try prepared.install(on: neck, materials: [neckParameters]))
+        XCTAssertTrue(try XCTUnwrap(neck.nodes[0].geometry).sources(for: .texcoord).isEmpty)
+        XCTAssertThrowsError(try prepared.install(on: neck,
+            materials: [parameters(name: "Liu_Neck_Skin", item: 2)]))
+        neckMaterial.diffuse.contents = UIImage()
+        XCTAssertThrowsError(try prepared.install(on: neck, materials: [neckParameters]),
+            "A textured material cannot use the untextured neck adapter")
+        neckMaterial.diffuse.contents = UIColor.red
+        let originalNormal = neckMaterial.normal.contents
+        neckMaterial.normal.contents = UIImage()
+        XCTAssertThrowsError(try prepared.install(on: neck, materials: [neckParameters]),
+            "A solid diffuse color must not hide a secondary texture's missing UV")
+        neckMaterial.normal.contents = originalNormal
+        neck.root.addChildNode(quad(uv: .zero, material: neckMaterial))
+        XCTAssertThrowsError(try prepared.install(on: neck, materials: [neckParameters]),
+            "One material cannot mix authored UVs and the constant-origin adapter")
     }
 
     func testNormalBoundaryThenExactly140TicksCompletesAndRepeatedRequestsDoNotRestart() throws {
         let instance = fixture(), state = try binding(instance, device: device())
+        let material = instance.materials[0], original = instance.materials[0].shaderModifiers
         try state.requestHide(sourceTick: 70)
         XCTAssertTrue(state.hasPendingBoundary); XCTAssertEqual(state.progress, 0)
+        XCTAssertEqual(material.shaderModifiers, original)
+        XCTAssertEqual(material.blendMode, .alpha, "Waiting for EndOfFrame must preserve the original raster state")
         try state.update(sourceTick: 70); try state.didRenderFrame(sourceTick: 70)
         XCTAssertFalse(state.hasPendingBoundary)
         try state.update(sourceTick: 209)
@@ -171,6 +198,32 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         XCTAssertGreaterThan(l.y, 230); XCTAssertLessThan(l.x, 15, "Clipped fragment must not write depth")
         XCTAssertGreaterThan(r.x, 230); XCTAssertLessThan(r.y, 15, "Surviving fragment must remain opaque in front")
         XCTAssertEqual(l.w, 255); XCTAssertEqual(r.w, 255)
+
+        // With repeat+bilinear on this 2x2 mask, source UV(0,0) samples 0.5.
+        // A fabricated glTF UV(0,0), then 1-V and tile0.2, samples near0.1.
+        // A cutoff near0.23 must clip only the exact neck-origin adapter.
+        let neckScene = SCNScene(), neck = fixture(uv: nil), flippedZero = fixture(uv: .zero)
+        neck.materials[0].name = "Liu_Neck_Skin"
+        neck.root.position.x = -0.6; flippedZero.root.position.x = 0.6
+        for actor in [neck, flippedZero] { actor.root.scale = SCNVector3(0.45, 0.8, 1); neckScene.rootNode.addChildNode(actor.root) }
+        let neckBinding = try prepared.install(on: neck, materials: [
+            parameters(name: "Liu_Neck_Skin", item: nil, base: true, tile: 0.2)])
+        let controlBinding = try prepared.install(on: flippedZero, materials: [parameters(tile: 0.2)])
+        let neckBackground = quad(uv: .zero, material: background)
+        neckBackground.position.z = -1; neckBackground.scale = SCNVector3(3, 3, 1)
+        neckBackground.renderingOrder = 10; neckScene.rootNode.addChildNode(neckBackground)
+        for state in [neckBinding, controlBinding] {
+            try state.requestHide(sourceTick: 0, transitionTicks: 100)
+            try state.didRenderFrame(sourceTick: 0); try state.update(sourceTick: 70)
+        }
+        let neckHarness = try Harness(device: gpu, scene: neckScene), neckPixels = try neckHarness.render()
+        let origin = neckHarness.pixel(neckPixels, world: SCNVector3(-0.6, 0, 0))
+        let incorrectFlip = neckHarness.pixel(neckPixels, world: SCNVector3(0.6, 0, 0))
+        XCTAssertGreaterThan(origin.y, 230); XCTAssertLessThan(origin.x, 15)
+        XCTAssertGreaterThan(incorrectFlip.x, 230); XCTAssertLessThan(incorrectFlip.y, 15)
+        XCTAssertEqual(origin.w, 255); XCTAssertEqual(incorrectFlip.w, 255)
+        XCTAssertTrue(try XCTUnwrap(neck.nodes[0].geometry).sources(for: .texcoord).isEmpty,
+            "The adapter must never manufacture or append a UV buffer")
     }
 
     func testGammaEdgeUsesOriginalSmoothstepAndPreservesOpaqueAlphaOnGPU() throws {
@@ -206,48 +259,108 @@ final class DuelTriadSourceMorphTests: XCTestCase {
             XCTAssertEqual(Float(after[channel]), Float(before[channel]) + start[channel] * 255, accuracy: 3)
         }
         XCTAssertEqual(after.w, before.w)
+
+        // The original weapon starts at cutoff=1 with a nonzero blue edge.
+        // At mask=1 that edge is added to the base color, so installing MORPH
+        // before EndOfFrame would visibly alter the waiting frame.
+        state.reset()
+        let weaponStart: [Float] = [0, 0.101960786, 0.572549045, 1]
+        let weapon = try binding(instance, device: gpu, red: 255,
+            parameters: parameters(item: 3, tile: 0.1, edge: 0.1,
+                start: weaponStart, end: [0, 0.929411769, 0.956862748, 1]))
+        let original = instance.materials[0].shaderModifiers
+        try weapon.requestHide(sourceTick: 70)
+        XCTAssertEqual(instance.materials[0].shaderModifiers, original)
+        let waiting = harness.pixel(try harness.render(), world: SCNVector3Zero)
+        XCTAssertEqual(waiting, before, "The real GPU waiting frame must have no premature weapon edge")
+        XCTAssertTrue(weapon.hasPendingBoundary); XCTAssertEqual(weapon.progress, 0)
+        // render() has committed and completed an actual command buffer.
+        try weapon.didRenderFrame(sourceTick: 70)
+        let started = harness.pixel(try harness.render(), world: SCNVector3Zero)
+        for channel in 0..<3 {
+            XCTAssertEqual(Float(started[channel]), Float(before[channel]) + weaponStart[channel] * 255, accuracy: 3)
+        }
+        XCTAssertGreaterThan(Int(started.z) - Int(waiting.z), 140)
+        XCTAssertEqual(started.w, before.w); XCTAssertEqual(weapon.progress, 0)
+        try weapon.didRenderFrame(sourceTick: 70); try weapon.update(sourceTick: 70)
+        let duplicate = harness.pixel(try harness.render(), world: SCNVector3Zero)
+        XCTAssertEqual(duplicate, started, "Repeated draws at the same source tick cannot advance the transition")
     }
 
-    func testOpaqueShadowPassUsesTheSameDiscardMask() throws {
-        let gpu = try device(), scene = SCNScene(), instance = fixture()
-        let caster = instance.nodes[0]
-        caster.eulerAngles.x = -.pi / 2; caster.position.y = 1
-        caster.scale = SCNVector3(0.4, 0.4, 0.4); caster.castsShadow = true
-        scene.rootNode.addChildNode(instance.root)
-        let floorMaterial = SCNMaterial(); floorMaterial.diffuse.contents = UIColor.white
-        floorMaterial.lightingModel = .lambert
-        let floor = quad(uv: .zero, material: floorMaterial)
-        floor.eulerAngles.x = -.pi / 2; floor.scale = SCNVector3(4, 4, 4); floor.castsShadow = false
-        scene.rootNode.addChildNode(floor)
-        let light = SCNNode(); light.light = SCNLight(); light.light?.type = .spot
-        light.light?.intensity = 1000; light.light?.castsShadow = true; light.light?.shadowMode = .forward
-        light.light?.shadowColor = UIColor.black; light.light?.shadowRadius = 0
-        light.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
-        light.light?.spotInnerAngle = 50; light.light?.spotOuterAngle = 70
-        light.light?.zNear = 0.1; light.light?.zFar = 30
-        light.position = SCNVector3(5, 6, 0); light.look(at: SCNVector3Zero); scene.rootNode.addChildNode(light)
-        let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient
-        ambient.light?.intensity = 80; scene.rootNode.addChildNode(ambient)
+    func testOriginalProjectionFadesWholeSilhouetteUntilCompletionAndRestoresOnReset() throws {
+        // Original CharacterShader has no ShadowCaster pass. Native 38405 and
+        // 23565 instead feed progress into an independent silhouette map; the
+        // recovered receiver multiplies q+(1-q)*ShadowColor. This test replaces
+        // the disproved assumption that SceneKit's opaque shadow samples MORPH.
+        let gpu = try device(), scene = SCNScene()
+        let target = DuelProjectedShadowFixture.actor(name: "morph_target", halfSize: 0.4, varyingUV: true)
+        let opponent = DuelProjectedShadowFixture.actor(name: "unchanged_opponent", halfSize: 0.4)
+        target.root.position.x = -0.65; opponent.root.position.x = 0.65
+        scene.rootNode.addChildNode(target.root); scene.rootNode.addChildNode(opponent.root)
+        let backgroundMaterial = SCNMaterial(); backgroundMaterial.lightingModel = .constant
+        backgroundMaterial.diffuse.contents = UIColor.green
+        let background = quad(uv: .zero, material: backgroundMaterial)
+        background.position.z = -1; background.scale = SCNVector3(3, 3, 1)
+        background.castsShadow = false; scene.rootNode.addChildNode(background)
+        let projection = try DuelProjectedShadowFixture(device: gpu, actors: [target, opponent])
+        defer { projection.renderer.shutdown() }
         let harness = try Harness(device: gpu, scene: scene)
-        harness.camera.position = SCNVector3(0, 5, 7); harness.camera.look(at: SCNVector3Zero)
-        harness.camera.camera?.orthographicScale = 4
-        let opaque = try harness.render()
-        caster.isHidden = true
-        let absent = try harness.render()
-        caster.isHidden = false
-        let state = try binding(instance, device: gpu, red: 255)
-        try state.requestHide(sourceTick: 0, transitionTicks: 2)
-        try state.didRenderFrame(sourceTick: 0); try state.update(sourceTick: 1)
-        let clipped = try harness.render()
-        let shadowPoint = SCNVector3(-1, 0, 0)
-        let a = harness.pixel(opaque, world: shadowPoint), b = harness.pixel(absent, world: shadowPoint)
-        let c = harness.pixel(clipped, world: shadowPoint)
-        XCTAssertGreaterThan(Int(b.x) - Int(a.x), 15, "Fixture must prove an actual projected shadow")
-        for channel in 0..<3 { XCTAssertEqual(Float(c[channel]), Float(b[channel]), accuracy: 3) }
-        let error = zip(absent, clipped).map { abs(Int($0.0) - Int($0.1)) }.reduce(0, +)
-        XCTAssertLessThan(Double(error) / Double(absent.count), 1)
-        XCTAssertFalse(caster.isHidden); XCTAssertTrue(caster.castsShadow)
-        XCTAssertFalse(state.isComplete, "This must test shader discard before renderer completion")
+        let original = try projection.receiver(tick: 0)
+        let originalTarget = projection.rgba(original, x: 21), originalOpponent = projection.rgba(original, x: 42)
+        XCTAssertLessThan(originalTarget.x, 60, "An actual source projection must be present before MORPH")
+        let masks: [(Data, Int, String)] = [
+            (Data([255, 0, 0, 255]), 1, "fully clipped body"),
+            (Data([0, 0, 0, 255]), 1, "surviving opaque body"),
+            (Data([0, 0, 0, 255, 255, 0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 255]), 2, "partially clipped body")]
+        var referenceMap: [UInt8]?
+        for (data, side, label) in masks {
+            let state = try Morph.prepare(mask: mask(data, width: side, height: side), data: data, device: gpu)
+                .install(on: target, materials: [parameters()])
+            defer { state.shutdown() }
+            projection.renderer.reset(); projection.factors = [0, 0]
+            try state.requestHide(sourceTick: 0)
+            XCTAssertEqual(try projection.receiver(tick: 0), original, "The EndOfFrame wait preserves the original shadow")
+            try state.didRenderFrame(sourceTick: 0); try state.update(sourceTick: 70)
+            projection.factors[0] = state.progress
+            let halfway = try projection.receiver(tick: 70)
+            let shadow = projection.rgba(halfway, x: 21)
+            for channel in 0..<4 {
+                let base: [Float] = [204, 153, 102, 255]
+                let color = projection.definition.sourceLocation.shadowColor[channel]
+                XCTAssertEqual(Float(shadow[channel]), base[channel] * (0.5 + 0.5 * color), accuracy: 3, label)
+            }
+            XCTAssertEqual(projection.rgba(halfway, x: 42), originalOpponent, "The other actor cannot inherit the target's factor")
+            let map = try projection.map(tick: 70)
+            if let referenceMap { XCTAssertEqual(map, referenceMap, "All masks use the same whole-silhouette shadow") }
+            else { referenceMap = map }
+            XCTAssertFalse(target.nodes[0].isHidden); XCTAssertFalse(state.isComplete)
+            let visible = try harness.render()
+            let left = harness.pixel(visible, world: SCNVector3(-0.85, 0, 0))
+            let right = harness.pixel(visible, world: SCNVector3(-0.45, 0, 0))
+            if label == "fully clipped body" {
+                XCTAssertGreaterThan(left.y, 230); XCTAssertGreaterThan(right.y, 230)
+            } else if label == "surviving opaque body" {
+                XCTAssertGreaterThan(left.x, 230); XCTAssertGreaterThan(right.x, 230)
+            } else {
+                XCTAssertGreaterThan(left.x, 230); XCTAssertGreaterThan(right.y, 230)
+            }
+            XCTAssertEqual(left.w, 255); XCTAssertEqual(right.w, 255)
+            try state.update(sourceTick: 140); projection.factors[0] = state.progress
+            XCTAssertTrue(state.isComplete); XCTAssertTrue(target.nodes[0].isHidden)
+            let completed = try projection.receiver(tick: 140)
+            XCTAssertEqual(projection.rgba(completed, x: 21), SIMD4<UInt8>(204, 153, 102, 255))
+            XCTAssertEqual(projection.rgba(completed, x: 42), originalOpponent)
+            state.reset(); projection.factors[0] = state.progress; projection.renderer.reset()
+            XCTAssertEqual(try projection.receiver(tick: 0), original)
+            try state.requestHide(sourceTick: 0); try state.didRenderFrame(sourceTick: 0)
+            try state.update(sourceTick: 70); projection.factors[0] = state.progress
+            _ = try projection.receiver(tick: 70)
+            state.cancel(); projection.factors[0] = state.progress
+            let canceled = try projection.receiver(tick: 70)
+            XCTAssertEqual(projection.rgba(canceled, x: 21), SIMD4<UInt8>(204, 153, 102, 255),
+                "Source cancel invokes completion without waiting for another core tick")
+            state.reset(); projection.factors[0] = 0; projection.renderer.reset()
+        }
     }
 
     func testCommittedControlledCaptureProvidesOneBoundaryAndShutdownClearsCallback() throws {

@@ -33,10 +33,10 @@ WORKFLOW = ".github/workflows/fighter-pangu-native.yml"
 COMMIT_MESSAGE = "Verify Pangu native bindings 20261114"
 # Filled only after the source and private release are frozen and reviewed.
 # A pending pin deliberately makes preparation fail before native execution.
-REVIEWED_SOURCE = 'b55e7d3d23b32983d607ee08ef71d17c84fff9ae'
-REVIEWED_ENTRIES = {'App': 'd796692d6b9fed2bcb41711e514d657e460b030e', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': 'cb5156378c63605e8fb339aa55baf4d0ece4f656', 'Tests': '1cec878d74c08b3f7995649171d655313bed6630', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'bd141189e626dba1d63272bd0b673b73c53a5b8c'}
+REVIEWED_SOURCE = '20284e5887854a883caaeb477046d8fc2d323b14'
+REVIEWED_ENTRIES = {'App': '3462e26637c78fcb38100a3e586b0a43f07d9a64', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': 'c6e8fd48fd6ecc5eefc35cb8d99656dc498403e3', 'Tests': '72925c9fd61a1251c2544dea81e114994c55ecec', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'd9fa8c6e43cd104d0d6f5b4ab0f6e0d4bcd67cb7'}
 RELEASE_MANIFEST = ".github/private/fighter-h17-d19/manifest.json"
-RELEASE_MANIFEST_SHA256 = 'af2dfb819f2d256f71c557495c9bf731c7557138214f14509dd94e541f3d8164'
+RELEASE_MANIFEST_SHA256 = '697d62e8d9bf81da4521b6b828e4b1c4d2aa00e7141eab4d1558b3aa2ee032ff'
 BASE_MANIFEST_PINS = {
     ".github/private/sf3/manifest.json": "f454b50969212171dfe07c34abc497854a6fc59fd55f62aceec64e74eef5c7d0",
     ".github/private/sf3-distinct/manifest.json": "a1eb14298057e11ebe3099d5a6b19df9ce404c2243446f9caffed2f7b0163e4e",
@@ -58,6 +58,7 @@ SYNTHETIC_SOURCES = (
     ("DuelPanguSourceTrailBindingTests", 11),
     ("DuelTriadSourceMaterialTests", 19),
     ("DuelTriadSourceMorphTests", 11),
+    ("DuelSourceProjectedShadowRendererTests", 9),
     ("DuelTriadMetalRendererTests", 5),
     ("DuelTriadSourceAudioBindingTests", 22),
     ("DuelBoundedGzipTests", 5),

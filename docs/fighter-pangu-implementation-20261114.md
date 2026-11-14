@@ -2,6 +2,8 @@
 
 记录日期：2026-11-14。本次开发基线：本地提交 `cabc2fc`；本文描述在该基线上完成的本地实现与验收边界，远程发布状态以本轮验收记录为准。
 
+**记录范围：第 1—10 节保留上述早期基线的交付情况，不代表之后各批的当前发布状态。正式配置恢复后的专项更正见第 11—13 节；后续整批源码、资源和 Apple 验收状态见 [源恢复记录](DUEL_SOURCE_RESTORATION_20261114.md)。**
+
 ## 1. 本轮交付状态
 
 盘古已具备独立的规则配置、1—6 级资源与技能状态机，并接入 `DuelWeaponFight` 的输入、碰撞、承伤、物理位移、回合生命周期与确定性回放。手机和外屏已接入盘古生命上限、光能与连击显示；网络选择和战斗校验已识别独立的 `liu_pangu` 身份。
@@ -137,3 +139,75 @@ Trance 的概率额外连击使用有显式内部状态的种子随机源；不�
 3. 可读的当前技能事件与参数表，或具备出处的授权导出，用于确认伤害、生命、光能换算、各等级阈值、控制、冷却与规则优先级。正式期作者报告值和测试版占位文字不能替代整套运行配置。
 
 详细文件版本、摘要、核验方式、排除的假命中和仍未知的内容以[源审计](acceptance/fighter-pangu-source-audit-20261114.json)为准；机制语义、视频时间点和证据级别以[机制参考](fighter-pangu-mechanics-reference-20261114.md)为准。这些结论限定于实际检查过的内容，不表示所有动态资源包已搜索完毕。后续工作应接回新增的、可验证的缺失文件，无需重复上传已经校验的 IPA、备份或录像资料。
+
+## 11. 正式 D19 规则勘误：L2／L3 劈地不得生成 L4 落地伤害
+
+2026-11-14 对用户已有 IPA 1.46.1 携带的 `1.46.0.16.16733-prod` 配置与当前运行路径进行复核，确认 `DuelPanguState.sourceContact` 曾在 L2／L3 劈地命中后错误预约一次 `upperFall`。该额外伤害使用 `0.5 × UnarmedDamage`，属于 L4 起才创建的独立落地模型，不能从低等级被动动画的地裂视觉标记推导出来。
+
+来源定位如下；原始配置正文保留在私有证据中，未加入公共仓库。
+
+| 原始条目 | 已核实的运行条件 |
+|---|---|
+| `lock_1546.bytes`，`SET_DYNASTY_19_SHADOW_UP`，trigger 4 | 敌方 `D19_Ground_Crack_VFX` 标记到达、处于战斗阶段且拥有 `D19_4_LEVEL` 时，才创建 `D19_UP_FALL_DAMAGE_MODEL_ATTACK`。 |
+| 同集合 trigger 5 | 五次 `D19_Upper_Wind_Blade` 标记创建风刃同样要求 `D19_4_LEVEL`。 |
+| `settings_sets_dynasty.bytes`，record 222 | 普通 `D19_Upper_Passive` 的地裂标记为源帧 27；该动画没有 Attack 区间。 |
+| 同文件 records 223—225 | 强化被动的五次风刃标记为源帧 5、10、15、30、35，地裂为源帧 40；对应风刃伤害为 `0.15 × MagicPower`，落地模型为 `0.5 × UnarmedDamage`。 |
+
+已从持有的配置 ZIP 成员重新核对摘要：`lock_1546.bytes` 为 `398e22eb17d605e6177a29d8dbf76ab704183b19cfcc784db100947e1909b7aa`；`settings_sets_dynasty.bytes` 为 `3d660f485ad5e238f23bf6dd19d16855635a9449fd213bf1dd468a9cc979f701`。原动画区间钟将源帧 F 映射为 `2 × (F − 1)` 个 60 Hz 核心 tick。
+
+更正仅收紧正式源分支的等级条件：L2／L3 保留原劈地攻击、命中资源和 52 tick 的受击控制，不再预约 `upperFall` 或高等级风刃／Dread。L4—L6 仍保留 78 tick 的受击控制，并在确认命中后的第 8、18、28、58、68、78 tick 依次产生五次风刃和落地伤害。本次没有修改通用调试规则、其他技能、受击清队列策略、角色身份、模型或资源清单。
+
+验证使用显式合成几何及 1,000 单位的应用生命／攻击归一化，测试规则由 `d19HeavenlyKing` 正式源工厂产生。[DuelPanguFormalMechanismTests](../Tests/ShiftCoreTests/DuelPanguFormalMechanismTests.swift) 的两个方法逐级覆盖 L2—L6；同时复跑既有 `DuelPanguRuntimeTests.testSplitterFollowUpsUsePassiveAnimationMarkersAndRequireActualReaction`，确认不能受该反应的目标不会预约追击。Swift 6.0.3 的本次独立回归为 **3 个方法、0 失败**，编译 23.66 秒、执行 0.139 秒。该结果与其他批次不累加宣称独立总数，也不构成盘古专属外观或 iOS 真机验收。
+
+## 12. 正式 D19 风刃计数在普通受击后继续计时
+
+同批复核确认，正式 D19 的普通风刃由模型变量 `SET_D19_WIND_BLADE_COUNTER` 与 `SET_D19_WIND_BLADE_SPAWN` 驱动，不依赖主人仍在某个施法动作中。此前四个普通受击／受控入口调用通用清队列方法时，同时抹掉了这两个状态，造成已获得但尚未发出的风刃丢失。
+
+原始证据仍来自第 11 节同一份 `lock_1546.bytes`，集合为 `SET_DYNASTY_19_SHADOW_BACK`：
+
+| 原始 trigger | 对风刃变量的作用 |
+|---|---|
+| 11 | 满足条件的 PostHit 将发射计时变量设为 1，并给它 10 tick 的到期时间。 |
+| 12—14 | 分别根据台风武器命中、连击门槛和 Trance 命中条件，增加无到期时间的待发数量。 |
+| 15 | 发射计时到期、仍处于战斗阶段且待发数量大于 0 时，重设 10 tick 计时、数量减 1，并创建风刃模型。没有主人受击动作或倒地状态的取消条件。 |
+
+已离线扫描原 battle-trigger ZIP 的全部 5,187 个成员及持有的明文配置，以上两个精确变量名的配置读写都位于该集合；未发现普通受击／倒地触发的清零操作。`lock_1549.bytes`、`lock_1550.bytes` 中另一个 `SET_D19_HIT_WIND_BLADE_COUNTER` 是命中特效循环计数，不能拿来解释待发风刃队列。
+
+原生静态执行链也与此一致：action 171 经 dispatcher 16475、handler 30639 写入独立模型变量；核心 update 36315 调用变量更新 23671／23670 推进到期时间。全局变量重置 23669 的已定位调用属于生命周期路径 23754／23755。该结论限定于持有 IPA 的原函数路径和已核对的配置，不宣称已经在真机观察。详细检索与反汇编回执保存在私有 `d19-wind-lifecycle-raw-references-private.json`、`d19-variable-reset-callers-private.json` 和 `d19-wind-disasm-*` 中；原始配置正文未加入公共仓库。
+
+实现增加 `cancelPendingDerivedAttacks(preservingSourceWindCounter: Bool = false)`。仅带正式 `runtime` 的普通击倒、Pangu 控制、Triad 控制及既有普通投技受击入口传入 `true`，保留待发数量与**当前剩余 tick**，不会重启一个新的 10 tick 计时。其他派生队列仍按原逻辑清理；强制中断、显式默认清理、重置和回合切换仍清空风刃。调试／旧规则没有正式 `runtime`，因此即使传入 `true` 也不改变其原取消行为。本项没有新增存储字段或改变回放编码。
+
+专项测试在 L2—L6 验证计时经过 3 tick 后受击仍准确保留剩余 7 tick；通过实际 `DuelWeaponFight` 普通互击倒地及 H17 根控路径，验证风刃按原第 10 tick 释放并命中目标；同时覆盖强制中断、默认清理、重置与真实回合切换，确认不会把旧风刃带入下一回合。两个 Fight 场景使用明确合成的骨盆点／碰撞几何及受击时长，仅测试机制交互，没有加载或声称盘古原始模型。
+
+最终 Swift 6.0.3 定向回归为 **9 个方法、0 失败**：本类 7 个方法包含第 11 节原有 2 个；另复跑原 Splitter 反应门禁与旧调试规则的击倒取消各 1 个。编译 6.07 秒，执行 0.667 秒。前置新 fixture 的闭包类型、点数组编码和调试根控时长约束错误已修正；最终通过并未放宽正式参数或断言。本次 9 个方法与第 11 节的 3 个方法存在重叠，不能相加为独立测试总数。日志为私有 `d19-wind-lifecycle-tests-private.log`。
+
+## 13. 正式 D19 六个本体技能的收招反投窗口
+
+原配置的 `Throwable` 区间并不等于普通动作的 `Uninterrupt` 结束。D19 的六个本体技能在仍处于收招时，已经允许敌方发起投技尝试，再由 D19 免投反击接管双方动作。旧实现同时要求目标没有普通 action、没有 activeCast，因而把这些已存在的源窗口延迟到了整段施法结束。
+
+来源为同一份 `settings_sets_dynasty.bytes`。下表的 tick 从当前源动画首帧开始；六条均未裁剪起始帧，`Throwable` 的 End 为 null，进入公式为 `2 × (源帧 − 1)`。其中投矛另有 EndFrame 55 的尾部裁剪。当前 cast 结束 tick 是既有运行适配边界，不能称为尚未恢复的全部原始动作总帧数。
+
+| 技能／原动作 | record | 原 Throwable 首帧 | 反投允许首 tick | 原 Uninterrupt 释放 tick | 当前 cast 结束 tick |
+|---|---:|---:|---:|---:|---:|
+| 劈地／`D19_Upper` | 221 | 58 | 114 | 126 | 126 |
+| 碎石／`D19_Forward` | 226 | 50 | 98 | 110 | 110 |
+| 根骨／`D19_Low` | 229 | 42 | 82 | 94 | 94 |
+| 台风／`D19_Back` | 232 | 35 | 68 | 80 | 80 |
+| 投矛／`D19_Missile` | 240 | 42 | 82 | 94 | 100 |
+| 天坠／`D19_Ultimate` | 236 | 155 | 308 | 320 | 320 |
+
+`lock_1545.bytes` 的 `SET_DYNASTY_19_ENEMY_THROW` triggers 0／1 要求目标**当前动画**带有 `Throwable`、没有 `Unstable`，并检查发起者输入／控制、真实 COM 距离、墙侧分支等条件。接受后令发起者进入 `D19_Unthrow_Passive`。`lock_1544.bytes` 的 `SET_DYNASTY_19_1_LEVEL` trigger 1 随敌方 THROW 动画开始，让 D19 主人进入 `D19_Unthrow`；该接管不要求主人自己的 Uninterrupt 已结束。因此不能把上述 12 tick 的重叠区间作为通用不可反投期。
+
+原生 `CurrentInterval` 查询也已闭环：dispatcher 16637 的 function 29 经 27860／38092 到控制器 39304，返回当前动画播放器持有的区间列表；没有播放器时返回空列表。39191 按源帧进入／移除区间，39347 安装新播放器并经 39176 交接，39185／39187 的显式结束／停止路径通过 39192 清理区间。因此本次采用由当前 cast 计算的只读窗口，不另存一个可能跨动作残留的布尔开关。
+
+代码增加 `sourceCastAllowsThrowResponse` 与 `acceptSourceThrowResponse()`。Fight 只在当前 action 的角色、clip 名称、无普通 command、非 reaction 均与该 cast 匹配时，放行这一条源反投路径。普通 `throwImmune`／`canBeThrown` 的含义没有改变：盘古不会因此变成普通被投受害者。发起者状态、双方落地条件、COM 小数距离、墙条件、强控、生命、已有投技配对等门禁保持原样。
+
+接管只取消被替换本体 cast 所拥有的尚未释放攻击，并发出一次中断通知；不用强制中断，也不抹掉独立风刃计数、剩余计时、已经释放的模型、资源或冷却。天坠在 308 tick 的合法窗口同样可进入反投，但其他普通冲击仍保留原有的天坠抗打断规则。反投配对从 tick 0 开始，伤害仍在配对 tick 98 按 `0.15 × UnarmedDamage` 进入正常 PreHit 计算，不再等待旧技能尾段。
+
+本次不扩展两个不同的问题：风暴之门的 `Throwable` 在当前 cast 结束的 62 tick 才进入，没有这六条提前窗口；`D19_Unthrow` 自己在 record 248 的 134 tick 再开放 Throwable，涉及已释放的旧配对参与者与仍持有角色的接管，应单独审查配对生命周期，未混入本次初次反投修正。当前未选用的 `D19_Ultimate_Alt` 也不借用正常天坠的规则。
+
+来源摘要：动画配置见第 11 节；`lock_1544.bytes` 为 `ec56d114b475aa7546fb056595edcb167156e458423dbb82967a02a49f9351ca`，`lock_1545.bytes` 为 `073e0dc18d278aa518fa0f2dbf502b2afc77cfd3ea65c56136a4216c25a4fb42`。完整私有证据 `d19-throw-window-audit-private.json` 的 SHA-256 为 `98f0f6397c404ddfc83802829e0db906f0fdade19fcfa33c104f93ddbc6c958c`；原配置及反汇编正文均未加入公共仓库。本项没有新增存储字段、修改回放编码或资源文件。
+
+Swift 6.0.3 本次定向验证一次完成 **37 个方法、0 失败**，编译 23.54 秒、执行 12.726 秒：本类现有 14 个方法（其中本项新增 7 个），加既有 SourceThrow 14 个及 SourceThrowFight 9 个。新覆盖逐级验证 L2—L6 的六条前一 tick／首 tick；实际 Fight 在两个朝向／席位接受后立即给出反投 tick 0，直到 97 tick 仍无反投伤害，98 tick 才执行原 `0.15` 基础值与普通 PreHit 倍率。另覆盖独立风剩余 7 tick、资源不退款、新施法、正常结束、强制清理、重置、回合切换、旧规则／双锤身份、超距、发起者忙碌，以及真实 host 暂停／恢复。几何与角色媒体仍明确为合成测试数据。本次 37 个方法包含第 11—12 节的部分方法，不能与此前批次相加宣称独立总数。
+
+私有日志为 `d19-throw-window-tests-private.log`，SHA-256 `ffeb25ac615a6d4a6247bc419bcf0b799bc69fba2092f23f713f36a44cfd7a4d`；没有执行 Apple 原生或真机验证。

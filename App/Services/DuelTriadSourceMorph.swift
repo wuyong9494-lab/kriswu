@@ -3,6 +3,7 @@ import Foundation
 import Metal
 import SceneKit
 import simd
+import UIKit
 
 /// The authenticated release supplies the mask and each affected material's
 /// parameters. This adapter implements only the recovered MORPH operation; it
@@ -97,10 +98,9 @@ enum DuelTriadSourceMorph {
                   instance.outlines.isEmpty else { throw Failure.geometry }
             for definition in definitions { try definition.validate() }
             let byName = Dictionary(uniqueKeysWithValues: definitions.map { ($0.name, $0) })
-            var installed: [Binding.Material] = []
             var materialIDs = Set<ObjectIdentifier>()
             for material in instance.materials {
-                guard let name = material.name, let definition = byName[name],
+                guard let name = material.name, byName[name] != nil,
                       materialIDs.insert(ObjectIdentifier(material)).inserted,
                       material.program == nil, material.transparency == 1,
                       material.readsFromDepthBuffer, material.writesToDepthBuffer,
@@ -109,32 +109,70 @@ enum DuelTriadSourceMorph {
                       !(material.shaderModifiers?.values.contains(where: {
                           $0.contains("triadMorph") || $0.contains("#pragma transparent")
                       }) ?? false) else { throw Failure.material(material.name ?? "") }
-                installed.append(.init(material: material, parameters: definition))
             }
             var nodes: [SCNNode] = []
             var boundMaterialIDs = Set<ObjectIdentifier>()
+            var authoredUVByMaterial: [ObjectIdentifier: Bool] = [:]
             var invalidGeometry = false
             instance.root.enumerateChildNodes { node, _ in
                 guard let geometry = node.geometry else { return }
                 let matched = geometry.materials.filter { materialIDs.contains(ObjectIdentifier($0)) }
                 guard !matched.isEmpty else { return }
                 guard matched.count == geometry.materials.count,
-                      let uv = geometry.sources(for: .texcoord).first,
-                      uv.componentsPerVector == 2, uv.vectorCount > 0 else {
+                      let vertices = geometry.sources(for: .vertex).first, vertices.vectorCount > 0 else {
                     invalidGeometry = true; return
                 }
-                for material in matched { boundMaterialIDs.insert(ObjectIdentifier(material)) }
+                let uv = geometry.sources(for: .texcoord).first
+                if let uv {
+                    guard uv.componentsPerVector == 2, uv.vectorCount > 0,
+                          uv.vectorCount == vertices.vectorCount else {
+                        invalidGeometry = true; return
+                    }
+                }
+                for material in matched {
+                    let id = ObjectIdentifier(material), hasUV = uv != nil
+                    guard let name = material.name, let definition = byName[name],
+                          hasUV || (name == "Liu_Neck_Skin" && definition.actorBaseGeometry &&
+                            definition.sourceItemType == nil && material.diffuse.contents is UIColor &&
+                            Self.hasOnlyConstantContents(material)),
+                          authoredUVByMaterial[id].map({ $0 == hasUV }) ?? true else {
+                        invalidGeometry = true; return
+                    }
+                    authoredUVByMaterial[id] = hasUV
+                    boundMaterialIDs.insert(id)
+                }
                 nodes.append(node)
             }
             // GLTFModel instances put their mesh holders beneath root. A
             // malformed binding must not leave an unhandled solid renderer.
             guard !invalidGeometry, !nodes.isEmpty, boundMaterialIDs == materialIDs else { throw Failure.geometry }
+            let installed = try instance.materials.map { material -> Binding.Material in
+                guard let name = material.name, let definition = byName[name],
+                      let hasUV = authoredUVByMaterial[ObjectIdentifier(material)] else { throw Failure.geometry }
+                return .init(material: material, parameters: definition, constantSourceUV: !hasUV)
+            }
             return Binding(texture: texture, materials: installed, nodes: nodes)
         }
 
         private static func identity(_ value: SCNMatrix4) -> Bool {
             let matrix = simd_float4x4(value)
             return (0..<4).allSatisfy { matrix[$0] == matrix_identity_float4x4[$0] }
+        }
+
+        @MainActor private static func hasOnlyConstantContents(_ material: SCNMaterial) -> Bool {
+            // Cover every public SCNMaterialProperty, including secondary
+            // normal/coat maps. A solid diffuse color alone proves no such
+            // absence; textures and unknown content types fail closed.
+            let properties = [material.diffuse, material.ambient, material.specular,
+                material.emission, material.transparent, material.reflective,
+                material.multiply, material.normal, material.displacement,
+                material.ambientOcclusion, material.metalness, material.roughness,
+                material.selfIllumination, material.clearCoat, material.clearCoatNormal,
+                material.clearCoatRoughness]
+            return properties.allSatisfy { property in
+                guard let contents = property.contents else { return true }
+                return contents is UIColor || contents is NSNumber
+            }
         }
     }
 
@@ -146,8 +184,10 @@ enum DuelTriadSourceMorph {
             let originalBlend: SCNBlendMode
             let originalReadsDepth: Bool
             let originalWritesDepth: Bool
-            init(material: SCNMaterial, parameters: MaterialBinding) {
+            let constantSourceUV: Bool
+            init(material: SCNMaterial, parameters: MaterialBinding, constantSourceUV: Bool) {
                 self.material = material; self.parameters = parameters
+                self.constantSourceUV = constantSourceUV
                 originalModifiers = material.shaderModifiers; originalBlend = material.blendMode
                 originalReadsDepth = material.readsFromDepthBuffer
                 originalWritesDepth = material.writesToDepthBuffer
@@ -182,8 +222,6 @@ enum DuelTriadSourceMorph {
             guard phase == .idle, lastTick.map({ sourceTick >= $0 }) ?? true else { throw Failure.clock }
             duration = transitionTicks; elapsed = 0; progress = 0
             requestTick = sourceTick; lastTick = sourceTick; phase = .pendingBoundary
-            installModifiers()
-            setProgress(0)
         }
 
         /// Called only after a real scene command buffer is committed. Repeated
@@ -194,6 +232,11 @@ enum DuelTriadSourceMorph {
                 throw Failure.clock
             }
             guard phase == .pendingBoundary else { return }
+            // Source 29988 yields EndOfFrame before calling 38357/38369,
+            // which enable MORPH. Even cutoff=1 can add the weapon's nonzero
+            // edgeStart where mask=1, so the waiting frame keeps its shader.
+            installModifiers()
+            setProgress(0)
             lastTick = sourceTick; phase = .running
         }
 
@@ -250,8 +293,10 @@ enum DuelTriadSourceMorph {
                 material.setValue(color(parameter.edgeStart), forKey: "triadMorphStart")
                 material.setValue(color(parameter.edgeEnd), forKey: "triadMorphEnd")
                 var modifiers = item.originalModifiers ?? [:]
-                modifiers[.surface] = GLTFModel.combiningShaderModifiers(modifiers[.surface] ?? "", DuelTriadSourceMorph.surface)
-                modifiers[.fragment] = GLTFModel.combiningShaderModifiers(modifiers[.fragment] ?? "", DuelTriadSourceMorph.fragment)
+                modifiers[.surface] = GLTFModel.combiningShaderModifiers(modifiers[.surface] ?? "",
+                    DuelTriadSourceMorph.surface(constantSourceUV: item.constantSourceUV))
+                modifiers[.fragment] = GLTFModel.combiningShaderModifiers(modifiers[.fragment] ?? "",
+                    DuelTriadSourceMorph.fragment(constantSourceUV: item.constantSourceUV))
                 material.shaderModifiers = modifiers
                 material.blendMode = .replace
                 material.readsFromDepthBuffer = true; material.writesToDepthBuffer = true
@@ -288,21 +333,33 @@ enum DuelTriadSourceMorph {
 
     // The mask is original linear data, uploaded without flipping its rows.
     // Imported glTF UV0 was flipped in the exporter; undo V before source tile.
-    // Discard is in the surface stage so the same clipping can affect opaque
-    // depth and shadow rendering. Native GPU tests verify those actual passes.
-    private static let surface = """
+    // Surface discard controls the main color/depth pass. The original
+    // projected shadow has a separate whole-silhouette fade: 38405 writes
+    // actorValue=1-progress, then 23565 passes progress to ShadowcasterUnlit.
+    // It never samples this mask, so its contract must be verified separately.
+    private static func sourceUV(constant: Bool) -> String {
+        // The authenticated personal neck bridge is an untextured addition
+        // with no authored UVs. Its explicit arena adapter samples source
+        // origin directly; it neither invents a glTF UV nor applies 1-V to it.
+        constant ? "vec2(0.0)" : "vec2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y)"
+    }
+
+    private static func surface(constantSourceUV: Bool) -> String {
+        """
     uniform sampler2D triadMorphSurfaceMask;
     uniform float triadMorphSurfaceTile;
     uniform float triadMorphSurfaceEdge;
     uniform float triadMorphSurfaceCutoff;
     #pragma opaque
     #pragma body
-    vec2 triadMorphUV = vec2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y) * triadMorphSurfaceTile;
+    vec2 triadMorphUV = \(sourceUV(constant: constantSourceUV)) * triadMorphSurfaceTile;
     float triadMorphValue = texture2D(triadMorphSurfaceMask, triadMorphUV).r;
     if (triadMorphValue > triadMorphSurfaceCutoff + triadMorphSurfaceEdge) { discard_fragment(); }
     """
+    }
 
-    private static let fragment = """
+    private static func fragment(constantSourceUV: Bool) -> String {
+        """
     uniform sampler2D triadMorphMask;
     uniform float triadMorphTile;
     uniform float triadMorphEdge;
@@ -318,7 +375,7 @@ enum DuelTriadSourceMorph {
     }
     #pragma opaque
     #pragma body
-    vec2 triadMorphUV = vec2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y) * triadMorphTile;
+    vec2 triadMorphUV = \(sourceUV(constant: constantSourceUV)) * triadMorphTile;
     float triadMorphValue = texture2D(triadMorphMask, triadMorphUV).r;
     if (triadMorphValue >= triadMorphCutoff && triadMorphValue <= triadMorphCutoff + triadMorphEdge) {
         float triadMorphT = clamp((triadMorphValue - triadMorphCutoff) / triadMorphEdge, 0.0, 1.0);
@@ -329,4 +386,5 @@ enum DuelTriadSourceMorph {
         _output.color.rgb = triadMorphToLinear(triadMorphColor);
     }
     """
+    }
 }

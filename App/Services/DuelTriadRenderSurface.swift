@@ -2,6 +2,7 @@ import Foundation
 import MetalKit
 import QuartzCore
 import SceneKit
+import simd
 import UIKit
 
 /// Kept outside the MainActor view so Metal completion callbacks only touch
@@ -28,7 +29,7 @@ private final class DuelTriadSurfaceCompletion: @unchecked Sendable {
 final class DuelTriadRenderSurface: MTKView {
     typealias Format = DuelTriadSourceMaterial.Format
     enum Failure: Error, Equatable {
-        case device, samples, size, target, allocation, stopped, paused, tick
+        case device, samples, size, target, allocation, stopped, paused, tick, projection
         case command(String)
     }
 
@@ -40,8 +41,13 @@ final class DuelTriadRenderSurface: MTKView {
     }
     let sceneRenderer: SCNRenderer
     let packetRenderer: DuelTriadMetalRenderer
+    /// Original independent projector. Its map is encoded before the scene,
+    /// then its recovered receiver multiplies the Gamma surface before FX.
+    /// The two actors keep their own fade scalars in a shared source map.
+    var projectedShadow: DuelSourceProjectedShadowRenderer?
     private let gpu: MTLDevice
     private let queue: MTLCommandQueue
+    private let opaquePresentation: MTLRenderPipelineState
     private let completion = DuelTriadSurfaceCompletion()
     private let inFlight = DispatchSemaphore(value: 3)
     private var targets: Targets?
@@ -83,6 +89,14 @@ final class DuelTriadRenderSurface: MTKView {
         guard let device, let queue = device.makeCommandQueue() else { throw Failure.device }
         _ = try Self.formats(device: device)
         self.gpu = device; self.queue = queue; self.packetRenderer = packets
+        let library = try device.makeLibrary(source: Self.opaquePresentationSource, options: nil)
+        let presentation = MTLRenderPipelineDescriptor()
+        presentation.vertexFunction = library.makeFunction(name: "duelPresentationVertex")
+        presentation.fragmentFunction = library.makeFunction(name: "duelPresentationAlpha")
+        presentation.colorAttachments[0].pixelFormat = .bgra8Unorm
+        presentation.colorAttachments[0].writeMask = .alpha
+        presentation.colorAttachments[0].isBlendingEnabled = false
+        opaquePresentation = try device.makeRenderPipelineState(descriptor: presentation)
         self.sceneRenderer = SCNRenderer(device: device, options: nil)
         super.init(frame: frame, device: device)
         colorPixelFormat = .bgra8Unorm
@@ -153,9 +167,11 @@ final class DuelTriadRenderSurface: MTKView {
         guard destination.device.registryID == gpu.registryID,
               commandBuffer.device.registryID == gpu.registryID,
               destination.pixelFormat == .bgra8Unorm, destination.sampleCount == 1,
-              destination.textureType == .type2D else { throw Failure.target }
+              destination.textureType == .type2D, destination.usage.contains(.renderTarget) else { throw Failure.target }
         let target = try renderTargets(width: destination.width, height: destination.height, samples: samples)
         let viewport = CGRect(x: 0, y: 0, width: destination.width, height: destination.height)
+        let viewportSize = viewport.size
+        try projectedShadow?.encodeMap(on: commandBuffer, viewportSize: viewportSize, tick: tick)
         let scenePass = MTLRenderPassDescriptor()
         scenePass.colorAttachments[0].texture = target.scene
         scenePass.colorAttachments[0].loadAction = .clear
@@ -180,15 +196,16 @@ final class DuelTriadRenderSurface: MTKView {
         // byte, including its edge resolve. Active source effects instead use
         // the original Gamma per-sample blend and Gamma resolve.
         let hasEffects = packetRenderer.submittedPacketCount > 0
-        if hasEffects || samples > 1 {
+        let hasGammaWork = hasEffects || projectedShadow != nil
+        if hasGammaWork || samples > 1 {
             let pass = MTLRenderPassDescriptor()
-            pass.colorAttachments[0].texture = hasEffects ? target.gamma : target.scene
+            pass.colorAttachments[0].texture = hasGammaWork ? target.gamma : target.scene
             pass.colorAttachments[0].loadAction = .load
             if samples > 1 {
-                pass.colorAttachments[0].resolveTexture = hasEffects ? target.resolvedGamma : target.resolvedScene
+                pass.colorAttachments[0].resolveTexture = hasGammaWork ? target.resolvedGamma : target.resolvedScene
                 pass.colorAttachments[0].storeAction = .multisampleResolve
             } else { pass.colorAttachments[0].storeAction = .store }
-            if hasEffects {
+            if hasGammaWork {
                 pass.depthAttachment.texture = target.depthStencil
                 pass.depthAttachment.loadAction = .load
                 pass.depthAttachment.storeAction = .dontCare
@@ -199,6 +216,16 @@ final class DuelTriadRenderSurface: MTKView {
             guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { throw Failure.allocation }
             do {
                 defer { encoder.endEncoding() }
+                if let projectedShadow {
+                    guard let cameraNode = sceneRenderer.pointOfView, let camera = cameraNode.camera else {
+                        throw Failure.projection
+                    }
+                    try projectedShadow.encodeReceiver(on: encoder, format: Self.format(samples: samples),
+                        cameraProjection: DuelTriadMetalRenderer.cameraProjection(camera, viewportSize: viewportSize),
+                        cameraView: simd_inverse(cameraNode.simdWorldTransform),
+                        viewport: MTLViewport(originX: 0, originY: 0, width: Double(destination.width),
+                            height: Double(destination.height), znear: 0, zfar: 1))
+                }
                 if hasEffects {
                     try packetRenderer.encodeCurrent(on: encoder, format: Self.format(samples: samples), device: gpu,
                         viewport: MTLViewport(originX: 0, originY: 0, width: Double(destination.width),
@@ -213,6 +240,27 @@ final class DuelTriadRenderSurface: MTKView {
             to: destination, destinationSlice: 0, destinationLevel: 0,
             destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
         blit.endEncoding()
+        if projectedShadow != nil {
+            // Keep the recovered receiver's full RGBA math available to every
+            // subsequent source effect. Only the final opaque UIKit surface
+            // drops that accumulated alpha; none of its RGB bytes change.
+            // isOpaque requires opaque presented content, not a promise that
+            // arbitrary intermediate shader alpha may be ignored by UIKit.
+            // https://developer.apple.com/documentation/uikit/uiview/isopaque
+            let presentation = MTLRenderPassDescriptor()
+            presentation.colorAttachments[0].texture = destination
+            presentation.colorAttachments[0].loadAction = .load
+            presentation.colorAttachments[0].storeAction = .store
+            guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: presentation) else {
+                throw Failure.allocation
+            }
+            encoder.setRenderPipelineState(opaquePresentation)
+            encoder.setCullMode(.none)
+            encoder.setViewport(MTLViewport(originX: 0, originY: 0, width: Double(destination.width),
+                height: Double(destination.height), znear: 0, zfar: 1))
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            encoder.endEncoding()
+        }
     }
 
     /// Explicit acceptance/diagnostic capture using the same command queue as
@@ -273,9 +321,21 @@ final class DuelTriadRenderSurface: MTKView {
     func shutdown() {
         guard !stopped else { return }
         stopped = true; presentationPaused = true; targets = nil
+        projectedShadow?.shutdown(); projectedShadow = nil
         didSubmitFrame = nil
         delegate = nil; isPaused = true
         sceneRenderer.delegate = nil; sceneRenderer.scene = nil; sceneRenderer.pointOfView = nil
         removeFromSuperview()
     }
+
+    private static let opaquePresentationSource = """
+    #include <metal_stdlib>
+    using namespace metal;
+    struct DuelPresentationVertex { float4 position [[position]]; };
+    vertex DuelPresentationVertex duelPresentationVertex(uint id [[vertex_id]]) {
+        const float2 positions[3] = { float2(-1, -1), float2(3, -1), float2(-1, 3) };
+        DuelPresentationVertex output; output.position = float4(positions[id], 0, 1); return output;
+    }
+    fragment half4 duelPresentationAlpha() { return half4(0, 0, 0, 1); }
+    """
 }

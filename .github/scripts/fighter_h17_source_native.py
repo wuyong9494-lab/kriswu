@@ -28,8 +28,8 @@ REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
 WORKFLOW = ".github/workflows/fighter-h17-source-native.yml"
 COMMIT_MESSAGE = "Verify H17 source compile 20261114"
-REVIEWED_SOURCE = 'b55e7d3d23b32983d607ee08ef71d17c84fff9ae'
-REVIEWED_ENTRIES = {'App': 'd796692d6b9fed2bcb41711e514d657e460b030e', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': 'cb5156378c63605e8fb339aa55baf4d0ece4f656', 'Tests': '1cec878d74c08b3f7995649171d655313bed6630', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'bd141189e626dba1d63272bd0b673b73c53a5b8c'}
+REVIEWED_SOURCE = '20284e5887854a883caaeb477046d8fc2d323b14'
+REVIEWED_ENTRIES = {'App': '3462e26637c78fcb38100a3e586b0a43f07d9a64', 'Package.swift': 'ffc64914ed88ae83bb4569fea0777b08ea2d29b6', 'Shared': 'e41e160b4262a9defbb3c5e92b4d020c5e0c2b80', 'Sources': 'c6e8fd48fd6ecc5eefc35cb8d99656dc498403e3', 'Tests': '72925c9fd61a1251c2544dea81e114994c55ecec', 'Widget': 'dc5c0075ea1fb8ed0a44c68f2fea21dfc92112d3', 'project.yml': '4659145612fbca682db5fb915784d9c6e9dc8cab', 'scripts': 'd9fa8c6e43cd104d0d6f5b4ab0f6e0d4bcd67cb7'}
 RECIPIENT = ROOT / ".github/public/fighter-pangu-native-20261114.public.pem"
 RECIPIENT_SPKI_SHA256 = "ba82f15dbd713e0fbd980f6ae455382f8cc20c1118ae692ef0fe67710eca4e15"
 SYNTHETIC_SOURCES = (
@@ -39,6 +39,7 @@ SYNTHETIC_SOURCES = (
     ("DuelPanguSourceTrailBindingTests", 11),
     ("DuelTriadSourceMaterialTests", 19),
     ("DuelTriadSourceMorphTests", 11),
+    ("DuelSourceProjectedShadowRendererTests", 9),
     ("DuelTriadMetalRendererTests", 5),
     ("DuelTriadSourceAudioBindingTests", 22),
     ("DuelBoundedGzipTests", 5),

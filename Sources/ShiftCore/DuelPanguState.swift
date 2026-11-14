@@ -144,6 +144,27 @@ public struct DuelPanguState: Equatable, Sendable {
     public var damageImmune: Bool { activeCast.flatMap { rules.ability($0.ability)?.damageImmune } ?? false }
     public var impactImmune: Bool { rules.runtime != nil && activeCast?.ability == .heavenfall }
 
+    /// Original current-animation Throwable intervals let an enemy attempt
+    /// the D19 counter before the owner's Uninterrupt interval ends. This
+    /// never makes the owner a normal throw victim. The interval belongs to
+    /// this cast, so a new animation cannot inherit a previous open window.
+    /// settings_sets_dynasty records 221/226/229/232/240/236, 60 Hz:
+    /// interval frame F enters at 2 * (F - 1).
+    public var sourceCastAllowsThrowResponse: Bool {
+        guard rules.runtime != nil, let cast = activeCast else { return false }
+        let firstTick: Int
+        switch cast.ability {
+        case .splitter: firstTick = 114
+        case .shard: firstTick = 98
+        case .bones: firstTick = 82
+        case .typhoon: firstTick = 68
+        case .spear: firstTick = 82
+        case .heavenfall: firstTick = 308
+        case .stormGate: return false // Its interval begins at the existing cast end.
+        }
+        return cast.tick >= firstTick && cast.tick < cast.duration
+    }
+
     // Cooldowns use exact integer ten-thousandths of a tick. This retains
     // fractional recovery instead of rounding a boosted cooldown every frame.
     private var cooldownUnits: [Int]
@@ -419,24 +440,22 @@ public struct DuelPanguState: Equatable, Sendable {
         return [.attack(attack)]
     }
 
-    /// Cancels only not-yet-emitted follow-ups. Released spatial projectiles,
-    /// light, combo, cooldowns and other resources remain owned by their layers.
-    public mutating func cancelPendingDerivedAttacks() {
+    /// Cancels only not-yet-emitted follow-ups. Original D19 owner reactions
+    /// retain the independent SHADOW_BACK/t11-15 timer and wind counter;
+    /// explicit teardown and forced interruption still clear everything.
+    /// Released spatial projectiles remain owned by their spatial layer.
+    public mutating func cancelPendingDerivedAttacks(preservingSourceWindCounter: Bool = false) {
         pendingWinds.removeAll(keepingCapacity: true)
         sourcePending.removeAll(keepingCapacity: true)
-        sourceWindCount = 0; sourceWindRemainingTicks = 0
+        if !preservingSourceWindCounter || rules.runtime == nil {
+            sourceWindCount = 0; sourceWindRemainingTicks = 0
+        }
     }
     @discardableResult public mutating func interrupt(force: Bool = false) -> [Effect] {
         if rules.runtime != nil {
             if force { cancelPendingDerivedAttacks() }
             guard let cast = activeCast, force || !impactImmune else { return [] }
-            sourcePending.removeAll { $0.requiresOwnerCast && $0.groupID == cast.id }
-            activeCast = nil
-            var effects: [Effect] = [.castInterrupted(cast.ability)]
-            if cast.ability == .heavenfall {
-                effects.append(.control(.init(sourceID: cast.id, kind: .petrify, durationTicks: 0)))
-            }
-            return effects
+            return interruptSourceCast(cast)
         }
         if force { cancelPendingDerivedAttacks() }
         guard let cast = activeCast, force || rules.ability(cast.ability)?.interruptible == true else { return [] }
@@ -445,6 +464,25 @@ public struct DuelPanguState: Equatable, Sendable {
         if cast.ability == .heavenfall { finishLightChargeBoundary() }
         var effects: [Effect] = [.castInterrupted(cast.ability)]
         if cast.ability == .heavenfall && rules.policies.interruptReleasesPetrification {
+            effects.append(.control(.init(sourceID: cast.id, kind: .petrify, durationTicks: 0)))
+        }
+        return effects
+    }
+
+    /// lock1545 permits the attempt on the current Throwable interval;
+    /// lock1544/t1 then replaces the owner's body animation with D19_Unthrow.
+    /// This is a narrowly scoped animation takeover, not forced teardown:
+    /// independent SHADOW_BACK wind counters and released models continue.
+    @discardableResult public mutating func acceptSourceThrowResponse() -> [Effect] {
+        guard sourceCastAllowsThrowResponse, let cast = activeCast else { return [] }
+        return interruptSourceCast(cast)
+    }
+
+    private mutating func interruptSourceCast(_ cast: Cast) -> [Effect] {
+        sourcePending.removeAll { $0.requiresOwnerCast && $0.groupID == cast.id }
+        activeCast = nil
+        var effects: [Effect] = [.castInterrupted(cast.ability)]
+        if cast.ability == .heavenfall {
             effects.append(.control(.init(sourceID: cast.id, kind: .petrify, durationTicks: 0)))
         }
         return effects
@@ -791,13 +829,13 @@ public struct DuelPanguState: Equatable, Sendable {
             effects.append(.control(.init(sourceID: id, kind: .stun,
                                           durationTicks: rules.earth.shardStunTicks + extensionTicks)))
         }
-        if strike == .splitter && !blocked && reactable, let id = takeEffectID() {
-            let fallDelay = rules.level >= 4 ? 78 : 52
-            queueSource(.upperFall, delay: fallDelay, groupID: id, anchoredAtOpponent: true)
-            if rules.level >= 4 {
-                for delay in [8, 18, 28, 58, 68] {
-                    queueSource(.upperWind, delay: delay, groupID: id, anchoredAtOpponent: true)
-                }
+        if strike == .splitter && !blocked && reactable && rules.level >= 4, let id = takeEffectID() {
+            // lock1546 SHADOW_UP/t4 gates the landing damage model on
+            // D19_4_LEVEL. The lower-level passive's frame-27 ground crack
+            // is a visual marker, not an extra UnarmedDamage packet.
+            queueSource(.upperFall, delay: 78, groupID: id, anchoredAtOpponent: true)
+            for delay in [8, 18, 28, 58, 68] {
+                queueSource(.upperWind, delay: delay, groupID: id, anchoredAtOpponent: true)
             }
         }
         if strike?.hasEmpoweredSpearTag == true && !blocked && reactable {

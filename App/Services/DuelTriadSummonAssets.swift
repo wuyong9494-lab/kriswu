@@ -215,6 +215,17 @@ final class DuelTriadSummonRenderer {
             if let existing = instances[key] { value = existing }
             else {
                 let instance = asset.model.instantiate(), holder = SCNNode()
+                // All 44 recovered H17 CreateModel actions leave
+                // ModelInfo.IsShadowCaster null. Native 29388/32191 converts
+                // that nullable value to false; 34903 therefore never
+                // registers these companions in the independent projector.
+                // Do not replace this source rule with SceneKit's default.
+                if instance.root.geometry != nil { instance.root.castsShadow = false }
+                // GLTFModel attaches primitive holders below its indexed
+                // nodes; those holders are not entries in instance.nodes.
+                instance.root.enumerateChildNodes { node, _ in
+                    if node.geometry != nil { node.castsShadow = false }
+                }
                 holder.name = "duel.triad.\(summon.soul.rawValue).\(summon.owner).\(summon.id)"
                 holder.addChildNode(instance.root); root.addChildNode(holder)
                 for definition in asset.definition.materials {

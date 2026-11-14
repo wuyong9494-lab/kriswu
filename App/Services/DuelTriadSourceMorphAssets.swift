@@ -26,6 +26,7 @@ final class DuelTriadSourceMorphAssets {
         let trigger: Trigger
         let mask: DuelTriadSourceMorph.Mask
         let materials: [DuelTriadSourceMorph.MaterialBinding]
+        let projectedShadow: DuelSourceProjectedShadowDefinition
     }
 
     let ownerProfileID: String
@@ -34,6 +35,7 @@ final class DuelTriadSourceMorphAssets {
     let trigger: Trigger
     let mask: DuelTriadSourceMorph.Mask
     let materials: [DuelTriadSourceMorph.MaterialBinding]
+    let projectedShadow: DuelSourceProjectedShadowDefinition
     let verifiedFiles: [DuelNetworkContentRecord]
     private let maskData: Data
 
@@ -42,7 +44,7 @@ final class DuelTriadSourceMorphAssets {
         let documentData = try DuelFighterAssetReleaseLoader.read(directory: directory,
             name: manifestName, maximum: 256_000, hash: expectedSHA256)
         let document = try JSONDecoder().decode(Document.self, from: documentData)
-        guard document.version == 1, owner.isTriad, target.id == "liu_hammers",
+        guard document.version == 2, owner.isTriad, target.id == "liu_hammers",
               owner.hero == .ember, target.hero == .liu,
               document.ownerProfileID == owner.id, document.ownerCharacterSHA256 == owner.sha256,
               document.targetProfileID == target.id, document.targetCharacterSHA256 == target.sha256,
@@ -51,6 +53,7 @@ final class DuelTriadSourceMorphAssets {
               document.sourceConfigurationSHA256 == "02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a",
               owner.triadRules?.runtime?.configurationSHA256 == document.sourceConfigurationSHA256,
               DuelTriadStanceState.accepts(owner) else { throw Failure.identity }
+        try document.projectedShadow.validatePalaceSource()
         let trigger = document.trigger
         guard manifestName.hasSuffix(".json"),
               (1...32).contains(document.evidence.count),
@@ -97,6 +100,7 @@ final class DuelTriadSourceMorphAssets {
         ownerProfileID = document.ownerProfileID; targetProfileID = document.targetProfileID
         targetCharacterSHA256 = document.targetCharacterSHA256; self.trigger = trigger
         self.mask = mask; materials = document.materials; maskData = data
+        projectedShadow = document.projectedShadow
         verifiedFiles = [
             .init(path: manifestName, bytes: documentData.count, sha256: expectedSHA256),
             .init(path: mask.file, bytes: data.count, sha256: mask.sha256)

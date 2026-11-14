@@ -56,6 +56,7 @@ final class DuelWorldView: SCNView {
     private var triadMorphRequested = false
     var sourceMorphProgress: Float? { triadSourceMorph?.progress }
     var sourceMorphIsComplete: Bool { triadSourceMorph?.isComplete == true }
+    var sourceProjectedShadowIsInstalled: Bool { triadRenderSurface?.projectedShadow != nil }
     private(set) var triadMetalRenderer: DuelTriadMetalRenderer?
     private(set) var triadRenderSurface: DuelTriadRenderSurface?
     /// Private acceptance diagnostics retain source compiler/runtime errors.
@@ -463,11 +464,32 @@ final class DuelWorldView: SCNView {
                       let target = fight.profiles.firstIndex(where: {
                           $0.id == assets.targetProfileID && $0.sha256 == assets.targetCharacterSHA256
                       }), owner != target, actors.indices.contains(target),
-                      let surface = triadRenderSurface else {
+                      let surface = triadRenderSurface, let gpu = device,
+                      stageAsset?.kind == .palace, let stageRoot = musicStageRoot,
+                      actors.count == 2 else {
                     throw DuelTriadSourceMorphAssets.Failure.identity
                 }
                 let prepared = try assets.prepare(device: device)
-                triadSourceMorph = try actors[target].installSourceMorph(prepared, materials: assets.materials)
+                let binding = try actors[target].installSourceMorph(prepared, materials: assets.materials)
+                triadSourceMorph = binding
+                let casterInstances = try actors.map { try $0.sourceShadowInstance() }
+                let shadow = try DuelSourceProjectedShadowRenderer(device: gpu,
+                    formats: DuelTriadRenderSurface.formats(device: gpu),
+                    definition: assets.projectedShadow, stageRoot: stageRoot, actors: casterInstances,
+                    worldCenters: { [weak self] in
+                        guard let self, !self.ended, let current = self.session.game.weaponFight,
+                              current.fighters.count == 2 else { throw DuelSourceProjectedShadowRenderer.Failure.geometry }
+                        return try (0..<2).map { index in
+                            // Native actor centerOfMass is the mass-weighted
+                            // FK point, including its current full XYZ pose.
+                            // Neither a root nor pelvis origin may replace it.
+                            guard let point = current.sourceCenterOfMass(index) else {
+                                throw DuelSourceProjectedShadowRenderer.Failure.geometry
+                            }
+                            return SIMD3(Float(point.x), Float(point.y), Float(point.z))
+                        }
+                    }, fade: { [weak binding] index in index == target ? binding?.progress ?? 0 : 0 })
+                surface.projectedShadow = shadow
                 triadMorphOwner = owner; triadMorphTrigger = assets.trigger
                 // The recovered HideModel coroutine waits for a real end of
                 // frame before starting its 140-tick linear tween. A fixed
@@ -500,6 +522,7 @@ final class DuelWorldView: SCNView {
             self.triadSummons?.reset()
             self.triadSourceEffects?.reset()
             self.triadSourceMorph?.reset(); self.triadMorphRequested = false
+            self.triadRenderSurface?.projectedShadow?.reset()
             self.triadMetalRenderer?.clear()
             self.combatCamera = DuelCombatCamera()
             // A restarted bout can reuse frame 0. Clear the previous lens
@@ -1108,6 +1131,10 @@ private final class DuelActor {
                             materials: [DuelTriadSourceMorph.MaterialBinding]) throws -> DuelTriadSourceMorph.Binding {
         guard let weapon else { throw DuelTriadSourceMorph.Failure.geometry }
         return try prepared.install(on: weapon.instance, materials: materials)
+    }
+    func sourceShadowInstance() throws -> GLTFModel.Instance {
+        guard let weapon else { throw DuelSourceProjectedShadowRenderer.Failure.geometry }
+        return weapon.instance
     }
     func updateSourceLighting(_ viewTransform: simd_float4x4) {
         weapon?.materialBinding?.update(viewTransform: viewTransform)

@@ -62,6 +62,19 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
         XCTAssertEqual(morph.trigger.normalRenderBoundaries, 1)
         XCTAssertEqual(morph.mask.sourceTextureFormat, 45)
         XCTAssertEqual(morph.mask.sourceColorSpace, 0)
+        XCTAssertNoThrow(try morph.projectedShadow.validatePalaceSource())
+        XCTAssertTrue(morph.projectedShadow.complete)
+        XCTAssertEqual(morph.projectedShadow.receiver.geometry.positions.count, 4)
+        XCTAssertEqual(morph.projectedShadow.receiver.geometry.indices.count, 6)
+        XCTAssertEqual(morph.projectedShadow.map.width, 256)
+        XCTAssertEqual(morph.projectedShadow.map.filter, 1)
+        XCTAssertEqual(morph.projectedShadow.map.wrapS, 1)
+        XCTAssertEqual(morph.projectedShadow.camera.follow.source, "actorCenterOfMassWorldXYZ")
+        let sourceStage = try DuelStageAsset(url: assets.directory.appendingPathComponent(morph.projectedShadow.stage.file))
+        let stageBinding = try morph.projectedShadow.bindStage(sourceStage.makeRoot())
+        XCTAssertEqual(stageBinding.meters.name, "SF3_Stage_Meters")
+        XCTAssertEqual(stageBinding.receiver.name, "shadow_reciever")
+        XCTAssertNil(stageBinding.receiver.geometry, "The pinned stage retained the empty original receiver node")
         XCTAssertEqual(Set(morph.materials.map(\.name)), Set([
             "mat_arm__str_03_base", "mat_wpn__hammers_01_01_base", "Liu_Neck_Skin", "tripo_mat_c4757646"]))
         let morphPrepared = try morph.prepare(device: MTLCreateSystemDefaultDevice())
@@ -197,6 +210,7 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
         XCTAssertEqual(Set(world.weaponAssets.keys), Set([DuelGame.Hero.ember, .liu]))
         XCTAssertEqual(world.sourceMorphProgress, 0)
         XCTAssertFalse(world.sourceMorphIsComplete)
+        XCTAssertTrue(world.sourceProjectedShadowIsInstalled, world.triadPreparationFailure ?? "Original projector is absent")
         let surface = try XCTUnwrap(world.triadRenderSurface, world.triadPreparationFailure ?? "Missing controlled source surface")
         let renderer = try XCTUnwrap(world.triadMetalRenderer, world.triadPreparationFailure ?? "Missing source Metal packets")
         XCTAssertFalse(world.rendersContinuously); XCTAssertFalse(world.isPlaying)
@@ -230,7 +244,15 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
             XCTAssertNil(state.loadError); XCTAssertNil(renderer.lastFailure); XCTAssertNil(surface.lastFailure)
             let fight = try XCTUnwrap(state.game.weaponFight)
             XCTAssertTrue(effects.isSubset(of: Set(world.activeSourceEffectIDs)), "Missing actual original effect at capture: \(label)")
-            if let summon { XCTAssertTrue(fight.triadPresentation.summons.contains { $0.motionRole == summon }) }
+            if let summon {
+                XCTAssertTrue(fight.triadPresentation.summons.contains { $0.motionRole == summon })
+                let souls = try XCTUnwrap(world.scene?.rootNode.childNode(withName: "duel.triad.souls", recursively: true))
+                var geometry: [SCNNode] = []
+                souls.enumerateChildNodes { node, _ in if node.geometry != nil { geometry.append(node) } }
+                XCTAssertFalse(geometry.isEmpty, "The source companion must actually be instantiated at capture")
+                XCTAssertTrue(geometry.allSatisfy { !$0.castsShadow },
+                    "Original H17 ModelInfo.IsShadowCaster null resolves to false, not a prototype SceneKit shadow")
+            }
             let samples = world.antialiasingMode == .none ? 1 : 2
             let image = try surface.captureFrame(tick: fight.triadPresentation.liveTick, pixelSize: imageSize, samples: samples)
             let png = try XCTUnwrap(image.pngData())

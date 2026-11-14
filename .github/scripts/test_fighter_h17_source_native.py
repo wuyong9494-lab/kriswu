@@ -37,15 +37,15 @@ class H17SourceNativeContractTests(unittest.TestCase):
             for name in self.expected]}]}
 
 
-    def testOnlyOneHundredEightSyntheticMethodsAreSelectedAndFiveResourceMethodsExplicitlyExcluded(self):
-        self.assertEqual(len(self.expected), 108)
-        self.assertEqual(len(set(self.expected)), 108)
+    def testExactReviewedSyntheticMethodsAreSelectedAndFiveResourceMethodsExplicitlyExcluded(self):
+        self.assertEqual(len(self.expected), 117)
+        self.assertEqual(len(set(self.expected)), 117)
         self.assertTrue(all(row["scenarioType"] == "synthetic fixture contract" for row in self.rows))
         excluded = native.excluded_inventory()
         self.assertEqual(len(excluded), 5)
         self.assertTrue(set(excluded).isdisjoint(self.expected))
         self.assertTrue(all("DuelTriadInstalledSourceTests/" in item for item in excluded))
-        self.assertEqual(len(self.hashes), 10)
+        self.assertEqual(len(self.hashes), 11)
         native.verify_results(self.summary, self.results, self.expected)
 
 
@@ -226,7 +226,7 @@ class H17SourceNativeContractTests(unittest.TestCase):
             self.assertEqual(text.count("run: python3 .github/scripts/fighter_h17_source_native.py " + phase + "\n"), 1)
         self.assertNotIn(" source_native.py stage", text)
         self.assertIn("steps.prepare.outcome == 'success'", text)
-        self.assertEqual(native.EXPECTED_COUNT, 108)
+        self.assertEqual(native.EXPECTED_COUNT, 117)
 
 
 if __name__ == "__main__":

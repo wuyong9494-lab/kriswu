@@ -16,21 +16,22 @@ The Liu reference model is not renamed or granted D19 equipment powers. Its
 original geometry, skins, materials, textures and 50 animation channels are
 checked unchanged before six original source throw channels are appended.
 
-The authenticated overlay contains 295 files, totaling 129,746,107 bytes.
+The authenticated overlay contains 295 files, totaling 129,750,242 bytes.
 The catalog and release validate with the current Swift implementation.
-Against the previous 293-file overlay, 292 files remain byte-identical, the
-release binding changes, and only the original Morph manifest and raw texture
-are added. Neither character model nor its animation bytes changed.
+Against the previous 295-file Morph overlay, 293 files remain byte-identical.
+Only the Morph v2 document and its release binding change, adding the recovered
+Palace receiver geometry and independent projector parameters. Neither
+character model nor its animation, audio, mask or effects bytes changed.
 
 | Independently pinned item | SHA-256 |
 | --- | --- |
 | Sun 65-motion GLB | `ce9e1b77c59fa63116af73409173fcd8922f2063ab2e0624534691fa00195ef6` |
 | Liu 56-motion GLB | `f83d8cbbd7b2158604dad9eff28398bcf57c64fdcb4146e5c142608484a5a472` |
 | H17 compressed effects | `ce7350283846c370e00df073d2c04146687301c095a1be4b6f19aece982f2435` |
-| Fighter release | `fe8056c7a65c51a83704d975f696316d0848d998143a384d85b8ef5aad8f0db3` |
-| Morph binding | `1bf98c9c06ac813333fb943be1440bea21dc5d4e7d5979454835790c02164680` |
+| Fighter release | `7bf9aa17a1e15273dbe7ae04eecd1ef092c2ad9a72360b99cd4f7ac08695704b` |
+| Morph v2 and projected-shadow binding | `364003f89aed01b0db41c68726c71ecd92c714ed6ee443984ba430d3b52c16ff` |
 | Original Morph mask | `f5572cfbbe87bd2feb2e9aa93843815b0acdf1b71c0dd7ab584df24ce3ede514` |
-| Encrypted overlay manifest | `af2dfb819f2d256f71c557495c9bf731c7557138214f14509dd94e541f3d8164` |
+| Encrypted overlay manifest | `697d62e8d9bf81da4521b6b828e4b1c4d2aa00e7141eab4d1558b3aa2ee032ff` |
 
 The overlay is AES-256-GCM authenticated, split into 68 bounded binary shards.
 The staging helper independently validated shard assembly, authenticated
@@ -44,6 +45,22 @@ The decryption key is not stored in this repository.
   serialization.
 - D19 formal runtime rules including heavenfall, Light, shield, cooldown,
   impact and source counterthrow behavior. Equipment identity remains strict.
+- D19 level-two/three Splitter retains its 52-tick air hold without creating
+  the landing damage that source SHADOW_UP/t4 reserves for level four. Levels
+  four through six retain their five wind markers and 78-tick landing damage.
+  The separate ordinary-wind counter and ten-tick timer survive normal
+  knockdown, Pangu control, Triad control and the existing throw reaction.
+  Force, explicit full cancellation, reset and round boundaries still clear
+  them; legacy rules retain their previous cancellation behavior.
+- Six D19 skill recoveries now accept the source counterthrow on their own
+  current-animation Throwable interval: Splitter 114, Sunder 98, Shard 82,
+  Typhoon 68, Missile 82 and normal Heavenfall 308, in 60 Hz core ticks.
+  The enemy attempt replaces only that matching body cast with the original
+  paired escape response. It preserves independent winds, released models,
+  resources and cooldowns, and retains the response's original tick-98 hit.
+  A new cast cannot inherit a previous interval. D19 remains immune to an
+  ordinary successful throw; range, grounded state and initiator gates remain
+  part of the source attempt.
 - D19 wind and upper-wind releases align to the actual enemy pelvis on X/Y.
   All 121 character clips carry independently verified half-frame pelvis
   tracks; missing source data never falls back to a guessed field origin.
@@ -86,6 +103,36 @@ The decryption key is not stored in this repository.
   without a fictional equipment type. Pause and repeated renders cannot
   advance the tween. Completion hides the affected mesh holders; arena reset
   restores the installation-time materials and visibility.
+  The normal coroutine enables MORPH only after the render boundary; the
+  waiting frame retains the original shader even at mask=1, where enabling
+  early would already add the weapon's blue edge-start color.
+- The source's independent projected shadow uses the recovered Palace
+  receiver mesh, material color, ancestry and camera settings. Both actors
+  draw ordered whole silhouettes into one 256-by-256 non-depth map; a single
+  five-tap bilinear/clamp filter precedes the original DstColor/Zero receiver
+  blend. Body MorphMask holes never cut this map. The affected actor's entire
+  silhouette fades by the source progress while the other actor retains its
+  own value. The camera follows the full mass-weighted XYZ midpoint, uses
+  screen aspect and the source's previous-forward positioning order, and
+  resets that history with the arena. Receiver projection preserves the
+  source half-precision rows, raw RGBA color and no-W-division rule.
+  Final presentation writes opaque alpha only after source rendering; the
+  original intermediate RGBA math and final RGB bytes are retained.
+- H17's current soul/root/wave model creations do not register additional
+  projected casters. All 44 recovered CreateModel records leave ModelInfo
+  `IsShadowCaster` unset; getter 29388, constructor 32191 and registrar 34903
+  establish that this becomes false and skips projector registration. The
+  source soul geometry therefore also disables SceneKit's default shadow.
+  This decision follows the runtime registration chain, not only the prefab
+  layer or cast-shadow flags. The generic additional-model projector path
+  remains tested separately.
+- The authenticated Liu neck bridge has 120 vertices and no UV0, with a
+  constant base color and no texture references. Only this exact named actor
+  base material may use constant source UV `(0,0)` in its Morph shader. The
+  imported geometry, skin and model bytes remain untouched. The other five
+  primitives retain their real UV0; equipment, textured geometry, and mixed
+  UV/no-UV use of one material cannot acquire the adapter. This is an explicit
+  personal-geometry adapter, not a claim of recovered neck UV data.
 - Liu's appended-motion release explicitly retains the original armor/hammer
   back-face culling and single-mip bilinear/repeat texture state. Its new GLB
   digest no longer relies on the old-export initializer's hash whitelist.
@@ -110,6 +157,10 @@ as a claimed number of distinct tests.
 | Actual source audio manifest and 88 WAVs | Foundation loading passed; 89 verified records, 112 markers, eight cues |
 | Source stance, source audio-event, replay and replay-audit batch | 37 passed; 15 stance, six audio-event, 14 replay, two audit methods |
 | Exact source stance capability identity | The existing capability method passed its exact retest after adding the source runtime configuration SHA gate |
+| D19 formal level gates and queued-wind reaction/lifecycle boundaries | Nine focused methods passed, including actual Fight knockdown, Triad control, original release tick, contact and clean next-round state |
+| D19 six current-animation counterthrow windows and source throw regression | 37 passed: 14 formal mechanism, 14 source throw and nine source throw fight methods; includes the earlier seven formal mechanism methods |
+| Projected-shadow release builder and authenticated source-field guards | 11 Python fixture methods passed |
+| Real GLB shadow input layout | Static checks passed for 48 primitives and 117,681 vertices across both actors and eight soul models; this is not GPU execution |
 | Real unchanged Sun65 / Liu56 catalog stance lifecycle | Birth, original intro, start-idle and combat entry passed; seven original marker ticks crossed once; no duplicate arena ambience adapter |
 | First/subsequent RoundStart cue scopes against the real audio manifest | Six exact cases passed; all 89 file records, 112 markers and eight cues still load |
 | Authenticated encrypted overlay | Cross-implementation assembly/decrypt/ZIP/file validation passed |
@@ -137,13 +188,23 @@ and executed all 97 selected methods: 96 passed, one failed, zero skipped.
 The failure was the 20-byte original-mip readback comparison; the old test read
 CPU texture storage without submitting GPU work. The revised test checks the
 same exact bytes through a completed GPU blit and retains CPU readback as
-diagnostic evidence. This change does not establish that the failure is fixed
-until the next Apple run actually passes.
+diagnostic evidence.
 
-The source-only Apple workflow now selects exactly 108 synthetic native methods,
-including 11 additional Morph lifecycle and actual GPU contract tests.
+The fifth build (run 43594347500, published source 03c91c5b) compiled and
+executed all 108 selected methods: 107 passed, one failed, zero skipped. The
+strict 20-byte GPU mip comparison passed; CPU getBytes returned the base
+level's first texel for the level-one read while the completed GPU blit
+returned all original bytes. The sole failed method incorrectly expected the
+body's MorphMask holes to remove the projected shadow. Recovering the actual
+source projector established a different rule: the complete silhouette fades
+uniformly while the body's independent noise mask cuts away its fragments.
+That finding requires both a new projected-shadow implementation and a
+source-correct GPU contract; it is not permission to ignore the failure.
+
+The source-only Apple workflow now selects exactly 117 synthetic native methods,
+including 11 Morph and nine independent projected-shadow GPU/contract methods.
 It receives no asset keys, uses no private asset environment, and excludes the
-five installed-source tests. The protected full-resource workflow selects 113
+five installed-source tests. The protected full-resource workflow selects 122
 methods, including those five tests and the original-resource captures. Neither
 method inventory is evidence of execution until an actual run completes.
 
@@ -163,6 +224,15 @@ method inventory is evidence of execution until an actual run completes.
   its 46 render-boundary waits are not invented as 45 logical ticks. The
   accepted personal geometry and persistent-actor reset are explicit arena
   adapters. Native GPU assertions do not establish Unity base-lighting parity.
+- Static inspection of all six original Liu primitives found and isolated the
+  missing-UV personal neck before the full private-resource run. Its targeted
+  shader adapter must still be exercised by the installed-character test; the
+  source-only synthetic tests cannot replace that resource-level acceptance.
+- The recovered receiver currently multiplies the preserved SceneKit surface
+  before original-effect packets. Its own source queue is 2501, but this
+  integration has not established original queue ordering against every
+  transparent SceneKit stage or character surface. Synthetic depth and blend
+  checks do not establish that wider ordering equivalence.
 - Remaining Unity modules, cross-emitter dynamic bounds sorting and some
   common floorfall sound events still need their own recovery or native
   comparison. Normalized arena stats/impulses are explicitly identified in
