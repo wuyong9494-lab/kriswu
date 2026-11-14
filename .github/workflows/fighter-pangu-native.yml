@@ -1,0 +1,93 @@
+name: Fighter Pangu binding native contracts (49 methods, unsigned only)
+'on':
+  push:
+    branches: [codex/fighter-pangu-native-20261114]
+    paths:
+      - App/**
+      - Sources/**
+      - Shared/**
+      - Tests/**
+      - scripts/**
+      - Package.swift
+      - project.yml
+      - .github/scripts/fighter_pangu_native.py
+      - .github/scripts/test_fighter_pangu_native.py
+      - .github/public/fighter-pangu-native-20261114.public.pem
+      - .github/workflows/fighter-pangu-native.yml
+      - .github/workflows/ios.yml
+permissions:
+  contents: read
+jobs:
+  native:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-pangu-native-20261114' &&
+      github.event_name == 'push' &&
+      github.event.head_commit.message == 'Verify Pangu native bindings 20261114'
+    concurrency:
+      group: fighter-private-visual-acceptance
+      cancel-in-progress: false
+    runs-on: macos-26
+    timeout-minutes: 65
+    environment: fighter-private-assets
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin reviewed source trees and exactly 46 new plus three legacy methods
+        id: prepare
+        timeout-minutes: 2
+        run: python3 .github/scripts/fighter_pangu_native.py prepare
+      - name: Select installed native tools
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_pangu_native.py tools
+      - name: Authenticate the existing private resource packs
+        timeout-minutes: 8
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+        run: python3 .github/scripts/fighter_pangu_native.py stage
+      - name: Build one unsigned demo host and verify compiled resource bytes
+        timeout-minutes: 25
+        run: python3 .github/scripts/fighter_pangu_native.py build
+      - name: Prepare one installed iPhone 17 Pro Max simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_pangu_native.py simulator
+      - name: Run the 49 exact methods once without rebuilding
+        timeout-minutes: 15
+        run: python3 .github/scripts/fighter_pangu_native.py test
+      - name: Seal bounded build and test diagnostics, including failed phases
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_pangu_native.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-pangu-native-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-pangu-native/published/fighter-pangu-native-evidence.enc
+            ${{ runner.temp }}/fighter-pangu-native/published/fighter-pangu-native-evidence.key.enc
+            ${{ runner.temp }}/fighter-pangu-native/published/fighter-pangu-native-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-pangu-native/published/fighter-pangu-native-evidence.SHA256SUMS
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Remove this run's simulator, products, staged assets and private logs
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_pangu_native.py cleanup
+      - name: Report exact coverage and the reached validation stages
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_pangu_native.py report
