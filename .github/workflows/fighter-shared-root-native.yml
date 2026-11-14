@@ -1,0 +1,116 @@
+name: Fighter shared-root increment (nine native methods and one UI capture)
+
+'on':
+  push:
+    branches: [codex/fighter-visual-acceptance-20261113-1200]
+    paths:
+      - .github/workflows/fighter-shared-root-native.yml
+      - .github/scripts/fighter_shared_root_native.py
+      - .github/scripts/test_fighter_shared_root_native.py
+      - Tests/SiteTests/DuelSharedRootInstalledModelTests.swift
+      - Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed workflow commit SHA; must equal this ref's HEAD
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    if: >-
+      github.repository == 'wuyong9494-lab/kriswu' &&
+      github.ref == 'refs/heads/codex/fighter-visual-acceptance-20261113-1200' &&
+      github.run_attempt == 1 &&
+      ((github.event_name == 'push' &&
+        github.event.head_commit.message == 'Verify shared root native increment 20261115') ||
+       (github.event_name == 'workflow_dispatch' && inputs.source_sha == github.sha))
+    concurrency:
+      group: fighter-private-visual-acceptance
+      cancel-in-progress: false
+    runs-on: macos-26
+    timeout-minutes: 65
+    environment: fighter-private-assets
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+      - name: Pin 6ebca application source, nine native methods and one separate UI capture
+        id: prepare
+        timeout-minutes: 2
+        run: python3 .github/scripts/fighter_shared_root_native.py prepare
+      - name: Select the installed Xcode and simulator tools
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_shared_root_native.py tools
+      - name: Authenticate 73 baseline files, 295 original overlay files and the 13-payload delta
+        id: stage
+        timeout-minutes: 8
+        env:
+          FIGHTER_LIU_MODEL_KEY: ${{ secrets.FIGHTER_LIU_MODEL_KEY }}
+          FIGHTER_PRESENTATION_KEY: ${{ secrets.FIGHTER_PRESENTATION_KEY }}
+          FIGHTER_H17_D19_KEY: ${{ secrets.FIGHTER_H17_D19_KEY }}
+        run: python3 .github/scripts/fighter_shared_root_native.py stage
+      - name: Build one unsigned host with both test targets and verify all 373 compiled resources
+        id: build
+        timeout-minutes: 25
+        run: python3 .github/scripts/fighter_shared_root_native.py build
+      - name: Prepare one installed iPhone 17 Pro Max simulator
+        id: simulator
+        timeout-minutes: 12
+        run: python3 .github/scripts/fighter_shared_root_native.py simulator
+      - name: Execute exactly three installed, five contract and one model-loading method once
+        timeout-minutes: 15
+        run: python3 .github/scripts/fighter_shared_root_native.py test
+      - name: Capture both real-resource fighters and Sun branches through one new UI method
+        id: ui
+        if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success'
+        timeout-minutes: 8
+        run: python3 .github/scripts/fighter_shared_root_native.py ui
+      - name: Capture a separate Liu lobby diagnostic if the UI method fails
+        if: always() && steps.build.outcome == 'success' && steps.simulator.outcome == 'success' && steps.ui.outcome != 'success'
+        timeout-minutes: 4
+        run: python3 .github/scripts/fighter_shared_root_native.py capture
+      - name: Export exact method-owned native metadata and UI images, preserving failed partial evidence
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_shared_root_native.py export
+      - name: Seal bounded diagnostics and captures, including failed phases
+        id: seal
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_shared_root_native.py seal
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.seal.outcome == 'success'
+        with:
+          name: fighter-shared-root-native-${{ github.run_id }}-${{ github.run_attempt }}-encrypted
+          path: |
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.enc
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.key.enc
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.session-key.enc
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-evidence.SHA256SUMS
+            ${{ runner.temp }}/fighter-shared-root-native/published/fighter-shared-root-native-ui-recovery.enc
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+      - name: Remove this run's simulator, staged media, products and plaintext diagnostics
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 5
+        run: python3 .github/scripts/fighter_shared_root_native.py cleanup
+      - name: Report reached gates without treating completion, artifacts or skipped tests as passing
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 1
+        run: python3 .github/scripts/fighter_shared_root_native.py report

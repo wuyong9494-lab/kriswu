@@ -1,0 +1,157 @@
+{
+  "schema": "fighter-shared-root-native-preflight-v1",
+  "observedAtUTC": "2026-11-14T21:20:17Z",
+  "sourceBaselineSHA": "6ebca235dfb579454c99528791f5c8e84bc9ff6f",
+  "sourceMapping": "All application trees and existing Tests content match baseline; two independently pinned new test files are the only permitted Tests additions.",
+  "executionSourceSHA": null,
+  "workflowRunURL": null,
+  "workflowTriggeredByAuthor": false,
+  "workflow": ".github/workflows/fighter-shared-root-native.yml",
+  "triggerCommitMessage": "Verify shared root native increment 20261115",
+  "protectedEnvironment": "fighter-private-assets",
+  "secretStatus": {
+    "specificDestinationAuthorizedByUser": true,
+    "savedAndMetadataConfirmedByRoot": true,
+    "requiredNames": [
+      "FIGHTER_LIU_MODEL_KEY",
+      "FIGHTER_PRESENTATION_KEY",
+      "FIGHTER_H17_D19_KEY"
+    ],
+    "valuesReadByThisTask": false,
+    "keyFilesCreatedByHelper": false
+  },
+  "resourceChain": {
+    "baselineFiles": 73,
+    "originalOverlayFiles": 295,
+    "deltaPayloadFiles": 13,
+    "unchangedOverlayFiles": 289,
+    "finalOverlayFiles": 302,
+    "reviewedBaselineReplacements": 2,
+    "finalCompiledFiles": 373,
+    "baseManifestSHA256": "697d62e8d9bf81da4521b6b828e4b1c4d2aa00e7141eab4d1558b3aa2ee032ff",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "localCheckScope": "public pinned inventory; no resource decryption, conversion or original-byte reload"
+  },
+  "native": {
+    "expectedMethods": 9,
+    "groups": {
+      "installedAudio": 3,
+      "syntheticContracts": 5,
+      "installedModelLoading": 1
+    },
+    "selectors": [
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback",
+      "SiteTests/DuelTriadRootVictimAudioTests/testVerifiedRootEndUsesLiuOwnershipAtTick38AndDeduplicatesTheSameFrame",
+      "SiteTests/DuelTriadRootVictimAudioTests/testRootEndRejectsWrongClockFrameContextVariantCountAndSunImpersonation",
+      "SiteTests/DuelTriadRootVictimAudioTests/testEveryVictimClipMustMatchSourceSHAFramesTicksGridAndPelvisBeforeSharing",
+      "SiteTests/DuelTriadRootVictimAudioTests/testOrdinarySharedThrowsKeepSoundFrameClockWithoutTheRootEndException",
+      "SiteTests/DuelTriadRootVictimAudioTests/testMorphTargetMetadataAcceptsOnlyReviewedHammersAndCompleteNewVictimCapability",
+      "SiteTests/DuelSharedRootInstalledModelTests/testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions"
+    ],
+    "methodsExecuted": 0,
+    "status": "PENDING_APPLE_EXECUTION",
+    "successRequires": {
+      "exactUniqueMethods": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "iterations": 1
+    }
+  },
+  "ui": {
+    "expectedMethods": 1,
+    "selectors": [
+      "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls"
+    ],
+    "methodsExecuted": 0,
+    "status": "PENDING_SIMULATOR_EXECUTION",
+    "successRequires": {
+      "exactUniqueMethods": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "iterations": 1
+    },
+    "expectedPNGLabels": [
+      "shared-root-ui-sun-lobby",
+      "shared-root-ui-sun-practice",
+      "shared-root-ui-sun-root-observed",
+      "shared-root-ui-sun-root-control-released",
+      "shared-root-ui-liu-lobby",
+      "shared-root-ui-liu-practice"
+    ],
+    "expectedReportLabel": "shared-root-ui-observations",
+    "visualReview": "PENDING",
+    "exactFrameClockClaimed": false
+  },
+  "nativeAttachment": "shared-root-installed-model-report",
+  "lightweightExecution": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_fighter_shared_root_native.py -v",
+    "executed": 15,
+    "passed": 15,
+    "failed": 0,
+    "durationSeconds": 0.041,
+    "methods": [
+      "test_actual_reviewed_inventory_has_nine_methods_and_373_resources",
+      "test_unreviewed_baseline_collision_is_rejected_before_resource_use",
+      "test_wrong_independent_delta_pin_is_rejected",
+      "test_native_and_ui_results_are_separate_exact_sets",
+      "test_completed_skipped_failed_missing_or_noninteger_counts_never_pass",
+      "test_duplicate_missing_extra_or_substituted_method_is_rejected",
+      "test_skipped_leaf_cannot_hide_behind_successful_summary",
+      "test_only_explicit_current_branch_first_attempt_trigger_is_accepted",
+      "test_native_failure_code_survives_successful_result_exports",
+      "test_resource_keys_are_removed_from_unrelated_child_processes",
+      "test_model_attachment_requires_exact_selector_and_simulator",
+      "test_incomplete_attachment_set_is_retained_but_not_certified",
+      "test_failed_ui_can_preserve_products_without_reexecuting_native",
+      "test_successful_ui_does_not_duplicate_products_into_recovery",
+      "test_cleanup_removes_owned_plaintext_even_when_identity_check_fails"
+    ],
+    "pythonSyntax": "passed",
+    "workflowYAML": "parsed",
+    "sourceBaselineTrees": "matched",
+    "resourceInventoryMapping": "373 rows verified"
+  },
+  "newSwiftFiles": {
+    "frontEndParse": "passed",
+    "appleTypecheck": "not run",
+    "nativeExecution": "not run"
+  },
+  "independentReadOnlyReview": {
+    "reviewer": "audit_freeze",
+    "result": "No concrete must-fix blocker found; attachment schema compared with prior actual successful xcresult manifest.",
+    "ranTests": false,
+    "modifiedFiles": false
+  },
+  "recovery": {
+    "onlyIfNativeNinePassedAndUIGateFailed": true,
+    "maxPlainBytes": 805306368,
+    "maxCompressedBytes": 268435456,
+    "encryptedWithFreshEvidenceKey": true,
+    "automaticallyRestoresOrReruns": false,
+    "requiresSameExecutionSHAAndReleasePin": true
+  },
+  "boundaries": {
+    "previous117Rerun": false,
+    "physicalIPhone17ProMaxVerified": false,
+    "audibleFloorfallPlaybackVerified": false,
+    "originalVisualParityVerified": false,
+    "productionPanguAssetsActivated": false,
+    "LiuIdentity": "liu_hammers",
+    "uploadedTestFlight": false,
+    "modifiedProtectedExistingWorkflowOrHelper": false,
+    "resourceKeysPublic": false
+  },
+  "filesSHA256": {
+    ".github/workflows/fighter-shared-root-native.yml": "fcd92bc797d97f892d8fc26a94f28b0d49ca94ab1a87014f6bade2bc70be0fdb",
+    ".github/scripts/fighter_shared_root_native.py": "4ef7c781f4ad48af7778d34dcdac7c38dcbceeee4f297d32d87142497a5a8854",
+    ".github/scripts/test_fighter_shared_root_native.py": "e4cd38247be246d40c163e53be3331c6e3b814596b1f84544a848f31cf9e1184",
+    "Tests/SiteTests/DuelSharedRootInstalledModelTests.swift": "58a5d25eb978e443b79ad4844d57a6cc2fad5e264fd6f1a0ac51e2f4b4fbbe93",
+    "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift": "50cbcd0d6f43f843bc5c1fd2a3b05f18632217a0a32a2384626c0c21477080f0",
+    "docs/fighter-shared-root-native-20261115.md": "5342c5541ae8ea771c8e90a5d2f856942f86f663bd1ca067779455d5cf0dc509"
+  }
+}
