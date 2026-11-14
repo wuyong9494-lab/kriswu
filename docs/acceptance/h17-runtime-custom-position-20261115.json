@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "scope": "H17 _CustomPos descriptor loading repair; no media replacement",
+  "sourceBaseSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+  "observedFailure": {
+    "runID": "43644209347",
+    "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347",
+    "actualNativeMethods": 9,
+    "nativePassed": 5,
+    "nativeFailed": 4,
+    "nativeSkipped": 0,
+    "passedClass": "DuelTriadRootVictimAudioTests",
+    "failedClasses": {
+      "DuelTriadFloorfallIntegrationTests": 3,
+      "DuelSharedRootInstalledModelTests": 1
+    },
+    "error": "descriptor(\"Missing original uniform: _CustomPos\")",
+    "uiExecuted": 1,
+    "uiFailed": 1,
+    "uiFailureStep": "ember-practice-ready",
+    "resourceErrorPresent": true
+  },
+  "callChain": [
+    "DuelWeaponAssets.init",
+    "DuelTriadEffectAssets.init",
+    "DuelTriadSourceMaterial.Descriptor.validate",
+    "DuelTriadSourceMaterial.Descriptor.materialUniforms"
+  ],
+  "failureBeforeMetalCompilation": true,
+  "failureBeforeLazyCharacterLoading": true,
+  "assetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+  "effectsManifestSHA256": "ce7350283846c370e00df073d2c04146687301c095a1be4b6f19aece982f2435",
+  "sourceBundles": {
+    "shader": {
+      "file": "b77cd85962dab26b5e542811e8599be3.bin",
+      "sha256": "c0b1fe09ba0684e474297ade8dcd7fee7b5d2e780236029c544c1986dea1e972"
+    },
+    "effects": {
+      "file": "528f39092b1ff478b8be70b35866e99d.bin",
+      "sha256": "f8623b6aeff0dbdee43818437043096ab5afb217e7564c3298f182e420e9f9d7"
+    }
+  },
+  "uniformInventory": {
+    "materialsExamined": 62,
+    "unresolvedNamesBeforeFix": {
+      "_CustomPos": 17
+    },
+    "affectedShaderObjects": 7,
+    "allOtherRequiredUniformsBound": true
+  },
+  "reviewedShaders": [
+    {
+      "shaderPathID": "-5536846542789745610",
+      "sourceName": "Unlit/shdr_dissolve_by_vertexColor_transp_v5",
+      "sourceShaderSHA256": "be9a9df47e13866c4f231bba59f3bea61156abc1eec1b91de39734792165fb7d",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    },
+    {
+      "shaderPathID": "-3174651875155825451",
+      "sourceName": "VFX/ThreeMapOffset",
+      "sourceShaderSHA256": "aba929b181287508bedf7c32448422caf1357f5b5b4f07537caf2a7c8476ff88",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    },
+    {
+      "shaderPathID": "2043458172595861893",
+      "sourceName": "Unlit/shdr_dissolve_by_vertexColor_transp_v4",
+      "sourceShaderSHA256": "6cad7b663d46fe8307764bb6f23806be1081b259697181f9430bdc754d8df96a",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    },
+    {
+      "shaderPathID": "3287265009000620561",
+      "sourceName": "Unlit/shdr_dissolve_by_vertexColor_transp_v3",
+      "sourceShaderSHA256": "b326ef05f56bd0df26e09c0bc2eba6db559c39abc840e9990593b639572e28e6",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    },
+    {
+      "shaderPathID": "4655989024510641494",
+      "sourceName": "VFX/TwoMapOffset",
+      "sourceShaderSHA256": "900248ef261d2fbda7879c9f4ed95d1595b9fb7004c303b8a4f148661aa2bf65",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    },
+    {
+      "shaderPathID": "4659798091178469451",
+      "sourceName": "VFX/Base",
+      "sourceShaderSHA256": "6cfb944a4278fb545246c2891f11dbf960de6c2601552d6e6b757a6a66dcf534",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    },
+    {
+      "shaderPathID": "7558582914624368553",
+      "sourceName": "VFX/DistortUV",
+      "sourceShaderSHA256": "c97bcaca25a9b16dfa426f2fab60f2e6341f1c344afa9094f617f58b3f30f541",
+      "customPosInShaderLabProperties": false,
+      "declaration": "uninitialized global scalar",
+      "width": 1
+    }
+  ],
+  "affectedOriginalMaterials": [
+    {
+      "materialID": "m_-1633406565193228711",
+      "sourceName": "mtl_Glow_1_premltpl",
+      "shaderPathID": "4659798091178469451",
+      "sourceMaterialSHA256": "2910348b914657f92ee4dbe08a1812c6cebd2aa594e74538c599d004926ff8d6",
+      "sourceMetadataSHA256": "077a8c7748b5933319e5db254b5344b18756cdd79595079f61165f1c133978c8",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-1657532153985412920",
+      "sourceName": "Glow_Alpha_World_Clamp_CamOf",
+      "shaderPathID": "4659798091178469451",
+      "sourceMaterialSHA256": "4c58b5714ce0cb6d903591d98ef67f4755fe434e3f3762a6593a9ff9e147ad4f",
+      "sourceMetadataSHA256": "f50933e7fe125bf4169472e66af3076b0e287c677faa3f6650c02cf328ef2990",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-1667832811379504186",
+      "sourceName": "mtl_glow_premltpl",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "2b40c6a6ea50e9adf03e4718ac2cd83a15f3975da954634f836c593440710c35",
+      "sourceMetadataSHA256": "95b00c2522d4ca145e9da596afef080ee465c4be670daa3ba07f1a61190a4511",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-1725078091730863546",
+      "sourceName": "mtl_noise_maskMove_006",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "af60e5c5082dc3bb0ba2cbe97ef792af07b3219f5bb00f0d920d974671b7f477",
+      "sourceMetadataSHA256": "33c8b18f84c5962a2c68b96c914db94ad2d4e520f63b10b008ce1940a7d6cdcf",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-2884023811106616991",
+      "sourceName": "mtl_smoke_30",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "d8aac102cb17186dadad923f6f81a8eaf18fcbac70ef262280e7c85cc2da00eb",
+      "sourceMetadataSHA256": "7a4f752d8e86d6bbf321bc046fd1e3fbd0f3789b80ad4669e11e9197fad1f2ba",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-330037124603633895",
+      "sourceName": "mtl_arc_distort_02",
+      "shaderPathID": "7558582914624368553",
+      "sourceMaterialSHA256": "18ad8198cee9a763cbba416c4e48a3a786bcf3b1499f227d71a67adb55ac057a",
+      "sourceMetadataSHA256": "d75dc6a683f041d799e4f8a4ef075a50c233927fd5468dfbb7c3c882f1524c49",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-5606633253560883264",
+      "sourceName": "mtl_arc_distort_01",
+      "shaderPathID": "7558582914624368553",
+      "sourceMaterialSHA256": "92d2857537d308d00181202d0c90779c8f8e8d9c578de6fcd899a31bb03c0ba6",
+      "sourceMetadataSHA256": "25e7f10a0780cbd640bb6a19bbcc2e13b8ac839c33d5c2ea9ed934a3886e2e15",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-5888327164443790799",
+      "sourceName": "mtl_dissolve_forestTree",
+      "shaderPathID": "2043458172595861893",
+      "sourceMaterialSHA256": "ff59bb21762820a3495484dcaadaa31152a6a1ecad835a819c2f5919a94b3e46",
+      "sourceMetadataSHA256": "be82bbd14a670fa661352cd67d86f76f04674fef15024320af153414ead66791",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-7048210961233165701",
+      "sourceName": "mtl_fog_2",
+      "shaderPathID": "-3174651875155825451",
+      "sourceMaterialSHA256": "bfb415b6114245eb3c614efc1f2ced4629cf56193f62dcd935e3554a9b55fa53",
+      "sourceMetadataSHA256": "ba6f99048ddb15185e2cf63b9f5d399e79e0cb153d6699de700c5cbf9cf352cd",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-7990107577437169024",
+      "sourceName": "mtl_energy_smoke_aBlend",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "4d8fe22261c5fdc75cca00fb8630c8fe5e36de48f08a2d8570102a17e4565e63",
+      "sourceMetadataSHA256": "dfdc13f8d32477ea460293f4bf30b5d6a09e1a834287e1d404d5fa438f64164e",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_-9181557359425061621",
+      "sourceName": "mtl_dissolve_attackTree_brightEdge",
+      "shaderPathID": "-5536846542789745610",
+      "sourceMaterialSHA256": "0217b1266fd9b3b584e5b89b19b910926aa56463331b9ac3e0d5adc12645dae4",
+      "sourceMetadataSHA256": "1a6839180044b2a18002750d3ba3f0934f4e5c9ed29644565f877f1cd8851596",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_1330429904785901429",
+      "sourceName": "mtl_noise_maskMove_005",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "44b76454b6833386e11d4e87599abd948f18c432763f04d497c62ec951e23b17",
+      "sourceMetadataSHA256": "422bd7f6c4e4ef0ee059a647f61a05c1f675300d6ad7d86d8f07a2f25547f145",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_1405335076776623755",
+      "sourceName": "mtl_Glow_02",
+      "shaderPathID": "4659798091178469451",
+      "sourceMaterialSHA256": "1ca4fdf09d983e7220e973e3a43fc2df04aa9fdd681d4280172b210fa56f02d6",
+      "sourceMetadataSHA256": "a68571bfb6a02856cf9e42644a21615dc0b5ba4e768b337c2cc36fc9eb846cac",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_403658789778190123",
+      "sourceName": "mtl_smoke_21",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "b83a32d6a8e696707d26b8dfa83c0a2eb7468b54179ad0348c9b24ca4ab8ddf7",
+      "sourceMetadataSHA256": "cd7a1c466aa9602151b83184d4c88d9ec21c88bf5d623934b6b5bb1ef56ea67c",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_4107023674267746256",
+      "sourceName": "mtl_Energy_Trails 5",
+      "shaderPathID": "4655989024510641494",
+      "sourceMaterialSHA256": "5afae9d0e56440ffe87199b66fe07dd5b1cad24a882a6427f26e3732b6d5f716",
+      "sourceMetadataSHA256": "5277c4666e1746827cc8d4f29bb761205f60df75bc3e4590589876b506bb5d5f",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_6174828090769566588",
+      "sourceName": "mtl_dissolve_attackTree",
+      "shaderPathID": "3287265009000620561",
+      "sourceMaterialSHA256": "b53b7f621d52ebeb38beccd12cb89808507af048b15543afc9547342fc4b9b98",
+      "sourceMetadataSHA256": "67711a9e8ee94e5b4e9145498af6b339b9c12513dc286b6688699990ae97f5ed",
+      "customPosSaved": false,
+      "declaredDefault": null
+    },
+    {
+      "materialID": "m_7001994652851409494",
+      "sourceName": "mtl_monkeyKing_glow_4",
+      "shaderPathID": "4659798091178469451",
+      "sourceMaterialSHA256": "843fc46b2a2798297905f11fbebd0c250dd9da1ee84533efb701926a2415ca1b",
+      "sourceMetadataSHA256": "7f42fc9b851757c2bb642214b28ca2ba2a9d3a82078805998ff7e89264d72a70",
+      "customPosSaved": false,
+      "declaredDefault": null
+    }
+  ],
+  "sourceEngineRule": {
+    "kind": "documented_unassigned_runtime_scalar_initial_value",
+    "value": 0,
+    "requiresName": "_CustomPos",
+    "requiresWidth": 1,
+    "requiresExactSourceIDAndSHA256": true,
+    "explicitValuesRemainHigherPriority": true,
+    "sourceURL": "https://docs.unity3d.com/2021.3/Documentation/Manual/SL-PropertiesInPrograms.html",
+    "secondaryURL": "https://registry.khronos.org/OpenGL/specs/es/3.1/GLSL_ES_Specification_3.10.pdf"
+  },
+  "runtimeWriterAudit": {
+    "proofLevel": "read_only_static_native_analysis",
+    "nativeExecuted": false,
+    "confirmedGlobalFloatCallSites": 10,
+    "confirmedGlobalFloatMethods": 8,
+    "confirmedOtherGlobalProperties": [
+      "_MipMapBias",
+      "_Gamma",
+      "_RimPower",
+      "_DissolveBlendValue",
+      "_DissolveWeaponBlendValue"
+    ],
+    "h17PrefabsExamined": 36,
+    "h17Objects": 561,
+    "h17MonoBehaviours": 36,
+    "h17MonoScriptPathID": "-8692118487735925797",
+    "targetSerializedDynamicNameArrayPresent": false,
+    "customPosSetterLocated": false,
+    "privateReceiptSHA256": "f3865505bcecec3e425cac5c23016c17e1b5ced237d00e10d23bb724d5bc86fa",
+    "arbitrarySceneDynamicSetterVerified": false
+  },
+  "changedFiles": [
+    {
+      "path": "App/Services/DuelTriadSourceMaterial.swift",
+      "sha256": "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856"
+    },
+    {
+      "path": "Tests/SiteTests/DuelTriadRuntimeUniformTests.swift",
+      "sha256": "e982e1ab17702552571a2fc8b00445039cf9e217ad615bf122074e67ece7b3ac"
+    }
+  ],
+  "newRegressionSelectors": [
+    "SiteTests/DuelTriadRuntimeUniformTests/testInstalledSourceMaterialsResolveOnlyReviewedUnassignedCustomPosition",
+    "SiteTests/DuelTriadRuntimeUniformTests/testUnreviewedMissingUniformsRemainRejectedAndExplicitValuesKeepPriority"
+  ],
+  "linuxValidation": {
+    "toolchain": "Swift 6.0.3 RELEASE Debian12",
+    "methodCount": 2,
+    "red": {
+      "passed": 1,
+      "failed": 1,
+      "skipped": 0,
+      "failure": "Missing original uniform: _CustomPos",
+      "logSHA256": "b39e52ed5861949d07a2c7f95b5fce1dd4560753d4e2b825c9d72503ae907206"
+    },
+    "green": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 0.233,
+      "exitCode": 0,
+      "logSHA256": "79dcaf7576a3179e079328eaf76e17fda724c3f6b8e7b0caa0e1db6cb724e280"
+    },
+    "productionDescriptorAndTestBodiesExact": true,
+    "adaptations": [
+      "Removed Metal-only functions/types outside descriptor validation for Linux compilation.",
+      "Replaced installed Apple bundle reading with the authenticated existing private effects-metadata fixture.",
+      "Removed test class MainActor annotation only in the private Linux harness."
+    ],
+    "fullSwiftSourceSyntaxParsed": true,
+    "appleExecuted": false,
+    "metalExecuted": false,
+    "sceneKitExecuted": false,
+    "physicalDeviceVerified": false
+  },
+  "plannedAppleFollowup": {
+    "priorFailedMethods": 4,
+    "newMethods": 2,
+    "nativeExpected": 6,
+    "uiExpectedSeparately": 1,
+    "previousFivePassedMethodsSelected": false,
+    "old117Selected": false,
+    "resultAtReceipt": "pending"
+  },
+  "limitations": [
+    "Engine initial state is supported; unrecovered scene-specific _CustomPos setters remain unverified.",
+    "Linux descriptor validation is not installed Apple, Metal, rendered-pixel, audible-output or physical-device evidence.",
+    "Liu remains liu_hammers; this material fix does not activate Pangu/D19."
+  ]
+}

@@ -1,0 +1,253 @@
+{
+  "schema": "fighter-shared-root-native-material-failure-v1",
+  "runID": 43644209347,
+  "jobID": 132598234049,
+  "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347",
+  "jobURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347/job/132598234049",
+  "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+  "sourceBaselineSHA": "6ebca235dfb579454c99528791f5c8e84bc9ff6f",
+  "status": "completed",
+  "conclusion": "failure",
+  "runAttempt": 1,
+  "updatedAtUTC": "2026-11-14T22:02:15Z",
+  "artifact": {
+    "id": 14133862654,
+    "name": "fighter-shared-root-native-43644209347-1-encrypted",
+    "bytes": 14828908,
+    "sha256": "c0b586e5cea26be6e243d0156f1d4b1f57effbc52bfdbff3721b2c412af0c0a8",
+    "downloadAndAuthenticatedDecryptionPerformedOnceByRoot": true
+  },
+  "successfulStages": [
+    "source gate",
+    "authenticated 73 baseline + 295 prior overlay + 13 delta payloads",
+    "one unsigned build with both targets",
+    "all 373 compiled resource bytes and hashes",
+    "iPhone 17 Pro Max simulator boot",
+    "bounded encrypted diagnostics upload",
+    "owned plaintext and simulator cleanup"
+  ],
+  "native": {
+    "totalTestCount": 9,
+    "passedTests": 5,
+    "failedTests": 4,
+    "skippedTests": 0,
+    "result": "Failed",
+    "processExitCode": 65,
+    "testCaseLeaves": 9,
+    "executedMethods": 9,
+    "passedSelectors": [
+      "SiteTests/DuelTriadRootVictimAudioTests/testEveryVictimClipMustMatchSourceSHAFramesTicksGridAndPelvisBeforeSharing",
+      "SiteTests/DuelTriadRootVictimAudioTests/testMorphTargetMetadataAcceptsOnlyReviewedHammersAndCompleteNewVictimCapability",
+      "SiteTests/DuelTriadRootVictimAudioTests/testOrdinarySharedThrowsKeepSoundFrameClockWithoutTheRootEndException",
+      "SiteTests/DuelTriadRootVictimAudioTests/testRootEndRejectsWrongClockFrameContextVariantCountAndSunImpersonation",
+      "SiteTests/DuelTriadRootVictimAudioTests/testVerifiedRootEndUsesLiuOwnershipAtTick38AndDeduplicatesTheSameFrame"
+    ],
+    "failedSelectors": [
+      "SiteTests/DuelSharedRootInstalledModelTests/testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals"
+    ],
+    "passedScope": "Five synthetic binding/capability contracts. Does not establish original resource loading or audio playback."
+  },
+  "ui": {
+    "totalTestCount": 1,
+    "passedTests": 0,
+    "failedTests": 1,
+    "skippedTests": 0,
+    "result": "Failed",
+    "processExitCode": 65,
+    "testCaseLeaves": 1,
+    "executedMethods": 1,
+    "selector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",
+    "failedPhase": "ember-practice-ready",
+    "failureText": "XCTAssertEqual failed: (\"XCTWaiterResult(rawValue: 2)\") is not equal to (\"XCTWaiterResult(rawValue: 1)\") - Did not observe ember-practice-ready within its bounded UI budget",
+    "resourceErrorIdentifier": "duel.resourceError",
+    "resourceErrorLabels": [
+      "人物资源无法载入，请返回后重试。"
+    ],
+    "flowCompleted": false,
+    "internalCombatStateInjected": false
+  },
+  "confirmedCause": {
+    "sourceFile": "App/Services/DuelTriadSourceMaterial.swift",
+    "failureText": "failed: caught error: \"descriptor(\"Missing original uniform: _CustomPos\")\"",
+    "callChain": [
+      "DuelWeaponAssets.init",
+      "DuelTriadEffectAssets.init",
+      "DuelTriadSourceMaterial.Descriptor.validate",
+      "DuelTriadSourceMaterial.Descriptor.materialUniforms"
+    ],
+    "failureBoundary": "Missing _CustomPos rejected during descriptor validation before Metal compilation or actual GLB/audio resource methods could complete.",
+    "allFourNativeFailuresHaveSameError": true,
+    "sourceAnalysis": "17 of 62 installed material descriptors use _CustomPos across seven reviewed shader identities. The source fix permits only the exact reviewed shader ID/SHA and scalar width; explicit properties take precedence and other missing uniforms remain rejected.",
+    "unrecoveredBehavior": "Original runtime global setter/update timing is not established; the scoped zero value represents only the unassigned initial scalar state."
+  },
+  "resourceIdentity": {
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "deltaManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "compiledFiles": 373,
+    "wavFiles": 95,
+    "audioMarkers": 115,
+    "sunClips": 65,
+    "liuClips": 59,
+    "liuIdentity": "liu_hammers",
+    "D19Activated": false,
+    "resourcePackChangedForFollowup": false
+  },
+  "screenshots": {
+    "reviewer": "root",
+    "methodOwnershipVerifiedFromManifest": true,
+    "images": [
+      {
+        "file": "ui-attachments/9EB4E955-6481-44C2-9FB2-2E7EEB18614F.png",
+        "bytes": 2420034,
+        "sha256": "666bf9969ca95bccf18f5dfc4a2815697cdb4403f3839e8ca902dae6b8b42408",
+        "label": "shared-root-ui-failure",
+        "ownerSelector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls"
+      },
+      {
+        "file": "ui-attachments/39060BDC-A9E8-48FD-A9CC-E66A1415502A.png",
+        "bytes": 3224009,
+        "sha256": "284ad12e3a2031e679d2f514ce6709f5c116febc7bd3727a30e142170a4d76d0",
+        "label": "shared-root-ui-sun-lobby",
+        "ownerSelector": "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls"
+      }
+    ],
+    "review": "Sun lobby shows menus but no character; legacy katana/double-hammer labels remain. Failure image visibly reports that character resources cannot load.",
+    "characterVisibilityPassed": false,
+    "rootGameplayVisible": false,
+    "audiblePlaybackVerified": false,
+    "physicalDeviceVerified": false
+  },
+  "evidence": [
+    {
+      "file": "metadata/native-process.json",
+      "bytes": 115,
+      "sha256": "55d141d4255809f2895c39392b6163ece84584d80d85e2336b72318c1a3b39d4"
+    },
+    {
+      "file": "metadata/native-summary.json",
+      "bytes": 3629,
+      "sha256": "d9e0145c6a6fe9491a691d9b651591038d246f55d5db900cbc196da4426f6e6f"
+    },
+    {
+      "file": "metadata/native-tests.json",
+      "bytes": 9066,
+      "sha256": "3881bbb758b1d0071f25de827e1a55553f712ad4ffdac4d6899efa3047c6d1d9"
+    },
+    {
+      "file": "metadata/ui-process.json",
+      "bytes": 115,
+      "sha256": "916f9df9a4e7f02033e93c49fc324634524f17f031ffbd219bc91d1b88758ccb"
+    },
+    {
+      "file": "metadata/ui-summary.json",
+      "bytes": 1750,
+      "sha256": "e1ad39e8e5d796d278abf2be605ec05a84c09ee120c37779f5fa32de3a8ea0b7"
+    },
+    {
+      "file": "metadata/ui-tests.json",
+      "bytes": 2468,
+      "sha256": "8161a0a348f41b7716e77729ec87a7e64860dcb9d070e4a804fcd5e0594ba161"
+    },
+    {
+      "file": "metadata/compiled-resources.json",
+      "bytes": 68265,
+      "sha256": "e5db3507998c01eaf444c3ba99050ef3d78419aab8c3a3441b180f42f9c8f516"
+    },
+    {
+      "file": "metadata/identity.json",
+      "bytes": 4809,
+      "sha256": "4a33353695517e6e73c44d3d8f4572c2b08d85379677309c89cebb07d09c1403"
+    },
+    {
+      "file": "metadata/selected-native.log",
+      "bytes": 7237,
+      "sha256": "900c9e3142658eca07dd8ddb7bbb6d30bb8dac874a2b6fa638bafe68138c577e"
+    },
+    {
+      "file": "metadata/selected-ui.log",
+      "bytes": 6512,
+      "sha256": "d140b191a82bf0fcb4ae6af70bcad6bd7c03f0b72b7d632dfe5c26a6df7ec29c"
+    },
+    {
+      "file": "ui-attachments/050C2EB7-8D18-429C-9E54-AA96B1B7FC61.json",
+      "bytes": 18009,
+      "sha256": "e15a096080f769420db21daebcd1aad6a12e374ba4d16e28f97d7bdfd0aed444"
+    }
+  ],
+  "nextBoundedScope": {
+    "state": "prepared; no Apple followup execution by this author",
+    "name": "material-followup-six",
+    "workflow": ".github/workflows/fighter-shared-root-material-followup.yml",
+    "commitMessage": "Verify shared root material followup 20261115",
+    "sourceBaselineSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+    "originalFailedMethods": 4,
+    "newUniformRegressionMethods": 2,
+    "nativeSelectedMethods": 6,
+    "uiSelectedMethods": 1,
+    "nativeSelectors": [
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+      "SiteTests/DuelTriadFloorfallIntegrationTests/testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback",
+      "SiteTests/DuelSharedRootInstalledModelTests/testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions",
+      "SiteTests/DuelTriadRuntimeUniformTests/testInstalledSourceMaterialsResolveOnlyReviewedUnassignedCustomPosition",
+      "SiteTests/DuelTriadRuntimeUniformTests/testUnreviewedMissingUniformsRemainRejectedAndExplicitValuesKeepPriority"
+    ],
+    "uiSelectors": [
+      "ArenaFlowTests/DuelSharedRootVisualCaptureTests/testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls"
+    ],
+    "excludedHistoricalPassedSelectors": [
+      "SiteTests/DuelTriadRootVictimAudioTests/testEveryVictimClipMustMatchSourceSHAFramesTicksGridAndPelvisBeforeSharing",
+      "SiteTests/DuelTriadRootVictimAudioTests/testMorphTargetMetadataAcceptsOnlyReviewedHammersAndCompleteNewVictimCapability",
+      "SiteTests/DuelTriadRootVictimAudioTests/testOrdinarySharedThrowsKeepSoundFrameClockWithoutTheRootEndException",
+      "SiteTests/DuelTriadRootVictimAudioTests/testRootEndRejectsWrongClockFrameContextVariantCountAndSunImpersonation",
+      "SiteTests/DuelTriadRootVictimAudioTests/testVerifiedRootEndUsesLiuOwnershipAtTick38AndDeduplicatesTheSameFrame"
+    ],
+    "historicalPassedRunID": 43644209347,
+    "materialSource": "App/Services/DuelTriadSourceMaterial.swift",
+    "materialSHA256": "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856",
+    "newTestFile": "Tests/SiteTests/DuelTriadRuntimeUniformTests.swift",
+    "newTestSHA256": "e982e1ab17702552571a2fc8b00445039cf9e217ad615bf122074e67ece7b3ac",
+    "allOtherAppGitInventorySHA256": "823f65ee5de955a7dd8ba2de3abd7290ed1e6c3b8fc58bd6bb3f7b193c6c162a",
+    "priorTestGitInventorySHA256": "3bb84dbb20328290337ab9e10f96848dfe8475d3e1d4460f235413978edb259d",
+    "nativeTimeoutSeconds": 720,
+    "uiTimeoutSeconds": 360,
+    "timeoutIncreased": false,
+    "testIterationsFlagPresent": false,
+    "retryFlagsPresent": false,
+    "currentMethodMultiplicityRequired": 1,
+    "requiredSkippedMethods": 0,
+    "previousFiveRerun": false,
+    "previous117Rerun": false,
+    "protectedOldHelpersChanged": false,
+    "resourceUploadRepeated": false,
+    "TestFlightUploaded": false
+  },
+  "lightweightScopeValidation": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_fighter_shared_root_material_followup.py -v",
+    "runner": "Python unittest, mocked xcodebuild/results plus local source byte/tree checks",
+    "newMethods": 8,
+    "passed": 8,
+    "failed": 0,
+    "skipped": 0,
+    "durationSeconds": 0.041,
+    "exitCode": 0,
+    "executionCount": 1,
+    "old16Reexecuted": false,
+    "appleMethodsExecuted": 0
+  },
+  "separation": {
+    "previousRun43642548703": "CLI validation failure, zero methods; preserved in its own report",
+    "thisRun43644209347": "Actual 9 native methods: 5 passed, 4 failed; actual UI 1 failed. This report never treats completed as passed.",
+    "futureFollowup": "Expected six native methods and one UI method; pending actual Apple execution. Historical five passes are not added to the new run count.",
+    "physicalIPhone17ProMax": "Not verified; this run used iOS Simulator 26.5 arm64 under Xcode 26.6."
+  },
+  "filesSHA256": {
+    ".github/scripts/fighter_shared_root_native.py": "016bb5a3a7065692dfc214036e7146b26c9e589ea7c58abf72c5a26ad1b8c978",
+    ".github/scripts/test_fighter_shared_root_material_followup.py": "eba275891aa51dcf0cc6171d5dc6476908a32cca5dc876ebc5d7d6d5e9641ee0",
+    ".github/workflows/fighter-shared-root-material-followup.yml": "458f83947c57a39035090e0ee2997194896cfe1d3c53e3fdc8375cab6821d6f3",
+    "docs/acceptance/fighter-shared-root-native-run-43644209347.md": "dc680cdabcefdd8f05a05ebc0a550a6ff7b42d593abc796beb0c4108e7eac9cb"
+  }
+}

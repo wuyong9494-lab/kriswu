@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""One unsigned Apple increment: 3 installed + 5 contracts + 1 real model load.
+"""Fixed unsigned Apple increments with independent native and UI evidence.
 
 Never selects the previously successful 117 methods. Existing protected
 helpers are reused only for pinned envelope and receipt operations; their old
 event, source, release and test gates remain unchanged. No signing, upload,
 Secret mutation, TestFlight operation, media conversion or asset acquisition.
+The material followup selects the four failed resource methods plus two new
+uniform regressions, and never reexecutes the five contracts already passed.
 """
 from __future__ import annotations
 
@@ -34,9 +36,18 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "wuyong9494-lab/kriswu"
 BRANCH = "refs/heads/codex/fighter-visual-acceptance-20261113-1200"
-WORKFLOW = ".github/workflows/fighter-shared-root-native.yml"
-COMMIT_MESSAGE = "Verify shared root native increment 20261115"
-SOURCE_BASELINE = "6ebca235dfb579454c99528791f5c8e84bc9ff6f"
+INITIAL_SCOPE = "initial-nine"
+MATERIAL_SCOPE = "material-followup-six"
+SCOPE = os.environ.get("FIGHTER_SHARED_ROOT_SCOPE", INITIAL_SCOPE)
+if SCOPE not in (INITIAL_SCOPE, MATERIAL_SCOPE):
+    raise ValueError("Unreviewed shared-root execution scope")
+IS_MATERIAL_FOLLOWUP = SCOPE == MATERIAL_SCOPE
+WORKFLOW = (".github/workflows/fighter-shared-root-material-followup.yml" if IS_MATERIAL_FOLLOWUP
+            else ".github/workflows/fighter-shared-root-native.yml")
+COMMIT_MESSAGE = ("Verify shared root material followup 20261115" if IS_MATERIAL_FOLLOWUP
+                  else "Verify shared root native increment 20261115")
+SOURCE_BASELINE = ("68f1e7de45351c3e4b2607c56ff8ab111d0c7130" if IS_MATERIAL_FOLLOWUP
+                   else "6ebca235dfb579454c99528791f5c8e84bc9ff6f")
 REVIEWED_ENTRIES = {
     "App": "093a5558930ad0702f6e977f300498707a97630c",
     "Package.swift": "ffc64914ed88ae83bb4569fea0777b08ea2d29b6",
@@ -47,13 +58,19 @@ REVIEWED_ENTRIES = {
     "scripts": "de93f174f9996a30c1a38cfff072d693bba050bf",
 }
 BASE_TEST_INVENTORY_SHA = "3bb84dbb20328290337ab9e10f96848dfe8475d3e1d4460f235413978edb259d"
+MATERIAL_SOURCE = "App/Services/DuelTriadSourceMaterial.swift"
+BASE_OTHER_APP_INVENTORY_SHA = "823f65ee5de955a7dd8ba2de3abd7290ed1e6c3b8fc58bd6bb3f7b193c6c162a"
+# These are the independently reviewed fix and the two new Apple test methods.
+MATERIAL_SOURCE_SHA = "efb78001996c8e66721cafbcdb99765b3af9d4ca17e827385ca6d3968ef75856"
+UNIFORM_TEST = "Tests/SiteTests/DuelTriadRuntimeUniformTests.swift"
+UNIFORM_TEST_SHA = "e982e1ab17702552571a2fc8b00445039cf9e217ad615bf122074e67ece7b3ac"
 MODEL_TEST = "Tests/SiteTests/DuelSharedRootInstalledModelTests.swift"
 MODEL_TEST_SHA = "58a5d25eb978e443b79ad4844d57a6cc2fad5e264fd6f1a0ac51e2f4b4fbbe93"
 UI_TEST = "Tests/ArenaFlowTests/DuelSharedRootVisualCaptureTests.swift"
 UI_TEST_SHA = "50cbcd0d6f43f843bc5c1fd2a3b05f18632217a0a32a2384626c0c21477080f0"
 UI_SELECTORS = ("ArenaFlowTests/DuelSharedRootVisualCaptureTests/"
                 "testFinalSharedRootReleaseShowsBothFightersAndAcceptsSunBranchesThroughRealControls",)
-TEST_METHODS = {
+INITIAL_TEST_METHODS = {
     "DuelTriadFloorfallIntegrationTests": (
         "testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
         "testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
@@ -70,11 +87,26 @@ TEST_METHODS = {
         "testFinalSharedRootReleaseLoadsBothOriginalCharactersAndAllThreeLiuVictimMotions",
     ),
 }
+UNIFORM_METHODS = (
+    "testInstalledSourceMaterialsResolveOnlyReviewedUnassignedCustomPosition",
+    "testUnreviewedMissingUniformsRemainRejectedAndExplicitValuesKeepPriority",
+)
+TEST_METHODS = ({
+    "DuelTriadFloorfallIntegrationTests": INITIAL_TEST_METHODS["DuelTriadFloorfallIntegrationTests"],
+    "DuelSharedRootInstalledModelTests": INITIAL_TEST_METHODS["DuelSharedRootInstalledModelTests"],
+    "DuelTriadRuntimeUniformTests": UNIFORM_METHODS,
+} if IS_MATERIAL_FOLLOWUP else INITIAL_TEST_METHODS)
+PREVIOUS_PASSED_SELECTORS = tuple("SiteTests/DuelTriadRootVictimAudioTests/" + method
+    for method in INITIAL_TEST_METHODS["DuelTriadRootVictimAudioTests"])
+MODEL_SELECTOR = "SiteTests/DuelSharedRootInstalledModelTests/" + \
+    INITIAL_TEST_METHODS["DuelSharedRootInstalledModelTests"][0]
 SELECTORS = tuple("SiteTests/" + klass + "/" + method
                   for klass, methods in TEST_METHODS.items() for method in methods)
-EXPECTED_COUNT = 9
+EXPECTED_COUNT = 6 if IS_MATERIAL_FOLLOWUP else 9
+METHOD_SCOPE = {"installedAudio": 3, "syntheticContracts": 0 if IS_MATERIAL_FOLLOWUP else 5,
+                "installedModels": 1, "runtimeUniformRegressions": 2 if IS_MATERIAL_FOLLOWUP else 0}
 EXPECTED_ATTACHMENTS = {
-    "native": {"shared-root-installed-model-report": (SELECTORS[-1], "data")},
+    "native": {"shared-root-installed-model-report": (MODEL_SELECTOR, "data")},
     "ui": {
         **{label: (UI_SELECTORS[0], "image") for label in (
             "shared-root-ui-sun-lobby", "shared-root-ui-sun-practice",
@@ -186,12 +218,65 @@ def selected_inventory():
         result.extend({"identifier": "SiteTests/" + klass + "/" + method,
                        "sourceFile": path, "sourceSHA256": digest(ROOT / path)} for method in methods)
     require(len(result) == len(set(SELECTORS)) == EXPECTED_COUNT, "Exact native inventory differs")
+    require(not IS_MATERIAL_FOLLOWUP or not set(SELECTORS) & set(PREVIOUS_PASSED_SELECTORS),
+            "Previously passed contracts cannot enter the failure followup")
     return result
+
+
+def preserved_prior_evidence():
+    if not IS_MATERIAL_FOLLOWUP:
+        return []
+    return [{
+        "runID": "43644209347", "sourceSHA": "68f1e7de45351c3e4b2607c56ff8ab111d0c7130",
+        "runURL": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43644209347",
+        "artifactID": "14133862654",
+        "artifactSHA256": "c0b586e5cea26be6e243d0156f1d4b1f57effbc52bfdbff3721b2c412af0c0a8",
+        "nativeSummarySHA256": "d9e0145c6a6fe9491a691d9b651591038d246f55d5db900cbc196da4426f6e6f",
+        "nativeTestNodesSHA256": "3881bbb758b1d0071f25de827e1a55553f712ad4ffdac4d6899efa3047c6d1d9",
+        "passedSelectors": PREVIOUS_PASSED_SELECTORS, "passedMethods": 5,
+        "selectedAgain": False, "countsBelongToCurrentRun": False,
+        "scope": "Historical synthetic binding/capability contracts; not original-media loading or playback",
+    }]
+
+
+def reviewed_test_pins():
+    result = {MODEL_TEST: MODEL_TEST_SHA, UI_TEST: UI_TEST_SHA}
+    if IS_MATERIAL_FOLLOWUP:
+        result[UNIFORM_TEST] = UNIFORM_TEST_SHA
+    return result
+
+
+def pin_scope_sources():
+    for path, expected in reviewed_test_pins().items():
+        require(re.fullmatch(r"[a-f0-9]{64}", expected), "New source review pin is not finalized")
+        pinned(path, expected)
+    if IS_MATERIAL_FOLLOWUP:
+        require(re.fullmatch(r"[a-f0-9]{64}", MATERIAL_SOURCE_SHA), "Material review pin is not finalized")
+        pinned(MATERIAL_SOURCE, MATERIAL_SOURCE_SHA)
+
+
+def retained_tree_digest(rows, excluded):
+    names = [line.split(b"\t", 1)[1].decode() for line in rows.splitlines()]
+    require(set(excluded) <= set(names), "A pinned source is not present in the committed tree")
+    return sha(b"".join(line + b"\n" for line, name in zip(rows.splitlines(), names) if name not in excluded))
+
+
+def validate_source_trees(entries, test_rows, app_rows=None):
+    expected = {name: value for name, value in REVIEWED_ENTRIES.items()
+                if not (IS_MATERIAL_FOLLOWUP and name == "App")}
+    require(entries == expected, "Application or build inputs differ from source baseline")
+    require(retained_tree_digest(test_rows, reviewed_test_pins()) == BASE_TEST_INVENTORY_SHA,
+            "Original Tests tree changed beyond independently pinned additions")
+    if IS_MATERIAL_FOLLOWUP:
+        require(app_rows is not None and retained_tree_digest(app_rows, {MATERIAL_SOURCE}) ==
+                BASE_OTHER_APP_INVENTORY_SHA, "Application changed beyond the reviewed source material file")
 
 
 def validate_event(environment, event, actual):
     expected = environment.get("GITHUB_SHA", "")
     require(re.fullmatch(r"[a-f0-9]{40}", expected) and actual == expected, "Checkout differs from triggering commit")
+    require(environment.get("FIGHTER_SHARED_ROOT_SCOPE", INITIAL_SCOPE) == SCOPE,
+            "Execution scope changed after helper initialization")
     require(environment.get("GITHUB_REPOSITORY") == REPOSITORY
             and environment.get("GITHUB_REF") == BRANCH
             and environment.get("GITHUB_WORKFLOW_REF") == REPOSITORY + "/" + WORKFLOW + "@" + BRANCH
@@ -209,15 +294,14 @@ def validate_event(environment, event, actual):
 
 
 def source_gate():
-    raw = subprocess.check_output(["git", "ls-tree", "HEAD", *REVIEWED_ENTRIES], cwd=ROOT, text=True)
+    names = [name for name in REVIEWED_ENTRIES if not (IS_MATERIAL_FOLLOWUP and name == "App")]
+    raw = subprocess.check_output(["git", "ls-tree", "HEAD", *names], cwd=ROOT, text=True)
     entries = {line.split("\t")[1]: line.split("\t")[0].split()[2] for line in raw.splitlines()}
-    require(entries == REVIEWED_ENTRIES, "Application or build inputs differ from source baseline")
     test_rows = subprocess.check_output(["git", "ls-tree", "-r", "HEAD", "Tests"], cwd=ROOT)
-    retained = b"".join(line + b"\n" for line in test_rows.splitlines()
-                        if line.split(b"\t", 1)[1].decode() not in (MODEL_TEST, UI_TEST))
-    require(sha(retained) == BASE_TEST_INVENTORY_SHA, "Original Tests tree changed beyond two new reviewed files")
-    pinned(MODEL_TEST, MODEL_TEST_SHA)
-    pinned(UI_TEST, UI_TEST_SHA)
+    app_rows = (subprocess.check_output(["git", "ls-tree", "-r", "HEAD", "App"], cwd=ROOT)
+                if IS_MATERIAL_FOLLOWUP else None)
+    validate_source_trees(entries, test_rows, app_rows)
+    pin_scope_sources()
     require(not subprocess.check_output(["git", "diff", "--name-only", "HEAD"], cwd=ROOT, text=True).strip(),
             "Tracked modifications exist before preparation")
 
@@ -278,10 +362,11 @@ def identity():
     value = read_json(work() / "identity.json")
     require(value["sourceSHA"] == os.environ["GITHUB_SHA"] and value["runID"] == os.environ["GITHUB_RUN_ID"]
             and value["attempt"] == os.environ["GITHUB_RUN_ATTEMPT"] and value["selectors"] == selected_inventory()
+            and value["executionScope"] == SCOPE and value["sourceBaselineSHA"] == SOURCE_BASELINE
             and value["helperSHA256"] == digest(Path(__file__))
             and value["workflowSHA256"] == digest(ROOT / WORKFLOW), "Prepared run or source identity changed")
     dependencies()
-    pinned(UI_TEST, UI_TEST_SHA)
+    pin_scope_sources()
     return value
 
 
@@ -347,20 +432,32 @@ def prepare():
             "Evidence recipient differs")
     work().mkdir(mode=0o700, exist_ok=False)
     write_json(work() / "identity.json", {
-        "sourceSHA": actual, "sourceBaselineSHA": SOURCE_BASELINE, "reviewedEntries": REVIEWED_ENTRIES,
-        "sourceMapping": "Application and prior tests exactly match 6ebca; two independently pinned new test files.",
+        "sourceSHA": actual, "sourceBaselineSHA": SOURCE_BASELINE,
+        "reviewedEntries": {name: value for name, value in REVIEWED_ENTRIES.items()
+                            if not (IS_MATERIAL_FOLLOWUP and name == "App")},
+        "executionScope": SCOPE,
+        "sourceMapping": ("Application/build inputs and prior tests match 68f1e7 except the pinned Material file; two new pinned uniform tests."
+                          if IS_MATERIAL_FOLLOWUP else
+                          "Application and prior tests exactly match 6ebca; two independently pinned new test files."),
+        "materialSourceSHA256": MATERIAL_SOURCE_SHA if IS_MATERIAL_FOLLOWUP else None,
+        "otherAppInventorySHA256": BASE_OTHER_APP_INVENTORY_SHA if IS_MATERIAL_FOLLOWUP else None,
+        "newUniformTestSHA256": UNIFORM_TEST_SHA if IS_MATERIAL_FOLLOWUP else None,
         "newModelTestSHA256": MODEL_TEST_SHA, "runID": os.environ["GITHUB_RUN_ID"],
         "newUITestSHA256": UI_TEST_SHA, "uiSelectors": UI_SELECTORS, "expectedUIMethods": 1,
         "attempt": os.environ["GITHUB_RUN_ATTEMPT"], "ref": BRANCH, "selectors": selected_inventory(),
-        "expectedNativeMethods": EXPECTED_COUNT, "installedAudioMethods": 3, "syntheticContractMethods": 5,
-        "installedModelMethods": 1, "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_PACK_SHA,
+        "expectedNativeMethods": EXPECTED_COUNT, "methodScope": METHOD_SCOPE,
+        "installedAudioMethods": 3, "syntheticContractMethods": METHOD_SCOPE["syntheticContracts"],
+        "installedModelMethods": 1, "runtimeUniformRegressions": METHOD_SCOPE["runtimeUniformRegressions"],
+        "preservedPriorEvidence": preserved_prior_evidence(),
+        "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_PACK_SHA,
         "helperSHA256": digest(Path(__file__)), "workflowSHA256": digest(ROOT / WORKFLOW),
         "preparedAtUTC": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "recipientSPKISHA256": RECIPIENT_SPKI_SHA, "diagnosticKeyEncoding": "raw-32; RSA-OAEP-SHA256",
         "previous117Selected": False, "physicalDevice": False, "TestFlight": False,
     })
     write_json(work() / "expected-resources.json", rows)
-    print("Pinned 9 native methods + 1 separate UI capture, source baseline and final v2 373-resource closure.")
+    print("Pinned " + str(EXPECTED_COUNT) + " native methods + 1 separate UI capture for " + SCOPE +
+          "; reviewed source and final v2 373-resource closure.")
 
 
 def tools():
@@ -799,7 +896,11 @@ def public_summary():
     result = {
         "sourceSHA": ident["sourceSHA"], "sourceBaselineSHA": SOURCE_BASELINE,
         "runID": ident["runID"], "attempt": ident["attempt"], "expectedNativeMethods": EXPECTED_COUNT,
-        "methodScope": {"installedAudio": 3, "syntheticContracts": 5, "installedModels": 1},
+        "executionScope": SCOPE, "methodScope": METHOD_SCOPE,
+        "preservedPriorEvidence": preserved_prior_evidence(),
+        "previousFiveContractsSelectedAgain": False if IS_MATERIAL_FOLLOWUP else None,
+        "materialSourceSHA256": MATERIAL_SOURCE_SHA if IS_MATERIAL_FOLLOWUP else None,
+        "newUniformTestSHA256": UNIFORM_TEST_SHA if IS_MATERIAL_FOLLOWUP else None,
         "assetReleaseSHA256": RELEASE_SHA, "deltaManifestSHA256": DELTA_PACK_SHA,
         "resourcesAuthenticated": (work() / "stage-ok.json").is_file(),
         "compiled373ResourcesVerified": (work() / "build-ok.txt").is_file(),
@@ -861,7 +962,9 @@ def reusable_ui_products():
     No restore or test rerun occurs here. A future authorized recovery must use
     the same source SHA/release pin and select only the failed UI method.
     """
-    receipt = {"needed": False, "available": False, "nativeNineReexecutionAllowed": False}
+    receipt = {"needed": False, "available": False, "nativeNineReexecutionAllowed": False,
+               "passedNativeScopeReexecutionAllowed": False, "executionScope": SCOPE,
+               "previousFiveContractsReexecutionAllowed": False}
     target = work() / "private-ui-recovery.zip"
     if not ((work() / "native-ok.txt").is_file() and
             not ((work() / "ui-ok.txt").is_file() and (work() / "ui-attachments-ok.json").is_file())):
@@ -1056,8 +1159,11 @@ def report():
     print(json.dumps(summary, indent=2))
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
-            output.write("### Shared-root increment: 9 native methods + 1 UI capture\n\n")
+            output.write("### Shared-root " + SCOPE + ": " + str(EXPECTED_COUNT) +
+                         " native methods + 1 UI capture\n\n")
             output.write("Each scope requires its exact methods once and zero skipped. Pixel review remains separate.\n\n")
+            if IS_MATERIAL_FOLLOWUP:
+                output.write("Five contract passes remain attributed only to run 43644209347; this run selects none of them.\n\n")
             fence = chr(96) * 3
             output.write(fence + "json\n" + json.dumps(summary, indent=2) + "\n" + fence + "\n")
     require(all(summary.get(k) is True for k in ("resourcesAuthenticated", "compiled373ResourcesVerified",
@@ -1076,6 +1182,8 @@ def main():
         if operation == "inventory":
             legacy, base, delta = manifests()
             print(json.dumps({"sourceBaselineSHA": SOURCE_BASELINE, "selectors": selected_inventory(),
+                  "executionScope": SCOPE, "methodScope": METHOD_SCOPE,
+                  "preservedPriorEvidence": preserved_prior_evidence(),
                   "uiSelectors": UI_SELECTORS, "expectedUIMethods": 1,
                   "expectedNativeMethods": EXPECTED_COUNT, "finalResourceFiles": len(
                       final_inventory(base, delta, legacy.resource_records())),

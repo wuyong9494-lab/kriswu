@@ -199,9 +199,31 @@ enum DuelTriadSourceMaterial {
                 if let value = uniform.defaultValue, value.count == 4 {
                     return SIMD4(value[0], value[1], value[2], value[3])
                 }
+                if uniform.name == "_CustomPos", uniform.width == 1,
+                   Self.unassignedCustomPositionShaders[shaderPathID] == sourceShaderSHA256 {
+                    // These original shaders declare a runtime scalar, absent
+                    // from ShaderLab Properties and the saved material. Unity
+                    // supplies zero when no instance/material/global value is
+                    // assigned (Manual: SL-PropertiesInPrograms). Preserve that
+                    // engine initial state, not an invented material default.
+                    // Unrecovered scene-specific setters remain unverified.
+                    return .zero
+                }
                 throw Failure.descriptor("Missing original uniform: " + uniform.name)
             }
         }
+
+        // Reviewed original shader objects, not a general missing-value policy.
+        // The name, scalar width, source path ID and full digest must all match.
+        private static let unassignedCustomPositionShaders = [
+            "4655989024510641494": "900248ef261d2fbda7879c9f4ed95d1595b9fb7004c303b8a4f148661aa2bf65",
+            "4659798091178469451": "6cfb944a4278fb545246c2891f11dbf960de6c2601552d6e6b757a6a66dcf534",
+            "-3174651875155825451": "aba929b181287508bedf7c32448422caf1357f5b5b4f07537caf2a7c8476ff88",
+            "7558582914624368553": "c97bcaca25a9b16dfa426f2fab60f2e6341f1c344afa9094f617f58b3f30f541",
+            "-5536846542789745610": "be9a9df47e13866c4f231bba59f3bea61156abc1eec1b91de39734792165fb7d",
+            "3287265009000620561": "b326ef05f56bd0df26e09c0bc2eba6db559c39abc840e9990593b639572e28e6",
+            "2043458172595861893": "6cad7b663d46fe8307764bb6f23806be1081b259697181f9430bdc754d8df96a"
+        ]
     }
 
     /// Source mesh data after the exporter has reflected Z, flipped UV V and
