@@ -81,6 +81,12 @@ error: SourceFX could not read the private Core round counter. The counter is
 now public with a private setter; its canonical encoding is unchanged. That
 failed build executed no native test methods.
 
+The second build (run 43588550268) reached the native renderer compilation
+and identified a SCNView-only antialiasing property used on SCNRenderer. That
+unsupported assignment was removed; the caller-owned multisample color/depth
+attachments and resolve path remain subject to the actual native tests. This
+failed build also executed no native methods.
+
 The source-only Apple workflow selects exactly 97 synthetic native methods.
 It receives no asset keys, uses no private asset environment, and excludes the
 five installed-source tests. The protected full-resource workflow selects 102

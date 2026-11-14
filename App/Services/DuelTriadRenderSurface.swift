@@ -167,7 +167,8 @@ final class DuelTriadRenderSurface: MTKView {
         scenePass.stencilAttachment.loadAction = .clear
         scenePass.stencilAttachment.storeAction = .store
         scenePass.stencilAttachment.clearStencil = 0
-        sceneRenderer.antialiasingMode = samples == 4 ? .multisampling4X : samples == 2 ? .multisampling2X : .none
+        // SCNRenderer uses the caller-owned render pass; antialiasingMode is
+        // a SCNView API. The color and depth textures carry the sample count.
         sceneRenderer.render(atTime: Double(tick) / 60, viewport: viewport,
             commandBuffer: commandBuffer, passDescriptor: scenePass)
 
