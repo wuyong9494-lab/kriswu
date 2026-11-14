@@ -450,6 +450,7 @@ final class DuelWorldView: SCNView {
                 triadSourceEffects = DuelTriadSourceEffects(assets: effects, factory: factory, parent: world.rootNode)
                 let surface = try DuelTriadRenderSurface(frame: bounds, device: device, scene: world,
                     pointOfView: pointOfView, packets: renderer)
+                surface.lateSourceGeometry = { [weak self] in self?.triadSummons?.lateSourceGeometry ?? [] }
                 surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                 surface.contentScaleFactor = contentScaleFactor
                 addSubview(surface)

@@ -61,6 +61,12 @@ The decryption key is not stored in this repository.
   A new cast cannot inherit a previous interval. D19 remains immune to an
   ordinary successful throw; range, grounded state and initiator gates remain
   part of the source attempt.
+- D19_Unthrow's own recovery now accepts its source frame-68/tick-134
+  counterthrow interval after the previous passive participant is released.
+  The still-owned active participant must match its authenticated current
+  source motion. Replacing that last participant starts the new pair at tick
+  zero without an invented idle frame, forced resource cancellation, double
+  advancement, duplicate hit, or an old end marker clearing the new pair.
 - D19 wind and upper-wind releases align to the actual enemy pelvis on X/Y.
   All 121 character clips carry independently verified half-frame pelvis
   tracks; missing source data never falls back to a guessed field origin.
@@ -126,6 +132,14 @@ The decryption key is not stored in this repository.
   This decision follows the runtime registration chain, not only the prefab
   layer or cast-shadow flags. The generic additional-model projector path
   remains tested separately.
+- The eight source soul models use the recovered render queue 4852. Their
+  actual primitive holders now draw after the receiver at 2501 and H17
+  effects at 3000/3003, using the shared unorm Gamma surface and preserved
+  scene depth. Only that authenticated layer is separated from the first
+  SceneKit pass. The four transparent Palace materials remain before the
+  receiver, matching their source queues 2110/2460/2470/2500. The final pass
+  restores camera/background state and resolves multisampling after the soul
+  blend. It issues no second time update or committed-frame callback.
 - The authenticated Liu neck bridge has 120 vertices and no UV0, with a
   constant base color and no texture references. Only this exact named actor
   base material may use constant source UV `(0,0)` in its Morph shader. The
@@ -159,6 +173,7 @@ as a claimed number of distinct tests.
 | Exact source stance capability identity | The existing capability method passed its exact retest after adding the source runtime configuration SHA gate |
 | D19 formal level gates and queued-wind reaction/lifecycle boundaries | Nine focused methods passed, including actual Fight knockdown, Triad control, original release tick, contact and clean next-round state |
 | D19 six current-animation counterthrow windows and source throw regression | 37 passed: 14 formal mechanism, 14 source throw and nine source throw fight methods; includes the earlier seven formal mechanism methods |
+| D19 counterthrow recovery takeover plus the previous source throw regression | 45 methods covered: 44 passed in the first run; the remaining fixture used the wrong jump input, was corrected to the actual jump edge and passed its exact retest. Eight new takeover methods are included; production logic did not change between those runs |
 | Projected-shadow release builder and authenticated source-field guards | 11 Python fixture methods passed |
 | Real GLB shadow input layout | Static checks passed for 48 primitives and 117,681 vertices across both actors and eight soul models; this is not GPU execution |
 | Real unchanged Sun65 / Liu56 catalog stance lifecycle | Birth, original intro, start-idle and combat entry passed; seven original marker ticks crossed once; no duplicate arena ambience adapter |
@@ -201,6 +216,14 @@ uniformly while the body's independent noise mask cuts away its fragments.
 That finding requires both a new projected-shadow implementation and a
 source-correct GPU contract; it is not permission to ignore the failure.
 
+The sixth build (run 43601012291, published source 8de8485e) failed while
+compiling the new five-tap test's CPU reference. Its nested pure rounding
+function crossed Swift's inferred MainActor isolation boundary. No native
+method or GPU comparison executed. The fix inlines the same Float16 rounding
+operations, preserving the independent reference algorithm and pixel limits;
+a strict Swift 6/default-MainActor minimal reproduction fails before this
+change and type-checks afterward. The complete Apple build remains the gate.
+
 The source-only Apple workflow now selects exactly 117 synthetic native methods,
 including 11 Morph and nine independent projected-shadow GPU/contract methods.
 It receives no asset keys, uses no private asset environment, and excludes the
@@ -228,11 +251,12 @@ method inventory is evidence of execution until an actual run completes.
   missing-UV personal neck before the full private-resource run. Its targeted
   shader adapter must still be exercised by the installed-character test; the
   source-only synthetic tests cannot replace that resource-level acceptance.
-- The recovered receiver currently multiplies the preserved SceneKit surface
-  before original-effect packets. Its own source queue is 2501, but this
-  integration has not established original queue ordering against every
-  transparent SceneKit stage or character surface. Synthetic depth and blend
-  checks do not establish that wider ordering equivalence.
+- Render-order recovery is scoped to the installed Palace/H17 layers. Source
+  Palace flames and wind are present in the original bundle but absent from
+  the current GLB; their existence is not evidence of installed scenery.
+  The new late-soul pass still requires actual Apple GPU validation of Gamma
+  blending, preserved depth, background load behavior and 1x/4x resolves.
+  These contracts do not establish whole-client pixel parity.
 - Remaining Unity modules, cross-emitter dynamic bounds sorting and some
   common floorfall sound events still need their own recovery or native
   comparison. Normalized arena stats/impulses are explicitly identified in

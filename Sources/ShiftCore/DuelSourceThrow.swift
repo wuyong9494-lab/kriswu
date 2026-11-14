@@ -268,6 +268,20 @@ public struct DuelSourceThrowState: Equatable, Sendable {
         guard owns(fighter), let slot = slot(fighter), let motion = motion(slot) else { return false }
         return tick >= motion.uninterruptEndTick
     }
+
+    /// settings_sets_dynasty record248 opens D19_Unthrow's Throwable interval
+    /// at source frame68 (core tick134), before its own Uninterrupt ends.
+    /// A live two-person pair cannot be replaced: only the remaining D19
+    /// active participant is eligible after its original initiator is free.
+    /// Fight prepares the next source sample before consuming input, so the
+    /// caller must identify the current/next sample it actually displayed.
+    public func permitsPanguRecoveryTakeover(_ fighter: Int, sampleTick: Int) -> Bool {
+        guard variant == .panguEscape, fighter == target,
+              owns(target), !owns(initiator),
+              sampleTick == tick || sampleTick == tick + 1,
+              let active = motion(1) else { return false }
+        return sampleTick >= 134 && sampleTick < active.animationEndTick
+    }
     public var samples: [ActorSample] { samples(at: tick, includeReleased: false) }
     public var nextSamples: [ActorSample] { samples(at: tick + 1, includeReleased: false) }
 

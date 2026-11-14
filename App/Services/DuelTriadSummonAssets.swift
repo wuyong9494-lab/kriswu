@@ -190,11 +190,19 @@ final class DuelTriadSummonRenderer {
     private struct Instance {
         let root: SCNNode
         let model: GLTFModel.Instance
+        let sourceGeometry: [SCNNode]
         var pose: GLTFModel.Pose
     }
     private let root = SCNNode()
     private let assets: DuelTriadSummonAssets
     private var instances: [Key: Instance] = [:]
+    /// Actual GLTF primitive holders, in stable authoritative summon order.
+    /// Indexed skeleton nodes do not contain the primitive geometry children.
+    var lateSourceGeometry: [SCNNode] {
+        instances.sorted {
+            $0.key.owner == $1.key.owner ? $0.key.id < $1.key.id : $0.key.owner < $1.key.owner
+        }.flatMap { $0.value.sourceGeometry }
+    }
     init(assets: DuelTriadSummonAssets, parent: SCNNode) {
         self.assets = assets; root.name = "duel.triad.souls"; parent.addChildNode(root)
     }
@@ -220,11 +228,20 @@ final class DuelTriadSummonRenderer {
                 // that nullable value to false; 34903 therefore never
                 // registers these companions in the independent projector.
                 // Do not replace this source rule with SceneKit's default.
-                if instance.root.geometry != nil { instance.root.castsShadow = false }
+                var sourceGeometry: [SCNNode] = []
+                if instance.root.geometry != nil { sourceGeometry.append(instance.root) }
                 // GLTFModel attaches primitive holders below its indexed
                 // nodes; those holders are not entries in instance.nodes.
                 instance.root.enumerateChildNodes { node, _ in
-                    if node.geometry != nil { node.castsShadow = false }
+                    if node.geometry != nil { sourceGeometry.append(node) }
+                }
+                for node in sourceGeometry {
+                    node.castsShadow = false
+                    // Source ModelSkin uses transparent queue group 2 ->
+                    // 4852 for these eight authenticated companion models.
+                    // This exclusive category is consumed only by the late
+                    // source pass, after receiver 2501 and effect 3000/3003.
+                    node.categoryBitMask = DuelTriadRenderSurface.lateSourceCategory
                 }
                 holder.name = "duel.triad.\(summon.soul.rawValue).\(summon.owner).\(summon.id)"
                 holder.addChildNode(instance.root); root.addChildNode(holder)
@@ -266,7 +283,8 @@ final class DuelTriadSummonRenderer {
                         material.shaderModifiers = modifiers
                     }
                 }
-                value = .init(root: holder, model: instance, pose: asset.model.restPose)
+                value = .init(root: holder, model: instance, sourceGeometry: sourceGeometry,
+                    pose: asset.model.restPose)
             }
             let phase = min(1, max(0, Double(summon.motionTick) / Double(max(1, summon.lastSampleTick))))
             value.pose.reset(from: asset.model.restPose)

@@ -2042,9 +2042,31 @@ extension DuelWeaponFight {
             y: Double(f.y) / 1000 + local.y + (pose?.groundLift ?? 0), z: local.z * facing)
     }
 
+    /// A source D19 counter can be replaced in its own Throwable recovery,
+    /// after the old passive actor has already been released. No other pair
+    /// ownership is bypassed, and the visible sample must be the exact next
+    /// sample prepared by this authoritative fight step.
+    private func sourceCounterRecoveryOwner(_ index: Int) -> Int? {
+        guard profiles[index].isPangu, panguStates[index]?.rules.runtime != nil,
+              panguStates[index]?.activeCast == nil, actions[index] == nil,
+              !ordinaryThrowStates.contains(where: { $0?.ownsFighter(index: index) == true }),
+              let pose = fighters[index].weaponPose else { return nil }
+        let owners = sourceThrowStates.indices.filter { sourceThrowStates[$0]?.owns(index) == true }
+        guard owners.count == 1, let owner = owners.first, let state = sourceThrowStates[owner],
+              state.permitsPanguRecoveryTakeover(index, sampleTick: pose.tick),
+              pose.tick == state.tick + 1,
+              let active = profiles[index].ordinaryThrows?.source?.motion(.panguActive),
+              state.participantMotions[1] == active,
+              let clip = profiles[index].clip(role: active.role),
+              pose.clip == clip.name, pose.duration == active.lastSampleTick,
+              clip.sha256 == active.sourceSHA256 else { return nil }
+        return owner
+    }
+
     private func sourceThrowCandidate(_ index: Int, command: DuelWeaponCommand) -> DuelSourceThrowState? {
         let target = 1 - index
         let targetD19 = profiles[target].isPangu && panguStates[target]?.rules.runtime != nil
+        let targetCounterAllowsResponse = sourceCounterRecoveryOwner(target) != nil
         // The source query reads the target's CURRENT animation intervals.
         // A cast's open interval must not authorize a different reaction,
         // ordinary action or paired animation that happens to occupy it.
@@ -2058,7 +2080,8 @@ extension DuelWeaponFight {
         guard let rules = profiles[index].ordinaryThrows?.source,
               let targetRules = profiles[target].ordinaryThrows?.source,
               command == .weaponForward || command == .weaponBack,
-              sourceThrowDisabledTicks[index] == 0, !ordinaryThrowOwns(index), !ordinaryThrowOwns(target),
+              sourceThrowDisabledTicks[index] == 0, !ordinaryThrowOwns(index),
+              !ordinaryThrowOwns(target) || targetCounterAllowsResponse,
               actions[index] == nil, actions[target] == nil || targetCastAllowsResponse,
               panguStates[index]?.activeCast == nil,
               panguStates[target]?.activeCast == nil || targetCastAllowsResponse,
@@ -2118,6 +2141,17 @@ extension DuelWeaponFight {
             let roll = Int((random >> 32) % 99) + 1
             state = candidates[roll >= 50 ? 0 : 1]
         } else { state = candidates[0] }
+        if ordinaryThrowOwns(state.target) {
+            guard state.variant == .panguEscape,
+                  let oldOwner = sourceCounterRecoveryOwner(state.target),
+                  var previous = sourceThrowStates[oldOwner],
+                  previous.release(state.target), previous.isFinished else { return }
+            // This is the old pair's last remaining participant. Removing it
+            // directly avoids an invented idle sample or releasing a partner
+            // still owned by another animation. The new pair starts at zero;
+            // the old advancing-tick snapshot cannot advance it this tick.
+            sourceThrowStates[oldOwner] = nil
+        }
         if state.variant == .panguEscape, panguStates[state.target]?.activeCast != nil {
             guard var pangu = panguStates[state.target], pangu.sourceCastAllowsThrowResponse else { return }
             let effects = pangu.acceptSourceThrowResponse()

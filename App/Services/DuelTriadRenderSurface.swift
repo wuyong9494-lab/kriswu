@@ -29,7 +29,7 @@ private final class DuelTriadSurfaceCompletion: @unchecked Sendable {
 final class DuelTriadRenderSurface: MTKView {
     typealias Format = DuelTriadSourceMaterial.Format
     enum Failure: Error, Equatable {
-        case device, samples, size, target, allocation, stopped, paused, tick, projection
+        case device, samples, size, target, allocation, stopped, paused, tick, projection, lateGeometry
         case command(String)
     }
 
@@ -45,6 +45,13 @@ final class DuelTriadRenderSurface: MTKView {
     /// then its recovered receiver multiplies the Gamma surface before FX.
     /// The two actors keep their own fade scalars in a shared source map.
     var projectedShadow: DuelSourceProjectedShadowRenderer?
+    /// Native ModelSkin selects render-queue group 2 for the authenticated
+    /// transparent H17 companions; SF3RenderSettings maps that group to 4852.
+    /// Their primitive holders therefore follow receiver 2501 and FX 3000/3003.
+    /// No other scene transparency is moved: all retained Palace transparent
+    /// materials have recovered queues <= 2500.
+    static let lateSourceCategory = 1 << 20
+    var lateSourceGeometry: (() -> [SCNNode])?
     private let gpu: MTLDevice
     private let queue: MTLCommandQueue
     private let opaquePresentation: MTLRenderPipelineState
@@ -171,6 +178,21 @@ final class DuelTriadRenderSurface: MTKView {
         let target = try renderTargets(width: destination.width, height: destination.height, samples: samples)
         let viewport = CGRect(x: 0, y: 0, width: destination.width, height: destination.height)
         let viewportSize = viewport.size
+        let lateGeometry = lateSourceGeometry?() ?? []
+        guard lateGeometry.count <= 512,
+              Set(lateGeometry.map(ObjectIdentifier.init)).count == lateGeometry.count,
+              lateGeometry.allSatisfy({ $0.geometry != nil && $0.categoryBitMask == Self.lateSourceCategory }) else {
+            throw Failure.lateGeometry
+        }
+        let camera = sceneRenderer.pointOfView?.camera
+        let cameraMask = camera?.categoryBitMask
+        let hasLate = !lateGeometry.isEmpty && ((cameraMask ?? 0) & Self.lateSourceCategory) != 0
+        if !lateGeometry.isEmpty && camera == nil { throw Failure.projection }
+        // Masks are a camera/node intersection, not inherited layer state.
+        // Only authenticated primitive holders carry the exclusive bit.
+        // https://developer.apple.com/documentation/scenekit/scncamera/categorybitmask
+        if hasLate, let cameraMask { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
+        defer { if let cameraMask { camera?.categoryBitMask = cameraMask } }
         try projectedShadow?.encodeMap(on: commandBuffer, viewportSize: viewportSize, tick: tick)
         let scenePass = MTLRenderPassDescriptor()
         scenePass.colorAttachments[0].texture = target.scene
@@ -196,22 +218,22 @@ final class DuelTriadRenderSurface: MTKView {
         // byte, including its edge resolve. Active source effects instead use
         // the original Gamma per-sample blend and Gamma resolve.
         let hasEffects = packetRenderer.submittedPacketCount > 0
-        let hasGammaWork = hasEffects || projectedShadow != nil
+        let hasGammaWork = hasEffects || projectedShadow != nil || hasLate
         if hasGammaWork || samples > 1 {
             let pass = MTLRenderPassDescriptor()
             pass.colorAttachments[0].texture = hasGammaWork ? target.gamma : target.scene
             pass.colorAttachments[0].loadAction = .load
-            if samples > 1 {
+            if samples > 1 && !hasLate {
                 pass.colorAttachments[0].resolveTexture = hasGammaWork ? target.resolvedGamma : target.resolvedScene
                 pass.colorAttachments[0].storeAction = .multisampleResolve
             } else { pass.colorAttachments[0].storeAction = .store }
             if hasGammaWork {
                 pass.depthAttachment.texture = target.depthStencil
                 pass.depthAttachment.loadAction = .load
-                pass.depthAttachment.storeAction = .dontCare
+                pass.depthAttachment.storeAction = hasLate ? .store : .dontCare
                 pass.stencilAttachment.texture = target.depthStencil
                 pass.stencilAttachment.loadAction = .load
-                pass.stencilAttachment.storeAction = .dontCare
+                pass.stencilAttachment.storeAction = hasLate ? .store : .dontCare
             }
             guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { throw Failure.allocation }
             do {
@@ -233,6 +255,41 @@ final class DuelTriadRenderSurface: MTKView {
                 }
             }
         }
+        if hasLate, let cameraMask {
+            // The source companion fragment emits original Gamma RGB. Draw
+            // directly into the unorm view after the source receiver/FX, with
+            // the first scene's depth still intact. Do not repaint the stage.
+            camera?.categoryBitMask = cameraMask & Self.lateSourceCategory
+            let background = sceneRenderer.scene?.background.contents
+            sceneRenderer.scene?.background.contents = nil
+            defer { sceneRenderer.scene?.background.contents = background }
+            let late = MTLRenderPassDescriptor()
+            late.colorAttachments[0].texture = target.gamma
+            late.colorAttachments[0].loadAction = .load
+            late.colorAttachments[0].storeAction = .store
+            late.depthAttachment.texture = target.depthStencil
+            late.depthAttachment.loadAction = .load
+            late.depthAttachment.storeAction = .dontCare
+            late.stencilAttachment.texture = target.depthStencil
+            late.stencilAttachment.loadAction = .load
+            late.stencilAttachment.storeAction = .dontCare
+            // The first atTime render has already updated this tick. This
+            // public draw-only entry point reuses that presentation snapshot;
+            // it neither requests a new time update nor submits a boundary.
+            // https://developer.apple.com/documentation/scenekit/scnrenderer/render(withviewport:commandbuffer:passdescriptor:)
+            sceneRenderer.render(withViewport: viewport, commandBuffer: commandBuffer, passDescriptor: late)
+            if samples > 1 {
+                let resolve = MTLRenderPassDescriptor()
+                resolve.colorAttachments[0].texture = target.gamma
+                resolve.colorAttachments[0].loadAction = .load
+                resolve.colorAttachments[0].resolveTexture = target.resolvedGamma
+                resolve.colorAttachments[0].storeAction = .multisampleResolve
+                guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: resolve) else {
+                    throw Failure.allocation
+                }
+                encoder.endEncoding()
+            }
+        }
         guard let blit = commandBuffer.makeBlitCommandEncoder() else { throw Failure.allocation }
         blit.copy(from: target.resolvedGamma, sourceSlice: 0, sourceLevel: 0,
             sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
@@ -240,7 +297,7 @@ final class DuelTriadRenderSurface: MTKView {
             to: destination, destinationSlice: 0, destinationLevel: 0,
             destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
         blit.endEncoding()
-        if projectedShadow != nil {
+        if projectedShadow != nil || hasLate {
             // Keep the recovered receiver's full RGBA math available to every
             // subsequent source effect. Only the final opaque UIKit surface
             // drops that accumulated alpha; none of its RGB bytes change.
@@ -322,7 +379,7 @@ final class DuelTriadRenderSurface: MTKView {
         guard !stopped else { return }
         stopped = true; presentationPaused = true; targets = nil
         projectedShadow?.shutdown(); projectedShadow = nil
-        didSubmitFrame = nil
+        didSubmitFrame = nil; lateSourceGeometry = nil
         delegate = nil; isPaused = true
         sceneRenderer.delegate = nil; sceneRenderer.scene = nil; sceneRenderer.pointOfView = nil
         removeFromSuperview()

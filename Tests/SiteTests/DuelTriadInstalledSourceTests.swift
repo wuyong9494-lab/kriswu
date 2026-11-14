@@ -252,6 +252,8 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
                 XCTAssertFalse(geometry.isEmpty, "The source companion must actually be instantiated at capture")
                 XCTAssertTrue(geometry.allSatisfy { !$0.castsShadow },
                     "Original H17 ModelInfo.IsShadowCaster null resolves to false, not a prototype SceneKit shadow")
+                XCTAssertTrue(geometry.allSatisfy { $0.categoryBitMask == DuelTriadRenderSurface.lateSourceCategory },
+                    "All real source soul primitives must enter their original queue-4852 late pass")
             }
             let samples = world.antialiasingMode == .none ? 1 : 2
             let image = try surface.captureFrame(tick: fight.triadPresentation.liveTick, pixelSize: imageSize, samples: samples)

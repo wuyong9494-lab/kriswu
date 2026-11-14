@@ -2,7 +2,7 @@
 
 记录日期：2026-11-14。本次开发基线：本地提交 `cabc2fc`；本文描述在该基线上完成的本地实现与验收边界，远程发布状态以本轮验收记录为准。
 
-**记录范围：第 1—10 节保留上述早期基线的交付情况，不代表之后各批的当前发布状态。正式配置恢复后的专项更正见第 11—13 节；后续整批源码、资源和 Apple 验收状态见 [源恢复记录](DUEL_SOURCE_RESTORATION_20261114.md)。**
+**记录范围：第 1—10 节保留上述早期基线的交付情况，不代表之后各批的当前发布状态。正式配置恢复后的专项更正见第 11—14 节；后续整批源码、资源和 Apple 验收状态见 [源恢复记录](DUEL_SOURCE_RESTORATION_20261114.md)。**
 
 ## 1. 本轮交付状态
 
@@ -211,3 +211,26 @@ Trance 的概率额外连击使用有显式内部状态的种子随机源；不�
 Swift 6.0.3 本次定向验证一次完成 **37 个方法、0 失败**，编译 23.54 秒、执行 12.726 秒：本类现有 14 个方法（其中本项新增 7 个），加既有 SourceThrow 14 个及 SourceThrowFight 9 个。新覆盖逐级验证 L2—L6 的六条前一 tick／首 tick；实际 Fight 在两个朝向／席位接受后立即给出反投 tick 0，直到 97 tick 仍无反投伤害，98 tick 才执行原 `0.15` 基础值与普通 PreHit 倍率。另覆盖独立风剩余 7 tick、资源不退款、新施法、正常结束、强制清理、重置、回合切换、旧规则／双锤身份、超距、发起者忙碌，以及真实 host 暂停／恢复。几何与角色媒体仍明确为合成测试数据。本次 37 个方法包含第 11—12 节的部分方法，不能与此前批次相加宣称独立总数。
 
 私有日志为 `d19-throw-window-tests-private.log`，SHA-256 `ffeb25ac615a6d4a6247bc419bcf0b799bc69fba2092f23f713f36a44cfd7a4d`；没有执行 Apple 原生或真机验证。
+
+## 14. 反投自身收招的 134 tick 再接管窗口
+
+本项单独处理第 13 节留下的 `D19_Unthrow` 收招问题，没有改变那六个本体技能的接管边界。原动画配置 record 248 明确包含 `Throwable` Start 68／End null，按同一 60 Hz 区间钟在 tick 134 进入；自己的 Uninterrupt 到源帧 73 结束，即 tick 146 才释放。原配对被动 record 249 在 tick 112 已触发 AnimationEnd，所以 134 tick 时可以出现“敌方已自由、盘古仍在旧反投主动动作”的有效状态。
+
+已与当前持有的真实动作及私有运行目录交叉核对：
+
+| 原动画 | 已绑定角色 | 源样本末 tick | AnimationEnd tick | Uninterrupt 结束 tick | 动作 SHA-256 |
+|---|---|---:|---:|---:|---|
+| `D19_Unthrow`／record 248 | `ordinaryPanguEscape` | 162 | 154 | 146 | `0887c31334fee81394ef7f2cf47fb1242b831d2151d37adcdd728334824b28f6` |
+| `D19_Unthrow_Passive`／record 249 | `ordinaryPanguResisted` | 120 | 112 | 121，全片 Uninterrupt 的投影边界 | `93c471b781eef97f90edc6be5213b1224b6559fd0158c599611660fd99a82228` |
+
+这仍通过第 13 节相同的 `lock1545` 当前 Throwable 检查和 `lock1544/t1` 反投响应链启动新配对。代码不从“旧配对已经存在”推导永远禁止新尝试，也不允许任意配对被覆盖：仅当旧 variant 是 `panguEscape`、旧主动目标仍被该状态持有、旧发起者已经释放，而且当前角色确为带正式 D19 runtime 的盘古时，才考虑这一窄窗口。普通投技、仍持有双方的配对、没有正式 D19 规则的旧双锤均不获得该例外。
+
+`DuelSourceThrowState.permitsPanguRecoveryTakeover(_:sampleTick:)` 是只读投影，没有新持久标志。Fight 进一步核对当前 pose 的 clip、时长、对应 `panguActive` motion 和 SHA。时钟边界使用**已实际准备的样本**：当前流程先 `prepareSourceThrowSamples(nextSamples)`，再判输入，之后才 advance 配对状态。因此旧状态 tick 133、当前 pose tick 134 时必须可响应；额外要求 `pose.tick == oldPair.tick + 1`，避免凭未推进的旧时钟延迟一 tick，或凭其他动画／任意未来样本提前接管。
+
+接受后只释放旧状态最后仍持有的盘古参与者，并确认旧状态已经 `isFinished`，再移除旧状态；不调用会产生 idle 样本的通用释放路径，也不清理盘古风刃、资源或冷却。新配对从 tick 0 开始。原 step 记录的旧 advancing tick 与新配对 tick 0 不同，故既有推进检查拒绝在同一 tick 再推进新配对；旧状态也不可能在其原 154 tick 结束点释放新参与者或重新执行旧 98 tick 伤害。新配对继续按自己的 98 tick 执行一次伤害。
+
+新增 [DuelPanguSourceRetakeTests](../Tests/ShiftCoreTests/DuelPanguSourceRetakeTests.swift) 8 个方法，与第 13 节的 37 个方法一并进行定向验证。**45 个方法范围内，44 个首轮通过；唯一失败方法的跳跃 fixture 把方向输入误写成跳跃 edge，修正为实际 `taps: .jump` 并推进至确实离地后，该方法单独复测 1／1 通过。** 保留了前置离地断言和全部拒绝断言，没有修改生产逻辑、原参数或容差；不能把这两次运行写成“一次 45／45”。首轮编译 23.71 秒、执行 19.236 秒；复测编译 7.47 秒、执行 1.164 秒。
+
+覆盖包括 133／134 边界、两朝向及两席位、仍持有双方时拒绝覆盖、当前／未来样本约束、普通配对排除、COM／地面／发起者状态、资源和冷却不退款、原配对结束不影响新配对、每个新配对的 97 tick 无额外伤害／98 tick 单次伤害、连续再接管的确定性 canonical bytes，以及实际回合重置不残留旧配对或伤害。测试几何、骨骼点和角色媒体均为显式合成夹具；真实公共动作的存在不会把当前 `liu_hammers` 角色身份改成盘古。本项没有修改资源包、App、CI、Site、存储字段或回放 schema。
+
+私有日志为 `d19-source-counter-retake-tests-private.log`（SHA-256 `b4a112a88edd47f1e6a51719b2947328e25ac024cc7a445897076da6d8efac6c`）及 `d19-source-counter-retake-air-fixture-retest-private.log`（SHA-256 `a5a3e6f9e9f07fd04471c1885b26e0d11b13674fe36804cad6570a875b774fd5`）。该范围包含前述 37 个方法，不能相加为 82 个独立测试；本项尚未单独执行 Apple 原生或真机验收。

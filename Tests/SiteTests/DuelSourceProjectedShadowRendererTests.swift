@@ -221,6 +221,44 @@ final class DuelProjectedShadowFixture {
         let i = (y * 64 + x) * 4
         return SIMD4(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3])
     }
+    /// Synthetic source-queue-3000 packet. The fixed numeric shader is
+    /// independent of the SceneKit soul modifier and its expected blend math.
+    func sourcePacket(formats: [Renderer.Format]) throws -> DuelTriadSourceMaterial.Draw {
+        let library = try device.makeLibrary(source: """
+        #include <metal_stdlib>
+        using namespace metal;
+        struct V { float4 p [[position]]; };
+        vertex V sourceEffect(const device float4 *p [[buffer(0)]], uint i [[vertex_id]]) {
+            V o; o.p=p[i]; return o;
+        }
+        fragment float4 effectGamma() { return float4(0.1,0.4,0.8,0.25); }
+        """, options: nil)
+        var pipelines: [Renderer.Format: MTLRenderPipelineState] = [:]
+        for format in formats {
+            let descriptor = MTLRenderPipelineDescriptor()
+            descriptor.vertexFunction = library.makeFunction(name: "sourceEffect")
+            descriptor.fragmentFunction = library.makeFunction(name: "effectGamma")
+            descriptor.rasterSampleCount = format.samples
+            descriptor.depthAttachmentPixelFormat = format.depth
+            descriptor.stencilAttachmentPixelFormat = format.stencil
+            let color = try XCTUnwrap(descriptor.colorAttachments[0])
+            color.pixelFormat = format.color; color.isBlendingEnabled = true
+            color.rgbBlendOperation = .add; color.alphaBlendOperation = .add
+            color.sourceRGBBlendFactor = .sourceAlpha; color.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            color.sourceAlphaBlendFactor = .sourceAlpha; color.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+            pipelines[format] = try device.makeRenderPipelineState(descriptor: descriptor)
+        }
+        let vertices: [SIMD4<Float>] = [SIMD4(-0.65, -0.65, 0.2, 1), SIMD4(0.65, -0.65, 0.2, 1),
+            SIMD4(0.65, 0.65, 0.2, 1), SIMD4(-0.65, 0.65, 0.2, 1)]
+        let indices: [UInt32] = [0, 1, 2, 0, 2, 3]
+        let vertex = try XCTUnwrap(vertices.withUnsafeBytes { device.makeBuffer(bytes: $0.baseAddress!, length: $0.count) })
+        let index = try XCTUnwrap(indices.withUnsafeBytes { device.makeBuffer(bytes: $0.baseAddress!, length: $0.count) })
+        let description = MTLDepthStencilDescriptor()
+        description.depthCompareFunction = .lessEqual; description.isDepthWriteEnabled = false
+        return .init(pipelines: pipelines, depth: try XCTUnwrap(device.makeDepthStencilState(descriptor: description)),
+            cull: .none, winding: .counterClockwise, vertex: vertex, index: index, indexCount: indices.count,
+            textures: [], samplers: [], uniforms: Data(count: 96 * 16))
+    }
 }
 
 @MainActor
@@ -355,27 +393,28 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let read = try fixture.readback(fixture.renderer.blurredMap, on: command, bytesPerPixel: 1)
         try fixture.finish(command)
         let actual = fixture.bytes(read, width: width, height: width, components: 1)
-        func half(_ value: Float) -> Float { Float(Float16(value)) }
         func sample(_ u: Float, _ v: Float) -> Float {
             let px = u * Float(width) - 0.5, py = v * Float(width) - 0.5
             let ix = Int(floor(px)), iy = Int(floor(py)), tx = px - floor(px), ty = py - floor(py)
             func texel(_ x: Int, _ y: Int) -> Float { Float(source[min(width - 1, max(0, y)) * width + min(width - 1, max(0, x))]) / 255 }
-            return half((texel(ix, iy) * (1 - tx) + texel(ix + 1, iy) * tx) * (1 - ty) +
-                (texel(ix, iy + 1) * (1 - tx) + texel(ix + 1, iy + 1) * tx) * ty)
+            return Float(Float16((texel(ix, iy) * (1 - tx) + texel(ix + 1, iy) * tx) * (1 - ty) +
+                (texel(ix, iy + 1) * (1 - tx) + texel(ix + 1, iy + 1) * tx) * ty))
         }
         var maximumError: Float = 0, changed = 0
         for y in 0..<width { for x in 0..<width {
             let u = (Float(x) + 0.5) / Float(width), v = (Float(y) + 0.5) / Float(width)
             let samples: [Float] = fixture.definition.blur.offsets.map { offset in
                 func varying(_ base: Float, _ offset: Float) -> Float {
-                    let delta = half(1 / Float(width)) * half(offset)
-                    let low = half(delta), high = half(1 + delta)
-                    return half(low + (high - low) * base)
+                    // Keep the pure half conversion local: a nested function
+                    // must not call an actor-isolated local helper in Swift 6.
+                    let delta = Float(Float16(1 / Float(width))) * Float(Float16(offset))
+                    let low = Float(Float16(delta)), high = Float(Float16(1 + delta))
+                    return Float(Float16(low + (high - low) * base))
                 }
                 return sample(varying(u, offset[0]), varying(v, offset[1]))
             }
-            let partial = half(samples.prefix(4).reduce(0, +) * half(0.2))
-            let expected = half(samples[4] * 0.2 + partial) * 255
+            let partial = Float(Float16(samples.prefix(4).reduce(0, +) * Float(Float16(Float(0.2)))))
+            let expected = Float(Float16(samples[4] * 0.2 + partial)) * 255
             maximumError = max(maximumError, abs(Float(actual[y * width + x]) - expected))
             if abs(Int(actual[y * width + x]) - Int(source[y * width + x])) > 8 { changed += 1 }
         } }
@@ -428,9 +467,11 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let fixture = try Fixture(device: gpu, formats: formats)
         fixture.actors[1].nodes[0].isHidden = true
         let scene = SCNScene(); scene.rootNode.addChildNode(fixture.stageRoot)
+        let backgroundColor = UIColor(red: 0.13, green: 0.17, blue: 0.19, alpha: 1)
+        scene.background.contents = backgroundColor
         // These synthetic casters are intentionally independent of SceneKit's
         // visible geometry, so the receiver is measurable without body overlap.
-        let plane = SCNNode(geometry: SCNPlane(width: 4, height: 4))
+        let plane = SCNNode(geometry: SCNPlane(width: 2, height: 2))
         let material = SCNMaterial(); material.lightingModel = .constant
         material.diffuse.contents = UIColor(red: 0.8, green: 0.6, blue: 0.4, alpha: 1)
         plane.geometry?.materials = [material]; plane.position.z = -0.01
@@ -438,36 +479,143 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let camera = SCNNode(); camera.camera = SCNCamera(); camera.position.z = 5
         camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 2
         camera.camera?.zNear = 0.1; camera.camera?.zFar = 20
+        let originalCameraMask = 1 | DuelTriadRenderSurface.lateSourceCategory | (1 << 10)
+        camera.camera?.categoryBitMask = originalCameraMask
         scene.rootNode.addChildNode(camera)
+        let soul = SCNNode(geometry: SCNPlane(width: 1, height: 1))
+        let soulMaterial = SCNMaterial(); soulMaterial.lightingModel = .constant
+        soulMaterial.diffuse.contents = UIColor.white
+        soulMaterial.blendMode = .alpha; soulMaterial.readsFromDepthBuffer = true
+        soulMaterial.writesToDepthBuffer = false
+        soulMaterial.shaderModifiers = [.fragment: """
+        #pragma transparent
+        #pragma body
+        _output.color = float4(0.7, 0.15, 0.45, 0.5);
+        """]
+        soul.geometry?.materials = [soulMaterial]; soul.position.z = 1
+        soul.categoryBitMask = DuelTriadRenderSurface.lateSourceCategory
+        soul.castsShadow = false; soul.isHidden = true; scene.rootNode.addChildNode(soul)
+        let occluder = SCNNode(geometry: SCNPlane(width: 0.6, height: 0.6))
+        let opaqueMaterial = SCNMaterial(); opaqueMaterial.lightingModel = .constant
+        opaqueMaterial.diffuse.contents = UIColor(red: 0.2, green: 0.7, blue: 0.1, alpha: 1)
+        occluder.geometry?.materials = [opaqueMaterial]; occluder.position.z = 2
+        occluder.isHidden = true; scene.rootNode.addChildNode(occluder)
         let packets = try DuelTriadMetalRenderer(device: gpu, formats: formats)
+        let sourcePacket = try fixture.sourcePacket(formats: formats)
         let surface = try DuelTriadRenderSurface(device: gpu, scene: scene, pointOfView: camera, packets: packets)
         defer { surface.shutdown(); packets.shutdown(); fixture.renderer.shutdown() }
-        func capture(tick: Int, samples: Int) throws -> SIMD4<UInt8> {
+        var lateGeometry: [SCNNode] = []
+        surface.lateSourceGeometry = { lateGeometry }
+        func capture(tick: Int, samples: Int) throws -> [UInt8] {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 64, height: 64, mipmapped: false)
             descriptor.storageMode = .private; descriptor.usage = .renderTarget
             let target = try XCTUnwrap(gpu.makeTexture(descriptor: descriptor)), command = try fixture.command()
             try surface.encodeFrame(to: target, atTick: tick, samples: samples, commandBuffer: command)
             let result = try fixture.readback(target, on: command, bytesPerPixel: 4)
             try fixture.finish(command)
-            let bytes = fixture.bytes(result, width: 64, height: 64, components: 4), i = (32 * 64 + 32) * 4
+            return fixture.bytes(result, width: 64, height: 64, components: 4)
+        }
+        func pixel(_ bytes: [UInt8], x: Int = 32, y: Int = 32) -> SIMD4<UInt8> {
+            let i = (y * 64 + x) * 4
             return SIMD4(bytes[i + 2], bytes[i + 1], bytes[i], bytes[i + 3])
         }
-        for samples in formats.map(\.samples) {
+        let soulRGB = SIMD3<Float>(0.7, 0.15, 0.45), soulAlpha: Float = 0.5
+        let effectRGB = SIMD3<Float>(0.1, 0.4, 0.8), effectAlpha: Float = 0.25
+        for format in formats {
+            let samples = format.samples
+            lateGeometry = []; soul.isHidden = true; occluder.isHidden = true; packets.clear()
             surface.projectedShadow = nil
-            let before = try capture(tick: 0, samples: samples)
+            let baseline = try capture(tick: 0, samples: samples), before = pixel(baseline)
             surface.projectedShadow = fixture.renderer; fixture.renderer.reset(); fixture.factors[0] = 0
-            let shadow = try capture(tick: 0, samples: samples)
+            let shadow = pixel(try capture(tick: 0, samples: samples))
             for c in 0..<3 {
                 XCTAssertEqual(Float(shadow[c]), Float(before[c]) * fixture.definition.sourceLocation.shadowColor[c], accuracy: 3)
             }
             XCTAssertEqual(shadow.w, 255, "Only the final presentation pass makes alpha opaque")
             fixture.factors[0] = 1
-            let complete = try capture(tick: 1, samples: samples)
+            let complete = pixel(try capture(tick: 1, samples: samples))
             XCTAssertEqual(complete, before, "Final alpha-only presentation must preserve all RGB bytes")
             surface.setPaused(true)
             XCTAssertThrowsError(try capture(tick: 2, samples: samples))
             surface.setPaused(false)
-            print("Source projected surface samples=\(samples), baseline=\(before), shadow=\(shadow), restored=\(complete)")
+
+            // A late-only frame must still preserve source Gamma, blend just
+            // once, and present A=1 even without an installed projector.
+            surface.projectedShadow = nil; soul.isHidden = false; lateGeometry = [soul]
+            let lateOnly = try capture(tick: 2, samples: samples), soulOnly = pixel(lateOnly)
+            for c in 0..<3 {
+                let expected = soulRGB[c] * 255 * soulAlpha + Float(before[c]) * (1 - soulAlpha)
+                XCTAssertEqual(Float(soulOnly[c]), expected, accuracy: 3)
+            }
+            XCTAssertEqual(soulOnly.w, 255)
+            XCTAssertEqual(pixel(lateOnly, x: 3, y: 3), pixel(baseline, x: 3, y: 3),
+                "The late SceneKit pass must not clear or repaint the background")
+
+            // This independent numeric order detects receiver-after-soul,
+            // FX-after-soul, sRGB re-encoding and drawing a soul twice.
+            surface.projectedShadow = fixture.renderer; fixture.renderer.reset(); fixture.factors[0] = 0
+            try packets.submit(.init(format: format, draws: [sourcePacket]))
+            let layered = try capture(tick: 3, samples: samples), combined = pixel(layered)
+            for c in 0..<3 {
+                let afterShadow = Float(before[c]) * fixture.definition.sourceLocation.shadowColor[c]
+                let afterEffect = effectRGB[c] * 255 * effectAlpha + afterShadow * (1 - effectAlpha)
+                let expected = soulRGB[c] * 255 * soulAlpha + afterEffect * (1 - soulAlpha)
+                XCTAssertEqual(Float(combined[c]), expected, accuracy: 3)
+            }
+            XCTAssertEqual(combined.w, 255)
+            XCTAssertEqual(pixel(layered, x: 3, y: 3), pixel(baseline, x: 3, y: 3))
+            let cameraPosition = fixture.renderer.lastFrame?.sourceCameraPosition
+            XCTAssertEqual(try capture(tick: 3, samples: samples), layered)
+            XCTAssertEqual(fixture.renderer.lastFrame?.sourceCameraPosition, cameraPosition)
+            XCTAssertEqual(camera.camera?.categoryBitMask, originalCameraMask)
+            XCTAssertTrue((scene.background.contents as? UIColor) === backgroundColor)
+
+            // An opaque foreground surface from the FIRST pass must occlude
+            // both source FX and the late soul through the preserved depth.
+            occluder.isHidden = false; soul.isHidden = true; lateGeometry = []
+            packets.clear(); surface.projectedShadow = nil
+            let opaque = pixel(try capture(tick: 4, samples: samples))
+            soul.isHidden = false; lateGeometry = [soul]; surface.projectedShadow = fixture.renderer
+            try packets.submit(.init(format: format, draws: [sourcePacket]))
+            XCTAssertEqual(pixel(try capture(tick: 4, samples: samples)), opaque)
+
+            // A source cancellation/removal can occur at the same tick. The
+            // normal no-soul path must neither replay a cached soul nor retain
+            // its camera mask/background changes.
+            occluder.isHidden = true; soul.isHidden = true; lateGeometry = []
+            let removed = pixel(try capture(tick: 4, samples: samples))
+            for c in 0..<3 {
+                let afterShadow = Float(before[c]) * fixture.definition.sourceLocation.shadowColor[c]
+                let expected = effectRGB[c] * 255 * effectAlpha + afterShadow * (1 - effectAlpha)
+                XCTAssertEqual(Float(removed[c]), expected, accuracy: 3)
+            }
+            packets.clear(); surface.projectedShadow = nil
+            XCTAssertEqual(try capture(tick: 4, samples: samples), baseline)
+
+            soul.isHidden = false; lateGeometry = [soul]
+            var boundaries = 0; surface.didSubmitFrame = { boundaries += 1 }
+            let pose = soul.simdTransform
+            let firstCapture = try surface.captureFrame(tick: 5, pixelSize: CGSize(width: 64, height: 64), samples: samples)
+            XCTAssertEqual(boundaries, 1, "Two scene passes form exactly one committed render boundary")
+            let secondCapture = try surface.captureFrame(tick: 5, pixelSize: CGSize(width: 64, height: 64), samples: samples)
+            XCTAssertEqual(boundaries, 2)
+            let firstData = try XCTUnwrap(firstCapture.cgImage?.dataProvider?.data)
+            let secondData = try XCTUnwrap(secondCapture.cgImage?.dataProvider?.data)
+            XCTAssertEqual(firstData as Data, secondData as Data)
+            for c in 0..<4 { XCTAssertEqual(soul.simdTransform[c], pose[c]) }
+            surface.setPaused(true)
+            XCTAssertThrowsError(try surface.captureFrame(tick: 6, pixelSize: CGSize(width: 64, height: 64), samples: samples))
+            XCTAssertEqual(boundaries, 2)
+            surface.setPaused(false)
+            _ = try surface.captureFrame(tick: 5, pixelSize: CGSize(width: 64, height: 64), samples: samples)
+            XCTAssertEqual(boundaries, 3)
+            XCTAssertEqual(camera.camera?.categoryBitMask, originalCameraMask)
+            XCTAssertTrue((scene.background.contents as? UIColor) === backgroundColor)
+            lateGeometry = [soul, soul]
+            XCTAssertThrowsError(try capture(tick: 6, samples: samples))
+            XCTAssertEqual(camera.camera?.categoryBitMask, originalCameraMask)
+            surface.didSubmitFrame = nil; lateGeometry = []; soul.isHidden = true
+            print("Source projected surface samples=\(samples), baseline=\(before), shadow=\(shadow), lateOnly=\(soulOnly), layered=\(combined), canceled=\(removed)")
         }
     }
 }
