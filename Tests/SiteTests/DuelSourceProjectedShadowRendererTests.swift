@@ -708,6 +708,12 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
             occluder.isHidden = false; soul.isHidden = true; lateGeometry = []
             packets.clear(); surface.projectedShadow = nil
             let opaque = pixel(try capture(tick: 4, samples: samples))
+            let opaqueRGB = SIMD3<Float>(0.2, 0.7, 0.1)
+            for c in 0..<3 {
+                XCTAssertEqual(Float(opaque[c]), opaqueRGB[c] * 255, accuracy: 3,
+                    "The foreground control must actually be visible before testing its preserved depth")
+            }
+            XCTAssertNotEqual(opaque, before, "An uncommitted hidden occluder cannot serve as a depth control")
             soul.isHidden = false; lateGeometry = [soul]; surface.projectedShadow = fixture.renderer
             try packets.submit(.init(format: format, draws: [sourcePacket]))
             XCTAssertEqual(pixel(try capture(tick: 4, samples: samples)), opaque)

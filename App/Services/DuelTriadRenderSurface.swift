@@ -191,8 +191,18 @@ final class DuelTriadRenderSurface: MTKView {
         // Masks are a camera/node intersection, not inherited layer state.
         // Only authenticated primitive holders carry the exclusive bit.
         // https://developer.apple.com/documentation/scenekit/scncamera/categorybitmask
-        if hasLate, let cameraMask { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
-        defer { if let cameraMask { camera?.categoryBitMask = cameraMask } }
+        // These passes and synchronous captures can share one run-loop turn.
+        // Automatic transactions would otherwise leave poses, visibility and
+        // camera filtering at their previous presentation values. The real
+        // Run10 late pass repainted that old scene in the unorm target.
+        Self.commitPresentationChanges {
+            if hasLate, let cameraMask { camera?.categoryBitMask = cameraMask & ~Self.lateSourceCategory }
+        }
+        defer {
+            if hasLate, let cameraMask {
+                Self.commitPresentationChanges { camera?.categoryBitMask = cameraMask }
+            }
+        }
         try projectedShadow?.encodeMap(on: commandBuffer, viewportSize: viewportSize, tick: tick)
         let scenePass = MTLRenderPassDescriptor()
         scenePass.colorAttachments[0].texture = target.scene
@@ -259,10 +269,14 @@ final class DuelTriadRenderSurface: MTKView {
             // The source companion fragment emits original Gamma RGB. Draw
             // directly into the unorm view after the source receiver/FX, with
             // the first scene's depth still intact. Do not repaint the stage.
-            camera?.categoryBitMask = cameraMask & Self.lateSourceCategory
             let background = sceneRenderer.scene?.background.contents
-            sceneRenderer.scene?.background.contents = nil
-            defer { sceneRenderer.scene?.background.contents = background }
+            Self.commitPresentationChanges {
+                camera?.categoryBitMask = cameraMask & Self.lateSourceCategory
+                sceneRenderer.scene?.background.contents = nil
+            }
+            defer {
+                Self.commitPresentationChanges { sceneRenderer.scene?.background.contents = background }
+            }
             let late = MTLRenderPassDescriptor()
             late.colorAttachments[0].texture = target.gamma
             late.colorAttachments[0].loadAction = .load
@@ -273,9 +287,11 @@ final class DuelTriadRenderSurface: MTKView {
             late.stencilAttachment.texture = target.depthStencil
             late.stencilAttachment.loadAction = .load
             late.stencilAttachment.storeAction = .dontCare
-            // The first atTime render has already updated this tick. This
-            // public draw-only entry point reuses that presentation snapshot;
-            // it neither requests a new time update nor submits a boundary.
+            // The pass-specific properties above are now committed. Keep one
+            // timed update: a second render(atTime:) is not documented to be
+            // idempotent for actions/physics merely because its time matches.
+            // The draw-only call must not wait for the next run-loop commit
+            // to see this layer; the native overlap test measures that path.
             // https://developer.apple.com/documentation/scenekit/scnrenderer/render(withviewport:commandbuffer:passdescriptor:)
             sceneRenderer.render(withViewport: viewport, commandBuffer: commandBuffer, passDescriptor: late)
             if samples > 1 {
@@ -318,6 +334,19 @@ final class DuelTriadRenderSurface: MTKView {
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             encoder.endEncoding()
         }
+    }
+
+    /// SceneKit normally flushes automatic transactions at the next run-loop
+    /// iteration. Our adjacent passes need their presentation changes now,
+    /// without starting an implicit animation or advancing a source tick.
+    /// https://developer.apple.com/documentation/scenekit/scntransaction/flush()
+    private static func commitPresentationChanges(_ changes: () -> Void) {
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = 0
+        SCNTransaction.disableActions = true
+        changes()
+        SCNTransaction.commit()
+        SCNTransaction.flush()
     }
 
     /// Explicit acceptance/diagnostic capture using the same command queue as

@@ -298,6 +298,32 @@ corrected-bind checks remain in the same native method. The original holder
 must remain valid, and a clone receives distinct sources with identical bytes.
 Local Swift key checks and parsing do not replace the next Apple SDK build.
 
+The tenth build (run 43608442972, published source 43bc5ee5) compiled and
+executed every selected method exactly once: 116 passed, one failed, zero
+skipped. All eight other projector methods and all 11 Morph methods passed.
+The retained constructor inputs were valid in 20 diagnostic pairs, including
+the actual bounds, clone/rebind and bone-movement assertions. The original
+five-tap GPU comparison changed 135 pixels with maximum byte error 0.5708008;
+the strict 20-byte mip comparison and strengthened no-UV neck pixels passed.
+All 27 diagnostic entries, eight source trees and 18 file digests matched.
+The strict attachment check also passed: one correctly owned 368-byte format
+JSON and no images. These are synthetic simulator results, not installed
+original-media or physical-device acceptance.
+
+The remaining controlled-surface method failed its late-soul blend and
+occlusion assertions at both 1x and 4x samples. Its late-only and layered
+pixels were both [154,81,34], the linear equivalents of the ordinary scene's
+[204,153,102], rather than the independently expected soul composite. The
+foreground occluder also remained absent from its supposed opaque reference.
+The manual multi-pass path did not explicitly commit SceneKit's automatic
+transactions between synchronous renders. The targeted repair applies the
+pending pose/visibility and camera/background changes before their draw and
+commits the restored state afterward. It keeps one timed scene update and
+one committed frame boundary, with unchanged source blending and thresholds.
+The same method now requires its opaque reference to visibly differ from the
+background before testing depth preservation. The next Apple run must verify
+that this transaction repair makes the late layer observable.
+
 The source-only Apple workflow now selects exactly 117 synthetic native methods,
 including 11 Morph and nine independent projected-shadow GPU/contract methods.
 It receives no asset keys, uses no private asset environment, and excludes the
