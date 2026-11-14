@@ -1,0 +1,277 @@
+{
+  "schema": "fighter-dual-development-20261115-v1",
+  "sourceBaselineSHA": "54bfc94dfdaca4a9ea8325e661cf5304525601f8",
+  "frozenAuditBaselineSHA": "0d83323a5463b9f3feb57cc00532da2ade5a5c48",
+  "branch": "codex/fighter-visual-acceptance-20261113-1200",
+  "swift": {
+    "batches": {
+      "pangu": {
+        "platform": "Swift 6.0.3 / Linux",
+        "distinctPassedMethods": 15,
+        "methods": [
+          "DuelPanguFormalMechanismTests.testFightRoundEndDoesNotCarryTheQueuedWindIntoTheNextRound",
+          "DuelPanguFormalMechanismTests.testForceRoundAndResetStillClearTheSourceWindCounter",
+          "DuelPanguFormalMechanismTests.testOwnerReactionRetainsTheSourceWindCountersRemainingTicks",
+          "DuelPanguFormalMechanismTests.testRealFightKnockdownPreservesOneSourceWindAtItsOriginalReleaseTick",
+          "DuelPanguFormalMechanismTests.testRealTriadRootDoesNotEraseTheOpponentsSourceWindQueue",
+          "DuelPanguReleasedModelTests.testGuardAfterOwnerRecoveryKeepsTheNormalSpearsRemainingFreeFlight",
+          "DuelPanguReleasedModelTests.testNormalAndEmpoweredSpearKeepTheirDistinctFullFreeFlightLifetimes",
+          "DuelPanguReleasedModelTests.testOrdinaryHitAndKnockdownCancelCreateButRetainMissInEitherSeatAndFacing",
+          "DuelPanguReleasedModelTests.testRealSunRootUsesTheSameCreateAndFreeFlightBoundaries",
+          "DuelPanguReleasedModelTests.testRoundEndAndNextRoundClearUncreatedCreatingAndReleasedModelsWithIdenticalReplay",
+          "DuelPanguReleasedModelTests.testUpperWindDealsDamageWithoutInterruptingSunCastPendingReleaseOrIndependentVolume",
+          "DuelPanguRuntimeTests.testSpearCreationMarkerDoesNotRemoveTheParentHitCancellationGate",
+          "DuelPanguRuntimeTests.testSpearInitialReactionCancelsFlightButUnreactableContactDoesNot",
+          "DuelPanguRuntimeTests.testSpearRhythmIsNotConsumedByCastingAndNormalSpearHasNoLightGain",
+          "DuelReplayStateAuditTests.testCompleteStoredPropertyInventoryIncludingPrivateFields"
+        ],
+        "logs": [
+          {
+            "file": "pangu-released-model-green.log",
+            "sha256": "bfe24a249473de74a5409ec3c7e8720d4c89717261a8f766c790728396cbbf77"
+          },
+          {
+            "file": "pangu-released-model-facing-green.log",
+            "sha256": "0a0764edfce86a4b10a08eb86220a0d1987b22684d9cf59e08a411db22e2ac82"
+          }
+        ]
+      },
+      "root": {
+        "platform": "Swift 6.0.3 / Linux",
+        "distinctPassedMethods": 16,
+        "methods": [
+          "DuelReplayStateAuditTests.testCompleteStoredPropertyInventoryIncludingPrivateFields",
+          "DuelReplayStateTests.testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths",
+          "DuelReplayStateTests.testInitialGameGoldenPinsTheCompleteFieldOrder",
+          "DuelReplayStateTests.testSyntheticDiagnosticSizesStayExplicit",
+          "DuelTriadRootVictimTests.testAReleasedShortRootStillFinishesStartBeforeEnteringEnd",
+          "DuelTriadRootVictimTests.testAStaleRootReleaseCannotUnlockAnotherSourceOrOwner",
+          "DuelTriadRootVictimTests.testActiveDurationLoopsOnlyAtTheOriginalEarlyAnimationEnds",
+          "DuelTriadRootVictimTests.testCapabilityRequiresEveryExactMotionClockAndRigPelvisTrack",
+          "DuelTriadRootVictimTests.testConfirmedRootContactSelectsTheBoundPassiveStartInsteadOfFreezingGenericHit",
+          "DuelTriadRootVictimTests.testDurationExpiryWaitsForTheNextLoopIntervalEndOrAnimationEnd",
+          "DuelTriadRootVictimTests.testEndRetainsItsLastSampleAndCrossesFloorfallExactlyOnce",
+          "DuelTriadRootVictimTests.testFightKeepsOwnershipAfterExpiryPublishesBoundarySamplesAndReplaysIdentically",
+          "DuelTriadRootVictimTests.testLethalRootRoundEndClearsVictimOwnershipBeforeTheNextRound",
+          "DuelTriadRootVictimTests.testMirroredSeatUsesTheSameSourceStagesAndPreservesPelvisAcrossTransitions",
+          "DuelTriadRootVictimTests.testMissingOriginalVictimMotionsRetainExplicitLegacyFallback",
+          "DuelTriadRootVictimTests.testSourceSamplingEndEventsAndIntervalEndClocksRemainDistinct"
+        ],
+        "logs": [
+          {
+            "file": "root-victim-green-20261115.log",
+            "sha256": "385c7f837a439d34c48b6dbb4d676c40ae60c3986ceeabaaf41f1eca8b990089"
+          },
+          {
+            "file": "root-victim-mirrored-fix-20261115.log",
+            "sha256": "dc819caeb15473c97fa903eb39d5d22c9932ea582247c93eeecb714b77ff8e15"
+          }
+        ]
+      },
+      "audio": {
+        "platform": "Swift 6.0.3 / Linux",
+        "distinctPassedMethods": 4,
+        "methods": [
+          "DuelSourceAudioVariationTests.testAcceptedEventOrdinalsAreStableAcrossRenderCadenceAndOtherCategories",
+          "DuelSourceAudioVariationTests.testInvalidSourceGroupsFailWithoutInventingAFallbackVariant",
+          "DuelSourceAudioVariationTests.testRepeatedAlternativesRetainArrayPositionWeightsAndCanRepeatConsecutively",
+          "DuelSourceAudioVariationTests.testResetOrdinalRestartsTheSameStreamAndMaximumOrdinalStaysBounded"
+        ],
+        "logs": [
+          {
+            "file": "audio-variation-green-20261115.log",
+            "sha256": "a06f02ce514459602130a282b233db5affda1ea381971cc5b4561fa6dff25c76"
+          }
+        ]
+      }
+    },
+    "distinctPassedMethods": 34,
+    "overlappingFieldAuditCount": 1,
+    "newRootFixtureFailurePreserved": true,
+    "newRootMainBatchPassed": 15,
+    "newRootMainBatchFailed": 1,
+    "onlyFailedMirrorBudgetMethodRetried": true,
+    "panguFacingFixtureReviewedThenOneMethodRerun": true
+  },
+  "python": {
+    "distinctPassedMethods": 82,
+    "suites": [
+      {
+        "source": "scripts/test_stage_h17_floorfall_release.py",
+        "sha256": "6893ec129a19dbd2a2d1fdd0d286491620b007022ae7080b293ccc341de789e4",
+        "passed": 10,
+        "scope": "intermediate floorfall assembly",
+        "failed": 0
+      },
+      {
+        "source": "scripts/test_seal_h17_floorfall_delta.py",
+        "sha256": "4c414ac6a8ac6b29270346314be52dbac45f1fca8acc7e72afc44d06d5850b55",
+        "passed": 11,
+        "scope": "intermediate seal/apply and reused key-file reader",
+        "failed": 0
+      },
+      {
+        "source": "scripts/test_recover_pangu_source_index.py",
+        "sha256": "14ec08903ca8a3c5dd5ff2d9a41394f80657f3653e71f2ae8e7f41e7e13f425d",
+        "passed": 24,
+        "scope": "D19 index recovery",
+        "failed": 0
+      },
+      {
+        "source": "scripts/test_append_cached_root_victim_motions.py",
+        "sha256": "7e54ab4508eddab23216d303de4bcf4b0fc1179a12d1ab2551e511d749f40843",
+        "passed": 6,
+        "scope": "shared motion importer gates",
+        "failed": 0
+      },
+      {
+        "source": "scripts/test_stage_h17_shared_root_release.py",
+        "sha256": "dad6b135093387cc957d4d57c9802455f075e293340e5a63a483b97ff88cf7b0",
+        "passed": 15,
+        "scope": "final thirteen-payload assembly",
+        "failed": 0
+      },
+      {
+        "source": "scripts/test_seal_h17_shared_root_delta.py",
+        "sha256": "93d03458b7be7165c2c7a66f2be96ba8ebfcd43098ba1637fd9462ac7125942c",
+        "passed": 16,
+        "scope": "final thirteen-payload AES-GCM and reconstruction",
+        "failed": 0
+      }
+    ],
+    "scope": "Local synthetic resource and security tests; not Apple native tests"
+  },
+  "resources": {
+    "targetReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "sealedManifestSHA256": "d50b7fc6f711a55849b259b0f78d348612782f5e3765f9629db50291e20fe2b9",
+    "deltaManifestSHA256": "dd08d99764fcbba6f791e1db941b9eb607e715f40ade2faf8b8bdf0051365765",
+    "cipher": {
+      "bytes": 816423,
+      "sha256": "fbf4e6b4e7f9777306a0bec62a39411a5deb5c2c4955975c397b015bf7ce7091"
+    },
+    "files": 302,
+    "totalBytes": 131055973,
+    "stagedAndAppliedEveryByteHashEqual": true,
+    "unchangedBaseFiles": 289,
+    "resourceChanges": 13,
+    "payloadFiles": 13,
+    "retainedOldLiuBINBytes": 8403480,
+    "oldCatalogClipsPreserved": 56,
+    "newLiuClips": 3,
+    "audioMarkers": 115,
+    "PCMFiles": 95,
+    "tests": {
+      "method": "Python unittest synthetic inputs only",
+      "stageMethods": 15,
+      "sealedDeltaMethods": 16,
+      "tests": 31,
+      "failures": 0,
+      "seconds": 0.443
+    },
+    "sealRuns": 1,
+    "applyRuns": 1,
+    "privateDirectoriesMode": "0700",
+    "privateFilesMode": "0600",
+    "existingAssetKeyUsedLocally": true,
+    "keysPrinted": false,
+    "remoteSecretsChanged": false,
+    "originalMediaReexported": false,
+    "iosPlaybackVerified": false,
+    "physicalDeviceVerified": false,
+    "panguEquipmentActivated": false,
+    "publicationArtifacts": [
+      ".github/private/fighter-h17-shared-root/manifest.json",
+      ".github/private/fighter-h17-shared-root/shared-root.delta.enc"
+    ],
+    "unchangedPrerequisite": "Original authenticated 295-file H17 overlay plus the existing 73 baseline resources; combined app inventory 373",
+    "intermediateFloorfallCipherPublished": false
+  },
+  "actualRootProbe": {
+    "source": "docs/acceptance/fighter-root-victim-20261115.json",
+    "resultSHA256": "c967b4dab9a27153a23b8be4af3e6d2577e56e2291f0c10d5698de54e9ee22e9",
+    "success": true,
+    "wallSteps": 772,
+    "hitStopWallSteps": 28,
+    "contacts": 8,
+    "health": [
+      1000,
+      273
+    ],
+    "endMarkerCrossings": 1,
+    "sourceDataAlteredForProbe": false,
+    "sceneKitExecuted": false,
+    "audiblePlaybackVerified": false
+  },
+  "morphLoader": {
+    "receipt": "docs/acceptance/fighter-shared-root-morph-loader-20261115.json",
+    "passedChecks": 11,
+    "failedChecks": 0,
+    "metalExecuted": false,
+    "sceneKitExecuted": false
+  },
+  "nativePending": {
+    "DuelTriadFloorfallIntegrationTests": 3,
+    "DuelTriadRootVictimAudioTests": 5,
+    "newAppleMethodsExecuted": 0,
+    "syntaxOnlyIsNotNativePass": true
+  },
+  "historicalAppleEvidence": {
+    "sha": "ef3064085879c497d59533459c94b429a40f9cee",
+    "runID": 43611931466,
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43611931466",
+    "passedSourceOnlyMethods": 117,
+    "excludedInstalledSourceMethods": 5,
+    "repeatedThisTurn": false,
+    "appliesToNewSourceCommit": false
+  },
+  "remaining": {
+    "D19ExclusiveFiles": 11,
+    "D19Aliases": 12,
+    "D19EquipmentClasses": 5,
+    "D19ProductionModelComplete": false,
+    "sourceGlobalFollowedByFullyRecovered": false,
+    "simulatorOriginalMediaVerifiedForThisCommit": false,
+    "physicalIPhone17ProMaxVerified": false,
+    "testFlightUploaded": false,
+    "remoteSecretDestinationChangeBlockedByPriorAutomaticApproval": true
+  },
+  "evidenceDocuments": [
+    "docs/fighter-root-victim-20261115.md",
+    "docs/acceptance/d19-released-model-lifecycle-20261114.md",
+    "docs/acceptance/h17-heavy-contact-diagnosis-20261114.md",
+    "docs/acceptance/liu-root-victim-independent-20261115.json",
+    "docs/acceptance/fighter-floorfall-native-semantics-20261115.json",
+    "docs/fighter-pangu-source-index-20261114.md"
+  ],
+  "finalCodeSHA256": {
+    "App/Services/DuelSourceEffects.swift": "acd021e6325608108e430089621b387a58b7020ddd4f58d91bd6929e4c712997",
+    "App/Services/DuelTriadAudioBinding.swift": "4c72e7fb2bb78e68e845347d67069be5456ff49ec770aadd63186d035b7aa0dd",
+    "App/Services/DuelTriadSourceMorphAssets.swift": "6f7e49ca8398419ec7f884cd8f9cc87069b9fb5a2549fd18a8b7b35717c946dc",
+    "Sources/ShiftCore/DuelPanguSpatialState.swift": "ecaf18e27fe64cf0f0977e6f69d116e3dc59805ed151f1adadf8a55821b09e12",
+    "Sources/ShiftCore/DuelPanguState.swift": "dd1b397d597799aaed2e4d93664c16d0a6765e7af8e48c02a838ac26ddffd0e0",
+    "Sources/ShiftCore/DuelReplayState.swift": "cfb0825b188c581e864b19c1e5e0f1edb8867b1b62b05b68bc6785dd305d9849",
+    "Sources/ShiftCore/DuelSourceAudioVariation.swift": "acde8e88ab885f4e4b297cfab1c1d801eff74beee9febb12bbf67f899ae3ab4b",
+    "Sources/ShiftCore/DuelTriadRootVictimState.swift": "09bfbe722c76f42ca10a039402481badb025ff49c88479faf1598513938da949",
+    "Sources/ShiftCore/DuelWeaponFight.swift": "c758862533776cf66b57e5532c466b9b035cf22abef9719ad766c973fb95a18f",
+    "Tests/ShiftCoreTests/DuelPanguReleasedModelTests.swift": "13c4a66c7b67d5195d70ce7210401fbaaf110ab096dfe05d294b01265034bc66",
+    "Tests/ShiftCoreTests/DuelPanguRuntimeTests.swift": "4c6f98ef0a56539a588b038dd88d31a209dd267d3f97c554e46c193bf6a39719",
+    "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift": "552f36e06ddc8d488299205ec0983cd2658c7ff94185e0772a67f4cf864772b9",
+    "Tests/ShiftCoreTests/DuelReplayStateTests.swift": "2c11d180d076a5cf3a6875e7a39f793d9090a1688572dd0b504f3c58295ccc14",
+    "Tests/ShiftCoreTests/DuelSourceAudioVariationTests.swift": "1fe757adbc098fc3751506004d182562c2285b22af0867e90acb080a8b8ff494",
+    "Tests/ShiftCoreTests/DuelTriadRootVictimTests.swift": "9ce6464e1b794b9fddd7abdc702b40c272690aa3bb84d331a2991773d5e08268",
+    "Tests/SiteTests/DuelTriadFloorfallIntegrationTests.swift": "dc6cf6e6a78eca5ec3bbd81eb565353fe095b0c81a8c6b8e31b445e342ce427d",
+    "Tests/SiteTests/DuelTriadRootVictimAudioTests.swift": "708e2c9854bc29149550aac5cc8403011b0b005b6a981ab80efce864e9f688a4",
+    "scripts/append_cached_root_victim_motions.py": "425c1ad0443a8d71775828df92fc4092cca5806d2cc18feafec862a532edf9b7",
+    "scripts/recover_pangu_source_index.py": "0f5a2abb3e5d48983855d7b3bf930359b3e69a006a0d5ddbc89b5fdc0e534040",
+    "scripts/seal_h17_floorfall_delta.py": "dc525f641fb5d0ed9c335d383dcef3fcfd39546d621ec33f7eb946f2a0b44cdf",
+    "scripts/seal_h17_shared_root_delta.py": "afe712b26b1ff07b1d4154f05b178fd90f28f3fc9e5d5e2a4cde35095ef53ed5",
+    "scripts/stage_h17_floorfall_release.py": "0bf36ee23b2d2e85623c560d5de764a37e6ac2f38c7ddcec2c79be4ba1b7e409",
+    "scripts/stage_h17_shared_root_release.py": "31bf0de7697678630b6722914d44b93c65773d0a38c11bedc4721a805a384bbd",
+    "scripts/test_append_cached_root_victim_motions.py": "7e54ab4508eddab23216d303de4bcf4b0fc1179a12d1ab2551e511d749f40843",
+    "scripts/test_recover_pangu_source_index.py": "14ec08903ca8a3c5dd5ff2d9a41394f80657f3653e71f2ae8e7f41e7e13f425d",
+    "scripts/test_seal_h17_floorfall_delta.py": "4c414ac6a8ac6b29270346314be52dbac45f1fca8acc7e72afc44d06d5850b55",
+    "scripts/test_seal_h17_shared_root_delta.py": "93d03458b7be7165c2c7a66f2be96ba8ebfcd43098ba1637fd9462ac7125942c",
+    "scripts/test_stage_h17_floorfall_release.py": "6893ec129a19dbd2a2d1fdd0d286491620b007022ae7080b293ccc341de789e4",
+    "scripts/test_stage_h17_shared_root_release.py": "dad6b135093387cc957d4d57c9802455f075e293340e5a63a483b97ff88cf7b0"
+  }
+}

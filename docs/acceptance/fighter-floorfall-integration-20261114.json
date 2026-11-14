@@ -1,0 +1,218 @@
+{
+  "schema": "fighter-floorfall-integration-verification-v1",
+  "sourceBaselineSHA": "54bfc94dfdaca4a9ea8325e661cf5304525601f8",
+  "implementation": [
+    {
+      "file": "scripts/stage_h17_floorfall_release.py",
+      "bytes": 12791,
+      "sha256": "0bf36ee23b2d2e85623c560d5de764a37e6ac2f38c7ddcec2c79be4ba1b7e409"
+    },
+    {
+      "file": "scripts/test_stage_h17_floorfall_release.py",
+      "bytes": 8470,
+      "sha256": "6893ec129a19dbd2a2d1fdd0d286491620b007022ae7080b293ccc341de789e4"
+    },
+    {
+      "file": "Tests/SiteTests/DuelTriadFloorfallIntegrationTests.swift",
+      "bytes": 7696,
+      "sha256": "dc6cf6e6a78eca5ec3bbd81eb565353fe095b0c81a8c6b8e31b445e342ce427d"
+    }
+  ],
+  "lightweightRegression": {
+    "executed": 10,
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 0.018,
+    "methods": [
+      "test_caller_authored_package_cannot_replace_the_reviewed_pin",
+      "test_exact_append_retains_all_existing_bindings_and_variant_order",
+      "test_existing_binding_or_pcm_change_cannot_hide_in_the_append",
+      "test_marker_clock_variant_order_and_release_motion_pin_cannot_drift",
+      "test_release_update_preserves_catalog_characters_morph_and_pangu_boundary",
+      "test_actual_bytes_and_regular_file_requirement_are_enforced",
+      "test_repeated_output_is_rejected_before_source_io",
+      "test_output_cannot_modify_repository_or_source_directories",
+      "test_private_writes_cannot_overwrite_old_files",
+      "test_inventory_receipt_mismatch_and_ambiguous_json_are_rejected"
+    ]
+  },
+  "actualStaging": {
+    "executions": 1,
+    "success": true,
+    "oldOverlayFiles": 295,
+    "newOverlayFiles": 302,
+    "newOverlayBytes": 129997765,
+    "unchangedBaseFiles": 293,
+    "newPCMFiles": 7,
+    "reusedPCMFiles": 88,
+    "deltaFiles": 9,
+    "deltaBytes": 329548,
+    "baseReleaseSHA256": "7bf9aa17a1e15273dbe7ae04eecd1ef092c2ad9a72360b99cd4f7ac08695704b",
+    "targetReleaseSHA256": "fc85891d75aef9b236270e801d9d6d43661ff0f86fde812d4d1aa7996bc9ebbf",
+    "audioManifestSHA256": "7451625a85eab8da8f296f4d412c94981e7d411706de7ea6e5b620c2f7d4d809",
+    "deltaManifestSHA256": "da980ab998acaa85fb828d320a9fc3aec4cff6457145644bd94287f0c84000fb",
+    "baselineResourcesStillRequired": 73,
+    "reviewedBaselineReplacementOverlap": 2,
+    "expectedCombinedGameResources": 373,
+    "requiresIndependentSignedBuildPin": true
+  },
+  "loaderCheck": {
+    "executions": 1,
+    "result": {
+      "catalogValidated": true,
+      "companionAdapter": "pinned role/frame metadata only",
+      "floorfallMarkers": 2,
+      "intervalChecks": 12,
+      "iOSPlaybackVerified": false,
+      "markers": 114,
+      "normalFightHeavyKnockdownCrossings": 0,
+      "normalFightSteps": 1600,
+      "oldReleasePinRejected": true,
+      "physicalDeviceVerified": false,
+      "platform": "Linux Swift Foundation",
+      "releaseLoaded": true,
+      "releasePin": "fc85891d75aef9b236270e801d9d6d43661ff0f86fde812d4d1aa7996bc9ebbf",
+      "sceneKitModelLoadVerified": false,
+      "shaAdapter": "sha256sum",
+      "verifiedAudioRecords": 96
+    },
+    "sources": [
+      {
+        "file": "App/Services/DuelFighterAssetReleaseLoader.swift",
+        "bytes": 9387,
+        "sha256": "9ddd6a5afc9a92ca19f08f3aec426564024e4cddee22f4ac8dc5eb70b13386c5"
+      },
+      {
+        "file": "App/Services/DuelTriadAudioBinding.swift",
+        "bytes": 17719,
+        "sha256": "9206ba7ea87dd2951ea37e77bf13027d51615fd2902604206e175368e5955d8f"
+      }
+    ],
+    "log": {
+      "file": "floorfall-loader-check/execution.log",
+      "bytes": 508,
+      "sha256": "5ace5c6d80894523cb723215dfe78a30bd48f37346d21db33f0f38ef9d553d94"
+    },
+    "scope": "Real pinned release/catalog and 95 WAV bytes; Linux Foundation with SHA and companion-metadata adapters; no SceneKit or AVAudioPlayer execution"
+  },
+  "installedTests": {
+    "file": "Tests/SiteTests/DuelTriadFloorfallIntegrationTests.swift",
+    "methods": 3,
+    "syntaxParseExit": 0,
+    "executed": 0,
+    "nativePassed": null,
+    "methodsSelectedForLaterValidation": [
+      "testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+      "testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+      "testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback"
+    ],
+    "missingResources": "fail; no XCTSkip",
+    "initialSyntaxDefinitionSHA256": "8c480d11ccace6657281922f3d778f4a0ee3d7800c16d6a816b87159a374c6f2",
+    "definitionUpdatedForFinalCombinedRelease": true,
+    "currentReleaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "currentAudioSHA256": "d13dbebea26a4759c3b5109ef12de957140b9056e6adc5fdf989b6a3321b3d90",
+    "currentMarkers": 115,
+    "currentFloorfallBindings": 3,
+    "currentDefinitionFollowup": "docs/acceptance/fighter-root-victim-20261115.json",
+    "sha256": "dc6cf6e6a78eca5ec3bbd81eb565353fe095b0c81a8c6b8e31b445e342ce427d"
+  },
+  "normalFightProbe": {
+    "result": {
+      "canUseHeavy": true,
+      "contacts": 0,
+      "controller": "Move ordinary opponent within 800mm, then send heavy; no profile/stat mutation",
+      "firstContactStep": -1,
+      "health": [
+        1000,
+        1000
+      ],
+      "liuObservedClips": {
+        "dual_hammers_heavy_slash": 124,
+        "dual_hammers_stance_idle": 0,
+        "m_step_forward": 16
+      },
+      "normalHeavyKnockdownCrossings": 0,
+      "phase": "fighting",
+      "positions": [
+        550,
+        1195
+      ],
+      "sourceIntroActive": false,
+      "steps": 1800,
+      "sunObservedClips": [
+        "h17_fight_start_stance",
+        "h17_start_stance_idle",
+        "ninjato_stance_idle"
+      ],
+      "supportsHeavy": true,
+      "swings": 11
+    },
+    "log": {
+      "file": "floorfall-loader-check/probe-diagnosis.log",
+      "bytes": 513,
+      "sha256": "255a4730198d73b411af27d2668cc3b5c4a21430fa5583e6b834172c02bb6765"
+    },
+    "naturalMarkerRouteVerified": false,
+    "fixtureAlteredSourceStatsOrTracks": false,
+    "missingGLBCapsuleProvider": false,
+    "finding": "Initial 800mm approach produced no contact. Follow-up legal 2600/2617mm heavy startups produced two real contacts; first source defender protection suppressed reaction, second produced one Floorfall crossing. No collision fix was required.",
+    "observationStage": "initial narrow-distance probe; retained historical result"
+  },
+  "rootVictimGap": {
+    "sourceLock": 1777,
+    "sourceLockSHA256": "d0732e8ca62baf42f6125d24d1c347f9054ae7d0dc9ce163fc0a458b096944c6",
+    "originalStartTrigger": 0,
+    "originalLoopTrigger": 5,
+    "originalEndTrigger": 6,
+    "originalStartEvent": "PostHit",
+    "originalLoopEvents": "AnimationEnd(Start/Loop)",
+    "originalEndEvents": "AnimationEnd(Start/Loop) or IntervalEnd(H17_Root_Spike_Passive_Loop_Check)",
+    "runtimeRouteComplete": false,
+    "liuLegacyVictimClipsInstalled": false,
+    "requiresSeparateSourceAndRigAudit": true,
+    "observationStage": "baseline before root-victim continuation",
+    "baselineEngine": "Generic hit pose while rooted; release clears timers without Start/Loop/End routing",
+    "followup": "docs/fighter-root-victim-20261115.md",
+    "resolvedByFollowup": "docs/acceptance/fighter-root-victim-20261115.json"
+  },
+  "boundaries": {
+    "sourceAssetsReencoded": false,
+    "existingInputsModified": false,
+    "keysReadOrPublishedByStager": false,
+    "uploadedByStager": false,
+    "reranSuccessful117NativeTests": false,
+    "iOSPlaybackVerified": false,
+    "physicalDeviceVerified": false,
+    "panguActivated": false,
+    "rootPassiveEndNaturalRouteVerified": false,
+    "legacyLiuIdentity": "liu_hammers"
+  },
+  "normalFightFollowup": {
+    "naturalCoreMarkerRouteVerified": true,
+    "audioPlaybackVerified": false,
+    "catalogMutated": false,
+    "wallSteps": 837,
+    "contacts": 2,
+    "healthHistory": [
+      1000,
+      871,
+      742
+    ],
+    "floorfallCrossings": 1,
+    "marker": {
+      "clip": "h_hit_head_fall",
+      "crossedSourceFrame": 19,
+      "duration": 116,
+      "previousTick": 37,
+      "step": 837,
+      "tick": 38
+    },
+    "artifact": {
+      "file": "heavy-contact-diagnosis/result-two-hits.json",
+      "bytes": 12963,
+      "sha256": "7ae98c4f264d34f14674c415a0ee2cdb42ab4bda7bdff6effa661e0bd9357b85"
+    },
+    "evidence": "docs/acceptance/h17-heavy-contact-diagnosis-20261114.md"
+  }
+}

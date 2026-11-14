@@ -1,4 +1,4 @@
-# Canonical fighter replay diagnostics, schema 6
+# Canonical fighter replay diagnostics, schema 8
 
 ## Scope and status
 
@@ -10,7 +10,7 @@ Equipped motion uses floating-point math. This format detects differing bits; it
 
 ## Wire-independent byte contract
 
-The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `6`, unsigned 16-bit simulation rules version `10`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
+The header is the eight ASCII bytes `DUELSTAT`, unsigned 16-bit schema version `8`, unsigned 16-bit simulation rules version `12`, and one payload byte: game `1`, standalone fight `2`, catalog `3`. Nested values have no additional header. Bump the schema version if any field order, width, meaning, tag, bound or numeric normalization changes. Bump the rules version whenever simulation behavior/constants change even if the stored fields do not.
 
 - All multi-byte numbers are **little-endian**. Swift `Int` becomes a signed, two's-complement 64-bit integer; RNG is unsigned 64-bit. No native-width values are written.
 - Boolean and optional-present markers are exactly one byte, `0` or `1`. A present optional is immediately followed by its payload.
@@ -41,7 +41,8 @@ Tags are unsigned bytes, explicitly switched rather than derived from raw string
 The following lists are the **exact encoding order**, checked against the declarations in `DuelGame.swift`, `DuelWeaponFight.swift` and `DuelWeaponMotion.swift`. No stored simulation fields are omitted. Re-audit this list whenever one of those types changes. `DuelReplayStateAuditTests` fails if their stored-property inventory changes, including private properties; manual review still has to verify each property's encoding and meaning.
 
 - [x] **DuelGame**: selectedHero, difficulty, mode, fighters, projectiles, grapple, phase, frame, remainingTicks, wins, hitStop, events, landedHits, damageDealt, weaponFight, random, nextProjectile, botHeld, buffered, opponentHero, weaponModeRequested. The private RNG, pending hit-stop buttons, AI held input, projectile identity counter and invalid-equipped-mode gate are included. The outer visible fighter/event copies are encoded even when a nested fight exists, so mirror-state drift is not hidden.
-- [x] **DuelWeaponFight**: profiles, fighters, phase, frame, remainingTicks, wins, hitStop, landedHits, damageDealt, events, contacts, swings, mode, difficulty, actions, queued, loopTicks, loopRoles, previousX, random, shadowCooldowns, previousY, previousHurtY, impactMotions, panguStates, panguSpace, ordinaryThrowStates, ordinaryThrowKnockdownTicks. Both new arrays have limit 2. PreviousHurtY retains the complete hurtbox origin, including source jump/root offsets. This includes queued follow-ups, action and loop clocks, previous positions used for swept collision, pending recoil/flight, ordinary-throw authority/recovery and RNG before its next decision.
+- [x] **DuelWeaponFight**: profiles, fighters, phase, frame, remainingTicks, wins, hitStop, landedHits, damageDealt, events, contacts, swings, mode, difficulty, actions, queued, loopTicks, loopRoles, previousX, random, shadowCooldowns, previousY, previousHurtY, impactMotions, panguStates, panguSpace, ordinaryThrowStates, ordinaryThrowKnockdownTicks, sourceThrowStates, sourceThrowDisabledTicks, triadStates, triadSpace, roundNumber, sourcePresentationTick, sourceStances, rootVictims, previousPoses, previousFacings. Fighter-indexed arrays have limit 2. PreviousHurtY retains the complete hurtbox origin, including source jump/root offsets. This includes queued follow-ups, source stance/root-victim clocks, previous positions used for swept collision, pending recoil/flight, throw authority/recovery and RNG before its next decision.
+- [x] **Root victim**, as optional elements of rootVictims: sourceID (UInt64), owner (Int64), motion (UTF-8 string), tick (Int64), durationActive (Bool), originXMillimeters (exact Double), direction (Int64). A visually identical loop pose before and after the duration variable expires remains distinguishable, because the next source checkpoint will branch differently.
 - [x] **Explicit presentation exclusion**: `DuelWeaponFight.panguPresentationEvents` is a derived queue, bounded to 128 accepted-feedback events per step and cleared at the next step or round reset. Its `(frame, sequence)` keys do not consume gameplay IDs or RNG. Adding, observing, dropping or discarding this feedback cannot affect simulation outcomes or canonical bytes; the audit test changes the queue independently and verifies this exclusion. The computed `panguPresentation` snapshot and native SceneKit/HUD caches are also outside the encoding. The original `events`, `contacts`, `swings`, Fighter and pose fields listed above remain encoded.
 - [x] **Private Action**, as optional elements of actions: name, role, command, tick, hits, touching, landedStrikeIDs, touchingStrikeIDs, requiresContactSeparation, sounded, reaction, comboDepth, soundAt, shadowOriginX. Strike IDs retain independent contact budgets inside one animation stage. The geometric separation latch prevents a new combo stage from damaging a continuously overlapping body just because its strike IDs differ. The optional origin owns the provisional hammer trajectory; cooldowns and external motion freeze with hit-stop. These states affect future events even if the current pose looks identical.
 - [x] **Fighter**: hero, x, y, velocityY, facing, health, guardMeter, energy, stun, knockdown, invulnerable, guarding, attack, flash, walking, movementDirection, weaponPose. Presentation fields are intentionally included so deterministic visible state can be diagnosed too.
@@ -270,6 +271,28 @@ section and retain their current equipment. The new source file is mandatory
 in both manifest required-path lists; peers require matching fingerprints.
 Input wire protocol remains 1. See fighter-pangu-ordinary-throw-followup-20261114.md
 and its separate validation record for this update's checks and limits.
+
+## Source root-victim update (2026-11-15)
+
+Schema 8 appends a two-entry optional root-victim array immediately after sourceStances
+and before previousPoses. An empty array payload adds six bytes to an equipped fight
+or game; bare laboratory games and catalog payloads keep their prior sizes. The
+current small fixture is 382 bytes (laboratory), 65,488 bytes (catalog), 66,516 bytes
+(equipped fight), and 66,966 bytes (equipped game). Earlier size tables describe their
+named historical schemas and are not current byte-count assertions.
+
+Rules 12 implements reviewed lock_1777 Start/Loop→Loop/End transitions, with a
+separate duration condition. Start and Loop transition at source AnimationEnd
+ticks 78 and 112. A released duration also allows Loop→End at IntervalEnd ticks
+2, 50 or 90. The End clip retains all 94 sampling ticks and publishes its Floorfall
+IntervalStart crossing at tick 38. The arena then uses its existing get-up role;
+this is not a claim that the original global FOLLOWED_BY dispatcher is restored.
+
+Hit-stop freezes the state and ordered source-motion queue. Locked inputs are
+discarded, repulsion remains disabled during the passive sequence, and round
+completion/reset clears ownership. The new state is part of canonical diagnostics;
+derived audio observations remain excluded. The source-manifest glob covers the
+new Swift helper, so old executable fingerprints must not join a new session.
 
 ## Provisional shadow schema update (2026-11-10)
 

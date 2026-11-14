@@ -1,0 +1,32 @@
+{
+  "schema": "root-victim-new-native-gates-v1",
+  "testFile": "Tests/SiteTests/DuelTriadRootVictimAudioTests.swift",
+  "testFileSHA256": "708e2c9854bc29149550aac5cc8403011b0b005b6a981ab80efce864e9f688a4",
+  "methodCount": 5,
+  "methods": [
+    "testVerifiedRootEndUsesLiuOwnershipAtTick38AndDeduplicatesTheSameFrame",
+    "testRootEndRejectsWrongClockFrameContextVariantCountAndSunImpersonation",
+    "testEveryVictimClipMustMatchSourceSHAFramesTicksGridAndPelvisBeforeSharing",
+    "testOrdinarySharedThrowsKeepSoundFrameClockWithoutTheRootEndException",
+    "testMorphTargetMetadataAcceptsOnlyReviewedHammersAndCompleteNewVictimCapability"
+  ],
+  "scope": "Independent synthetic PCM/tracks plus pure morph metadata gate; no original media bytes are embedded or reused.",
+  "verification": {
+    "swiftFrontendParseWithDEBUG": true,
+    "parseExitCode": 0,
+    "appleTypeCheck": false,
+    "appleNativeTestExecution": false,
+    "nativePassedMethods": 0,
+    "nativePendingMethods": 5,
+    "simulatorVerified": false,
+    "physicalDeviceVerified": false
+  },
+  "boundaries": [
+    "All3shared victim clips require exact sourceSHA/frames/ticks/2x sampling/pelvis count before rootEnd can extend shared motion binding.",
+    "Explicit Liu rootEnd marker must use intervalStart20/Common/7distinct variants; ordinary throws remain soundFrame.",
+    "Playback spy checks Liu owner routing at tick38, no Sun impersonation, no unbound owner playback, and same-frame duplicate suppression.",
+    "Morph metadata permits reviewed old Hammers hash or reviewed new Hammers hash with complete victim capability; fake D19/incorrect equipment/hash are rejected."
+  ],
+  "existing117NativePassSetModified": false,
+  "existing22SourceAudioTestMethodsModified": false
+}

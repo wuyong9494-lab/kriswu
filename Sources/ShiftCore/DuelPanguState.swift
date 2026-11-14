@@ -927,13 +927,16 @@ public struct DuelPanguState: Equatable, Sendable {
         case .splitter: queueSource(.splitter, delay: 38, groupID: id, requiresOwnerCast: true)
         case .bones: queueSource(.bones, delay: 42, groupID: id, requiresOwnerCast: true)
         case .spear:
-            // Missile creation is owner frame 5 (core tick 8). Interruption
-            // before creation cancels it; the created model then runs alone.
+            // Model birth at owner frame 5 / tick 8 is not free flight.
+            // lock1557/t5 still cancels either Create animation on Parent
+            // Hit. t8/9 release that gate only at AnimationEnd -> Miss:
+            // record241 ends at frame26 / tick50; record242 has no EndFrame
+            // override, so its 31-frame bullet clip ends at tick60.
             queueSource(empowered ? .spearInitial : .normalSpear, delay: 46, groupID: id,
-                        empowered: empowered, requiresOwnerCast: true, ownerReleaseTick: 8)
+                        empowered: empowered, requiresOwnerCast: true, ownerReleaseTick: empowered ? 50 : 60)
             if empowered {
                 queueSource(.spearFlight, delay: 50, groupID: id, empowered: true,
-                            requiresOwnerCast: true, ownerReleaseTick: 8)
+                            requiresOwnerCast: true, ownerReleaseTick: 50)
             }
         case .heavenfall:
             queueSource(.heavenfallAxe, delay: runtime.axeHitTick, groupID: id, requiresOwnerCast: true)
@@ -1048,7 +1051,9 @@ public struct DuelPanguState: Equatable, Sendable {
         case .landingShock: coefficient = 1500; scale = runtime.normalizedMagicPower; lifetime = 17; spec = rules.earth.landingShock
         case .spearInitial: coefficient = 2500; scale = runtime.normalizedMagicPower; lifetime = 4; spec = rules.hunt.empoweredSpear
         case .spearFlight: coefficient = 4500; scale = runtime.normalizedMagicPower; lifetime = 50; spec = rules.hunt.empoweredSpear
-        case .normalSpear: coefficient = 2000; scale = runtime.normalizedRangedPower; lifetime = 54
+        // Attack starts at tick46, Create_No_Wall ends at60, then t9 grants
+        // 50 free-flight ticks. The normal packet therefore lasts14 + 50.
+        case .normalSpear: coefficient = 2000; scale = runtime.normalizedRangedPower; lifetime = 64
         case .windBlade: coefficient = 2500; scale = runtime.normalizedMagicPower; lifetime = 17; spec = rules.windBlade; spec.delivery = .ground
         case .heavenfallAxe: coefficient = 7000; scale = runtime.normalizedWeaponPower; lifetime = 8; spec.delivery = .melee
         case .heavenfallExplosion: coefficient = 10_000; scale = runtime.normalizedMagicPower; lifetime = 17

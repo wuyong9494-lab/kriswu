@@ -213,7 +213,22 @@ struct DuelPanguSpatialState: Equatable, Sendable {
     }
 
     mutating func cancelMelee(owner: Int) {
-        volumes.removeAll { $0.owner == owner && $0.attack.delivery == .melee }
+        volumes.removeAll { volume in
+            guard volume.owner == owner else { return false }
+            if volume.attack.delivery == .melee { return true }
+            // A source spear can already deal damage while its model is
+            // still in Create. lock1557/t5 cancels it with its parent until
+            // t8/9 enters Miss; that released flight survives owner reaction.
+            let creationTicks: Int
+            switch volume.attack.sourceStrike {
+            case .spearInitial: creationTicks = 4  // damage46 -> Miss50
+            case .normalSpear: creationTicks = 14 // damage46 -> Miss60
+            default: return false
+            }
+            guard let lifetime = volume.attack.sourceLifetimeTicks else { return false }
+            let releasedAt = volume.expiresAt - max(1, lifetime) + 1
+            return tick - releasedAt < creationTicks
+        }
         cancelUnreleasedAttacks(owner: owner)
         speedRemainders[owner] = 0
     }

@@ -1,0 +1,368 @@
+{
+  "schema": "fighter-root-victim-verification-v1",
+  "sourceBaselineSHA": "54bfc94dfdaca4a9ea8325e661cf5304525601f8",
+  "implementation": [
+    {
+      "file": "Sources/ShiftCore/DuelTriadRootVictimState.swift",
+      "bytes": 5127,
+      "sha256": "09bfbe722c76f42ca10a039402481badb025ff49c88479faf1598513938da949"
+    },
+    {
+      "file": "Sources/ShiftCore/DuelWeaponFight.swift",
+      "bytes": 166892,
+      "sha256": "c758862533776cf66b57e5532c466b9b035cf22abef9719ad766c973fb95a18f"
+    },
+    {
+      "file": "Sources/ShiftCore/DuelReplayState.swift",
+      "bytes": 14286,
+      "sha256": "cfb0825b188c581e864b19c1e5e0f1edb8867b1b62b05b68bc6785dd305d9849"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelTriadRootVictimTests.swift",
+      "bytes": 14449,
+      "sha256": "9ce6464e1b794b9fddd7abdc702b40c272690aa3bb84d331a2991773d5e08268"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift",
+      "bytes": 15846,
+      "sha256": "552f36e06ddc8d488299205ec0983cd2658c7ff94185e0772a67f4cf864772b9"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelReplayStateTests.swift",
+      "bytes": 17153,
+      "sha256": "2c11d180d076a5cf3a6875e7a39f793d9090a1688572dd0b504f3c58295ccc14"
+    }
+  ],
+  "sourceContract": {
+    "configurationSHA256": "64bd77afa0edacdc7b672047222fb4261771f08b835367bc3aeeb5b02e668f5a",
+    "triggerSHA256": "d0732e8ca62baf42f6125d24d1c347f9054ae7d0dc9ce163fc0a458b096944c6",
+    "triggerEntry": "lock_1777.bytes",
+    "transitionTriggers": [
+      5,
+      6
+    ],
+    "loopIntervalEndTicks": [
+      2,
+      50,
+      90
+    ],
+    "startAnimationEndTick": 78,
+    "loopAnimationEndTick": 112,
+    "endLastSampleTick": 94,
+    "floorfallIntervalStartTick": 38,
+    "durationExpiryIsImmediateAnimationEnd": false,
+    "getUpAfterEnd": "explicit arena adapter; original global FOLLOWED_BY dispatcher not restored"
+  },
+  "skeletonAudit": {
+    "sourceBones": 58,
+    "matchedSourceIDs": 58,
+    "matchedNames": 58,
+    "matchedParentNames": 58,
+    "targetNodeNameMismatches": 0,
+    "restTRSDifferences": 58,
+    "sunTracksCopiedToLiu": false,
+    "liuOldProfile": {
+      "file": "Liu_Legion_Hammers_profile_before_root.json",
+      "bytes": 8584711,
+      "sha256": "30b7af76550112c523d11d8b967553bccd7a65503d24bb21cb71f92b060c8723"
+    },
+    "liuAppendReceipt": {
+      "file": "root-victim-append-receipt-private.json",
+      "bytes": 2251,
+      "sha256": "c9a1e608dfa56d0311bf459ad4dd5340a84e2e43f456161604bb47e8df8b66f3"
+    },
+    "liuNewGLBSHA256": "a3aada76d336b9c4f9bda3904b5e947711d916f683a2dcbf7b8184377e01a517",
+    "retainedIdentity": "liu_hammers",
+    "panguEquipmentActivated": false
+  },
+  "lightweightRegression": {
+    "platform": "Linux Swift 6.0.3",
+    "runs": [
+      {
+        "log": {
+          "file": "root-victim-red-20261115.log",
+          "bytes": 2552,
+          "sha256": "6a12760689b8fc50e191ef28d1644efd0e084e224dd3342863fa26037daf39ad"
+        },
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "passedMethods": [],
+        "failedMethods": [
+          "DuelTriadRootVictimTests.testConfirmedRootContactSelectsTheBoundPassiveStartInsteadOfFreezingGenericHit"
+        ]
+      },
+      {
+        "log": {
+          "file": "root-victim-green-20261115.log",
+          "bytes": 173721,
+          "sha256": "385c7f837a439d34c48b6dbb4d676c40ae60c3986ceeabaaf41f1eca8b990089"
+        },
+        "passed": 15,
+        "failed": 1,
+        "skipped": 0,
+        "passedMethods": [
+          "DuelReplayStateAuditTests.testCompleteStoredPropertyInventoryIncludingPrivateFields",
+          "DuelReplayStateTests.testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths",
+          "DuelReplayStateTests.testInitialGameGoldenPinsTheCompleteFieldOrder",
+          "DuelReplayStateTests.testSyntheticDiagnosticSizesStayExplicit",
+          "DuelTriadRootVictimTests.testAReleasedShortRootStillFinishesStartBeforeEnteringEnd",
+          "DuelTriadRootVictimTests.testAStaleRootReleaseCannotUnlockAnotherSourceOrOwner",
+          "DuelTriadRootVictimTests.testActiveDurationLoopsOnlyAtTheOriginalEarlyAnimationEnds",
+          "DuelTriadRootVictimTests.testCapabilityRequiresEveryExactMotionClockAndRigPelvisTrack",
+          "DuelTriadRootVictimTests.testConfirmedRootContactSelectsTheBoundPassiveStartInsteadOfFreezingGenericHit",
+          "DuelTriadRootVictimTests.testDurationExpiryWaitsForTheNextLoopIntervalEndOrAnimationEnd",
+          "DuelTriadRootVictimTests.testEndRetainsItsLastSampleAndCrossesFloorfallExactlyOnce",
+          "DuelTriadRootVictimTests.testFightKeepsOwnershipAfterExpiryPublishesBoundarySamplesAndReplaysIdentically",
+          "DuelTriadRootVictimTests.testLethalRootRoundEndClearsVictimOwnershipBeforeTheNextRound",
+          "DuelTriadRootVictimTests.testMissingOriginalVictimMotionsRetainExplicitLegacyFallback",
+          "DuelTriadRootVictimTests.testSourceSamplingEndEventsAndIntervalEndClocksRemainDistinct"
+        ],
+        "failedMethods": [
+          "DuelTriadRootVictimTests.testMirroredSeatUsesTheSameSourceStagesAndPreservesPelvisAcrossTransitions"
+        ]
+      },
+      {
+        "log": {
+          "file": "root-victim-mirrored-fix-20261115.log",
+          "bytes": 1528,
+          "sha256": "dc819caeb15473c97fa903eb39d5d22c9932ea582247c93eeecb714b77ff8e15"
+        },
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "passedMethods": [
+          "DuelTriadRootVictimTests.testMirroredSeatUsesTheSameSourceStagesAndPreservesPelvisAcrossTransitions"
+        ],
+        "failedMethods": []
+      }
+    ],
+    "finalDistinctPassedMethods": 16,
+    "newRootMethods": 12,
+    "changedReplayGateMethods": 4,
+    "singleRunSixteenOfSixteenClaim": false,
+    "fixtureFailureResolution": "Mirrored scene had End tick88 after310 wall steps because follow-up contact hit-stop freezes live ticks. Raised only that bounded test to380 and reran only the failed method; production code unchanged.",
+    "heavyNative117Rerun": false
+  },
+  "replay": {
+    "schemaVersion": 8,
+    "rulesVersion": 12,
+    "fields": [
+      "sourceID",
+      "owner",
+      "motion",
+      "tick",
+      "durationActive",
+      "originXMillimeters",
+      "direction"
+    ],
+    "emptyFightBytesAdded": 6
+  },
+  "actualCatalogProbe": {
+    "executed": true,
+    "executions": 1,
+    "exitCode": 0,
+    "result": {
+      "audioPlaybackVerified": false,
+      "audioSHA256": "d13dbebea26a4759c3b5109ef12de957140b9056e6adc5fdf989b6a3321b3d90",
+      "catalogMutated": false,
+      "catalogSHA256": "fbd9ecbd9fb16de79c0240404e315af81d8cbbaa113b6042e6afc5ed7b1d0330",
+      "companionAdapter": "pinned role/frame metadata only",
+      "contacts": 8,
+      "durationVariableEnds": [
+        {
+          "gameLiveTick": 639,
+          "rootRemainingTicks": 0,
+          "stage": "loop",
+          "tick": 102,
+          "wallStep": 659
+        }
+      ],
+      "endLastSamples": [
+        {
+          "gameLiveTick": 743,
+          "previousTick": 93,
+          "tick": 94,
+          "wallStep": 771
+        }
+      ],
+      "floorfallCrossings": 1,
+      "floorfallSamples": [
+        {
+          "boundPCMVariants": 7,
+          "clip": "h17_root_spike_passive_end",
+          "configuredIntervalStart": 20,
+          "duration": 94,
+          "gameLiveTick": 687,
+          "markerID": "source_floorfall_923_97_liu_hammers_h17_root_spike_passive_end",
+          "owner": 1,
+          "playbackFrame": 19,
+          "previousTick": 37,
+          "profileID": "liu_hammers",
+          "tick": 38,
+          "wallStep": 715
+        }
+      ],
+      "gameLiveTickAfter": 744,
+      "healthAfter": [
+        1000,
+        273
+      ],
+      "healthOrStateInjected": false,
+      "hitStopWallSteps": 28,
+      "issuance": {
+        "gameLiveTick": 394,
+        "health": [
+          1000,
+          1000
+        ],
+        "input": "neutral-direction shadow (branches)",
+        "mist": 0,
+        "positions": [
+          3044,
+          6500
+        ],
+        "wallStep": 395
+      },
+      "legacyTrailsTargetPinMatched": true,
+      "liuCharacterSHA256": "a3aada76d336b9c4f9bda3904b5e947711d916f683a2dcbf7b8184377e01a517",
+      "markers": 115,
+      "morphOwnerAndTargetPinsMatched": true,
+      "morphSHA256": "fc6cad67889ead35ca683ede13b86d4c0423949609388c01ca04b36dc050416b",
+      "panguEquipmentActivated": false,
+      "physicalDeviceVerified": false,
+      "profiles": [
+        "sun_triad",
+        "liu_hammers"
+      ],
+      "realGLBBytesAndContainerVerified": true,
+      "releaseID": "h17-shared-root-floorfall-20261115-v2",
+      "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+      "rootVictimCleared": true,
+      "sceneKitModelLoadVerified": false,
+      "schema": "source-root-victim-live-probe-v1",
+      "scope": "Linux Foundation current release/audio loaders plus actual catalog Core inputs; no renderer or audible playback",
+      "shaAdapter": "sha256sum",
+      "sourceBaselineSHA": "54bfc94dfdaca4a9ea8325e661cf5304525601f8",
+      "sourceStagesSampled": [
+        "h17_root_spike_passive_end",
+        "h17_root_spike_passive_loop",
+        "h17_root_spike_passive_start"
+      ],
+      "steps": 772,
+      "success": true,
+      "targetTrailsSHA256": "0190b0cb88d9824cae2fab4e4f0b76d9d3e823eb267968b44a597236ecd79d66",
+      "transitions": [
+        {
+          "durationActive": true,
+          "gameLiveTick": 459,
+          "owner": 0,
+          "rootRemainingTicks": 180,
+          "sourceID": 2,
+          "sourcePresentationTick": 459,
+          "stage": "start",
+          "tick": 0,
+          "wallStep": 459
+        },
+        {
+          "durationActive": true,
+          "gameLiveTick": 537,
+          "owner": 0,
+          "rootRemainingTicks": 102,
+          "sourceID": 2,
+          "sourcePresentationTick": 537,
+          "stage": "loop",
+          "tick": 0,
+          "wallStep": 549
+        },
+        {
+          "durationActive": false,
+          "gameLiveTick": 649,
+          "owner": 0,
+          "rootRemainingTicks": 0,
+          "sourceID": 2,
+          "sourcePresentationTick": 649,
+          "stage": "end",
+          "tick": 0,
+          "wallStep": 669
+        },
+        {
+          "clip": "m_str_stand_up_back_forward",
+          "gameLiveTick": 744,
+          "sourcePresentationTick": 744,
+          "stage": "arena_getUp",
+          "tick": 0,
+          "wallStep": 772
+        }
+      ],
+      "verifiedAudioRecords": 96,
+      "wallStepsWaitingAfterDuration": 10
+    },
+    "resultArtifact": {
+      "file": "root-victim-live-check/result-v2.json",
+      "bytes": 3720,
+      "sha256": "c967b4dab9a27153a23b8be4af3e6d2577e56e2291f0c10d5698de54e9ee22e9"
+    },
+    "source": {
+      "file": "root-victim-live-check/Probe.swift",
+      "bytes": 10834,
+      "sha256": "4dcc4bc4b0c543f35595a3bdb4aedbaff65c4c16c7c66c6defd1d9f3e005dc11"
+    },
+    "compiledCurrentAppSources": [
+      {
+        "file": "App/Services/DuelFighterAssetReleaseLoader.swift",
+        "bytes": 9387,
+        "sha256": "9ddd6a5afc9a92ca19f08f3aec426564024e4cddee22f4ac8dc5eb70b13386c5"
+      },
+      {
+        "file": "App/Services/DuelTriadAudioBinding.swift",
+        "bytes": 18781,
+        "sha256": "4c72e7fb2bb78e68e845347d67069be5456ff49ec770aadd63186d035b7aa0dd"
+      }
+    ],
+    "compiledCoreObjects": 147,
+    "compilationExitCode": 0,
+    "intermediateReleaseProbeExecutions": 0,
+    "clockDefinition": "gameLiveTick is the public triadPresentation.liveTick, includes source intro and excludes hit-stop, not a claim about private combat-only clock",
+    "sceneKitVerified": false,
+    "audiblePlaybackVerified": false,
+    "physicalDeviceVerified": false
+  },
+  "boundaries": {
+    "simulatorExecuted": false,
+    "iPhone17ProMaxAccepted": false,
+    "keysPublished": false,
+    "testFlightUploaded": false,
+    "originalGlobalReactionDispatcherRestored": false,
+    "rootVictimSourceModelsAndAudioRequireIndependentSignedReleasePin": true
+  },
+  "installedTests": {
+    "source": {
+      "file": "Tests/SiteTests/DuelTriadFloorfallIntegrationTests.swift",
+      "bytes": 7696,
+      "sha256": "dc6cf6e6a78eca5ec3bbd81eb565353fe095b0c81a8c6b8e31b445e342ce427d"
+    },
+    "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+    "audioSHA256": "d13dbebea26a4759c3b5109ef12de957140b9056e6adc5fdf989b6a3321b3d90",
+    "declaredMethods": 3,
+    "methods": [
+      "testInstalledReleaseBindsSevenOriginalVariantsAtThreeExactProfileIntervals",
+      "testInstalledIntervalsReachTheExistingConsumerOnceAcrossPauseAndReset",
+      "testInstalledOriginalBodyFallWAVsDecodeWithoutStartingPlayback"
+    ],
+    "floorfallBindings": 3,
+    "markers": 115,
+    "originalWAVFiles": 95,
+    "syntaxParseExit": 0,
+    "appleXCTestExecuted": 0,
+    "skippedCount": null,
+    "missingResourcesBehavior": "explicit failure; no XCTSkip",
+    "finalReadOnlyReviewCorrection": "Release ID literal corrected to final -v2; independent release SHA unchanged; syntax parse succeeded; Apple execution remains zero."
+  },
+  "peerReview": {
+    "readOnly": true,
+    "reranTests": false,
+    "scope": "state clock, source transition conditions, hit-stop, End sampling, get-up, repulsion, round cleanup, canonical fields and throw/input ownership",
+    "specificDefectsFoundInScope": 0
+  }
+}

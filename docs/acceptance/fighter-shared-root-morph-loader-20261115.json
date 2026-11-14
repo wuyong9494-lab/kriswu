@@ -1,0 +1,39 @@
+{
+  "checks": [
+    "new exact reference admitted",
+    "old reviewed reference preserved",
+    "renamed D19 rejected",
+    "changed body rejected",
+    "changed weapon rejected",
+    "unreviewed character digest rejected",
+    "missing root phase rejected",
+    "wrong original motion rejected",
+    "missing own pelvis rejected",
+    "current actual Morph manifest and mask load",
+    "stale old-target Morph binding rejected"
+  ],
+  "failed": 0,
+  "metadataLoaderExecuted": true,
+  "metalExecuted": false,
+  "passed": 11,
+  "physicalDeviceVerified": false,
+  "releaseSHA256": "e5c0ccaeef85ce86c5b8fd4ee64524794d6556f5a561f4078362f6899bedf4e5",
+  "sceneKitExecuted": false,
+  "schema": "shared-root-morph-loader-result-v1",
+  "scope": "Current MorphAssets Foundation initializer and exact target gates; current shadow metadata validator; GPU preparation and stage node binding excluded; SHA via sha256sum",
+  "sourceBaselineSHA": "54bfc94dfdaca4a9ea8325e661cf5304525601f8",
+  "sourceFiles": {
+    "App/Services/DuelTriadSourceMorphAssets.swift": "6f7e49ca8398419ec7f884cd8f9cc87069b9fb5a2549fd18a8b7b35717c946dc",
+    "App/Services/DuelSourceProjectedShadowDefinition.swift": "5c7dffd64bd13cc3c6338f4f87223d381fa540a2c06c9e034ba98ca1dc6d43ec",
+    "App/Services/DuelTriadSourceMorph.swift": "c74d3fd4f4b87f52c394304c61de5fc99c702228ed86a7b758481c92c137fc94",
+    "App/Services/DuelStage.swift": "2f26fa0b89d1fca159183dbce12aa9887aba4382a82750adab53aa8756ecb94f",
+    "App/Services/DuelFighterAssetReleaseLoader.swift": "9ddd6a5afc9a92ca19f08f3aec426564024e4cddee22f4ac8dc5eb70b13386c5"
+  },
+  "resultSHA256": "de03659ec163159fbb201f2ffcfa537f50ee3bb0a31252880ff17283e897de72",
+  "compileSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "firstCompile": {
+    "recorded": true,
+    "reason": "Harness import needed @testable for internal Core; Swift 6.0 ternary numeric inference rejected implicit Float material ratios. Import adapted; production ratios made explicitly Float without changing intended values."
+  },
+  "nativeAppleExecuted": false
+}

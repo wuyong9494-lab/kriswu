@@ -1,0 +1,62 @@
+{
+  "schema": "fighter-floorfall-native-semantics-v1",
+  "sourceBaselineSHA": "54bfc94dfdaca4a9ea8325e661cf5304525601f8",
+  "sourceClient": "User-supplied IPA 1.46.1 (11345)",
+  "frameworkSHA256": "7c192647b0e035bd246c135a59c597ee3910d50fc4ed128abe402da39a62a55b",
+  "metadataSHA256": "12d52d278c904b210541e7c337025c68454e2b89a83eddab51f9c74fcc5a245c",
+  "analysis": "Static ARM64 control flow; source application not executed",
+  "methods": [
+    {
+      "methodIndex": 30175,
+      "address": "06f6ada0",
+      "instructions": 76,
+      "disassemblySHA256": "b40df5f9a5730965803afd3cc77bb463f89a644d588b9d071c007fefc4d59479",
+      "finding": "PlaySound parameter 2: null yields an empty nullable Vector2"
+    },
+    {
+      "methodIndex": 30177,
+      "address": "06f6aed8",
+      "instructions": 168,
+      "disassemblySHA256": "80266423d368f8c009b21558d94a561454cd70d45d2bdde12179506186010e0d",
+      "finding": "Random.Range selects one array position; nullable position becomes Vector3 with z=0"
+    },
+    {
+      "methodIndex": 177256,
+      "address": "0371217c",
+      "instructions": 115,
+      "disassemblySHA256": "7f476e2705a4be12f2fa49d2cc48a25bac5c392f717aa53516ca3d524e2eda94",
+      "finding": "AudioManager forwards the nullable position at request offset 0x78"
+    },
+    {
+      "methodIndex": 177329,
+      "address": "03715f38",
+      "instructions": 69,
+      "disassemblySHA256": "47ba5499fd274d30fdef8407afde08f0f2864d3b30a50f6bf330bc81b882eca2",
+      "finding": "Audio source factory receives and forwards the nullable position"
+    },
+    {
+      "methodIndex": 177330,
+      "address": "037160b0",
+      "instructions": 94,
+      "disassemblySHA256": "c3055b5e39cddba6c1744f3c312630b82f066c3b4c3bdfd079c9683597a1bb5b",
+      "finding": "No position uses shared audio object and spatialBlend=0; a position uses spatialBlend=0.5"
+    }
+  ],
+  "confirmed": {
+    "playSoundPositionNullUsesSpatialBlend": 0,
+    "explicitPositionUsesSpatialBlend": 0.5,
+    "arraySelection": "UnityEngine.Random.Range(0, count)",
+    "arrayDuplicatesRetainWeight": true,
+    "effectCenterOfMassIsNotSoundPosition": true
+  },
+  "adapter": {
+    "path": "App/Services/DuelSourceEffects.swift",
+    "sourceCueSelection": "DuelSourceAudioVariation; category plus accepted event ordinal",
+    "combatRandomStateMutated": false,
+    "unityGlobalRandomStateReproduced": false,
+    "physicalFloorHitIntegrated": false,
+    "applePlaybackVerified": false,
+    "physicalDeviceVerified": false
+  },
+  "privateSourceDisassemblyPublished": false
+}

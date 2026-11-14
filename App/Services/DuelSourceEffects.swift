@@ -284,6 +284,7 @@ final class DuelSourceEffects: NSObject {
     private(set) var audioStatus: AudioStatus = .ready
     private(set) var audioFailure: String?
     private var soundCursor: [String: Int] = [:]
+    private var sourceSoundOrdinals: [String: UInt64] = [:]
     private var pausedPlayers: Set<ObjectIdentifier> = []
     private var bursts: [Burst] = []
     private var sequence = 0
@@ -743,7 +744,7 @@ final class DuelSourceEffects: NSObject {
             guard event.id.frame == frame,
                   (0..<DuelPanguPresentation.maximumEventsPerStep).contains(event.id.sequence),
                   event.liveTick >= 0, consumedPanguEvents.insert(event.id).inserted else { continue }
-            for cue in panguCues where cue.matches(event.kind) { play(cue.category) }
+            for cue in panguCues where cue.matches(event.kind) { play(cue.category, sourceVariants: true) }
         }
     }
 
@@ -859,7 +860,7 @@ final class DuelSourceEffects: NSObject {
             // alternative starts for the same ambience, never stacked loops.
             stopTriadCategories(binding.sourceLoopCategories)
         }
-        play(category)
+        play(category, sourceVariants: true)
     }
     private func acceptTriadSource(_ event: DuelTriadPresentation.SourceEvent, owner: Int) -> Bool {
         let key: TriadSourceID
@@ -1012,7 +1013,7 @@ final class DuelSourceEffects: NSObject {
         emittedHits = 0; emittedBlocks = 0; playedSounds = 0
         playedSoundCategories.removeAll()
         for group in players.values { for player in group { player.stop(); player.currentTime = 0 } }
-        pausedPlayers.removeAll(); soundCursor.removeAll()
+        pausedPlayers.removeAll(); soundCursor.removeAll(); sourceSoundOrdinals.removeAll()
         lastPanguFrame = nil; consumedPanguEvents.removeAll(keepingCapacity: true)
         lastTriadFrame = nil; consumedTriadEvents.removeAll(keepingCapacity: true)
         consumedTriadSamples.removeAll(keepingCapacity: true)
@@ -1033,16 +1034,26 @@ final class DuelSourceEffects: NSObject {
         textures.removeAll(); manifest = nil
     }
 
-    private func play(_ category: String) {
+    private func play(_ category: String, sourceVariants: Bool = false) {
         guard !ended, !paused, let bytes = audioBytes[category], !bytes.isEmpty else { return }
         // Verified preparation can precede any session. An unused pool must not
         // carry an unrelated prior match's consent into a future network start.
         // Once used, keep this ownership history across round resets.
         hasConsumedSoundEvent = true
-        let cursor = soundCursor[category, default: 0]
-        // Consume each live event once, even during service loss/failure. Recovery
-        // must not shift category rotation or queue an attack for later replay.
-        soundCursor[category] = (cursor + 1) % bytes.count
+        let variant: Int
+        if sourceVariants {
+            let ordinal = sourceSoundOrdinals[category, default: 0]
+            guard let selected = DuelSourceAudioVariation.index(category: category,
+                eventOrdinal: ordinal, count: bytes.count) else { return }
+            variant = selected
+            sourceSoundOrdinals[category] = ordinal &+ 1
+        } else {
+            let cursor = soundCursor[category, default: 0]
+            variant = cursor % bytes.count
+            soundCursor[category] = (cursor + 1) % bytes.count
+        }
+        // Consume each accepted event once, including during media-service loss.
+        // Recovery cannot shift source choices or replay a discarded sound later.
         guard mediaServicesAvailable, !audioInterrupted, !requiresUserAudioResume else { return }
         if players.isEmpty {
             do {
@@ -1057,7 +1068,7 @@ final class DuelSourceEffects: NSObject {
             audioStatus = .failed; audioFailure = "Missing effect category: \(category)"
             return
         }
-        let player = group[cursor % group.count]
+        let player = group[variant]
         player.stop(); player.currentTime = 0
         if player.play() {
             audioStatus = .ready; audioFailure = nil

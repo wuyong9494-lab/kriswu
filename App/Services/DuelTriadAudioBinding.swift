@@ -208,6 +208,7 @@ struct DuelTriadAudioBinding {
         }
         var sourceFrames = Dictionary(uniqueKeysWithValues: profile.clips.map { ($0.name, $0.frames) })
         var sharedClips: [String: Set<String>] = [:]
+        var sharedRootEndProfiles: Set<String> = []
         if let pins = document.motionProfiles {
             guard document.version == 2, pins.count == 1,
                   Set(additionalProfiles.map(\.id)).count == additionalProfiles.count else { throw Failure.identity }
@@ -226,6 +227,15 @@ struct DuelTriadAudioBinding {
                     names.insert(clip.name); sourceFrames[id + "/" + clip.name] = clip.frames
                 }
                 guard names.count == DuelSourceThrowRules.Motion.allCases.count else { throw Failure.identity }
+                // The shared victim sequence is authenticated independently of
+                // the actor's equipment identity. A hammers reference remains
+                // hammers; one matching clip name cannot opt into H17 sounds.
+                if DuelTriadRootVictimState.matches(profile: other) {
+                    let motion = DuelTriadRootVictimState.Motion.end
+                    names.insert(motion.clip)
+                    sourceFrames[id + "/" + motion.clip] = motion.frames
+                    sharedRootEndProfiles.insert(id)
+                }
                 sharedClips[id] = names
             }
         }
@@ -238,8 +248,14 @@ struct DuelTriadAudioBinding {
         for marker in document.markers {
             if let id = marker.profileID {
                 guard document.version == 2, sharedClips[id]?.contains(marker.clip) == true,
-                      marker.summonRole == nil, marker.loopUntil == nil,
-                      marker.clock == .soundFrame else { throw Failure.identity }
+                      marker.summonRole == nil, marker.loopUntil == nil else { throw Failure.identity }
+                if sharedRootEndProfiles.contains(id) && marker.clip == DuelTriadRootVictimState.Motion.end.clip {
+                    guard marker.clock == .intervalStart, marker.sourceFrame == 20,
+                          marker.context == "Common", marker.files.count == 7,
+                          Set(marker.files).count == 7 else { throw Failure.identity }
+                } else {
+                    guard marker.clock == .soundFrame else { throw Failure.identity }
+                }
             }
             guard validID(marker.id), validGroup(marker.files), let frames = sourceFrames[marker.sourceKey],
                   (0..<frames).contains(marker.sourceFrame),

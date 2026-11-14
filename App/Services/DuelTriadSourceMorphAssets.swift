@@ -39,6 +39,20 @@ final class DuelTriadSourceMorphAssets {
     let verifiedFiles: [DuelNetworkContentRecord]
     private let maskData: Data
 
+    /// Both reviewed containers have identical meshes, material/UV bindings,
+    /// skins and the complete original BIN prefix. The second only appends
+    /// three authenticated shared victim animations; it is still not D19.
+    static func acceptsReviewedTarget(_ target: DuelWeaponProfile) -> Bool {
+        guard target.id == "liu_hammers", target.hero == .liu,
+              target.bodyID == "arm__str_03", target.weaponID == "wpn__hammers_01_01" else { return false }
+        switch target.sha256 {
+        case "f83d8cbbd7b2158604dad9eff28398bcf57c64fdcb4146e5c142608484a5a472": return true
+        case "a3aada76d336b9c4f9bda3904b5e947711d916f683a2dcbf7b8184377e01a517":
+            return DuelTriadRootVictimState.matches(profile: target)
+        default: return false
+        }
+    }
+
     init(directory: URL, manifestName: String, expectedSHA256: String,
          owner: DuelWeaponProfile, target: DuelWeaponProfile) throws {
         let documentData = try DuelFighterAssetReleaseLoader.read(directory: directory,
@@ -48,7 +62,7 @@ final class DuelTriadSourceMorphAssets {
               owner.hero == .ember, target.hero == .liu,
               document.ownerProfileID == owner.id, document.ownerCharacterSHA256 == owner.sha256,
               document.targetProfileID == target.id, document.targetCharacterSHA256 == target.sha256,
-              target.sha256 == "f83d8cbbd7b2158604dad9eff28398bcf57c64fdcb4146e5c142608484a5a472",
+              Self.acceptsReviewedTarget(target),
               target.bodyID == "arm__str_03", target.weaponID == "wpn__hammers_01_01",
               document.sourceConfigurationSHA256 == "02bcd31d5b0f3ed992ca1972f2c6da5f59e6495fe3880fec45f8b073fbaa0e7a",
               owner.triadRules?.runtime?.configurationSHA256 == document.sourceConfigurationSHA256,
@@ -87,8 +101,8 @@ final class DuelTriadSourceMorphAssets {
                   material.sourceItemType == (base ? nil : weapon ? 3 : 2),
                   material.tile.isFinite, abs(material.tile - (weapon ? 0.1 : 0.2)) <= 0.0000001,
                   material.edgeSize.isFinite, abs(material.edgeSize - 0.1) <= 0.0000001,
-                  equal(material.edgeStart, weapon ? [0, 26.0 / 255, 146.0 / 255, 1] : [0, 0, 0, 1]),
-                  equal(material.edgeEnd, weapon ? [0, 237.0 / 255, 244.0 / 255, 1] : [0, 87.0 / 255, 96.0 / 255, 1]) else {
+                  equal(material.edgeStart, weapon ? [0, Float(26) / 255, Float(146) / 255, 1] : [0, 0, 0, 1]),
+                  equal(material.edgeEnd, weapon ? [0, Float(237) / 255, Float(244) / 255, 1] : [0, Float(87) / 255, Float(96) / 255, 1]) else {
                 throw Failure.materials
             }
         }

@@ -1,0 +1,166 @@
+{
+  "schema": "independent-root-victim-glb-validation-v1",
+  "originalProfileSHA256": "30b7af76550112c523d11d8b967553bccd7a65503d24bb21cb71f92b060c8723",
+  "candidateProfileSHA256": "2dbe085bd288a4aff2bf9694d5e55699500879feb203985a342b76c1036b81ca",
+  "originalCharacterSHA256": "f83d8cbbd7b2158604dad9eff28398bcf57c64fdcb4146e5c142608484a5a472",
+  "candidateCharacterSHA256": "a3aada76d336b9c4f9bda3904b5e947711d916f683a2dcbf7b8184377e01a517",
+  "inputBindingsSHA256": "fd16a6cb2eb863365b563aab9b162220335c6abdb0c700594499c08264151c57",
+  "inputMassesSHA256": "3bf3b9b92e118d4584019213c1d51f68b47d28dff11abb098ef42428a32dd1d2",
+  "binaryPrefixBytes": 8403480,
+  "binaryPrefixSHA256": "59780756e9fdc959b5d88b379bbef2d9077ff5489df27ad12d9423a8bdc0fd9e",
+  "binaryPrefixExactMatch": true,
+  "oldAnimationsPreserved": 56,
+  "oldProfileClipsPreserved": 56,
+  "oldGLBSections": {
+    "asset": {
+      "semanticSHA256": "9c3ef4341dc4ff5d4b22ccd7a752677d18963aceb0c25367d50ee4f8f8574b3f"
+    },
+    "scene": {
+      "semanticSHA256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    "scenes": {
+      "semanticSHA256": "e51bc00189fae76b345c18b9344ab73a34783d733375485da5993cf8b9f508ff"
+    },
+    "nodes": {
+      "semanticSHA256": "e62f658d0000b041cdc434383644e3612981c56611e5a007e8cd782a83336086"
+    },
+    "meshes": {
+      "semanticSHA256": "61b39c8bf2cbc3db729bf435ee123a0ec9cf29e9dbaf0dd8db6f78e35e1ac36a"
+    },
+    "materials": {
+      "semanticSHA256": "f2bc4e31d257fd38a7f3340c4a7b81b64e305b3404457013349470edcbc54e47"
+    },
+    "skins": {
+      "semanticSHA256": "0babc81e06e401124a873c82a2d61ff7ce121509405f019d95a5a7de14b18a1e"
+    },
+    "textures": {
+      "semanticSHA256": "91465e61294e9be6b3921637ca04a2dbba5da3a7f3223850f26ed1df99fa5f96"
+    },
+    "images": {
+      "semanticSHA256": "f1165dbeca4baa060adc6a0795a859a7b2d663cbc17b258e3d869f6a11a3c7d3"
+    },
+    "samplers": {
+      "semanticSHA256": "536885f0ccaea709985be4e3fb577aeaf746a4c2f078944147f7047e016d4a94"
+    },
+    "bufferViews": {
+      "count": 6785,
+      "semanticSHA256": "ede96b7bf8cea0d9c2806a312bcf9b048aa0a4fd519c3066e332cd35aa6cd43d"
+    },
+    "accessors": {
+      "count": 6780,
+      "semanticSHA256": "94c5c428f555dd65d577a56f8a7d225ff6dea1d15938f5ea00d5880d13dca799"
+    },
+    "animations": {
+      "count": 56,
+      "semanticSHA256": "ce72d9f464cb4f3076c53e754e42b196dd6a4aa812d819b8e3b96ea92363a51e"
+    },
+    "extras": {
+      "semanticSHA256": "d7a2924f8a0b7da51c1cdf220e4292c000d5e46760352bfbf2f991bab1cc1c93"
+    }
+  },
+  "outputClips": 59,
+  "sourceReferenceIdentity": "liu_hammers",
+  "panguEquipmentActivated": false,
+  "nativeRuntimeExecuted": false,
+  "simulatorVerified": false,
+  "physicalDeviceVerified": false,
+  "appendExecuted": false,
+  "sourceInputsModified": false,
+  "clips": [
+    {
+      "name": "h17_root_spike_passive_start",
+      "frames": 44,
+      "samples": 87,
+      "sourceSHA256": "69d01bc2d1cc6be69188be006582598bf3551c88db3f7446078fcda63583382c",
+      "existingPelvisSamplesExactMatch": true,
+      "otherTracksMaxError": {
+        "root": 0.0,
+        "handL": 0.0,
+        "handR": 0.0,
+        "footL": 0.0,
+        "footR": 0.0,
+        "weaponBaseL": 0.0,
+        "weaponTipL": 0.0,
+        "weaponBaseR": 0.0,
+        "weaponTipR": 0.0,
+        "groundLift": 0.0,
+        "centerOfMass": 0.0
+      },
+      "ownRigHurtCapsulesExactMatch": true,
+      "channels": 116,
+      "ownRigBones": 58,
+      "sunProfileRead": false,
+      "pelvisSemanticSHA256": "2bf61202a842a924ead813214bc78fc46d180914a5b181e2804928df6d685d6e",
+      "pelvisSHA256": "bfd636a37efced0f54d0dcba485faca3278a2f773ecadd5ba1baab0490549af4",
+      "tracksSHA256": "3275368e4cc8e7ee96e8f28a7040e43b780d902335c5cf178fb668e819748fcc",
+      "appendReceiptDigestsMatch": true
+    },
+    {
+      "name": "h17_root_spike_passive_loop",
+      "frames": 61,
+      "samples": 121,
+      "sourceSHA256": "a3f13059f3eeedd057e14d738894667a77b04279109d1544f0e2b34ad12502ce",
+      "existingPelvisSamplesExactMatch": true,
+      "otherTracksMaxError": {
+        "root": 0.0,
+        "handL": 0.0,
+        "handR": 0.0,
+        "footL": 0.0,
+        "footR": 0.0,
+        "weaponBaseL": 0.0,
+        "weaponTipL": 0.0,
+        "weaponBaseR": 0.0,
+        "weaponTipR": 0.0,
+        "groundLift": 0.0,
+        "centerOfMass": 0.0
+      },
+      "ownRigHurtCapsulesExactMatch": true,
+      "channels": 116,
+      "ownRigBones": 58,
+      "sunProfileRead": false,
+      "pelvisSemanticSHA256": "10c003291dab0f2c1762189b8307d8f262f2d8885e76f21a257a7064618c6c8b",
+      "pelvisSHA256": "24137d6f9c6453812dbdee89800670fd07aa7473dc1c9b5a8a6d6b233b9ca529",
+      "tracksSHA256": "8dfbafe54551696c3b937455e46d3218bffbfd9bccfced3e5c877c3657d18170",
+      "appendReceiptDigestsMatch": true
+    },
+    {
+      "name": "h17_root_spike_passive_end",
+      "frames": 48,
+      "samples": 95,
+      "sourceSHA256": "7d9b8572ae67cd8f344f16478cc50a56e17c0646191c7f2306ff2724453cf5e2",
+      "existingPelvisSamplesExactMatch": true,
+      "otherTracksMaxError": {
+        "root": 0.0,
+        "handL": 0.0,
+        "handR": 0.0,
+        "footL": 0.0,
+        "footR": 0.0,
+        "weaponBaseL": 0.0,
+        "weaponTipL": 0.0,
+        "weaponBaseR": 0.0,
+        "weaponTipR": 0.0,
+        "groundLift": 0.0,
+        "centerOfMass": 0.0
+      },
+      "ownRigHurtCapsulesExactMatch": true,
+      "channels": 116,
+      "ownRigBones": 58,
+      "sunProfileRead": false,
+      "pelvisSemanticSHA256": "ece6c22d11aa6c9bd9d25b3c2de5671503e5059d7156f4f96c2b938dd0b580ad",
+      "pelvisSHA256": "dcc55eefe136ec34c9fd174e01e90552ac5cc6a6e0d73577e6bb4c7a220af834",
+      "tracksSHA256": "0e63eb602c7b3e3f5321a3d6399c08bb0b6100605bc23cb0edc403d2214092a8",
+      "appendReceiptDigestsMatch": true
+    }
+  ],
+  "hashEncoding": "pelvisSHA256/tracksSHA256: compact JSON plus trailing newline, matching append receipt; pelvisSemanticSHA256: compact JSON without newline, matching existing pelvis helper semantics.",
+  "syntheticGates": {
+    "path": "scripts/test_append_cached_root_victim_motions.py",
+    "methods": 6,
+    "failures": 0,
+    "seconds": 0.021,
+    "logSHA256": "461de20ad913e1dc1536859fbd62386ff7f1cbc42743b9968c3ddff564eaec11",
+    "sourceSHA256": "7e54ab4508eddab23216d303de4bcf4b0fc1179a12d1ab2551e511d749f40843"
+  },
+  "independentCheckerSHA256": "9965b1a65d4e660b1aa44722c06253b4807b640d1a740e9e7954bdebc877320e",
+  "scope": "Read-only independent GLB/catalog validation and6synthetic Python gates. No media bytes, credentials, decryption keys, simulator screenshots, native Apple execution or phone acceptance are included."
+}

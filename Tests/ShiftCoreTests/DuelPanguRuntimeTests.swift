@@ -344,13 +344,15 @@ final class DuelPanguRuntimeTests: XCTestCase {
         }
     }
 
-    func testSpearModelSurvivesOwnerInterruptionOnlyAfterCreationMarker() throws {
-        for tick in [7, 8] {
+    func testSpearCreationMarkerDoesNotRemoveTheParentHitCancellationGate() throws {
+        // lock1557/t5 still destroys a Create model after its frame-5 birth.
+        // Only AnimationEnd -> Miss (t8/9), not creation at tick 8, releases it.
+        for tick in [7, 8, 45] {
             var value = try state(rules(1))
             value.start(.spear); advance(&value, tick)
             value.interrupt()
             let released = attacks(advance(&value, 46 - tick))
-            XCTAssertEqual(released.map(\.sourceStrike), tick == 8 ? [.normalSpear] : [])
+            XCTAssertTrue(released.isEmpty)
         }
     }
 
