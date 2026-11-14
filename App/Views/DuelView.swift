@@ -590,7 +590,10 @@ final class DuelSession: ObservableObject {
     func advance() {
         guard driver == .offline, acceptsPhysicalInput else { return }
         if case .matchOver = game.phase { return }
-        let input = consumeLocalInput()
+        let sampledInput = consumeLocalInput()
+        // Drain edges during the authored entrance without letting a held
+        // direction falsely complete the tutorial before combat opens.
+        let input = game.weaponFight?.sourceIntroActive == true ? DuelGame.Input.neutral : sampledInput
         let frozen = game.hitStop > 0 && game.grapple == nil
         game.step(input)
         presentStep(input: input, frozen: frozen)

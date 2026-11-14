@@ -61,7 +61,7 @@ final class DuelTriadMetalRendererTests: XCTestCase {
     func testControlledSurfaceUsesPublicFormatsAndCannotDrawAfterPauseOrShutdown() throws {
         let device = try XCTUnwrap(MTLCreateSystemDefaultDevice(), "Native acceptance requires Metal")
         let originalView = SCNView(frame: CGRect(x: 0, y: 0, width: 32, height: 32), options: [
-            .preferredRenderingAPI: SCNRenderingAPI.metal.rawValue])
+            SCNView.Option.preferredRenderingAPI.rawValue: SCNRenderingAPI.metal.rawValue])
         originalView.usesReverseZ = false
         let formats = try DuelTriadRenderSurface.formats(device: device)
         let packets = try DuelTriadMetalRenderer(device: device, formats: formats)
@@ -82,7 +82,7 @@ final class DuelTriadMetalRendererTests: XCTestCase {
             "sampleCounts": formats.map(\.samples), "usesReverseZ": false,
             "presentation": "SceneKit sRGB pass; shared unorm view; original Gamma blend; unorm drawable"], options: [.sortedKeys, .prettyPrinted])
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
-        attachment.name = "native-scenekit-metal-formats"; attachment.lifetime = .keepAlways; add(attachment)
+        attachment.name = "native-scenekit-metal-formats"; attachment.lifetime = XCTAttachment.Lifetime.keepAlways; add(attachment)
         let description = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 4, height: 4, mipmapped: false)
         description.storageMode = .shared; description.usage = .renderTarget
         let target = try XCTUnwrap(device.makeTexture(descriptor: description))

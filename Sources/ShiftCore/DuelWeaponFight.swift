@@ -78,6 +78,10 @@ public struct DuelWeaponFight: Equatable, Sendable {
     private var triadStates: [DuelTriadState?] = [nil, nil]
     private var triadSpace = DuelTriadSpatialState()
     public private(set) var roundNumber = 1
+    /// Source presentation advances through authored intros and victory poses,
+    /// while the combat/ability/spatial clocks remain frozen in those stages.
+    public private(set) var sourcePresentationTick = 0
+    private var sourceStances: [DuelTriadStanceState?] = [nil, nil]
     private var ordinaryThrowStates: [DuelWeaponThrowState?] = [nil, nil]
     private var ordinaryThrowKnockdownTicks = [0, 0]
     private var sourceThrowStates: [DuelSourceThrowState?] = [nil, nil]
@@ -104,13 +108,22 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 let opponent = profiles[1 - i]
                 state.configureOpponent(armor: faction, weapon: faction,
                     maximumHealth: opponent.panguRules?.maximumHealth ?? opponent.triadRules?.maximumHealth ?? 1000)
-                let effects = state.beginRound(roundID: roundNumber)
-                triadStates[i] = state; triadSpace.enqueue(effects, owner: i)
+                if hasSourceStance(i) {
+                    sourceStances[i] = .init(round: roundNumber,
+                        originXMillimeters: Double(fighters[i].x), direction: fighters[i].facing)
+                } else {
+                    triadSpace.enqueue(state.beginRound(roundID: roundNumber), owner: i)
+                }
+                triadStates[i] = state
                 self.fighters[i].health = rules.maximumHealth
                 self.fighters[i].energy = state.mist * 100 / rules.mist.maximum
             }
         }
-        for i in 0..<2 { setPose(i, role: "idle", tick: 0) }
+        for i in 0..<2 {
+            if sourceStances[i] != nil { alignSourceStance(i); sampleSourceStance(i, restart: true) }
+            else { setPose(i, role: "idle", tick: 0) }
+        }
+        previousX = self.fighters.map(\.x)
         previousPoses = self.fighters.map(\.weaponPose); previousFacings = self.fighters.map(\.facing)
         previousHurtY = fighters.indices.map { hurtBox($0).minY }
         consumeTriadEffects()
@@ -136,7 +149,8 @@ public struct DuelWeaponFight: Equatable, Sendable {
         return profiles[index].resolvedCombatRule(command: command, clipName: clip.name) != nil
     }
     public func canUse(_ command: DuelWeaponCommand, index: Int) -> Bool {
-        guard supports(command, index: index), !ordinaryThrowOwns(index),
+        guard phase == .fighting, !sourceIntroActive,
+              supports(command, index: index), !ordinaryThrowOwns(index),
               ordinaryThrowKnockdownTicks[index] == 0 else { return false }
         if let state = panguStates[index], command == .shadow || command == .ranged {
             return state.canUse(command == .ranged ? .spear : .heavenfall)
@@ -222,8 +236,22 @@ public struct DuelWeaponFight: Equatable, Sendable {
         if case .matchOver = phase { return }
         frame += 1
         if case .roundBreak(let winner, let ticks) = phase {
-            if ticks > 1 { phase = .roundBreak(winner: winner, remaining: ticks - 1) }
-            else { resetRound() }
+            sourcePresentationTick += 1
+            if ticks > 1 {
+                advanceSourceVictoryStances()
+                phase = .roundBreak(winner: winner, remaining: ticks - 1)
+            } else if let winner, wins[winner] >= 2 {
+                // Win_Idle tick zero was visible for the previous complete
+                // authoritative tick. Match-over may now stop App/network work.
+                phase = .matchOver(winner: winner)
+            } else { resetRound() }
+            return
+        }
+        releaseCompletedSourceIntros()
+        if sourceIntroActive {
+            sourcePresentationTick += 1
+            cancelBufferedInputs()
+            advanceSourceIntro()
             return
         }
         let inputs = [player, opponent ?? (mode == .versus ? botInput() : .neutral)]
@@ -239,6 +267,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
             }
             hitStop -= 1; return
         }
+        sourcePresentationTick += 1
         if mode == .versus { remainingTicks -= 1 }
         panguSpace.tick += 1
         triadSpace.tick += 1
@@ -1181,7 +1210,20 @@ public struct DuelWeaponFight: Equatable, Sendable {
         for i in 0..<2 where actions[i]?.command == .shadow {
             actions[i] = nil; fighters[i].attack = nil
         }
-        if let winner, wins[winner] >= 2 {
+        sourceStances = [nil, nil]
+        if let winner, hasSourceStance(winner) {
+            let final = wins[winner] >= 2
+            sourceStances[winner] = .init(finalVictory: final,
+                originXMillimeters: Double(fighters[winner].x), direction: fighters[winner].facing)
+            actions[winner] = nil; fighters[winner].attack = nil
+            fighters[winner].guarding = false; fighters[winner].walking = false
+            // This arena resolves/grounds the round before selecting the
+            // recovered win pose. It does not reproduce the original game's
+            // separate PHYSICS/LOSS/Uninterrupt transition-lock dispatcher.
+            alignSourceStance(winner); sampleSourceStance(winner, restart: true)
+            let end = sourceStances[winner]!.motion.endEventTick!
+            phase = .roundBreak(winner: winner, remaining: max(final ? 0 : 150, end + 1))
+        } else if let winner, wins[winner] >= 2 {
             phase = .matchOver(winner: winner)
             if let victory = profiles[winner].clip(role: "victory") { setPose(winner, clip: victory, tick: victory.ticks) }
         } else { phase = .roundBreak(winner: winner, remaining: 150) }
@@ -1197,6 +1239,7 @@ public struct DuelWeaponFight: Equatable, Sendable {
         impactMotions = [nil, nil]; remainingTicks = 3600; hitStop = 0; phase = .fighting
         ordinaryThrowStates = [nil, nil]; ordinaryThrowKnockdownTicks = [0, 0]
         sourceThrowStates = [nil, nil]; sourceThrowDisabledTicks = [0, 0]
+        sourceStances = [nil, nil]
         panguSpace = DuelPanguSpatialState()
         triadSpace.resetRound()
         for i in 0..<2 {
@@ -1206,16 +1249,110 @@ public struct DuelWeaponFight: Equatable, Sendable {
                 fighters[i].energy = state.light * 100 / state.rules.light.maximum
             }
             if var state = triadStates[i] {
-                let effects = state.beginRound(roundID: roundNumber)
-                triadStates[i] = state; triadSpace.enqueue(effects, owner: i)
+                if hasSourceStance(i) {
+                    sourceStances[i] = .init(round: roundNumber,
+                        originXMillimeters: Double(fighters[i].x), direction: fighters[i].facing)
+                } else {
+                    triadSpace.enqueue(state.beginRound(roundID: roundNumber), owner: i)
+                }
+                triadStates[i] = state
                 fighters[i].health = state.rules.maximumHealth
                 fighters[i].energy = state.mist * 100 / state.rules.mist.maximum
             }
         }
-        for i in 0..<2 { setPose(i, role: "idle", tick: 0) }
+        for i in 0..<2 {
+            if sourceStances[i] != nil { alignSourceStance(i); sampleSourceStance(i, restart: true) }
+            else { setPose(i, role: "idle", tick: 0) }
+        }
+        previousX = fighters.map(\.x)
         previousPoses = fighters.map(\.weaponPose); previousFacings = fighters.map(\.facing)
         previousHurtY = fighters.indices.map { hurtBox($0).minY }
         consumeTriadEffects()
+    }
+}
+
+extension DuelWeaponFight {
+    /// Source stances are a profile capability. Their original clips are
+    /// already in the authenticated catalog, not replacement preview motions.
+    public func hasSourceStance(_ index: Int) -> Bool {
+        profiles.indices.contains(index) && DuelTriadStanceState.accepts(profiles[index])
+    }
+    public func sourceStance(_ index: Int) -> DuelTriadStanceState? {
+        sourceStances.indices.contains(index) ? sourceStances[index] : nil
+    }
+    public var sourceIntroActive: Bool { sourceStances.contains { $0?.purpose.isIntro == true } }
+
+    private mutating func releaseCompletedSourceIntros() {
+        for i in sourceStances.indices where sourceStances[i]?.purpose.isIntro == true &&
+            sourceStances[i]?.motion == .startIdle {
+            sourceStances[i] = nil
+        }
+    }
+    private mutating func advanceSourceIntro() {
+        for i in sourceStances.indices {
+            guard var stance = sourceStances[i], stance.purpose.isIntro else { continue }
+            if stance.motion.isBirth {
+                // Application RoundStart boundary: both participants' source
+                // starts enter on this same authoritative tick. The original
+                // PLAYER/NOT_PLAYER equipment-lock choice is not inferred.
+                if var state = triadStates[i] {
+                    triadSpace.enqueue(state.beginRound(roundID: roundNumber), owner: i)
+                    triadStates[i] = state
+                    fighters[i].energy = state.mist * 100 / state.rules.mist.maximum
+                }
+                stance.beginRound(); sourceStances[i] = stance
+                alignSourceStance(i); sampleSourceStance(i, restart: true)
+                recordTriadPresentation(.source(owner: i, event: .roundStarted(roundID: roundNumber)))
+            } else { advanceSourceStance(i) }
+        }
+        consumeTriadEffects()
+    }
+    private mutating func advanceSourceVictoryStances() {
+        for i in sourceStances.indices where sourceStances[i]?.purpose.isIntro == false {
+            advanceSourceStance(i)
+        }
+    }
+    private mutating func advanceSourceStance(_ index: Int) {
+        guard var stance = sourceStances[index] else { return }
+        let previous = stance
+        if let transition = stance.advance() {
+            sampleSourceStance(index, state: previous, tick: transition.finalTick)
+            sourceStances[index] = stance
+            alignSourceStance(index); sampleSourceStance(index, restart: true)
+        } else {
+            sourceStances[index] = stance; sampleSourceStance(index)
+        }
+    }
+    private mutating func alignSourceStance(_ index: Int) {
+        guard var stance = sourceStances[index],
+              let clip = profiles[index].clip(named: stance.motion.clip),
+              let pelvis = clip.tracks.pelvis else { return }
+        var direction = fighters[index].facing
+        if stance.motion.isBirth {
+            let center = (DuelGame.leftWall + DuelGame.rightWall) / 2
+            direction = center >= fighters[index].x ? 1 : -1
+        } else if stance.motion.setsDirectionToEnemy,
+                  let owner = sourcePelvis(index), let enemy = sourcePelvis(1 - index), enemy.x != owner.x {
+            direction = enemy.x > owner.x ? 1 : -1
+        }
+        let pivot = clip.tracks.sample(stance.motion.alignToFoot ? clip.tracks.footL : pelvis, phase: 0)
+        // Original Align is X-only, against this model's current Pivot. The
+        // arena uses the existing actor .92 conversion (9.2 mm/source cm).
+        // Source pelvis Y is already skinned; adding root.Y would double it.
+        let aligned = Double(fighters[index].x) + Double(direction) *
+            (Double(stance.motion.sourceShiftX) * 9.2 - pivot.x * 1000)
+        stance.align(originXMillimeters: aligned, direction: direction)
+        sourceStances[index] = stance; fighters[index].facing = direction
+    }
+    private mutating func sampleSourceStance(_ index: Int, state: DuelTriadStanceState? = nil,
+                                            tick: Int? = nil, restart: Bool = false) {
+        guard let stance = state ?? sourceStances[index],
+              let clip = profiles[index].clip(named: stance.motion.clip) else { return }
+        let at = tick ?? stance.tick
+        let root = clip.tracks.sample(clip.tracks.root, phase: clip.phase(at: at)).x - clip.tracks.root[0].x
+        fighters[index].x = clamped(Int((stance.originXMillimeters + root * 1000 * Double(stance.direction)).rounded()))
+        fighters[index].walking = false; fighters[index].guarding = false; fighters[index].attack = nil
+        setPose(index, clip: clip, tick: at, restart: restart)
     }
 }
 
@@ -1277,7 +1414,8 @@ extension DuelWeaponFight {
         return .heavenfall
     }
     public func canUsePangu(_ ability: DuelPanguRules.Ability, index: Int) -> Bool {
-        guard let state = panguState(index), state.canUse(ability), fighters[index].health > 0,
+        guard phase == .fighting, !sourceIntroActive,
+              let state = panguState(index), state.canUse(ability), fighters[index].health > 0,
               !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
               !panguSpace.controls[index].locked(at: panguSpace.tick),
               !panguSpace.controls[index].airHeld(at: panguSpace.tick), !isAirborne(index) else { return false }
@@ -1529,9 +1667,10 @@ extension DuelWeaponFight {
     }
     public var triadPresentation: DuelTriadPresentation {
         guard phase == .fighting, triadStates.contains(where: { $0 != nil }) else {
-            return .empty(liveTick: triadSpace.tick)
+            return .empty(liveTick: sourcePresentationTick)
         }
-        return .init(space: triadSpace, hurts: fighters.indices.map { hurtBox($0) }, states: triadStates)
+        return .init(space: triadSpace, hurts: fighters.indices.map { hurtBox($0) }, states: triadStates,
+                     presentationTick: sourcePresentationTick)
     }
     private mutating func recordTriadPresentation(_ kind: DuelTriadPresentation.Event.Kind) {
         guard triadPresentationEvents.count < DuelTriadPresentation.maximumEventsPerStep else { return }
@@ -1547,12 +1686,12 @@ extension DuelWeaponFight {
             }.map { DuelTriadPresentation.summon($0, liveTick: triadSpace.tick) }
         } else { source = nil }
         triadPresentationEvents.append(.init(id: .init(frame: frame, sequence: triadPresentationEvents.count),
-            liveTick: triadSpace.tick, kind: kind, sourceSummon: source))
+            liveTick: sourcePresentationTick, kind: kind, sourceSummon: source))
     }
     private mutating func recordTriadSourceTimeline() {
         if roundNumber == 1 && triadSpace.tick == 1 {
             for i in triadStates.indices where triadStates[i]?.rules.runtime != nil &&
-                (triadStates[i]?.rules.level ?? 0) >= 2 {
+                (triadStates[i]?.rules.level ?? 0) >= 2 && !hasSourceStance(i) {
                 recordTriadPresentation(.source(owner: i, event: .arenaForestLoopStarted(roundID: roundNumber)))
             }
         }
@@ -1579,7 +1718,8 @@ extension DuelWeaponFight {
         return .branches
     }
     public func canUseTriad(_ ability: DuelTriadRules.Ability, index: Int) -> Bool {
-        guard let state = triadState(index), state.canUse(ability), fighters[index].health > 0,
+        guard phase == .fighting, !sourceIntroActive,
+              let state = triadState(index), state.canUse(ability), fighters[index].health > 0,
               !ordinaryThrowOwns(index), ordinaryThrowKnockdownTicks[index] == 0,
               !panguSpace.controls[index].locked(at: panguSpace.tick),
               !panguSpace.controls[index].airHeld(at: panguSpace.tick),
@@ -1702,7 +1842,7 @@ extension DuelWeaponFight {
                     }
                 }
             case .forestStarted(let round):
-                if triadStates[i]?.rules.runtime != nil && round > 1 {
+                if triadStates[i]?.rules.runtime != nil && round > 1 && !hasSourceStance(i) {
                     recordTriadPresentation(.source(owner: i, event: .roundStarted(roundID: round)))
                 }
             case .forestEnded:
@@ -2410,6 +2550,10 @@ extension DuelWeaponFight {
         }
         try triadSpace.appendReplayState(to: &writer)
         try writer.int(roundNumber)
+        try writer.int(sourcePresentationTick)
+        try writer.array(sourceStances, limit: 2) { writer, stance in
+            try writer.optional(stance) { try $1.appendReplayState(to: &$0) }
+        }
         try writer.array(previousPoses, limit: 2) { writer, pose in
             try writer.optional(pose) { try $0.pose($1) }
         }

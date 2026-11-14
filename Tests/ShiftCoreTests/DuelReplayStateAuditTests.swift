@@ -20,7 +20,7 @@ final class DuelReplayStateAuditTests: XCTestCase {
         fields(fight, ["profiles", "fighters", "phase", "frame", "remainingTicks", "wins", "hitStop", "landedHits",
                        "damageDealt", "events", "contacts", "swings", "panguPresentationEvents", "mode", "difficulty", "actions", "queued",
                        "loopTicks", "loopRoles", "previousX", "random", "shadowCooldowns", "previousY", "previousHurtY", "impactMotions", "panguStates", "panguSpace", "ordinaryThrowStates", "ordinaryThrowKnockdownTicks", "sourceThrowStates", "sourceThrowDisabledTicks",
-                       "triadPresentationEvents", "sourceMotionSamples", "triadStates", "triadSpace", "roundNumber", "previousPoses", "previousFacings"])
+                       "triadPresentationEvents", "sourceMotionSamples", "triadStates", "triadSpace", "roundNumber", "sourcePresentationTick", "sourceStances", "previousPoses", "previousFacings"])
         fields(game.fighters[0], ["hero", "x", "y", "velocityY", "facing", "health", "guardMeter", "energy", "stun",
                                  "knockdown", "invulnerable", "guarding", "attack", "flash", "walking",
                                  "movementDirection", "weaponPose"])

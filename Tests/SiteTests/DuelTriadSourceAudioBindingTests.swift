@@ -391,8 +391,11 @@ final class DuelTriadSourceAudioBindingTests: XCTestCase {
     }
 
     func testArenaForestStartDoesNotImpersonateTheOriginalIntroMarker() throws {
-        var value = try sourceFixture(cues: [["id": "arena", "event": "arenaForestLoopStarted",
-            "loopUntil": "sourceRoundFightEnded", "files": ["Synthetic_Forest.wav"]]])
+        var value = try sourceFixture(cues: [
+            ["id": "arena", "event": "arenaForestLoopStarted",
+             "loopUntil": "sourceRoundFightEnded", "files": ["Synthetic_Forest.wav"]],
+            ["id": "round", "event": "sourceRoundStarted",
+             "loopUntil": "sourceRoundFightEnded", "files": ["Synthetic_Forest.wav"]]])
         var markers = try XCTUnwrap(value.document["markers"] as? [[String: Any]])
         markers.append(["id": "original_intro", "clip": "synthetic_ninjato_slash", "sourceFrame": 7,
             "clock": "intervalStart", "loopUntil": "sourceRoundFightEnded", "files": ["Synthetic_Forest.wav"]])
@@ -403,6 +406,11 @@ final class DuelTriadSourceAudioBindingTests: XCTestCase {
         }
         defer { effects.shutdown() }
         effects.consumeTriad(events: [event(.forestStarted(roundID: 1))], samples: [], frame: 10, fighting: true, liveTick: 3, owners: [0])
+        XCTAssertEqual(effects.playedSounds, 0)
+        // First-round presentation now emits the real RoundStart. Its forest
+        // ambience still belongs to the original intro marker, not lock1800.
+        effects.consumeTriad(events: [source(.roundStarted(roundID: 1), sequence: 1)],
+            samples: [], frame: 10, fighting: true, liveTick: 3, owners: [0])
         XCTAssertEqual(effects.playedSounds, 0)
         effects.consumeTriad(events: [source(.arenaForestLoopStarted(roundID: 1), frame: 11, tick: 4)],
             samples: [], frame: 11, fighting: true, liveTick: 4, owners: [0])
@@ -416,6 +424,28 @@ final class DuelTriadSourceAudioBindingTests: XCTestCase {
         effects.consumeTriad(events: [source(.roundFightEnded, frame: 13, tick: 6)],
             samples: [], frame: 13, fighting: false, liveTick: 6, owners: [0])
         XCTAssertTrue(players.filter { $0.numberOfLoops == -1 }.allSatisfy { !$0.isPlaying })
+        let nextRound = source(.roundStarted(roundID: 2), frame: 14, tick: 7)
+        effects.consumeTriad(events: [nextRound], samples: [], frame: 14, fighting: true, liveTick: 7, owners: [0])
+        effects.consumeTriad(events: [nextRound], samples: [], frame: 14, fighting: true, liveTick: 7, owners: [0])
+        XCTAssertEqual(effects.playedSoundCategories,
+            ["triadCue:arena": 1, "triadMarker:original_intro": 1, "triadCue:round": 1])
+        XCTAssertEqual(players.filter { $0.numberOfLoops == -1 && $0.isPlaying }.count, 1)
+
+        // FX shares Cue but preserves the authenticated binding's first-round
+        // scope: lock1799 energy/threads must not inherit the ambience gate.
+        var definition: [String: Any] = ["id": "first_energy", "event": "sourceRoundStarted",
+            "effect": "synthetic", "anchor": "owner", "follow": false, "sourceRoundScope": "first"]
+        let first = try JSONDecoder().decode(DuelTriadEffectAssets.Binding.self,
+            from: JSONSerialization.data(withJSONObject: definition))
+        for round in [0, 1, 2] {
+            XCTAssertEqual(first.cue.matches(.source(owner: 0, event: .roundStarted(roundID: round))), round == 1)
+        }
+        definition.removeValue(forKey: "sourceRoundScope")
+        let subsequent = try JSONDecoder().decode(DuelTriadEffectAssets.Binding.self,
+            from: JSONSerialization.data(withJSONObject: definition))
+        for round in [0, 1, 2] {
+            XCTAssertEqual(subsequent.cue.matches(.source(owner: 0, event: .roundStarted(roundID: round))), round == 2)
+        }
     }
 
     func testUnboundOwnerAndEquippedRoleChangeCannotLeakSoundOrPendingWave() throws {

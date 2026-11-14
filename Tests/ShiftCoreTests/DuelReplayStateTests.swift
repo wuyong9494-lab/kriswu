@@ -198,9 +198,11 @@ final class DuelReplayStateTests: XCTestCase {
         // (18 B), two nil source-throw states (6 B), and two 64-bit source
         // throw-ban clocks with their array length (20 B).
         // Authored pelvis adds one nil marker after COM in each of 18 clips.
+        // The source stance clock (8 B) and two nil stance entries (6 B)
+        // follow roundNumber; no new catalog or bare laboratory-game fields.
         XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_488)
-        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_496)
-        XCTAssertEqual(try Encoding.encode(game).count, 66_946)
+        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_510)
+        XCTAssertEqual(try Encoding.encode(game).count, 66_960)
     }
 
     func testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths() throws {

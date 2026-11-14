@@ -186,7 +186,8 @@ final class DuelTriadEffectAssets {
         let sourceRoundScope: String?
         var cue: DuelTriadAudioBinding.Cue {
             .init(id: id, event: event, ability: ability, phase: phase, origin: origin,
-                contactKind: contactKind, files: [], loopUntil: loopUntil, sourceRoles: sourceRoles)
+                contactKind: contactKind, files: [], loopUntil: loopUntil, sourceRoles: sourceRoles,
+                sourceRoundScope: sourceRoundScope)
         }
         func stops(on event: DuelTriadPresentation.Event.Kind) -> Bool {
             if cue.stops(on: event) { return true }

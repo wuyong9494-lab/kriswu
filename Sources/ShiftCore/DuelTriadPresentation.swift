@@ -11,8 +11,8 @@ public struct DuelTriadPresentation: Equatable, Sendable {
         case rootModelEnded(id: UInt64)
         case soulModelCreated(id: UInt64, move: DuelTriadRules.SummonMove)
         case soulAnimationEnded(id: UInt64, role: String)
-        /// This arena starts combat immediately. Its first-round ambience
-        /// adapter does not claim to have played H17's original intro clip.
+        /// Legacy catalogs start combat immediately. Their first-round
+        /// ambience adapter does not claim to have played the H17 intro.
         case arenaForestLoopStarted(roundID: Int)
         case roundStarted(roundID: Int)
         case roundFightEnded
@@ -83,6 +83,8 @@ public struct DuelTriadPresentation: Equatable, Sendable {
             case source(owner: Int, event: SourceEvent)
         }
         public let id: ID
+        /// Monotonic presentation time. Combat lifetimes/ages still come
+        /// from the independent spatial tick, frozen throughout an intro.
         public let liveTick: Int
         public let kind: Kind
         /// Captured before an AnimationEnd trigger changes the same soul's
@@ -108,8 +110,9 @@ public struct DuelTriadPresentation: Equatable, Sendable {
             direction: value.direction, sourceMove: value.sourceMove, sourceAnimation: value.sourceAnimation,
             motionTick: max(0, liveTick - value.motionBeganAt), lastSampleTick: value.lastSampleTick)
     }
-    init(space: DuelTriadSpatialState, hurts: [DuelGame.Box], states: [DuelTriadState?]) {
-        liveTick = space.tick
+    init(space: DuelTriadSpatialState, hurts: [DuelGame.Box], states: [DuelTriadState?],
+         presentationTick: Int? = nil) {
+        liveTick = presentationTick ?? space.tick
         volumes = space.volumes.map { Self.volume($0, liveTick: space.tick) }
         summons = space.summons.map { Self.summon($0, liveTick: space.tick) }
         var controls: [Control] = []

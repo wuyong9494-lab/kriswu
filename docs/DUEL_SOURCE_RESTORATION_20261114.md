@@ -46,6 +46,19 @@ The decryption key is not stored in this repository.
 - Original paired front/back throws and active/passive escape clips. Both
   actors play their own skeleton's motion. Range and wall tests use recovered
   mass-weighted centers of mass, preserving submillimeter precision.
+- The eight authenticated H17 stance clips now drive the entrance, later-round
+  entrance, round victory, final victory, and their idle transitions. Source
+  AnimationEnd ticks (392, 100, 198, and 314) remain separate from the full
+  sampling durations. The original birth loops wait for RoundStart; they are
+  not shortened or forced to play a complete cycle before that event.
+- A separate deterministic presentation clock keeps stance FX/audio moving
+  while combat timers, ability state, and spatial lifetimes stay frozen. Intro
+  inputs are drained, including tutorial feedback. The final victory reaches
+  Win_Idle tick zero before the existing match-over/network shutdown boundary.
+- Original X-only stance alignment, source root displacement, facing and
+  existing ground lift are retained without adding source root Y twice.
+  First-round effects retain their explicit source scope; subsequent-round
+  forest ambience cannot start early from the first RoundStart event.
 - Source effect birth/stop events, independent magic-model skeletons, source
   bone attachments, raw 60 Hz StopFrames, and shader `_Transparent` fades.
 - 36 recovered effect prefabs, 9,693 particle tracks, 552,099 samples, four
@@ -74,6 +87,10 @@ as a claimed number of distinct tests.
 | Offline particle sorting extraction fixtures | 5 passed |
 | Current real catalog and fighter release | Swift validation passed |
 | Actual source audio manifest and 88 WAVs | Foundation loading passed; 89 verified records, 112 markers, eight cues |
+| Source stance, source audio-event, replay and replay-audit batch | 37 passed; 15 stance, six audio-event, 14 replay, two audit methods |
+| Exact source stance capability identity | The existing capability method passed its exact retest after adding the source runtime configuration SHA gate |
+| Real unchanged Sun65 / Liu56 catalog stance lifecycle | Birth, original intro, start-idle and combat entry passed; seven original marker ticks crossed once; no duplicate arena ambience adapter |
+| First/subsequent RoundStart cue scopes against the real audio manifest | Six exact cases passed; all 89 file records, 112 markers and eight cues still load |
 | Authenticated encrypted overlay | Cross-implementation assembly/decrypt/ZIP/file validation passed |
 
 The first source-only Apple build (run 43587119695) reported one compile
@@ -87,6 +104,13 @@ unsupported assignment was removed; the caller-owned multisample color/depth
 attachments and resolve path remain subject to the actual native tests. This
 failed build also executed no native methods.
 
+The third build (run 43589690716) passed production-source compilation and
+found two type-inference errors in the native renderer test fixture. The
+SCNView option now uses its explicit string raw value, and the attachment
+lifetime uses the explicit XCTest enum. The five renderer methods and their
+format, depth, projection, and sample-count assertions are unchanged. This
+build executed no native methods either.
+
 The source-only Apple workflow selects exactly 97 synthetic native methods.
 It receives no asset keys, uses no private asset environment, and excludes the
 five installed-source tests. The protected full-resource workflow selects 102
@@ -98,10 +122,20 @@ method inventory is evidence of execution until an actual run completes.
 - The dedicated D19 costume, long axe and remaining exclusive motions are not
   installed by this H17 overlay. Formal D19 rule tests do not prove that full
   character is playable with original visuals.
-- Remaining Unity modules, cross-emitter dynamic bounds sorting, original
-  intro/win playback and some common floorfall sound events still need their
-  own recovery or native comparison. Normalized arena stats/impulses are
-  explicitly identified in the runtime evidence.
+- The entrance begins on this arena's first authoritative RoundStart tick;
+  combat opens after its source AnimationEnd and initial start-idle sample.
+  Round/final victory likewise reaches win-idle before advancing the existing
+  arena lifecycle. These are explicit lifecycle adapters: the original
+  PLAYER/NOT_PLAYER lock selection, opponent's 20-tick start gate, and global
+  phase dispatcher are not inferred from local/network player indices.
+- The original final-victory MorphMask has been recovered and byte-verified.
+  Its source shader uses opaque pixel discard and a black-to-teal edge, not
+  node opacity. Its native transition/lifecycle binding is being checked
+  independently and is not installed by the current encrypted overlay.
+- Remaining Unity modules, cross-emitter dynamic bounds sorting and some
+  common floorfall sound events still need their own recovery or native
+  comparison. Normalized arena stats/impulses are explicitly identified in
+  the runtime evidence.
 - The single-prefab particle budget audit reached 90 simultaneously live
   particles; a conservative independent-phase bound was 144. This does not
   prove every combination of concurrently live bursts fits the shared budget.

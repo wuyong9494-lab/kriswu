@@ -212,6 +212,16 @@ final class DuelTriadInstalledSourceTests: XCTestCase {
                 "requestedSamples": samples, "actualSamples": DuelTriadRenderSurface.format(samples: samples).samples,
                 "pngSHA256": DuelNetworkContentRecord.digest(png)])
         }
+        XCTAssertTrue(try XCTUnwrap(state.game.weaponFight).hasSourceStance(0))
+        XCTAssertEqual(state.game.fighters[0].weaponPose?.clip,
+            DuelTriadStanceState.Motion.firstBirth.clip)
+        // Authored entrances now own the first 393 presentation ticks. Reach
+        // combat through real fixed steps before selecting the skill captures;
+        // do not inject a ready state or label the birth pose as ordinary idle.
+        try wait("Original source entrance completed", limit: 395) {
+            state.game.weaponFight?.sourceIntroActive == false
+        }
+        XCTAssertEqual(state.game.fighters[0].weaponPose?.clip, sun.roles["idle"])
         try capture("sun-source-idle")
         state.weaponAction(.ranged, down: true)
         for (animation, tick, label, effects) in [

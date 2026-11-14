@@ -23,12 +23,17 @@ struct DuelTriadAudioBinding {
         let files: [String]
         let loopUntil: EventKind?
         let sourceRoles: [String]?
+        /// The shared source cue also routes FX callbacks: lock1799 owns the
+        /// first RoundStart, while lock1800 starts ambience in later rounds.
+        /// Original audio starts the first forest at its intro interval marker.
+        let sourceRoundScope: String?
         var category: String { "triadCue:" + id }
         init(id: String, event: EventKind, ability: DuelTriadRules.Ability?, phase: DuelTriadState.Phase?,
              origin: DuelTriadState.Origin?, contactKind: String?, files: [String],
-             loopUntil: EventKind?, sourceRoles: [String]? = nil) {
+             loopUntil: EventKind?, sourceRoles: [String]? = nil, sourceRoundScope: String? = nil) {
             self.id = id; self.event = event; self.ability = ability; self.phase = phase; self.origin = origin
             self.contactKind = contactKind; self.files = files; self.loopUntil = loopUntil; self.sourceRoles = sourceRoles
+            self.sourceRoundScope = sourceRoundScope
         }
         /// Both original H17 wave models carry Sounds.Frame=1. That is two
         /// live simulation ticks after their own ModelCreated, not the owner.
@@ -56,9 +61,10 @@ struct DuelTriadAudioBinding {
                  (.sourceWaveModelCreated, .source(_, .modelCreated(_, .mistWave, _))),
                  (.sourceBlastModelCreated, .source(_, .modelCreated(_, .heraldBlast, _))),
                  (.arenaForestLoopStarted, .source(_, .arenaForestLoopStarted)),
-                 (.sourceRoundStarted, .source(_, .roundStarted)),
                  (.sourceRoundFightEnded, .source(_, .roundFightEnded)):
                 return true
+            case (.sourceRoundStarted, .source(_, .roundStarted(let round))):
+                return sourceRoundScope == "first" ? round == 1 : sourceRoundScope == nil && round > 1
             case (.sourceSoulModelCreated, .source(_, .soulModelCreated(_, let move))):
                 return sourceRoles?.contains(move.role) == true
             case (.sourceSoulAnimationEnded, .source(_, .soulAnimationEnded(_, let role))):
@@ -172,7 +178,7 @@ struct DuelTriadAudioBinding {
         let sourceRoles = Set(DuelTriadRules.SummonMove.allCases.map(\.role) +
             [DuelTriadRules.SoulAnimation.ninjatoActiveStart.role, DuelTriadRules.SoulAnimation.ninjatoActiveEnd.role])
         for cue in document.cues {
-            guard validID(cue.id), validGroup(cue.files) else { throw Failure.manifest }
+            guard validID(cue.id), validGroup(cue.files), cue.sourceRoundScope == nil else { throw Failure.manifest }
             if cue.event.rawValue.hasPrefix("source") || cue.event == .arenaForestLoopStarted {
                 guard document.version == 2 else { throw Failure.manifest }
             }
