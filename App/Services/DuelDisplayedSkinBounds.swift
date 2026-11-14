@@ -40,17 +40,22 @@ final class DuelDisplayedSkinBounds {
                   SCNMatrix4EqualToMatrix4(skin.baseGeometryBindTransform, SCNMatrix4Identity)
             else { throw Failure.unsupportedGeometry }
             let indices = skin.boneIndices, weights = skin.boneWeights
-            guard positions.usesFloatComponents, positions.bytesPerComponent == 4,
+            let influenceCount = weights.componentsPerVector
+            guard positions.semantic == .vertex, weights.semantic == .boneWeights,
+                  indices.semantic == .boneIndices,
+                  positions.usesFloatComponents, positions.bytesPerComponent == 4,
                   positions.componentsPerVector == 3, positions.vectorCount > 0,
                   weights.usesFloatComponents, weights.bytesPerComponent == 4,
-                  !indices.usesFloatComponents, indices.bytesPerComponent == 2,
-                  weights.componentsPerVector == 4, indices.componentsPerVector == 4,
+                  (1...4).contains(influenceCount), !indices.usesFloatComponents,
+                  [1, 2, 4].contains(indices.bytesPerComponent),
+                  indices.componentsPerVector == influenceCount,
                   weights.vectorCount == positions.vectorCount, indices.vectorCount == positions.vectorCount
             else { throw Failure.unsupportedGeometry }
             for source in [positions, indices, weights] {
-                guard source.dataOffset >= 0, source.dataStride >= source.componentsPerVector * source.bytesPerComponent,
-                      source.dataOffset + (source.vectorCount - 1) * source.dataStride
-                        + source.componentsPerVector * source.bytesPerComponent <= source.data.count
+                let width = source.componentsPerVector * source.bytesPerComponent
+                guard source.dataOffset >= 0, source.dataOffset <= source.data.count,
+                      source.dataStride >= width, width <= source.data.count - source.dataOffset,
+                      source.vectorCount - 1 <= (source.data.count - source.dataOffset - width) / source.dataStride
                 else { throw Failure.unsupportedGeometry }
             }
             let matrices = binds.map { simd_float4x4($0.scnMatrix4Value) }
@@ -65,16 +70,30 @@ final class DuelDisplayedSkinBounds {
                         func scalar(_ b: UnsafeRawBufferPointer, _ o: Int) -> Float {
                             Float(bitPattern: UInt32(littleEndian: b.loadUnaligned(fromByteOffset: o, as: UInt32.self)))
                         }
+                        // SCNSkinner exposes its own packed geometry sources;
+                        // their integer width need not match the uploaded GLTF
+                        // ushort4. Read the actual layout without changing skin
+                        // data, normalizing weights, or inventing influences.
+                        func jointIndex(_ offset: Int) -> Int {
+                            switch indices.bytesPerComponent {
+                            case 1:
+                                return Int(ib.loadUnaligned(fromByteOffset: offset, as: UInt8.self))
+                            case 2:
+                                return Int(UInt16(littleEndian: ib.loadUnaligned(fromByteOffset: offset, as: UInt16.self)))
+                            default:
+                                return Int(UInt32(littleEndian: ib.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
+                            }
+                        }
                         for v in 0..<positions.vectorCount {
                             let po = positions.dataOffset + v * positions.dataStride
                             let p = SIMD4(scalar(pb, po), scalar(pb, po + 4), scalar(pb, po + 8), 1)
                             guard p.x.isFinite, p.y.isFinite, p.z.isFinite else { throw Failure.invalidSkin }
                             var sum: Double = 0
-                            for c in 0..<4 {
-                                let joint = Int(UInt16(littleEndian: ib.loadUnaligned(fromByteOffset:
-                                    indices.dataOffset + v * indices.dataStride + c * 2, as: UInt16.self)))
+                            for c in 0..<influenceCount {
+                                let joint = jointIndex(indices.dataOffset + v * indices.dataStride
+                                    + c * indices.bytesPerComponent)
                                 let w = scalar(wb, weights.dataOffset + v * weights.dataStride + c * 4)
-                                guard w.isFinite, w >= 0, matrices.indices.contains(joint) else { throw Failure.invalidSkin }
+                                guard w.isFinite, (0...1).contains(w), matrices.indices.contains(joint) else { throw Failure.invalidSkin }
                                 sum += Double(w)
                                 if w > 0 {
                                     let q = matrices[joint] * p

@@ -204,6 +204,7 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         // A cutoff near0.23 must clip only the exact neck-origin adapter.
         let neckScene = SCNScene(), neck = fixture(uv: nil), flippedZero = fixture(uv: .zero)
         neck.materials[0].name = "Liu_Neck_Skin"
+        let originalNeckGeometry = try XCTUnwrap(neck.nodes[0].geometry)
         neck.root.position.x = -0.6; flippedZero.root.position.x = 0.6
         for actor in [neck, flippedZero] { actor.root.scale = SCNVector3(0.45, 0.8, 1); neckScene.rootNode.addChildNode(actor.root) }
         let neckBinding = try prepared.install(on: neck, materials: [
@@ -212,11 +213,36 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         let neckBackground = quad(uv: .zero, material: background)
         neckBackground.position.z = -1; neckBackground.scale = SCNVector3(3, 3, 1)
         neckBackground.renderingOrder = 10; neckScene.rootNode.addChildNode(neckBackground)
+        let neckHarness = try Harness(device: gpu, scene: neckScene)
+        let baselineNeck = neckHarness.pixel(try neckHarness.render(), world: SCNVector3(-0.6, 0, 0))
+        XCTAssertGreaterThan(baselineNeck.x, 230); XCTAssertLessThan(baselineNeck.y, 15)
         for state in [neckBinding, controlBinding] {
             try state.requestHide(sourceTick: 0, transitionTicks: 100)
-            try state.didRenderFrame(sourceTick: 0); try state.update(sourceTick: 70)
+            try state.didRenderFrame(sourceTick: 0); try state.update(sourceTick: 20)
         }
-        let neckHarness = try Harness(device: gpu, scene: neckScene), neckPixels = try neckHarness.render()
+        // A missing SceneKit pipeline also reveals the green background. The
+        // same no-UV geometry must first survive with MORPH actually installed,
+        // otherwise the later discard pixel would be a false positive.
+        let activeNeck = neckHarness.pixel(try neckHarness.render(), world: SCNVector3(-0.6, 0, 0))
+        XCTAssertGreaterThan(activeNeck.x, 230); XCTAssertLessThan(activeNeck.y, 15)
+        XCTAssertEqual(activeNeck, baselineNeck)
+        let sourceValue = try XCTUnwrap(neck.materials[0].value(forKey: "triadMorphSourceValue") as? NSNumber)
+        XCTAssertEqual(sourceValue.floatValue, 0.5, accuracy: 0.000001,
+            "The original repeat/bilinear source origin is the four-corner sample, not the flipped glTF origin")
+        XCTAssertFalse(neck.materials[0].shaderModifiers?.values.contains(where: {
+            $0.contains("sampler2D") || $0.contains("texture2D") || $0.contains("diffuseTexcoord")
+        }) ?? true, "The constant-source adapter cannot retain a SceneKit texcoord dependency")
+        try neckBinding.update(sourceTick: 50)
+        let edgeNeck = neckHarness.pixel(try neckHarness.render(), world: SCNVector3(-0.6, 0, 0))
+        // sample=.5, cutoff=.45 and edge=.1 put this at the source
+        // smoothstep midpoint. The scalar path must retain the real edge RGB.
+        let edgeMidpoint: [Float] = [0, 0.34 * 0.5, 0.38 * 0.5]
+        for channel in 0..<3 {
+            XCTAssertEqual(Float(edgeNeck[channel]), edgeMidpoint[channel] * 255, accuracy: 3)
+        }
+        XCTAssertEqual(edgeNeck.w, 255)
+        for state in [neckBinding, controlBinding] { try state.update(sourceTick: 70) }
+        let neckPixels = try neckHarness.render()
         let origin = neckHarness.pixel(neckPixels, world: SCNVector3(-0.6, 0, 0))
         let incorrectFlip = neckHarness.pixel(neckPixels, world: SCNVector3(0.6, 0, 0))
         XCTAssertGreaterThan(origin.y, 230); XCTAssertLessThan(origin.x, 15)
@@ -224,6 +250,26 @@ final class DuelTriadSourceMorphTests: XCTestCase {
         XCTAssertEqual(origin.w, 255); XCTAssertEqual(incorrectFlip.w, 255)
         XCTAssertTrue(try XCTUnwrap(neck.nodes[0].geometry).sources(for: .texcoord).isEmpty,
             "The adapter must never manufacture or append a UV buffer")
+        neckBinding.reset(); controlBinding.reset()
+        let restoredNeck = neckHarness.pixel(try neckHarness.render(), world: SCNVector3(-0.6, 0, 0))
+        XCTAssertGreaterThan(restoredNeck.x, 230); XCTAssertLessThan(restoredNeck.y, 15)
+        XCTAssertEqual(restoredNeck, baselineNeck)
+        XCTAssertTrue(neck.nodes[0].geometry === originalNeckGeometry)
+        XCTAssertTrue(originalNeckGeometry.sources(for: .texcoord).isEmpty)
+
+        // Sampling is tied to each authenticated mask, not hardcoded to this
+        // 2x2 fixture's 0.5 or cached globally across different textures.
+        let otherData = Data([64, 0, 0, 255])
+        let otherPrepared = try Morph.prepare(mask: mask(otherData), data: otherData, device: gpu)
+        let otherBinding = try otherPrepared.install(on: neck, materials: [
+            parameters(name: "Liu_Neck_Skin", item: nil, base: true, tile: 0.2)])
+        defer { otherBinding.shutdown() }
+        try otherBinding.requestHide(sourceTick: 0); try otherBinding.didRenderFrame(sourceTick: 0)
+        let otherValue = try XCTUnwrap(neck.materials[0].value(forKey: "triadMorphSourceValue") as? NSNumber)
+        XCTAssertEqual(otherValue.floatValue, Float(64) / 255, accuracy: 0.00001)
+        XCTAssertEqual(neckHarness.pixel(try neckHarness.render(), world: SCNVector3(-0.6, 0, 0)), baselineNeck)
+        XCTAssertTrue(neck.nodes[0].geometry === originalNeckGeometry)
+        XCTAssertTrue(originalNeckGeometry.sources(for: .texcoord).isEmpty)
     }
 
     func testGammaEdgeUsesOriginalSmoothstepAndPreservesOpaqueAlphaOnGPU() throws {

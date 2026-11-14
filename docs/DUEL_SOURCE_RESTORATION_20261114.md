@@ -147,6 +147,11 @@ The decryption key is not stored in this repository.
   primitives retain their real UV0; equipment, textured geometry, and mixed
   UV/no-UV use of one material cannot acquire the adapter. This is an explicit
   personal-geometry adapter, not a claim of recovered neck UV data.
+  That constant coordinate is sampled once from the prepared original mask
+  on Metal with normalized repeat/bilinear/no-mip state. Its validated scalar
+  reaches both Morph shader stages without a SceneKit texture sampler, so no
+  texcoord0 attribute is required. The sample is cached per prepared texture;
+  textured source materials retain their original UV sampling path.
 - Liu's appended-motion release explicitly retains the original armor/hammer
   back-face culling and single-mip bilinear/repeat texture state. Its new GLB
   digest no longer relies on the old-export initializer's hash whitelist.
@@ -223,6 +228,31 @@ method or GPU comparison executed. The fix inlines the same Float16 rounding
 operations, preserving the independent reference algorithm and pixel limits;
 a strict Swift 6/default-MainActor minimal reproduction fails before this
 change and type-checks afterward. The complete Apple build remains the gate.
+
+The seventh build (run 43602731827, published source 82c20482) compiled and
+executed exactly 117 methods once: 108 passed, nine failed, zero skipped.
+All nine failures occurred in the projected-shadow caster's skin initializer,
+before those methods reached their GPU assertions. The previous strict
+20-byte GPU mip comparison passed. The run's eight pinned source-tree entries,
+18 selected file digests, exact method inventory and single format-data
+attachment were independently verified; there were no image attachments.
+The failure log did not expose the actual SCNSkinner getter layout, so it
+cannot establish which representation check rejected the skin. The next
+revision logs upload/getter layout metadata and reads supported packed
+integer widths and one-to-four influences using the returned offsets and
+strides, while retaining finite-value, bone-index and byte-bound checks.
+The optical framing reader uses the same supported influence/index layouts.
+The selected native contract now checks its actual bone movement and model
+identity alongside the projector, as well as padded source buffers for all
+12 supported influence-count/index-width combinations and rejected invalid
+values. Those added assertions remain inside the existing method inventory.
+
+The same run exposed a separate false-positive Morph assertion: the no-UV
+Liu neck fixture failed to create a SceneKit pipeline because texcoord0 was
+missing, but its background-only discard assertion still passed. The repaired
+contract must also prove the neck is visible while the effect is active and
+after reset. A successful discard alone is insufficient evidence. These
+diagnostics do not turn the run's recorded 108/9 result into a passing run.
 
 The source-only Apple workflow now selects exactly 117 synthetic native methods,
 including 11 Morph and nine independent projected-shadow GPU/contract methods.

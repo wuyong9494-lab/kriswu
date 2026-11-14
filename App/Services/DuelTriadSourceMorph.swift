@@ -15,7 +15,7 @@ import UIKit
 /// https://developer.apple.com/documentation/scenekit/scnmaterialproperty/contents
 enum DuelTriadSourceMorph {
     enum Failure: Error, Equatable {
-        case mask, material(String), geometry, clock, stopped, allocation
+        case mask, material(String), geometry, clock, stopped, allocation, sampling
     }
 
     struct Mask: Codable, Equatable, Sendable {
@@ -88,6 +88,7 @@ enum DuelTriadSourceMorph {
 
     final class Prepared {
         let texture: MTLTexture
+        @MainActor private var sourceOriginRed: Float?
         fileprivate init(texture: MTLTexture) { self.texture = texture }
 
         @MainActor
@@ -146,12 +147,61 @@ enum DuelTriadSourceMorph {
             // GLTFModel instances put their mesh holders beneath root. A
             // malformed binding must not leave an unhandled solid renderer.
             guard !invalidGeometry, !nodes.isEmpty, boundMaterialIDs == materialIDs else { throw Failure.geometry }
+            // SceneKit can require texcoord0 for a custom texture sampler even
+            // when its shader expression uses a constant coordinate. Only the
+            // authenticated untextured neck may replace that sampler with its
+            // real, immutable GPU sample. No geometry attribute is invented.
+            let constantSample = authoredUVByMaterial.values.contains(false) ? try sampleSourceOrigin() : nil
             let installed = try instance.materials.map { material -> Binding.Material in
                 guard let name = material.name, let definition = byName[name],
-                      let hasUV = authoredUVByMaterial[ObjectIdentifier(material)] else { throw Failure.geometry }
-                return .init(material: material, parameters: definition, constantSourceUV: !hasUV)
+                      let hasUV = authoredUVByMaterial[ObjectIdentifier(material)],
+                      hasUV || constantSample != nil else { throw Failure.geometry }
+                return .init(material: material, parameters: definition,
+                    constantSourceMaskValue: hasUV ? nil : constantSample)
             }
             return Binding(texture: texture, materials: installed, nodes: nodes)
+        }
+
+        @MainActor
+        private func sampleSourceOrigin() throws -> Float {
+            if let sourceOriginRed { return sourceOriginRed }
+            let device = texture.device
+            let options = MTLCompileOptions(); options.fastMathEnabled = false
+            let library = try device.makeLibrary(source: """
+            #include <metal_stdlib>
+            using namespace metal;
+            kernel void triad_morph_source_origin(
+                texture2d<float, access::sample> mask [[texture(0)]],
+                sampler sourceSampler [[sampler(0)]],
+                device float* result [[buffer(0)]]) {
+                result[0] = mask.sample(sourceSampler, float2(0.0), level(0.0)).r;
+            }
+            """, options: options)
+            guard let function = library.makeFunction(name: "triad_morph_source_origin") else {
+                throw Failure.sampling
+            }
+            let pipeline = try device.makeComputePipelineState(function: function)
+            let descriptor = MTLSamplerDescriptor()
+            descriptor.normalizedCoordinates = true
+            descriptor.sAddressMode = .repeat; descriptor.tAddressMode = .repeat
+            descriptor.minFilter = .linear; descriptor.magFilter = .linear
+            descriptor.mipFilter = .notMipmapped; descriptor.maxAnisotropy = 1
+            guard let sampler = device.makeSamplerState(descriptor: descriptor),
+                  let result = device.makeBuffer(length: MemoryLayout<Float>.size, options: .storageModeShared),
+                  let queue = device.makeCommandQueue(), let command = queue.makeCommandBuffer(),
+                  let encoder = command.makeComputeCommandEncoder() else { throw Failure.allocation }
+            result.contents().storeBytes(of: Float.nan, as: Float.self)
+            encoder.setComputePipelineState(pipeline)
+            encoder.setTexture(texture, index: 0); encoder.setSamplerState(sampler, index: 0)
+            encoder.setBuffer(result, offset: 0, index: 0)
+            encoder.dispatchThreadgroups(MTLSize(width: 1, height: 1, depth: 1),
+                threadsPerThreadgroup: MTLSize(width: 1, height: 1, depth: 1))
+            encoder.endEncoding(); command.commit(); command.waitUntilCompleted()
+            guard command.status == .completed, command.error == nil else { throw Failure.sampling }
+            let value = result.contents().load(as: Float.self)
+            guard value.isFinite, (0...1).contains(value) else { throw Failure.sampling }
+            sourceOriginRed = value
+            return value
         }
 
         private static func identity(_ value: SCNMatrix4) -> Bool {
@@ -184,10 +234,11 @@ enum DuelTriadSourceMorph {
             let originalBlend: SCNBlendMode
             let originalReadsDepth: Bool
             let originalWritesDepth: Bool
-            let constantSourceUV: Bool
-            init(material: SCNMaterial, parameters: MaterialBinding, constantSourceUV: Bool) {
+            let constantSourceMaskValue: Float?
+            var constantSourceUV: Bool { constantSourceMaskValue != nil }
+            init(material: SCNMaterial, parameters: MaterialBinding, constantSourceMaskValue: Float?) {
                 self.material = material; self.parameters = parameters
-                self.constantSourceUV = constantSourceUV
+                self.constantSourceMaskValue = constantSourceMaskValue
                 originalModifiers = material.shaderModifiers; originalBlend = material.blendMode
                 originalReadsDepth = material.readsFromDepthBuffer
                 originalWritesDepth = material.writesToDepthBuffer
@@ -277,12 +328,22 @@ enum DuelTriadSourceMorph {
         private func installModifiers() {
             for item in materials {
                 let material = item.material, parameter = item.parameters
-                let mask = SCNMaterialProperty(contents: texture)
-                mask.wrapS = .repeat; mask.wrapT = .repeat
-                mask.minificationFilter = .linear; mask.magnificationFilter = .linear
-                mask.mipFilter = .none; mask.maxAnisotropy = 1
-                material.setValue(mask, forKey: "triadMorphMask")
-                material.setValue(mask, forKey: "triadMorphSurfaceMask")
+                if let value = item.constantSourceMaskValue {
+                    // Removing the sampler declaration alone is insufficient
+                    // if a texture property still participates in SceneKit's
+                    // generated vertex descriptor. This branch owns no sampler.
+                    material.setValue(nil, forKey: "triadMorphMask")
+                    material.setValue(nil, forKey: "triadMorphSurfaceMask")
+                    material.setValue(NSNumber(value: value), forKey: "triadMorphSourceValue")
+                    material.setValue(NSNumber(value: value), forKey: "triadMorphSurfaceSourceValue")
+                } else {
+                    let mask = SCNMaterialProperty(contents: texture)
+                    mask.wrapS = .repeat; mask.wrapT = .repeat
+                    mask.minificationFilter = .linear; mask.magnificationFilter = .linear
+                    mask.mipFilter = .none; mask.maxAnisotropy = 1
+                    material.setValue(mask, forKey: "triadMorphMask")
+                    material.setValue(mask, forKey: "triadMorphSurfaceMask")
+                }
                 material.setValue(NSNumber(value: parameter.tile), forKey: "triadMorphTile")
                 material.setValue(NSNumber(value: parameter.tile), forKey: "triadMorphSurfaceTile")
                 material.setValue(NSNumber(value: parameter.edgeSize), forKey: "triadMorphEdge")
@@ -337,31 +398,39 @@ enum DuelTriadSourceMorph {
     // projected shadow has a separate whole-silhouette fade: 38405 writes
     // actorValue=1-progress, then 23565 passes progress to ShadowcasterUnlit.
     // It never samples this mask, so its contract must be verified separately.
-    private static func sourceUV(constant: Bool) -> String {
-        // The authenticated personal neck bridge is an untextured addition
-        // with no authored UVs. Its explicit arena adapter samples source
-        // origin directly; it neither invents a glTF UV nor applies 1-V to it.
-        constant ? "vec2(0.0)" : "vec2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y)"
+    private static func sourceUV() -> String {
+        // Only authored glTF UVs enter this path. The authenticated untextured
+        // neck uses its independently sampled original mask value instead.
+        "vec2(_surface.diffuseTexcoord.x, 1.0 - _surface.diffuseTexcoord.y)"
     }
 
     private static func surface(constantSourceUV: Bool) -> String {
-        """
-    uniform sampler2D triadMorphSurfaceMask;
-    uniform float triadMorphSurfaceTile;
+        let declaration = constantSourceUV ? "uniform float triadMorphSurfaceSourceValue;" :
+            "uniform sampler2D triadMorphSurfaceMask;\nuniform float triadMorphSurfaceTile;"
+        let sample = constantSourceUV ? "float triadMorphValue = triadMorphSurfaceSourceValue;" : """
+    vec2 triadMorphUV = \(sourceUV()) * triadMorphSurfaceTile;
+    float triadMorphValue = texture2D(triadMorphSurfaceMask, triadMorphUV).r;
+    """
+        return """
+    \(declaration)
     uniform float triadMorphSurfaceEdge;
     uniform float triadMorphSurfaceCutoff;
     #pragma opaque
     #pragma body
-    vec2 triadMorphUV = \(sourceUV(constant: constantSourceUV)) * triadMorphSurfaceTile;
-    float triadMorphValue = texture2D(triadMorphSurfaceMask, triadMorphUV).r;
+    \(sample)
     if (triadMorphValue > triadMorphSurfaceCutoff + triadMorphSurfaceEdge) { discard_fragment(); }
     """
     }
 
     private static func fragment(constantSourceUV: Bool) -> String {
-        """
-    uniform sampler2D triadMorphMask;
-    uniform float triadMorphTile;
+        let declaration = constantSourceUV ? "uniform float triadMorphSourceValue;" :
+            "uniform sampler2D triadMorphMask;\nuniform float triadMorphTile;"
+        let sample = constantSourceUV ? "float triadMorphValue = triadMorphSourceValue;" : """
+    vec2 triadMorphUV = \(sourceUV()) * triadMorphTile;
+    float triadMorphValue = texture2D(triadMorphMask, triadMorphUV).r;
+    """
+        return """
+    \(declaration)
     uniform float triadMorphEdge;
     uniform float triadMorphCutoff;
     uniform vec3 triadMorphStart;
@@ -375,8 +444,7 @@ enum DuelTriadSourceMorph {
     }
     #pragma opaque
     #pragma body
-    vec2 triadMorphUV = \(sourceUV(constant: constantSourceUV)) * triadMorphTile;
-    float triadMorphValue = texture2D(triadMorphMask, triadMorphUV).r;
+    \(sample)
     if (triadMorphValue >= triadMorphCutoff && triadMorphValue <= triadMorphCutoff + triadMorphEdge) {
         float triadMorphT = clamp((triadMorphValue - triadMorphCutoff) / triadMorphEdge, 0.0, 1.0);
         vec3 triadMorphColor = mix(triadMorphStart, triadMorphEnd, triadMorphT * triadMorphT * (3.0 - 2.0 * triadMorphT));

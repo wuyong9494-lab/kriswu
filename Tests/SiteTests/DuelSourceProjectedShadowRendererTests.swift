@@ -96,10 +96,45 @@ final class DuelProjectedShadowFixture {
             usesFloatComponents: true, componentsPerVector: 4, bytesPerComponent: 4, dataOffset: 0, dataStride: 16)
         let js = SCNGeometrySource(data: jd, semantic: .boneIndices, vectorCount: 4,
             usesFloatComponents: false, componentsPerVector: 4, bytesPerComponent: 2, dataOffset: 0, dataStride: 8)
+        let uploadLayout = "weights=\(Renderer.sourceLayout(ws));indices=\(Renderer.sourceLayout(js))"
         holder.skinner = SCNSkinner(baseGeometry: geometry, bones: [bone],
             boneInverseBindTransforms: [NSValue(scnMatrix4: SCNMatrix4Identity)], boneWeights: ws, boneIndices: js)
         holder.skinner?.skeleton = bone; holder.castsShadow = true
+        if let skin = holder.skinner, let positions = geometry.sources(for: .vertex).first {
+            print("Synthetic SceneKit skin upload: \(uploadLayout)")
+            print("Synthetic SceneKit skin returned: position=\(Renderer.sourceLayout(positions));weights=\(Renderer.sourceLayout(skin.boneWeights));indices=\(Renderer.sourceLayout(skin.boneIndices))")
+        }
         return .init(root: root, nodes: [holder, bone], materials: [material], outlines: [])
+    }
+
+    /// Deliberately padded, offset and unaligned synthetic source buffers.
+    /// No SCNSkinner optimization can hide an unsupported reader format here.
+    static func packedSkinSources(weights: [Float], indices: [UInt32], indexBytes: Int,
+                                  floatIndices: Bool = false) -> (position: SCNGeometrySource, weights: SCNGeometrySource, indices: SCNGeometrySource) {
+        let positionStride = 20, weightStride = weights.count * 4 + 8
+        let indexStride = indices.count * indexBytes + 5
+        var positions = Data(repeating: 0xa5, count: 4 + 2 * positionStride)
+        var weightData = Data(repeating: 0xa5, count: 4 + 2 * weightStride)
+        var indexData = Data(repeating: 0xa5, count: 3 + 2 * indexStride)
+        for v in 0..<2 {
+            let point: [Float] = [Float(v) + 0.5, -0.25, 0.75]
+            for c in 0..<3 { for b in 0..<4 {
+                positions[4 + v * positionStride + c * 4 + b] = UInt8(truncatingIfNeeded: point[c].bitPattern >> (b * 8))
+            } }
+            for c in weights.indices { for b in 0..<4 {
+                weightData[4 + v * weightStride + c * 4 + b] = UInt8(truncatingIfNeeded: weights[c].bitPattern >> (b * 8))
+            } }
+            for c in indices.indices { for b in 0..<indexBytes {
+                indexData[3 + v * indexStride + c * indexBytes + b] = UInt8(truncatingIfNeeded: indices[c] >> (b * 8))
+            } }
+        }
+        return (SCNGeometrySource(data: positions, semantic: .vertex, vectorCount: 2,
+                    usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 4, dataStride: positionStride),
+                SCNGeometrySource(data: weightData, semantic: .boneWeights, vectorCount: 2,
+                    usesFloatComponents: true, componentsPerVector: weights.count, bytesPerComponent: 4, dataOffset: 4, dataStride: weightStride),
+                SCNGeometrySource(data: indexData, semantic: .boneIndices, vectorCount: 2,
+                    usesFloatComponents: floatIndices, componentsPerVector: indices.count, bytesPerComponent: indexBytes,
+                    dataOffset: 3, dataStride: indexStride))
     }
 
     init(device: MTLDevice, definition: Definition? = nil,
@@ -303,6 +338,61 @@ final class DuelSourceProjectedShadowRendererTests: XCTestCase {
         let skin = try XCTUnwrap(a.nodes[0].skinner); a.nodes[0].skinner = nil
         XCTAssertThrowsError(try create()); XCTAssertTrue(a.nodes[0].castsShadow)
         a.nodes[0].skinner = skin
+        // The optical-fit path reads the same actual SceneKit getters. It
+        // must respond to bones without modifying the corrected source model.
+        let originalGeometry = b.nodes[0].geometry, originalSkin = b.nodes[0].skinner
+        let originalNodes = b.nodes.map(ObjectIdentifier.init)
+        let bounds = try DuelDisplayedSkinBounds(root: b.root)
+        let camera = SCNNode(); camera.position.z = 5
+        let before = try bounds.cameraPoints(camera: camera)
+        XCTAssertFalse(before.isEmpty)
+        b.nodes[1].position.x += 0.25
+        let after = try bounds.cameraPoints(camera: camera)
+        XCTAssertEqual(after.count, before.count)
+        for index in before.indices {
+            XCTAssertEqual(after[index].x - before[index].x, 0.25, accuracy: 0.00001)
+            XCTAssertEqual(after[index].y, before[index].y, accuracy: 0.00001)
+            XCTAssertEqual(after[index].z, before[index].z, accuracy: 0.00001)
+        }
+        b.nodes[1].position.x -= 0.25
+        XCTAssertTrue(b.nodes[0].geometry === originalGeometry)
+        XCTAssertTrue(b.nodes[0].skinner === originalSkin)
+        XCTAssertEqual(b.nodes.map(ObjectIdentifier.init), originalNodes)
+
+        // Exercise each documented integer width and <=4 influence count
+        // directly, with nonzero offsets, gaps and values crossing byte 255.
+        let sourceWeights: [Float] = [0.125, 0.25, 0.5, 0.125]
+        for indexBytes in [1, 2, 4] {
+            let sourceIndices: [UInt32] = indexBytes == 1 ? [0, 127, 128, 255] : [0, 255, 256, 511]
+            for count in 1...4 {
+                let sources = Fixture.packedSkinSources(weights: Array(sourceWeights.prefix(count)),
+                    indices: Array(sourceIndices.prefix(count)), indexBytes: indexBytes)
+                let vertices = try Renderer.readSkinSources(position: sources.position, weights: sources.weights,
+                    indices: sources.indices, boneCount: 512)
+                XCTAssertEqual(vertices.count, 2)
+                for v in vertices.indices {
+                    XCTAssertEqual(vertices[v].position, SIMD4<Float>(Float(v) + 0.5, -0.25, 0.75, 1))
+                    for c in 0..<4 {
+                        XCTAssertEqual(vertices[v].weights[c], c < count ? sourceWeights[c] : 0)
+                        XCTAssertEqual(vertices[v].joints[c], c < count ? sourceIndices[c] : 0)
+                    }
+                }
+            }
+        }
+        for invalidWeights: [Float] in [[.nan], [-0.25], [1.25], [0]] {
+            let sources = Fixture.packedSkinSources(weights: invalidWeights, indices: [0], indexBytes: 1)
+            XCTAssertThrowsError(try Renderer.readSkinSources(position: sources.position, weights: sources.weights,
+                indices: sources.indices, boneCount: 1))
+        }
+        let outside = Fixture.packedSkinSources(weights: [1], indices: [512], indexBytes: 4)
+        XCTAssertThrowsError(try Renderer.readSkinSources(position: outside.position, weights: outside.weights,
+            indices: outside.indices, boneCount: 512))
+        let mismatch = Fixture.packedSkinSources(weights: [0.5, 0.5], indices: [0], indexBytes: 1)
+        XCTAssertThrowsError(try Renderer.readSkinSources(position: mismatch.position, weights: mismatch.weights,
+            indices: mismatch.indices, boneCount: 1))
+        let floating = Fixture.packedSkinSources(weights: [1], indices: [0], indexBytes: 4, floatIndices: true)
+        XCTAssertThrowsError(try Renderer.readSkinSources(position: floating.position, weights: floating.weights,
+            indices: floating.indices, boneCount: 1))
         let trail = SCNNode(geometry: SCNPlane(width: 1, height: 1))
         trail.geometry?.materials = [SCNMaterial()]; trail.castsShadow = false; a.root.addChildNode(trail)
         // A supported nonidentity base bind is applied in the actual skin

@@ -17,6 +17,7 @@ final class DuelSourceProjectedShadowRenderer {
     enum Failure: Error, Equatable {
         case device, format, allocation, geometry, skin, transform, clock, stopped, queue
         case shader(String)
+        case skinLayout(String), skinValue(String)
     }
 
     struct FrameInfo {
@@ -31,7 +32,7 @@ final class DuelSourceProjectedShadowRenderer {
         let factors: [Float]
     }
 
-    private struct Vertex {
+    struct Vertex {
         let position: SIMD4<Float>
         let weights: SIMD4<Float>
         let joints: SIMD4<UInt32>
@@ -450,51 +451,11 @@ final class DuelSourceProjectedShadowRenderer {
                   (1...512).contains(binds.count), (1...250_000).contains(position.vectorCount) else {
                 throw Failure.geometry
             }
-            let weights = skin.boneWeights, joints = skin.boneIndices
-            guard position.usesFloatComponents, position.bytesPerComponent == 4, position.componentsPerVector == 3,
-                  weights.usesFloatComponents, weights.bytesPerComponent == 4, weights.componentsPerVector == 4,
-                  !joints.usesFloatComponents, joints.bytesPerComponent == 2, joints.componentsPerVector == 4,
-                  weights.vectorCount == position.vectorCount, joints.vectorCount == position.vectorCount else {
-                throw Failure.skin
-            }
-            for source in [position, weights, joints] {
-                let width = source.componentsPerVector * source.bytesPerComponent
-                guard source.dataOffset >= 0, source.dataStride >= width,
-                      source.dataStride <= 1024, source.dataOffset <= source.data.count,
-                      source.vectorCount <= (source.data.count - source.dataOffset - min(width, source.data.count - source.dataOffset)) / source.dataStride + 1,
-                      source.dataOffset + (source.vectorCount - 1) * source.dataStride + width <= source.data.count else {
-                    throw Failure.geometry
-                }
-            }
+            let vertices = try readSkinSources(position: position, weights: skin.boneWeights,
+                indices: skin.boneIndices, boneCount: binds.count)
             let inverseBinds = binds.map { simd_float4x4($0.scnMatrix4Value) }
             let baseBind = simd_float4x4(skin.baseGeometryBindTransform)
             guard inverseBinds.allSatisfy(affine), affine(baseBind) else { throw Failure.transform }
-            var vertices: [Vertex] = []; vertices.reserveCapacity(position.vectorCount)
-            let pd = position.data, wd = weights.data, jd = joints.data
-            try pd.withUnsafeBytes { (pb: UnsafeRawBufferPointer) in
-                try wd.withUnsafeBytes { (wb: UnsafeRawBufferPointer) in
-                    try jd.withUnsafeBytes { (jb: UnsafeRawBufferPointer) in
-                        func scalar(_ bytes: UnsafeRawBufferPointer, _ offset: Int) -> Float {
-                            Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
-                        }
-                        for v in 0..<position.vectorCount {
-                            let offset = position.dataOffset + v * position.dataStride
-                            let p = SIMD4(scalar(pb, offset), scalar(pb, offset + 4), scalar(pb, offset + 8), 1)
-                            var w = SIMD4<Float>.zero, j = SIMD4<UInt32>.zero
-                            for c in 0..<4 {
-                                w[c] = scalar(wb, weights.dataOffset + v * weights.dataStride + c * 4)
-                                j[c] = UInt32(UInt16(littleEndian: jb.loadUnaligned(fromByteOffset:
-                                    joints.dataOffset + v * joints.dataStride + c * 2, as: UInt16.self)))
-                                guard w[c].isFinite, (0...1).contains(w[c]), Int(j[c]) < binds.count else { throw Failure.skin }
-                            }
-                            guard finite(p), w.x + w.y + w.z + w.w > 0 else { throw Failure.skin }
-                            // Preserve uploaded weights; no second normalization
-                            // or personal-character scale is introduced here.
-                            vertices.append(Vertex(position: p, weights: w, joints: j))
-                        }
-                    }
-                }
-            }
             guard !geometry.elements.isEmpty, geometry.elements.count <= 32 else { throw Failure.geometry }
             let elements = try geometry.elements.map { element -> Element in
                 guard element.primitiveType == .triangles, (1...500_000).contains(element.primitiveCount),
@@ -525,6 +486,80 @@ final class DuelSourceProjectedShadowRenderer {
         }
         return Caster(root: instance.root, parts: parts,
             originalFlags: holders.map { ($0, $0.castsShadow) })
+    }
+
+    /// Read the actual SCNSkinner getters, not an assumption that SceneKit
+    /// retained the original uint16x4 upload representation. The public skin
+    /// contract maps one integer index to each floating-point influence; at
+    /// most four influences fit this GPU vertex format. Unknown representations
+    /// and invalid source values still fail before changing any caster flags.
+    /// https://developer.apple.com/documentation/scenekit/scnskinner/boneweights
+    /// https://developer.apple.com/documentation/scenekit/scnskinner/boneindices
+    static func readSkinSources(position: SCNGeometrySource, weights: SCNGeometrySource,
+                                indices joints: SCNGeometrySource, boneCount: Int) throws -> [Vertex] {
+        let influences = weights.componentsPerVector
+        guard (1...512).contains(boneCount), (1...250_000).contains(position.vectorCount),
+              position.semantic == .vertex, weights.semantic == .boneWeights, joints.semantic == .boneIndices,
+              position.usesFloatComponents, position.bytesPerComponent == 4, position.componentsPerVector == 3,
+              weights.usesFloatComponents, weights.bytesPerComponent == 4, (1...4).contains(influences),
+              !joints.usesFloatComponents, [1, 2, 4].contains(joints.bytesPerComponent),
+              joints.componentsPerVector == influences,
+              weights.vectorCount == position.vectorCount, joints.vectorCount == position.vectorCount else {
+            throw Failure.skinLayout("position=\(sourceLayout(position));weights=\(sourceLayout(weights));indices=\(sourceLayout(joints));bones=\(boneCount)")
+        }
+        for source in [position, weights, joints] {
+            let width = source.componentsPerVector * source.bytesPerComponent
+            guard source.dataOffset >= 0, source.dataOffset <= source.data.count,
+                  source.dataStride >= width, source.dataStride <= 1024 else {
+                throw Failure.skinLayout("bounds:\(sourceLayout(source))")
+            }
+            let remaining = source.data.count - source.dataOffset
+            guard remaining >= width, source.vectorCount - 1 <= (remaining - width) / source.dataStride else {
+                throw Failure.skinLayout("truncated:\(sourceLayout(source))")
+            }
+        }
+        var vertices: [Vertex] = []; vertices.reserveCapacity(position.vectorCount)
+        let pd = position.data, wd = weights.data, jd = joints.data
+        try pd.withUnsafeBytes { (pb: UnsafeRawBufferPointer) in
+            try wd.withUnsafeBytes { (wb: UnsafeRawBufferPointer) in
+                try jd.withUnsafeBytes { (jb: UnsafeRawBufferPointer) in
+                    func scalar(_ bytes: UnsafeRawBufferPointer, _ offset: Int) -> Float {
+                        Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
+                    }
+                    for v in 0..<position.vectorCount {
+                        let offset = position.dataOffset + v * position.dataStride
+                        let p = SIMD4(scalar(pb, offset), scalar(pb, offset + 4), scalar(pb, offset + 8), 1)
+                        var w = SIMD4<Float>.zero, j = SIMD4<UInt32>.zero
+                        for c in 0..<influences {
+                            w[c] = scalar(wb, weights.dataOffset + v * weights.dataStride + c * 4)
+                            let indexOffset = joints.dataOffset + v * joints.dataStride + c * joints.bytesPerComponent
+                            switch joints.bytesPerComponent {
+                            case 1: j[c] = UInt32(jb.load(fromByteOffset: indexOffset, as: UInt8.self))
+                            case 2: j[c] = UInt32(UInt16(littleEndian: jb.loadUnaligned(fromByteOffset: indexOffset, as: UInt16.self)))
+                            case 4: j[c] = UInt32(littleEndian: jb.loadUnaligned(fromByteOffset: indexOffset, as: UInt32.self))
+                            default: throw Failure.skinLayout("index-width:\(sourceLayout(joints))")
+                            }
+                            guard w[c].isFinite, (0...1).contains(w[c]), Int(j[c]) < boneCount else {
+                                throw Failure.skinValue("vertex=\(v);component=\(c);weight=\(w[c]);index=\(j[c]);bones=\(boneCount)")
+                            }
+                        }
+                        guard finite(p), w.x + w.y + w.z + w.w > 0 else {
+                            throw Failure.skinValue("vertex=\(v);finitePosition=\(finite(p));weightSum=\(w.x + w.y + w.z + w.w)")
+                        }
+                        // Only unused slots are zero-filled. Preserve each
+                        // actual weight and index, without normalizing again.
+                        vertices.append(Vertex(position: p, weights: w, joints: j))
+                    }
+                }
+            }
+        }
+        return vertices
+    }
+
+    /// Layout metadata only; no original vertex or texture bytes are logged.
+    /// SceneKit may expose a representation different from the upload source.
+    static func sourceLayout(_ source: SCNGeometrySource) -> String {
+        "semantic=\(source.semantic.rawValue),float=\(source.usesFloatComponents),components=\(source.componentsPerVector),bytes=\(source.bytesPerComponent),count=\(source.vectorCount),offset=\(source.dataOffset),stride=\(source.dataStride),length=\(source.data.count)"
     }
 
     private static func visible(_ node: SCNNode) -> Bool {
