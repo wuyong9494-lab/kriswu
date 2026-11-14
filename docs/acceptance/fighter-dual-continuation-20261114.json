@@ -1,0 +1,274 @@
+{
+  "schema": "fighter-dual-continuation-verification-v1",
+  "sourceBaselineSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+  "sourceBranch": "codex/fighter-visual-acceptance-20261113-1200",
+  "executionIdentity": "File SHA-256 records bind the executed source. Existing Apple run belongs only to its stated earlier GitHub SHA.",
+  "implementation": [
+    {
+      "file": "Sources/ShiftCore/DuelTriadRuntimeProfile.swift",
+      "bytes": 14071,
+      "sha256": "3db0f0998e4b11c7eaf7c3762d0edd5ef23a4a79a1ef91b651b98b831581ab21"
+    },
+    {
+      "file": "Sources/ShiftCore/DuelTriadState.swift",
+      "bytes": 81310,
+      "sha256": "1d7b6497254893dc1f794ba54a6d8c04c15487f5ab7a914ad5372aab25fbe390"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelTriadStanceTests.swift",
+      "bytes": 23769,
+      "sha256": "0385481207d477b1cd3c48a6be442baa45654b1ee682b55d7ac31ec00ea761cc"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelFighterRuntimeProvenanceTests.swift",
+      "bytes": 3631,
+      "sha256": "ed211ee4453463f1f13765bba7d3b16ed67a45bc838c2d20ff87b9c623c78d0a"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelTriadCapacityTests.swift",
+      "bytes": 4311,
+      "sha256": "d7aff5ae77f0665761516639d1c091439fd916d3ab1e40a81d1487f44e45e2dc"
+    },
+    {
+      "file": "Tests/ShiftCoreTests/DuelFloorfallSourceMarkerTests.swift",
+      "bytes": 2338,
+      "sha256": "f03d9c4b1aed43fdf127ac598d19a88af239a3949c2e555419c422c138989479"
+    },
+    {
+      "file": "scripts/prepare_liu_pangu_inputs.py",
+      "bytes": 17658,
+      "sha256": "1d4852fe7a230c7dd7f684d2eaa35e1d47ae98db1bbf5a0db60d993e123e1ea7"
+    },
+    {
+      "file": "scripts/test_prepare_liu_pangu_inputs.py",
+      "bytes": 8903,
+      "sha256": "fb8b752cafcbbe1a5aa2347c7804ba1ddd711e26d6e78e8283fc3a68a9f65795"
+    },
+    {
+      "file": "scripts/source_floorfall_audio.py",
+      "bytes": 31630,
+      "sha256": "066091ae3f8188409283e5584e0edc054e3f6503d3251315747417f6d3287fd1"
+    },
+    {
+      "file": "scripts/test_source_floorfall_audio.py",
+      "bytes": 15870,
+      "sha256": "9ca8f80777e2205a80c3be0e032a41b3b34919bb882711223059ecda953e86a7"
+    }
+  ],
+  "coreRegression": {
+    "platform": "Linux x86_64",
+    "toolchain": "Swift 6.0.3",
+    "mode": "targeted compiled SwiftPM XCTest; no iOS frameworks or original media",
+    "executed": 15,
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "buildSeconds": 11.27,
+    "testSeconds": 3.109,
+    "methods": [
+      "DuelFighterRuntimeProvenanceTests.testBothRecoveredRuntimesRejectAWellFormedButDifferentConfigurationDigest",
+      "DuelFighterRuntimeProvenanceTests.testCorrectSharedConfigurationDoesNotMakeTheTwoCharacterVersionsInterchangeable",
+      "DuelFighterRuntimeProvenanceTests.testExplicitApplicationProfilesWithoutRecoveredRuntimeStillLoad",
+      "DuelFighterRuntimeProvenanceTests.testReviewedFactoriesRemainLoadableAfterJSONRoundTripAtEverySupportedLevel",
+      "DuelFloorfallSourceMarkerTests.testBothRecoveredIntervalsCrossAtTick38",
+      "DuelFloorfallSourceMarkerTests.testFrozenTickDoesNotRepeatTheIntervalAndSpeedSkipKeepsIt",
+      "DuelFloorfallSourceMarkerTests.testRestartBeforeMarkerAllowsANewPlaybackButRewindDoesNotCross",
+      "DuelTriadCapacityTests.testFullPendingSourceSoulQueueRejectsWithoutSpendingResourceCooldownOrIdentity",
+      "DuelTriadCapacityTests.testSourceSoulCapacityRemainsOccupiedUntilAttacksExpireThenAcceptsANewCast",
+      "DuelTriadRulesTests.testRecoveredBlackNinjatoFactoryPreservesSourceAndApplicationBoundariesForEverySuppliedLevel",
+      "DuelTriadRulesTests.testRecoveredFactoryRejectsUnsuppliedLevelsAndInvalidStatNormalization",
+      "DuelTriadSourceFightTests.testSourceSoulReleaseUsesItsOwnMotionInsteadOfBirthOrMovingOwner",
+      "DuelTriadStanceTests.testExactCapabilityGateRejectsMissingWrongHashAndWrongClock",
+      "DuelTriadStanceTests.testUnreviewedRuntimeConfigurationIsRejectedBeforeStanceCapabilityFallback",
+      "DuelTriadStateTests.testProductionSoulEvaluatesBladeAtContactIncludingCriticalRounding"
+    ],
+    "log": {
+      "file": "dual-character-core-final.log",
+      "bytes": 7067,
+      "sha256": "8d0822e2e0c8f8208b44b2725ef0bfbc5e8060fcb372cb84dfe67d385896a91f"
+    }
+  },
+  "pythonRegressions": [
+    {
+      "script": "scripts/test_source_floorfall_audio.py",
+      "finalImplementationVerified": true,
+      "executed": 18,
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "testSeconds": 0.019,
+      "methods": [
+        "test_source_floorfall_audio.SourceFloorfallTests.test_base_counts_total_bytes_duplicates_and_reference_closure_fail_before_media_io",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_candidate_only_appends_files_and_markers_and_preserves_old_objects",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_changed_motion_hash_duration_crop_or_interval_requires_review",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_duplicate_marker_or_unreferenced_media_is_rejected",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_invalid_base_identity_is_rejected_before_source_read_or_decode",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_malformed_explicit_playback_ticks_do_not_fall_back_to_default",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_original_alternatives_array_order_and_null_position_are_retained",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_physics_no_sfx_appearing_on_accepted_clip_fails_closed",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_private_candidate_is_new_0700_with_0600_files_and_keeps_input_bytes",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_raw_source_pin_is_checked_before_the_storage_parser",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_removed_throw_exclusion_is_rejected",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_repeated_successful_output_is_rejected_before_any_source_read_or_decode",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_repository_output_is_rejected_before_decode",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_symlinks_and_corrupt_existing_pcm_are_rejected",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_throw_fall_cannot_inherit_the_common_body_sound",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_two_exact_intervals_bind_at_38_and_stance_and_throw_are_excluded",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_typed_storage_consumes_all_bytes_and_bounds_references",
+        "test_source_floorfall_audio.SourceFloorfallTests.test_unreviewed_sound_or_spatial_override_is_rejected"
+      ],
+      "log": {
+        "file": "floorfall-python-final.log",
+        "bytes": 3401,
+        "sha256": "5979060ad819fd31b18471657df8ac225fb22de9c19b85ded57808784625e55a"
+      },
+      "note": "Final-code run is required by the new shared base-manifest validation and changed fixture; no original AudioClip decoder is invoked."
+    },
+    {
+      "script": "scripts/test_prepare_liu_pangu_inputs.py",
+      "executed": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "liu-pangu-input-preparation-20261114.json",
+      "reusedExistingSuccessfulRun": true,
+      "implementationUnchangedSinceRun": true
+    }
+  ],
+  "reproducedBeforeFix": [
+    {
+      "issue": "Source soul queue admission omitted sourceScheduled",
+      "tests": 2,
+      "failedMethods": 1,
+      "assertionFailures": 14,
+      "mistBeforeDeniedRequest": 155200,
+      "mistAfterDeniedRequest": 151900,
+      "scope": "Validated synthetic capacity stress; not claimed observed under default original balance",
+      "log": {
+        "file": "triad-capacity-before.log",
+        "bytes": 1091675,
+        "sha256": "bff2b4a8d362bb0fbf4cea2f1823281a1a4398e69ecb8ca11cece8cd8d5de9f1"
+      }
+    },
+    {
+      "issue": "Well-formed wrong H17 configuration digest passed runtime validation",
+      "tests": 1,
+      "failedMethods": 1,
+      "assertionFailures": 6,
+      "wrongDigests": 3,
+      "log": {
+        "file": "runtime-provenance-before.log",
+        "bytes": 86722,
+        "sha256": "29790ac66a89bd30bee6f347fb8b67bf93a1158de7a474618a582b6478ea38c4"
+      }
+    }
+  ],
+  "existingNativeEvidence": {
+    "sha": "ef3064085879c497d59533459c94b429a40f9cee",
+    "runId": "43611931466",
+    "url": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43611931466",
+    "status": "completed",
+    "conclusion": "success",
+    "executed": 117,
+    "passed": 117,
+    "failed": 0,
+    "skipped": 0,
+    "exactSelectorSetVerified": true,
+    "controlledSurfaceMethod": "SiteTests/DuelSourceProjectedShadowRendererTests/testControlledSurfacePreservesGammaRGBAndPresentsOpaqueAlphaAtAllRequiredSamples",
+    "controlledSurfaceResult": "Passed",
+    "excludedInstalledSourceMethods": [
+      "SiteTests/DuelTriadInstalledSourceTests/testInstalledReleaseKeepsOriginalSunIdentityAndDoesNotRelabelLiuAsPangu",
+      "SiteTests/DuelTriadInstalledSourceTests/testInstalledEightCompanionsBindTwentySourceRolesAndSixtyHertzTracks",
+      "SiteTests/DuelTriadInstalledSourceTests/testInstalledSourceEffectsAudioAndMixedTrailsRetainEveryFileIdentity",
+      "SiteTests/DuelTriadInstalledSourceTests/testInstalledNetworkFingerprintIncludesAllOriginalSourceBindings",
+      "SiteTests/DuelTriadInstalledSourceTests/testInstalledWorldRendersOriginalSkillsAndStopsWithoutAdvancingOnRedraw"
+    ],
+    "sourceOriginalMediaLoaded": false,
+    "productionPanguAssetsActivated": false,
+    "physicalDeviceAcceptance": "NOT VERIFIED",
+    "coversNewChanges": false,
+    "receipts": [
+      {
+        "file": "summary.json",
+        "bytes": 1206,
+        "sha256": "d1319119174aeeb7681d76f2e4ac987d334e4f520bb4a375a89896a435097ae0"
+      },
+      {
+        "file": "tests.json",
+        "bytes": 77788,
+        "sha256": "0a3b0bc7770e527514de90913d5118023adfb7cce53be4a142cea03ab34c86c1"
+      },
+      {
+        "file": "identity.json",
+        "bytes": 35668,
+        "sha256": "50a410947cdd9370ea45078c2e11b0edb43d4895f35778b6fc87b472390a81fc"
+      },
+      {
+        "file": "public-summary.json",
+        "bytes": 2803,
+        "sha256": "ce8185c0883b56a91877f0a8b2f75119d4eef12578a61f202e589fd9fc93ebe3"
+      }
+    ]
+  },
+  "floorfallCandidate": {
+    "newSourceAudioClips": 7,
+    "newPCMBytes": 245606,
+    "existingPCMFilesReusedUnchanged": 88,
+    "candidatePCMFiles": 95,
+    "candidatePCMBytes": 10143046,
+    "candidateMarkers": 114,
+    "manifestBytes": 51395,
+    "manifestSHA256": "7451625a85eab8da8f296f4d412c94981e7d411706de7ea6e5b620c2f7d4d809",
+    "unchangedInputFiles": 91,
+    "sourceIntervalFrames": [
+      20,
+      20
+    ],
+    "zeroBasedSourceSamples": [
+      19,
+      19
+    ],
+    "playbackTicks": [
+      38,
+      38
+    ],
+    "sourceClockScope": "Per-motion tick, not fight frame",
+    "audioConfigurationSHA256": "71b164acc4f03d93e4af4aba864eb2e192531c07d1b4751f05b2520b94e7656e",
+    "audioConfigurationMeaning": "Current v2 generator concatenates four reviewed animation/trigger JSON inputs; different provenance scope from the runtime configuration digest.",
+    "privateCandidateRebuiltAfterPreflightChanges": false,
+    "runtimeIntegrated": false,
+    "physicsFloorHitIntegrated": false,
+    "sourceDefaultAudioPositionVerified": false,
+    "iOSPlaybackVerified": false,
+    "physicalDeviceVerified": false
+  },
+  "panguInputs": {
+    "actualCacheExecutions": 1,
+    "exitCode": 2,
+    "exitMeaning": "Valid partial input plan, not a passing release",
+    "verifiedSharedMotionObjects": 10,
+    "verifiedSharedMotionBytes": 585528,
+    "existingRecoveredAliases": 17,
+    "totalAliasMappings": 29,
+    "unrecoveredAliases": 12,
+    "unrecoveredOriginalFiles": 11,
+    "verifiedEquipmentInputs": 0,
+    "equipmentIdentities": 5,
+    "newlyRecoveredPanguAssets": 0,
+    "releaseActivationAllowed": false
+  },
+  "sideEffects": {
+    "reranSuccessfulAppleWorkflow": false,
+    "triggeredNativeWorkflow": false,
+    "uploadedGameResourceVersion": false,
+    "uploadedTestFlight": false,
+    "modifiedEncryptedAssetsOrKeys": false,
+    "modifiedActiveRendererChain": false,
+    "publishedOriginalMedia": false
+  },
+  "remainingVerification": {
+    "native": "Only the stated existing ef306 source-only run is verified. New changes have Linux/Python evidence. New audio candidate needs its own Apple loading/playback verification.",
+    "simulator": "Full original-resource character scene and audiovisual validation pending.",
+    "device": "iPhone 17 Pro Max physical audiovisual, frame-time and paired-network replay evidence pending."
+  }
+}

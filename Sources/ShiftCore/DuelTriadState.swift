@@ -353,8 +353,10 @@ public struct DuelTriadState: Equatable, Sendable {
         // not test the owner's Uninterrupt interval or grounded state. The
         // fight still enforces external ALL_CONTROLS_DISABLED-style locks.
         if ability.soul != nil {
+            // Delayed source attacks share the budget with released flights.
+            // Reject before start spends mist, cooldowns or event identity.
             return sharedSoulCooldownRemainingTicks == 0 &&
-                flights.count + scheduled.count < Self.maximumPendingEvents && nextID < UInt64.max - 1
+                flights.count + scheduled.count + sourceScheduled.count < Self.maximumPendingEvents && nextID < UInt64.max - 1
         }
         guard activeCast == nil || (rules.runtime != nil && !weaponAttacksLocked), !weaponAttacksLocked else { return false }
         switch ability {

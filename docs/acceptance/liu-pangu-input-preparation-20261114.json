@@ -1,0 +1,105 @@
+{
+  "schema": "liu-pangu-input-preparation-acceptance-v1",
+  "observedAtUTC": "2026-11-14T16:11:47Z",
+  "implementationStatus": "new-local-code-validated",
+  "implementation": [
+    {
+      "file": "scripts/prepare_liu_pangu_inputs.py",
+      "bytes": 17658,
+      "sha256": "1d4852fe7a230c7dd7f684d2eaa35e1d47ae98db1bbf5a0db60d993e123e1ea7"
+    },
+    {
+      "file": "scripts/test_prepare_liu_pangu_inputs.py",
+      "bytes": 8903,
+      "sha256": "fb8b752cafcbbe1a5aa2347c7804ba1ddd711e26d6e78e8283fc3a68a9f65795"
+    }
+  ],
+  "scope": "Reusable preparation and exact identity checking of existing D19 source inputs; not a character release builder",
+  "reviewedInputPins": [
+    {
+      "file": "scripts/pangu_source_identity_20261114.json",
+      "sha256": "fdaf44812d2e5aa02baf876a401ea507a8f83a7e11f76ac274f60532825b1901"
+    },
+    {
+      "file": "scripts/pangu_source_motion_inventory_20261114.json",
+      "sha256": "baa0a83c58348c3842b4a442ea534f875168a93a411646ed6c7e07e5d2941d45"
+    }
+  ],
+  "lightweightRegression": {
+    "command": "python3 -m unittest discover -s scripts -p 'test_prepare_liu_pangu_inputs.py' -v",
+    "exitCode": 0,
+    "testMethods": 12,
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0,
+    "coverage": [
+      "Reviewed inventory pins cannot be replaced by caller-authored JSON",
+      "Old hammers and old axe cannot satisfy exact D19 equipment identity",
+      "Every known alias is retained and shared source objects are deduplicated",
+      "Native defaults and source-coordinate frame semantics are retained without inventing speed or FPS",
+      "Wrong bytes, wrong digests, symbolic links and relative path escape are rejected",
+      "A caller-supplied model path and locally matching hash remain an unverified candidate",
+      "Reviewed catalog digest, reviewed item receipt, concrete Unity object path and verified bytes are all required",
+      "Missing motions, forged counts, duplicate aliases, duplicate JSON keys and non-finite numbers cannot pass completeness",
+      "Partial output has explicit exit 2, cannot overwrite an existing plan and cannot use runtime release filenames"
+    ],
+    "syntheticInputs": "Small negative/contract-test byte strings only; never asset or release evidence"
+  },
+  "actualCachePreflight": {
+    "executions": 1,
+    "exitCode": 2,
+    "exitMeaning": "Valid partial input mapping written; required original inputs remain missing",
+    "prepared": true,
+    "existingRecoveredAliases": 17,
+    "existingRecoveredMotionObjects": 10,
+    "verifiedLocalMotionObjects": 10,
+    "verifiedLocalMotionBytes": 585528,
+    "missingLocalRecoveredMotionObjects": 0,
+    "unrecoveredAliases": 12,
+    "unrecoveredSourceFiles": 11,
+    "totalAliasMappings": 29,
+    "requiredEquipmentIdentities": 5,
+    "verifiedEquipmentInputs": 0,
+    "newlyRecoveredAssets": 0,
+    "inputCoverageComplete": false,
+    "releaseActivationAllowed": false,
+    "plan": {
+      "schema": "liu-pangu-input-preparation-v1",
+      "bytes": 59523,
+      "sha256": "7bccd52d5280b5d9316abeae48fbada999a6edd14a879330ddcf4cd74bb0df37",
+      "containsPrivateAbsolutePaths": false,
+      "containsOriginalAnimationOrAudioBytes": false
+    }
+  },
+  "evidenceBoundary": {
+    "codeAnalysis": "confirmed for the new preparer and the existing release contracts",
+    "pythonExecution": "12 lightweight tests passed and existing cached motion bytes matched the reviewed pins",
+    "originalModelIdentity": "unverified; no reviewed exact D19 equipment match exists in the current pinned identity inventory",
+    "newNativeExecution": "not run",
+    "newSimulatorValidation": "not run",
+    "iPhone17ProMaxValidation": "not performed",
+    "productionPanguActivated": false
+  },
+  "releaseBlockers": [
+    "Recover and independently review exact D19 equipment, materials, textures and skeleton inputs",
+    "Recover the 12 outstanding aliases from their 11 original motion source files",
+    "Decode and bind both source motion arrays to the recovered rig, using reviewed speed and frame-event mapping",
+    "Bind exact source trail and audio media; marker identifiers are not media bytes",
+    "Provide a separately reviewed H17 Morph counterpart: the existing document pins liu_hammers and its old actor/material identity",
+    "Review the packer replacement allowlist, currently limited to Liu_Legion_Hammers.glb and SF3_DistinctFighters.json",
+    "Validate a complete self-contained release against the independent signed-build digest, then obtain native, simulator and physical-device evidence"
+  ],
+  "sideEffects": {
+    "downloadedAssets": false,
+    "decodedOrConvertedAssets": false,
+    "packedOrUploadedRelease": false,
+    "generatedRuntimeRelease": false,
+    "changedBuildPin": false,
+    "reranNativeOrSuccessfulCI": false,
+    "uploadedTestFlight": false,
+    "modifiedExistingRepoFiles": false,
+    "exposedKeysOrOriginalMediaBytes": false
+  },
+  "sourceBaselineSHA": "ef3064085879c497d59533459c94b429a40f9cee",
+  "executionIdentity": "The implementation SHA-256 records identify the files executed; the local snapshot commit is not a GitHub source commit."
+}

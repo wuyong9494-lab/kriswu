@@ -121,6 +121,19 @@ final class DuelTriadStanceTests: XCTestCase {
         XCTAssertFalse(legacy.hasSourceStance(0)); XCTAssertFalse(legacy.sourceIntroActive)
     }
 
+    func testUnreviewedRuntimeConfigurationIsRejectedBeforeStanceCapabilityFallback() throws {
+        let source = try F.catalog()
+        let changed = try DuelWeaponTestFixtures.changing(source) { profiles in
+            var rules = profiles[0]["triadRules"] as! [String: Any]
+            var runtime = rules["runtime"] as! [String: Any]
+            runtime["configurationSHA256"] = String(repeating: "d", count: 64)
+            rules["runtime"] = runtime; profiles[0]["triadRules"] = rules
+        }
+        XCTAssertThrowsError(try changed.validate()) {
+            XCTAssertEqual($0 as? DuelTriadRules.ValidationError, .provenance)
+        }
+    }
+
     func testFirstAuthoritativeTickStartsIntroAndEmitsRoundStartExactlyOnce() throws {
         var fight = try F.fight()
         XCTAssertEqual(fight.sourceStance(0)?.motion, .firstBirth)

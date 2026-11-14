@@ -40,8 +40,10 @@ extension DuelTriadRules {
                   evidence.version == "user-ipa-1.46.1/config-1.46.0.16.16733-prod/H17-06-06a",
                   !evidence.references.isEmpty, evidence.references.count <= 32,
                   evidence.references.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 1024 }),
-                  configurationSHA256.count == 64,
-                  configurationSHA256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+                  // This interpreter implements one reviewed source revision.
+                  // A different well-formed digest cannot silently fall back
+                  // to an arena lifecycle while claiming that same revision.
+                  configurationSHA256 == DuelTriadStanceState.runtimeConfigurationSHA256,
                   tickRate == 60, sourceFramesPerSecond == 30,
                   (1...1_000_000).contains(normalizedMagicPower),
                   (0...10_000).contains(suppressionHealthFractionBps),
