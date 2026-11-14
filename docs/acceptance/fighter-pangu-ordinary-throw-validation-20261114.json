@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "baselineCommit": "597f6def986ea8a45653fdcce71015bbd4f8ec59",
+  "remoteBaselineCommit": "0d83323a5463b9f3feb57cc00532da2ade5a5c48",
+  "commitReference": "Containing commit of this record; exact commit is in the review README.",
+  "scope": "Configured ordinary throws and real Pangu automatic escape, paired source sampling, lifecycle, native feedback and replay.",
+  "swift": {
+    "version": "6.0.3",
+    "platform": "x86_64-unknown-linux-gnu",
+    "filter": "DuelPangu|DuelWeapon|DuelReplayState|DuelNetwork|DuelMultiplayer|DuelCombat|DuelImpact|DuelShadow",
+    "tests": 321,
+    "failures": 0,
+    "durationSeconds": 177.16,
+    "logFile": "pangu-throw-final-regression.log",
+    "logSHA256": "7a1e4371146b57ad5f0760b474b3dc9e7c0c94e53ecec04172a5c9407908c195",
+    "passedSuites": [
+      "DuelCombatCameraTests",
+      "DuelCombatRulesTests",
+      "DuelImpactMotionTests",
+      "DuelMultiplayerReplicaTests",
+      "DuelMultiplayerSelectionTests",
+      "DuelNetworkCombatWireTests",
+      "DuelNetworkHostSimulationTests",
+      "DuelNetworkInputsTests",
+      "DuelNetworkPulseScheduleTests",
+      "DuelNetworkReplayTests",
+      "DuelNetworkStartBarrierTests",
+      "DuelPanguFightTests",
+      "DuelPanguLifecycleTests",
+      "DuelPanguNetworkTests",
+      "DuelPanguPrecisionTests",
+      "DuelPanguPresentationTests",
+      "DuelPanguStateTests",
+      "DuelPanguThrowFightTests",
+      "DuelPanguThrowNetworkTests",
+      "DuelReplayStateAuditTests",
+      "DuelReplayStateTests",
+      "DuelWeaponComboTests",
+      "DuelWeaponFightTests",
+      "DuelWeaponImpactTests",
+      "DuelWeaponInputTests",
+      "DuelWeaponMotionTests",
+      "DuelWeaponShadowTests",
+      "DuelWeaponSweepContinuityTests",
+      "DuelWeaponThrowTests"
+    ],
+    "newThrowTests": 36,
+    "note": "Synthetic rules and motion fixtures validate execution; they are not retail assets or numeric measurements."
+  },
+  "python": {
+    "tests": 16,
+    "failures": 0,
+    "command": "python3 scripts/test_build_fighter_network_rules.py",
+    "logFile": "pangu-throw-manifest-tests.log",
+    "logSHA256": "c36c3fbb74024a609555253800551c18654e73d520039b06e4ef0709aeb19680",
+    "nativeRequiredPathsMatch": true
+  },
+  "native": {
+    "syntaxParsedFiles": [
+      "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "App/Services/DuelPanguDiagnostics.swift",
+      "App/Views/DuelPanguHUD.swift",
+      "App/Views/DuelTelevision.swift",
+      "App/Views/DuelView.swift"
+    ],
+    "syntaxDiagnostics": 0,
+    "logFile": "pangu-throw-native-syntax.log",
+    "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "iOSSDKTypechecked": false,
+    "deviceVisualRun": false
+  },
+  "sourceIdentity": {
+    "fileCount": 314,
+    "fingerprint": "c165e8dcfdd247dca6d4ce8094cde21a2844607c2006c66ba69b75c336740198",
+    "recipe": "fighter-network-rules-v1",
+    "buildMode": "source-only",
+    "manifestFile": "pangu-throw-rules-manifest.json",
+    "manifestSHA256": "0458140efc99b4b592e8f8c738fd1455818234c269d9ee08cbd4d9855e38e4d2"
+  },
+  "simulation": {
+    "schemaVersion": 6,
+    "rulesVersion": 10,
+    "inputWireProtocolVersion": 1,
+    "throwConfigurationAndDynamicStateEncoded": true,
+    "throwRecoveryClocksEncoded": true,
+    "presentationEventsExcludedFromCanonicalBytes": true,
+    "legacyThrowConfigurationDefault": null,
+    "productionThrowPresetAdded": false
+  },
+  "sourceEvidence": {
+    "audit": "docs/acceptance/fighter-pangu-ordinary-throw-source-audit-20261114.json",
+    "usesExistingCachedReference": true,
+    "newMediaDownloaded": false,
+    "ordinaryAutomaticEscapeSemanticsVerified": true,
+    "exactCurrentThrowTimingDamageAndMotionBindingRecovered": false,
+    "genericThrowCandidatesWithVerifiedBytes": 6,
+    "sourcePlaybackFPSKnown": false
+  },
+  "initialChecks": {
+    "focusedRun": {
+      "tests": 36,
+      "failedTestCases": 1,
+      "assertionFailures": 2,
+      "cause": "Synthetic test holdTicks was raised above level6HoldTicks and correctly rejected by existing validation.",
+      "fix": "Set both synthetic hold durations explicitly to 400; production rules unchanged.",
+      "logFile": "pangu-throw-focused-regression.log",
+      "logSHA256": "842a3dab43d05cc8dfb144b04cb46394a385976ee168f387589c5272c9720ac7"
+    },
+    "correctedFocusedAndReplayRun": {
+      "tests": 17,
+      "failures": 0,
+      "logFile": "pangu-throw-followup-regression.log",
+      "logSHA256": "4fd724d559159ec4de6432629d2db17454cbd8376572a73d7c418ef3f0f502fa"
+    },
+    "pythonInvocation": "An initial root-level unittest module invocation lacked the scripts import path; the documented direct script invocation passed. No source change was needed."
+  },
+  "originalParity": {
+    "productionPanguCatalogEnabled": false,
+    "fullRetailParametersRecovered": false,
+    "sourceModelMotionFXAudioComplete": false,
+    "configuredThrowEscapeSequenceImplemented": true,
+    "originalThrowEscapeAnimationBound": false,
+    "defenseFormulaRecovered": false,
+    "completeOriginalGameParity": false
+  },
+  "publication": {
+    "localOnly": true,
+    "remotePush": false,
+    "pullRequestCreated": false,
+    "workflowRun": false,
+    "sitesWritten": false,
+    "sitesObservedVersion": 11,
+    "iOSBuild": false,
+    "testFlightUploaded": false,
+    "previousPushApprovalRejectionBypassed": false
+  },
+  "logClockNote": "Emitted host log timestamps retained; document date follows the user task date.",
+  "changedFilesExcludingThisRecord": [
+    {
+      "path": "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "bytes": 24649,
+      "sha256": "9da39a53e35f219d6443fcaf3373802715bb83436dd2edae20a152227c739d13"
+    },
+    {
+      "path": "App/Services/DuelPanguDiagnostics.swift",
+      "bytes": 8666,
+      "sha256": "3e6df3f00a32957f410274057dde48f6230480b01d02af79132757cbc7b3a2ed"
+    },
+    {
+      "path": "App/Views/DuelPanguHUD.swift",
+      "bytes": 3379,
+      "sha256": "321772a446b0cf806141e447131e7c6161b413d98207d5fb01761dc691e985fa"
+    },
+    {
+      "path": "App/Views/DuelTelevision.swift",
+      "bytes": 10117,
+      "sha256": "cc5030de6570aa6e6dfd552b94b94539b4fc83622b4b7b5c687f55a38ef8e97d"
+    },
+    {
+      "path": "App/Views/DuelView.swift",
+      "bytes": 80897,
+      "sha256": "f87c6c5a108b98ed86b7c55566dbc1378b488c479c6f6815b3c8663a1b52b252"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelPanguPresentation.swift",
+      "bytes": 7772,
+      "sha256": "00d804cbf34d1a1cc5efa385248ba31a436d49c1b767da38617fc0bf521399ab"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelReplayState.swift",
+      "bytes": 12691,
+      "sha256": "09878579cb04040db0dcdeef9b5c083adb3b9a182487dc4ecb745d00839fdab3"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelWeaponFight.swift",
+      "bytes": 93819,
+      "sha256": "f7e5f74fa77382b9720856fc2a3370b296a8c85b1aacdd5919dc78c872f2098e"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelWeaponMotion.swift",
+      "bytes": 11055,
+      "sha256": "d7bb2410288c0c66f9a4539d4e24d9d216d95cba837158ca446af9a5c70c7852"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelWeaponThrow.swift",
+      "bytes": 28022,
+      "sha256": "15d17c38a2435cbe70dd90073d7f01ce0d4d1bef03a7ca50adca1b2c94c8d685"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelPanguThrowFightTests.swift",
+      "bytes": 25503,
+      "sha256": "3908726ac1db13dcf92824a1dcbc17229c63959c630acd5fad918c21f4a16674"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelPanguThrowNetworkTests.swift",
+      "bytes": 13881,
+      "sha256": "6eeff2e2ebbd80025e8d2d7bdd7501cf9eb56ccbe1ae06ec7f65c6e2b17545ac"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift",
+      "bytes": 13613,
+      "sha256": "b76a1f33ec892f5de728071c9c96eef867cd77b13a8763736113084a0f180005"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelReplayStateTests.swift",
+      "bytes": 16329,
+      "sha256": "1d159b265f6eeca62fe1389818352ba2544253014f45ccbad09f80ba95c2a331"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelWeaponThrowTests.swift",
+      "bytes": 27875,
+      "sha256": "6f853a82ea535f97ab2c2d5e2a3fad532056d59418fe5ae3b14b260ec4469961"
+    },
+    {
+      "path": "docs/acceptance/fighter-pangu-ordinary-throw-source-audit-20261114.json",
+      "bytes": 12306,
+      "sha256": "b6faa13adc353f5ff49b8725850e0c837d86746c9f7a84949393eeb6989ad246"
+    },
+    {
+      "path": "docs/fighter-pangu-ordinary-throw-followup-20261114.md",
+      "bytes": 6231,
+      "sha256": "6f5656473995f6b533b30a3410390af4931943af9c09878e6d4c8f0d35e3cc8e"
+    },
+    {
+      "path": "docs/fighter-replay-state-encoding.md",
+      "bytes": 33021,
+      "sha256": "0aee010339ff6d1437f3e4360e603b10fc304555a71f3ace9cf9ade41e836289"
+    },
+    {
+      "path": "scripts/build_fighter_network_rules.py",
+      "bytes": 9048,
+      "sha256": "f6ab0ed1b4ec03547006eb8d1536b4ef4c1061ad1482120f6f96ef914c632260"
+    }
+  ]
+}

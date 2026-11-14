@@ -572,6 +572,9 @@ final class DuelSession: ObservableObject {
     /// One physical-input sample, in world coordinates, resolved against the
     /// local seat's current authoritative facing and airborne state. Consumes
     /// edges exactly once but never advances the simulation or clears its buffers.
+    func weaponControlPreview(_ command: DuelWeaponCommand) -> DuelGame.Input {
+        .init(move: weaponInput.x, vertical: weaponInput.y, weaponCommand: command)
+    }
     func consumeLocalInput() -> DuelGame.Input {
         guard acceptsPhysicalInput else { return .neutral }
         let input = setup.originalWeapons ? weaponInput.consume(facing: localFighter.facing,
@@ -1064,11 +1067,21 @@ private struct DuelMatchContent: View {
         return VStack(alignment: i == 0 ? .leading : .trailing, spacing: 3) {
             Text("\(f.hero.name) · \(session.game.weaponFight?.profiles[i].weaponTitle ?? (i == session.localFighterIndex ? "你" : "对手"))").font(.caption.bold())
                 .accessibilityIdentifier("duel.name.\(i)")
-            ProgressView(value: Double(f.health), total: 1000).tint(i == 0 ? .orange : .cyan)
-            Text("生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
+            ProgressView(value: Double(f.health), total: Double(session.game.weaponFight?.maximumHealth(i) ?? 1000))
+                .tint(i == 0 ? .orange : .cyan)
+            Text(session.game.weaponFight?.panguState(i).map {
+                "生命 \(f.health) · 光能 \($0.light)/\($0.rules.light.maximum) · 连击 \($0.combo)"
+            } ?? "生命 \(f.health) · 防御 \(f.guardMeter / 10) · 能量 \(f.energy)")
                 .font(.system(size: 10, design: .monospaced))
                 .accessibilityIdentifier("duel.stats.\(i)")
                 .accessibilityValue("生命 \(f.health)，位置 \(f.x)，高度 \(f.y)")
+            if let state = session.game.weaponFight?.panguState(i) {
+                DuelPanguHUD(state: state,
+                    isEscapingOrdinaryThrow: session.game.weaponFight?.ordinaryThrow(i)?.stage == .immune)
+            }
+            if let fight = session.game.weaponFight {
+                DuelPanguControlHUD(controls: fight.panguPresentation.controls.filter { $0.target == i })
+            }
         }.frame(maxWidth: .infinity)
     }
     private func updateMusic() {
@@ -1210,6 +1223,19 @@ struct DuelWeaponControls: UIViewRepresentable {
         let profile = fight.profiles[index], fighter = session.localFighter
         for action in DuelSourceControlsView.Action.allCases {
             guard let command = DuelWeaponCommand(rawValue: action.rawValue) else { continue }
+            if let state = fight.panguState(index), command == .shadow || command == .ranged,
+               let ability = fight.panguAbility(for: session.weaponControlPreview(command), index: index),
+               let rule = state.rules.ability(ability) {
+                let unlocked = state.rules.level >= ability.minimumLevel
+                let cooldown = state.cooldownRemaining(ability)
+                let ready = fight.canUsePangu(ability, index: index)
+                let description = !unlocked ? "套装等级不足" : cooldown > 0 ? "冷却中 \((cooldown + 59) / 60) 秒" :
+                    state.light < rule.lightCost ? "光能不足" : ability == .spear && state.rangedCharges == 0 ? "长矛充能中" :
+                    state.activeCast != nil ? "施放中" : ready ? "可施放" : "暂不可施放"
+                view.setState(.init(enabled: unlocked, ready: ready, description: description,
+                                    accessibilityLabel: ability.title), for: action)
+                continue
+            }
             let equipped = fight.supports(command, index: index)
             let enough = command != .shadow || fighter.energy >= 100
             let cooldown = command == .shadow ? fight.shadowCooldownRemaining(index) : 0

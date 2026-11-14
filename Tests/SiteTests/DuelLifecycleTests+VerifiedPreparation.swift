@@ -72,7 +72,13 @@ extension DuelLifecycleTests {
         weak var stage = prepared.stage
         weak var effects = prepared.sourceEffects
         weak var trails = prepared.weaponEffects
-        XCTAssertEqual(identity.verifiedFiles.count, 62)
+        if prepared.assets?.release != nil {
+            XCTAssertNotNil(prepared.assets?.panguAudio)
+            XCTAssertNotNil(prepared.assets?.sourceTrails)
+            XCTAssertEqual(identity.verifiedFiles.filter { $0.path.hasPrefix("asset-release/") }.count, 1)
+        } else {
+            XCTAssertEqual(identity.verifiedFiles.count, 62 + (prepared.assets?.sourceTrails == nil ? 0 : 1))
+        }
         XCTAssertEqual(identity.catalog.profiles.count, 2)
         XCTAssertTrue(prepared.hasExactResources)
         XCTAssertNotNil(ember); XCTAssertNotNil(liu)

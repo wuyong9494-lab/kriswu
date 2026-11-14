@@ -65,6 +65,7 @@ class FighterNetworkRulesTests(unittest.TestCase):
     def test_xcode_context_is_bounded_allowlisted_and_bound_to_digest(self):
         environment = {key: "1" for key in rules.BUILD_ENVIRONMENT}
         environment["TARGET_NAME"] = "ShiftReminder"
+        environment["FIGHTER_ASSET_RELEASE_SHA256"] = ""
         environment["SECRET"] = "never-record-this"
         context = rules.xcode_build_context(environment)
         self.assertNotIn("SECRET", context)
@@ -73,10 +74,22 @@ class FighterNetworkRulesTests(unittest.TestCase):
         self.assertNotEqual(first["fingerprint"], rules.build_manifest(
             self.root, rules.xcode_build_context(environment))["fingerprint"])
         for key, value in [("TARGET_NAME", "ShiftWidget"), ("SDK_VERSION", ""),
+                           ("FIGHTER_ASSET_RELEASE_SHA256", "1"),
+                           ("FIGHTER_ASSET_RELEASE_SHA256", "A" * 64),
                            ("CONFIGURATION", "/Users/private"), ("CONFIGURATION", "x" * 257)]:
             changed = dict(environment, **{key: value})
             with self.assertRaises(ValueError):
                 rules.xcode_build_context(changed)
+
+    def test_reviewed_asset_pin_is_part_of_build_identity(self):
+        environment = {key: "1" for key in rules.BUILD_ENVIRONMENT}
+        environment["TARGET_NAME"] = "ShiftReminder"
+        environment["FIGHTER_ASSET_RELEASE_SHA256"] = ""
+        legacy = rules.build_manifest(self.root, rules.xcode_build_context(environment))
+        environment["FIGHTER_ASSET_RELEASE_SHA256"] = "a" * 64
+        target = rules.build_manifest(self.root, rules.xcode_build_context(environment))
+        self.assertNotEqual(legacy["fingerprint"], target["fingerprint"])
+        self.assertEqual(target["build"]["FIGHTER_ASSET_RELEASE_SHA256"], "a" * 64)
 
     def test_missing_required_sources_and_empty_files_fail_closed(self):
         path = self.root / rules.REQUIRED[-1]

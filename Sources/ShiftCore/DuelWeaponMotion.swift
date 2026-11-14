@@ -80,9 +80,27 @@ public struct DuelWeaponProfile: Equatable, Codable, Sendable {
     public let roles: [String: String]
     public let clips: [DuelWeaponClip]
     public let comboLinks: [DuelWeaponComboLink]?
+    public let combatRules: DuelCombatRuleProfile?
+    public let panguRules: DuelPanguRules?
+    /// Ordinary throws are opt-in source bindings and explicit application
+    /// timing. A directional weapon command alone never invents a grapple.
+    public let ordinaryThrows: DuelWeaponThrowRules?
+    public init(id: String, hero: DuelGame.Hero, faction: String, resourceName: String,
+                bytes: Int, sha256: String, bodyID: String, weaponID: String,
+                activeWeaponSides: [String], roles: [String: String], clips: [DuelWeaponClip],
+                comboLinks: [DuelWeaponComboLink]? = nil, combatRules: DuelCombatRuleProfile? = nil,
+                panguRules: DuelPanguRules? = nil, ordinaryThrows: DuelWeaponThrowRules? = nil) {
+        self.id = id; self.hero = hero; self.faction = faction; self.resourceName = resourceName
+        self.bytes = bytes; self.sha256 = sha256; self.bodyID = bodyID; self.weaponID = weaponID
+        self.activeWeaponSides = activeWeaponSides; self.roles = roles; self.clips = clips
+        self.comboLinks = comboLinks; self.combatRules = combatRules
+        self.panguRules = panguRules
+        self.ordinaryThrows = ordinaryThrows
+    }
     public var isKatana: Bool { id == "sun_katana" }
-    public var title: String { isKatana ? "先锋 · 武士刀" : "军团 · 双锤" }
-    public var weaponTitle: String { isKatana ? "武士刀" : "双锤" }
+    public var isPangu: Bool { id == "liu_pangu" }
+    public var title: String { isKatana ? "先锋 · 武士刀" : isPangu ? "盘古 · 双手长斧" : "军团 · 双锤" }
+    public var weaponTitle: String { isKatana ? "武士刀" : isPangu ? "盘古大斧" : "双锤" }
     public func clip(named name: String) -> DuelWeaponClip? { clips.first { $0.name == name } }
     public func clip(role: String) -> DuelWeaponClip? { roles[role].flatMap { clip(named: $0) } }
     public func combo(from name: String) -> DuelWeaponComboLink? { comboLinks?.first { $0.from == name } }
@@ -100,9 +118,11 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
     public enum ValidationError: Error { case identity, incomplete, invalidTracks }
 
     public func validate() throws {
+        let expected: Set<String> = profiles.contains(where: \.isPangu)
+            ? ["sun_katana", "liu_pangu"] : ["sun_katana", "liu_hammers"]
         guard schemaVersion == 1, previewFramesPerSecond == 30,
               profiles.count == 2,
-              Set(profiles.map(\.id)) == ["sun_katana", "liu_hammers"],
+              Set(profiles.map(\.id)) == expected,
               Set(profiles.map(\.hero)) == [.ember, .liu],
               Set(profiles.map(\.bodyID)).count == 2,
               Set(profiles.map(\.weaponID)).count == 2,
@@ -138,6 +158,27 @@ public struct DuelWeaponCatalog: Equatable, Codable, Sendable {
                       link.from != link.to, link.sourceFrame >= 0,
                       link.sourceFrame < min(from.frames, to.frames) - 1 else { throw ValidationError.incomplete }
             }
+            try profile.combatRules?.validate(for: profile)
+            if profile.isPangu {
+                // A target identity must arrive with its own rules and authored
+                // motion bindings. The legacy two-hammer profile is never
+                // upgraded by changing a title or enabling a shadow button.
+                guard let pangu = profile.panguRules, profile.combatRules != nil,
+                      profile.activeWeaponSides.count == 1,
+                      ["panguShard", "panguTyphoon", "panguSplitter", "panguBones",
+                       "panguSpear", "panguHeavenfall", "panguStormGate"].allSatisfy({
+                          profile.clip(role: $0) != nil
+                      }) else { throw ValidationError.incomplete }
+                try pangu.validate()
+            } else if profile.panguRules != nil { throw ValidationError.identity }
+            if let throwRules = profile.ordinaryThrows,
+               let target = profiles.first(where: { $0.hero != profile.hero }) {
+                try throwRules.validate(for: profile, target: target)
+            }
+        }
+        let throwPolicies = profiles.compactMap { $0.ordinaryThrows?.simultaneousContactPolicy }
+        if let first = throwPolicies.first, throwPolicies.contains(where: { $0 != first }) {
+            throw ValidationError.incomplete
         }
     }
     public func profile(for hero: DuelGame.Hero) -> DuelWeaponProfile? { profiles.first { $0.hero == hero } }

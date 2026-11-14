@@ -2,6 +2,27 @@ import XCTest
 @testable import ShiftCore
 
 final class DuelWeaponInputTests: XCTestCase {
+    func testPrimalDirectionSurvivesBothFingersReleasingBeforeTheSimulationTick() {
+        for x in [-1, 0, 1] {
+            for y in [-1, 0, 1] {
+                var input = DuelWeaponInput()
+                input.direction(x: x, y: y)
+                input.press(.shadow)
+                input.release(.shadow)
+                input.direction(x: 0, y: 0)
+                let edge = input.consume(facing: 1, airborne: false)
+                XCTAssertEqual(edge.weaponCommand, .shadow)
+                XCTAssertEqual(edge.move, x)
+                XCTAssertEqual(edge.vertical, y)
+                XCTAssertFalse(edge.taps.contains(.jump))
+                let after = input.consume(facing: 1, airborne: false)
+                XCTAssertNil(after.weaponCommand)
+                XCTAssertEqual(after.move, 0)
+                XCTAssertEqual(after.vertical, 0)
+            }
+        }
+    }
+
     func testNeutralTapAndHeavyHoldAreExclusiveAndNeverRepeatWhileHeld() {
         var input = DuelWeaponInput()
         input.press(.weapon)

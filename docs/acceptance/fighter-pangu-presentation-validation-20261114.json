@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "baselineCommit": "264a11abbcb77a2efb410a8e9cdf719c2bd2d21a",
+  "commitReference": "Containing commit of this record; exact hash is in review README.",
+  "scope": "Pangu presentation and public reference followup; no retail preset or gameplay quantity changes.",
+  "swift": {
+    "version": "6.0.3",
+    "platform": "x86_64-unknown-linux-gnu",
+    "filter": "DuelPangu|DuelReplayState",
+    "tests": 75,
+    "failures": 0,
+    "durationSeconds": 53.124,
+    "newTests": 9,
+    "newPresentationTests": 8,
+    "newReplayExclusionTest": 1,
+    "logFile": "pangu-presentation-regression.log",
+    "logSHA256": "272fd91f907a6ee1ad1ed81af72b9911168dcf069a3e314d31e9e488343fd823",
+    "passedSuites": [
+      "DuelPanguFightTests",
+      "DuelPanguLifecycleTests",
+      "DuelPanguNetworkTests",
+      "DuelPanguPresentationTests",
+      "DuelPanguStateTests",
+      "DuelReplayStateAuditTests",
+      "DuelReplayStateTests"
+    ],
+    "knownUnrelatedWarning": "ShiftCoreTests.swift:2594 code after throw is unreachable; existing unrelated test source unchanged."
+  },
+  "python": {
+    "testFile": "scripts/test_build_fighter_network_rules.py",
+    "tests": 16,
+    "failures": 0,
+    "logFile": "pangu-presentation-manifest-tests.log",
+    "logSHA256": "14b9bef6a9cb4ed11d6586d17b58dbc3479dc529a4e7a13e5a9a06ce7a928d52"
+  },
+  "native": {
+    "syntaxParse": "passed",
+    "files": [
+      "App/Services/DuelPanguDiagnostics.swift",
+      "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "App/Views/DuelPanguHUD.swift",
+      "App/Views/DuelView.swift",
+      "App/Views/DuelTelevision.swift",
+      "App/Views/DuelWorld.swift"
+    ],
+    "logFile": "pangu-presentation-native-syntax.log",
+    "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "independentStaticReview": "No definite compile blocker or lifecycle error found; not an SDK typecheck.",
+    "xcodeBuild": false,
+    "deviceRun": false,
+    "renderedVisualAcceptance": false
+  },
+  "simulation": {
+    "schemaVersion": 4,
+    "rulesVersion": 8,
+    "canonicalBytesChangedByPresentationQueue": false,
+    "presentationEventsPerStepMaximum": 128,
+    "nativeTransientMarkerMaximum": 32,
+    "nativeTransientLifetimeLiveTicks": 12
+  },
+  "sourceIdentity": {
+    "fileCount": 313,
+    "fingerprint": "958ae66cf83ad7bd4e895db600d4aac6a02054c981f977304acd7bbc5e0380b7",
+    "recipe": "fighter-network-rules-v1",
+    "buildMode": "source-only"
+  },
+  "publicEvidence": [
+    {
+      "file": "docs/acceptance/fighter-pangu-public-source-followup-20261114.json",
+      "sha256": "abf8443454553f576b43e8782031b8e63d161e15383ada83298c24b0f798773e"
+    },
+    {
+      "file": "docs/acceptance/fighter-pangu-verified-reference-values-20261114.json",
+      "sha256": "27158976d70ce642454fdefe1d88467f33d75e455ee340b42d5f4a1da097d882"
+    }
+  ],
+  "originalParity": {
+    "verifiedReferenceFields": 38,
+    "fullRetailParametersRecovered": false,
+    "panguSourceModelMotionFXAudioComplete": false,
+    "productionPanguCatalogEnabled": false,
+    "fullThrowEscapeImplemented": false,
+    "completeOriginalGameParity": false
+  },
+  "publication": {
+    "localOnly": true,
+    "remotePush": false,
+    "pullRequestCreated": false,
+    "workflowRun": false,
+    "sitesWritten": false,
+    "testFlightUploaded": false,
+    "previousPublicPushApprovalRejectionBypassed": false
+  },
+  "logClockNote": "Test log timestamps are retained as emitted; document date follows the user task date."
+}

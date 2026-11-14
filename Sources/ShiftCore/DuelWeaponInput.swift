@@ -105,11 +105,16 @@ public struct DuelWeaponInput: Equatable, Sendable {
         }
         let command = queued.map { Self.command(for: $0, facing: facing) }
         let backward = x == (facing < 0 ? 1 : -1)
+        // A directional ability is an edge with its own captured direction.
+        // Releasing both fingers before the next simulation step must not turn
+        // an intended primal move into neutral Heavenfall. Ordinary held
+        // movement still uses the live stick on subsequent ticks.
+        let abilityDirection = queued.flatMap { $0.action == .shadow ? $0 : nil }
         let result = DuelGame.Input(
-            move: x,
+            move: abilityDirection?.x ?? x,
             guardHeld: (backward || (manualGuardHeld && x == 0)) && !recoveringGuard && !airborne && y == 0 && presses.isEmpty && command == nil &&
                 !jump && pendingJumpTicks == nil,
-            taps: jump ? .jump : [], vertical: y, weaponCommand: command)
+            taps: jump ? .jump : [], vertical: abilityDirection?.y ?? y, weaponCommand: command)
         queued = nil
         return result
     }

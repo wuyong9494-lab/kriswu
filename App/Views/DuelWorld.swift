@@ -47,6 +47,7 @@ final class DuelWorldView: SCNView {
     private(set) var weaponAssets: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var sourceEffects: DuelSourceEffects?
     private(set) var weaponEffects: DuelWeaponEffects?
+    private var panguDiagnostics: DuelPanguDiagnostics?
     #if DEBUG
     /// Native A/B capture only; production always prefers verified source skins.
     var sourceWeaponSkinsEnabled = true
@@ -355,6 +356,9 @@ final class DuelWorldView: SCNView {
         antialiasingMode = .multisampling2X; preferredFramesPerSecond = 60
         isUserInteractionEnabled = false; isAccessibilityElement = false; accessibilityElementsHidden = true
         let world = SCNScene(); scene = world
+        if session.game.weaponFight?.profiles.contains(where: \.isPangu) == true {
+            panguDiagnostics = DuelPanguDiagnostics(parent: world.rootNode)
+        }
         let camera = SCNNode(); camera.camera = SCNCamera(); camera.camera?.usesOrthographicProjection = true
         camera.camera?.orthographicScale = 3.6; camera.camera?.zNear = 0.1; camera.camera?.zFar = 80
         camera.position = SCNVector3(5, 3.6, 14); camera.look(at: SCNVector3(5, 1.0, 0))
@@ -402,7 +406,8 @@ final class DuelWorldView: SCNView {
             }
             characterAsset = characterAssets[.liu]
             let loaded = session.game.fighters.compactMap { characterAssets[$0.hero] == nil && originalAssets[$0.hero] == nil && weaponAssets[$0.hero] == nil ? nil : $0.hero.name }
-            session.characterLoaded(session.setup.originalWeapons ? loaded.joined(separator: "、") + " · 武士刀 / 双锤" : loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
+            let equippedTitles = session.game.weaponFight?.profiles.map(\.weaponTitle).joined(separator: " / ") ?? ""
+            session.characterLoaded(session.setup.originalWeapons ? loaded.joined(separator: "、") + " · " + equippedTitles : loaded.isEmpty ? "人物资源未就绪 · 当前显示动作替身" : loaded.joined(separator: "、") + " · 全身人物")
         }
         for fighter in session.game.fighters {
             let actor = DuelActor(hero: fighter.hero, asset: characterAssets[fighter.hero], originalAsset: originalAssets[fighter.hero], weaponAsset: weaponAssets[fighter.hero]); actor.root.name = "duel.actor.\(actors.count)"
@@ -426,7 +431,8 @@ final class DuelWorldView: SCNView {
                 } else { session.characterFailed() }
             } else if let directory = session.weaponAssets?.directory {
                 do {
-                    sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory)
+                    sourceEffects = try DuelSourceEffects(root: world.rootNode, directory: directory,
+                                                         panguAudio: session.weaponAssets?.panguAudio)
                     weaponEffects = try DuelWeaponEffects(root: world.rootNode, directory: directory)
                 }
                 catch { session.characterFailed() }
@@ -437,6 +443,7 @@ final class DuelWorldView: SCNView {
         session.didReset = { [weak self] in
             guard let self, !self.ended else { return }
             self.sourceEffects?.reset(); self.weaponEffects?.reset()
+            self.panguDiagnostics?.reset()
             self.combatCamera = DuelCombatCamera()
             // A restarted bout can reuse frame 0. Clear the previous lens
             // before rendering its opening pose or the old weapon-swing FOV
@@ -649,6 +656,7 @@ final class DuelWorldView: SCNView {
         }
         sourceEffects?.shutdown(); sourceEffects = nil
         weaponEffects?.shutdown(); weaponEffects = nil
+        panguDiagnostics?.shutdown(); panguDiagnostics = nil
         NotificationCenter.default.removeObserver(self)
         // Break application ownership before clearing the SCNView reference.
         // Renderer/UIKit work may still finish after this method returns.
@@ -713,13 +721,18 @@ final class DuelWorldView: SCNView {
         SCNTransaction.begin(); SCNTransaction.disableActions = true
         for i in 0..<actors.count {
             actors[i].pose(session.game.fighters[i], frame: session.animationTick, grapple: session.game.grapple, index: i, phase: session.game.phase, shadow: session.game.weaponFight?.shadowVisual(i),
-                           sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true)
+                           sourceTrailActive: sourceWeaponSkinsEnabled && session.game.weaponFight?.weaponTrailIsActive(i) == true,
+                           sourceTrailEnabled: sourceWeaponSkinsEnabled)
             place(hurtNodes[i], box: session.game.hurtBox(i), visible: session.showBoxes && session.game.fighters[i].knockdown == 0 && session.game.grapple == nil)
             if let box = session.game.attackBox(i) { place(attackNodes[i], box: box, visible: session.showBoxes) }
             else { attackNodes[i].isHidden = true }
         }
         if let hold = session.game.grapple {
             actors[hold.attacker].connectWrist(to: actors[1 - hold.attacker], hold: hold)
+        }
+        if let fight = session.game.weaponFight {
+            panguDiagnostics?.draw(fight.panguPresentation, visible: session.showBoxes,
+                                   fighting: fight.phase == .fighting)
         }
         slamRing?.isHidden = true
         // Read-only sampling: repeated draws, layout, and skipped display
@@ -759,34 +772,68 @@ final class DuelWorldView: SCNView {
                              firstX: Double(game.fighters[0].x) / 1000,
                              secondX: Double(game.fighters[1].x) / 1000, impacts: impacts)
         guard let fight = game.weaponFight else { return }
-        let contacts = fight.contacts.map { contact in
-            DuelSourceEffects.Contact(kind: contact.kind == .hit ? .hit : .block,
-                position: SCNVector3(Float(contact.position.x), Float(contact.position.y), Float(contact.position.z)),
-                direction: contact.direction, heavy: contact.heavy,
-                sound: !contact.usesWeapon ? .unarmed : fight.profiles[contact.attacker].isKatana ? .katana : .dualHammers)
-        }
+        panguDiagnostics?.consume(fight.panguPresentation, events: fight.panguPresentationEvents,
+                                  frame: fight.frame, fighting: fight.phase == .fighting)
+        let contacts = Self.sourceEffectContacts(fight)
         let swings = fight.swings.map {
-            DuelSourceEffects.Swing(heavy: $0.heavy, sound: !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
+            DuelSourceEffects.Swing(heavy: $0.heavy, sound: !$0.usesWeapon ? .unarmed : fight.profiles[$0.attacker].isPangu ? .pangu :
+                fight.profiles[$0.attacker].isKatana ? .katana : .dualHammers)
         }
         // Called for every fixed simulation step, including all catch-up steps.
         // A display frame is not an event queue and must not drop earlier hits.
         let liuIndex = fight.fighters.firstIndex { $0.hero == .liu }
         sourceEffects?.consumeStep(contacts: contacts, swings: swings, animationTick: tick,
                                   liuShadowTick: liuIndex.flatMap { fight.shadowVisual($0)?.tick })
+        sourceEffects?.consumePangu(events: fight.panguPresentationEvents, frame: fight.frame,
+                                    fighting: fight.phase == .fighting)
         let skinned = Set(fight.fighters.indices.filter { index in
             sourceWeaponSkinsEnabled && actors.indices.contains(index) &&
                 actors[index].supportsSourceTrail(fight.fighters[index].weaponPose?.clip)
         })
         weaponEffects?.consumeStep(poses: Self.weaponEffectPoses(fight, tick: tick, sourceSkinFighters: skinned), animationTick: tick)
     }
+    /// Contact events and the generic impact queue are appended in the same
+    /// simulation order. A skill's cue owns its audio even when two contacts
+    /// share one position/tick; no coordinate-only lookup may merge them.
+    static func sourceEffectContacts(_ fight: DuelWeaponFight) -> [DuelSourceEffects.Contact] {
+        let pangu = fight.panguPresentationEvents.compactMap { event -> DuelPanguPresentation.Contact? in
+            if case .contact(let value) = event.kind { return value }
+            return nil
+        }
+        var next = 0
+        return fight.contacts.map { contact in
+            let profile = fight.profiles[contact.attacker]
+            let sound: DuelSourceEffects.SoundFamily
+            if profile.isPangu {
+                if next < pangu.count, pangu[next].owner == contact.attacker,
+                   pangu[next].kind == contact.kind, pangu[next].position == contact.position,
+                   pangu[next].direction == contact.direction {
+                    sound = pangu[next].attackID == nil ? (contact.usesWeapon ? .pangu : .unarmed) : .silent
+                    next += 1
+                } else {
+                    // Feedback overflow cannot license an unrelated impact sound.
+                    sound = .silent
+                }
+            } else {
+                sound = !contact.usesWeapon ? .unarmed : profile.isKatana ? .katana : .dualHammers
+            }
+            return .init(kind: contact.kind == .hit ? .hit : .block,
+                position: SCNVector3(Float(contact.position.x), Float(contact.position.y), Float(contact.position.z)),
+                direction: contact.direction, heavy: contact.heavy, sound: sound)
+        }
+    }
     /// Read-only adapter shared by native presentation verification.
     static func weaponEffectPoses(_ fight: DuelWeaponFight, tick: Int, sourceSkinFighters: Set<Int> = []) -> [DuelWeaponEffects.Pose] {
         fight.fighters.enumerated().compactMap { index, fighter in
             guard let pose = fighter.weaponPose, let clip = fight.profiles[index].clip(named: pose.clip) else { return nil }
             let profile = fight.profiles[index], tracks = clip.tracks
+            // These authenticated trail families belong to the old weapons.
+            // Pangu needs its own verified binding before visual activation.
+            guard !profile.isPangu else { return nil }
             func world(_ value: DuelWeaponPoint) -> SCNVector3 {
                 SCNVector3(Float(fighter.x) / 1000 + Float(value.x) * Float(fighter.facing),
-                           Float(value.y + pose.groundLift), Float(value.z) * Float(fighter.facing))
+                           Float(value.y + pose.groundLift) + Float(fighter.y) / 1000,
+                           Float(value.z) * Float(fighter.facing))
             }
             let shadow = fight.shadowVisual(index)
             let endpoints: [DuelWeaponEffects.Endpoints] = profile.activeWeaponSides.map { side in
@@ -1022,11 +1069,13 @@ private final class DuelActor {
         root.simdOrientation = simd_quatf(angle: worldRoll, axis: SIMD3<Float>(0, 0, 1)) *
             simd_quatf(angle: yaw, axis: SIMD3<Float>(0, 1, 0))
     }
-    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false) {
+    func pose(_ fighter: DuelGame.Fighter, frame: Int, grapple: DuelGame.Grapple?, index: Int, phase: DuelGame.Phase, shadow: DuelShadowVisual? = nil, sourceTrailActive: Bool = false, sourceTrailEnabled: Bool = true) {
         if let weapon {
             weapon.pose(fighter, root: root, shadow: shadow); shield.isHidden = true
             weapon.sourceTrailBinding?.update(clip: fighter.weaponPose?.clip ?? "",
-                                              active: sourceTrailActive && shadow == nil)
+                active: sourceTrailActive && shadow == nil,
+                phaseBps: fighter.weaponPose.map { Int(($0.phase * 10_000).rounded()) },
+                enabled: sourceTrailEnabled && phase == .fighting && shadow == nil)
             return
         }
         if let original {

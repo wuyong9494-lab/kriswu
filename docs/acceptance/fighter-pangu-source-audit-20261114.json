@@ -1,0 +1,583 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-14",
+  "target": "Liu Pangu / Primordial Heavenly King",
+  "status": "visual equipment identity confirmed; original Pangu model and exclusive-motion bindings unresolved",
+  "scope": "Original source audit only. This report does not certify the separately implemented combat rules as original game parameters.",
+  "verifiedIdentity": {
+    "setEnglishName": "Primordial Heavenly King",
+    "weaponClass": "Two-Handed Axe",
+    "weaponDisplayNames": [
+      "STORMBORN",
+      "CHAOS SPLITTER"
+    ],
+    "helmetDisplayName": "PINNACLE OF CREATION",
+    "armorDisplayName": "PRIMORDIAL FIRMAMENT",
+    "preReleaseHelmetLabel": "ERR_HELM_AGL_48",
+    "internalHelmetCandidate": "helm__agl_48",
+    "internalHelmetCandidateIsVerifiedBundle": false,
+    "internalArmorResourceID": null,
+    "internalWeaponResourceID": null,
+    "internalSetConfigurationID": null,
+    "notes": [
+      "The beta helmet label does not identify the weapon or establish the armor ID.",
+      "Neither D19 nor D20 has been verified as this set configuration."
+    ]
+  },
+  "videoEvidence": [
+    {
+      "url": "https://www.youtube.com/watch?v=ILQbJiTv52s",
+      "author": "Quarantine Gaming",
+      "publishDate": "2026-08-25T03:00:03-07:00",
+      "uploadDate": "2026-08-25T03:00:03-07:00",
+      "cachedPlayerJSONSHA256": "ddefea1fb8d0d3f913d5622f2768738ac60ba192e71da87e3bb426ed19fbc77f",
+      "findings": [
+        {
+          "timeSeconds": 5,
+          "observedHelmetErrorLabel": "ERR_HELM_AGL_48",
+          "interpretation": "helmet resource identity clue only; no weapon or motion mapping",
+          "status": "pre-release recording with unresolved localization and numeric placeholders"
+        }
+      ]
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=othVs1yco3o",
+      "author": "Shadow Gamer",
+      "publishDate": "2026-08-25T03:00:01-07:00",
+      "uploadDate": "2026-08-25T03:00:01-07:00",
+      "cachedPlayerJSONSHA256": "6def1063234c8170696407e4a0b02391bf8a5e8873175e42bd2076a6a7d0270a",
+      "findings": [
+        {
+          "status": "same-day pre-release recording; does not establish a formal release version or final numeric tuning"
+        }
+      ]
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=1pblpwg6QJk",
+      "author": "Aimpire Gamerz",
+      "publishDate": "2026-10-17T03:38:32-07:00",
+      "uploadDate": "2026-10-17T03:38:32-07:00",
+      "cachedPlayerJSONSHA256": "96a2f0a267945370fdb0564a939a278005d67bc5b0e1e5ebc2622da877864011",
+      "findings": [
+        {
+          "timeSeconds": 580,
+          "slot": "helmet",
+          "label": "PINNACLE OF CREATION"
+        },
+        {
+          "timeSeconds": 590,
+          "slot": "armor",
+          "label": "PRIMORDIAL FIRMAMENT"
+        },
+        {
+          "timeSeconds": 610,
+          "slot": "weapon",
+          "label": "STORMBORN",
+          "typeLabel": "LEGENDARY TWO-HANDED AXE",
+          "screenshotSHA256": "f29df8e0fdf749a96f6a87ede20c4c252ceb2a698c278082a0085fee273823d3"
+        }
+      ]
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=1D-xW-2zJqg",
+      "author": "Venomous vex",
+      "publishDate": "2026-08-31T03:07:04-07:00",
+      "uploadDate": "2026-08-31T03:07:04-07:00",
+      "cachedPlayerJSONSHA256": "1520581c3f1ac5bf538a4bcf7858abd92b822ce68b0e601447c4dc12c9d2dc33",
+      "findings": [
+        {
+          "timeSeconds": 30,
+          "slot": "weapon",
+          "label": "CHAOS SPLITTER",
+          "interpretation": "observed appearance/name variant; internal weapon resource ID unresolved"
+        }
+      ]
+    }
+  ],
+  "releaseDateBoundary": {
+    "formalReleaseDate": null,
+    "officialAnnouncementURL": "https://t.me/shadowfightgames/937",
+    "statement": "August 25 is verified as the upload date of beta recordings, not a verified formal release date. Later equipment labels establish displayed identities, not source package versions."
+  },
+  "availableArchiveCoverage": {
+    "androidMotionSource": {
+      "filename": "ShadowFight3_Motions_and_Scene_Sources.zip",
+      "bytes": 190482427,
+      "sha256": "f9a24c6f81c46b12facd670adff92d24f829a7811c298473ee51867262338959",
+      "sourcePackageVersion": "1.45.3",
+      "sourcePackageSHA256": "29eab6cb60ebec8aeb0a47c2efcfebc5e38320c2c659add3fa5670067ece13ab",
+      "bundleCatalog": {
+        "member": "research/android_bundle_catalog.jsonl",
+        "bytes": 9100700,
+        "sha256": "2c01276ca8c58ea32d79bfe481e37adc6696bc4c5a6140f6f6842ca262d07055",
+        "entries": 2205
+      },
+      "motionCatalog": {
+        "member": "research/motion_catalog.json",
+        "bytes": 3008671,
+        "sha256": "09829af10b6691124853335a3b8a2821a53c771ffeb4ec0bac97ad8eb6c6fee8",
+        "decodedMotions": 2711,
+        "reportedErrors": 0
+      },
+      "highestIndexedDynastyArmorOrHelmet": 47,
+      "indexedAGL40Through47EquipmentBundles": 16,
+      "AGL48EquipmentIndexMatches": 0,
+      "highestIndexedDynastySetFamily": 18,
+      "wholeTokenD19D20SetFamilyMatches": 0,
+      "coverageBoundary": "Complete saved bundle catalog and all 2,711 saved motion records searched. This catalog describes the saved regional package, not all later live content."
+    },
+    "ipa": {
+      "filename": "ShadowFight3_1.46.1.ipa",
+      "version": "1.46.1",
+      "build": "11345",
+      "bytes": 268682264,
+      "sha256": "4776275c4cc42141f4799c32a6cc0e090d15e7e69a91a9b8c109795d7b2aba49",
+      "englishTextAsset": {
+        "pathID": 662,
+        "bytes": 3614636,
+        "sha256": "360c79ae9ab3e1b594900063c14cb13c4a479e6571d3c91137d6a419e0bb3c07",
+        "nonemptyKeyCount": 29926,
+        "highestNamedDynastyArmorOrHelmet": 45,
+        "exactDisplayedNameCaseInsensitiveMatchCounts": {
+          "STORMBORN": 0,
+          "PINNACLE OF CREATION": 0,
+          "PRIMORDIAL FIRMAMENT": 0,
+          "CHAOS SPLITTER": 0
+        },
+        "twoHandedAxeLocalizedKeyCount": 0
+      },
+      "configurationBoundary": {
+        "bytes": 20081243,
+        "decryptionAttempted": false,
+        "encryptedConfigurationMembers": [
+          {
+            "bytes": 17325888,
+            "entropyBitsPerByte": 7.99999,
+            "entryName": "1.46.0.16.16733-prod_splits.zip.enc",
+            "sha256": "76e1e7ee36649912ae2179d1294d4d0cb86abf7940be266449c0632f9a1be38a",
+            "zipReadable": false
+          },
+          {
+            "bytes": 2751248,
+            "entropyBitsPerByte": 7.99994,
+            "entryName": "1.46.0.16.16733-prod.zip.enc",
+            "sha256": "709b62ef0128639b343e5bb5578c8d8f92124d9d5a769f7a5e103c3fb32ceb6e",
+            "zipReadable": false
+          }
+        ],
+        "formatBoundary": "The outer ZIP is readable. Its two .zip.enc payloads are opaque binary, not directly readable ZIP/JSON/XML configuration tables; no cipher or plaintext was inferred.",
+        "outerZIPEntryCount": 4,
+        "outerZIPReadable": true,
+        "resourcePath": "configs/archive",
+        "sha256": "3bc4845cadc2d0398941bcdbaed79bb06ab5e044710ecdefa23b92013b576c16",
+        "sourcePathID": "565"
+      },
+      "coverageBoundary": "All 29,926 entries of the full English table were parsed, rather than only the earlier selected H17 records. Other small TextAssets named English are distinct tables. App version alone does not establish that this embedded table includes current downloadable content."
+    },
+    "integrationBackup": {
+      "filename": "ShadowFight3_Personal_Fighters_Integration.zip",
+      "bytes": 438041759,
+      "sha256": "5b88c119e514203b322cbf6878e5c2bca710a6635cd8d4e9a7318c45b34ab348",
+      "members": 737,
+      "readmeSHA256": "60cd6ac7bfd20b72f5bcdd9c7eeb51f4b5e5b5ddfe0589858e1055ea6fa95f53",
+      "frozenManifestSHA256": "af9618f525a285f8b5f181252bfed4918498b7ada54e247dd22185c6aa48d865",
+      "declaredLoadouts": [
+        {
+          "fighter": "Sun",
+          "armor": "arm__prc_02",
+          "weapon": "wpn__katana_01_01",
+          "motions": 52
+        },
+        {
+          "fighter": "Liu",
+          "armor": "arm__str_03",
+          "weapon": "wpn__hammers_01_01",
+          "motions": 50
+        }
+      ],
+      "nestedAssetArchive": {
+        "member": "Distinct_Fighters/SF3_DistinctFighters.zip",
+        "bytes": 16499513,
+        "sha256": "1b228965b08c5d1b6cc659426722705a1ea734a906e183082d6556bde3fc18a8",
+        "members": 61
+      },
+      "panguBindingFound": false,
+      "coverage": "All outer entry names, source manifests, README, and the nested 61-member fighter asset archive were inspected. Other nested native CI artifacts and opaque encrypted staging were not treated as proof of Pangu absence."
+    }
+  },
+  "genuineButUnboundAssets": {
+    "motionBundle": {
+      "bundle": "81061bda0b4e3587d673a6fe6f15b55d.bin",
+      "bundleName": "resources-content-animations-binaries-w_twohanded_axe",
+      "bytes": 3827145,
+      "sha256": "1eb82956d5a3e69feb8b128a3db426067863e07a14f887495cde6b738e11f942",
+      "sourceBytesAvailable": true,
+      "originalTextAssetsVerifiedAgainstCatalog": 77,
+      "twoHandedAxeNamedMotions": 72,
+      "otherFiveMotionNames": [
+        "inv_1_twohanded_hammer_01",
+        "s_twohanded_hammer_1_bullet_return",
+        "s_twohanded_hammer_1_bullet_fly",
+        "s_twohanded_hammer_1",
+        "s_twohanded_hammer_1_bullet_stomp"
+      ],
+      "sourceFPS": null,
+      "panguBindingVerified": false,
+      "safeConclusion": "77 original TextAsset names, byte sizes and SHA256 values match the saved source catalog. The shared weapon class is a lead, not proof that these are Pangu-specific or complete animations."
+    },
+    "indexedTwoHandedAxeModels": [
+      {
+        "resourceID": "wpn__twohanded_axe_01_01a",
+        "bundle": "0f63cbd8d832658e0784c0bded788e83.bin",
+        "bytes": 220449,
+        "sha256": "38950cd335bca471ec6db0b1297ec5cac0b86ef82d94494df074eae0affb4a16",
+        "panguBindingVerified": false,
+        "status": "indexed, not restored as a Pangu asset"
+      },
+      {
+        "resourceID": "wpn__twohanded_axe_01_01",
+        "bundle": "242bac13b9a00fab5faec4a39fa6dfef.bin",
+        "bytes": 195393,
+        "sha256": "0ae6b64e43fcb808e334101860828da956ade0661aff689d8f6f51ec3775012c",
+        "panguBindingVerified": false,
+        "status": "indexed, not restored as a Pangu asset"
+      }
+    ]
+  },
+  "currentOfficialDistributionChecks": [
+    {
+      "url": "https://app.mi.com/details?id=com.hahd.aygd3.mi",
+      "publisher": "Hoolai",
+      "listedVersion": "1.45.3",
+      "listedUpdatedDate": "2026-07-22",
+      "role": "The known original Android source remains the older regional listing; no complete APK was downloaded again."
+    },
+    {
+      "url": "https://www.rustore.ru/catalog/app/com.nekki.shadowfight3",
+      "publisher": "Banzai Games",
+      "listedVersion": "1.46.2",
+      "listedDateModified": "2026-11-09T11:45:57.422Z",
+      "listedAPKBytes": 255725095,
+      "savedPublicHTMLSHA256": "d561835fbe90bc6a7e2735ba2cd592796c05b04c343f725e68f66925f89e02ba",
+      "publicPageLinkedJavaScriptFilesInspected": 6,
+      "directGamePackageURLObserved": false,
+      "gamePackageDownloaded": false,
+      "role": "The inspected public installation route leads to RuStore installation instructions. No signed game package URL or current resource manifest was exposed by that route. This does not establish that a current official package lacks Pangu."
+    }
+  ],
+  "excludedFalseMatches": [
+    {
+      "candidate": "D20 string hits in old localization",
+      "reason": "Observed hits belong to BD2023 / BD2024 birthday identifiers, not an identified D20 set."
+    },
+    {
+      "candidate": "PRIMORDIAL CHAOS",
+      "reason": "This is the older H15 level-six label, not proof of Primordial Heavenly King."
+    },
+    {
+      "candidate": "agl_47 armor or helmet",
+      "reason": "Nearest lower resource number is not evidence of identity; not used as a substitute."
+    },
+    {
+      "candidate": "diffPatchTest URLs embedded in metadata",
+      "reason": "They are explicitly test fixtures, not a verified production resource manifest."
+    },
+    {
+      "candidate": "generic axe motion family",
+      "reason": "Shared class and file names do not provide equipment-set linkage, unique skill event tracks, contact windows, or original timing."
+    }
+  ],
+  "remainingExactSourceRequirements": [
+    "A current original resource manifest that maps the displayed Pangu set/equipment to internal IDs and bundle hashes.",
+    "The identified original Pangu armor, helmet, long-axe, skeleton and material dependency bundles.",
+    "The set-specific motion/effect bundles, their state and event bindings, and original playback timing.",
+    "Readable authoritative runtime parameter tables or equivalent verified source evidence for damage, health, durations, cooldowns and level scaling. The existing opaque encrypted archives have not supplied these tables."
+  ],
+  "restorationFlags": {
+    "exactPanguModelBytesRecovered": false,
+    "exactPanguExclusiveMotionBytesRecovered": false,
+    "panguEquipmentSetBindingRecovered": false,
+    "originalContactWindowsRecovered": false,
+    "originalDamageHealthParametersRecovered": false,
+    "originalPlaybackFPSRecovered": false,
+    "allOfficialOrLiveSourcesExhaustivelySearched": false
+  },
+  "publicationBoundary": {
+    "rawSourceModelsIncluded": false,
+    "rawMotionArraysIncluded": false,
+    "fullSkillTextIncluded": false,
+    "downloadCredentialsOrKeysIncluded": false,
+    "sourcePayloadStorage": "private workspace outside the repository",
+    "remoteWritesPerformed": false
+  },
+  "currentOfficialAPKRangeInspection": {
+    "inspectionDate": "2026-11-14",
+    "publicAPIDiscovery": {
+      "authorSourceURL": "https://gist.github.com/smi-falcon/f75edfb5c0143f81ff6ea25e315f0964",
+      "author": "smi-falcon",
+      "tool": "RuStore Downloader 1.5.1",
+      "license": "MIT",
+      "sourceStatus": "public original-author implementation, not official API documentation",
+      "observedSourceRevision": "bb93af53af1c0e41876f8da50eebdbc5f8387007",
+      "infoEndpoint": "https://backapi.rustore.ru/applicationData/overallInfo/com.nekki.shadowfight3",
+      "downloadMetadataEndpoint": "https://backapi.rustore.ru/applicationData/v2/download-link",
+      "downloadMetadataMethod": "POST",
+      "requestHeaders": {
+        "ruStoreVerCode": "110802",
+        "Content-Type": "application/json; charset=utf-8"
+      },
+      "requestBody": {
+        "appId": 1676543935,
+        "firstInstall": true,
+        "supportedAbis": [
+          "arm64-v8a"
+        ],
+        "screenDensity": 640,
+        "sdkVersion": 33,
+        "withoutSplits": false
+      },
+      "bothResponsesHTTPStatus": 200,
+      "bothResponsesResultCode": "OK",
+      "accountCredentialsUsed": false,
+      "accessControlBypassAttempted": false,
+      "storeInstalled": false,
+      "guessedEndpointRequests": 0
+    },
+    "artifactIdentity": {
+      "catalogURL": "https://www.rustore.ru/catalog/app/com.nekki.shadowfight3",
+      "packageName": "com.nekki.shadowfight3",
+      "versionName": "1.46.2",
+      "versionCode": 19226,
+      "versionId": 2064942264,
+      "versionType": "REGULAR",
+      "appVerUpdatedAt": "2026-11-09T11:45:57.422+00:00",
+      "listingBytes": 255725095,
+      "selectedArtifactBytes": 263976910,
+      "selectedArtifactHost": "static.rustore.ru",
+      "manifestIdentity": {
+        "package": "com.nekki.shadowfight3",
+        "versionName": "1.46.2",
+        "versionCode": 19226,
+        "compileSdkVersion": 36
+      },
+      "APIAndInternalManifestVersionAgree": true,
+      "sizeBoundary": "The public listing and the selected downloadable artifact report different sizes; these are retained separately, not silently equated.",
+      "wholeAPKDownloaded": false,
+      "wholeAPKSHA256": null,
+      "providerHash": "6fa73cdae968c4ba",
+      "providerHashAlgorithm": "not declared; not represented as SHA256"
+    },
+    "rangeVerification": {
+      "allRequestsHTTPStatus": 206,
+      "exactContentRangesVerified": true,
+      "ZIPCentralDirectoryEntries": 3117,
+      "ZIPCentralDirectoryOffset": 263752912,
+      "ZIPCentralDirectoryBytes": 223976,
+      "ZIPCentralDirectorySHA256": "7faf2efa1aaa2392751c4bb8b8791faaa8c528aa8e7de167ed05b3ff00db15f0",
+      "ZIPTailBytes": 65558,
+      "ZIPTailSHA256": "f54576718a420551446229e55346a51f8361f3be28c248ffe33e490924e18b34",
+      "completeMembersReadAndCRC32Verified": 7,
+      "APKRangesReceivedBytes": 1915989,
+      "entireAPKTransferred": false
+    },
+    "verifiedMetadataMembers": [
+      {
+        "path": "assets/bin/Data/boot.config",
+        "flags": 0,
+        "method": 8,
+        "crc32": "d05246a7",
+        "compressedBytes": 153,
+        "bytes": 195,
+        "offset": 249363821,
+        "sha256": "0baf0cc8885397a06f49893f679ab74bf6b3f1fef0d719c8100ce86ff2009219",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 210
+      },
+      {
+        "path": "assets/bin/Data/globalgamemanagers.assets",
+        "flags": 0,
+        "method": 8,
+        "crc32": "046a40cd",
+        "compressedBytes": 218290,
+        "bytes": 979660,
+        "offset": 255785787,
+        "sha256": "ba3c85d4a19429c05ddc88126cd2e000b2c1680b5298a0ed2a35daadc0e51ec8",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 218361
+      },
+      {
+        "path": "assets/bin/Data/globalgamemanagers",
+        "flags": 0,
+        "method": 8,
+        "crc32": "6d9072bc",
+        "compressedBytes": 257370,
+        "bytes": 689076,
+        "offset": 256004148,
+        "sha256": "ed70af4c866e4c9b1296322a216a173cabb834eed6468f2100867e8500ad40e1",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 257434
+      },
+      {
+        "path": "AndroidManifest.xml",
+        "flags": 0,
+        "method": 8,
+        "crc32": "134abea1",
+        "compressedBytes": 13587,
+        "bytes": 75904,
+        "offset": 257554897,
+        "sha256": "2824bfa54cea5b60b7b12eb19c6019cf12a31b16270f1d4e2a595f5d31e68d0b",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 13636
+      },
+      {
+        "path": "assets/bin/Data/d03d6c4b3185d694db6bb7fd329584af",
+        "flags": 0,
+        "method": 8,
+        "crc32": "710f17b3",
+        "compressedBytes": 7107,
+        "bytes": 9364,
+        "offset": 249672955,
+        "resourcePath": "configs/configsources",
+        "sha256": "cf4cc11ba333672c60f7b983b28ab3a518c28af2f2bad0a6aef580a62c4c6604",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 7185
+      },
+      {
+        "path": "assets/bin/Data/4e61cfe094fb4514fb95b0e3c37b769e",
+        "flags": 0,
+        "method": 8,
+        "crc32": "cfdc0306",
+        "compressedBytes": 232,
+        "bytes": 660,
+        "offset": 150933221,
+        "resourcePath": "editor/animationtool/mainconfig",
+        "sha256": "2e33819dc1c7c01818308cd6e6332c93aab4da2b80af56a70076bddf6a922108",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 310
+      },
+      {
+        "path": "assets/bin/Data/f4df970a9802ae14fb318ed972c1b739",
+        "flags": 0,
+        "method": 8,
+        "crc32": "6655e80c",
+        "compressedBytes": 1120971,
+        "bytes": 3614796,
+        "offset": 254369743,
+        "resourcePath": "localizations/dto/english",
+        "sha256": "2b2558d3986aa82de0e75acad163a325fdf5245e29731d6640fd1c05cd5fac02",
+        "httpRangeVerified": true,
+        "crc32Verified": true,
+        "rangeBytesRead": 1121049
+      }
+    ],
+    "resourceMapping": {
+      "entries": 1127,
+      "pathMultisetIdenticalToUserIPA1461Checkpoint": true,
+      "directPanguAGL48D19D20NameMappingsFound": 0,
+      "scope": "The ResourceManager names and file references were inspected; this is the embedded resource mapping, not an authenticated current downloadable-content catalog. It does not prove that opaque configuration or later live resources lack Pangu."
+    },
+    "textAssetInspection": [
+      {
+        "resourcePath": "configs/configsources",
+        "name": "configSources",
+        "pathID": 1,
+        "scriptBytes": 9196,
+        "scriptSHA256": "524d7bd857d9d53bb6c557f83a7c32cbb1acfeae1391dae9b164594511e68cec",
+        "encoding": "base64",
+        "decodedBytes": 6896,
+        "decodedSHA256": "04ac442f922bbcbd90e952b106fcd7780dd1edb40e170ae2793c7f0f39cd5203",
+        "directlyReadableJSONOrXML": false
+      },
+      {
+        "resourcePath": "editor/animationtool/mainconfig",
+        "name": "MainConfig",
+        "pathID": 1,
+        "scriptBytes": 494,
+        "scriptSHA256": "2ad7e22ead4e9065422eb2887787bd1c1772a6578d667dbae7c2ef10f2bac9ed",
+        "encoding": "XML",
+        "scope": "editor animation-tool distance/position configuration; not a production asset manifest"
+      },
+      {
+        "resourcePath": "localizations/dto/english",
+        "name": "English",
+        "pathID": 1,
+        "scriptBytes": 3614636,
+        "scriptSHA256": "360c79ae9ab3e1b594900063c14cb13c4a479e6571d3c91137d6a419e0bb3c07",
+        "nonemptyKeyCount": 29926,
+        "sameAsUserIPA1461": true,
+        "exactNameMatchCounts": {
+          "STORMBORN": 0,
+          "PINNACLE OF CREATION": 0,
+          "PRIMORDIAL FIRMAMENT": 0,
+          "CHAOS SPLITTER": 0,
+          "PRIMORDIAL HEAVENLY KING": 0
+        },
+        "highestNamedAGL": 45
+      }
+    ],
+    "configurationArchivePrefixOnly": {
+      "member": "assets/bin/Data/5b5574f6588b7c54db57a2940da4aabb",
+      "resourcePath": "configs/archive",
+      "indexedMemberBytes": 20081404,
+      "indexedMemberCompressedBytes": 20087239,
+      "prefixRangeBytesRead": 8270,
+      "decompressedPrefixBytes": 8192,
+      "prefixSHA256": "878d89a70ccb1861aef7cf67f39208a97602cf14b15bab82e6d14d27eebfe9f7",
+      "firstInternalZIPEntryName": "1.46.0.11.16732-prod_splits.zip.enc",
+      "firstInternalZIPEntryFlags": 0,
+      "firstInternalZIPEntryMethod": 8,
+      "completeMemberDownloaded": false,
+      "completeMemberCRCOrSHA256Verified": false,
+      "decryptionAttempted": false
+    },
+    "configurationSourceURLCheck": {
+      "resourcePath": "configs/configsources",
+      "textAssetName": "configSources",
+      "scriptSHA256": "524d7bd857d9d53bb6c557f83a7c32cbb1acfeae1391dae9b164594511e68cec",
+      "scriptBytes": 9196,
+      "decodedBytes": 6896,
+      "decodedSHA256": "04ac442f922bbcbd90e952b106fcd7780dd1edb40e170ae2793c7f0f39cd5203",
+      "base64ValidationPassed": true,
+      "rawHTTPURLCount": 0,
+      "decodedASCIIHTTPURLCount": 0,
+      "decodedUTF16HTTPPrefixCount": 0,
+      "jsonOrXMLPrefix": false,
+      "zipPrefix": false,
+      "gzipPrefix": false,
+      "plainDynamicManifestURLFound": false,
+      "decryptionAttempted": false,
+      "guessedEndpointRequests": 0,
+      "resourcePathMultisetMatchesOldIPACheckpoint": true,
+      "resourceMappingEntries": 1127
+    },
+    "conclusion": "A current officially distributed client was identified and its internal version verified using bounded ranges. Its English table and configSources payload are byte-identical to the supplied 1.46.1 IPA. The 1,127 embedded resource names also match that checkpoint. No directly readable current Pangu asset catalog or original equipment/motion binding was recovered.",
+    "specificMissingSourceTypes": [
+      "An authoritative current downloadable-resource catalog or manifest mapping Pangu equipment/internal IDs to actual bundle files, hashes and dependencies; its exact filename and URL are still unknown.",
+      "The current Pangu armor, helmet, long-axe and dedicated animation/effect AssetBundles identified by that catalog.",
+      "Readable current skill/event/parameter tables or an authorized export of those tables; the inspected configSources data and the archive prefix have not supplied such tables."
+    ],
+    "stopBoundary": "configSources contains no HTTP(S) URL in its original text or base64-decoded binary (ASCII and UTF-16 checks). No manifest endpoint was guessed, no encrypted configuration was decrypted, and the approximately 20 MB configuration member was not downloaded in full.",
+    "rawDownloadURLOrPayloadPublished": false
+  },
+  "sameTopicDropboxRecheck": {
+    "inspectionDate": "2026-11-14",
+    "queries": [
+      "暗影格斗3",
+      "ShadowFight3"
+    ],
+    "requestedSearchMode": "title_only",
+    "matchingFiles": 1,
+    "matchingFolders": 0,
+    "knownFileVersion": "1.46.1",
+    "knownFileBytes": 268682264,
+    "knownFileLastModified": "2026-11-08T02:37:32Z",
+    "newerMatchingResourceFound": false,
+    "scope": "Searches were limited to the same game title. No unrelated personal folder listing or content inspection was performed."
+  }
+}

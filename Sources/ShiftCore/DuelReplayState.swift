@@ -5,9 +5,9 @@ import Foundation
 /// Full equipped profiles are included: asset SHA strings alone do not verify
 /// the roles, combo links and collision tracks used by the simulation.
 public enum DuelReplayStateEncoding {
-    public static let schemaVersion: UInt16 = 2
+    public static let schemaVersion: UInt16 = 6
     /// Bump when simulation semantics/constants change, even without new fields.
-    public static let rulesVersion: UInt16 = 6
+    public static let rulesVersion: UInt16 = 10
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumStringBytes = 4096
     public static let maximumCollectionCount = 16_384
@@ -194,6 +194,30 @@ struct DuelReplayStateWriter {
         try optional(value.comboLinks) { writer, links in
             try writer.array(links) { try $0.combo($1) }
         }
+        try optional(value.combatRules) { try $0.combatRules($1) }
+        try optional(value.panguRules) { writer, rules in try rules.appendReplayState(to: &writer) }
+        try optional(value.ordinaryThrows) { writer, rules in try rules.appendReplayState(to: &writer) }
+    }
+    mutating func impactResponse(_ value: DuelImpactResponse) throws {
+        try int(value.distanceMillimeters); try int(value.durationTicks)
+        try int(value.launchVelocityMillimetersPerTick); try int(value.gravityMillimetersPerTickSquared)
+    }
+    mutating func combatStrike(_ value: DuelCombatStrike) throws {
+        try int(value.id); try int(value.startTick); try int(value.endTick)
+        try array(value.weaponSides, limit: 2) { try $0.string($1) }
+        try int(value.damage); try int(value.blockedDamage); try bool(value.knocksDown)
+        try int(value.hitStopTicks); try int(value.blockedHitStopTicks)
+        try impactResponse(value.impact); try impactResponse(value.blockedImpact)
+    }
+    mutating func combatAttack(_ value: DuelCombatAttackRule) throws {
+        try command(value.command); try string(value.clipName)
+        try array(value.strikes, limit: 32) { try $0.combatStrike($1) }
+    }
+    mutating func combatRules(_ value: DuelCombatRuleProfile) throws {
+        try string(value.id); try string(value.basis.rawValue); try string(value.sourceVersion)
+        try optional(value.sourceSHA256) { try $0.string($1) }
+        try array(value.evidence, limit: 16) { try $0.string($1) }
+        try array(value.attacks, limit: 128) { try $0.combatAttack($1) }
     }
     mutating func clip(_ value: DuelWeaponClip) throws {
         try string(value.name); try int(value.frames); try string(value.sha256); try string(value.bundle)

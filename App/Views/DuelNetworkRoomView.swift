@@ -265,8 +265,9 @@ private struct DuelNetworkLobbyContent: View {
     private var selectionControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("选择武者").font(.title3.bold())
-            choiceButton(.sun)
-            choiceButton(.liu)
+            ForEach(owner.coordinator?.availableChoices ?? [], id: \.hero.rawValue) { choice in
+                choiceButton(choice)
+            }
             if model.hasConflict {
                 message("双方选择了同一位武者。请其中一人换选，才能准备。", warning: true)
                     .accessibilityIdentifier("duel.network.conflict")
@@ -343,7 +344,13 @@ private struct DuelNetworkLobbyContent: View {
     }
 
     private static func choiceName(_ choice: DuelMultiplayerSelection.Choice) -> String {
-        choice.hero.name + (choice.weapon == .katana ? " · 武士刀" : " · 双锤")
+        let weapon: String
+        switch choice.weapon {
+        case .katana: weapon = "武士刀"
+        case .hammers: weapon = "双锤"
+        case .pangu: weapon = "盘古 · 双手长斧"
+        }
+        return choice.hero.name + " · " + weapon
     }
 
     private func hasPreview(_ hero: DuelGame.Hero) -> Bool {

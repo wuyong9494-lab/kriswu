@@ -6,6 +6,7 @@ extension DuelLifecycleTests {
     private var identityBuildContext: [String: String] {
         var value = Dictionary(uniqueKeysWithValues: DuelNetworkRulesManifest.buildKeys.map { ($0, "1") })
         value["mode"] = "xcode"; value["TARGET_NAME"] = "ShiftReminder"
+        value["FIGHTER_ASSET_RELEASE_SHA256"] = ""
         return value
     }
     private var identitySourceFiles: [DuelNetworkContentRecord] {
@@ -150,7 +151,14 @@ extension DuelLifecycleTests {
         let clocks = DuelWorldView.activeClocks
         let value = try DuelNetworkCompatibilityIdentity.verify()
         XCTAssertEqual(value.catalog.profiles.count, 2)
-        XCTAssertEqual(value.verifiedFiles.count, 62)
+        if value.catalog.profiles.contains(where: \.isPangu) {
+            XCTAssertEqual(value.verifiedFiles.filter { $0.path.hasPrefix("asset-release/") }.count, 1)
+            XCTAssertGreaterThanOrEqual(value.verifiedFiles.filter { $0.path.hasPrefix("pangu-audio/") }.count, 2)
+        } else {
+            let directory = try XCTUnwrap(DuelWeaponAssets.catalogURL()).deletingLastPathComponent()
+            let hasLegacyTrails = FileManager.default.fileExists(atPath: directory.appendingPathComponent(DuelSourceWeaponTrails.fileName).path)
+            XCTAssertEqual(value.verifiedFiles.count, 62 + (hasLegacyTrails ? 1 : 0))
+        }
         XCTAssertEqual(Set(value.verifiedFiles.map(\.path)).count, value.verifiedFiles.count)
         XCTAssertEqual(value.verifiedFiles.filter { $0.path.hasPrefix("controls/") }.count, 7)
         XCTAssertEqual(value.verifiedFiles.filter { $0.path.hasPrefix("stage/") }.map(\.path), ["stage/SF3_Palace_Exterior.glb"])

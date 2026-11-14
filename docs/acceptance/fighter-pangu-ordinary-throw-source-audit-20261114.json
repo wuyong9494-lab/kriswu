@@ -1,0 +1,263 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-14",
+  "baselineCommit": "597f6def986ea8a45653fdcce71015bbd4f8ec59",
+  "target": "Liu Pangu / Primordial Heavenly King ordinary-throw escape",
+  "purpose": "记录本轮普通投技接触链的来源依据与现有通用动作存档核对；不把工程实现或合成测试参数当作原版配置。",
+  "relatedRecords": [
+    "docs/fighter-pangu-mechanics-reference-20261114.md",
+    "docs/acceptance/fighter-pangu-source-audit-20261114.json",
+    "docs/acceptance/fighter-pangu-public-source-followup-20261114.json"
+  ],
+  "summary": {
+    "automaticOrdinaryThrowEscapeSemanticsRechecked": true,
+    "evidenceTier": "beta_overlay",
+    "currentProductionBehaviorMeasured": false,
+    "currentClientBuildIdentified": false,
+    "genericRawMotionMembersVerified": 6,
+    "newPanguExclusiveMotionBindingRecovered": false,
+    "exactOrdinaryThrowTimingsRecovered": false,
+    "originalEscapeDamageOrCounterattackRecovered": false,
+    "interpretation": "缓存中的原作者字幕支持盘古自动脱离普通投掷抓握。现有存档中六个通用投技动作的原始成员摘要一致，但缺少播放速度、精确阶段配置和盘古专属挣脱绑定。"
+  },
+  "panguAutomaticEscapeEvidence": {
+    "sourceID": "B2",
+    "author": "HUY",
+    "channelID": "UCngi2ttBqUPTtF0kj6LROfw",
+    "videoID": "GNw-4YUvN70",
+    "url": "https://www.youtube.com/watch?v=GNw-4YUvN70",
+    "approximateMomentURL": "https://www.youtube.com/watch?v=GNw-4YUvN70&t=200s",
+    "videoTitle": "New Primordial Heavenly King gameplay on Hard Bosses and Bonus Showcase||Shadow Fight 3 new set",
+    "publishDate": "2026-08-25T03:00:12-07:00",
+    "uploadDate": "2026-08-25T03:00:12-07:00",
+    "videoLengthSeconds": 947,
+    "cachedPlayerMetadata": {
+      "basename": "pangu-player.json",
+      "bytes": 47969,
+      "sha256": "fc85937aad9d28a5e91052d11131fe3a0be14bc0cdaf849d2405124bc40c936d",
+      "rawMetadataIncludedInRepository": false
+    },
+    "cachedStoryboard": {
+      "basename": "pangu-storyboard-2.jpg",
+      "bytes": 84252,
+      "sha256": "80f384ddb614f02c0b2a5ed2cd67e924ab3babb5b2eae744963eeaa3b329da74",
+      "selectedCell": {
+        "rowOneBased": 1,
+        "columnOneBased": 3
+      },
+      "layout": {
+        "cellWidthPixels": 320,
+        "cellHeightPixels": 180,
+        "columns": 3,
+        "rows": 3,
+        "intervalMilliseconds": 10000
+      },
+      "approximateVideoTimeSeconds": 200,
+      "exactFrameTimestampVerified": false,
+      "timeBasis": "缓存第2张3×3分镜图首行第3格及播放器分镜间隔；仅标约3:20，不用于逐帧计时。",
+      "visualInspected": true,
+      "imageIncludedInRepository": false
+    },
+    "semanticSummary": "作者在一级能力说明区间写明：对手尝试投掷时，盘古会自动从对手抓握中挣脱。",
+    "existingReferenceWindowSeconds": {
+      "start": 163,
+      "end": 232
+    },
+    "evidenceTier": "beta_overlay",
+    "isReadableOriginalGameNumericPanel": false,
+    "recordingClientVersion": null,
+    "recordingClientBuild": null,
+    "currentProductionRulesEquivalent": null,
+    "limitations": [
+      "2026-08-25的测试期作者叠加字幕，不等于2026-11-14正式客户端的配置读取或当前实测。",
+      "单张缓存画面中的对手后仰及HEAD HIT提示不足以证明挣脱自带反击、具体伤害或受击时点。",
+      "这里只确认普通投掷自动脱离语义；没有取得免疫石化、钉岩、根枝或所有Boss特殊抓取的证据。",
+      "原页面本轮读取受到限流；本次存证复用缓存，没有发起新的网页读取或视频下载。"
+    ]
+  },
+  "officialInputEvidence": {
+    "sources": [
+      {
+        "url": "https://nekki.helpshift.com/hc/en/8-shadow-fight-3/faq/170-in-game-controls/",
+        "publisher": "Nekki",
+        "title": "In-Game Controls",
+        "access": "public text read",
+        "supportedClaim": "左侧摇杆控制方向，右侧动作按钮执行武器与踢击，可组合方向与动作执行不同攻击。",
+        "throwSpecificInputOrDistanceDocumentedInReadText": false
+      },
+      {
+        "url": "https://nekki.helpshift.com/hc/en/8-shadow-fight-3/faq/171-moves-list/",
+        "publisher": "Nekki",
+        "title": "Moves List",
+        "access": "public text read",
+        "supportedClaim": "方向箭头与攻击按钮可以组合；原图下载链接存在。",
+        "throwSpecificInputOrDistanceDocumentedInReadText": false,
+        "linkedOriginalImageAlbum": "https://imgur.com/a/hgVPH",
+        "linkedAlbumAccessResult": "公开页面文字服务未提供动作图；直接页面请求返回HTTP 429后停止。",
+        "linkedAlbumImageInspected": false
+      }
+    ],
+    "implementationMappingStatus": "复用weaponForward与weaponBack属于本项目明确配置的近身输入路线；不以官方文字页宣称已核专属throw键位或精确接触距离。"
+  },
+  "existingGenericMotionArchive": {
+    "archiveBasename": "ShadowFight3_Motions_and_Scene_Sources.zip",
+    "archiveNewlyDownloaded": false,
+    "catalogMember": "research/motion_catalog.json",
+    "catalogMemberBytes": 3008671,
+    "catalogMemberSHA256": "09829af10b6691124853335a3b8a2821a53c771ffeb4ec0bac97ad8eb6c6fee8",
+    "catalogMemberCRC32": "f1be37af",
+    "catalogDecodedCount": 2711,
+    "verificationMethod": "在已有ZIP内读取目录JSON及六个指定raw成员；逐个比较解压后长度、SHA-256与目录记录，并比较CRC32与ZIP目录。没有解包到工作树、重新转换动作或上传原始数据。",
+    "verifiedMembers": [
+      {
+        "name": "throw_front_a",
+        "sourceBundle": "888efc45ca62239d317e74c8cd87d037.bin",
+        "sourcePathID": "-5911405978803642808",
+        "archiveMember": "converted/motions/raw/throw_front_a.bytes",
+        "bytes": 115810,
+        "sha256": "bb3d2b158479ebf9e3d156ab656627fb91a0a22659686237422f30bbcf98ea0d",
+        "zipCRC32": "f8e60a4e",
+        "catalogFrames": 83,
+        "catalogArrays": 2,
+        "playbackFPS": null,
+        "memberLengthMatchesCatalog": true,
+        "memberSHA256MatchesCatalog": true,
+        "memberCRC32MatchesZip": true,
+        "panguEscapeBindingVerified": false,
+        "originalThrowTimingVerified": false
+      },
+      {
+        "name": "throw_front_b",
+        "sourceBundle": "888efc45ca62239d317e74c8cd87d037.bin",
+        "sourcePathID": "1250847001760672903",
+        "archiveMember": "converted/motions/raw/throw_front_b.bytes",
+        "bytes": 113026,
+        "sha256": "6c83d3004ebc4dd52fde805eb9a7c8029df269723f0215cbaad0eb7cc9d4d6ed",
+        "zipCRC32": "d7a33439",
+        "catalogFrames": 81,
+        "catalogArrays": 2,
+        "playbackFPS": null,
+        "memberLengthMatchesCatalog": true,
+        "memberSHA256MatchesCatalog": true,
+        "memberCRC32MatchesZip": true,
+        "panguEscapeBindingVerified": false,
+        "originalThrowTimingVerified": false
+      },
+      {
+        "name": "throw_p",
+        "sourceBundle": "888efc45ca62239d317e74c8cd87d037.bin",
+        "sourcePathID": "-3991192040140581869",
+        "archiveMember": "converted/motions/raw/throw_p.bytes",
+        "bytes": 71266,
+        "sha256": "4d21b4505bc94a123c4081af85016e79861e762f0f520cadf19c36441ac8373f",
+        "zipCRC32": "f9cd7434",
+        "catalogFrames": 51,
+        "catalogArrays": 2,
+        "playbackFPS": null,
+        "memberLengthMatchesCatalog": true,
+        "memberSHA256MatchesCatalog": true,
+        "memberCRC32MatchesZip": true,
+        "panguEscapeBindingVerified": false,
+        "originalThrowTimingVerified": false
+      },
+      {
+        "name": "throw_e",
+        "sourceBundle": "888efc45ca62239d317e74c8cd87d037.bin",
+        "sourcePathID": "-3755351335049391097",
+        "archiveMember": "converted/motions/raw/throw_e.bytes",
+        "bytes": 58738,
+        "sha256": "6f7a99a98e4e1224d486cdf5302308849aa6a7de3ccc2f50ffacf7c2c85b4e75",
+        "zipCRC32": "dad56f99",
+        "catalogFrames": 42,
+        "catalogArrays": 2,
+        "playbackFPS": null,
+        "memberLengthMatchesCatalog": true,
+        "memberSHA256MatchesCatalog": true,
+        "memberCRC32MatchesZip": true,
+        "panguEscapeBindingVerified": false,
+        "originalThrowTimingVerified": false
+      },
+      {
+        "name": "agl_throw_back_active",
+        "sourceBundle": "888efc45ca62239d317e74c8cd87d037.bin",
+        "sourcePathID": "-1719473526680845567",
+        "archiveMember": "converted/motions/raw/agl_throw_back_active.bytes",
+        "bytes": 70154,
+        "sha256": "d1977b1478dd40ff9ae85b5819b11e7744ff2883e40fe1601d44d9f96b33b40b",
+        "zipCRC32": "bee1f2bb",
+        "catalogFrames": 52,
+        "catalogArrays": 2,
+        "playbackFPS": null,
+        "memberLengthMatchesCatalog": true,
+        "memberSHA256MatchesCatalog": true,
+        "memberCRC32MatchesZip": true,
+        "panguEscapeBindingVerified": false,
+        "originalThrowTimingVerified": false
+      },
+      {
+        "name": "agl_throw_back_passive",
+        "sourceBundle": "888efc45ca62239d317e74c8cd87d037.bin",
+        "sourcePathID": "6282785072326731860",
+        "archiveMember": "converted/motions/raw/agl_throw_back_passive.bytes",
+        "bytes": 70154,
+        "sha256": "f2975086ec03e41cb769f92a697d51c6c94e2fb6cc0d1b3c774ec0caa6f7d9e4",
+        "zipCRC32": "d9243e2f",
+        "catalogFrames": 52,
+        "catalogArrays": 2,
+        "playbackFPS": null,
+        "memberLengthMatchesCatalog": true,
+        "memberSHA256MatchesCatalog": true,
+        "memberCRC32MatchesZip": true,
+        "panguEscapeBindingVerified": false,
+        "originalThrowTimingVerified": false
+      }
+    ],
+    "limitations": [
+      "这些是既有存档中的通用投技候选动作；名称相似不构成盘古专属动作或套装绑定证明。",
+      "所有六个条目的playback_fps均为null；帧数不能自行换算为秒或60Hz模拟ticks。",
+      "未从这些成员恢复普通投技的输入状态机、接触距离、有效窗口、成功/失败/免投分支或伤害时点。",
+      "不把throw_e名称推断为盘古挣脱，不把active/passive名称自行拼接为已验证的盘古成对动作。",
+      "成员读取仅核对已有原始字节与目录摘要；没有声称本轮重新验证了来源安装包的发行身份或运行时绑定。"
+    ]
+  },
+  "unverifiedSourceParameters": {
+    "ordinaryThrowExactInputTiming": null,
+    "ordinaryThrowMinimumRange": null,
+    "ordinaryThrowMaximumRange": null,
+    "ordinaryThrowContactStartFrame": null,
+    "ordinaryThrowContactEndFrame": null,
+    "ordinaryThrowSourcePlaybackFPS": null,
+    "ordinaryThrowPairedClipBinding": null,
+    "ordinaryThrowSuccessDamage": null,
+    "ordinaryThrowDamagePhase": null,
+    "ordinaryThrowHitStopTicks": null,
+    "ordinaryThrowKnockdownTicks": null,
+    "ordinaryThrowSimultaneousResolutionPolicy": null,
+    "panguEscapeSourceClipBinding": null,
+    "panguEscapeAttackerPairedClipBinding": null,
+    "panguEscapePhaseTiming": null,
+    "panguEscapeDisplacementTrajectory": null,
+    "panguEscapeCounterattackDamage": null,
+    "panguEscapeHitStopTicks": null,
+    "panguEscapeInvulnerabilityWindow": null,
+    "panguImmunityToBossSpecialGrabs": null
+  },
+  "implementationEvidenceBoundary": [
+    "成功、失败和免投的配置与可重放状态机是本项目工程实现，不是原版源代码或当前客户端配置的还原证据。",
+    "免投分支不结算普通投技伤害可表达已核的脱离语义；当前未给盘古额外虚构反击伤害。",
+    "实际角色需要明确的源动作、阶段、位置与伤害配置；本记录不提供生产平衡默认值。",
+    "实验室三秒ultimate抓取与这里的普通throw分开；不能借用其时长、位移或伤害作为原版数值。"
+  ],
+  "scope": {
+    "swiftFilesModifiedByThisAudit": false,
+    "swiftOrNativeTestsRunByThisAudit": false,
+    "testResultsIncluded": false,
+    "newMediaDownloadedByThisAudit": false,
+    "binaryOrScreenshotIncludedInRepository": false,
+    "rawPlayerMetadataIncludedInRepository": false,
+    "temporarySignedURLsIncluded": false,
+    "publicRemoteWritePerformed": false,
+    "sourceArchiveExtractedToWorkingTree": false,
+    "userUploadRequired": false
+  }
+}

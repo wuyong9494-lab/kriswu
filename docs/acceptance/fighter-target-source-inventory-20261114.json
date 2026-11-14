@@ -1,0 +1,1254 @@
+{
+  "additionalSourceInspection": {
+    "configArchive": {
+      "bytes": 20081243,
+      "decryptionAttempted": false,
+      "encryptedConfigurationMembers": [
+        {
+          "bytes": 17325888,
+          "entropyBitsPerByte": 7.99999,
+          "entryName": "1.46.0.16.16733-prod_splits.zip.enc",
+          "sha256": "76e1e7ee36649912ae2179d1294d4d0cb86abf7940be266449c0632f9a1be38a",
+          "zipReadable": false
+        },
+        {
+          "bytes": 2751248,
+          "entropyBitsPerByte": 7.99994,
+          "entryName": "1.46.0.16.16733-prod.zip.enc",
+          "sha256": "709b62ef0128639b343e5bb5578c8d8f92124d9d5a769f7a5e103c3fb32ceb6e",
+          "zipReadable": false
+        }
+      ],
+      "formatBoundary": "The outer ZIP is readable. Its two .zip.enc payloads are opaque binary, not directly readable ZIP/JSON/XML configuration tables; no cipher or plaintext was inferred.",
+      "outerZIPEntryCount": 4,
+      "outerZIPReadable": true,
+      "resourcePath": "configs/archive",
+      "sha256": "3bc4845cadc2d0398941bcdbaed79bb06ab5e044710ecdefa23b92013b576c16",
+      "sourcePathID": "565"
+    },
+    "correlatedAndroidModelIndex": [
+      {
+        "bundleNames": [
+          "resources-content-items-models-top100-wpn__ninjato_01_06a"
+        ],
+        "indexedBytes": 304392,
+        "indexedSHA256": "af88df8026090c8ec4a6f1dfb76855dc4b2d9cf6ea4cadf9dd35a83a121af075",
+        "sourceBundle": "2ce51c5f93d302dae72eec7d53359b77.bin",
+        "sourceBytesPresentInSavedMotionArchive": false,
+        "sourceBytesRecoveredInPrivateStaging": false,
+        "sourceVersion": "Android 1.45.3",
+        "status": "saved original index only; bundle bytes not verified or restored in this task"
+      },
+      {
+        "bundleNames": [
+          "resources-content-items-models-top100-wpn__ninjato_01_07"
+        ],
+        "indexedBytes": 264037,
+        "indexedSHA256": "1c1419ad8b6b1fd337a80742734be43999ef91f380a84e2371d279d260831991",
+        "sourceBundle": "55f779b53bc3a253ab43b0368f8ad685.bin",
+        "sourceBytesPresentInSavedMotionArchive": false,
+        "sourceBytesRecoveredInPrivateStaging": false,
+        "sourceVersion": "Android 1.45.3",
+        "status": "saved original index only; bundle bytes not verified or restored in this task"
+      },
+      {
+        "bundleNames": [
+          "resources-content-items-models-top100-arm__prc_43"
+        ],
+        "httpRangeVerified": true,
+        "indexedBytes": 2459378,
+        "indexedSHA256": "ce2ca96d5c310fdb731a43aab9ff3884557bf0e2ce654ae557df5edd4a58ee9e",
+        "parsedObjectTypeCounts": {
+          "AssetBundle": 1,
+          "Cloth": 2,
+          "GameObject": 18,
+          "Material": 12,
+          "Mesh": 4,
+          "MonoBehaviour": 10,
+          "MonoScript": 4,
+          "SkinnedMeshRenderer": 4,
+          "TextAsset": 4,
+          "Texture2D": 23,
+          "Transform": 18
+        },
+        "sourceBundle": "8c698f01a124be29f09101d5ba3e22e9.bin",
+        "sourceBytesPresentInSavedMotionArchive": false,
+        "sourceBytesRecoveredInPrivateStaging": true,
+        "sourceVersion": "Android 1.45.3",
+        "status": "exact original bundle recovered through bounded HTTP ranges; ZIP CRC32 and indexed SHA256 verified",
+        "verifiedCRC32": "05362eb1",
+        "verifiedSHA256": "ce2ca96d5c310fdb731a43aab9ff3884557bf0e2ce654ae557df5edd4a58ee9e"
+      },
+      {
+        "bundleNames": [
+          "resources-content-items-models-top100-wpn__ninjato_01_06"
+        ],
+        "httpRangeVerified": true,
+        "indexedBytes": 463249,
+        "indexedSHA256": "71b33699f5de3c3a0f2e16afcfa37b428dc0f8f8d31aab700340ad15c158663c",
+        "parsedObjectTypeCounts": {
+          "AssetBundle": 1,
+          "BoxCollider": 6,
+          "GameObject": 20,
+          "Material": 20,
+          "Mesh": 4,
+          "MonoBehaviour": 9,
+          "MonoScript": 4,
+          "Rigidbody": 2,
+          "SkinnedMeshRenderer": 4,
+          "TextAsset": 2,
+          "Texture2D": 21,
+          "Transform": 20
+        },
+        "sourceBundle": "9e0ac3ba87e002425eeb76668aab567d.bin",
+        "sourceBytesPresentInSavedMotionArchive": false,
+        "sourceBytesRecoveredInPrivateStaging": true,
+        "sourceVersion": "Android 1.45.3",
+        "status": "exact original bundle recovered through bounded HTTP ranges; ZIP CRC32 and indexed SHA256 verified",
+        "verifiedCRC32": "d8da6d50",
+        "verifiedSHA256": "71b33699f5de3c3a0f2e16afcfa37b428dc0f8f8d31aab700340ad15c158663c"
+      },
+      {
+        "bundleNames": [
+          "resources-content-items-models-top100-helm__prc_43"
+        ],
+        "httpRangeVerified": true,
+        "indexedBytes": 375046,
+        "indexedSHA256": "31c20e950cb735ebaa87cfe87f2fe562ace96b7a6f55130a451b08201726794c",
+        "parsedObjectTypeCounts": {
+          "AssetBundle": 1,
+          "GameObject": 2,
+          "Material": 6,
+          "Mesh": 2,
+          "MonoBehaviour": 4,
+          "MonoScript": 2,
+          "SkinnedMeshRenderer": 2,
+          "TextAsset": 2,
+          "Texture2D": 12,
+          "Transform": 2
+        },
+        "sourceBundle": "a7bb4595abac6ca190801afcb30e9ab5.bin",
+        "sourceBytesPresentInSavedMotionArchive": false,
+        "sourceBytesRecoveredInPrivateStaging": true,
+        "sourceVersion": "Android 1.45.3",
+        "status": "exact original bundle recovered through bounded HTTP ranges; ZIP CRC32 and indexed SHA256 verified",
+        "verifiedCRC32": "f26bfbcc",
+        "verifiedSHA256": "31c20e950cb735ebaa87cfe87f2fe562ace96b7a6f55130a451b08201726794c"
+      }
+    ],
+    "damageHealthContactTimingAndSourceFPSRecovered": false,
+    "inspectionDate": "2026-11-14",
+    "inspectionMethod": "ZIP metadata and member inspection; UnityPy 1.25.4 reads original resources.assets; bounded protobuf wire parsing reads selected original localization records without executing the app.",
+    "ipa": {
+      "build": "11345",
+      "bundleIdentifier": "com.nekki.shadowfight3",
+      "bytes": 268682264,
+      "dropboxContentHash": "0d567a9d5781d5f137eb1cf6e0af54bb3f534e2da726b595be351a2dd00f348c",
+      "dropboxContentHashVerified": true,
+      "sha256": "4776275c4cc42141f4799c32a6cc0e090d15e7e69a91a9b8c109795d7b2aba49",
+      "version": "1.46.1"
+    },
+    "localization": {
+      "H17DescriptionLevelsAbsent": [
+        7,
+        8
+      ],
+      "H17DescriptionLevelsPresent": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "H17DescriptionPlaceholderIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26
+      ],
+      "completeCombatRulesRecovered": false,
+      "equipmentNames": [
+        {
+          "chineseName": "森林遗骸",
+          "englishName": "FOREST'S POSTMORTEM",
+          "nameMappingStatus": "verified original IPA localization; not an equipment-set binding table",
+          "resourceID": "arm__prc_43"
+        },
+        {
+          "chineseName": "傀儡",
+          "englishName": "PUPPET",
+          "nameMappingStatus": "verified original IPA localization; not an equipment-set binding table",
+          "resourceID": "helm__prc_43"
+        },
+        {
+          "chineseName": "痛苦枝桠",
+          "englishName": "BRANCHES OF PAIN",
+          "nameMappingStatus": "verified original IPA localization; not an equipment-set binding table",
+          "resourceID": "wpn__ninjato_01_06"
+        },
+        {
+          "chineseName": "荒原之歌",
+          "englishName": "SONGS OF WASTELAND",
+          "nameMappingStatus": "verified original IPA localization; not an equipment-set binding table",
+          "resourceID": "wpn__ninjato_01_06a"
+        },
+        {
+          "chineseName": "被吞噬者的低语",
+          "englishName": "WHISPERS OF THE CONSUMED",
+          "nameMappingStatus": "verified original IPA localization; not an equipment-set binding table",
+          "resourceID": "wpn__ninjato_01_07"
+        }
+      ],
+      "equipmentSetBindingTableRecovered": false,
+      "languages": [
+        {
+          "duplicateKeyRecordCount": 0,
+          "language": "ChineseSimplified",
+          "missingKeyRecordCount": 1,
+          "nonemptyKeyRecordCount": 29926,
+          "sourcePathID": "656",
+          "sourceSHA256": "d2fc0dbbb23f452b557822607987b4d66b1fa6b300bdda5a1c5bcfdcb8f0b88d"
+        },
+        {
+          "duplicateKeyRecordCount": 0,
+          "language": "English",
+          "missingKeyRecordCount": 1,
+          "nonemptyKeyRecordCount": 29926,
+          "sourcePathID": "662",
+          "sourceSHA256": "360c79ae9ab3e1b594900063c14cb13c4a479e6571d3c91137d6a419e0bb3c07"
+        }
+      ],
+      "numericPlaceholderArgumentsRecovered": false,
+      "originalMechanicDescriptionsPresent": true,
+      "publicationScope": "Hashes, record keys, short identity names and format findings only; original skill paragraphs remain outside the repository.",
+      "setKey": "H17_set_title",
+      "setNames": {
+        "en": "DEAD FOREST TRIAD",
+        "zh": "死亡森林三魄"
+      },
+      "storageFormat": "protobuf wire records containing localization keys and text values"
+    },
+    "modelRecovery": {
+      "bundleUnityVersionVerified": false,
+      "completeGameplayAccepted": false,
+      "completeRenderableCharacterAccepted": false,
+      "containerReader": "UnityPy 1.25.4",
+      "expectedAPKBytes": 2683387431,
+      "externalReferenceExactSavedCatalogMatches": {
+        "archive:/CAB-901eba28f4c9f491c9323f34153174a5/CAB-901eba28f4c9f491c9323f34153174a5": 0,
+        "archive:/CAB-c8d89ff307ad393b5cf0982a245a196c/CAB-c8d89ff307ad393b5cf0982a245a196c": 0
+      },
+      "fallbackUnityVersion": "6000.3.11f1",
+      "modelConfigAndBoneMapStatus": "Embedded config/bones TextAssets are base64-encoded opaque binary. Runtime skeleton/control binding and materials have not been converted or accepted.",
+      "rawModelsPublished": false,
+      "sourceHost": "s2.g.mi.com",
+      "sourcePage": "https://app.mi.com/details?id=com.hahd.aygd3.mi",
+      "sourceVersion": "Android 1.45.3",
+      "unresolvedExternalReferences": [
+        "archive:/CAB-901eba28f4c9f491c9323f34153174a5/CAB-901eba28f4c9f491c9323f34153174a5",
+        "archive:/CAB-c8d89ff307ad393b5cf0982a245a196c/CAB-c8d89ff307ad393b5cf0982a245a196c"
+      ],
+      "verification": "Each HTTP response matched the requested byte range and source APK size. ZIP local header names, decompression boundaries, uncompressed sizes, ZIP CRC32 and pre-existing catalog SHA256 all matched.",
+      "verifiedBundleBytes": 3297673,
+      "verifiedBundleCount": 3,
+      "wholeAPKDownloadedThisTask": false,
+      "wholeAPKHashRecomputedThisTask": false
+    },
+    "otherConfigurationCandidates": [
+      {
+        "base64DecodedBytes": 8688,
+        "base64DecodedSHA256": "064cb2a99188f227809fbb18237049b57a3da3d6e6d260799451fe5e7cdb4139",
+        "bytes": 11584,
+        "directlyReadableGameplayTable": false,
+        "name": "tactics_settings",
+        "pathID": "533",
+        "sha256": "839f591d4a37b265b5b2560a67919ee03e6835b7983121a9b9ca3b329e888179",
+        "storageFormat": "base64-encoded opaque binary"
+      },
+      {
+        "base64DecodedBytes": 3184,
+        "base64DecodedSHA256": "83e6da137c831628b72ac2ee3d0ec909607eb0505e49893453ab5350669aa3be",
+        "bytes": 4248,
+        "directlyReadableGameplayTable": false,
+        "name": "fightProcessContext",
+        "pathID": "619",
+        "sha256": "1a4877b02845e3da9736e21cd54af4fb653138565b3f0d640ddc783a947a73a7",
+        "storageFormat": "base64-encoded opaque binary"
+      },
+      {
+        "base64DecodedBytes": 6896,
+        "base64DecodedSHA256": "04ac442f922bbcbd90e952b106fcd7780dd1edb40e170ae2793c7f0f39cd5203",
+        "bytes": 9196,
+        "directlyReadableGameplayTable": false,
+        "name": "configSources",
+        "pathID": "638",
+        "sha256": "524d7bd857d9d53bb6c557f83a7c32cbb1acfeae1391dae9b164594511e68cec",
+        "storageFormat": "base64-encoded opaque binary"
+      },
+      {
+        "base64DecodedBytes": 2928,
+        "base64DecodedSHA256": "a11a740b0bf9c20f9fb0c2d511c027a6a222009d47454032080be9795035c054",
+        "bytes": 3904,
+        "directlyReadableGameplayTable": false,
+        "name": "fight_settings",
+        "pathID": "665",
+        "sha256": "3b76bc3e82954e006ea55d33be4d51bc86ef16922159aa234e77e0224bae8f84",
+        "storageFormat": "base64-encoded opaque binary"
+      }
+    ],
+    "pangu": {
+      "exactEnglishIdentityMatchCounts": {
+        "Pangu": 0,
+        "Primordial Heavenly King": 0
+      },
+      "exactLocalizationKeyMatchCounts": {
+        "D19": 0,
+        "D20": 0,
+        "agl_48": 0
+      },
+      "excludedSubstringMatches": [
+        "D20 substring matches were BD2023/BD2024 birthday event keys.",
+        "PRIMORDIAL CHAOS is H15_set_upgrade_6_title, not a Heavenly King identity.",
+        "The metadata substring pangu occurs in gripAngularVelocity, not a Pangu symbol."
+      ],
+      "originalEquipmentIDConfirmed": false,
+      "originalModelOrMotionMappingConfirmed": false,
+      "referenceLead": "ERR_HELM_AGL_48",
+      "status": "not identified in this IPA; reference-video lead remains unverified"
+    },
+    "permitsGameplayEnablement": false,
+    "rawSourceBytesCommitted": false,
+    "source": "Previously user-provided Dropbox IPA; read-only download and inspection",
+    "unityVersion": "6000.3.11f1",
+    "unityVersionVerifiedFromIPASerializedFile": true
+  },
+  "contactWindowsRecovered": false,
+  "damageAndHealthRecovered": false,
+  "decodedArrayCount": 94,
+  "decoder": {
+    "bundleUnityVersionVerified": false,
+    "containerReader": "UnityPy 1.25.4",
+    "fallbackUnityVersion": "6000.3.11f1",
+    "motionFormat": "two compressed transform arrays",
+    "rotationAttribution": "ShadowFightAnimationTool (MIT), Abdul Ghani, 2025"
+  },
+  "gameRulesRecovered": false,
+  "limitations": [
+    "Android 1.45.3 motion bytes do not establish iOS 1.46.1 behavior.",
+    "No contact windows, damage, health, source FPS, state transitions or input bindings are inferred.",
+    "Private decoded arrays retain source-frame indices; neither array is assigned undocumented semantics.",
+    "Target model, skeleton binding, effects and complete gameplay still require separate verification."
+  ],
+  "pangu": {
+    "leadStatus": "reference-video lead; not a verified asset mapping",
+    "observedEquipmentLead": "ERR_HELM_AGL_48",
+    "sourcePathMatchCounts": {
+      "agl_48": 0,
+      "heavenly": 0,
+      "pangu": 0,
+      "primordial": 0
+    },
+    "status": "unmapped"
+  },
+  "permitsGameplayEnablement": false,
+  "preparationKind": "verified-source-motion-decode",
+  "schemaVersion": 1,
+  "sourceArchive": "ShadowFight3_Motions_and_Scene_Sources.zip",
+  "sourceArchiveSHA256": "f9a24c6f81c46b12facd670adff92d24f829a7811c298473ee51867262338959",
+  "sourceFramesPerSecond": null,
+  "sourcePackage": {
+    "platform": "Android",
+    "sha256": "29eab6cb60ebec8aeb0a47c2efcfebc5e38320c2c659add3fa5670067ece13ab",
+    "version": "1.45.3"
+  },
+  "targets": [
+    {
+      "bundleBytes": 1091123,
+      "bundleSHA256": "733d0127c26bda02300d0c2b7cdf4e11beea8b024ca7567161a194795247d1cc",
+      "motions": [
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.heavy.slash",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_heavy_slash",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 78226,
+          "sourceFrameCount": 56,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-2065274859960638146",
+          "sourceSHA256": "ff62b07f84e6f6291dcef9d3ef65e3a19c7493913234199134ec79e7c0363a69",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.low.slash",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_low_slash",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 78226,
+          "sourceFrameCount": 56,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "2842705157115401781",
+          "sourceSHA256": "5ddd24a5c7dfd50670fde81f8eda3d4de752ae88846fe644289c578ced6e2421",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.slash.1",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_slash_1",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 61522,
+          "sourceFrameCount": 44,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "9158368698166420800",
+          "sourceSHA256": "1518e1e61c950b8782478f4a79bd5a6d53ae31e54e184738167a33611c60b01c",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.slash.2",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_slash_2",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 65698,
+          "sourceFrameCount": 47,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "757669024560858683",
+          "sourceSHA256": "166862f4842f96fe4105c103da03cb56bc8ef130eecb6b632b304f8d02d5235a",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.spinning.slash",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_spinning_slash",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 54562,
+          "sourceFrameCount": 39,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-751424131339272431",
+          "sourceSHA256": "43d7803de8a317eb8e5cdb40f11fe85dc52e6f237e1bdb631bcf40aae2491f31",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.spinning.slash.1",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_spinning_slash_1",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 57346,
+          "sourceFrameCount": 41,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "1705726371032189458",
+          "sourceSHA256": "aeedb19b75eefe6c71add0f986b9fbfd3c6f897b4f56431c41de513b176d37a9",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.spinning.slash.2",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_spinning_slash_2",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 92146,
+          "sourceFrameCount": 66,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "4366797490338896323",
+          "sourceSHA256": "e19976ba81a0ef74493850b154936a32a988f62ede53ab33e75c8346ce5321fa",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.stance",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_stance",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 108850,
+          "sourceFrameCount": 78,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "6851617984488927264",
+          "sourceSHA256": "2f02ff8ab72f0c3f20b9a4dc00ee16218fa95d383a2df705ef1c7429c0522583",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.stance.birth",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_stance_birth",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 64306,
+          "sourceFrameCount": 46,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-5911133147384196563",
+          "sourceSHA256": "88047bc5f7ab60826b92a12184cecf070cd405aab65ffc95c85178a723b85a91",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.stance.idle",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_stance_idle",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 82402,
+          "sourceFrameCount": 59,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "38620501794357134",
+          "sourceSHA256": "018403d58e1fbc5e9613c3da765675f2dd838f6ead6719de0087f5ca7a7e0076",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.stance.win",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_stance_win",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 65698,
+          "sourceFrameCount": 47,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-4445541387562631565",
+          "sourceSHA256": "7e9602ac7c1bad48f6a817c684cfafa5cfcf3531498b3a9a84ddd3ce4cb21e76",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.stance.win.idle",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_stance_win_idle",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 69874,
+          "sourceFrameCount": 50,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "6874757450637686520",
+          "sourceSHA256": "0c283462626445a66f0b964aabe5c6816b6d42d9e1ebf49407c3abefeb321243",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.super.3.slash.1",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_super_3_slash_1",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 64306,
+          "sourceFrameCount": 46,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "8575417852652510441",
+          "sourceSHA256": "8d3b42e9685dc5789b5942ed3aa24c36715fe235cd88a58cbebc4d36018b709a",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.super.3.slash.2",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_super_3_slash_2",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 93538,
+          "sourceFrameCount": 67,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "5335555947495738108",
+          "sourceSHA256": "013e437eb32f86da499c64bd334f9bcdbfd420120ae47939845b1615a993bd2e",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.super.3.slash.3",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_super_3_slash_3",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 145042,
+          "sourceFrameCount": 104,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-5347305895960381276",
+          "sourceSHA256": "ebb1498025d5b1dc7a57a32fba9d64b15186052c11d29776626d4e3ebdcc7946",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.super.slash.1",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_super_slash_1",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 76834,
+          "sourceFrameCount": 55,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "5132509857607445019",
+          "sourceSHA256": "35313e5e9c02038fdb674f99d8cb35de5a8e8c219a017152bd2afea17b1f4f8e",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.super.slash.2",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_super_slash_2",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 136690,
+          "sourceFrameCount": 98,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "7546471133088878489",
+          "sourceSHA256": "800bc097eb6e7f94ab27b9e605649146e18c9cd1cf8ca46f64a65161d9ea3f40",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.upper.slash",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "ninjato_upper_slash",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 65698,
+          "sourceFrameCount": 47,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "8057668089583574513",
+          "sourceSHA256": "97f0c9db7b46eac7fef697881ee37f9100d21c8e5979646cb8957025ceb971c0",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.shadow.end",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "s_ninjato_end",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 48994,
+          "sourceFrameCount": 35,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-9212479108587495156",
+          "sourceSHA256": "49c58654a7a560c8d94fe4887fcf49773c02edb1da5754a10a70a9c09d07f036",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.shadow.slash.1",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "s_ninjato_slash_1",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 36466,
+          "sourceFrameCount": 26,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "2689349126417366668",
+          "sourceSHA256": "df8ab9f5d7c72ad1af9f7bee45284d6e000e402e5ba447de5c79585056b1d5c3",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.shadow.slash.1.active",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "s_ninjato_slash_1_active",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 42034,
+          "sourceFrameCount": 30,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-6537111837285457291",
+          "sourceSHA256": "83887d30eac906be9447b3986b102f43eaddb220972836842e44d27befb98f30",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.shadow.slash.2",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "s_ninjato_slash_2",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 29506,
+          "sourceFrameCount": 21,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-6883572394014778721",
+          "sourceSHA256": "9def939f3913f94c873a6e280a56c080009fc0efe5468d5dc32b3e3d9e898eb7",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.shadow.slash.passive",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "s_ninjato_slash_passive",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 114418,
+          "sourceFrameCount": 82,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "828299837859100842",
+          "sourceSHA256": "c5b4a7a6c64d44c494d903253b0d85102e35c5e1babd82cffa7c434599729bcd",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "weapon.shadow.start",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "s_ninjato_start",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+          "sourceBytes": 21154,
+          "sourceFrameCount": 15,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-4794127382275233528",
+          "sourceSHA256": "8f9b99375b71cae3da18caa75b63e03f7af51a19f95de135015e7b0fccdcd134",
+          "trailingBytes": 0
+        }
+      ],
+      "sourceBundle": "2ee15f236c4e114912c05a8561b8c9a3.bin",
+      "target": "sun_ninjato"
+    },
+    {
+      "bundleBytes": 14681877,
+      "bundleSHA256": "d6f2efe8ce772b953f610583ab5fb8963fb27abcccfec4b3aeccce8be973dd42",
+      "motions": [
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.buff.ability",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_buff_ability",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 53898,
+          "sourceFrameCount": 31,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-4708679463272721778",
+          "sourceSHA256": "bafdb60a87625137747f0371fe60383a57bcb3fd03a360350bae403d07fb4463",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.fight.start.stance",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_fight_start_stance",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 347658,
+          "sourceFrameCount": 201,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "8912784022478929554",
+          "sourceSHA256": "65d5f450ae7d4b912c594cb95627f27969c2cd4924fddca8c3bdfd447f26be0a",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.fight.start.stance.birth",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_fight_start_stance_birth",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 53898,
+          "sourceFrameCount": 31,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-4674744829025402561",
+          "sourceSHA256": "02b376b06eebf6566335c3c9631875a81fd639e5040104f96da92f247befb929",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.active.end",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_root_spike_active_end",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 53898,
+          "sourceFrameCount": 31,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-8725526058169753022",
+          "sourceSHA256": "cd37b98dbe16fb568b595f052e7b2a78bfe44759d5ee6c9d3f41f598204d2164",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.active.loop",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_root_spike_active_loop",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 88458,
+          "sourceFrameCount": 51,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "3170262226993720576",
+          "sourceSHA256": "0dfcc45ce5673f7921086c044515d7070da68cc39e59cc3a6fcc983ec47fa1f5",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.active.start",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_root_spike_active_start",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 67722,
+          "sourceFrameCount": 39,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-3477830912550096663",
+          "sourceSHA256": "2a044bed51b04f17cc5e131cccf5ff72eab02cb028caa10385e1c5375d8c76e0",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.model",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            7,
+            7
+          ],
+          "name": "h17_root_spike_model",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 5278,
+          "sourceFrameCount": 31,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "8257141588547143685",
+          "sourceSHA256": "c33a9c85a17542ab436c380ebbc5a116e7b51ec4a67df2a022ce6674ee9d5a11",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.passive.end",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "h17_root_spike_passive_end",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 67090,
+          "sourceFrameCount": 48,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-1870236551894418490",
+          "sourceSHA256": "7d9b8572ae67cd8f344f16478cc50a56e17c0646191c7f2306ff2724453cf5e2",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.passive.loop",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "h17_root_spike_passive_loop",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 85186,
+          "sourceFrameCount": 61,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "2284072289221197163",
+          "sourceSHA256": "a3f13059f3eeedd057e14d738894667a77b04279109d1544f0e2b34ad12502ce",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.root.spike.passive.start",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            58,
+            58
+          ],
+          "name": "h17_root_spike_passive_start",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 61522,
+          "sourceFrameCount": 44,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-2831424740327325281",
+          "sourceSHA256": "69d01bc2d1cc6be69188be006582598bf3551c88db3f7446078fcda63583382c",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.round.start.stance",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_round_start_stance",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 95370,
+          "sourceFrameCount": 55,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-6876457357080261162",
+          "sourceSHA256": "394515f6016f90dec58c0166e92ca26ea2051f8657abb1913c61da04a79c5b0a",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.round.start.stance.birth",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_round_start_stance_birth",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 83274,
+          "sourceFrameCount": 48,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "5892340504519661688",
+          "sourceSHA256": "f341942b0474ffc71185baf5ebce8f60039b4bc570114fdaffb30d7164916147",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.stance.round.win",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_stance_round_win",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 180042,
+          "sourceFrameCount": 104,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "6138220834000576415",
+          "sourceSHA256": "e0942bada319c9f043e2f0f5ea90902e6ad9e50783d91139f0aca98e0c6e04ef",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.stance.win",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_stance_win",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 280266,
+          "sourceFrameCount": 162,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "2950188213383869077",
+          "sourceSHA256": "f4ca38a84dc50549ba1f5aa8c96269526feb09d037773d7c64933591092e531e",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.stance.win.idle",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_stance_win_idle",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 71178,
+          "sourceFrameCount": 41,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "6430705054914111955",
+          "sourceSHA256": "36bb49e502eaf9ad3cb7fe07de8c1ecf0fbafd031c019f228a981dba91917ea6",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.start.stance.idle",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_start_stance_idle",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 181770,
+          "sourceFrameCount": 105,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "2171270451650278752",
+          "sourceSHA256": "63a2d1640be379d287311e6afe9d5a1dffc11e79d0d5cc41cd4484288a86886d",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.trans.end",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_trans_end",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 57354,
+          "sourceFrameCount": 33,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "371505223235378646",
+          "sourceSHA256": "8d5a820e3b95748b151419384f4a1a7f5b3c563afeb247420f668955bf871f79",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.trans.loop",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_trans_loop",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 85002,
+          "sourceFrameCount": 49,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "5770813510384190442",
+          "sourceSHA256": "bb5e933ff20d253b3aff3d2132a4349b5894db750becc1c0b2910a539b407269",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.trans.start",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_trans_start",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 27978,
+          "sourceFrameCount": 16,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "4871528202850028893",
+          "sourceSHA256": "33367e1f95d51346e0fedcb0a6253184b2dfa358564552f997d3082caf6e71dc",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.wave.ability.1",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_wave_ability_1",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 88458,
+          "sourceFrameCount": 51,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "4167565256288571296",
+          "sourceSHA256": "e59a9ae44e735a8ea431b0be49f858b9d99cb3bf3d0103c70168bbffb21e39ec",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.wave.ability.2",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_wave_ability_2",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 116106,
+          "sourceFrameCount": 67,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "-1080301500424786930",
+          "sourceSHA256": "ab3e9f1370821fea6518ea6520ee2a91923cf9802c9ab47c50d65c0522ba29dd",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.wave.ability.3",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            72,
+            72
+          ],
+          "name": "h17_wave_ability_3",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 150666,
+          "sourceFrameCount": 87,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "4297722013514590332",
+          "sourceSHA256": "036461aba6cc19c9e2f77aef26bf78ab77ef7cd21c215acd406718fdefeefdb4",
+          "trailingBytes": 0
+        },
+        {
+          "allTransformsFinite": true,
+          "candidateRole": "set.wave.model",
+          "decodedArrayCount": 2,
+          "decodedBoneCounts": [
+            7,
+            7
+          ],
+          "name": "h17_wave_model",
+          "roleBindingStatus": "name-derived candidate; not a verified control or event binding",
+          "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+          "sourceBytes": 3766,
+          "sourceFrameCount": 22,
+          "sourceFramesPerSecond": null,
+          "sourcePathID": "7123785703015833713",
+          "sourceSHA256": "ef3cb604495fe6c111c4e5ce5daa9030dd55b8c71437cb3a64e2d520666d6b2d",
+          "trailingBytes": 0
+        }
+      ],
+      "sourceBundle": "9893dca6e10355eb9c3c79d1613f08b1.bin",
+      "target": "sun_dead_forest_triad_h17"
+    }
+  ],
+  "verifiedBundleCount": 2,
+  "verifiedMotionCount": 47
+}

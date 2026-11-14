@@ -11,8 +11,10 @@ final class DuelWeaponAssets {
     enum AssetError: Error { case missing, integrity, incomplete }
     let catalog: DuelWeaponCatalog
     let directory: URL
+    let release: DuelFighterAssetReleaseLoader?
     let presentation: DuelPresentationAssets?
     let sourceTrails: DuelSourceWeaponTrails?
+    let panguAudio: DuelSourceEffects.PanguAudioBinding?
     private var characters: [DuelGame.Hero: DuelWeaponCharacterAsset] = [:]
     private(set) var belongsToVerifiedPreparation = false
     func bindVerifiedPreparation() { belongsToVerifiedPreparation = true }
@@ -25,13 +27,25 @@ final class DuelWeaponAssets {
         if let directory { url = directory.appendingPathComponent("SF3_DistinctFighters.json") }
         else if let found = Self.catalogURL(bundle: bundle) { url = found }
         else { throw AssetError.missing }
+        let base = url.deletingLastPathComponent()
+        let release = try DuelFighterAssetReleaseLoader.optional(directory: base, bundle: bundle)
         let data = try Data(contentsOf: url)
-        guard Self.digest(data) == Self.catalogSHA256 else { throw AssetError.integrity }
+        guard Self.digest(data) == (release?.definition.catalog.sha256 ?? Self.catalogSHA256) else { throw AssetError.integrity }
         let catalog = try JSONDecoder().decode(DuelWeaponCatalog.self, from: data)
         try catalog.validate()
-        self.catalog = catalog; self.directory = url.deletingLastPathComponent()
+        self.catalog = catalog; self.directory = base; self.release = release
         presentation = try DuelPresentationAssets.optional(directory: self.directory)
-        sourceTrails = try DuelSourceWeaponTrails.optional(directory: self.directory)
+        if let release {
+            let trails = release.definition.sourceTrails, audio = release.definition.panguAudio
+            sourceTrails = try DuelSourceWeaponTrails(url: base.appendingPathComponent(trails.name),
+                                                      expectedSHA256: trails.sha256, catalog: catalog)
+            guard let pangu = catalog.profiles.first(where: \.isPangu) else { throw AssetError.incomplete }
+            panguAudio = try DuelSourceEffects.PanguAudioBinding.load(directory: base,
+                manifestName: audio.name, expectedSHA256: audio.sha256, profile: pangu)
+        } else {
+            sourceTrails = try DuelSourceWeaponTrails.optional(directory: base)
+            panguAudio = nil
+        }
         for profile in catalog.profiles {
             let modelURL = self.directory.appendingPathComponent(profile.resourceName + ".glb")
             guard FileManager.default.fileExists(atPath: modelURL.path) else { throw AssetError.missing }
@@ -40,7 +54,9 @@ final class DuelWeaponAssets {
     func character(for hero: DuelGame.Hero) throws -> DuelWeaponCharacterAsset {
         if let existing = characters[hero] { return existing }
         guard let profile = catalog.profile(for: hero) else { throw AssetError.incomplete }
-        let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"), profile: profile, presentation: presentation, sourceTrails: sourceTrails)
+        let value = try DuelWeaponCharacterAsset(url: directory.appendingPathComponent(profile.resourceName + ".glb"),
+            profile: profile, presentation: presentation, sourceTrails: sourceTrails,
+            releaseBinding: release?.definition.profile(id: profile.id))
         characters[hero] = value; return value
     }
     /// Cache-only access for an already verified network owner. A miss never
@@ -57,11 +73,16 @@ final class DuelWeaponCharacterAsset {
     let model: GLTFModel
     let presentation: DuelPresentationAssets?
     let sourceTrails: DuelSourceWeaponTrails?
+    let releaseBinding: DuelFighterAssetRelease.Profile?
     private let starts: [String: Float]
-    init(url: URL, profile: DuelWeaponProfile, presentation: DuelPresentationAssets? = nil, sourceTrails: DuelSourceWeaponTrails? = nil) throws {
+    init(url: URL, profile: DuelWeaponProfile, presentation: DuelPresentationAssets? = nil,
+         sourceTrails: DuelSourceWeaponTrails? = nil, releaseBinding: DuelFighterAssetRelease.Profile? = nil) throws {
         let data = try Data(contentsOf: url)
         guard data.count == profile.bytes, DuelWeaponAssets.digest(data) == profile.sha256 else {
             throw DuelWeaponAssets.AssetError.integrity
+        }
+        if releaseBinding != nil {
+            try DuelFighterAssetReleaseLoader.validateSelfContainedGLB(data)
         }
         // These two byte-verified exports include node 0 ("skeleton") in the
         // skin's joints, but declare its child node 1 ("Armature") as the root.
@@ -72,8 +93,15 @@ final class DuelWeaponCharacterAsset {
             "5a1a64c9986b0d5284a7986efc1589dbfc1f00f91ac9477cdae45930612ac553",
             "9ff998118a69b1d089694e97b2623cf6d6fb81e64451a8462dddaff756b6a09f"
         ]
-        let corrections: [Int: GLTFModel.SkinRootCorrection] = correctedExports.contains(profile.sha256)
-            ? [0: .init(declared: 1, corrected: 0)] : [:]
+        let corrections: [Int: GLTFModel.SkinRootCorrection]
+        if let binding = releaseBinding {
+            guard binding.id == profile.id, binding.characterSHA256 == profile.sha256 else { throw DuelWeaponAssets.AssetError.integrity }
+            corrections = Dictionary(uniqueKeysWithValues: binding.skinRoots.map {
+                ($0.skin, GLTFModel.SkinRootCorrection(declared: $0.declared, corrected: $0.corrected))
+            })
+        } else {
+            corrections = correctedExports.contains(profile.sha256) ? [0: .init(declared: 1, corrected: 0)] : [:]
+        }
         let model = try GLTFModel(url: url, maxTexture: 1024, physicallyBased: true,
                                   skinRootCorrections: corrections)
         let expected = Set(profile.clips.map(\.name))
@@ -82,11 +110,18 @@ final class DuelWeaponCharacterAsset {
               model.node(named: (profile.hero == .ember ? "Sun" : "Liu") + "_Personal_Head") != nil else {
             throw DuelWeaponAssets.AssetError.incomplete
         }
+        if let binding = releaseBinding {
+            guard binding.materials.allSatisfy({ model.materialNames.contains($0.name) }),
+                  !binding.restorePersonalBindSpace || model.node(named: "SF3_Actor_Meters") != nil else {
+                throw DuelWeaponAssets.AssetError.incomplete
+            }
+        }
         var starts: [String: Float] = [:]
         for clip in profile.clips {
             guard let native = model.clips[clip.name], !native.channels.isEmpty,
                   let start = native.channels.compactMap({ $0.times.first }).min(), start.isFinite,
-                  abs(native.duration - start - Float(clip.frames - 1) / 30) < 0.001 else {
+                  abs(native.duration - start - Float(clip.frames - 1) /
+                      Float(releaseBinding?.motions.first(where: { $0.clip == clip.name })?.exportFramesPerSecond ?? 30)) < 0.001 else {
                 throw DuelWeaponAssets.AssetError.incomplete
             }
             starts[clip.name] = start
@@ -94,6 +129,7 @@ final class DuelWeaponCharacterAsset {
         try sourceTrails?.validate(model: model, profile: profile)
         self.profile = profile; self.model = model; self.starts = starts; self.presentation = presentation
         self.sourceTrails = sourceTrails
+        self.releaseBinding = releaseBinding
     }
     func sample(_ selection: DuelWeaponPose, into pose: inout GLTFModel.Pose) {
         pose.reset(from: model.restPose)
@@ -135,7 +171,7 @@ final class DuelWeaponCharacterInstance {
             "mat_wpn__katana_01_01_base", "mat_wpn__hammers_01_01_base"
         ]
         if sourceExports.contains(asset.profile.sha256) {
-            restorePersonalBindSpace()
+            if asset.releaseBinding == nil { restorePersonalBindSpace() }
             for material in instance.materials where sourceBackCulled.contains(material.name ?? "") {
                 material.isDoubleSided = false
                 material.cullMode = .back
@@ -151,6 +187,25 @@ final class DuelWeaponCharacterInstance {
                 material.diffuse.maxAnisotropy = 1
             }
             materialBinding = asset.presentation?.install(on: instance.materials, environment: environment)
+        }
+        if let binding = asset.releaseBinding {
+            if binding.restorePersonalBindSpace { restorePersonalBindSpace() }
+            for definition in binding.materials {
+                for material in instance.materials where material.name == definition.name {
+                    material.isDoubleSided = definition.doubleSided
+                    material.cullMode = definition.cull == .front ? .front : .back
+                    material.diffuse.minificationFilter = definition.minification == .linear ? .linear : .nearest
+                    material.diffuse.magnificationFilter = definition.magnification == .linear ? .linear : .nearest
+                    switch definition.mip {
+                    case .none: material.diffuse.mipFilter = .none
+                    case .nearest: material.diffuse.mipFilter = .nearest
+                    case .linear: material.diffuse.mipFilter = .linear
+                    }
+                    material.diffuse.wrapS = definition.wrapS == .repeat ? .repeat : .clamp
+                    material.diffuse.wrapT = definition.wrapT == .repeat ? .repeat : .clamp
+                    material.diffuse.maxAnisotropy = CGFloat(definition.maxAnisotropy)
+                }
+            }
         }
         // Capture the actual corrected skinners, not the uncorrected asset template.
         do { displayedBounds = try DuelDisplayedSkinBounds(root: instance.root) }
@@ -236,7 +291,10 @@ final class DuelWeaponCharacterInstance {
         apply(selection)
         // Exported pelvis X/Z are in-place. Source pelvis Y is retained, so
         // jumping is already in the sampled pose and is not added twice here.
-        root.position = SCNVector3(Float(fighter.x) / 1000, Float(selection.groundLift), 0)
+        // Fighter.y is an additional authoritative impact displacement, not
+        // another copy of the source pelvis height or source jump track.
+        let impactHeight = Float(fighter.y) / 1000
+        root.position = SCNVector3(Float(fighter.x) / 1000, Float(selection.groundLift) + impactHeight, 0)
         root.eulerAngles = SCNVector3(0, -Float(fighter.facing) * .pi / 2, 0)
         guard shadow?.kind == .hammerThrow,
               let base = shadow?.weaponBase, let tip = shadow?.weaponTip,
@@ -245,7 +303,7 @@ final class DuelWeaponCharacterInstance {
         let tracks = clip.tracks
         func world(_ point: DuelWeaponPoint) -> SIMD3<Float> {
             SIMD3(Float(fighter.x) / 1000 + Float(point.x) * Float(fighter.facing),
-                  Float(point.y + selection.groundLift), Float(point.z) * Float(fighter.facing))
+                  Float(point.y + selection.groundLift) + impactHeight, Float(point.z) * Float(fighter.facing))
         }
         let sourceBase = world(tracks.sample(tracks.weaponBaseR, phase: selection.phase))
         let sourceTip = world(tracks.sample(tracks.weaponTipR, phase: selection.phase))

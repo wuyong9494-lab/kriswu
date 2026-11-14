@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "requestDate": "2026-11-14",
+  "baselineCommit": "53e8bd4aab88d56d8d2b6150b4e6db0dfeba5712",
+  "remoteBaselineCommit": "0d83323a5463b9f3feb57cc00532da2ade5a5c48",
+  "commitReference": "Containing commit; review README records the exact final commit.",
+  "scope": "Pinned Pangu asset release, per-profile model/motion/raster bindings, source trails and phase windows, audio cues and finishing-step feedback, complete network content identity.",
+  "swift": {
+    "version": "6.0.3",
+    "platform": "x86_64-unknown-linux-gnu",
+    "filter": "DuelFighterAssetReleaseTests",
+    "tests": 23,
+    "failures": 0,
+    "log": "pangu-bindings-core-tests.log",
+    "sha256": "90aa94289cb72f78696892593bd3b7e08925ee04958ce07636058be8c1abe54e",
+    "sourceFixtures": "Synthetic Pangu catalog; not retail evidence."
+  },
+  "python": {
+    "tests": 17,
+    "failures": 0,
+    "log": "pangu-bindings-manifest-tests.log",
+    "sha256": "fdf968dc71345e737f251135d14637cce2105bd4da39362b717d46522b299ccb",
+    "nativeRequiredPathsMatch": true,
+    "nativeBuildKeysMatch": true
+  },
+  "native": {
+    "syntaxFiles": [
+      "App/Services/DuelFighterAssetReleaseLoader.swift",
+      "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "App/Services/DuelSourceEffects.swift",
+      "App/Services/DuelSourceWeaponTrails.swift",
+      "App/Services/DuelWeaponAssets.swift",
+      "App/Services/GLTFModel.swift",
+      "App/Views/DuelWorld.swift",
+      "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift",
+      "Tests/SiteTests/DuelFighterCharacterContainerTests.swift",
+      "Tests/SiteTests/DuelLifecycleTests+CompatibilityIdentity.swift",
+      "Tests/SiteTests/DuelLifecycleTests+VerifiedPreparation.swift",
+      "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift",
+      "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift"
+    ],
+    "syntaxFilesSHA256": {
+      "App/Services/DuelFighterAssetReleaseLoader.swift": "74dd25f98428d5f57cfc295e4c4a2224744b2ef3ad9ffb8bddfebfaa2109ec5c",
+      "App/Services/DuelNetworkCompatibilityIdentity.swift": "c2b8be5905662c68753af983eee4e7a7c1c90876d50b18e895f412c6466acca3",
+      "App/Services/DuelSourceEffects.swift": "2e7563beba9f55542f506dd3cd67a31c2b97353bf5baf201b559a0baadbde5b7",
+      "App/Services/DuelSourceWeaponTrails.swift": "b241f8887fc10c5ce25666e9996dcb6dc5f8c8f02440bf363ba5814ee6af9e1e",
+      "App/Services/DuelWeaponAssets.swift": "f16ffca9d9c5dd8a0345ebf3a04e21d1293122f093cdf54d6ea81d9a6c59f976",
+      "App/Services/GLTFModel.swift": "f230b0c171c97d0f75260ffe054b831ab43a17cb37490cf776c2a34215abfd62",
+      "App/Views/DuelWorld.swift": "768eed7aacbd6c0ab60fdde4739d9abfd0e774f185bb27d6a12a1d55b618d3b7",
+      "Tests/SiteTests/DuelFighterAssetReleaseLoaderTests.swift": "65c29bfc5c15dc0a42e9c8f831aa4070c8a495ea3fc6391e60c3118bd2c6f4a3",
+      "Tests/SiteTests/DuelFighterCharacterContainerTests.swift": "00d1978fe71e9ab32ca8587d23f27a115c98d67eb91352de426c2f73b15a4c8e",
+      "Tests/SiteTests/DuelLifecycleTests+CompatibilityIdentity.swift": "5d94ac3d0121193ca19884e6b448b8fbf7a38f8f14a60bfe726809d24fa113c6",
+      "Tests/SiteTests/DuelLifecycleTests+VerifiedPreparation.swift": "2584bbd1fa69249e9578c00d0d2ed036430841cda2e39ce033f0eef2137c19d6",
+      "Tests/SiteTests/DuelPanguSourceAudioBindingTests.swift": "c2f1f7e26fe731a5ce3f3a69a35318d6149e24f6856f856d1b75cb04f6bc379d",
+      "Tests/SiteTests/DuelPanguSourceTrailBindingTests.swift": "4a1beff98ff3454370bf74007fc315b5aeb7774baa0d2070abf37caa27521674"
+    },
+    "syntaxExitCode": 0,
+    "syntaxDiagnostics": 0,
+    "log": "pangu-bindings-native-syntax.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "newTestsByFile": {
+      "DuelFighterAssetReleaseLoaderTests.swift": 12,
+      "DuelFighterCharacterContainerTests.swift": 10,
+      "DuelPanguSourceAudioBindingTests.swift": 13,
+      "DuelPanguSourceTrailBindingTests.swift": 11
+    },
+    "newTests": 46,
+    "testsRun": false,
+    "iOSSDKTypechecked": false,
+    "physicalDeviceConnected": false,
+    "physicalDeviceAccepted": false
+  },
+  "rulesIdentity": {
+    "files": 317,
+    "fingerprint": "91d62f4b25fa0d6e12988a87ac4270331002bd19982de7bea2e1166fd361a6c8",
+    "recipe": "fighter-network-rules-v1",
+    "sourceOnly": true
+  },
+  "previousValidation": {
+    "tests": 321,
+    "commit": "53e8bd4aab88d56d8d2b6150b4e6db0dfeba5712",
+    "rerunThisBatch": false,
+    "record": "fighter-pangu-ordinary-throw-validation-20261114.json"
+  },
+  "originalParity": {
+    "newOriginalAssets": 0,
+    "newVerifiedFormalParameters": 0,
+    "existingSourceFacts": 38,
+    "remainingReferenceUnknowns": 14,
+    "targetCatalogActivated": false,
+    "productionAssetReleasePin": "",
+    "completeOriginalRecreation": false
+  },
+  "published": {
+    "gitHub": false,
+    "siteVersion": 11,
+    "testFlight": "705; older source"
+  },
+  "clockNote": "The request date is 2026-11-14. Swift emitted test times on 2026-11-13; logs are preserved without rewriting timestamps."
+}

@@ -1,0 +1,225 @@
+{
+  "acceptance": {
+    "actualResourceVisuals": "not-run",
+    "completeOriginalMechanics": false,
+    "increment": "passed-selected-local-regression",
+    "nativeIOSCompile": "not-run",
+    "newTestFlightBuild": false,
+    "physicalDeviceAcceptance": "not-run",
+    "targetProfilesEnabled": false,
+    "twoDeviceAcceptance": "not-run"
+  },
+  "baseCommit": "0d83323a5463b9f3feb57cc00532da2ade5a5c48",
+  "changedFilesExcludingThisRecord": [
+    {
+      "bytes": 24293,
+      "path": "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "sha256": "ba8622f91e4a77975c53d5c0c53f9ae53b15297d3c1b57f52f8d0c2bc76d9d3f"
+    },
+    {
+      "bytes": 16334,
+      "path": "App/Services/DuelWeaponAssets.swift",
+      "sha256": "1f081c76832e554eea556dc049dbd7165286dc2bb533d8f82de78903f3a9c148"
+    },
+    {
+      "bytes": 65520,
+      "path": "App/Views/DuelWorld.swift",
+      "sha256": "748da67c8a10d9eb214a7bd842ea7f8eb1b43a379b7bd9007a7c9605b018fc77"
+    },
+    {
+      "bytes": 11761,
+      "path": "Sources/ShiftCore/DuelCombatRules.swift",
+      "sha256": "fd5e3a6912be957f398b40ddda96575be61351dc0507d578c29c4f73c045c932"
+    },
+    {
+      "bytes": 4918,
+      "path": "Sources/ShiftCore/DuelImpactMotion.swift",
+      "sha256": "cb3b0a18703cc6026dc0c32881f8dbea9d319fd5f4f5a5b5c7da6acd75db0c47"
+    },
+    {
+      "bytes": 12484,
+      "path": "Sources/ShiftCore/DuelReplayState.swift",
+      "sha256": "8b96bc841cfaf9411abe473a197f77010e025b4afd54eb9b4d05eeca267a210e"
+    },
+    {
+      "bytes": 47664,
+      "path": "Sources/ShiftCore/DuelWeaponFight.swift",
+      "sha256": "d3592ac7892849e3b85971d18f42eacb3384a3d418c0093ab07464d51a2243e4"
+    },
+    {
+      "bytes": 9101,
+      "path": "Sources/ShiftCore/DuelWeaponMotion.swift",
+      "sha256": "6a8ed848b789cb30399803b683ece25a2166ddcd01935b8eb60389e13910a942"
+    },
+    {
+      "bytes": 8529,
+      "path": "Tests/ShiftCoreTests/DuelCombatRulesTests.swift",
+      "sha256": "0af6fcb62c6ec8963d30ca2d70df649a62943b21a71eeb6907ef15c2cda9da77"
+    },
+    {
+      "bytes": 4895,
+      "path": "Tests/ShiftCoreTests/DuelImpactMotionTests.swift",
+      "sha256": "d43f5452d5e1244d9d120a1a849cf2b5949dd27d1a0c19da55a75690cab783b9"
+    },
+    {
+      "bytes": 5118,
+      "path": "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift",
+      "sha256": "ced5363e33a3043ef9cfe7a24fd17c221bf39ecd9bc87404b1d3623b892a9ef6"
+    },
+    {
+      "bytes": 16234,
+      "path": "Tests/ShiftCoreTests/DuelReplayStateTests.swift",
+      "sha256": "d46b06a922410ad6b779e68b6c0d92c1202cd4a997b01886749fa2ddf59e3d95"
+    },
+    {
+      "bytes": 26201,
+      "path": "Tests/ShiftCoreTests/DuelWeaponImpactTests.swift",
+      "sha256": "51444b2ef295e6ee89e8f60884ac017ebe08b35b2be9d474d6ce7c19bed3220c"
+    },
+    {
+      "bytes": 49103,
+      "path": "docs/acceptance/fighter-target-source-inventory-20261114.json",
+      "sha256": "d004e423b9811143e2da3ddf4cc763c83a2ad0e1ab0c5724d496df05ccb65190"
+    },
+    {
+      "bytes": 16018,
+      "path": "docs/fighter-replay-state-encoding.md",
+      "sha256": "0308a443176a1485c17aeaff6b350b8319f8bc4243a60d45d593b448abbcf9d5"
+    },
+    {
+      "bytes": 7922,
+      "path": "docs/fighter-target-mechanics-implementation-20261114.md",
+      "sha256": "9a0d4aca7dacfab40b1b4a6b7571aeed9a1e14e80c9cc7eb1fce9b9ed1ef44a7"
+    },
+    {
+      "bytes": 26497,
+      "path": "docs/fighter-target-mechanics-reference-20261114.md",
+      "sha256": "48f58c15d4bf1ca72630457a1925fd9895bcedd0a61b437e8006f8202d605480"
+    },
+    {
+      "bytes": 8720,
+      "path": "scripts/build_fighter_network_rules.py",
+      "sha256": "476eac6003167e61bfabf84376c3b507d48db62e0163671d75c4dbebf97ba010"
+    },
+    {
+      "bytes": 17052,
+      "path": "scripts/prepare_fighter_target_motions.py",
+      "sha256": "6e872d2e6617bc5e5b686eb85886d87518297d3d5098827a9bcd56be2ce22743"
+    },
+    {
+      "bytes": 9700,
+      "path": "scripts/test_prepare_fighter_target_motions.py",
+      "sha256": "19e7d3aa9778b8a79e304479c29d3b513fcedacc50f3d0734d200915d3b6c5fc"
+    }
+  ],
+  "dateBasis": "Session/user task date; compiler log wall-clock dates are retained as emitted, not used to date publication.",
+  "localBranch": "codex/fighter-lab-target-mechanics-20261114",
+  "originalSources": {
+    "decodedArrays": 94,
+    "decodedMotions": 47,
+    "gameplayEnablementPermitted": false,
+    "inventoryFile": "docs/acceptance/fighter-target-source-inventory-20261114.json",
+    "inventorySHA256": "d004e423b9811143e2da3ddf4cc763c83a2ad0e1ab0c5724d496df05ccb65190",
+    "numericRulesRecovered": false,
+    "sourceFrames": 2663,
+    "verifiedModelBundles": 3,
+    "verifiedModelBytes": 3297673
+  },
+  "otherChecks": {
+    "fourAirborneBoundaryIndependentReview": "passed-static-review",
+    "gitDiffCheck": "passed",
+    "nativeChangedSourceSyntaxParse": "passed; syntax-only, not iOS type-check or build"
+  },
+  "publication": {
+    "blockedAction": "git push --dry-run to a new public GitHub branch",
+    "excluded": [
+      "raw original model and motion payloads",
+      "decoded original transforms",
+      "user media",
+      "IPA/configuration payloads",
+      "credentials and encryption keys"
+    ],
+    "proposedExistingWorkflow": ".github/workflows/fighter-lab.yml",
+    "proposedWorkflowMode": "one push-triggered unsigned run; private resource inputs remain false; no release/TestFlight",
+    "pullRequestCreated": false,
+    "remotePushPerformed": false,
+    "reviewBatchContents": [
+      "application/core source",
+      "tests",
+      "source-preparation tooling",
+      "public audit metadata",
+      "documentation"
+    ],
+    "siteChanged": false,
+    "statedReason": "Missing explicit authorization to publish this new branch and its potentially private source.",
+    "status": "blocked-by-automatic-approval-review",
+    "workflowDispatched": false
+  },
+  "python": [
+    {
+      "failures": 0,
+      "result": "passed",
+      "suite": "scripts/test_prepare_fighter_target_motions.py",
+      "tests": 8
+    },
+    {
+      "failures": 0,
+      "result": "passed",
+      "suite": "scripts/test_build_fighter_network_rules.py",
+      "tests": 16
+    }
+  ],
+  "repository": "wuyong9494-lab/kriswu",
+  "schemaVersion": 1,
+  "sitesBaseline": {
+    "lastConfirmedTestFlightBuild": 705,
+    "publishedAt": "2026-11-13T13:24:46Z",
+    "publishedVersion": 11
+  },
+  "sourceIdentity": {
+    "fileCount": 307,
+    "fingerprint": "a7a6a411c990a1084e0de039b82da4a7c5199f95e5bfd9ac21e5109dcc837305",
+    "mode": "source-only; not a native Xcode build fingerprint",
+    "recipe": "fighter-network-rules-v1"
+  },
+  "swift": {
+    "durationSeconds": 137.353,
+    "failures": 0,
+    "filter": "DuelCombatRules|DuelImpactMotion|DuelWeapon|DuelReplayState|DuelNetwork",
+    "logFile": "fighter-core-final.log",
+    "logSHA256": "5a572f25dddc1a6825ab120f386ed0ae603ac626f9ee7824d69bb0f09ea87376",
+    "newRegressionTests": 27,
+    "result": "passed",
+    "scope": "selected tests; complete package compilation required by swift test",
+    "suites": [
+      "DuelCombatRulesTests",
+      "DuelImpactMotionTests",
+      "DuelNetworkCombatWireTests",
+      "DuelNetworkHostSimulationTests",
+      "DuelNetworkInputsTests",
+      "DuelNetworkPulseScheduleTests",
+      "DuelNetworkReplayTests",
+      "DuelNetworkStartBarrierTests",
+      "DuelReplayStateAuditTests",
+      "DuelReplayStateTests",
+      "DuelWeaponComboTests",
+      "DuelWeaponFightTests",
+      "DuelWeaponImpactTests",
+      "DuelWeaponInputTests",
+      "DuelWeaponMotionTests",
+      "DuelWeaponShadowTests",
+      "DuelWeaponSweepContinuityTests"
+    ],
+    "target": "x86_64-unknown-linux-gnu",
+    "tests": 179,
+    "version": "6.0.3"
+  },
+  "toolchainLimitations": [
+    {
+      "outcome": "unchanged APIDiscovery.swift expression at line 315 exceeded compiler type-check budget; unrelated parser not edited",
+      "resolution": "used existing CI-pinned Swift 6.0.3 for final successful selected regression",
+      "version": "6.4.2"
+    }
+  ],
+  "validationDate": "2026-11-14"
+}

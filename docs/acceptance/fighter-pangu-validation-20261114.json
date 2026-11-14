@@ -1,0 +1,300 @@
+{
+  "acceptance": {
+    "iOSBuildRun": false,
+    "physicalDeviceRun": false,
+    "simulatorRun": false,
+    "testFlightUploaded": false,
+    "twoDeviceAcceptance": "not-run"
+  },
+  "baseCommit": "cabc2fc0f9fdf1b97e1d36aa6e37f772424574fa",
+  "changedFilesExcludingThisRecord": [
+    {
+      "bytes": 24450,
+      "path": "App/Services/DuelNetworkCompatibilityIdentity.swift",
+      "sha256": "6027c6f83984d07ad9a8aa72cf856e27267d3c69394723d6f0caf5d589f85384"
+    },
+    {
+      "bytes": 35812,
+      "path": "App/Services/DuelSourceEffects.swift",
+      "sha256": "895155470f6005a27ca5d33d8809354c7d4b5220078ad4f8c5bacd7e28782804"
+    },
+    {
+      "bytes": 37611,
+      "path": "App/Views/DuelNetworkCombatCoordinator.swift",
+      "sha256": "b3c186ad2906e079237813a673da13555d5377d19857da524e825b474172ad9b"
+    },
+    {
+      "bytes": 17772,
+      "path": "App/Views/DuelNetworkRoomView.swift",
+      "sha256": "157313abb7ca8e24ac3dd7d876930da5bdafa46ec6c486c9de4960551be3bdb5"
+    },
+    {
+      "bytes": 9608,
+      "path": "App/Views/DuelTelevision.swift",
+      "sha256": "74282a4a684b9b7f7bd70d4335ae86e7d7cd321f59bcf8a7f3931cc9b6361ed8"
+    },
+    {
+      "bytes": 80490,
+      "path": "App/Views/DuelView.swift",
+      "sha256": "6834320c266503188a496f0f43a4a3189f1302aae3c42d0dc5c105f274ee0f86"
+    },
+    {
+      "bytes": 65865,
+      "path": "App/Views/DuelWorld.swift",
+      "sha256": "163cbcb7c7612268d54a4fb7ee513dce7b2e7a9de6e1e57cb26bc6c2c55b2b3d"
+    },
+    {
+      "bytes": 9658,
+      "path": "Sources/ShiftCore/DuelMultiplayerSelection.swift",
+      "sha256": "948f0906f08362ddd86ee6ab2ff676fe43d249c57f502d4f22af2ca51deff60e"
+    },
+    {
+      "bytes": 5990,
+      "path": "Sources/ShiftCore/DuelNetworkCombatState.swift",
+      "sha256": "c6d1815e8ce1b0903d89e9e5c0acb5381b002e0dd66ab964b909deb35927214d"
+    },
+    {
+      "bytes": 33516,
+      "path": "Sources/ShiftCore/DuelPanguRules.swift",
+      "sha256": "6d8710db60a6e08bf5111f076640662563e30f84c6bc6775a05928763a76b448"
+    },
+    {
+      "bytes": 10301,
+      "path": "Sources/ShiftCore/DuelPanguSpatialState.swift",
+      "sha256": "b557f26d12f5c702130dc2db3666f972547038588060e7d3c8da83f53d562173"
+    },
+    {
+      "bytes": 33680,
+      "path": "Sources/ShiftCore/DuelPanguState.swift",
+      "sha256": "daeff3513869a96531dc2aac5916a62e33e0ef58064bd6e15fa940ccf4caeaa4"
+    },
+    {
+      "bytes": 12585,
+      "path": "Sources/ShiftCore/DuelReplayState.swift",
+      "sha256": "502550bde7ab940dcff63727c7740a9d27ed81c81cba198b9eaae2e5e4dd82fc"
+    },
+    {
+      "bytes": 72023,
+      "path": "Sources/ShiftCore/DuelWeaponFight.swift",
+      "sha256": "7384b63725b698f6a48587341c184972547650f9881ce6ef0294b0914890f60a"
+    },
+    {
+      "bytes": 7780,
+      "path": "Sources/ShiftCore/DuelWeaponInput.swift",
+      "sha256": "5093828c31013d8cc380e90a185b4b1909b3eb44fea1459d5cdfabe1907b5005"
+    },
+    {
+      "bytes": 10294,
+      "path": "Sources/ShiftCore/DuelWeaponMotion.swift",
+      "sha256": "e9045a8a8f56614d34176df02f09cca0d2ca27b02c8cc6cfdc23f0879768372c"
+    },
+    {
+      "bytes": 10817,
+      "path": "Tests/ShiftCoreTests/DuelCombatRulesTests.swift",
+      "sha256": "745e0ae8c6298caa49639ef8a084983fe8335ca04d0179c6a2dd86cd4c73ba30"
+    },
+    {
+      "bytes": 39781,
+      "path": "Tests/ShiftCoreTests/DuelPanguFightTests.swift",
+      "sha256": "a0f6acf900f4ccf8a883221c018a0ad51a47ac53e8144f288de1e1a17abfe345"
+    },
+    {
+      "bytes": 12803,
+      "path": "Tests/ShiftCoreTests/DuelPanguLifecycleTests.swift",
+      "sha256": "3cd69657a30c3340cc75f6a76c89314ae60ceb099a4b06c500842c0f9bb65362"
+    },
+    {
+      "bytes": 7773,
+      "path": "Tests/ShiftCoreTests/DuelPanguNetworkTests.swift",
+      "sha256": "a9e387acdf9a39e18e2bf1e58d736864ab9536e2ae61b9a762cbb1a30c1b8e67"
+    },
+    {
+      "bytes": 30364,
+      "path": "Tests/ShiftCoreTests/DuelPanguStateTests.swift",
+      "sha256": "32f6d10b3619284e8eb719274b5f01bd6ab3d823c9718ebed04444d4d0d8d5dd"
+    },
+    {
+      "bytes": 5496,
+      "path": "Tests/ShiftCoreTests/DuelPanguTestFixture.swift",
+      "sha256": "d51438b1bed7f2f6f525a842f425b52efb9ce6ae5cb9f4c2d51b8eb060a3ed72"
+    },
+    {
+      "bytes": 12388,
+      "path": "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift",
+      "sha256": "59b63c6b2720fe548de87dcf147d62224fe74a9abe643b0f2aa9255eb43edc52"
+    },
+    {
+      "bytes": 16187,
+      "path": "Tests/ShiftCoreTests/DuelReplayStateTests.swift",
+      "sha256": "0771eb3072a1b6dae59204cfc450b7876a9ecef7a1f695d728ecf000326ee25c"
+    },
+    {
+      "bytes": 15826,
+      "path": "Tests/ShiftCoreTests/DuelWeaponInputTests.swift",
+      "sha256": "af7eb0c227c1efc64162666813649d1694c8c884c46819b7a7b6ec8b77731d6b"
+    },
+    {
+      "bytes": 24750,
+      "path": "docs/acceptance/fighter-pangu-source-audit-20261114.json",
+      "sha256": "8ac643255e99ea482c3cc83fcdfdb8407be4e42f0f0f72ab90474ccdb5a2fc9f"
+    },
+    {
+      "bytes": 19742,
+      "path": "docs/fighter-pangu-implementation-20261114.md",
+      "sha256": "352b205e5d87cc0124951225e3d0bcd0f6c3c7694d4f966c78912b7870b3ba65"
+    },
+    {
+      "bytes": 30894,
+      "path": "docs/fighter-pangu-mechanics-reference-20261114.md",
+      "sha256": "3c51b835f42d9358d6614bf5c489858cf0e01ff28fde24e2cf21371448ed16d9"
+    },
+    {
+      "bytes": 24171,
+      "path": "docs/fighter-replay-state-encoding.md",
+      "sha256": "2e8c5180393d3919211b3cb2d53a99907a923487cb4b0a32e3cf18c913be8113"
+    },
+    {
+      "bytes": 8865,
+      "path": "scripts/build_fighter_network_rules.py",
+      "sha256": "7311bb42b0d73d797cf3e8a29c75e52660739e940c126a069a693cce24b72fc4"
+    }
+  ],
+  "commitReference": "This record belongs to its containing local commit; exact commit is in the review README.",
+  "dateBasis": "Session/user task date; compiler log wall-clock timestamps are retained as emitted.",
+  "localBranch": "codex/fighter-lab-target-mechanics-20261114",
+  "originalSources": {
+    "completeOriginalGameParity": false,
+    "currentAPKBytes": 263976910,
+    "currentAPKRangeBytesRead": 1915989,
+    "currentClientVersion": "1.46.2",
+    "currentClientVersionCode": 19226,
+    "fullThrowEscapeSequenceImplemented": false,
+    "inventoryFile": "docs/acceptance/fighter-pangu-source-audit-20261114.json",
+    "inventorySHA256": "8ac643255e99ea482c3cc83fcdfdb8407be4e42f0f0f72ab90474ccdb5a2fc9f",
+    "productionPanguCatalogEnabled": false,
+    "remainingInputs": [
+      "current readable downloaded-resource manifest and bundle identities",
+      "Pangu model, specialized motion, FX and audio bundles with verified bindings",
+      "current readable ability event/parameter table or authorized equivalent evidence"
+    ],
+    "resourceManagerEntries": 1127,
+    "retailNumericRulesRecovered": false,
+    "sourceFXAndAudioComplete": false,
+    "syntheticTuningLocation": "Tests/ShiftCoreTests only; no production defaults or hammer-as-Pangu replacement",
+    "targetModelAndMotionBindingRecovered": false,
+    "verifiedMetadataMembers": 7,
+    "zipDirectoryEntries": 3117
+  },
+  "otherChecks": {
+    "gitDiffCheck": "passed",
+    "independentSemanticReview": "Completed; fixed L6 fixed-duration reduction, pending-wind cancellation, landing-wind origin, contact anchor and live-clock boundaries.",
+    "nativeChangedSourceSyntaxParse": "passed; seven changed native files, syntax only, no SDK type-check",
+    "nativeStaticReview": "No definite type/access issue found; not equivalent to Xcode compilation."
+  },
+  "previousRemoteBaseCommit": "0d83323a5463b9f3feb57cc00532da2ade5a5c48",
+  "publication": {
+    "excludedFromReviewPackage": [
+      "raw model/motion payloads",
+      "user photos or media",
+      "IPA/APK/archive bytes",
+      "temporary download URLs",
+      "credentials or encryption keys"
+    ],
+    "priorBlockedAction": "git push --dry-run to a new public GitHub branch",
+    "priorStatedReason": "Missing explicit authorization to publish the new branch and potentially private source.",
+    "pullRequestCreated": false,
+    "remotePushPerformed": false,
+    "retiredVideoRoute": "Automatic approval rejected a 20-58 second 720p public reference clip download for potential large-download scope; no alternative client or bypass retry.",
+    "siteChanged": false,
+    "status": "local-only; prior automatic approval rejection remains unresolved",
+    "testFlightUploaded": false,
+    "workflowDispatched": false
+  },
+  "python": {
+    "failures": 0,
+    "logFile": "pangu-manifest-tests.log",
+    "logSHA256": "f648ccfa1cf7e3be04bdfce7328375091d31e9e5596a6f70aef3e185b12a47f1",
+    "result": "passed",
+    "suite": "scripts/test_build_fighter_network_rules.py",
+    "tests": 16
+  },
+  "repository": "wuyong9494-lab/kriswu",
+  "schemaVersion": 1,
+  "simulation": {
+    "inputWireLayoutChanged": false,
+    "replaySchemaVersion": 4,
+    "rulesVersion": 8
+  },
+  "sitesBaseline": {
+    "lastPreviouslyConfirmedTestFlightBuild": 705,
+    "latestVersionNumber": 11,
+    "projectID": "appgprj_6af12e6cdf508191a5e3826cfe8d115f",
+    "readAgainThisTurn": true,
+    "siteChanged": false,
+    "updatedAt": "2026-11-13T13:24:46.127454+00:00",
+    "url": "https://rift-duel-review.wuyong21.chatgpt.site"
+  },
+  "sourceIdentity": {
+    "fileCount": 310,
+    "fingerprint": "36355624777e33efb85805f4d3dd421aaba3cf2729e473a587fe209dd3ecc8e3",
+    "mode": "public-source-only; not an Xcode build fingerprint",
+    "recipe": "fighter-network-rules-v1"
+  },
+  "swift": {
+    "durationSeconds": 158.532,
+    "failures": 0,
+    "filter": "DuelCombatRules|DuelImpactMotion|DuelWeapon|DuelReplayState|DuelNetwork|DuelPangu|DuelMultiplayer",
+    "logFile": "pangu-final-regression.log",
+    "logSHA256": "fa52d5616401400b4ba16e760423c4a1469df6d13b0158cba2249a8434271923",
+    "newRegressionTestsSinceBase": 53,
+    "panguSpecificTests": 51,
+    "result": "passed",
+    "scope": "Selected relevant suites; SwiftPM compiles the complete package. Not an iOS build.",
+    "suites": [
+      "DuelCombatRulesTests",
+      "DuelImpactMotionTests",
+      "DuelMultiplayerReplicaTests",
+      "DuelMultiplayerSelectionTests",
+      "DuelNetworkCombatWireTests",
+      "DuelNetworkHostSimulationTests",
+      "DuelNetworkInputsTests",
+      "DuelNetworkPulseScheduleTests",
+      "DuelNetworkReplayTests",
+      "DuelNetworkStartBarrierTests",
+      "DuelPanguFightTests",
+      "DuelPanguLifecycleTests",
+      "DuelPanguNetworkTests",
+      "DuelPanguStateTests",
+      "DuelReplayStateAuditTests",
+      "DuelReplayStateTests",
+      "DuelWeaponComboTests",
+      "DuelWeaponFightTests",
+      "DuelWeaponImpactTests",
+      "DuelWeaponInputTests",
+      "DuelWeaponMotionTests",
+      "DuelWeaponShadowTests",
+      "DuelWeaponSweepContinuityTests"
+    ],
+    "target": "x86_64-unknown-linux-gnu",
+    "tests": 254,
+    "version": "6.0.3"
+  },
+  "validationDate": "2026-11-14",
+  "verifiedBehavior": [
+    "L1-L6 configured resource/ability state and integer Light absorption",
+    "relative directional abilities, captured input edge and ranged charges",
+    "Rhythm spear empowerment snapshots, actual single contact and pinning",
+    "separate L4/L6 fixed cooldown reductions and explicit Typhoon precedence",
+    "real ascent, apex hold, descent, ground landing and hard interruption",
+    "Earth own-jump eligibility and contact-anchored rock secondary damage",
+    "same-tick grounded Heavenfall slam and generated landing wind",
+    "cancel scheduled/unreleased attacks after knockdown or hard interruption",
+    "attack-speed microsteps preserve one-tick strike windows and hit-stop",
+    "explicit combo-anchor contact resolves before stage transition",
+    "seeded Trance, bounded pending attacks and complete canonical state audit",
+    "distinct Pangu multiplayer identity; actual host wire replay in both seats",
+    "configured health at spawn, practice KO and round reset",
+    "application timeout rule compares remaining health fractions exactly",
+    "legacy catalog remains on its original weapons and mechanics"
+  ]
+}

@@ -28,7 +28,7 @@ final class DuelSourceEffects: NSObject {
     enum Kind: String { case hit, block }
     /// Weapon-family labels are verified source audio directories. They do
     /// not claim recovered original event IDs or heavy/light selection rules.
-    enum SoundFamily { case unarmed, katana, dualHammers }
+    enum SoundFamily { case unarmed, katana, dualHammers, pangu, silent }
     enum Failure: Error { case missing, manifest, resource(String), audioPreparation(String) }
 
     struct Contact {
@@ -57,6 +57,147 @@ final class DuelSourceEffects: NSObject {
         let name: String
         let bytes: Int
         let sha256: String
+    }
+    /// A separately pinned target pack. Its profile/model identity must match
+    /// the catalog authenticated by the signed fighter release. No legacy audio
+    /// category, sample count or hammer filename is inferred for this profile.
+    struct PanguAudioBinding {
+        fileprivate enum EventKind: String, Decodable {
+            case castStarted, castPhase, attackReleased, contact, teleported, landed, ordinaryThrowEscaped
+        }
+        fileprivate struct Cue: Decodable {
+            let id: String
+            let event: EventKind
+            let ability: DuelPanguRules.Ability?
+            let phase: DuelPanguState.Phase?
+            let contactKind: String?
+            let generated: Bool?
+            let empowered: Bool?
+            let files: [String]
+            var category: String { "panguCue:" + id }
+            var key: String {
+                [event.rawValue, ability?.rawValue ?? "", phase?.rawValue ?? "", contactKind ?? "",
+                 generated.map { $0 ? "true" : "false" } ?? "",
+                 empowered.map { $0 ? "true" : "false" } ?? ""].joined(separator: ":")
+            }
+
+            func matches(_ kind: DuelPanguPresentation.Event.Kind) -> Bool {
+                switch (event, kind) {
+                case (.castStarted, .castStarted(let cast)):
+                    return ability == cast.ability && phase == cast.phase
+                case (.castPhase, .castPhase(_, let ability, let phase)):
+                    return self.ability == ability && self.phase == phase
+                case (.attackReleased, .attackReleased(let volume)):
+                    return ability == volume.ability && generated == volume.generated && empowered == volume.empowered
+                case (.contact, .contact(let contact)):
+                    // Ordinary contacts already own panguHit/panguBlock in
+                    // consumeStep. A nil ability here only binds a generated
+                    // attack that still has an accepted attack ID.
+                    return contact.attackID != nil && ability == contact.ability && contactKind == contact.kind.rawValue &&
+                        generated == contact.generated && empowered == contact.empowered
+                case (.teleported, .teleported(_, _, _)), (.landed, .landed(_, _)),
+                     (.ordinaryThrowEscaped, .ordinaryThrowEscaped(_, _, _)):
+                    return true
+                default: return false
+                }
+            }
+        }
+        private struct Document: Decodable {
+            let version: Int
+            let profileID: String
+            let characterSHA256: String
+            let files: [SourceFile]
+            let audio: [String: [String]]
+            let cues: [Cue]?
+        }
+        let profileID: String
+        let characterSHA256: String
+        /// Basenames relative to the manifest directory, including its own pin.
+        let verifiedFiles: [DuelNetworkContentRecord]
+        fileprivate let audio: [String: [Data]]
+        fileprivate let cues: [Cue]
+
+        private init(profileID: String, characterSHA256: String,
+                     verifiedFiles: [DuelNetworkContentRecord], audio: [String: [Data]], cues: [Cue]) {
+            self.profileID = profileID; self.characterSHA256 = characterSHA256
+            self.verifiedFiles = verifiedFiles; self.audio = audio; self.cues = cues
+        }
+
+        static func load(directory: URL, manifestName: String, expectedSHA256: String,
+                         profile: DuelWeaponProfile) throws -> Self {
+            func validName(_ name: String, suffix: String) -> Bool {
+                name.hasSuffix(suffix) && name.utf8.count <= 160 &&
+                    name.range(of: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9]+$", options: .regularExpression) != nil
+            }
+            func read(_ name: String, maximum: Int, expectedBytes: Int? = nil, digest: String) throws -> Data {
+                guard DuelNetworkContentRecord.validDigest(digest) else { throw Failure.manifest }
+                let url = directory.appendingPathComponent(name)
+                let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                guard values.isRegularFile == true, values.isSymbolicLink != true,
+                      let count = values.fileSize, (1...maximum).contains(count),
+                      expectedBytes.map({ $0 == count }) ?? true else { throw Failure.resource(name) }
+                // Keep independent bytes after the signed directory has been
+                // verified; media-service recovery must not reopen its files.
+                let data = try Data(contentsOf: url)
+                guard data.count == count, DuelNetworkContentRecord.digest(data) == digest else {
+                    throw Failure.resource(name)
+                }
+                return data
+            }
+            guard profile.isPangu, profile.hero == .liu,
+                  DuelNetworkContentRecord.validDigest(profile.sha256),
+                  validName(manifestName, suffix: ".json") else { throw Failure.manifest }
+            let data = try read(manifestName, maximum: 256_000, digest: expectedSHA256)
+            let document = try JSONDecoder().decode(Document.self, from: data)
+            let categories: Set<String> = ["panguHit", "panguBlock", "panguWhoosh"]
+            let cues = document.cues ?? []
+            guard cues.count <= 64, Set(cues.map(\.id)).count == cues.count,
+                  Set(cues.map(\.key)).count == cues.count else { throw Failure.manifest }
+            for cue in cues {
+                guard cue.id.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil,
+                      (1...16).contains(cue.files.count), Set(cue.files).count == cue.files.count else { throw Failure.manifest }
+                switch cue.event {
+                case .castStarted, .castPhase:
+                    guard cue.ability != nil, cue.phase != nil, cue.contactKind == nil,
+                          cue.generated == nil, cue.empowered == nil else { throw Failure.manifest }
+                case .attackReleased:
+                    guard cue.phase == nil, cue.contactKind == nil,
+                          cue.generated != nil, cue.empowered != nil else { throw Failure.manifest }
+                case .contact:
+                    guard cue.phase == nil, cue.contactKind == "hit" || cue.contactKind == "block",
+                          cue.generated != nil, cue.empowered != nil else { throw Failure.manifest }
+                case .teleported, .landed, .ordinaryThrowEscaped:
+                    // These accepted core events carry no ability/phase field.
+                    // A guessed filter must not silently bind to every event.
+                    guard cue.ability == nil, cue.phase == nil, cue.contactKind == nil,
+                          cue.generated == nil, cue.empowered == nil else { throw Failure.manifest }
+                }
+            }
+            let references = document.audio.values.flatMap { $0 } + cues.flatMap(\.files)
+            guard document.version == 1, document.profileID == profile.id,
+                  document.characterSHA256 == profile.sha256,
+                  Set(document.audio.keys) == categories,
+                  document.audio.values.allSatisfy({ (1...16).contains($0.count) && Set($0).count == $0.count }),
+                  (1...48).contains(document.files.count),
+                  Set(document.files.map(\.name)).count == document.files.count,
+                  Set(references) == Set(document.files.map(\.name)) else { throw Failure.manifest }
+            var bytes: [String: Data] = [:]
+            var records = [DuelNetworkContentRecord(path: manifestName, bytes: data.count, sha256: expectedSHA256)]
+            var total = 0
+            for file in document.files {
+                guard validName(file.name, suffix: ".wav"), (1...4_000_000).contains(file.bytes) else { throw Failure.manifest }
+                total += file.bytes
+                guard total <= 16_000_000 else { throw Failure.manifest }
+                bytes[file.name] = try read(file.name, maximum: 4_000_000,
+                                            expectedBytes: file.bytes, digest: file.sha256)
+                records.append(.init(path: file.name, bytes: file.bytes, sha256: file.sha256))
+            }
+            var audio: [String: [Data]] = [:]
+            for category in categories { audio[category] = document.audio[category]!.map { bytes[$0]! } }
+            for cue in cues { audio[cue.category] = cue.files.map { bytes[$0]! } }
+            return Self(profileID: document.profileID, characterSHA256: document.characterSHA256,
+                        verifiedFiles: records.sorted { $0.path < $1.path }, audio: audio, cues: cues)
+        }
     }
     private struct Manifest: Decodable {
         let version: Int
@@ -148,6 +289,9 @@ final class DuelSourceEffects: NSObject {
     private(set) var sampledFrameCount = 0
     #endif
     private var lastLiuShadowTick: Int?
+    private var panguCues: [PanguAudioBinding.Cue] = []
+    private var lastPanguFrame: Int?
+    private var consumedPanguEvents: Set<DuelPanguPresentation.EventID> = []
     private var paused = false
     private var ended = false
     private(set) var emittedHits = 0
@@ -181,6 +325,7 @@ final class DuelSourceEffects: NSObject {
     }
 
     init(root: SCNNode, directory: URL? = nil, bundle: Bundle = .main,
+         panguAudio: PanguAudioBinding? = nil,
          center: NotificationCenter = .default,
          makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) throws {
         self.root = root; self.center = center; self.makePlayer = makePlayer
@@ -268,6 +413,10 @@ final class DuelSourceEffects: NSObject {
         if let callout = try DuelPresentationAssets.verifiedVoice(directory: base) {
             audioBytes["liuShadow"] = [callout]
         }
+        if let panguAudio {
+            audioBytes.merge(panguAudio.audio) { _, authored in authored }
+            panguCues = panguAudio.cues
+        }
         players = try buildPlayers(requirePreparation: false)
         manifest = definition
         // Single-player does not enter the network renderer preparation path.
@@ -284,7 +433,13 @@ final class DuelSourceEffects: NSObject {
         for category in audioBytes.keys.sorted() {
             rebuilt[category] = try audioBytes[category]!.map { bytes in
                 let player = try makePlayer(bytes)
-                guard player.duration > 0, player.duration < 2 else { throw Failure.resource(category) }
+                // The legacy short-effect budget is unchanged. The target pack
+                // has its own bounded bytes; do not infer its original duration
+                // from the older hammer audio. This is a decoder/resource bound.
+                let maximumDuration: TimeInterval = category.hasPrefix("pangu") ? 30 : 2
+                guard player.duration.isFinite, player.duration > 0, player.duration < maximumDuration else {
+                    throw Failure.resource(category)
+                }
                 if !player.prepareToPlay() {
                     // Initial loading historically accepts a decoded, verified
                     // clip even when the shared audio service cannot prepare it
@@ -389,9 +544,21 @@ final class DuelSourceEffects: NSObject {
         DuelSourceEffects(preparationFixtureRoot: root)
     }
 
-    private init(preparationFixtureRoot root: SCNNode) {
+    /// The same verified target loader feeds synthetic native playback tests.
+    /// This does not authenticate source artwork or claim original assets.
+    static func panguAudioFixture(root: SCNNode, binding: PanguAudioBinding,
+                                  makePlayer: @escaping (Data) throws -> DuelEffectPlayback) throws -> DuelSourceEffects {
+        let effects = DuelSourceEffects(preparationFixtureRoot: root, makePlayer: makePlayer)
+        effects.audioBytes = binding.audio
+        effects.panguCues = binding.cues
+        effects.players = try effects.buildPlayers(requirePreparation: false)
+        return effects
+    }
+
+    private init(preparationFixtureRoot root: SCNNode,
+                 makePlayer: @escaping (Data) throws -> DuelEffectPlayback = { try AVAudioPlayer(data: $0) }) {
         self.root = root; center = .default
-        makePlayer = { try AVAudioPlayer(data: $0) }
+        self.makePlayer = makePlayer
         super.init()
         let texture = "synthetic-preparation"
         textures[texture] = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
@@ -523,6 +690,28 @@ final class DuelSourceEffects: NSObject {
         advance(to: animationTick)
     }
 
+    /// Consume accepted fixed-step events, never draw callbacks or guessed cast
+    /// timings. A missing cue remains silent. The current frame's bounded ID set
+    /// allows incremental calls without losing another sequence at the same tick.
+    func consumePangu(events: [DuelPanguPresentation.Event], frame: Int, fighting: Bool) {
+        guard !ended, !paused, frame >= 0 else { return }
+        if let lastPanguFrame, frame < lastPanguFrame { return }
+        if lastPanguFrame != frame {
+            lastPanguFrame = frame; consumedPanguEvents.removeAll(keepingCapacity: true)
+        }
+        // A finishing hit emits accepted events before resolveRound changes the
+        // phase to roundBreak/matchOver. Preserve that last step and its IDs;
+        // later empty break steps advance the frame fence instead of resetting
+        // it and allowing the finishing sound to replay.
+        guard fighting || !events.isEmpty else { return }
+        for event in events.prefix(DuelPanguPresentation.maximumEventsPerStep) {
+            guard event.id.frame == frame,
+                  (0..<DuelPanguPresentation.maximumEventsPerStep).contains(event.id.sequence),
+                  event.liveTick >= 0, consumedPanguEvents.insert(event.id).inserted else { continue }
+            for cue in panguCues where cue.matches(event.kind) { play(cue.category) }
+        }
+    }
+
     /// Lower-level birth event. `tick` is the visual clock at the start of the
     /// step resolving contact. Call advance with its post-step clock before
     /// drawing, or use consumeStep to perform both operations together.
@@ -547,6 +736,8 @@ final class DuelSourceEffects: NSObject {
         case .unarmed: play(kind == .block ? "block" : heavy ? "heavyHit" : "hit")
         case .katana: play(kind == .block ? "katanaBlock" : "katanaHit")
         case .dualHammers: play(kind == .block ? "hammerBlock" : "hammerHit")
+        case .pangu: play(kind == .block ? "panguBlock" : "panguHit")
+        case .silent: break
         }
     }
 
@@ -560,6 +751,11 @@ final class DuelSourceEffects: NSObject {
         // No hammer-specific source whoosh was verified. Do not substitute a
         // fist sound or label a generic medium-weapon sound as original here.
         case .dualHammers: break
+        case .pangu:
+            // A target manifest must supply its own verified audio. Missing
+            // Pangu assets must never silently select the old hammer sounds.
+            play("panguWhoosh"); return
+        case .silent: break
         }
     }
 
@@ -627,6 +823,7 @@ final class DuelSourceEffects: NSObject {
         playedSoundCategories.removeAll()
         for group in players.values { for player in group { player.stop(); player.currentTime = 0 } }
         pausedPlayers.removeAll(); soundCursor.removeAll()
+        lastPanguFrame = nil; consumedPanguEvents.removeAll(keepingCapacity: true)
     }
 
     func shutdown() {
@@ -634,7 +831,8 @@ final class DuelSourceEffects: NSObject {
         reset(); ended = true; center.removeObserver(self)
         audioStatus = .stopped
         preparationTemplates.removeAll(); availableBursts.removeAll()
-        players.removeAll(); audioBytes.removeAll(); textures.removeAll(); manifest = nil
+        players.removeAll(); audioBytes.removeAll(); panguCues.removeAll()
+        textures.removeAll(); manifest = nil
     }
 
     private func play(_ category: String) {

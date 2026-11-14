@@ -164,10 +164,10 @@ final class DuelReplayStateTests: XCTestCase {
     }
 
 
-    func testInitialGameGoldenPinsTheCompleteVersionTwoFieldOrder() throws {
+    func testInitialGameGoldenPinsTheCompleteFieldOrder() throws {
         // Independent signed-64/little-endian reference fixture, not JSON or a Swift hash.
         let hex = [
-            "4455454c5354415402000600010000000200000000ac0d00000000000000000000000000000000000000000000010000",
+            "4455454c5354415406000a00010000000200000000ac0d00000000000000000000000000000000000000000000010000",
             "0000000000e803000000000000e803000000000000640000000000000000000000000000000000000000000000000000",
             "000000000000000000000000000000000000000000000000000164190000000000000000000000000000000000000000",
             "0000ffffffffffffffffe803000000000000e80300000000000064000000000000000000000000000000000000000000",
@@ -186,9 +186,13 @@ final class DuelReplayStateTests: XCTestCase {
         let game = DuelGame(weaponCatalog: catalog)
         // Measured by an independent schema-size calculation, also pinned here.
         XCTAssertEqual(try Encoding.encode(DuelGame()).count, 381)
-        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_388)
-        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 65_849)
-        XCTAssertEqual(try Encoding.encode(game).count, 66_298)
+        // Schema 4 added two nil Pangu-profile markers, the two optional
+        // runtime states (6 bytes), and the 232-byte empty spatial state.
+        // Schema 6 adds two nil throw-profile markers, a two-entry nil state
+        // array (6 bytes), and two explicit knockdown clocks (20 bytes).
+        XCTAssertEqual(try Encoding.encodeCatalog(catalog).count, 65_394)
+        XCTAssertEqual(try Encoding.encode(XCTUnwrap(game.weaponFight)).count, 66_165)
+        XCTAssertEqual(try Encoding.encode(game).count, 66_614)
     }
 
     func testCanonicalScalarsHaveFixedGoldenByteOrderAndLengths() throws {
@@ -197,7 +201,7 @@ final class DuelReplayStateTests: XCTestCase {
         try writer.string("é"); try writer.optional(nil as Int?) { try $0.int($1) }
         try writer.optional(7) { try $0.int($1) }
         XCTAssertEqual(Array(writer.data), [
-            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 2, 0, 6, 0, 1,
+            0x44, 0x55, 0x45, 0x4c, 0x53, 0x54, 0x41, 0x54, 6, 0, 10, 0, 1,
             0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
             0, 0, 0, 0, 0, 0, 0xd0, 0x3f,

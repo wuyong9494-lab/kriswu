@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "baselineCommit": "d240abe471cc9d4bdd70a1287d7856cb855525e8",
+  "previousReviewCommit": "264a11abbcb77a2efb410a8e9cdf719c2bd2d21a",
+  "commitReference": "Containing commit of this record; exact commit is in the review README.",
+  "scope": "Exact rational Heavenfall Light, configurable combo grant phase and explicit additive attack-speed policy.",
+  "swift": {
+    "version": "6.0.3",
+    "platform": "x86_64-unknown-linux-gnu",
+    "filter": "DuelPangu|DuelReplayState|DuelNetwork|DuelMultiplayer",
+    "tests": 165,
+    "failures": 0,
+    "durationSeconds": 59.383,
+    "logFile": "pangu-precision-regression.log",
+    "logSHA256": "6decdb34aa0e73b7dcfca76cd8288f241c08a288cfcea6c8d038f9451dd7ccad",
+    "passedSuites": [
+      "DuelMultiplayerReplicaTests",
+      "DuelMultiplayerSelectionTests",
+      "DuelNetworkCombatWireTests",
+      "DuelNetworkHostSimulationTests",
+      "DuelNetworkInputsTests",
+      "DuelNetworkPulseScheduleTests",
+      "DuelNetworkReplayTests",
+      "DuelNetworkStartBarrierTests",
+      "DuelPanguFightTests",
+      "DuelPanguLifecycleTests",
+      "DuelPanguNetworkTests",
+      "DuelPanguPrecisionTests",
+      "DuelPanguPresentationTests",
+      "DuelPanguStateTests",
+      "DuelReplayStateAuditTests",
+      "DuelReplayStateTests"
+    ],
+    "note": "Synthetic rules and motion fixtures validate implementation, not retail asset or numeric parity."
+  },
+  "reusedChecks": {
+    "nativeSyntax": "Six native files passed syntax parsing in d240abe; no native source changed in this precision step.",
+    "nativeLog": "pangu-presentation-native-syntax.log",
+    "nativeLogSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pythonGenerator": "16 tests passed in d240abe; generator and required source path sets unchanged in precision step.",
+    "pythonLog": "pangu-presentation-manifest-tests.log",
+    "pythonLogSHA256": "14b9bef6a9cb4ed11d6586d17b58dbc3479dc529a4e7a13e5a9a06ce7a928d52",
+    "previousPresentationRegression": "75 tests passed in d240abe; final selected suites include these cases again."
+  },
+  "simulation": {
+    "schemaVersion": 5,
+    "rulesVersion": 9,
+    "rationalCarryEncoded": true,
+    "legacyOptionalDefaultsRetained": true,
+    "presentationEventsExcludedFromCanonicalBytes": true
+  },
+  "sourceIdentity": {
+    "fileCount": 313,
+    "fingerprint": "432e18e133a244c0a2447fca4dcb680d9f1fb17ad329c8bee5db0d8058ec64b4",
+    "recipe": "fighter-network-rules-v1",
+    "buildMode": "source-only"
+  },
+  "publicEvidence": {
+    "verifiedUIFields": 38,
+    "numericFields": 33,
+    "unverifiedFields": 14,
+    "sourceVideoPublishedAt": "2026-08-31T06:15:07-07:00",
+    "clientBuildKnown": false,
+    "currentNovemberParityAssumed": false,
+    "videoResponseBytes": 3057608,
+    "completeVideoDownloaded": false
+  },
+  "originalParity": {
+    "productionPanguCatalogEnabled": false,
+    "fullRetailParametersRecovered": false,
+    "sourceModelMotionFXAudioComplete": false,
+    "fullThrowEscapeSequenceImplemented": false,
+    "defenseFormulaRecovered": false,
+    "completeOriginalGameParity": false
+  },
+  "publication": {
+    "localOnly": true,
+    "remotePush": false,
+    "pullRequestCreated": false,
+    "workflowRun": false,
+    "sitesWritten": false,
+    "iOSBuild": false,
+    "deviceRun": false,
+    "testFlightUploaded": false,
+    "previousPushApprovalRejectionBypassed": false
+  },
+  "logClockNote": "Log timestamps are retained as emitted; document date follows the user task date.",
+  "changedFilesExcludingThisRecord": [
+    {
+      "path": "Sources/ShiftCore/DuelPanguRules.swift",
+      "bytes": 36294,
+      "sha256": "afb49414dda300a65c36e17d2d95281a9102b30388f69948da62e56a1a20a4c9"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelPanguState.swift",
+      "bytes": 35668,
+      "sha256": "1d0884d5d9f2c0dc79896d1ff6ec0cf73c23ab44bd47c52f63a915fb65a252da"
+    },
+    {
+      "path": "Sources/ShiftCore/DuelReplayState.swift",
+      "bytes": 12585,
+      "sha256": "d80b423cc0b13f21b228aef9db70d9f423fa77f8d6bed06f5580d9220c86c117"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelPanguNetworkTests.swift",
+      "bytes": 8197,
+      "sha256": "01572ba11862192e51080af8f5703b19dc1b94a4de21bbfb0dc5c5921cbe280f"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelPanguPrecisionTests.swift",
+      "bytes": 19019,
+      "sha256": "8b6504ae5d6e5a699fc29229fd167a9dc7508eaacd281414edca72330efe567d"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelPanguStateTests.swift",
+      "bytes": 30452,
+      "sha256": "071c51f81d569c484da69c5b3935d815ba5e75f6f7b890a8b55a2523368fe236"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelReplayStateAuditTests.swift",
+      "bytes": 13541,
+      "sha256": "d82ef04bea771ec1b7a94d959fa8528d6756a18cee1e771d42dcb085125c9f37"
+    },
+    {
+      "path": "Tests/ShiftCoreTests/DuelReplayStateTests.swift",
+      "bytes": 16249,
+      "sha256": "90ead9a1ea880cf678bff120d5522d87132f662c8516abd94b539061fd873038"
+    },
+    {
+      "path": "docs/fighter-pangu-precision-followup-20261114.md",
+      "bytes": 5609,
+      "sha256": "5e7d8d7f7850e3663e4d4d5548a518ba8508df4313b6a28a9e36d5bd3ad96f5b"
+    },
+    {
+      "path": "docs/fighter-pangu-presentation-followup-20261114.md",
+      "bytes": 6149,
+      "sha256": "3fc28aacf71e62bf7ffb9e77c239c19c151c08be53253ba9f1e39bda568bac3c"
+    },
+    {
+      "path": "docs/fighter-replay-state-encoding.md",
+      "bytes": 28721,
+      "sha256": "d51ab48e0b295af8f6cf505849e77e57684996a0cf2ddd6644cb4d4f59d450e0"
+    }
+  ]
+}

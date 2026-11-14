@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-14",
+  "baselineCommit": "264a11abbcb77a2efb410a8e9cdf719c2bd2d21a",
+  "purpose": "继续查找公开可用的盘古原始资源；本记录补充新证据，不重写上一轮历史审计。",
+  "previousAudit": {
+    "path": "docs/acceptance/fighter-pangu-source-audit-20261114.json",
+    "bytes": 24750,
+    "sha256": "8ac643255e99ea482c3cc83fcdfdb8407be4e42f0f0f72ab90474ccdb5a2fc9f",
+    "modifiedByThisFollowup": false
+  },
+  "summary": {
+    "newCommunitySearchMappingRecovered": true,
+    "panguSearchNames": [
+      "helm__agl_48",
+      "arm__agl_48",
+      "D19_ultimate"
+    ],
+    "mappingEvidenceTier": "原作者公开维护的第三方资源检索表；不是游戏官方动态资源清单。",
+    "newOriginalPanguModelBytesRecovered": false,
+    "newOriginalPanguMotionBytesRecovered": false,
+    "newOriginalPanguFXBytesRecovered": false,
+    "currentDynamicResourceManifestURLRecovered": false,
+    "originalSetToBundleBindingConfirmed": false,
+    "originalDamageHealthContactTimingRecovered": false,
+    "allPossiblePublicSourcesExhausted": false,
+    "interpretation": "新增 AGL48/D19 检索线索可缩小后续查找范围。表中没有具体 bundle 路径、摘要或下载地址，不能据此把盘古素材或参数标为已恢复。"
+  },
+  "scope": {
+    "publicSourceReadsOnly": true,
+    "remoteWritesPerformed": false,
+    "fullInstallationPackageDownloaded": false,
+    "previousIPAOrPreviouslyInspectedAPKMembersDownloadedAgain": false,
+    "newlyAuthorizedAPKMember": "assets/bin/Data/Managed/Metadata/global-metadata.dat",
+    "nativeLibrariesRead": false,
+    "encryptedConfigurationDecrypted": false,
+    "accessControlsOrEncryptionModified": false,
+    "unobservedEndpointsGuessedOrCalled": false,
+    "deniedRequestsRetried": false,
+    "rawBinaryOrFullSourceDataIncludedInRepository": false,
+    "userUploadRequiredToContinue": false
+  },
+  "publicAuthorSearchIndex": {
+    "repository": "https://github.com/sadisticblooper/Unityfs-Searcher",
+    "sourcePage": "https://github.com/sadisticblooper/Unityfs-Searcher/blob/main/unityfs%20searcher%203.6%20.py",
+    "sourceBlobAPI": "https://api.github.com/repos/sadisticblooper/Unityfs-Searcher/git/blobs/1c2d93a4575cb30654e15669e69b2feb49408df3",
+    "sourceGitBlobSHA1": "1c2d93a4575cb30654e15669e69b2feb49408df3",
+    "sourceFile": {
+      "bytes": 18522,
+      "sha256": "9d5dbd9729018eca01b1c3ce4ce25a4a3dc1685074bd304aad064b69c7274f33"
+    },
+    "repositoryTreeSHA1": "24e36b1577ba1f087332d650a1a08b6f96e2d62d",
+    "treeSHAIsCommitSHA": false,
+    "repositoryPushedAtUTC": "2025-12-04T13:45:43Z",
+    "repositoryUpdatedAtUTC": "2026-10-24T08:40:09Z",
+    "sourceExecuted": false,
+    "behavior": "源码从公开 CSV 加载检索名称，并检索使用者已有的本地 UnityFS 文件；它不提供原始游戏 bundle 下载。",
+    "setTable": {
+      "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS93_FlKEXvd0Ng--g6SnnRe2hKuO3dVg343ugrEfLmczkKuuQOVwM5gqjk7PiniVfo03vLFuGkCMq6/pub?gid=241641798&single=true&output=csv",
+      "httpStatus": 200,
+      "contentType": "text/csv; charset=utf-8",
+      "bytes": 3611,
+      "sha256": "f85e9afab4e706a1acb496c5d1ee0a427e44562f407c7d50ca602a20a35d4ed3",
+      "rowsIncludingHeader": 61,
+      "header": [
+        "Set Name",
+        "helm",
+        "armour ",
+        "wpn",
+        "rng",
+        "animation",
+        "Boss Head"
+      ],
+      "targetRow": {
+        "rowNumberIncludingHeader": 60,
+        "setName": "Pangu",
+        "helmetSearchString": "helm__agl_48",
+        "armorSearchString": "arm__agl_48",
+        "weaponSearchString": null,
+        "rangedSearchString": null,
+        "animationSearchString": "D19_ultimate",
+        "bossHeadSearchString": null
+      },
+      "separateRow": {
+        "rowNumberIncludingHeader": 61,
+        "setName": "Founder",
+        "helmetSearchString": "helm__agl_49",
+        "armorSearchString": "arm__agl_49",
+        "weaponSearchString": null,
+        "rangedSearchString": null,
+        "animationSearchString": "D20_ultimate_imperor"
+      },
+      "emptyColumnsAreEvidenceOfMissingMapping": true,
+      "containsTargetBundlePathOrHashOrURL": false,
+      "containsOriginalCombatRules": false,
+      "dataDateInference": "CSV 可以独立于仓库源码更新，不能用仓库最后 push 日期推定此行的加入日期。"
+    },
+    "miscTable": {
+      "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS93_FlKEXvd0Ng--g6SnnRe2hKuO3dVg343ugrEfLmczkKuuQOVwM5gqjk7PiniVfo03vLFuGkCMq6/pub?gid=1855152004&single=true&output=csv",
+      "httpStatus": 200,
+      "bytes": 1023,
+      "sha256": "18ddc29f4eb78e1058ed6ce66f6f8ca85e1686d1cbce1927f5957ca59e98cd25",
+      "rowsIncludingHeader": 34,
+      "targetMappingObserved": false
+    },
+    "confidenceBoundary": "AGL48 与先前游戏画面中的 ERR_HELM_AGL_48 相互印证；D19_ultimate 是新增的社区检索映射。二者均未替代原始 bundle 与套装配置之间的绑定验证。D20 行对应另一套装，不能改作盘古。"
+  },
+  "otherPublicSourceChecks": [
+    {
+      "repository": "https://github.com/UAETeams/ShadowFightAnimationTool/",
+      "treeSHA1": "a626cb1594b0a443256ad5e368915b81e3f14e4f",
+      "treeEntryCount": 25,
+      "scope": "公开树及原作者说明",
+      "result": "动作解码工具源码；没有盘古模型、动作归档或新版资源清单。",
+      "targetAssetArchivesDownloaded": false
+    },
+    {
+      "repository": "https://github.com/sadisticblooper/SF3MODHUB",
+      "treeSHA1": "b32a7c2428d3c8da516342ed6103cbe2c328ac7a",
+      "treeEntryCount": 76,
+      "repositoryPushedAtUTC": "2026-01-08T04:09:33Z",
+      "scope": "仅公开文件树",
+      "result": "存在早期动作、改装资源归档名称；文件树没有识别到 Pangu、Primordial、Stormborn、AGL48 或 D19 的目标条目。没有把不明归档当作盘古下载。",
+      "targetAssetArchivesDownloaded": false
+    },
+    {
+      "repository": "https://github.com/SergoZar/shadowfight3-master",
+      "treeSHA1": "1bcd1058d1aa2ebb48814f875d59a15ad4de6df5",
+      "repositoryPushedAtUTC": "2025-06-29T11:12:40Z",
+      "scope": "公开文件树及装备数据源文件",
+      "checkedFiles": [
+        {
+          "path": "components/data/data-equipment-all-items.js",
+          "bytes": 149440,
+          "gitBlobSHA1": "af82ea9a65205430d51798b3c980225cdf5771f2"
+        },
+        {
+          "path": "components/data/data-equipment.js",
+          "bytes": 47759,
+          "gitBlobSHA1": "12b3196fc317e2b31512b1955531f799a2cad74f"
+        }
+      ],
+      "result": "该社区装备数据中没有识别到目标套装、正式装备名或 AGL48/D19；不是现行动态 bundle 清单。",
+      "targetAssetArchivesDownloaded": false
+    },
+    {
+      "repository": "https://github.com/ZiZc3/Hydroid",
+      "treeSHA1": "d8371afd75e3da6ab888d467d1e6bb00c32d2beb",
+      "treeEntryCount": 259,
+      "scope": "公开说明及文件树",
+      "result": "兼容运行工具说明明确不附带游戏文件；未发现可据以下载盘古的公开资源索引。未安装或运行该工具。",
+      "targetAssetArchivesDownloaded": false
+    }
+  ],
+  "currentPackageExpansionChecks": [
+    {
+      "page": "https://www.apkmirror.com/apk/nekki/shadow-fight-3/shadow-fight-3-rpg-fighting-1-46-2-release/shadow-fight-3-rpg-fighting-1-46-2-android-apk-download/",
+      "declaredVersion": "1.46.2",
+      "declaredVersionCode": 19225,
+      "declaredTotalBytes": 256369190,
+      "declaredComponents": [
+        "base APK",
+        "config.arm64_v8a",
+        "config.armeabi_v7a"
+      ],
+      "evidenceLevel": "公开分发页面元数据，未下载或验证归档内容",
+      "result": "页面未列出独立 OBB 或盘古资源扩展包的确切路径；基础包加架构拆分不能证明动态内容齐全。",
+      "archiveDownloaded": false
+    },
+    {
+      "page": "https://apkpure.net/shadow-fight-3-mobile/com.nekki.shadowfight3/versions",
+      "evidenceLevel": "公开搜索及版本页面；缓存内容与搜索展示版本不同",
+      "searchDisplayedVersion": "1.46.2",
+      "openedCachedDownloadPageVersion": "1.46.1",
+      "boundedDownloadPageRequestHTTPStatus": 403,
+      "deniedRequestRetried": false,
+      "result": "未取得可核验的当前 OBB 或具体目标资源链接。未继续请求被拒页面。",
+      "archiveDownloaded": false
+    },
+    {
+      "page": "https://captain-droid.com/en/games/role-playing/shadow-fight-3/attachment/com-nekki-shadowfight3_19225-xapk/",
+      "declaredVersion": "1.46.2",
+      "declaredVersionCode": 19225,
+      "evidenceLevel": "公开页面声明与通用 XAPK 说明",
+      "boundedPageRequestHTTPStatus": 403,
+      "deniedRequestRetried": false,
+      "result": "通用 XAPK 说明没有证明该文件含 OBB，也没有提供已验证的目标扩展成员路径。未下载归档。",
+      "archiveDownloaded": false
+    }
+  ],
+  "newMetadataMemberInspection": {
+    "reason": "此前审计没有检查该未加密元数据成员中的资源 CDN 字串；本次仅补读这一个已知 ZIP 成员。",
+    "packageVersion": "1.46.2",
+    "versionCode": 19226,
+    "sourceDownloadHost": "static.rustore.ru",
+    "packageDeclaredBytes": 263976910,
+    "transientDownloadURLIncluded": false,
+    "requestCredentialOrSignatureIncluded": false,
+    "member": {
+      "path": "assets/bin/Data/Managed/Metadata/global-metadata.dat",
+      "flags": 0,
+      "method": 8,
+      "crc32": "ecb24785",
+      "compressedBytes": 8576780,
+      "bytes": 27901476,
+      "offset": 227737703
+    },
+    "compressedSHA256": "5bf00cd4b4365b0713611ba3a4ed26aeee9aadc7ef6531a69d61a2be2fe71e65",
+    "uncompressedSHA256": "b6070729e09bf5a6bfe49eea9587847fa4756e12fa357b7d63f3a8d2f97416fc",
+    "uncompressedBytes": 27901476,
+    "status": "verified",
+    "rangeRequests": [
+      {
+        "start": 227737703,
+        "bytes": 1024,
+        "httpStatus": 206,
+        "contentRange": "bytes 227737703-227738726/263976910",
+        "sha256": "081195ac98f71f21aef224e15e9ec90210568423cefce2cd1e8ccd4c145e4c12"
+      },
+      {
+        "start": 227737785,
+        "bytes": 8576780,
+        "httpStatus": 206,
+        "contentRange": "bytes 227737785-236314564/263976910",
+        "sha256": "5bf00cd4b4365b0713611ba3a4ed26aeee9aadc7ef6531a69d61a2be2fe71e65"
+      }
+    ],
+    "totalRangeBytesIncludingHeaderRead": 8577804,
+    "checks": [
+      "HTTP 206 and exact Content-Range",
+      "ZIP local filename, method and bounds",
+      "exact compressed byte count",
+      "bounded raw-deflate decompression",
+      "uncompressed size and ZIP CRC32"
+    ],
+    "decodeOperation": "仅标准 ZIP 解压；读取明文 IL2CPP v39 字符串表，未解密配置、反编译 native library 或执行游戏。",
+    "formatReference": "https://github.com/SamboyCoding/Cpp2IL/blob/development/LibCpp2IL/Metadata/Il2CppGlobalMetadataHeader.cs",
+    "formatVersion": 39,
+    "managedLiteralCount": 33727,
+    "invalidUTF8ManagedLiteralCount": 0,
+    "managedHTTPURLCount": 88,
+    "completeResourceURLsObserved": [
+      {
+        "literalIndex": 27197,
+        "url": "https://sf3assets.nekki.com/diffPatchTest/diff",
+        "classification": "diff_patch_test_fixture",
+        "requested": false
+      },
+      {
+        "literalIndex": 27198,
+        "url": "https://sf3assets.nekki.com/diffPatchTest/new.zip",
+        "classification": "diff_patch_test_fixture",
+        "requested": false
+      },
+      {
+        "literalIndex": 27199,
+        "url": "https://sf3assets.nekki.com/diffPatchTest/old.zip",
+        "classification": "diff_patch_test_fixture",
+        "requested": false
+      }
+    ],
+    "incompletePathsAndLocalKeys": [
+      {
+        "literalIndex": 2063,
+        "value": "/Configs/localServerSettings.json",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 2076,
+        "value": "/bundlesConfig_",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 6384,
+        "value": "Configs/configSources",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 6385,
+        "value": "Configs/internalSettings",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 6386,
+        "value": "Configs/localServerSettings",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 6387,
+        "value": "Configs/localizationFallbacks.json",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 6388,
+        "value": "Configs/youtubeplaylist.zip",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 23734,
+        "value": "bundles.zip",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 23735,
+        "value": "bundlesConfig_",
+        "completeRemoteURL": false
+      },
+      {
+        "literalIndex": 23736,
+        "value": "bundles_",
+        "completeRemoteURL": false
+      }
+    ],
+    "readableResourceLoadingSymbolNames": [
+      "CdnUrlSwitcher",
+      "ICdnUrlProvider",
+      "ICdnUrlSwitcher",
+      "RateLimitedCdnUrlSwitcherDecorator",
+      "RateLimitedCdnUrlSwitcherDecoratorSettings",
+      "cdnUrl",
+      "configSourcesConfigs"
+    ],
+    "exactTargetManagedLiteralMatches": {
+      "Pangu": 0,
+      "D19_ultimate": 0,
+      "arm__agl_48": 0,
+      "helm__agl_48": 0,
+      "Stormborn": 0
+    },
+    "targetAbsenceScope": "仅说明这些名称未作为完整 managed 字符串 literal 出现，不证明它们不存在于所有资源包、动态配置或未读的 native code。",
+    "falsePositiveExcluded": "大小写不敏感的 Pangu 子串会匹配 gripAngularVelocity，不能据此认定找到了盘古逻辑。",
+    "currentManifestRecovered": false,
+    "newResourceURLRequestsPerformed": false,
+    "result": "sf3assets.nekki.com 的三个完整地址都位于 diffPatchTest 路径，按名称属于差分补丁测试线索；没有证据将它们当作现行资源清单。bundlesConfig_、bundles_、bundles.zip 是不完整片段，未和任意主机名拼接。类名不能恢复运行时 CDN 选择值或配置。",
+    "targetHandlerCandidateScan": {
+      "scope": "完整已校验 metadata 明文 bytes 的定点大小写不敏感子串检索；不读取 native 库，不反编译，不获取新网络数据。",
+      "caseInsensitiveByteSubstringCounts": {
+        "Pangu": 1,
+        "Primordial": 0,
+        "Heavenfall": 0,
+        "Typhoon": 0,
+        "Stormborn": 0,
+        "D19": 11,
+        "AGL48": 0,
+        "AGL_48": 0,
+        "D19_ultimate": 0,
+        "PinnacleOfCreation": 0,
+        "PrimordialFirmament": 0,
+        "HorizonSplitter": 0,
+        "ShardOfCreation": 0,
+        "BonesOfTheEarth": 0,
+        "RhythmOfTheFirmament": 0,
+        "PrimordialTrance": 0,
+        "PrimalOnslaught": 0
+      },
+      "actualMatchClassification": [
+        {
+          "query": "Pangu",
+          "count": 1,
+          "classification": "unrelated_substring",
+          "safeContext": "gripAngularVelocity",
+          "identifiesPangu": false
+        },
+        {
+          "query": "D19",
+          "count": 7,
+          "classification": "substring_inside_hexadecimal_identifiers",
+          "identifiesPangu": false
+        },
+        {
+          "query": "D19",
+          "count": 3,
+          "classification": "substring_inside_UUID_shaped_identifiers",
+          "identifiesPangu": false
+        },
+        {
+          "query": "D19",
+          "count": 1,
+          "classification": "substring_inside_an_opaque_60_character_managed_token",
+          "identifiesPangu": false
+        }
+      ],
+      "identifiableTargetHandlerOrConfigurationFieldRecovered": false,
+      "adjacentTargetTypesOrFieldsEstablished": false,
+      "rawOpaqueIdentifiersPublished": false,
+      "limitation": "无命中不排除混淆类型名、其他名称、动态配置或未读的资源包；不能据此宣布已搜完所有盘古源码或资源。"
+    }
+  },
+  "remainingConcreteGaps": [
+    "当前版本的明文动态 bundle 清单，包含 AGL48/D19 对应条目的确切下载路径、大小或摘要。",
+    "盘古头盔、护甲和单把双手长斧的原始模型及材质；公开表的武器字段仍为空。",
+    "D19_ultimate 对应的原始专属动作文件，以及动作到套装、技能状态和碰撞事件的真实绑定。",
+    "石、风、柱、长矛、天坠等原始特效文件及技能事件绑定。",
+    "可直接读取并验证的正式规则参数，包含血量、伤害、接触时序和原始动作采样率；名称索引与 metadata 字符串不能替代这些表。"
+  ],
+  "deliveryBoundary": {
+    "newRepositoryFile": "docs/acceptance/fighter-pangu-public-source-followup-20261114.json",
+    "privateReceiptsAvailableInWorkspace": true,
+    "privateReceiptNames": [
+      "github-source-receipts-private.json",
+      "global-metadata-range-receipt-private.json",
+      "metadata-source-string-scan-private.json",
+      "metadata-target-name-scan-private.json"
+    ],
+    "publicPayloadContains": "来源 URL、已验证摘要、必要的名称映射、有限元数据及核验边界。",
+    "publicPayloadExcludes": [
+      "原始模型或动作数组",
+      "完整游戏技能文案",
+      "原始元数据文件或完整作者 CSV",
+      "临时下载签名及凭据",
+      "应用密钥与不相关服务地址"
+    ],
+    "codePublicationPerformed": false,
+    "runtimeRestorationFlagsChangedByThisAudit": false
+  }
+}

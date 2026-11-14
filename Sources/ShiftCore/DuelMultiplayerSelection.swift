@@ -9,6 +9,7 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
     public enum Weapon: String, Codable, Sendable {
         case katana = "sun_katana"
         case hammers = "liu_hammers"
+        case pangu = "liu_pangu"
     }
 
     public struct Choice: Equatable, Codable, Sendable {
@@ -19,10 +20,23 @@ public struct DuelMultiplayerSelection: Equatable, Sendable {
             self.weapon = weapon
         }
         public var isValid: Bool {
-            (hero == .ember && weapon == .katana) || (hero == .liu && weapon == .hammers)
+            (hero == .ember && weapon == .katana) ||
+                (hero == .liu && (weapon == .hammers || weapon == .pangu))
         }
         public static let sun = Self(hero: .ember, weapon: .katana)
         public static let liu = Self(hero: .liu, weapon: .hammers)
+        public static let liuPangu = Self(hero: .liu, weapon: .pangu)
+
+        /// Select only weapons in the exact loaded catalog. Adding a supported
+        /// identifier must not relabel, replace, or unlock the legacy assets.
+        public static func available(in catalog: DuelWeaponCatalog) -> [Self] {
+            guard (try? catalog.validate()) != nil else { return [] }
+            return catalog.profiles.compactMap { profile in
+                guard let weapon = Weapon(rawValue: profile.id) else { return nil }
+                let choice = Self(hero: profile.hero, weapon: weapon)
+                return choice.isValid ? choice : nil
+            }
+        }
     }
 
     public enum Seat: Int, Codable, Sendable { case host = 0, guest = 1 }

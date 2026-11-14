@@ -209,8 +209,20 @@ private struct DuelTelevisionHUD: View {
         let fighter = session.game.fighters[index]
         return VStack(alignment: index == 0 ? .leading : .trailing) {
             Text(fighter.hero.name)
-            ProgressView(value: Double(fighter.health), total: 1000).tint(index == 0 ? .orange : .cyan)
-            Text("生命 \(fighter.health) · 能量 \(fighter.energy)").font(.headline.monospacedDigit())
+            ProgressView(value: Double(fighter.health), total: Double(session.game.weaponFight?.maximumHealth(index) ?? 1000))
+                .tint(index == 0 ? .orange : .cyan)
+            Text(session.game.weaponFight?.panguState(index).map {
+                "生命 \(fighter.health) · 光能 \($0.light)/\($0.rules.light.maximum) · 连击 \($0.combo)"
+            } ?? "生命 \(fighter.health) · 能量 \(fighter.energy)").font(.headline.monospacedDigit())
+            if let state = session.game.weaponFight?.panguState(index) {
+                DuelPanguHUD(state: state,
+                    isEscapingOrdinaryThrow: session.game.weaponFight?.ordinaryThrow(index)?.stage == .immune,
+                    prominent: true)
+            }
+            if let fight = session.game.weaponFight {
+                DuelPanguControlHUD(controls: fight.panguPresentation.controls.filter { $0.target == index },
+                                    prominent: true)
+            }
         }.frame(maxWidth: .infinity)
     }
 }

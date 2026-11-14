@@ -9,7 +9,7 @@ struct DuelNetworkRulesManifest {
     static let recipe = "fighter-network-rules-v1"
     static let maximumBytes = 262_144
     static let helperPaths: Set<String> = [
-        "project.yml", "Shared/CaptureIntents.swift", "Shared/DutyActivity.swift", "Shared/WidgetShared.swift",
+        "project.yml", "App/Info.plist", "Shared/CaptureIntents.swift", "Shared/DutyActivity.swift", "Shared/WidgetShared.swift",
         "Sources/ShiftCore/BoneSampler.swift", "App/Services/GLTFModel.swift",
         "App/Services/ArenaOpaquePNG.swift", "App/Services/GameRoom.swift",
         "App/Services/GameRoomDirectIdentity.swift"
@@ -18,6 +18,14 @@ struct DuelNetworkRulesManifest {
         "Sources/ShiftCore/DuelGame.swift",
         "Sources/ShiftCore/DuelWeaponMotion.swift",
         "Sources/ShiftCore/DuelWeaponFight.swift",
+        "Sources/ShiftCore/DuelWeaponThrow.swift",
+        "Sources/ShiftCore/DuelFighterAssetRelease.swift",
+        "Sources/ShiftCore/DuelCombatRules.swift",
+        "Sources/ShiftCore/DuelImpactMotion.swift",
+        "Sources/ShiftCore/DuelPanguRules.swift",
+        "Sources/ShiftCore/DuelPanguState.swift",
+        "Sources/ShiftCore/DuelPanguSpatialState.swift",
+        "Sources/ShiftCore/DuelPanguPresentation.swift",
         "Sources/ShiftCore/DuelWeaponInput.swift",
         "Sources/ShiftCore/DuelMultiplayerSelection.swift",
         "Sources/ShiftCore/DuelMultiplayerReplica.swift",
@@ -33,20 +41,24 @@ struct DuelNetworkRulesManifest {
         "App/Services/DuelNetworkLobby.swift",
         "App/Services/DuelNetworkMessageRouter.swift",
         "App/Services/DuelWeaponAssets.swift",
+        "App/Services/DuelFighterAssetReleaseLoader.swift",
         "App/Services/DuelSourceEffects.swift",
         "App/Services/DuelWeaponEffects.swift",
+        "App/Services/DuelPanguDiagnostics.swift",
         "App/Services/DuelSourceWeaponTrails.swift",
         "App/Services/DuelStage.swift",
         "App/Views/DuelSourceControls.swift",
         "App/Views/DuelNetworkSelectionModel.swift",
         "App/Views/DuelNetworkRoomView.swift",
         "App/Views/DuelView.swift",
+        "App/Views/DuelPanguHUD.swift",
         "App/Views/DuelWorld.swift"
     ])
     static let buildKeys: Set<String> = [
         "mode", "TARGET_NAME", "CONFIGURATION", "PLATFORM_NAME", "SDK_VERSION", "SWIFT_VERSION",
         "XCODE_VERSION_ACTUAL", "IPHONEOS_DEPLOYMENT_TARGET", "SWIFT_OPTIMIZATION_LEVEL",
-        "SWIFT_COMPILATION_MODE", "ENABLE_TESTABILITY", "SWIFT_ACTIVE_COMPILATION_CONDITIONS"
+        "SWIFT_COMPILATION_MODE", "ENABLE_TESTABILITY", "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
+        "FIGHTER_ASSET_RELEASE_SHA256"
     ]
     enum Failure: Error, Equatable { case malformed, unsupported, invalidBuild, invalidFiles, fingerprintMismatch }
     private struct Document: Decodable {
@@ -74,6 +86,7 @@ struct DuelNetworkRulesManifest {
               decoded.build["TARGET_NAME"] == "ShiftReminder",
               ["CONFIGURATION", "PLATFORM_NAME", "SDK_VERSION", "SWIFT_VERSION", "XCODE_VERSION_ACTUAL",
                "IPHONEOS_DEPLOYMENT_TARGET"].allSatisfy({ decoded.build[$0]?.isEmpty == false }),
+              decoded.build["FIGHTER_ASSET_RELEASE_SHA256"].map({ $0.isEmpty || DuelNetworkContentRecord.validDigest($0) }) == true,
               decoded.build.values.allSatisfy({ $0.utf8.count <= 256 &&
                   $0.range(of: "^[A-Za-z0-9_.+ =()$-]*\\z", options: .regularExpression) != nil }) else {
             throw Failure.invalidBuild
@@ -170,7 +183,7 @@ struct DuelNetworkCompatibilityIdentity {
         let stageURL = bundle.url(forResource: "SF3_Palace_Exterior", withExtension: "glb") ??
             bundle.url(forResource: "SF3_Palace_Exterior", withExtension: "glb", subdirectory: "FighterPrivate")
         guard let stageURL else { throw Failure.missingStage }
-        return try prepare(rules: rules, directory: catalogURL.deletingLastPathComponent(), stageURL: stageURL)
+        return try prepare(rules: rules, directory: catalogURL.deletingLastPathComponent(), stageURL: stageURL, bundle: bundle)
     }
 
     /// Explicit-directory seam for native tests / already installed resources.
@@ -183,7 +196,7 @@ struct DuelNetworkCompatibilityIdentity {
     }
 
     static func prepare(rules: DuelNetworkRulesManifest, directory: URL,
-                        stageURL: URL) throws -> DuelNetworkPreparedResources {
+                        stageURL: URL, bundle: Bundle = .main) throws -> DuelNetworkPreparedResources {
         let directory = directory.resolvingSymlinksInPath().standardizedFileURL
         var records: [DuelNetworkContentRecord] = []
         var observed: [(URL, DuelNetworkContentRecord)] = []
@@ -191,24 +204,48 @@ struct DuelNetworkCompatibilityIdentity {
         func record(_ url: URL, path: String, maximum: Int, bytes: Int? = nil, hash: String? = nil) throws -> Data {
             let data = try read(url, maximum: maximum)
             let digest = DuelNetworkContentRecord.digest(data)
-            guard bytes.map({ $0 == data.count }) ?? true, hash.map({ $0 == digest }) ?? true,
-                  !records.contains(where: { $0.path == path }), totalBytes <= 256_000_000 - data.count else {
+            guard bytes.map({ $0 == data.count }) ?? true, hash.map({ $0 == digest }) ?? true else {
                 throw Failure.invalidResource(path)
             }
+            if let existing = observed.first(where: { $0.1.path == path }) {
+                guard existing.0.standardizedFileURL == url.standardizedFileURL,
+                      existing.1.bytes == data.count, existing.1.sha256 == digest else { throw Failure.invalidResource(path) }
+                return data
+            }
+            guard totalBytes <= 256_000_000 - data.count else { throw Failure.invalidResource(path) }
             totalBytes += data.count
             let entry = DuelNetworkContentRecord(path: path, bytes: data.count, sha256: digest)
             records.append(entry); observed.append((url, entry))
             return data
         }
+        let assets = try DuelWeaponAssets(directory: directory, bundle: bundle)
+        let assetPin = assets.release?.files.first(where: { $0.path.hasPrefix("asset-release/") })?.sha256 ?? ""
+        guard rules.build["FIGHTER_ASSET_RELEASE_SHA256"] == assetPin else {
+            throw Failure.invalidResource("asset-release-build-pin")
+        }
         let catalogURL = directory.appendingPathComponent("SF3_DistinctFighters.json")
         _ = try record(catalogURL, path: "catalog/SF3_DistinctFighters.json", maximum: 32_000_000,
-                       hash: DuelWeaponAssets.catalogSHA256)
-        let sourceTrailURL = directory.appendingPathComponent(DuelSourceWeaponTrails.fileName)
-        if FileManager.default.fileExists(atPath: sourceTrailURL.path) {
-            _ = try record(sourceTrailURL, path: "weapon-effects/" + DuelSourceWeaponTrails.fileName,
-                           maximum: 100_000, hash: DuelSourceWeaponTrails.sha256)
+                       hash: assets.release?.definition.catalog.sha256 ?? DuelWeaponAssets.catalogSHA256)
+        if let release = assets.release {
+            for file in release.files where file.path.hasPrefix("asset-release/") {
+                _ = try record(directory.appendingPathComponent(DuelFighterAssetRelease.fileName),
+                    path: file.path, maximum: DuelFighterAssetRelease.maximumBytes, bytes: file.bytes, hash: file.sha256)
+            }
+            for (prefix, files) in [("weapon-effects/", assets.sourceTrails?.verifiedFiles ?? []),
+                                    ("pangu-audio/", assets.panguAudio?.verifiedFiles ?? [])] {
+                guard !files.isEmpty else { throw Failure.invalidResource(prefix) }
+                for file in files {
+                    _ = try record(directory.appendingPathComponent(file.path), path: prefix + file.path,
+                                   maximum: file.bytes, bytes: file.bytes, hash: file.sha256)
+                }
+            }
+        } else {
+            let sourceTrailURL = directory.appendingPathComponent(DuelSourceWeaponTrails.fileName)
+            if FileManager.default.fileExists(atPath: sourceTrailURL.path) {
+                _ = try record(sourceTrailURL, path: "weapon-effects/" + DuelSourceWeaponTrails.fileName,
+                               maximum: 100_000, hash: DuelSourceWeaponTrails.sha256)
+            }
         }
-        let assets = try DuelWeaponAssets(directory: directory)
         var transferred = false
         var retainedControls: DuelSourceControlsView?
         var retainedSourceEffects: DuelSourceEffects?
@@ -270,7 +307,7 @@ struct DuelNetworkCompatibilityIdentity {
         }
         // Existing loaders check image/audio decoding, sampled curves, material
         // references and complete effect schemas. No emit/play/step call is made.
-        let sourceEffects = try DuelSourceEffects(root: root, directory: directory)
+        let sourceEffects = try DuelSourceEffects(root: root, directory: directory, panguAudio: assets.panguAudio)
         retainedSourceEffects = sourceEffects
         let weaponEffects = try DuelWeaponEffects(root: root, directory: directory)
         retainedWeaponEffects = weaponEffects
@@ -286,7 +323,8 @@ struct DuelNetworkCompatibilityIdentity {
                 throw Failure.invalidResource(entry.path)
             }
         }
-        guard records.count == 62, assets.catalog.profiles.count == 2 else {
+        let legacyFileCount = 62 + (assets.sourceTrails == nil ? 0 : 1)
+        guard (assets.release != nil || records.count == legacyFileCount), assets.catalog.profiles.count == 2 else {
             throw Failure.invalidResource("complete-content")
         }
         let identity = Self(rules: rules, catalog: assets.catalog, records: records)

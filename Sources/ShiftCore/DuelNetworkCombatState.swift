@@ -48,7 +48,7 @@ public struct DuelNetworkCombatState: Codable, Equatable, Sendable {
         }
         public var isPlausible: Bool {
             (-2_000...12_000).contains(x) && (-1_000...10_000).contains(y)
-            && (facing == -1 || facing == 1) && (0...1_000).contains(health)
+            && (facing == -1 || facing == 1) && (0...1_000_000).contains(health)
             && (0...1_000).contains(guardMeter) && (0...100).contains(energy)
             && (0...10_000).contains(stun) && (0...10_000).contains(knockdown)
             && (animation?.isPlausible ?? true)

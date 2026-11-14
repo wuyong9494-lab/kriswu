@@ -1,0 +1,848 @@
+{
+  "schemaVersion": 1,
+  "auditedAt": "2026-11-14",
+  "purpose": "清晰原作者游戏 UI 的事实记录；不是可直接导入的完整平衡配置。",
+  "repositoryBaseCommit": "264a11a",
+  "source": {
+    "id": "FGTV_LIVE_20260831",
+    "author": "Funny Games TV",
+    "originalVideoURL": "https://www.youtube.com/watch?v=Jkf6cRuIIkw",
+    "publisherMirrorURL": "https://rutube.ru/video/f2d148ab0ce9f8d089a620b7ae373d9d/",
+    "youtubePublishedAt": "2026-08-31T06:15:07-07:00",
+    "recordingDate": null,
+    "clientBuild": null,
+    "balanceVersion": null,
+    "localeObserved": "ru",
+    "setName": "Primordial Heavenly King",
+    "equippedSetLevelObserved": 6,
+    "versionBoundary": "2026-08-31 发布录像中的清晰游戏面板；录制时间及客户端构建未显示，不自动等于 2026-11 的 1.46.2 或其他区域的当前平衡。",
+    "videoDurationSeconds": 2235
+  },
+  "sourceTerms": {
+    "combo": "комбо",
+    "lightEnergy": "энергии света",
+    "shadowDamage": "теневого урона",
+    "weaponDamage": "урона оружием",
+    "unarmedPhysicalDamage": "физического безоружного урона",
+    "defense": "защита"
+  },
+  "measurementPolicy": {
+    "damagePercentBasis": "暗影、武器、徒手物理百分比使用各自伤害基数；均不得转换为目标最大生命百分比或未经校准的绝对值。",
+    "unknownIsNotZero": true,
+    "mediaIncludedInRepository": false,
+    "quotesPolicy": "仅保留 11 个俄文词作为类别标签；没有转录整页技能文本。",
+    "sourceTimePolicy": "视频时点按 HLS 清单累计时长；解码首帧 PTS 另记，编码时间原点约偏移 0.151 秒。"
+  },
+  "boundedAcquisition": {
+    "allowedSourceWindowSeconds": [
+      40,
+      80
+    ],
+    "hardLimitResponseBodyBytes": 3145728,
+    "chargedResponseBodyBytes": 3057608,
+    "publicOptionsBytesIncluded": 129915,
+    "manifestResponseBytes": 44109,
+    "videoRangeResponseBytes": 2883584,
+    "verification": "公开未加密清单；每段先核 Content-Length/Accept-Ranges，GET 必须返回精确 206 Content-Range 与 Content-Length；仅取得列明区间的前缀，已停止下载。",
+    "masterManifestSHA256": "4f911043c9900847788fdd3754aad829f09ae4f40c5eaf629ebe77a51201a4c3",
+    "mediaPlaylistSHA256": "2651d64e42019ec59609283c3dd48d280a7d70b69b61e3f004bf6a1b3afa08f8"
+  },
+  "frames": [
+    {
+      "id": "F0044",
+      "sourceID": "FGTV_LIVE_20260831",
+      "videoTimeSeconds": 44,
+      "mediaPTSSeconds": 44.151,
+      "sourceLink": "https://www.youtube.com/watch?v=Jkf6cRuIIkw&t=44s",
+      "fileName": "fgtv-public-frame-0044.png",
+      "sha256": "ac87de19ada6fc790c4d5bd0bb5428f4f0c7f2144f43d5b0c6e89e9a8efaa904",
+      "byteLength": 942317,
+      "resolution": [
+        1280,
+        720
+      ],
+      "repositoryContainsImage": false
+    },
+    {
+      "id": "F0048",
+      "sourceID": "FGTV_LIVE_20260831",
+      "videoTimeSeconds": 48,
+      "mediaPTSSeconds": 48.151,
+      "sourceLink": "https://www.youtube.com/watch?v=Jkf6cRuIIkw&t=48s",
+      "fileName": "fgtv-public-frame-0048.png",
+      "sha256": "7e2c6b7ef2cb59be508fccd2028d31d182590d3f248ddf1dd6c08cb781911cfc",
+      "byteLength": 911609,
+      "resolution": [
+        1280,
+        720
+      ],
+      "repositoryContainsImage": false
+    },
+    {
+      "id": "F0052",
+      "sourceID": "FGTV_LIVE_20260831",
+      "videoTimeSeconds": 52,
+      "mediaPTSSeconds": 52.151,
+      "sourceLink": "https://www.youtube.com/watch?v=Jkf6cRuIIkw&t=52s",
+      "fileName": "fgtv-public-frame-0052.png",
+      "sha256": "76ab0ae8715223d100b0323fcdf5081a2506c76e82dd016565d201f96d284017",
+      "byteLength": 1020123,
+      "resolution": [
+        1280,
+        720
+      ],
+      "repositoryContainsImage": false
+    },
+    {
+      "id": "F0060",
+      "sourceID": "FGTV_LIVE_20260831",
+      "videoTimeSeconds": 60,
+      "mediaPTSSeconds": 60.151,
+      "sourceLink": "https://www.youtube.com/watch?v=Jkf6cRuIIkw&t=60s",
+      "fileName": "fgtv-public-frame-0060.png",
+      "sha256": "275e6afc8a0a624281ae78b7a26bbea9f03cd9066914f887897e6d45c952e843",
+      "byteLength": 939657,
+      "resolution": [
+        1280,
+        720
+      ],
+      "repositoryContainsImage": false
+    },
+    {
+      "id": "F0064",
+      "sourceID": "FGTV_LIVE_20260831",
+      "videoTimeSeconds": 64,
+      "mediaPTSSeconds": 64.151,
+      "sourceLink": "https://www.youtube.com/watch?v=Jkf6cRuIIkw&t=64s",
+      "fileName": "fgtv-public-frame-0064.png",
+      "sha256": "375e3fd10594efbbd4be8aa5481da6dba25e335ecff10013308635e74320fc00",
+      "byteLength": 926491,
+      "resolution": [
+        1280,
+        720
+      ],
+      "repositoryContainsImage": false
+    },
+    {
+      "id": "F0068",
+      "sourceID": "FGTV_LIVE_20260831",
+      "videoTimeSeconds": 68,
+      "mediaPTSSeconds": 68.151,
+      "sourceLink": "https://www.youtube.com/watch?v=Jkf6cRuIIkw&t=68s",
+      "fileName": "fgtv-public-frame-0068.png",
+      "sha256": "c7eb141393895f9e037dd47788b42b35f51f144b10cae1547a63797d75b75b7d",
+      "byteLength": 989661,
+      "resolution": [
+        1280,
+        720
+      ],
+      "repositoryContainsImage": false
+    }
+  ],
+  "counts": {
+    "verifiedFields": 38,
+    "numericFields": 33,
+    "booleanRules": 5,
+    "unverifiedFields": 14
+  },
+  "verifiedValues": {
+    "l2.heavyWindComboThreshold": {
+      "value": 15,
+      "unit": "combo_points",
+      "description": "重击开始附带风刃的连击门槛。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "临界那一击使用加点前或加点后的计数仍未核。"
+    },
+    "l2.heavyWindShadowDamagePercent": {
+      "value": 25,
+      "unit": "percent_of_shadow_damage_basis",
+      "description": "重击附带风刃的暗影伤害比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "分母是暗影伤害基数，不是目标最大生命。"
+    },
+    "l2.primordialMoveCount": {
+      "value": 4,
+      "unit": "moves",
+      "description": "回合开始可用的原初招式数量。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": null
+    },
+    "l2.primordialAvailableAtRoundStart": {
+      "value": true,
+      "unit": "boolean",
+      "description": "四个原初招式在回合开始即已可用。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": null
+    },
+    "l2.primordialHitLightRestorationPercent": {
+      "value": 15,
+      "unit": "percent_light_energy",
+      "description": "原初招式成功命中回复光能的面板比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "不提供光能与生命伤害的换算；与 L5 增强的合并方式未由该页说明。"
+    },
+    "l2.shardShadowDamagePercent": {
+      "value": 55,
+      "unit": "percent_of_shadow_damage_basis",
+      "description": "前岩造成的暗影伤害比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "不转换为生命百分比或绝对伤害。"
+    },
+    "l2.typhoonDurationSeconds": {
+      "value": 10,
+      "unit": "seconds",
+      "description": "风状态持续时长。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": null
+    },
+    "l2.typhoonDamageIncreasePercent": {
+      "value": 50,
+      "unit": "relative_percent_increase",
+      "description": "风状态提高自身伤害的相对幅度。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "面板未给出与其他增伤的乘区。"
+    },
+    "l2.typhoonWindShadowDamagePercent": {
+      "value": 25,
+      "unit": "percent_of_shadow_damage_basis",
+      "description": "风状态每次攻击附带风刃的暗影伤害比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": null
+    },
+    "l2.typhoonFixedCooldownSeconds": {
+      "value": 10,
+      "unit": "seconds",
+      "description": "风招式面板单独声明固定冷却时间。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "该固定条款与 L4 减秒、L6 零冷却条款的优先级仍未核。"
+    },
+    "l2.typhoonEveryAttackProducesWind": {
+      "value": true,
+      "unit": "boolean",
+      "description": "风状态下每次攻击附带风刃。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0048",
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        48,
+        52
+      ],
+      "notes": "与 Trance 和普通连击风刃是否合并生成仍未知。"
+    },
+    "l2.splitterWeaponDamagePercent": {
+      "value": 55,
+      "unit": "percent_of_weapon_damage_basis",
+      "description": "上挑命中造成的武器伤害比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        52
+      ],
+      "notes": "不得改写为暗影伤害或最大生命百分比。"
+    },
+    "l2.splitterDeclaredAirborneSeconds": {
+      "value": 0.5,
+      "unit": "seconds",
+      "description": "上挑使敌人被挑起的面板时间。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        52
+      ],
+      "notes": "文字未拆分升空、悬停、下落；不能把 0.5 秒同时填进三个阶段。"
+    },
+    "l2.bonesShadowDamagePercent": {
+      "value": 45,
+      "unit": "percent_of_shadow_damage_basis",
+      "description": "下招石刺命中造成的暗影伤害比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0052"
+      ],
+      "videoTimeSeconds": [
+        52
+      ],
+      "notes": null
+    },
+    "l4.dreadTargetDamageTakenIncreasePercent": {
+      "value": 50,
+      "unit": "relative_percent_increase",
+      "description": "Dread 状态目标承受的伤害提高。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044"
+      ],
+      "videoTimeSeconds": [
+        44
+      ],
+      "notes": "是目标承伤修正，不是 Trance 防御。"
+    },
+    "l4.dreadTargetDamageDealtDecreasePercent": {
+      "value": 50,
+      "unit": "relative_percent_decrease",
+      "description": "Dread 状态目标造成的伤害降低。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044"
+      ],
+      "videoTimeSeconds": [
+        44
+      ],
+      "notes": null
+    },
+    "l4.bonesSelfLandingWindowSeconds": {
+      "value": 9,
+      "unit": "seconds",
+      "description": "下招后，自己的跳跃落地可击倒敌人的窗口。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": null
+    },
+    "l4.bonesShardBonusWindowSeconds": {
+      "value": 9,
+      "unit": "seconds",
+      "description": "下招后，前岩获得额外徒手物理伤害和眩晕的窗口。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": "独立于上一项；本次两项各自显示 9 秒，不能只靠名称合并状态。"
+    },
+    "l4.bonesEmpoweredShardUnarmedPhysicalDamagePercent": {
+      "value": 25,
+      "unit": "percent_of_unarmed_physical_damage_basis",
+      "description": "窗口内前岩命中的附加徒手物理伤害比例。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": "与前岩原有暗影部分分开结算；百分比分母不是生命。"
+    },
+    "l4.bonesEmpoweredShardStunSeconds": {
+      "value": 3,
+      "unit": "seconds",
+      "description": "下招强化后的前岩眩晕时长。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": "这不是普通 L4 前岩 2 秒眩晕的改写；两种条件须分开。"
+    },
+    "l4.primordialCooldownReductionSeconds": {
+      "value": 1,
+      "unit": "seconds_removed",
+      "description": "四级原初招式冷却固定减少的秒数。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": "不要替换成冷却恢复速度倍率。"
+    },
+    "l4.eldenStormComboThreshold": {
+      "value": 55,
+      "unit": "combo_points",
+      "description": "Elden Storm 的连击门槛。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": null
+    },
+    "l4.eldenStormAttackSpeedIncreasePercent": {
+      "value": 12.5,
+      "unit": "relative_percent_increase",
+      "description": "达到门槛后的攻击速度提升。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0044",
+        "F0060"
+      ],
+      "videoTimeSeconds": [
+        44,
+        60
+      ],
+      "notes": "与 Trance 的攻速合并方式仍未知。"
+    },
+    "l6.comboRetainedOnDamage": {
+      "value": true,
+      "unit": "boolean",
+      "description": "承受伤害不清空连击计数。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "不意味着永久保持或跨回合保留。"
+    },
+    "l6.comboRetentionAddedSeconds": {
+      "value": 3,
+      "unit": "seconds_added",
+      "description": "连击计数比基础规则多保持的时间。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "不是连击总保持时间；基础时间仍未知。"
+    },
+    "l6.noCooldownComboThreshold": {
+      "value": 100,
+      "unit": "combo_points",
+      "description": "原初招式不进入冷却的连击门槛。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "临界计点时序和已经在冷却中的招式是否立即清零仍未知。"
+    },
+    "l6.primordialNoCooldownAtThreshold": {
+      "value": true,
+      "unit": "boolean",
+      "description": "达到门槛后原初招式不进入冷却。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "与 Typhoon 固定冷却的优先级仍未核。"
+    },
+    "l6.heavenfallCooldownDivisorAtThreshold": {
+      "value": 2,
+      "unit": "cooldown_duration_divisor",
+      "description": "同一门槛使天坠冷却时间除以该数。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "即持续时间乘 0.5 的算术关系；不是天坠也零冷却。"
+    },
+    "l6.primordialCooldownAdditionalReductionSeconds": {
+      "value": 1,
+      "unit": "seconds_removed",
+      "description": "六级再次固定减少原初招式冷却的秒数。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "与四级条款是不同升级项，不应只实现零冷却门槛。"
+    },
+    "l6.heavenfallLightGainIncreasePercent": {
+      "value": 25,
+      "unit": "relative_percent_increase",
+      "description": "天坠累积光能比基础天坠增加的相对幅度。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "是相对增加 25%，不是直接加 25 个光能百分点；基础天坠回能未由该页给出。"
+    },
+    "l6.heavenfallDamageIncreasePercent": {
+      "value": 50,
+      "unit": "relative_percent_increase",
+      "description": "天坠比基础伤害增加的相对幅度。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": null
+    },
+    "l6.heavenfallComboGranted": {
+      "value": 20,
+      "unit": "combo_points",
+      "description": "使用天坠授予的连击点。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "面板把触发写在使用天坠上；实际动画第几帧授予仍未实测。"
+    },
+    "l6.tranceDurationSeconds": {
+      "value": 15,
+      "unit": "seconds",
+      "description": "天坠激活后获得 Trance 的时长。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0064",
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        64,
+        68
+      ],
+      "notes": "面板写激活；起跳、蓄能、着地之间的精确状态授予帧仍未知。"
+    },
+    "l6.tranceAttackSpeedIncreasePercent": {
+      "value": 12.5,
+      "unit": "relative_percent_increase",
+      "description": "Trance 内的攻击速度提升。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        68
+      ],
+      "notes": null
+    },
+    "l6.tranceExtraComboProbabilityPercent": {
+      "value": 50,
+      "unit": "probability_percent_per_successful_attack",
+      "description": "Trance 内每次成功攻击获得额外连击点的概率。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        68
+      ],
+      "notes": "触发依据是成功攻击；多段接触如何归属于一次攻击仍需原版边界证据。"
+    },
+    "l6.tranceExtraComboOnProc": {
+      "value": 1,
+      "unit": "combo_point_per_proc",
+      "description": "概率触发时额外获得的连击点。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        68
+      ],
+      "notes": null
+    },
+    "l6.tranceDefenseIncreasePercent": {
+      "value": 50,
+      "unit": "relative_percent_defense_increase",
+      "description": "Trance 内防御属性的提升。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        68
+      ],
+      "notes": "防御属性与最终承伤的公式未知，不能直接设为承伤乘 0.5。"
+    },
+    "l6.tranceEveryAttackProducesWind": {
+      "value": true,
+      "unit": "boolean",
+      "description": "Trance 内每次攻击唤出风刃。",
+      "evidenceTier": "live_ui",
+      "sourceID": "FGTV_LIVE_20260831",
+      "sourcePublicationDate": "2026-08-31",
+      "frameIDs": [
+        "F0068"
+      ],
+      "videoTimeSeconds": [
+        68
+      ],
+      "notes": "与 Typhoon 和连击风的重叠计数不由该句决定。"
+    }
+  },
+  "unverified": {
+    "l1.lightToHealthDamageConversion": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "没有取得 L1 承伤转换公式；本轮 15% 是回复光能而非承伤换算。"
+    },
+    "l1.comboBaseRetentionSeconds": {
+      "value": null,
+      "unknownKind": "parameter_unknown",
+      "reason": "六级只给出多保持 3 秒。"
+    },
+    "l3.allAttackWindComboThreshold": {
+      "value": null,
+      "unknownKind": "parameter_unknown",
+      "reason": "本轮清晰帧没有展开 L3。"
+    },
+    "l5.primordialHitLightRestorationIncrease": {
+      "value": null,
+      "unknownKind": "parameter_unknown",
+      "reason": "已有测试期机制语义；本轮已读窗口中 L5 处于折叠，未核正式数字。"
+    },
+    "l5.blockedAttackLightGain": {
+      "value": null,
+      "unknownKind": "parameter_unknown",
+      "reason": "未取得可读的正式 L5 数字面板。"
+    },
+    "l5.rangedComboThreshold": {
+      "value": null,
+      "unknownKind": "parameter_unknown",
+      "reason": "不能拿 L2 的 15、L4 的 55 或 L6 的 100 替代。"
+    },
+    "l5.rangedCooldownModifier": {
+      "value": null,
+      "unknownKind": "parameter_unknown",
+      "reason": "本轮未取得 L5 面板。"
+    },
+    "l6.tranceDefenseToDamageMultiplier": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "确认的是防御提高 50%，最终承伤转换未知。"
+    },
+    "cooldown.typhoonFixedRulePrecedence": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "L2 固定 10 秒与高等级减秒/零冷却文字并存，缺实际边界验证。"
+    },
+    "cooldown.clearExistingCooldownOnThreshold": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "不进入冷却未直接定义已有冷却的清理时点。"
+    },
+    "combo.thresholdEvaluationPreOrPostContact": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "面板给门槛但没有展示临界一击处理次序。"
+    },
+    "heavenfall.tranceAndComboExactGrantPhase": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "文字为使用/激活；没有逐帧实机边界。"
+    },
+    "attackSpeed.eldenTranceCombinationFormula": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "两个条款各自 +12.5%，不能未经证据断言相加或相乘。"
+    },
+    "wind.overlappingSourceSpawnPolicy": {
+      "value": null,
+      "unknownKind": "rule_unknown",
+      "reason": "风状态、连击门槛和 Trance 同时成立时的风刃数量仍未核。"
+    }
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "requestDate": "2026-11-14",
+  "baselineCommit": "53e8bd4aab88d56d8d2b6150b4e6db0dfeba5712",
+  "officialAndroid": {
+    "sourcePage": "https://sf3.wdyxgames.com/",
+    "cms": "https://web.hoolai.com/api/cms/getById?id=7743",
+    "officialAPK": "https://sf3-apk.wdyxgames.com/sale/103352.apk",
+    "size": 2713288163,
+    "lastModified": "2026-07-22T09:06:07Z",
+    "entries": 4963,
+    "centralBytes": 458189,
+    "centralOffset": 2712829952,
+    "centralSHA256": "f4ac33d2a3da8b5313a8eb51f2c435c46fa83cce7ac6f212147d607434ae3c7d",
+    "completeAPKDownloaded": false
+  },
+  "manifest": {
+    "entry": {
+      "name": "AndroidManifest.xml",
+      "compression": 8,
+      "crc32": "4833b3df",
+      "compressed_bytes": 12925,
+      "uncompressed_bytes": 76092,
+      "local_offset": 0
+    },
+    "attributes": {
+      "versionCode": 907,
+      "versionName": "1.45.3",
+      "compileSdkVersion": 30,
+      "compileSdkVersionCodename": "26",
+      "package": "com.wanda.sf3.xq"
+    },
+    "sha256": "8ecd9df201c458aab3f190c4a2f131451384b778eced2b0240b89f4d89a26f4e",
+    "crcVerified": true
+  },
+  "bundleComparison": {
+    "oldBundleCount": 2205,
+    "newBundleCount": 2205,
+    "commonNameCount": 2205,
+    "addedNames": [],
+    "missingNames": [],
+    "changedUncompressedLengths": [],
+    "matchedBySHA256": false,
+    "readNewBundlePayloads": false,
+    "finding": "The current official Android distribution has the same 2205 bundle identifiers and uncompressed lengths as the already inspected July 1.45.3 source. This does not prove byte equality and does not cover current in-game downloaded resources."
+  },
+  "newAPKBytes": 536720,
+  "newOriginalAssetFiles": 0,
+  "candidateVideoAudit": {
+    "schemaVersion": 1,
+    "checkedAtUTC": "2026-11-14T06:12:10.485654+00:00",
+    "purpose": "Bounded read-only inspection of two newly discovered original-author Pangu candidate videos.",
+    "maximumNewResponseBodyBytes": 524288,
+    "actualNewResponseBodyBytes": 19495,
+    "storyboardImagesFetched": 0,
+    "videoOrAudioSegmentsFetched": 0,
+    "candidates": [
+      {
+        "videoId": "G7_k40UXV5Q",
+        "originalVideoURL": "https://www.youtube.com/watch?v=G7_k40UXV5Q",
+        "author": "Anh Tuấn SF3VN",
+        "title": "Shadow Fight 3: Primordial Heavenly King Lv4 vs Pioneer Hard Boss",
+        "videoDurationSeconds": 249,
+        "publishedAt": "2026-11-04T15:40:46-08:00",
+        "uploadedAt": "2026-11-04T15:40:46-08:00",
+        "recordingDate": null,
+        "clientBuild": null,
+        "balanceVersion": null,
+        "responseBodyBytes": 8785,
+        "playabilityStatus": "UNPLAYABLE",
+        "playabilityReason": "The page needs to be reloaded.",
+        "storyboardURLReturned": false,
+        "expandedPanelObserved": false,
+        "numericClaimsMade": false,
+        "metadataFile": "G7_k40UXV5Q-player.json",
+        "metadataBytes": 7691,
+        "metadataSHA256": "d06b55fdc437db92ac24af9d7a9774b0a45bfa41bd53ea8cceeb4f8c51f478b3"
+      },
+      {
+        "videoId": "gZ-U3FBJlGY",
+        "originalVideoURL": "https://www.youtube.com/watch?v=gZ-U3FBJlGY",
+        "author": "SF3 Pro & Bro",
+        "title": "FREE LEGENDARY SET?! 🔥 Primordial Heavenly King Level 4 | Shadow Fight 3",
+        "videoDurationSeconds": 131,
+        "publishedAt": "2026-10-18T04:00:47-07:00",
+        "uploadedAt": "2026-10-18T04:00:47-07:00",
+        "recordingDate": null,
+        "clientBuild": null,
+        "balanceVersion": null,
+        "responseBodyBytes": 10710,
+        "playabilityStatus": "UNPLAYABLE",
+        "playabilityReason": "The page needs to be reloaded.",
+        "storyboardURLReturned": false,
+        "expandedPanelObserved": false,
+        "numericClaimsMade": false,
+        "metadataFile": "gZ-U3FBJlGY-player.json",
+        "metadataBytes": 9641,
+        "metadataSHA256": "ebeb3e8a23e41735ca59779e2164a8da77c9dc687fe786d38a593bd4802a771f"
+      }
+    ],
+    "newVerifiedCombatParameters": 0,
+    "unknownFieldsResolved": 0,
+    "versionPolicy": "Publication dates are not recording dates or game client/balance versions. No 1.46.2 equivalence established.",
+    "result": "No storyboard URL was returned. Panel visibility and legibility could not be established. Closed without further requests."
+  },
+  "formalBalanceUnknownsResolved": 0,
+  "deviceAcceptance": {
+    "currentSourceRun": false,
+    "physicalDeviceConnected": false,
+    "oldVisualRun": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43427815592",
+    "oldVisualEnvironment": "iPhone 17 Pro Max simulator",
+    "oldVisualNotCurrentSource": true,
+    "oldImpactLifecycleRun": "https://github.com/wuyong9494-lab/kriswu/actions/runs/43441900352",
+    "testFlight": "705; earlier source, not this batch"
+  },
+  "limitations": [
+    "Same bundle names and sizes do not prove byte identity.",
+    "No runtime dynamic asset manifest was recovered.",
+    "No raw game assets, media, access tokens or temporary signed download URLs are in this record.",
+    "Neither reference panels nor synthetic tests establish full retail parity."
+  ]
+}

@@ -19,6 +19,7 @@ RECIPE = "fighter-network-rules-v1"
 PATTERNS = ("Sources/ShiftCore/**/*.swift", "App/**/*.swift", "Shared/**/*.swift")
 HELPERS = (
     "project.yml",
+    "App/Info.plist",
     "Shared/CaptureIntents.swift", "Shared/DutyActivity.swift", "Shared/WidgetShared.swift",
     "Sources/ShiftCore/BoneSampler.swift",
     "App/Services/GLTFModel.swift",
@@ -31,6 +32,14 @@ REQUIRED = HELPERS + (
     "Sources/ShiftCore/DuelGame.swift",
     "Sources/ShiftCore/DuelWeaponMotion.swift",
     "Sources/ShiftCore/DuelWeaponFight.swift",
+    "Sources/ShiftCore/DuelWeaponThrow.swift",
+    "Sources/ShiftCore/DuelFighterAssetRelease.swift",
+    "Sources/ShiftCore/DuelCombatRules.swift",
+    "Sources/ShiftCore/DuelImpactMotion.swift",
+    "Sources/ShiftCore/DuelPanguRules.swift",
+    "Sources/ShiftCore/DuelPanguState.swift",
+    "Sources/ShiftCore/DuelPanguSpatialState.swift",
+    "Sources/ShiftCore/DuelPanguPresentation.swift",
     "Sources/ShiftCore/DuelWeaponInput.swift",
     "Sources/ShiftCore/DuelMultiplayerSelection.swift",
     "Sources/ShiftCore/DuelMultiplayerReplica.swift",
@@ -46,14 +55,17 @@ REQUIRED = HELPERS + (
     "App/Services/DuelNetworkLobby.swift",
     "App/Services/DuelNetworkMessageRouter.swift",
     "App/Services/DuelWeaponAssets.swift",
+    "App/Services/DuelFighterAssetReleaseLoader.swift",
     "App/Services/DuelSourceEffects.swift",
     "App/Services/DuelWeaponEffects.swift",
+    "App/Services/DuelPanguDiagnostics.swift",
     "App/Services/DuelSourceWeaponTrails.swift",
     "App/Services/DuelStage.swift",
     "App/Views/DuelSourceControls.swift",
     "App/Views/DuelNetworkSelectionModel.swift",
     "App/Views/DuelNetworkRoomView.swift",
     "App/Views/DuelView.swift",
+    "App/Views/DuelPanguHUD.swift",
     "App/Views/DuelWorld.swift",
 )
 MAX_SOURCE_BYTES = 8_000_000
@@ -62,6 +74,7 @@ BUILD_ENVIRONMENT = (
     "TARGET_NAME", "CONFIGURATION", "PLATFORM_NAME", "SDK_VERSION", "SWIFT_VERSION",
     "XCODE_VERSION_ACTUAL", "IPHONEOS_DEPLOYMENT_TARGET", "SWIFT_OPTIMIZATION_LEVEL",
     "SWIFT_COMPILATION_MODE", "ENABLE_TESTABILITY", "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
+    "FIGHTER_ASSET_RELEASE_SHA256",
 )
 REQUIRED_BUILD_ENVIRONMENT = BUILD_ENVIRONMENT[:7]
 
@@ -70,6 +83,8 @@ def xcode_build_context(environment: dict) -> dict:
     context = {"mode": "xcode"}
     for key in BUILD_ENVIRONMENT:
         value = environment.get(key, "")
+        if key == "FIGHTER_ASSET_RELEASE_SHA256" and value and re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("Invalid fighter asset release pin")
         if len(value) > 256 or re.fullmatch(r"[A-Za-z0-9_.+ =()$-]*", value) is None:
             raise ValueError("Unsafe or unsupported build setting: " + key)
         if key in REQUIRED_BUILD_ENVIRONMENT and not value:

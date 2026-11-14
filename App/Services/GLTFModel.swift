@@ -80,6 +80,11 @@ final class GLTFModel: @unchecked Sendable {
     /// Static scenery can share an instanced scene-node template. Skinned meshes
     /// need their own bone hierarchy and must never reuse a cloned skinner.
     var hasSkinning: Bool { !skins.isEmpty }
+    /// Names from the decoded model; binding manifests may not name materials
+    /// that only exist in a different character export.
+    var materialNames: Set<String> {
+        Set(meshes.flatMap { $0 }.flatMap { $0.geometry.materials }.compactMap(\.name))
+    }
 
     /// animations：只读这几段动画（一个角色文件里有七十多段，用不上的不读）；nil 全读。
     /// maxTexture：贴图最大边长。smoothNormals：角色把同一位置的法线并成一条，光是圆的，箱子石头不要

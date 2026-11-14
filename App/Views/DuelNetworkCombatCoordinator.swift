@@ -87,6 +87,7 @@ final class DuelNetworkCombatCoordinator {
     static let checkpointInterval: UInt64 = 60
 
     let lobby: DuelNetworkLobby
+    let availableChoices: [DuelMultiplayerSelection.Choice]
     private(set) var state = State.idle
     private(set) var failure: Failure?
     private(set) var presentation: DuelSession?
@@ -164,7 +165,8 @@ final class DuelNetworkCombatCoordinator {
                      loader: @escaping Loader, cancelLoading: @escaping Cancellation) {
         self.init(transport: transport, compatibility: identity.compatibility, loader: loader,
                   cancelLoading: cancelLoading, now: { ProcessInfo.processInfo.systemUptime },
-                  automaticClock: true, permitsFixtures: false)
+                  automaticClock: true, permitsFixtures: false,
+                  availableChoices: DuelMultiplayerSelection.Choice.available(in: identity.catalog))
     }
 
     #if DEBUG
@@ -175,20 +177,23 @@ final class DuelNetworkCombatCoordinator {
                      loader: @escaping Loader, cancelLoading: @escaping Cancellation,
                      now: @escaping () -> TimeInterval) {
         self.init(transport: transport, compatibility: identity.compatibility, loader: loader,
-                  cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: false)
+                  cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: false,
+                  availableChoices: DuelMultiplayerSelection.Choice.available(in: identity.catalog))
     }
 
     convenience init(testingTransport: any DuelLobbyTransport, compatibility: Barrier.Compatibility,
                      loader: @escaping Loader, cancelLoading: @escaping Cancellation = {},
                      now: @escaping () -> TimeInterval) {
         self.init(transport: testingTransport, compatibility: compatibility, loader: loader,
-                  cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: true)
+                  cancelLoading: cancelLoading, now: now, automaticClock: false, permitsFixtures: true,
+                  availableChoices: [.sun, .liu])
     }
     #endif
 
     private init(transport: any DuelLobbyTransport, compatibility: Barrier.Compatibility,
                  loader: @escaping Loader, cancelLoading: @escaping Cancellation,
-                 now: @escaping () -> TimeInterval, automaticClock: Bool, permitsFixtures: Bool) {
+                 now: @escaping () -> TimeInterval, automaticClock: Bool, permitsFixtures: Bool,
+                 availableChoices: [DuelMultiplayerSelection.Choice]) {
         let router = DuelNetworkMessageRouter(transport: transport)
         self.router = router
         startChannel = router.channel(for: .start); combatChannel = router.channel(for: .combat)
@@ -196,6 +201,7 @@ final class DuelNetworkCombatCoordinator {
         expectedCompatibility = compatibility; self.loader = loader
         self.cancelLoading = cancelLoading; self.now = now; self.automaticClock = automaticClock
         self.permitsFixtures = permitsFixtures
+        self.availableChoices = availableChoices
         lobby.$snapshot.sink { [weak self] in self?.selectionChanged($0) }.store(in: &observations)
         lobby.$status.sink { [weak self] value in
             if value == .closed { self?.close(.disconnected, notifyPeer: false) }
